@@ -12,10 +12,22 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn run_gate(root: &Path) -> Output {
-    Command::new("cargo")
+fn gate_command(root: &Path) -> Command {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let mut command = Command::new(cargo);
+    command
         .args(["run", "-p", "xtask", "--", "bundle-tokenization-drift"])
         .current_dir(root)
+        // A shared ambient target can run a baseline binary in the mutated checkout.
+        .env(
+            "CARGO_TARGET_DIR",
+            root.join("target/bundle-tokenization-drift"),
+        );
+    command
+}
+
+fn run_gate(root: &Path) -> Output {
+    gate_command(root)
         .output()
         .expect("run bundle-tokenization-drift gate")
 }
@@ -42,15 +54,8 @@ fn bundle_tokenization_drift_gate_passes_on_baseline() {
 fn bundle_tokenization_drift_gate_targets_repo_snapshot_from_nested_cwd() {
     let root = workspace_root();
     let nested = root.join("crates/xtask/fixtures");
-    let output = Command::new("cargo")
-        .args([
-            "run",
-            "-p",
-            "xtask",
-            "--",
-            "bundle-tokenization-drift",
-            "--verify-ack",
-        ])
+    let output = gate_command(&root)
+        .arg("--verify-ack")
         .current_dir(&nested)
         .output()
         .expect("run bundle-tokenization-drift gate from nested cwd");

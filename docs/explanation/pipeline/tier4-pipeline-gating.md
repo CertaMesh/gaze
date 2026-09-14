@@ -14,22 +14,31 @@ recognizer floor, do not change token shapes, and are default-off through
   and inputs without a capital letter at a non-sentence-start position. This is
   valid only for configured English/German capital-case locales; unsupported
   locales fail closed with `UnsupportedCapitalHeuristicLocale`.
-- `prefix_cache`: stores recently tokenized raw prefixes inside the owning
-  `Session`. Cache state is not exported and is not shared across sessions.
-  Every cached token emission writes an audit row with
-  `provenance_stage = "prefix_cache"`.
+- `prefix_cache`: compatibility flag only. The pipeline always rescans each
+  complete input, including repeated or extended text in live and transactional
+  calls. It stores no raw prefixes and emits the current recognizer/rule audit
+  rows, never synthetic `prefix_cache` rows. `enable_prefix_cache()` and
+  `with_prefix_cache(true)` remain accepted but provide no scan shortcut.
 - `length_bucketing`: reserves an opt-in config flag for batching callers that
   group same-length model inputs to reduce padding waste. The current core path
   does not batch Pass-3 calls, so this flag is a compatibility hook.
 
 ## Invariants
 
-- Existing adopters see no behavior change unless a flag is explicitly enabled.
+- Prefix reuse is disabled even when explicitly enabled; the other flags retain
+  their existing behavior.
 - Gates only reduce observer-only Pass-3 calls. They never suppress a
   resolve/redact SafetyNet pass.
-- Prefix cache entries are session-scoped and dropped with the session.
-- Cache hits are auditable and metadata-only; audit rows never include source
-  bytes or token strings.
+- No cached decision is trusted across fields, pipelines, locales, dictionaries,
+  or calls. Immutable configuration identity cannot certify stateful custom
+  recognizers/rules, and an appended suffix can complete an entity across a
+  cached boundary (for example, `alice@` followed by `example.invalid`).
+- Both `PrefixCacheWriteMode::Allow` and `Suppress` perform full scans without
+  prefix storage. Token mappings, manifest offsets, transaction commit/drop and
+  logger error propagation retain the normal full-scan behavior.
+- This intentionally trades opted-in prefix-cache throughput for detection
+  correctness. Repeated growing inputs scan all bytes each time, as with the
+  default configuration; token mappings remain reusable and restorable.
 
 ## Bench Snapshot
 
@@ -48,12 +57,15 @@ Local result on May 15, 2026:
 | capitals_heuristic_gate | 100 | 15.061 | 66.7% |
 | combined_skip_and_capitals | 0 | 1.904 | 100.0% |
 
-Prefix cache keystroke-style bench:
+Historical prefix cache keystroke-style bench (unsafe reuse, now disabled):
 
 | config | detector bytes processed | elapsed ms | reduction |
 | --- | ---: | ---: | ---: |
 | baseline | 2190 | 28.169 | - |
 | prefix_cache | 1035 | 13.848 | 52.7% bytes, 50.8% latency |
+
+The historical prefix savings above do not apply to the current runtime. The
+current benchmark requires equal detector bytes with the flag on and off.
 
 The bench asserts zero SafetyNet suspects for every config, preserving the
 observer-mode recall baseline for the synthetic fixture set.

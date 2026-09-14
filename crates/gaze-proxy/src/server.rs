@@ -3417,7 +3417,7 @@ mod tests {
             DEFAULT_MAX_REQUEST_BYTES,
             |attempt, live, staged| {
                 assert_eq!(attempt, 0);
-                assert_eq!(staged.prefix_cache_entry_count(), 1);
+                assert_eq!(staged.prefix_cache_entry_count(), 0);
                 assert_eq!(live.prefix_cache_entry_count(), 0);
                 Ok(())
             },
@@ -3426,8 +3426,8 @@ mod tests {
 
         assert_eq!(session.tokens(), vec![expected_token.clone()]);
         assert_eq!(committed.snapshot.tokens(), vec![expected_token.clone()]);
-        assert_eq!(committed.snapshot.prefix_cache_entry_count(), 1);
-        assert_eq!(session.prefix_cache_entry_count(), 1);
+        assert_eq!(committed.snapshot.prefix_cache_entry_count(), 0);
+        assert_eq!(session.prefix_cache_entry_count(), 0);
         let protected = std::str::from_utf8(&committed.request.body).unwrap();
         assert!(!protected.contains(SYNTHETIC_EMAIL));
         assert_eq!(protected.matches(&expected_token).count(), 2);
@@ -3592,7 +3592,7 @@ mod tests {
         let baseline_entries = session.snapshot_entries();
         let baseline_tokens = session.tokens();
         let baseline_cache_entries = session.prefix_cache_entry_count();
-        assert_eq!(baseline_cache_entries, 1);
+        assert_eq!(baseline_cache_entries, 0);
 
         let body = format!(
             r#"{{"model":"claude-test","max_tokens":32,"messages":[{{"role":"user","content":[{{"type":"text","text":"{left}"}},{{"type":"text","text":"{right}"}}]}}]}}"#
@@ -3679,7 +3679,7 @@ mod tests {
     }
 
     #[test]
-    fn every_logical_domain_probe_family_preserves_exact_cache_cardinality() {
+    fn every_logical_domain_probe_family_leaves_prefix_storage_empty() {
         let pipeline = Pipeline::builder()
             .detector(RegexDetector::emails().unwrap())
             .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
@@ -3713,14 +3713,14 @@ mod tests {
             |attempt, live, staged| {
                 assert_eq!(attempt, 0);
                 assert_eq!(live.prefix_cache_entry_count(), 0);
-                assert_eq!(staged.prefix_cache_entry_count(), 7);
+                assert_eq!(staged.prefix_cache_entry_count(), 0);
                 Ok(())
             },
         )
         .unwrap();
 
-        assert_eq!(committed.snapshot.prefix_cache_entry_count(), 7);
-        assert_eq!(session.prefix_cache_entry_count(), 7);
+        assert_eq!(committed.snapshot.prefix_cache_entry_count(), 0);
+        assert_eq!(session.prefix_cache_entry_count(), 0);
     }
 
     struct RejectOnSecondAttemptCodec {
@@ -3895,7 +3895,7 @@ mod tests {
             false,
             DEFAULT_MAX_REQUEST_BYTES,
             |attempt, live, staged| {
-                assert_eq!(staged.prefix_cache_entry_count(), 1);
+                assert_eq!(staged.prefix_cache_entry_count(), 0);
                 assert_eq!(live.prefix_cache_entry_count(), 0);
                 live.tokenize(&PiiClass::Name, &format!("Dr. Schmidt {attempt}"))
                     .unwrap();

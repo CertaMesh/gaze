@@ -1618,6 +1618,7 @@ dependencies = [
  "http",
  "libc",
  "reqwest",
+ "same-file",
  "serde",
  "serde_json",
  "sha2",
