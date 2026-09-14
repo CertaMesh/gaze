@@ -713,7 +713,7 @@ fn restore_prefixed_bare_adjacency_roundtrips_without_phantom_warnings() {
             PiiClass::Name,
             PiiClass::Location,
             PiiClass::Organization,
-            PiiClass::Custom("class_alpha".into()),
+            PiiClass::custom("class_alpha").expect("valid custom class"),
         ]
         .iter()
         .map(|class| {
