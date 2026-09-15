@@ -5986,3 +5986,7 @@ mod tests {
         assert_eq!(session.prefix_cache_entry_count(), 0);
     }
 }
+
+#[cfg(test)]
+#[path = "pipeline_multiple_gaps_tests.rs"]
+mod multiple_gaps_tests;
