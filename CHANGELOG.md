@@ -28,10 +28,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Measured on the rule-floor arm over the 1,886-document holdout: gold ZIP byte
   recall rises from 30.8% to 59.7%, recovering **1,567 gold bytes**; per locale,
   `en-CA` 97.1%, `en-GB` 96.9%, `en-IE` 87.9%. Precision cost is one false
-  positive across all 1,886 documents (shape `AA9 9AA` in lowercase prose) and
-  **zero across all 1,024 committed A4 negative documents**. The bundle
-  tokenization drift snapshot is unchanged: none of the three patterns match the
-  drift corpus.
+  positive across all 1,886 documents (an uppercase `AA9 9AA` token in lowercase
+  prose, whose outward code is a real assigned UK district) and **zero across all
+  1,024 committed A4 negative documents**. The bundle tokenization drift snapshot
+  is unchanged: none of the three patterns match the drift corpus.
+
+  Review hardening, all costing **zero** of the 71 / 83 / 60 measured gold
+  entities and verified by a per-entity gold census over the full holdout:
+
+  * The Eircode identifier must now carry at least one letter. Allowing all four
+    characters to be digits made `postal.ie` tokenize the ordinary
+    `LETTER + 2 digits + 4 digits` business reference layout — `ORDER A12 3456`,
+    `TICKET D45 6789`, `JOB F90 1234` — as postal codes at every locale. The A4
+    negative corpus contains no token of that shape, so its 0/1024 score could
+    not see the class.
+  * `postal.ca` and `postal.gb` no longer match when the preceding character is
+    `#`. `\b` gave no protection there, so `#D3D3D3` (`lightgray`) and `#A9A9A9`
+    (`darkgray`) tokenized as postal codes; a measured 1.31% / 2.87% of uniform
+    `#RRGGBB` values matched. The corpus contains no `#RRGGBB` literal.
+  * All three accept NO-BREAK SPACE, NARROW NO-BREAK SPACE, and a doubled space
+    between the two halves. `[ ]?` matched U+0020 only, so a postcode pasted out
+    of a PDF or rendered HTML leaked in full — the same failure class as the
+    `ssn.us` NBSP regression.
+  * `postal.gb` covers the `GIR 0AA` Girobank pseudo-postcode and restricts the
+    inward code to the official Royal Mail alphabet (never `C I K M O V`), which
+    also drops matches overlapping a different gold label from 3 to 1. The AREA
+    letters stay wide: encoding the official `Q V X` / `I J Z` exclusions was
+    measured and LOST a gold entity on this holdout.
+  * `postal.ie` covers the `D6W` Dublin 6W routing key, the one assigned routing
+    key that is not `LETTER + 2 digits`. Every D6W address leaked in full before.
 
   The 4-digit locales (`de-AT`, `de-CH`, `en-AU`, `en-NZ`) are deliberately not
   covered. Unanchored `\d{4}` is 19% precise on the holdout (516 of 2,723 runs
@@ -45,6 +70,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which described a two-rule world — is replaced by a two-group policy note
   explaining why the numeric rules stay locale-gated and the alphanumeric ones
   do not.
+
+- [docs] Every `core.toml` line citation in the recognizer coverage matrix of
+  `docs/reference/redaction-classes.md` is regenerated. 35 of 37 rows pointed at
+  stale line ranges: the doc gate reads the first twelve columns and never
+  checks the thirteenth, so the column had drifted unnoticed across many
+  changes. Adding an assertion for it is tracked separately.
 
 - [bundle-tokenization-drift] The `core` snapshot records rulepack version0.5.3; detection entries, spans, classes, sources, token shapes and counts are unchanged.
 

@@ -328,12 +328,14 @@ fn version_and_build_strings_are_not_postal_codes() {
 
 /// The single MEASURED false positive this rule set introduces across 1,886 holdout documents.
 ///
-/// Shape `A{2}9_9A{2}` — the canonical UK form — occurring in all-lowercase running prose with no
-/// gold annotation of any label at that offset. It is accepted knowingly: the same branch carries
-/// 58 of the 85 en-GB gold entities, and the surrounding prose context makes it at least as likely
-/// to be an UNANNOTATED postcode in the gold as a true error. Axis 1 (never leak) beats one benign
-/// reversible token. This test documents the behaviour so a future tightening is a deliberate
-/// decision rather than an accident.
+/// Shape `A{2}9_9A{2}` — the canonical UK form — an UPPERCASE token sitting in lowercase running
+/// prose, with no gold annotation of any label at that offset. (These rules compile
+/// case-sensitively through `Regex::new`, so the token itself cannot be lowercase; only the prose
+/// around it is.) Its outward code is a real, assigned UK postcode district, which makes an
+/// unannotated gold at least as likely as a true error. Accepted knowingly: the same branch
+/// carries 58 of the 85 en-GB gold entities, and axis 1 (never leak) beats one benign reversible
+/// token. This test documents the behaviour so a future tightening is a deliberate decision
+/// rather than an accident.
 #[test]
 fn documented_holdout_false_positive_shape_is_tokenized_knowingly() {
     assert_postal_removed(
@@ -344,6 +346,180 @@ fn documented_holdout_false_positive_shape_is_tokenized_knowingly() {
             " alongside the other notes",
         ],
     );
+}
+
+// ======================================================= separators: non-ASCII and repeated
+//
+// `[ ]?` matched U+0020 only, so a postcode pasted out of a PDF, a Word document, or rendered HTML
+// — where the outward/inward gap is routinely a NO-BREAK SPACE — leaked in full. This is the same
+// failure class as the `ssn.us` NBSP regression: the separator, not the code, decides the leak.
+
+#[test]
+fn ca_nbsp_and_repeated_separators_are_tokenized() {
+    for code in ["Z1Z\u{00A0}9Z9", "Z1Z\u{202F}9Z9", "Z1Z  9Z9"] {
+        assert_postal_removed(
+            &format!("Ship to {code} before Friday."),
+            code,
+            &["Ship to ", " before Friday."],
+        );
+    }
+}
+
+#[test]
+fn gb_nbsp_and_repeated_separators_are_tokenized() {
+    for code in ["ZZ9\u{00A0}9ZZ", "ZZ9\u{202F}9ZZ", "ZZ9  9ZZ"] {
+        assert_postal_removed(
+            &format!("The registered office is at {code} in the filing."),
+            code,
+            &["The registered office is at ", " in the filing."],
+        );
+    }
+}
+
+#[test]
+fn ie_nbsp_and_repeated_separators_are_tokenized() {
+    for code in ["Y99\u{00A0}X4X7", "Y99\u{202F}X4X7", "Y99  X4X7"] {
+        assert_postal_removed(
+            &format!("The Eircode on record is {code} for that site."),
+            code,
+            &["The Eircode on record is ", " for that site."],
+        );
+    }
+}
+
+#[test]
+fn a_postal_code_split_across_a_newline_is_not_one_token() {
+    // Pins that the separator class stays a SPACE class. Widening it to `\s` would let a match
+    // span a line break and swallow unrelated text into one restorable token.
+    assert_value_survives("Ship to Z1Z\n9Z9 before Friday.", "Z1Z\n9Z9");
+}
+
+// ======================================================= special-case codes
+
+#[test]
+fn gb_gir_0aa_is_tokenized() {
+    // The Royal Mail Girobank pseudo-postcode: the one valid UK postcode outside the six outward
+    // forms, so the generic outward branches cannot reach it.
+    assert_postal_removed("Girobank sits at GIR 0AA in Bootle.", "GIR 0AA", &["Girobank sits at "]);
+    assert_postal_removed("Compact GIR0AA in the export.", "GIR0AA", &["Compact "]);
+}
+
+#[test]
+fn ie_d6w_routing_key_is_tokenized() {
+    // `D6W` (Dublin 6 West) is the one assigned Eircode routing key that is not
+    // `LETTER + 2 digits`, so every D6W address leaked before it was matched explicitly.
+    assert_postal_removed("Registered at D6W FN82 in Dublin.", "D6W FN82", &["Registered at "]);
+}
+
+#[test]
+fn ie_compact_d6w_is_tokenized() {
+    assert_postal_removed("Compact D6WFN82 in the CSV column.", "D6WFN82", &["Compact "]);
+}
+
+#[test]
+fn ie_all_digit_identifiers_are_a_documented_gap() {
+    // `D6W 1234` is a format-valid Eircode, but an all-digit identifier is exactly the business
+    // reference shape above, so it is deliberately out of scope for EVERY routing key — not a D6W
+    // quirk. Pinned so the trade stays visible.
+    assert_value_survives("Reference D6W 1234 in the ledger.", "D6W 1234");
+    assert_value_survives("Reference Y99 1234 in the ledger.", "Y99 1234");
+}
+
+// ======================================================= hex colours must not be postal codes
+//
+// `#` is not a word character, so `\b` gave no protection and every `#RRGGBB` value whose hex
+// digits alternate letter/digit matched. `#D3D3D3` and `#A9A9A9` are the named CSS colours
+// `lightgray` and `darkgray`. The A4 negative corpus contains no `#RRGGBB` literal at all, so its
+// 0/1024 score never covered this class; the `(?:\A|[^#])` + `capture_groups = [1]` guard does.
+
+#[test]
+fn css_hex_colours_are_not_postal_codes() {
+    for colour in ["#D3D3D3", "#A9A9A9", "#A1B2C3", "#B1C2D3", "#F0E1D2", "#FF00AA", "#E1F5FE"] {
+        assert_value_survives(&format!("Set the divider to {colour} in the stylesheet."), colour);
+    }
+}
+
+#[test]
+fn html_entity_and_0x_hex_are_not_postal_codes() {
+    assert_value_survives("Escaped as &#A1B2C3; in the template.", "&#A1B2C3;");
+    // `0x` needs no guard: `x` is a word character, so `\b` already refuses it. Pinned so that a
+    // future rewrite of the boundary cannot quietly open this shape.
+    assert_value_survives("The mask is 0xA1B2C3 in the header.", "0xA1B2C3");
+}
+
+// ======================================================= business reference codes
+//
+// The Eircode unique identifier previously allowed all four characters to be digits, so the
+// ordinary `LETTER + 2 digits + 4 digits` reference layout tokenized as a postal code at every
+// locale. The restricted Eircode alphabet does nothing against that shape: an all-digit identifier
+// never touches the alphabet. Requiring one letter in the identifier removes the class and costs 0
+// of the 60 measured gold entities.
+
+#[test]
+fn business_reference_codes_are_not_eircodes() {
+    for reference in [
+        "ORDER A12 3456",
+        "TICKET D45 6789",
+        "JOB F90 1234",
+        "BATCH E12 3456",
+        "ASSET P30 4567",
+        "CASE C12 3456",
+        "DOC H55 2211",
+        "REQ K21 8890",
+        "LOT X99 4471",
+    ] {
+        assert_value_survives(&format!("Please quote {reference} when you call."), reference);
+    }
+}
+
+#[test]
+fn eircode_identifiers_that_do_carry_a_letter_are_still_tokenized() {
+    // The complement of the test above: the letter may sit in ANY of the four identifier
+    // positions, so all four alternation branches are exercised rather than just the first.
+    for code in ["Y99 X456", "Y99 4X56", "Y99 45X6", "Y99 456X"] {
+        assert_postal_removed(&format!("Eircode {code} on file."), code, &["Eircode "]);
+    }
+}
+
+// ======================================================= postal.ca loosening guards
+//
+// `postal.ca` ships the widest alphabet of the three rules, so it needs the most explicit negative
+// pins. Without these, a mutation that lets position 1 hold a digit, or that drops the `#` guard,
+// passes the whole suite silently.
+
+#[test]
+fn ca_position_one_must_be_a_letter() {
+    // RED if `[A-Z]` in position 1 is ever widened to `[A-Z0-9]`.
+    assert_value_survives("Line item 91A 2B3 on the packing slip.", "91A 2B3");
+    assert_value_survives("Line item 91A2B3 on the packing slip.", "91A2B3");
+}
+
+#[test]
+fn ca_digit_positions_must_be_digits() {
+    // RED if any `\d` position is widened to `[A-Z\d]`.
+    assert_value_survives("Marker ZZZ ZZZ has no digits.", "ZZZ ZZZ");
+}
+
+// ======================================================= capture-group boundary behaviour
+//
+// `postal.ca` and `postal.gb` consume ONE character before the code so the `#` guard can be
+// expressed without lookbehind, and report only capture group 1 as the span. These pin that the
+// consumed character never costs a neighbouring match and that a code at offset 0 still matches.
+
+#[test]
+fn a_postal_code_at_the_start_of_the_input_is_tokenized() {
+    assert_postal_removed("Z1Z 9Z9 is the mailing code.", "Z1Z 9Z9", &[" is the mailing code."]);
+    assert_postal_removed("ZZ9 9ZZ is the registered office.", "ZZ9 9ZZ", &[" is the registered office."]);
+}
+
+#[test]
+fn adjacent_postal_codes_separated_by_one_character_both_tokenize() {
+    let cleaned = clean("Ship to Z1Z 9Z9,Z2Z 8Z8 today.");
+    assert!(!cleaned.contains("Z1Z 9Z9"), "first code survived in {cleaned:?}");
+    assert!(!cleaned.contains("Z2Z 8Z8"), "second code survived in {cleaned:?}");
+    let cleaned = clean("Offices ZZ9 9ZZ ZZ8 8ZZ both apply.");
+    assert!(!cleaned.contains("ZZ9 9ZZ"), "first code survived in {cleaned:?}");
+    assert!(!cleaned.contains("ZZ8 8ZZ"), "second code survived in {cleaned:?}");
 }
 
 // ======================================================= locale contract: format-basis everywhere

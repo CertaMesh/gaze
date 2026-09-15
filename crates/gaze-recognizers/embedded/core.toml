@@ -764,10 +764,24 @@ priority = 70
 # gold ZIP entities in the Dataiku EN/DE holdout carry exactly this shape (497 of 512 gold bytes);
 # the remaining 3 are bare five-digit strings that only `postal.us` shapes cover.
 #
-# The official first-letter exclusions (`D F I O Q U`, and no `W`/`Z` in position 1) are
-# deliberately NOT encoded. They would add a second failure mode for zero measured benefit: this
-# pattern already scores 0 false positives across the 1,024 A4 negative documents and 0 across all
-# 1,886 holdout documents. Restricting the alphabet can only reject real codes, never find more.
+# The leading `(?:\A|[^#])` with `capture_groups = [1]` rejects a match whose immediately preceding
+# character is `#`, reporting only group 1 as the span. `\b` alone does NOT do this: `#` is not a
+# word character, so every `#RRGGBB` CSS colour whose hex digits happen to alternate
+# letter/digit/letter/digit/letter/digit matched this rule. `#D3D3D3` (`lightgray`) and `#A9A9A9`
+# (`darkgray`) are named CSS colours, and a measured 1.31% of uniform `#RRGGBB` values matched.
+# The A4 negative corpus contains no `#RRGGBB` literal at all, so its 0/1024 score could not see
+# this class; out-of-corpus enumeration found it. `0x`-prefixed hex needs no guard: `x` is a word
+# character, so `\b` already refuses `0xA1B2C3`.
+#
+# The official Canada Post alphabet exclusions (`D F I O Q U` never assigned, `W`/`Z` never in
+# position 1) are still NOT encoded, but the reason is now measured rather than assumed. Encoding
+# them costs 0 of the 71 gold entities and would cut the match rate on uniform six-character
+# alphanumeric tokens from 0.81% to 0.34%. Two measured facts argue against doing it here: the
+# sibling UK area-alphabet tightening LOST a gold entity on this corpus (synthetic holdout data
+# uses unassigned area letters), and every fixture in `postal_international.rs` deliberately uses
+# unassigned letters so that no test value is a deliverable Canadian address. A bare `A1B2C3`-shaped
+# token with no `#` prefix therefore still matches; that is the known residual, and only the
+# alphabet restriction would close it. Tracked as its own decision, not asserted as zero-benefit.
 [[recognizers]]
 id = "postal.ca"
 safety_tier = "safe_default"
@@ -779,7 +793,8 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''\b[A-Z]\d[A-Z][ -]?\d[A-Z]\d\b'''
+pattern = '''(?:\A|[^#])(\b[A-Z]\d[A-Z](?:[ \u{00A0}\u{202F}]{1,2}|-)?\d[A-Z]\d\b)'''
+capture_groups = [1]
 
 [recognizers.scoring]
 base = 0.80
@@ -796,13 +811,32 @@ license = "Apache-2.0"
 # gold ZIP entities, plus 3 more in en-IE (Northern-Ireland-shaped codes in the Irish set), for 83
 # entities and ~590 gold bytes.
 #
+# The inward code's two letters are restricted to the official Royal Mail set: `C I K M O V` are
+# never used there. That restriction costs 0 of the 83 gold entities and drops the number of
+# matches that overlap a DIFFERENT gold label from 3 to 1, i.e. it stops the rule clipping into
+# neighbouring entities. The AREA letters are deliberately left as `[A-Z]{1,2}`: encoding the
+# official `Q V X` / `I J Z` exclusions was measured on this holdout and LOST a gold ZIP entity
+# (an `A99 9AA` whose area letter is `V`, which the synthetic corpus assigns but Royal Mail never
+# does). Axis 1 outranks the precision gain, so the area stays wide.
+#
+# `GIR 0AA` is the Royal Mail Girobank pseudo-postcode, the one valid UK postcode outside the six
+# outward forms, and is matched explicitly.
+#
+# The leading `(?:\A|[^#])` with `capture_groups = [1]` refuses a match preceded by `#`; see the
+# `postal.ca` note above for the measurement. `#FF00AA` and `#E1F5FE` matched before this guard.
+#
 # Known, accepted gaps and costs, all measured rather than assumed:
 #   * Outward-code-only golds (`AA9` x3, `AA99` x1, 4 of 85) are NOT covered. An isolated one-to-two
 #     letter plus one-to-two digit token is indistinguishable from an ordinary reference code.
-#   * ONE false positive across all 1,886 holdout documents: shape `AA9 9AA` — the canonical form,
-#     not the wide branch — in all-lowercase running prose with no gold annotation at that offset.
-#     Accepted knowingly: that same branch carries 58 of the 85 en-GB golds, the context makes an
-#     unannotated gold at least as likely as a true error, and axis 1 beats one reversible token.
+#   * ONE false positive across all 1,886 holdout documents: an uppercase `AA9 9AA` token — the
+#     canonical form, not the wide branch — sitting in lowercase running prose with no gold
+#     annotation at that offset. Its outward code is a real, assigned UK postcode district, so an
+#     unannotated gold is at least as likely as a true error. Accepted knowingly: that same branch
+#     carries 58 of the 85 en-GB golds, and axis 1 beats one reversible token. (These rules compile
+#     case-sensitively, so the token itself is uppercase; only the surrounding prose is lowercase.)
+#   * A bare `AA9 9AA`-shaped reference code with no `#` prefix still matches. Uniform six-character
+#     alphanumeric tokens match at 4.97%, the widest surface of the three rules, and only an area
+#     alphabet restriction would narrow it — which costs a gold entity here.
 #   * ZERO matches across the 1,024 A4 negative documents.
 [[recognizers]]
 id = "postal.gb"
@@ -815,7 +849,8 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''\b[A-Z]{1,2}\d[A-Z\d]?[ ]?\d[A-Z]{2}\b'''
+pattern = '''(?:\A|[^#])(\b(?:GIR[ \u{00A0}\u{202F}]{0,2}0AA|[A-Z]{1,2}\d[A-Z\d]?[ \u{00A0}\u{202F}]{0,2}\d[ABD-HJLNP-UW-Z]{2})\b)'''
+capture_groups = [1]
 
 [recognizers.scoring]
 base = 0.80
@@ -831,10 +866,27 @@ license = "Apache-2.0"
 # identifier, conventionally spaced but also written compactly. 60 of the 78 en-IE gold ZIP
 # entities, 479 gold bytes.
 #
-# The restricted alphabet is the whole precision story and is why this rule needs no validator:
-# Eircode excludes `B G I J L M O Q S U Z` from BOTH halves, so the character set itself rejects
-# most look-alike reference codes. Measured: 0 false positives on the 1,024 A4 negative documents,
-# 0 on all 1,886 holdout documents, and 0 matches of any kind outside en-IE.
+# The unique identifier must contain AT LEAST ONE letter. The `regex` crate has no lookaround, so
+# that constraint is spelled as an alternation over the letter's position. This is the whole
+# precision story for this rule and is why it needs no validator.
+#
+# The earlier `[0-9AC-FHKNPRTV-Y]{4}` identifier allowed all four characters to be digits, which
+# made the rule match the ordinary `LETTER + 2 digits + 4 digits` business reference layout:
+# `ORDER A12 3456`, `TICKET D45 6789`, `JOB F90 1234` and `BATCH E12 3456` were all tokenized as
+# postal codes at every locale. The restricted Eircode alphabet does nothing against that shape,
+# because an all-digit identifier never touches the alphabet. The A4 negative corpus contains no
+# `L99 9999` token at all, so its 0/1024 score could not see the class; out-of-corpus enumeration
+# found it. Requiring one letter removes all ten measured cases and costs 0 of the 60 gold
+# entities: every measured gold identifier shape (`A9A9` x39, `AA99` x9, `A999` x5, `A9AA` x4)
+# already carries a letter.
+#
+# `D6W` is a real assigned Dublin 6W routing key and is the one routing key that is not
+# `LETTER + 2 digits`, so it is matched explicitly, spaced or compact. Every D6W address leaked in
+# full before this branch existed. `D6W 1234` remains uncovered, but only because its identifier is
+# all digits — the same trade every routing key makes, not a D6W quirk.
+#
+# Measured: 0 false positives on the 1,024 A4 negative documents, 0 on all 1,886 holdout documents,
+# and 0 matches of any kind outside en-IE.
 #
 # The `A99 9AA` tail shape (2 of 78) is not covered: a three-character inward part is the UK form,
 # and widening this pattern to accept it would let it shadow `postal.gb` on genuine UK codes.
@@ -849,7 +901,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''\b[AC-FHKNPRTV-Y]\d{2}[ ]?[0-9AC-FHKNPRTV-Y]{4}\b'''
+pattern = '''\b(?:[AC-FHKNPRTV-Y]\d{2}|D6W)[ \u{00A0}\u{202F}]{0,2}(?:[AC-FHKNPRTV-Y][0-9AC-FHKNPRTV-Y]{3}|\d[AC-FHKNPRTV-Y][0-9AC-FHKNPRTV-Y]{2}|\d{2}[AC-FHKNPRTV-Y][0-9AC-FHKNPRTV-Y]|\d{3}[AC-FHKNPRTV-Y])\b'''
 
 [recognizers.scoring]
 base = 0.80
