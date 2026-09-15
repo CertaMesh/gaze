@@ -2,6 +2,7 @@ mod occurrence;
 mod protection;
 use occurrence::{Batch, Ledger, Occurrence, Origin, Relation};
 mod recovery;
+mod residual;
 pub use protection::{ProtectionContext, ProtectionError};
 
 use std::collections::BTreeMap;
@@ -285,7 +286,7 @@ pub struct Pipeline {
     safety_net_registry: Option<Arc<LocaleAwareModelRegistry>>,
     optimization_config: PipelineOptimizationConfig,
     restore_boundary_dlp_audit: bool,
-    rules: Vec<Arc<dyn Rule>>,
+    rules: Vec<crate::rule::RuleEntry>,
     residual_coverage: bool,
 }
 
@@ -391,7 +392,8 @@ impl GazeLocalProtectionTraceItem {
 
     pub fn stage(&self) -> &'static str {
         match self.kind {
-            GazeLocalProtectionTraceKind::PrimaryPolicyTokenize => "primary_pipeline",
+            GazeLocalProtectionTraceKind::PrimaryPolicyTokenize
+            | GazeLocalProtectionTraceKind::ResidualPolicyTokenize { .. } => "primary_pipeline",
             GazeLocalProtectionTraceKind::SafetyNetResolveTokenize
             | GazeLocalProtectionTraceKind::SafetyNetRedact
             | GazeLocalProtectionTraceKind::SafetyNetFallbackRedact => "safety_net",
@@ -400,7 +402,8 @@ impl GazeLocalProtectionTraceItem {
 
     pub fn decision(&self) -> &'static str {
         match self.kind {
-            GazeLocalProtectionTraceKind::PrimaryPolicyTokenize => "policy",
+            GazeLocalProtectionTraceKind::PrimaryPolicyTokenize
+            | GazeLocalProtectionTraceKind::ResidualPolicyTokenize { .. } => "policy",
             GazeLocalProtectionTraceKind::SafetyNetResolveTokenize => "resolve",
             GazeLocalProtectionTraceKind::SafetyNetRedact => "redact",
             GazeLocalProtectionTraceKind::SafetyNetFallbackRedact => "fallback_redact",
@@ -410,6 +413,7 @@ impl GazeLocalProtectionTraceItem {
     pub fn action(&self) -> &'static str {
         match self.kind {
             GazeLocalProtectionTraceKind::PrimaryPolicyTokenize
+            | GazeLocalProtectionTraceKind::ResidualPolicyTokenize { .. }
             | GazeLocalProtectionTraceKind::SafetyNetResolveTokenize => "tokenize",
             GazeLocalProtectionTraceKind::SafetyNetRedact
             | GazeLocalProtectionTraceKind::SafetyNetFallbackRedact => "redact",
@@ -424,6 +428,7 @@ impl GazeLocalProtectionTraceItem {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GazeLocalProtectionTraceKind {
     PrimaryPolicyTokenize,
+    ResidualPolicyTokenize { segment: usize, residual: usize },
     SafetyNetResolveTokenize,
     SafetyNetRedact,
     SafetyNetFallbackRedact,
@@ -957,7 +962,6 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<CleanText> {
-        let _ = self.residual_coverage;
         let normalized = normalize(text);
         let spans = &normalized.spans;
         let ctx = DetectContext::new(locale_chain, dictionaries);
@@ -966,10 +970,35 @@ impl Pipeline {
             .detect_candidate_pool(&normalized.text, &ctx)?;
         let recovery::WholePlan {
             evidence,
+            order,
             primary: resolved,
             recovered,
             ..
         } = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
+        let residual_plan = if self.residual_coverage {
+            let by_span = resolved
+                .iter()
+                .chain(&recovered)
+                .map(|c| ((c.span.start, c.span.end), c))
+                .collect::<BTreeMap<_, _>>();
+            let selected = evidence
+                .selections
+                .iter()
+                .map(|s| by_span[&(s.raw.start, s.raw.end)])
+                .collect::<Vec<_>>();
+            Some(residual::plan(
+                self,
+                &evidence,
+                &order,
+                &selected,
+                &normalized.text,
+                text,
+                &build_context(field_name),
+                locale_chain,
+            )?)
+        } else {
+            None
+        };
         let selection_ids = evidence
             .selections
             .iter()
@@ -1065,39 +1094,167 @@ impl Pipeline {
             ));
         }
 
+        if let Some(plan) = &residual_plan {
+            plan.check_actual(ledger.segment())?;
+        }
         prepared.sort_by_key(|(span, ..)| span.start);
+        let mut primary = prepared.into_iter().peekable();
+        let mut residuals = residual_plan
+            .as_ref()
+            .map(|p| p.cells.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .peekable();
         let mut out = String::with_capacity(text.len());
         let mut cursor = 0usize;
-        for (span, class, replacement, action, owned, selection) in prepared {
+        while primary.peek().is_some() || residuals.peek().is_some() {
+            let is_residual = residuals.peek().is_some_and(|(_, cell)| {
+                primary
+                    .peek()
+                    .is_none_or(|(span, ..)| cell.raw.start < span.start)
+            });
+            let (span, class, replacement, action, owned, origin, trace_sources) = if is_residual {
+                let (id, cell) = residuals.next().expect("peeked residual");
+                let actual = self
+                    .rules
+                    .iter()
+                    .find_map(|rule| rule.action(&cell.class, &build_context(field_name)))
+                    .unwrap_or(Action::Preserve);
+                if actual != Action::Tokenize {
+                    return Err(clean_to_raw_mapping_error(
+                        "residual policy preview mismatch",
+                    ));
+                }
+                let replacement = target.tokenize_with_family(
+                    &cell.family,
+                    &cell.class,
+                    &text[cell.raw.clone()],
+                )?;
+                let representative = &ledger.segment().originals[cell.representative];
+                self.log_residual_entry(
+                    target,
+                    representative,
+                    &cell.class,
+                    field_name,
+                    document_kind,
+                )?;
+                let sources = cell
+                    .parents
+                    .iter()
+                    .flat_map(|&id| {
+                        let parent = &ledger.segment().originals[id];
+                        std::iter::once(parent.recognizer_id.clone())
+                            .chain(parent.merged_sources.iter().cloned())
+                    })
+                    .collect::<Vec<_>>();
+                (
+                    cell.raw.clone(),
+                    cell.class.clone(),
+                    Some(replacement),
+                    Action::Tokenize,
+                    true,
+                    Origin::Residual {
+                        segment: 0,
+                        residual: id,
+                    },
+                    Some(sources),
+                )
+            } else {
+                let (span, class, replacement, action, owned, selection) =
+                    primary.next().expect("peeked primary");
+                (
+                    span,
+                    class,
+                    replacement,
+                    action,
+                    owned,
+                    Origin::Selection {
+                        segment: 0,
+                        selection,
+                    },
+                    None,
+                )
+            };
+            // Checked append avoids copying the whole output for each residual cell.
+            if span.start < cursor
+                || span.end > text.len()
+                || span.is_empty()
+                || !text.is_char_boundary(span.start)
+                || !text.is_char_boundary(span.end)
+            {
+                return Err(clean_to_raw_mapping_error(
+                    "invalid prepared replacement geometry",
+                ));
+            }
             out.push_str(&text[cursor..span.start]);
             match replacement {
                 Some(replacement) => {
                     let clean_start = out.len();
                     out.push_str(&replacement);
                     ledger.insert(Occurrence::new(
-                        EmittedTokenSpan::new(clean_start..out.len(), span.clone(), class),
+                        EmittedTokenSpan::new(clean_start..out.len(), span.clone(), class.clone()),
                         action,
                         owned,
-                        Origin::Selection {
-                            segment: 0,
-                            selection,
-                        },
+                        origin.clone(),
                     ));
                 }
                 None => out.push_str(&text[span.clone()]),
             }
+            if let Some(sources) = trace_sources {
+                if let Some(trace) = protection_trace.as_deref_mut() {
+                    let Origin::Residual { segment, residual } = origin else {
+                        unreachable!()
+                    };
+                    trace.record(
+                        span.clone(),
+                        class,
+                        GazeLocalProtectionTraceKind::ResidualPolicyTokenize { segment, residual },
+                        sources,
+                    )?;
+                }
+            }
             cursor = span.end;
         }
-
-        if cursor < text.len() {
-            out.push_str(&text[cursor..]);
+        out.push_str(&text[cursor..]);
+        if let Some(plan) = residual_plan {
+            ledger.set_residuals(plan.cells, order);
         }
-
         ledger.validate()?;
         Ok(CleanText {
             text: out,
             manifest: ledger,
         })
+    }
+
+    fn log_residual_entry(
+        &self,
+        target: &ProtectionTarget<'_, '_>,
+        representative: &Candidate,
+        class: &PiiClass,
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+    ) -> Result<()> {
+        let mut entry = RedactionEntry::new(
+            representative.source.clone(),
+            class.clone(),
+            Action::Tokenize,
+            field_name.map(str::to_owned),
+            document_kind,
+            false,
+            ConflictTier::None,
+            crate::redaction_log::current_epoch_ms(),
+            Some(target.audit_session_id().to_owned()),
+        )
+        .with_recognizer_metadata(
+            Some(representative.recognizer_id.clone()),
+            representative.recognizer_version_id.clone(),
+        );
+        entry.provenance_stage = Some("primary_pipeline.residual".into());
+        for logger in &self.redaction_loggers {
+            logger.log(&entry)?;
+        }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3229,7 +3386,7 @@ pub struct PipelineBuilder {
     safety_net_registry: Option<Arc<LocaleAwareModelRegistry>>,
     optimization_config: PipelineOptimizationConfig,
     restore_boundary_dlp_audit: bool,
-    rules: Vec<Arc<dyn Rule>>,
+    rules: Vec<crate::rule::RuleEntry>,
 }
 
 impl PipelineBuilder {
@@ -3276,7 +3433,7 @@ impl PipelineBuilder {
     where
         R: Rule + 'static,
     {
-        self.rules.push(Arc::new(rule));
+        self.rules.push(crate::rule::RuleEntry::new(rule));
         self
     }
 

@@ -4,6 +4,10 @@ use std::cell::OnceCell;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Origin {
+    Residual {
+        segment: usize,
+        residual: usize,
+    },
     Selection {
         segment: usize,
         selection: usize,
@@ -83,6 +87,8 @@ pub(super) struct Segment {
     pub(super) originals: Vec<Candidate>,
     pub(super) original_raw: Vec<Range<usize>>,
     pub(super) selections: Vec<Selection>,
+    pub(super) residuals: Vec<super::residual::Cell>,
+    pub(super) residual_order: Vec<usize>,
     pub(super) events: Arc<[crate::resolver::ResolutionEvent]>,
     pub(super) raw_offset: usize,
     pub(super) clean_offset: usize,
@@ -126,6 +132,13 @@ impl Ledger {
             segments: vec![segment],
             ..Self::default()
         }
+    }
+    pub(super) fn segment(&self) -> &Segment {
+        &self.segments[0]
+    }
+    pub(super) fn set_residuals(&mut self, cells: Vec<super::residual::Cell>, order: Vec<usize>) {
+        self.segments[0].residuals = cells;
+        self.segments[0].residual_order = order;
     }
     pub(super) fn set_selection_action(&mut self, selection: usize, action: Action) {
         self.segments[0].selections[selection].action = Some(action);
@@ -244,6 +257,8 @@ impl Ledger {
             originals: Vec::new(),
             original_raw: Vec::new(),
             selections: Vec::new(),
+            residuals: Vec::new(),
+            residual_order: Vec::new(),
             events: Arc::from([]),
             raw_offset: emitted.raw_span.start,
             clean_offset: emitted.clean_span.start,
@@ -318,6 +333,7 @@ impl Ledger {
     }
     pub(super) fn validate(&self) -> Result<()> {
         for segment in &self.segments {
+            super::residual::validate(segment)?;
             if segment.originals.len() != segment.original_raw.len() {
                 return Err(manifest_integrity_error("evidence length mismatch"));
             }
@@ -421,6 +437,23 @@ impl Ledger {
                 return Err(manifest_integrity_error("invalid occurrence id"));
             }
             match &record.origin {
+                Origin::Residual { segment, residual } => {
+                    let segment = self
+                        .segments
+                        .get(*segment)
+                        .ok_or_else(|| manifest_integrity_error("invalid residual segment"))?;
+                    let cell = segment
+                        .residuals
+                        .get(*residual)
+                        .ok_or_else(|| manifest_integrity_error("invalid residual identity"))?;
+                    if record.action != Some(Action::Tokenize)
+                        || !record.owned
+                        || record.emitted.class != cell.class
+                        || record.emitted.raw_span != shift(&cell.raw, segment.raw_offset)?
+                    {
+                        return Err(manifest_integrity_error("invalid residual disposition"));
+                    }
+                }
                 Origin::Selection { segment, selection } => {
                     let segment = self
                         .segments
@@ -550,9 +583,9 @@ fn shift(span: &Range<usize>, offset: usize) -> Result<Range<usize>> {
 }
 fn remap_origin(origin: &mut Origin, segment: usize, observation: usize) {
     match origin {
-        Origin::Selection { segment: id, .. } | Origin::ExistingOwnedUnknown { segment: id } => {
-            *id += segment
-        }
+        Origin::Residual { segment: id, .. }
+        | Origin::Selection { segment: id, .. }
+        | Origin::ExistingOwnedUnknown { segment: id } => *id += segment,
         Origin::SafetyNet {
             observation: id, ..
         } => *id += observation,

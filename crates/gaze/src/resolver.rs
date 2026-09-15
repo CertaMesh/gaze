@@ -509,19 +509,50 @@ fn apply_missing_anchor_fallback(
     policy: &FamilyPolicyTable,
     anchor_ctx: AnchorContext<'_>,
 ) -> Candidate {
-    if candidate.decided_by == ConflictTier::CollisionPolicy {
-        return candidate;
+    match missing_anchor_family(&candidate, policy, anchor_ctx) {
+        Some(family) => family_fallback_candidate(candidate, family, ConflictTier::AnchoredContext),
+        None => candidate,
     }
-    match anchor_ctx.resolver.resolve(
-        &candidate,
-        anchor_ctx.input,
+}
+
+fn missing_anchor_family(
+    candidate: &Candidate,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: AnchorContext<'_>,
+) -> Option<String> {
+    if candidate.decided_by == ConflictTier::CollisionPolicy {
+        return None;
+    }
+    match anchor_ctx
+        .resolver
+        .resolve(candidate, anchor_ctx.input, policy, anchor_ctx.locale_chain)
+    {
+        AnchorOutcome::Missing { family, .. } => Some(family),
+        AnchorOutcome::Found | AnchorOutcome::NotRequired => None,
+    }
+}
+
+pub(crate) fn effective_view(
+    candidate: &Candidate,
+    policy: &FamilyPolicyTable,
+    resolver: &AnchorResolver,
+    input: &str,
+    locale_chain: &[LocaleTag],
+) -> (PiiClass, String) {
+    match missing_anchor_family(
+        candidate,
         policy,
-        anchor_ctx.locale_chain,
+        AnchorContext {
+            resolver,
+            input,
+            locale_chain,
+        },
     ) {
-        AnchorOutcome::Missing { family, .. } => {
-            family_fallback_candidate(candidate, family, ConflictTier::AnchoredContext)
-        }
-        AnchorOutcome::Found | AnchorOutcome::NotRequired => candidate,
+        Some(family) => (
+            PiiClass::family(&family),
+            format!("collision-family:{family}"),
+        ),
+        None => (candidate.class.clone(), candidate.token_family.clone()),
     }
 }
 

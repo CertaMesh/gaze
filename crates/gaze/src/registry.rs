@@ -530,6 +530,22 @@ impl RecognizerRegistry {
         )
     }
 
+    pub(crate) fn effective_view(
+        &self,
+        candidate: &Candidate,
+        input: &str,
+        locales: &[LocaleTag],
+    ) -> (PiiClass, String) {
+        let locales = LocaleChain::from(locales);
+        crate::resolver::effective_view(
+            candidate,
+            &self.family_policy,
+            &self.anchor_resolver,
+            input,
+            locales.as_slice(),
+        )
+    }
+
     pub(crate) fn detect_candidate_pool(
         &self,
         input: &str,
