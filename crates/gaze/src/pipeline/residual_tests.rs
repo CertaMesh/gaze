@@ -94,308 +94,1024 @@ fn pair_residual_preserves_whole_token_and_exact_raw_union() {
 }
 
 fn triple() -> Vec<Candidate> {
-    vec![candidate(11..15,PiiClass::Name,"synthetic.left"),candidate(11..21,field(),"synthetic.field"),candidate(16..29,PiiClass::Name,"synthetic.right")]
+    vec![
+        candidate(11..15, PiiClass::Name, "synthetic.left"),
+        candidate(11..21, field(), "synthetic.field"),
+        candidate(16..29, PiiClass::Name, "synthetic.right"),
+    ]
 }
-fn text(document: CleanDocument) -> String { let CleanDocument::Text(value)=document else { panic!("text result") }; value }
+fn text(document: CleanDocument) -> String {
+    let CleanDocument::Text(value) = document else {
+        panic!("text result")
+    };
+    value
+}
 #[test]
 fn pair_and_triple_use_existing_traced_live_staged_and_strict_calls() {
-    for (input, expected) in [(pair(),vec![0..15,15..21]),(triple(),vec![11..15,15..16,16..29])] {
-        let p=pipeline(input,true);
-        let session=Session::new(crate::Scope::Ephemeral).unwrap();
-        let locales=[crate::LocaleTag::Global]; let dictionaries=DictionaryBundle::default();
-        let (output,manifest,_,trace)=p.clean_text_with_safety_net_policy_detect_context_and_protection_trace(&session,RAW,&locales,&dictionaries,SafetyNetPolicy::default()).unwrap();
-        assert_eq!(manifest.iter().map(|s|s.raw_span.clone()).collect::<Vec<_>>(),expected);
-        assert_eq!(trace.len(),manifest.len());
-        for (item,span) in trace.iter().zip(&manifest) {
-            assert_eq!((item.raw_start(),item.raw_end(),item.class()),(span.raw_span.start,span.raw_span.end,&span.class));
-            assert_eq!((item.stage(),item.decision(),item.action()),("primary_pipeline","policy","tokenize"));
+    for (input, expected) in [
+        (pair(), vec![0..15, 15..21]),
+        (triple(), vec![11..15, 15..16, 16..29]),
+    ] {
+        let p = pipeline(input, true);
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let locales = [crate::LocaleTag::Global];
+        let dictionaries = DictionaryBundle::default();
+        let (output, manifest, _, trace) = p
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                RAW,
+                &locales,
+                &dictionaries,
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        assert_eq!(
+            manifest
+                .iter()
+                .map(|s| s.raw_span.clone())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        wire_fixture(RAW, &manifest, &trace);
+        assert_eq!(trace.len(), manifest.len());
+        for (item, span) in trace.iter().zip(&manifest) {
+            assert_eq!(
+                (item.raw_start(), item.raw_end(), item.class()),
+                (span.raw_span.start, span.raw_span.end, &span.class)
+            );
+            assert_eq!(
+                (item.stage(), item.decision(), item.action()),
+                ("primary_pipeline", "policy", "tokenize")
+            );
         }
-        assert_eq!(session.restore_strict_text(&text(output)).unwrap(),RAW);
-        let staged_session=Session::new(crate::Scope::Ephemeral).unwrap();
-        let mut tx=staged_session.begin_transaction();
-        let (output,staged,_) = p.clean_transaction_with_safety_net_policy_detect_context(&mut tx,RawDocument::Text(RAW.into()),&locales,&dictionaries,SafetyNetPolicy::default()).unwrap();
+        assert_eq!(session.restore_strict_text(&text(output)).unwrap(), RAW);
+        let staged_session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let mut tx = staged_session.begin_transaction();
+        let (output, staged, _) = p
+            .clean_transaction_with_safety_net_policy_detect_context(
+                &mut tx,
+                RawDocument::Text(RAW.into()),
+                &locales,
+                &dictionaries,
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
         assert!(staged_session.tokens().is_empty());
-        assert_eq!(staged.iter().map(|s|s.raw_span.clone()).collect::<Vec<_>>(),expected);
-        let output=text(output);tx.commit().unwrap();
-        assert_eq!(staged_session.restore_strict_text(&output).unwrap(),RAW);
-        let strict_session=Session::new(crate::Scope::Ephemeral).unwrap();
-        let mut tx=strict_session.begin_transaction();
-        let protected=p.protect_text_transaction(&mut tx,RAW,ProtectionContext::strict(&locales,&dictionaries)).unwrap();
+        assert_eq!(
+            staged
+                .iter()
+                .map(|s| s.raw_span.clone())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        let output = text(output);
         tx.commit().unwrap();
-        assert_eq!(strict_session.restore_strict_text(&protected).unwrap(),RAW);
-        assert_eq!(strict_session.tokens().len(),expected.len());
+        assert_eq!(staged_session.restore_strict_text(&output).unwrap(), RAW);
+        let strict_session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let mut tx = strict_session.begin_transaction();
+        let protected = p
+            .protect_text_transaction(
+                &mut tx,
+                RAW,
+                ProtectionContext::strict(&locales, &dictionaries),
+            )
+            .unwrap();
+        tx.commit().unwrap();
+        assert_eq!(strict_session.restore_strict_text(&protected).unwrap(), RAW);
+        assert_eq!(strict_session.tokens().len(), expected.len());
     }
 }
 
 #[test]
 fn all_twenty_five_action_pairs_admit_only_both_tokenize() {
-    let actions=[Action::Tokenize,Action::Preserve,Action::Redact,Action::Generalize,Action::FormatPreserve];
-    for a in actions { for b in actions {
-        let mut p=pipeline(pair(),true);
-        p.rules=vec![crate::rule::RuleEntry::new(crate::rule::ClassRule::new(PiiClass::Name,a)),crate::rule::RuleEntry::new(crate::rule::DefaultRule::new(b))];
-        let normalized=normalize(RAW);
-        let (pool,_)=p.registry.detect_candidate_pool(&normalized.text,&DetectContext::new(&[crate::LocaleTag::Global],&DictionaryBundle::default())).unwrap();
-        let whole=recovery::plan(pool,&p.registry,&normalized,RAW,&[crate::LocaleTag::Global]).unwrap();
-        let selected=whole.primary.iter().chain(&whole.recovered).collect::<Vec<_>>();
-        let plan=residual::plan(&p,&whole.evidence,&whole.order,&selected,&normalized.text,RAW,&RuleContext::default(),&[crate::LocaleTag::Global]).unwrap();
-        assert_eq!(plan.cells.len(),usize::from(a==Action::Tokenize && b==Action::Tokenize),"{a:?}/{b:?}");
-        if a!=Action::Tokenize || b!=Action::Tokenize {
-            let session=Session::new(crate::Scope::Ephemeral).unwrap();
-            let new=clean(&p,&session,RAW);
-            p.residual_coverage=false;
-            let old=clean(&p,&session,RAW);
-            match (new,old) { (Ok(new),Ok(old)) => {assert_eq!(new.text,old.text);assert_eq!(new.manifest,old.manifest);}, (Err(new),Err(old)) => assert_eq!(new.to_string(),old.to_string()), _ => panic!("ineligible behavior drift") }
+    let actions = [
+        Action::Tokenize,
+        Action::Preserve,
+        Action::Redact,
+        Action::Generalize,
+        Action::FormatPreserve,
+    ];
+    for a in actions {
+        for b in actions {
+            let mut p = pipeline(pair(), true);
+            p.rules = vec![
+                crate::rule::RuleEntry::new(crate::rule::ClassRule::new(PiiClass::Name, a)),
+                crate::rule::RuleEntry::new(crate::rule::DefaultRule::new(b)),
+            ];
+            let normalized = normalize(RAW);
+            let (pool, _) = p
+                .registry
+                .detect_candidate_pool(
+                    &normalized.text,
+                    &DetectContext::new(&[crate::LocaleTag::Global], &DictionaryBundle::default()),
+                )
+                .unwrap();
+            let whole = recovery::plan(
+                pool,
+                &p.registry,
+                &normalized,
+                RAW,
+                &[crate::LocaleTag::Global],
+            )
+            .unwrap();
+            let selected = whole
+                .primary
+                .iter()
+                .chain(&whole.recovered)
+                .collect::<Vec<_>>();
+            let plan = residual::plan(
+                &p,
+                &whole.evidence,
+                &whole.order,
+                &selected,
+                &normalized.text,
+                RAW,
+                &RuleContext::default(),
+                &[crate::LocaleTag::Global],
+            )
+            .unwrap();
+            assert_eq!(
+                plan.cells.len(),
+                usize::from(a == Action::Tokenize && b == Action::Tokenize),
+                "{a:?}/{b:?}"
+            );
+            if a != Action::Tokenize || b != Action::Tokenize {
+                let session = Session::new(crate::Scope::Ephemeral).unwrap();
+                let new = clean(&p, &session, RAW);
+                p.residual_coverage = false;
+                let old = clean(&p, &session, RAW);
+                match (new, old) {
+                    (Ok(new), Ok(old)) => {
+                        assert_eq!(new.text, old.text);
+                        assert_eq!(new.manifest, old.manifest);
+                    }
+                    (Err(new), Err(old)) => assert_eq!(new.to_string(), old.to_string()),
+                    _ => panic!("ineligible behavior drift"),
+                }
+            }
         }
-    }}
+    }
 }
 
-struct Unknown { calls: Arc<std::sync::atomic::AtomicUsize> }
+struct Unknown {
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+}
 impl Rule for Unknown {
-    fn action(&self,_:&PiiClass,_:&RuleContext)->Option<Action> { self.calls.fetch_add(1,std::sync::atomic::Ordering::SeqCst);None }
+    fn action(&self, _: &PiiClass, _: &RuleContext) -> Option<Action> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        None
+    }
 }
 struct Wrapped(crate::rule::DefaultRule);
-impl Rule for Wrapped { fn action(&self,c:&PiiClass,x:&RuleContext)->Option<Action>{self.0.action(c,x)} }
+impl Rule for Wrapped {
+    fn action(&self, c: &PiiClass, x: &RuleContext) -> Option<Action> {
+        self.0.action(c, x)
+    }
+}
 #[test]
 fn unknown_order_wrappers_nonmatches_and_clone_preserve_runtime_calls() {
-    use crate::rule::{RuleEntry,DefaultRule,ClassRule,ColumnRule,preview};
+    use crate::rule::{preview, ClassRule, ColumnRule, DefaultRule, RuleEntry};
     for mode in 0..6 {
-        let calls=Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let unknown=RuleEntry::new(Unknown{calls:calls.clone()});
-        let default=RuleEntry::new(DefaultRule::new(Action::Tokenize));
-        let rules=match mode {
-            0=>vec![unknown,default],
-            1=>vec![default,unknown],
-            2=>vec![RuleEntry::new(ClassRule::new(PiiClass::Email,Action::Tokenize)),unknown,default],
-            3=>vec![RuleEntry::new(Wrapped(DefaultRule::new(Action::Tokenize)))],
-            4=>vec![RuleEntry::new(ColumnRule::new("secret",Action::Tokenize)),unknown,default],
-            _=>vec![RuleEntry::new(ClassRule::new(PiiClass::Name,Action::Preserve)),default],
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let unknown = RuleEntry::new(Unknown {
+            calls: calls.clone(),
+        });
+        let default = RuleEntry::new(DefaultRule::new(Action::Tokenize));
+        let rules = match mode {
+            0 => vec![unknown, default],
+            1 => vec![default, unknown],
+            2 => vec![
+                RuleEntry::new(ClassRule::new(PiiClass::Email, Action::Tokenize)),
+                unknown,
+                default,
+            ],
+            3 => vec![RuleEntry::new(Wrapped(DefaultRule::new(Action::Tokenize)))],
+            4 => vec![
+                RuleEntry::new(ColumnRule::new("secret", Action::Tokenize)),
+                unknown,
+                default,
+            ],
+            _ => vec![
+                RuleEntry::new(ClassRule::new(PiiClass::Name, Action::Preserve)),
+                default,
+            ],
         };
-        let expected=match mode {1=>Some(Action::Tokenize),5=>Some(Action::Preserve),_=>None};
-        assert_eq!(preview(&rules,&PiiClass::Name,&RuleContext::default()),expected);
-        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst),0);
-        let mut p=pipeline(pair(),true);p.rules=rules.clone();
-        let session=Session::new(crate::Scope::Ephemeral).unwrap();
-        let output=clean(&p,&session,RAW).unwrap();
-        assert_eq!(output.manifest.len(),if mode==1 {2} else if mode==5 {0} else {1});
-        let invoked=calls.swap(0,std::sync::atomic::Ordering::SeqCst);
-        p.residual_coverage=false;
-        clean(&p.clone(),&session,RAW).unwrap();
-        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst),invoked);
+        let expected = match mode {
+            1 => Some(Action::Tokenize),
+            5 => Some(Action::Preserve),
+            _ => None,
+        };
+        assert_eq!(
+            preview(&rules, &PiiClass::Name, &RuleContext::default()),
+            expected
+        );
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        let mut p = pipeline(pair(), true);
+        p.rules = rules.clone();
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let output = clean(&p, &session, RAW).unwrap();
+        assert_eq!(
+            output.manifest.len(),
+            if mode == 1 {
+                2
+            } else if mode == 5 {
+                0
+            } else {
+                1
+            }
+        );
+        let invoked = calls.swap(0, std::sync::atomic::Ordering::SeqCst);
+        p.residual_coverage = false;
+        clean(&p.clone(), &session, RAW).unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), invoked);
     }
 }
 
 #[test]
 fn builtin_preview_matches_runtime_for_actual_class_and_field_context() {
-    use crate::rule::{RuleEntry,DefaultRule,ClassRule,ColumnRule,preview};
-    for action in [Action::Tokenize,Action::Preserve,Action::Redact,Action::Generalize,Action::FormatPreserve] {
-        for class in [PiiClass::Name,PiiClass::Email,field(),PiiClass::family("document")] {
-            for field_name in [None,Some("secret"),Some("different")] {
-                let context=build_context(field_name);
-                let rules=vec![RuleEntry::new(ClassRule::new(PiiClass::Name,action)),RuleEntry::new(ColumnRule::new("secret",action)),RuleEntry::new(DefaultRule::new(Action::Tokenize))];
-                assert_eq!(preview(&rules,&class,&context),Some(rules.iter().find_map(|r|r.action(&class,&context)).unwrap()));
+    use crate::rule::{preview, ClassRule, ColumnRule, DefaultRule, RuleEntry};
+    for action in [
+        Action::Tokenize,
+        Action::Preserve,
+        Action::Redact,
+        Action::Generalize,
+        Action::FormatPreserve,
+    ] {
+        for class in [
+            PiiClass::Name,
+            PiiClass::Email,
+            field(),
+            PiiClass::family("document"),
+        ] {
+            for field_name in [None, Some("secret"), Some("different")] {
+                let context = build_context(field_name);
+                let rules = vec![
+                    RuleEntry::new(ClassRule::new(PiiClass::Name, action)),
+                    RuleEntry::new(ColumnRule::new("secret", action)),
+                    RuleEntry::new(DefaultRule::new(Action::Tokenize)),
+                ];
+                assert_eq!(
+                    preview(&rules, &class, &context),
+                    Some(
+                        rules
+                            .iter()
+                            .find_map(|r| r.action(&class, &context))
+                            .unwrap()
+                    )
+                );
             }
         }
     }
-    assert_eq!(preview(&[],&PiiClass::Name,&RuleContext::default()),Some(Action::Preserve));
+    assert_eq!(
+        preview(&[], &PiiClass::Name, &RuleContext::default()),
+        Some(Action::Preserve)
+    );
 }
 
 #[test]
 fn duplicate_nested_and_touching_evidence_retains_all_parent_ids_without_hulls() {
-    let mut input=pair();input.push(input[1].clone());
-    input.push(candidate(17..23,field(),"synthetic.nested"));
-    input.push(candidate(23..26,PiiClass::Name,"synthetic.touch"));
-    let p=pipeline(input,true);let session=Session::new(crate::Scope::Ephemeral).unwrap();
-    let output=clean(&p,&session,RAW).unwrap();
-    assert_eq!(session.restore_strict_text(&output.text).unwrap(),RAW);
-    let cells=&output.manifest.segment().residuals;
-    assert_eq!(cells.iter().map(|c|c.raw.clone()).collect::<Vec<_>>(),vec![15..17]);
-    assert_eq!(cells[0].parents.len(),2);
-    assert_ne!(cells[0].parents[0],cells[0].parents[1]);
+    let mut input = pair();
+    input.push(input[1].clone());
+    input.push(candidate(17..23, field(), "synthetic.nested"));
+    input.push(candidate(23..26, PiiClass::Name, "synthetic.touch"));
+    let p = pipeline(input, true);
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&p, &session, RAW).unwrap();
+    assert_eq!(session.restore_strict_text(&output.text).unwrap(), RAW);
+    let cells = &output.manifest.segment().residuals;
+    assert_eq!(
+        cells.iter().map(|c| c.raw.clone()).collect::<Vec<_>>(),
+        vec![15..17]
+    );
+    assert_eq!(cells[0].parents.len(), 2);
+    assert_ne!(cells[0].parents[0], cells[0].parents[1]);
     // A touching Preserve component does not disable the pair's residual.
-    let mut p=pipeline(vec![pair()[0].clone(),pair()[1].clone(),candidate(21..22,PiiClass::Email,"synthetic.touch")],true);
-    p.rules=vec![crate::rule::RuleEntry::new(crate::rule::ClassRule::new(PiiClass::Email,Action::Preserve)),crate::rule::RuleEntry::new(crate::rule::DefaultRule::new(Action::Tokenize))];
-    assert_eq!(clean(&p,&session,RAW).unwrap().manifest.segment().residuals[0].raw,15..21);
+    let mut p = pipeline(
+        vec![
+            pair()[0].clone(),
+            pair()[1].clone(),
+            candidate(21..22, PiiClass::Email, "synthetic.touch"),
+        ],
+        true,
+    );
+    p.rules = vec![
+        crate::rule::RuleEntry::new(crate::rule::ClassRule::new(
+            PiiClass::Email,
+            Action::Preserve,
+        )),
+        crate::rule::RuleEntry::new(crate::rule::DefaultRule::new(Action::Tokenize)),
+    ];
+    assert_eq!(
+        clean(&p, &session, RAW)
+            .unwrap()
+            .manifest
+            .segment()
+            .residuals[0]
+            .raw,
+        15..21
+    );
 }
 
 #[test]
 fn normalization_keeps_source_scalars_joiners_and_the_original_collision_guard() {
-    let raw="ｐassword: \"le\u{200d}ft right\"\nmarker\u{200d}";
-    let p=pipeline(triple(),true);let session=Session::new(crate::Scope::Ephemeral).unwrap();
-    let output=clean(&p,&session,raw).unwrap();
-    assert_eq!(session.restore_strict_text(&output.text).unwrap(),raw);
-    assert_eq!(&raw[output.manifest.segment().residuals[0].raw.clone()]," ");
+    let raw = "ｐassword: \"le\u{200d}ft right\"\nmarker\u{200d}";
+    let p = pipeline(triple(), true);
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&p, &session, raw).unwrap();
+    assert_eq!(session.restore_strict_text(&output.text).unwrap(), raw);
+    assert_eq!(
+        &raw[output.manifest.segment().residuals[0].raw.clone()],
+        " "
+    );
     assert!(output.text.ends_with('\u{200d}')); // Outside admitted evidence.
-    let raw="\u{0344}";
-    let p=pipeline(vec![candidate(0..2,PiiClass::Name,"synthetic.a"),candidate(2..4,PiiClass::Name,"synthetic.b")],true);
-    let empty=Session::new(crate::Scope::Ephemeral).unwrap();
-    assert!(clean(&p,&empty,raw).is_err());assert!(empty.tokens().is_empty());
-    for span in [0..0,1..2,0..8] {
-        let p=pipeline(vec![candidate(span,PiiClass::Name,"synthetic.bad")],true);
-        assert!(clean(&p,&empty,"é").is_err());
+    let raw = "\u{0344}";
+    let p = pipeline(
+        vec![
+            candidate(0..2, PiiClass::Name, "synthetic.a"),
+            candidate(2..4, PiiClass::Name, "synthetic.b"),
+        ],
+        true,
+    );
+    let empty = Session::new(crate::Scope::Ephemeral).unwrap();
+    assert!(clean(&p, &empty, raw).is_err());
+    assert!(empty.tokens().is_empty());
+    for span in [0..0, 1..2, 0..8] {
+        let p = pipeline(vec![candidate(span, PiiClass::Name, "synthetic.bad")], true);
+        assert!(clean(&p, &empty, "é").is_err());
     }
 }
 
 #[test]
 fn actual_collision_bypass_and_conservative_original_fallback_are_distinct() {
-    let a=PiiClass::custom("alpha").unwrap();let b=PiiClass::custom("beta").unwrap();
-    let mut p=Pipeline::builder().recognizer(Fixed(vec![candidate(0..5,a.clone(),"synthetic.a"),candidate(3..8,b,"synthetic.b")]))
-        .register_collision("synthetic.a",crate::CollisionMembership::new("document","a",10,Some("cue".into())))
-        .register_collision("synthetic.b",crate::CollisionMembership::new("document","b",20,None))
-        .rule(crate::rule::DefaultRule::new(Action::Tokenize)).build().unwrap();p.residual_coverage=true;
-    let session=Session::new(crate::Scope::Ephemeral).unwrap();
-    let output=clean(&p,&session,"xxxxxxxx").unwrap();
-    assert_eq!(output.manifest[0].class,a);
-    assert_eq!(output.manifest[0].raw_span,0..5);
-    assert_eq!(output.manifest.segment().residuals[0].raw,5..8);
+    let a = PiiClass::custom("alpha").unwrap();
+    let b = PiiClass::custom("beta").unwrap();
+    let mut p = Pipeline::builder()
+        .recognizer(Fixed(vec![
+            candidate(0..5, a.clone(), "synthetic.a"),
+            candidate(3..8, b, "synthetic.b"),
+        ]))
+        .register_collision(
+            "synthetic.a",
+            crate::CollisionMembership::new("document", "a", 10, Some("cue".into())),
+        )
+        .register_collision(
+            "synthetic.b",
+            crate::CollisionMembership::new("document", "b", 20, None),
+        )
+        .rule(crate::rule::DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    p.residual_coverage = true;
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&p, &session, "xxxxxxxx").unwrap();
+    assert_eq!(output.manifest[0].class, a);
+    assert_eq!(output.manifest[0].raw_span, 0..5);
+    assert_eq!(output.manifest.segment().residuals[0].raw, 5..8);
     // Actual selected CollisionPolicy bypass stays alpha; the conservative original
     // check still requires its standalone family policy and can exclude coverage.
-    p.rules.insert(0,crate::rule::RuleEntry::new(crate::rule::ClassRule::new(PiiClass::family("document"),Action::Preserve)));
-    let output=clean(&p,&session,"xxxxxxxx").unwrap();
-    assert_eq!(output.manifest[0].class,a);assert!(output.manifest.segment().residuals.is_empty());
+    p.rules.insert(
+        0,
+        crate::rule::RuleEntry::new(crate::rule::ClassRule::new(
+            PiiClass::family("document"),
+            Action::Preserve,
+        )),
+    );
+    let output = clean(&p, &session, "xxxxxxxx").unwrap();
+    assert_eq!(output.manifest[0].class, a);
+    assert!(output.manifest.segment().residuals.is_empty());
     // A family class that is never an actual fallback does not exclude the pair.
-    p.registry=pipeline(pair(),true).registry;
-    assert_eq!(clean(&p,&session,RAW).unwrap().manifest.segment().residuals.len(),1);
+    p.registry = pipeline(pair(), true).registry;
+    assert_eq!(
+        clean(&p, &session, RAW)
+            .unwrap()
+            .manifest
+            .segment()
+            .residuals
+            .len(),
+        1
+    );
 }
 
 #[test]
 fn same_value_whole_and_fragment_keep_distinct_occurrences() {
-    let p=pipeline(vec![candidate(0..3,PiiClass::Email,"synthetic.email"),candidate(2..4,PiiClass::Name,"synthetic.partial"),candidate(5..6,PiiClass::Name,"synthetic.whole")],true);
-    let session=Session::new(crate::Scope::Ephemeral).unwrap();
-    let output=clean(&p,&session,"xxaa a").unwrap();
-    assert_eq!(output.manifest.iter().map(|s|s.raw_span.clone()).collect::<Vec<_>>(),vec![0..3,3..4,5..6]);
-    assert_eq!(&output.text[output.manifest[1].clean_span.clone()],&output.text[output.manifest[2].clean_span.clone()]);
-    assert!(matches!(output.manifest.records()[1].origin,Origin::Residual{..}));
-    assert!(matches!(output.manifest.records()[2].origin,Origin::Selection{..}));
-    assert_ne!(output.manifest.records()[1].id,output.manifest.records()[2].id);
-    assert_eq!(session.restore_strict_text(&output.text).unwrap(),"xxaa a");
+    let p = pipeline(
+        vec![
+            candidate(0..3, PiiClass::Email, "synthetic.email"),
+            candidate(2..4, PiiClass::Name, "synthetic.partial"),
+            candidate(5..6, PiiClass::Name, "synthetic.whole"),
+        ],
+        true,
+    );
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&p, &session, "xxaa a").unwrap();
+    assert_eq!(
+        output
+            .manifest
+            .iter()
+            .map(|s| s.raw_span.clone())
+            .collect::<Vec<_>>(),
+        vec![0..3, 3..4, 5..6]
+    );
+    assert_eq!(
+        &output.text[output.manifest[1].clean_span.clone()],
+        &output.text[output.manifest[2].clean_span.clone()]
+    );
+    assert!(matches!(
+        output.manifest.records()[1].origin,
+        Origin::Residual { .. }
+    ));
+    assert!(matches!(
+        output.manifest.records()[2].origin,
+        Origin::Selection { .. }
+    ));
+    assert_ne!(
+        output.manifest.records()[1].id,
+        output.manifest.records()[2].id
+    );
+    assert_eq!(session.restore_strict_text(&output.text).unwrap(), "xxaa a");
 }
 
-type AuditCalls=Arc<std::sync::Mutex<Vec<(bool,usize)>>>;
-struct Audit { session:Arc<Session>, calls:AuditCalls, fail:Option<usize> }
+type AuditCalls = Arc<std::sync::Mutex<Vec<(bool, usize)>>>;
+struct Audit {
+    session: Arc<Session>,
+    calls: AuditCalls,
+    fail: Option<usize>,
+}
 impl RedactionLogger for Audit {
-    fn log(&self,entry:&RedactionEntry)->std::result::Result<(),crate::RedactionLogError> {
-        let mut calls=self.calls.lock().unwrap();let index=calls.len();
-        calls.push((entry.provenance_stage.as_deref()==Some("primary_pipeline.residual"),self.session.tokens().len()));
-        if self.fail==Some(index) { return Err(crate::RedactionLogError::Backend("synthetic audit failure".into())); } Ok(())
+    fn log(&self, entry: &RedactionEntry) -> std::result::Result<(), crate::RedactionLogError> {
+        let mut calls = self.calls.lock().unwrap();
+        let index = calls.len();
+        calls.push((
+            entry.provenance_stage.as_deref() == Some("primary_pipeline.residual"),
+            self.session.tokens().len(),
+        ));
+        if self.fail == Some(index) {
+            return Err(crate::RedactionLogError::Backend(
+                "synthetic audit failure".into(),
+            ));
+        }
+        Ok(())
     }
 }
 #[test]
 fn audit_failures_preserve_original_order_and_residual_allocate_before_log() {
-    let raw="xxxxxxxxxxxxxx";
-    let input=vec![candidate(0..11,field(),"synthetic.parent"),candidate(1..2,PiiClass::Name,"synthetic.a"),candidate(4..5,PiiClass::Name,"synthetic.b"),candidate(7..8,PiiClass::Name,"synthetic.c"),candidate(10..14,PiiClass::Name,"synthetic.last")];
-    let baseline_session=Arc::new(Session::new(crate::Scope::Ephemeral).unwrap());let baseline_calls=AuditCalls::default();
-    let mut baseline=pipeline(input.clone(),true);baseline.redaction_loggers.push(Arc::new(Audit{session:baseline_session.clone(),calls:baseline_calls.clone(),fail:None}));
-    let out=clean(&baseline,&baseline_session,raw).unwrap();assert_eq!(out.manifest.segment().residuals.len(),4);
-    let expected=baseline_calls.lock().unwrap().clone();
-    let first=expected.iter().position(|(r,_)|*r).unwrap();
-    assert!(expected[first..].iter().all(|(r,_)|*r));
-    assert!(expected[first].1 > expected[first-1].1);
+    let raw = "xxxxxxxxxxxxxx";
+    let input = vec![
+        candidate(0..11, field(), "synthetic.parent"),
+        candidate(1..2, PiiClass::Name, "synthetic.a"),
+        candidate(4..5, PiiClass::Name, "synthetic.b"),
+        candidate(7..8, PiiClass::Name, "synthetic.c"),
+        candidate(10..14, PiiClass::Name, "synthetic.last"),
+    ];
+    let baseline_session = Arc::new(Session::new(crate::Scope::Ephemeral).unwrap());
+    let baseline_calls = AuditCalls::default();
+    let mut baseline = pipeline(input.clone(), true);
+    baseline.redaction_loggers.push(Arc::new(Audit {
+        session: baseline_session.clone(),
+        calls: baseline_calls.clone(),
+        fail: None,
+    }));
+    let out = clean(&baseline, &baseline_session, raw).unwrap();
+    assert_eq!(out.manifest.segment().residuals.len(), 4);
+    let expected = baseline_calls.lock().unwrap().clone();
+    let first = expected.iter().position(|(r, _)| *r).unwrap();
+    assert!(expected[first..].iter().all(|(r, _)| *r));
+    assert!(expected[first].1 > expected[first - 1].1);
     for fail in 0..expected.len() {
-        let session=Arc::new(Session::new(crate::Scope::Ephemeral).unwrap());let calls=AuditCalls::default();
-        let mut p=pipeline(input.clone(),true);p.redaction_loggers.push(Arc::new(Audit{session:session.clone(),calls:calls.clone(),fail:Some(fail)}));
-        assert!(clean(&p,&session,raw).is_err());
-        assert_eq!(*calls.lock().unwrap(),expected[..=fail]);
-        assert_eq!(session.tokens().len(),expected[fail].1);
-        let staged_session=Arc::new(Session::new(crate::Scope::Ephemeral).unwrap());let staged_calls=AuditCalls::default();
-        p.redaction_loggers=vec![Arc::new(Audit{session:staged_session.clone(),calls:staged_calls.clone(),fail:Some(fail)})];
-        let mut tx=staged_session.begin_transaction();
-        assert!(p.redact_text_with_manifest_uncached(&mut ProtectionTarget::Staged(&mut tx),raw,None,DocumentKind::Text,&[crate::LocaleTag::Global],&DictionaryBundle::default(),None).is_err());
-        drop(tx);assert!(staged_session.tokens().is_empty());
-        assert_eq!(staged_calls.lock().unwrap().len(),fail+1); // Audit attempts are not rolled back.
+        let session = Arc::new(Session::new(crate::Scope::Ephemeral).unwrap());
+        let calls = AuditCalls::default();
+        let mut p = pipeline(input.clone(), true);
+        p.redaction_loggers.push(Arc::new(Audit {
+            session: session.clone(),
+            calls: calls.clone(),
+            fail: Some(fail),
+        }));
+        assert!(clean(&p, &session, raw).is_err());
+        assert_eq!(*calls.lock().unwrap(), expected[..=fail]);
+        assert_eq!(session.tokens().len(), expected[fail].1);
+        let staged_session = Arc::new(Session::new(crate::Scope::Ephemeral).unwrap());
+        let staged_calls = AuditCalls::default();
+        p.redaction_loggers = vec![Arc::new(Audit {
+            session: staged_session.clone(),
+            calls: staged_calls.clone(),
+            fail: Some(fail),
+        })];
+        let mut tx = staged_session.begin_transaction();
+        assert!(p
+            .redact_text_with_manifest_uncached(
+                &mut ProtectionTarget::Staged(&mut tx),
+                raw,
+                None,
+                DocumentKind::Text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                None
+            )
+            .is_err());
+        drop(tx);
+        assert!(staged_session.tokens().is_empty());
+        assert_eq!(staged_calls.lock().unwrap().len(), fail + 1); // Audit attempts are not rolled back.
     }
 }
 
 #[test]
 fn many_gaps_and_parent_incidence_retain_payloads_once() {
-    for count in [8,32,64] {
-        let raw="x".repeat(4*count+1);
-        let mut input=(0..count).map(|i|candidate(0..4*count-i,field(),"synthetic.parent")).collect::<Vec<_>>();
-        input.extend((0..count).map(|i|candidate(2*i+1..2*i+2,PiiClass::Name,"synthetic.whole")));
-        input.push(candidate(3*count-1..4*count+1,PiiClass::Name,"synthetic.last"));
-        let p=pipeline(input,true);let session=Session::new(crate::Scope::Ephemeral).unwrap();
-        let output=clean(&p,&session,&raw).unwrap();
-        let segment=output.manifest.segment();
-        assert_eq!(segment.originals.len(),2*count+1);
-        let incidence=segment.residuals.iter().map(|c|c.parents.len()).sum::<usize>();
-        assert!(incidence>=count*count,"maximal nested parent incidence is quadratic");
-        let payloads=segment.originals.as_ptr();
-        for _ in 0..4 { output.manifest.projection();output.manifest.validate().unwrap(); }
-        assert_eq!(payloads,output.manifest.segment().originals.as_ptr());
-        assert_eq!(session.restore_strict_text(&output.text).unwrap(),raw);
-        eprintln!("B1 retained originals={} cells={} parent_incidence={} records={} projected_spans={}",segment.originals.len(),segment.residuals.len(),incidence,output.manifest.len(),output.manifest.projection().spans.len());
+    for count in [8, 32, 64] {
+        let raw = "x".repeat(4 * count + 1);
+        let mut input = (0..count)
+            .map(|i| candidate(0..4 * count - i, field(), "synthetic.parent"))
+            .collect::<Vec<_>>();
+        input.extend(
+            (0..count).map(|i| candidate(2 * i + 1..2 * i + 2, PiiClass::Name, "synthetic.whole")),
+        );
+        input.push(candidate(
+            3 * count - 1..4 * count + 1,
+            PiiClass::Name,
+            "synthetic.last",
+        ));
+        let p = pipeline(input, true);
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let output = clean(&p, &session, &raw).unwrap();
+        let segment = output.manifest.segment();
+        assert_eq!(segment.originals.len(), 2 * count + 1);
+        let incidence = segment
+            .residuals
+            .iter()
+            .map(|c| c.parents.len())
+            .sum::<usize>();
+        assert!(
+            incidence >= count * count,
+            "maximal nested parent incidence is quadratic"
+        );
+        let payloads = segment.originals.as_ptr();
+        for _ in 0..4 {
+            output.manifest.projection();
+            output.manifest.validate().unwrap();
+        }
+        assert_eq!(payloads, output.manifest.segment().originals.as_ptr());
+        assert_eq!(session.restore_strict_text(&output.text).unwrap(), raw);
+        eprintln!(
+            "B1 retained originals={} cells={} parent_incidence={} records={} projected_spans={}",
+            segment.originals.len(),
+            segment.residuals.len(),
+            incidence,
+            output.manifest.len(),
+            output.manifest.projection().spans.len()
+        );
     }
 }
 
-type NetCalls=Arc<std::sync::Mutex<Vec<(usize,usize,String,usize,usize)>>>;
-struct ScriptNet { net:usize, step:std::sync::Mutex<usize>,calls:NetCalls }
+type NetCalls = Arc<std::sync::Mutex<Vec<(usize, usize, String, usize, usize)>>>;
+struct ScriptNet {
+    net: usize,
+    step: std::sync::Mutex<usize>,
+    calls: NetCalls,
+}
 impl SafetyNet for ScriptNet {
-    fn id(&self)->&str { if self.net==0 {"synthetic.net"} else {"synthetic.observer"} }
-    fn supported_locales(&self)->&[crate::LocaleTag] { &[crate::LocaleTag::Global] }
-    fn check(&self,output:&str,context:SafetyNetContext<'_>)->std::result::Result<Vec<LeakSuspect>,SafetyNetError> {
-        let mut step=self.step.lock().unwrap();
-        self.calls.lock().unwrap().push((self.net,*step,output.into(),context.manifest as *const Manifest as usize,context.manifest.spans.len()));
-        let found=if self.net==1 {vec![]} else {match *step {
-            0=>{assert_eq!(context.manifest.spans.len(),2);vec![LeakSuspect::new(output.len()-2..output.len(),PiiClass::Name,self.id(),Some(0.99),LeakKind::Uncovered,"synthetic",None)]},
-            1=>{let start=output.find("ma").unwrap();vec![LeakSuspect::new(start..start+2,PiiClass::Name,self.id(),Some(0.99),LeakKind::Uncovered,"synthetic",None)]},
-            2=>{let residual=&context.manifest.spans[1];vec![LeakSuspect::new(residual.clean_span.start..residual.clean_span.end+1,PiiClass::Name,self.id(),Some(0.99),LeakKind::ClassMismatch{pipeline_class:field(),safety_net_class:PiiClass::Name},"synthetic",None)]},
-            3=>vec![],_=>panic!("unexpected extra sweep")}};
-        *step+=1;Ok(found)
+    fn id(&self) -> &str {
+        if self.net == 0 {
+            "synthetic.net"
+        } else {
+            "synthetic.observer"
+        }
+    }
+    fn supported_locales(&self) -> &[crate::LocaleTag] {
+        &[crate::LocaleTag::Global]
+    }
+    fn check(
+        &self,
+        output: &str,
+        context: SafetyNetContext<'_>,
+    ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+        let mut step = self.step.lock().unwrap();
+        self.calls.lock().unwrap().push((
+            self.net,
+            *step,
+            output.into(),
+            context.manifest as *const Manifest as usize,
+            context.manifest.spans.len(),
+        ));
+        let found = if self.net == 1 {
+            vec![]
+        } else {
+            match *step {
+                0 => {
+                    assert_eq!(context.manifest.spans.len(), 2);
+                    vec![LeakSuspect::new(
+                        output.len() - 2..output.len(),
+                        PiiClass::Name,
+                        self.id(),
+                        Some(0.99),
+                        LeakKind::Uncovered,
+                        "synthetic",
+                        None,
+                    )]
+                }
+                1 => {
+                    let start = output.find("ma").unwrap();
+                    vec![LeakSuspect::new(
+                        start..start + 2,
+                        PiiClass::Name,
+                        self.id(),
+                        Some(0.99),
+                        LeakKind::Uncovered,
+                        "synthetic",
+                        None,
+                    )]
+                }
+                2 => {
+                    let residual = &context.manifest.spans[1];
+                    vec![LeakSuspect::new(
+                        residual.clean_span.start..residual.clean_span.end + 1,
+                        PiiClass::Name,
+                        self.id(),
+                        Some(0.99),
+                        LeakKind::ClassMismatch {
+                            pipeline_class: field(),
+                            safety_net_class: PiiClass::Name,
+                        },
+                        "synthetic",
+                        None,
+                    )]
+                }
+                3 => vec![],
+                _ => panic!("unexpected extra sweep"),
+            }
+        };
+        *step += 1;
+        Ok(found)
     }
 }
 #[test]
 fn actual_two_net_sequence_sees_residual_output_and_deletes_its_final_authority() {
-    let mut p=pipeline(pair(),true);let calls=NetCalls::default();
-    for net in 0..2 {p.safety_nets.push(Arc::new(ScriptNet{net,step:std::sync::Mutex::new(0),calls:calls.clone()}));}
-    let session=Session::new(crate::Scope::Ephemeral).unwrap();
-    let (output,manifest,_,trace)=p.clean_text_with_safety_net_policy_detect_context_and_protection_trace(&session,RAW,&[crate::LocaleTag::Global],&DictionaryBundle::default(),SafetyNetPolicy::default()).unwrap();
-    let observed=calls.lock().unwrap();assert_eq!(observed.len(),8);
-    for (phase,pair) in observed.chunks_exact(2).enumerate() {
-        assert_eq!(pair[0].1,phase);assert_eq!(pair[0].2,pair[1].2);assert_eq!(pair[0].3,pair[1].3);
-        assert_eq!(pair[0].4,[2,3,4,3][phase]);
-        if phase>0 {assert_ne!(pair[0].2,observed[(phase-1)*2].2);}
+    let mut p = pipeline(pair(), true);
+    let calls = NetCalls::default();
+    for net in 0..2 {
+        p.safety_nets.push(Arc::new(ScriptNet {
+            net,
+            step: std::sync::Mutex::new(0),
+            calls: calls.clone(),
+        }));
+    }
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let (output, manifest, _, trace) = p
+        .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+            &session,
+            RAW,
+            &[crate::LocaleTag::Global],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        )
+        .unwrap();
+    wire_fixture(RAW, &manifest, &trace);
+    let observed = calls.lock().unwrap();
+    assert_eq!(observed.len(), 8);
+    for (phase, pair) in observed.chunks_exact(2).enumerate() {
+        assert_eq!(pair[0].1, phase);
+        assert_eq!(pair[0].2, pair[1].2);
+        assert_eq!(pair[0].3, pair[1].3);
+        assert_eq!(pair[0].4, [2, 3, 4, 3][phase]);
+        if phase > 0 {
+            assert_ne!(pair[0].2, observed[(phase - 1) * 2].2);
+        }
     }
     assert!(!observed[0].2.contains(" right"));
-    assert_eq!(manifest.iter().map(|s|s.raw_span.clone()).collect::<Vec<_>>(),vec![0..15,23..25,27..29]);
-    assert_eq!(trace.iter().filter(|t|t.stage()=="safety_net" && t.action()=="tokenize").count(),2);
-    assert_eq!(trace.iter().filter(|t|t.decision()=="fallback_redact").count(),1);
-    assert_eq!(trace.iter().filter(|t|t.action()=="tokenize").count(),manifest.len());
-    assert_eq!(session.restore_strict_text(&text(output)).unwrap(),format!("{}{}",&RAW[..15],&RAW[22..]));
+    assert_eq!(
+        manifest
+            .iter()
+            .map(|s| s.raw_span.clone())
+            .collect::<Vec<_>>(),
+        vec![0..15, 23..25, 27..29]
+    );
+    assert_eq!(
+        trace
+            .iter()
+            .filter(|t| t.stage() == "safety_net" && t.action() == "tokenize")
+            .count(),
+        2
+    );
+    assert_eq!(
+        trace
+            .iter()
+            .filter(|t| t.decision() == "fallback_redact")
+            .count(),
+        1
+    );
+    assert_eq!(
+        trace.iter().filter(|t| t.action() == "tokenize").count(),
+        manifest.len()
+    );
+    assert_eq!(
+        session.restore_strict_text(&text(output)).unwrap(),
+        format!("{}{}", &RAW[..15], &RAW[22..])
+    );
 }
 
-struct RejectNet { calls:Arc<std::sync::atomic::AtomicUsize>, error:bool, inside_owned:bool }
+struct RejectNet {
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+    error: bool,
+    inside_owned: bool,
+}
 impl SafetyNet for RejectNet {
-    fn id(&self)->&str {"synthetic.reject"}
-    fn supported_locales(&self)->&[crate::LocaleTag] { &[crate::LocaleTag::Global] }
-    fn check(&self,_:&str,context:SafetyNetContext<'_>)->std::result::Result<Vec<LeakSuspect>,SafetyNetError> {
-        self.calls.fetch_add(1,std::sync::atomic::Ordering::SeqCst);
-        assert_eq!(context.manifest.spans.len(),2);
-        if self.error {Err(SafetyNetError::InvalidOutput{message:"synthetic failure".into()})} else {Ok(vec![LeakSuspect::new(if self.inside_owned { context.manifest.spans[1].clean_span.clone() } else { let end=context.manifest.spans[1].clean_span.end; end..end+1 },PiiClass::Name,self.id(),Some(0.99),LeakKind::Uncovered,"synthetic",None)])}
+    fn id(&self) -> &str {
+        "synthetic.reject"
+    }
+    fn supported_locales(&self) -> &[crate::LocaleTag] {
+        &[crate::LocaleTag::Global]
+    }
+    fn check(
+        &self,
+        _: &str,
+        context: SafetyNetContext<'_>,
+    ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(context.manifest.spans.len(), 2);
+        if self.error {
+            Err(SafetyNetError::InvalidOutput {
+                message: "synthetic failure".into(),
+            })
+        } else {
+            Ok(vec![LeakSuspect::new(
+                if self.inside_owned {
+                    context.manifest.spans[1].clean_span.clone()
+                } else {
+                    let end = context.manifest.spans[1].clean_span.end;
+                    end..end + 1
+                },
+                PiiClass::Name,
+                self.id(),
+                Some(0.99),
+                LeakKind::Uncovered,
+                "synthetic",
+                None,
+            )])
+        }
     }
 }
 #[test]
 fn strict_nets_deny_actual_residual_output_and_owned_prefix_composition_restores() {
-    for (error,inside_owned) in [(false,false),(true,false),(false,true)] {
-        let mut p=pipeline(pair(),true);let calls=Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        p.safety_nets.push(Arc::new(RejectNet{calls:calls.clone(),error,inside_owned}));
-        let session=Session::new(crate::Scope::Ephemeral).unwrap();let mut tx=session.begin_transaction();
-        assert_eq!(p.protect_text_transaction(&mut tx,RAW,ProtectionContext::strict(&[crate::LocaleTag::Global],&DictionaryBundle::default())).is_err(),error || !inside_owned);
-        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst),1);drop(tx);assert!(session.tokens().is_empty());
+    for (error, inside_owned) in [(false, false), (true, false), (false, true)] {
+        let mut p = pipeline(pair(), true);
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        p.safety_nets.push(Arc::new(RejectNet {
+            calls: calls.clone(),
+            error,
+            inside_owned,
+        }));
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let mut tx = session.begin_transaction();
+        assert_eq!(
+            p.protect_text_transaction(
+                &mut tx,
+                RAW,
+                ProtectionContext::strict(
+                    &[crate::LocaleTag::Global],
+                    &DictionaryBundle::default()
+                )
+            )
+            .is_err(),
+            error || !inside_owned
+        );
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        drop(tx);
+        assert!(session.tokens().is_empty());
     }
-    let p=pipeline(pair(),true);let session=Session::new(crate::Scope::Ephemeral).unwrap();
-    let prefix=session.tokenize(&PiiClass::Name,"seed").unwrap();
-    let mut tx=session.begin_transaction();
-    let output=p.protect_text_transaction(&mut tx,&format!("{prefix}{RAW}"),ProtectionContext::strict(&[crate::LocaleTag::Global],&DictionaryBundle::default())).unwrap();
-    tx.commit().unwrap();assert_eq!(session.restore_strict_text(&output).unwrap(),format!("seed{RAW}"));
+    let p = pipeline(pair(), true);
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let prefix = session.tokenize(&PiiClass::Name, "seed").unwrap();
+    let mut tx = session.begin_transaction();
+    let output = p
+        .protect_text_transaction(
+            &mut tx,
+            &format!("{prefix}{RAW}"),
+            ProtectionContext::strict(&[crate::LocaleTag::Global], &DictionaryBundle::default()),
+        )
+        .unwrap();
+    tx.commit().unwrap();
+    assert_eq!(
+        session.restore_strict_text(&output).unwrap(),
+        format!("seed{RAW}")
+    );
 }
 
 #[test]
 fn residual_parent_order_cannot_replace_the_legacy_representative() {
-    let mut input=pair();let mut duplicate=input[1].clone();duplicate.recognizer_id="synthetic.zz".into();input.push(duplicate);
-    let session=Session::new(crate::Scope::Ephemeral).unwrap();let output=clean(&pipeline(input,true),&session,RAW).unwrap();
-    let mut segment=output.manifest.segment().clone();
-    let ids=segment.residuals[0].parents.clone();assert_eq!(ids.len(),2);
-    let a=segment.residual_order.iter().position(|id|*id==ids[0]).unwrap();let b=segment.residual_order.iter().position(|id|*id==ids[1]).unwrap();
-    segment.residual_order.swap(a,b);segment.residuals[0].parents.swap(0,1);segment.residuals[0].representative=ids[1];
-    let mut bad=Ledger::new(segment);for record in output.manifest.records(){bad.insert(record.clone());}
-    assert!(bad.validate().is_err(),"a self-consistent replacement order must not forge representative authority");
+    let mut input = pair();
+    let mut duplicate = input[1].clone();
+    duplicate.recognizer_id = "synthetic.zz".into();
+    input.push(duplicate);
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&pipeline(input, true), &session, RAW).unwrap();
+    let mut segment = output.manifest.segment().clone();
+    let ids = segment.residuals[0].parents.clone();
+    assert_eq!(ids.len(), 2);
+    let a = segment
+        .residual_order
+        .iter()
+        .position(|id| *id == ids[0])
+        .unwrap();
+    let b = segment
+        .residual_order
+        .iter()
+        .position(|id| *id == ids[1])
+        .unwrap();
+    segment.residual_order.swap(a, b);
+    segment.residuals[0].parents.swap(0, 1);
+    segment.residuals[0].representative = ids[1];
+    let mut bad = Ledger::new(segment);
+    for record in output.manifest.records() {
+        bad.insert(record.clone());
+    }
+    assert!(
+        bad.validate().is_err(),
+        "a self-consistent replacement order must not forge representative authority"
+    );
+}
+
+fn wire_fixture(raw: &str, manifest: &[EmittedTokenSpan], trace: &[GazeLocalProtectionTraceItem]) {
+    // Match the existing benchmark serializer's closed compatibility projection.
+    let manifest=manifest.iter().map(|s|serde_json::json!({"raw_start":s.raw_span.start,"raw_end":s.raw_span.end,"clean_start":s.clean_span.start,"clean_end":s.clean_span.end,"class":s.class.to_canonical_str()})).collect::<Vec<_>>();
+    let trace=trace.iter().map(|t|serde_json::json!({"raw_start":t.raw_start(),"raw_end":t.raw_end(),"class":t.class().to_canonical_str(),"action":t.action(),"provenance":{"stage":t.stage(),"decision":t.decision(),"source_ids":t.source_ids()}})).collect::<Vec<_>>();
+    eprintln!(
+        "B1_WIRE {}",
+        serde_json::json!({"raw":raw,"manifest":manifest,"trace":trace})
+    );
+}
+
+#[test]
+fn forged_residual_ids_bounds_parent_membership_and_ownership_fail_closed() {
+    let mut input = pair();
+    input.push(input[1].clone());
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&pipeline(input, true), &session, RAW).unwrap();
+    for mode in 0..6 {
+        let mut segment = output.manifest.segment().clone();
+        let mut records = output.manifest.records().to_vec();
+        match mode {
+            0 => {
+                segment.residuals[0].parents.pop();
+            }
+            1 => segment.residuals[0].raw.start -= 1,
+            2 => segment.residuals[0].raw.end += 1,
+            3 => records[1].owned = false,
+            4 => {
+                records[1].origin = Origin::Residual {
+                    segment: 0,
+                    residual: 99,
+                }
+            }
+            _ => records[1].action = Some(Action::Preserve),
+        }
+        let mut bad = Ledger::new(segment);
+        for r in records {
+            bad.insert(r);
+        }
+        assert!(bad.validate().is_err(), "corrupt residual mode{mode}");
+    }
+}
+
+#[test]
+fn preview_disagreement_never_overrides_action_or_allocates_a_residual() {
+    struct Fault {
+        calls: Arc<std::sync::atomic::AtomicUsize>,
+        limit: usize,
+    }
+    impl Rule for Fault {
+        fn action(&self, _: &PiiClass, _: &RuleContext) -> Option<Action> {
+            let call = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Some(if call < self.limit + 1 {
+                Action::Tokenize
+            } else {
+                Action::Preserve
+            })
+        }
+    }
+    for limit in 0..2 {
+        let mut p = pipeline(pair(), true);
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        p.rules[0].inject_runtime(Fault {
+            calls: calls.clone(),
+            limit,
+        });
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let err = clean(&p, &session, RAW).err().unwrap();
+        assert!(err.to_string().contains("preview mismatch"));
+        assert_eq!(session.tokens().len(), limit);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), limit + 2);
+    }
+}
+
+#[test]
+fn residual_allocation_failure_occurs_after_original_effects_before_residual_audit() {
+    let mut input = pair();
+    input[1].class = PiiClass::Custom("___".into());
+    let mut p = pipeline(input, true);
+    let session = Arc::new(Session::new(crate::Scope::Ephemeral).unwrap());
+    let calls = AuditCalls::default();
+    p.redaction_loggers.push(Arc::new(Audit {
+        session: session.clone(),
+        calls: calls.clone(),
+        fail: None,
+    }));
+    assert!(clean(&p, &session, RAW).is_err());
+    assert_eq!(session.tokens().len(), 1);
+    assert!(calls.lock().unwrap().iter().all(|(residual, _)| !*residual));
+}
+
+#[test]
+fn duplicate_normalized_parents_consume_one_raw_scalar_and_tied_order_is_real() {
+    let raw = "\u{0344}x";
+    assert_eq!(normalize(raw).text, "\u{0308}\u{0301}x");
+    let parent = candidate(2..5, field(), "synthetic.parent");
+    let p = pipeline(
+        vec![
+            candidate(0..4, PiiClass::Name, "synthetic.name"),
+            parent.clone(),
+            parent,
+        ],
+        true,
+    );
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let out = clean(&p, &session, raw).unwrap();
+    assert_eq!(
+        out.manifest
+            .iter()
+            .map(|s| s.raw_span.clone())
+            .collect::<Vec<_>>(),
+        vec![0..2, 2..3]
+    );
+    assert_eq!(out.manifest.segment().residuals[0].parents.len(), 2);
+    assert_eq!(session.restore_strict_text(&out.text).unwrap(), raw);
+    assert_eq!(normalize("e\u{0301}").text, "e\u{0301}");
+    for reverse in [false, true] {
+        let a = candidate(2..5, PiiClass::custom("alpha").unwrap(), "synthetic.same");
+        let b = candidate(2..5, PiiClass::custom("beta").unwrap(), "synthetic.same");
+        let mut parents = if reverse { vec![b, a] } else { vec![a, b] };
+        let expected = parents[0].class.clone();
+        parents.insert(0, candidate(0..3, PiiClass::Name, "synthetic.name"));
+        let out = clean(&pipeline(parents, true), &session, "xxxxx").unwrap();
+        assert_eq!(out.manifest.segment().residuals[0].class, expected);
+    }
+}
+
+#[test]
+fn planning_counts_real_preview_and_sweep_operations() {
+    let count = 64;
+    let raw = "x".repeat(4 * count + 1);
+    let mut input = (0..count)
+        .map(|i| candidate(0..4 * count - i, field(), "synthetic.parent"))
+        .collect::<Vec<_>>();
+    input.extend(
+        (0..count).map(|i| candidate(2 * i + 1..2 * i + 2, PiiClass::Name, "synthetic.whole")),
+    );
+    input.push(candidate(
+        3 * count - 1..4 * count + 1,
+        PiiClass::Name,
+        "synthetic.last",
+    ));
+    let p = pipeline(input, true);
+    let normalized = normalize(&raw);
+    let dictionaries = DictionaryBundle::default();
+    let locales = [crate::LocaleTag::Global];
+    let (pool, _) = p
+        .registry
+        .detect_candidate_pool(
+            &normalized.text,
+            &DetectContext::new(&locales, &dictionaries),
+        )
+        .unwrap();
+    let whole = recovery::plan(pool, &p.registry, &normalized, &raw, &locales).unwrap();
+    let by_span = whole
+        .primary
+        .iter()
+        .chain(&whole.recovered)
+        .map(|c| ((c.span.start, c.span.end), c))
+        .collect::<BTreeMap<_, _>>();
+    let selected = whole
+        .evidence
+        .selections
+        .iter()
+        .map(|s| by_span[&(s.raw.start, s.raw.end)])
+        .collect::<Vec<_>>();
+    let plan = residual::plan(
+        &p,
+        &whole.evidence,
+        &whole.order,
+        &selected,
+        &normalized.text,
+        &raw,
+        &RuleContext::default(),
+        &locales,
+    )
+    .unwrap();
+    assert_eq!(plan.work.preview_queries, 2);
+    assert_eq!(plan.work.active_parent_visits, 4160);
+    assert_eq!(
+        plan.cells.iter().map(|c| c.parents.len()).sum::<usize>(),
+        4160
+    );
+    eprintln!(
+        "B1 work preview_queries={} endpoint_cells={} active_parent_visits={}",
+        plan.work.preview_queries, plan.work.endpoint_cells, plan.work.active_parent_visits
+    );
 }

@@ -95,6 +95,11 @@ impl RuleEntry {
             description,
         }
     }
+    #[cfg(test)]
+    pub(crate) fn inject_runtime(&mut self, runtime: impl Rule + 'static) {
+        self.runtime = Arc::new(runtime);
+    }
+
     pub(crate) fn action(&self, class: &PiiClass, context: &RuleContext) -> Option<Action> {
         self.runtime.action(class, context)
     }

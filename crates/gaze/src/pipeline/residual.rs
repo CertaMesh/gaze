@@ -11,7 +11,17 @@ pub(super) struct Cell {
     pub(super) family: String,
 }
 
+#[cfg(test)]
+#[derive(Default)]
+pub(super) struct Work {
+    pub(super) preview_queries: usize,
+    pub(super) endpoint_cells: usize,
+    pub(super) active_parent_visits: usize,
+}
+
 pub(super) struct Plan {
+    #[cfg(test)]
+    pub(super) work: Work,
     pub(super) cells: Vec<Cell>,
     selected: Vec<usize>,
 }
@@ -30,6 +40,7 @@ impl Plan {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn plan(
     pipeline: &Pipeline,
     segment: &occurrence::Segment,
@@ -40,13 +51,22 @@ pub(super) fn plan(
     context: &RuleContext,
     locales: &[crate::LocaleTag],
 ) -> Result<Plan> {
+    #[cfg(test)]
+    let mut work = Work::default();
     let views = segment
         .originals
         .iter()
         .map(|c| pipeline.registry.effective_view(c, normalized, locales))
         .collect::<Vec<_>>();
-    let known = |class: &PiiClass| {
-        crate::rule::preview(&pipeline.rules, class, context) == Some(Action::Tokenize)
+    let mut policies = std::collections::HashMap::new();
+    let mut known = |class: &PiiClass| {
+        *policies.entry(class.clone()).or_insert_with(|| {
+            #[cfg(test)]
+            {
+                work.preview_queries += 1;
+            }
+            crate::rule::preview(&pipeline.rules, class, context)
+        }) == Some(Action::Tokenize)
     };
     // Require the original policy as well as its real standalone fallback policy.
     let original_known = segment
@@ -99,6 +119,11 @@ pub(super) fn plan(
     }
     let mut cells = Vec::<Cell>::new();
     sweep(segment, order, |span, parents, blocked| {
+        #[cfg(test)]
+        {
+            work.endpoint_cells += 1;
+            work.active_parent_visits += parents.len();
+        }
         if blocked || parents.is_empty() || !admitted[parents[0]] {
             return Ok(());
         }
@@ -166,6 +191,8 @@ pub(super) fn plan(
         return Err(clean_to_raw_mapping_error("incomplete residual raw union"));
     }
     Ok(Plan {
+        #[cfg(test)]
+        work,
         cells,
         selected: checked_selected,
     })
@@ -202,7 +229,11 @@ fn sweep(
     for (position, changes) in events {
         if let Some(start) = previous {
             if start < position {
-                let parents = active.iter().map(|&(_, id)| id).collect::<Vec<_>>();
+                let parents = if blocked == 0 {
+                    active.iter().map(|&(_, id)| id).collect::<Vec<_>>()
+                } else {
+                    Vec::new()
+                };
                 visit(start..position, &parents, blocked != 0)?;
             }
         }
@@ -228,8 +259,16 @@ pub(super) fn validate(segment: &occurrence::Segment) -> Result<()> {
     if segment.residuals.is_empty() {
         return Ok(());
     }
+    if segment.original_raw.iter().any(Range::is_empty)
+        || segment.selections.iter().any(|s| s.raw.is_empty())
+    {
+        return Err(manifest_integrity_error(
+            "invalid residual evidence geometry",
+        ));
+    }
     let order = &segment.residual_order;
-    if order.len() != segment.originals.len()
+    if *order != crate::resolver::candidate_order(&segment.originals)
+        || order.len() != segment.originals.len()
         || order.iter().copied().collect::<BTreeSet<_>>() != (0..segment.originals.len()).collect()
     {
         return Err(manifest_integrity_error("invalid residual evidence order"));

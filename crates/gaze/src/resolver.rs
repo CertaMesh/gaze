@@ -96,6 +96,23 @@ pub(crate) enum PairOutcome {
     Existing(ConflictTier),
 }
 
+pub(crate) fn candidate_order(originals: &[Candidate]) -> Vec<usize> {
+    let mut order = (0..originals.len()).collect::<Vec<_>>();
+    // Keep the legacy stable key, including its input-order ties.
+    order.sort_by(|&a, &b| {
+        let (a, b) = (&originals[a], &originals[b]);
+        a.span
+            .start
+            .cmp(&b.span.start)
+            .then_with(|| b.span.end.cmp(&a.span.end))
+            .then_with(|| class_priority(&b.class).cmp(&class_priority(&a.class)))
+            .then_with(|| b.priority.cmp(&a.priority))
+            .then_with(|| b.score.total_cmp(&a.score))
+            .then_with(|| a.recognizer_id.cmp(&b.recognizer_id))
+    });
+    order
+}
+
 impl CandidatePool {
     pub(crate) fn take_originals(&mut self) -> Vec<Candidate> {
         std::mem::take(&mut self.originals)
@@ -106,19 +123,7 @@ impl CandidatePool {
     }
 
     pub(crate) fn new(originals: Vec<Candidate>) -> Self {
-        let mut order = (0..originals.len()).collect::<Vec<_>>();
-        // Keep the legacy stable key, including its input-order ties.
-        order.sort_by(|&a, &b| {
-            let (a, b) = (&originals[a], &originals[b]);
-            a.span
-                .start
-                .cmp(&b.span.start)
-                .then_with(|| b.span.end.cmp(&a.span.end))
-                .then_with(|| class_priority(&b.class).cmp(&class_priority(&a.class)))
-                .then_with(|| b.priority.cmp(&a.priority))
-                .then_with(|| b.score.total_cmp(&a.score))
-                .then_with(|| a.recognizer_id.cmp(&b.recognizer_id))
-        });
+        let order = candidate_order(&originals);
         Self {
             next_node: originals.len(),
             originals,

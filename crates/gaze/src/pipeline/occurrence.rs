@@ -333,10 +333,10 @@ impl Ledger {
     }
     pub(super) fn validate(&self) -> Result<()> {
         for segment in &self.segments {
-            super::residual::validate(segment)?;
             if segment.originals.len() != segment.original_raw.len() {
                 return Err(manifest_integrity_error("evidence length mismatch"));
             }
+            super::residual::validate(segment)?;
             use crate::resolver::{PairOutcome, ResolutionEvent};
             let mut pairs = BTreeMap::new();
             let mut structural_parents = std::collections::BTreeSet::new();
