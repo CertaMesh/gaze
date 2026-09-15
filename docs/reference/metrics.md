@@ -529,14 +529,49 @@ recognizer registry (Passes 1 + 2) and the safety-net loop (Pass 3) inside
 | Return field | What | Surface | Stability |
 |---|---|---|---|
 | `CleanDocument` | Tokenized text or structured doc. | `clean` JSON field in `gaze clean` output. | `#[non_exhaustive]` enum |
-| `Vec<EmittedTokenSpan>` | Per-token (clean-span, raw-span, class) triples used by `Manifest` (§3) and restore. | Inside `Manifest`; manifest JSON in adopter restore paths. | `#[non_exhaustive]` struct |
+| `Vec<EmittedTokenSpan>` | Per-token (clean-span, raw-span, class, **origin**) tuples used by `Manifest` (§3) and restore. | Inside `Manifest`; manifest JSON in adopter restore paths. | `#[non_exhaustive]` struct |
 | `LeakReport` | SafetyNet report; see §3.2. | `leak_report` JSON field. | `#[non_exhaustive]` struct |
+
+#### `EmittedTokenOrigin` — whole selection vs residual fragment (v0.15)
+
+`EmittedTokenSpan` carries `origin: EmittedTokenOrigin`, a `#[non_exhaustive]`
+enum with two variants:
+
+| Variant | Wire form | Means |
+|---|---|---|
+| `Whole` (default) | **omitted** | The replacement covers a whole selection chosen by conflict resolution. |
+| `ResidualFragment` | `"origin":"residual_fragment"` | The replacement covers raw bytes that admitted originals evidenced but no selection kept (see [Residual coverage](redaction-classes.md#residual-coverage)). |
+
+A fragment is a real protected byte range but it is **not an entity**: it can be
+a single space, quote, or letter carved out of the middle of one. Consumers that
+index, canonicalize, or count entities must branch on `origin` first.
+`EmittedTokenSpan::new` yields `Whole` and keeps its signature;
+`EmittedTokenSpan::residual_fragment` is the new constructor.
+
+**Serialization compatibility, both directions.** `Whole` is the serde default
+and is skipped on output, so JSON written for an existing whole span is
+byte-identical to what v0.14 produced, and JSON written before the field existed
+deserializes as `Whole`
+(`emitted_token_origin_tests` in `crates/gaze-types/src/lib.rs` pins both with a
+byte-exact snapshot).
+
+**Known limit for unmigrated readers.** There is no `deny_unknown_fields`, so a
+reader built before v0.15 silently ignores `"origin":"residual_fragment"` and
+treats the fragment as a whole span. Absence of the key therefore means "whole"
+both for genuinely old JSON and for new fragment JSON read by an old parser, and
+no version field distinguishes them: `BundleReport.bundle_version` is unchanged
+and the `gaze daemon` JSONL protocol carries no version. A consumer that counts
+entities must be rebuilt against v0.15, not merely re-pointed. (An *unknown
+future* origin value fails closed — it errors rather than being misread.)
 
 ### 5.3 Per-token / manifest counts
 
 - **Token count per call** is `Manifest::spans.len()` (one entry per emitted
   token). Source: [`Manifest`](../../crates/gaze-types/src/lib.rs) at
-  `crates/gaze-types/src/lib.rs:1044`.
+  `crates/gaze-types/src/lib.rs:1044`. Since v0.15 this counts **replacements,
+  not distinct recognized values**: with residual coverage on by default, one
+  recognized value can contribute more than one span. Filter on
+  `span.origin.is_whole()` for a whole-selection count.
 - **Per-class token breakdown** is computed by `gaze-document` for its
   `BundleReport.pii_tokens_by_class` field (§6) but is **not** exposed on the
   generic `Pipeline` return — adopters who want it must group

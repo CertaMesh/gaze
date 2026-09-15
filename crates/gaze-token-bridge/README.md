@@ -97,6 +97,34 @@ Integration coverage for expected outcomes and fixture leak checks lives in
   exposes this bridge as an agent tool) lives behind the `chokepoint` feature.
   This example drives the bridge through its library API directly.
 
+## Known limitation: residual fragments are protected but not searchable
+
+Since v0.15 the core pipeline has [residual
+coverage](../../docs/reference/redaction-classes.md#residual-coverage) on by
+default, so a manifest can contain replacements that cover a *fragment* of the
+admitted raw union rather than a whole recognized value.
+
+The bridge handles a fragment **by location, not by identity**. On ingest
+(`build_index_hit` in [`src/ingest.rs`](src/ingest.rs)) a fragment gets a
+class-derived placeholder in the stored snippet — no raw bytes, no fingerprint,
+no ingest-session token — and produces **no `CanonicalEntity`, no `IndexEntity`
+and no posting**.
+
+Two consequences, stated plainly:
+
+- **The gain.** Fragment raw bytes no longer reach the persistent index. The
+  bridge is the only component that stores corpus text, so this closes the worst
+  place to keep uncovered bytes in the clear.
+- **The cost.** A fragment is **protected but unsearchable**. You cannot retrieve
+  it by value or by fingerprint, and it will not appear in `hit.entities`. Whole
+  entities remain searchable exactly as before, so nothing an adopter can do
+  today gets narrower.
+
+Making a fragment an entity is not an available alternative: `translate` fails
+closed when any entity's raw value survives into agent-visible output, and a
+fragment's raw value is frequently a single space or quote, so indexing fragments
+would make that guard true for almost any prose and deny every translation.
+
 For bring-your-own-data redaction, use the core folder scan example:
 
 ```bash
