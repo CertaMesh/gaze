@@ -2172,7 +2172,8 @@ fn plan_multiple_gap_resolutions<'a>(
     let mut plans = Vec::new();
     let mut has_multiple_gaps = false;
     for suspect in &report.suspects {
-        if suspect.span.start >= suspect.span.end
+        if suspect.class.validate_custom_name().is_err()
+            || suspect.span.start >= suspect.span.end
             || !is_char_boundary_range(&clean.text, &suspect.span)
         {
             return Ok(None);

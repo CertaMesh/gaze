@@ -454,7 +454,7 @@ fn multiple_gap_source_ids_keep_existing_live_and_trace_validation_boundary() {
 
 #[test]
 fn multiple_gap_invalid_class_in_mixed_batch_never_plans() {
-    let (session, clean, raw) = fixture();
+    let (session, mut clean, raw) = fixture();
     let mut extra = suspect(
         clean.manifest[1].clean_span.end..clean.text.len(),
         LeakKind::Uncovered,
@@ -471,4 +471,77 @@ fn multiple_gap_invalid_class_in_mixed_batch_never_plans() {
     )
     .unwrap()
     .is_none());
+    let before = (clean.text.clone(), clean.manifest.clone(), session.tokens());
+    let logs = Arc::new(Mutex::new(vec![]));
+    let pipeline = Pipeline::builder()
+        .redaction_logger(Capture(logs.clone()))
+        .build()
+        .unwrap();
+    assert_eq!(
+        pipeline
+            .resolve_safety_net_suspects(
+                &mut ProtectionTarget::Live(&session),
+                &mut clean,
+                &report,
+                DocumentKind::Text,
+                None,
+                None
+            )
+            .unwrap(),
+        Some(FallbackReason::OverlapConflict)
+    );
+    assert_eq!((clean.text, clean.manifest, session.tokens()), before);
+    assert!(logs.lock().unwrap().is_empty());
+}
+
+#[test]
+fn multiple_gap_adjacent_half_open_plans_remain_separate() {
+    let (session, clean, raw) = fixture();
+    let mut multi = parent(&clean);
+    multi.span.start = 1;
+    multi.kind = LeakKind::PartialBleed { uncovered: 1..2 };
+    let report = report(vec![multi, suspect(0..1, LeakKind::Uncovered)]);
+    let plans = plan_multiple_gap_resolutions(
+        &ProtectionTarget::Live(&session),
+        &clean,
+        &report,
+        Some(&raw),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        plans.iter().map(|p| p.raw_span.clone()).collect::<Vec<_>>(),
+        [0..1, 1..2, 3..5, 6..8]
+    );
+}
+
+#[test]
+fn multiple_gap_unowned_replacement_and_format_lookalikes_never_plan() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    for replacement in [
+        "[REDACTED]",
+        "[EMAIL]",
+        "<deadbeef:Email_1>",
+        "email1.deadbeef@gaze-fake.invalid",
+    ] {
+        let clean = CleanText {
+            text: format!("aa{replacement}cc"),
+            manifest: vec![EmittedTokenSpan::new(
+                2..2 + replacement.len(),
+                2..3,
+                PiiClass::Email,
+            )],
+        };
+        let report = report(vec![parent(&clean)]);
+        assert!(!session.contains_token(replacement));
+        assert!(plan_multiple_gap_resolutions(
+            &ProtectionTarget::Live(&session),
+            &clean,
+            &report,
+            None
+        )
+        .unwrap()
+        .is_none());
+        assert!(session.tokens().is_empty());
+    }
 }
