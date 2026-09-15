@@ -66,8 +66,8 @@ pub use sandbox::{
     ExecPolicy, Sandbox, SandboxError, SandboxPlan, UntrustedExecRequest, ValidatedExecRequest,
 };
 pub use session::{
-    CommittedSessionSnapshot, RestoreAssessment, RestoreError, RestoreEvent, RestoreEventKind,
-    RestoredTextWithProvenance, Scope, SensitiveSnapshot, Session, SessionSnapshotEntry,
-    SessionTransaction, SessionTransactionError,
+    BoundedRestoreError, CommittedSessionSnapshot, RestoreAssessment, RestoreError, RestoreEvent,
+    RestoreEventKind, RestoredTextWithProvenance, Scope, SensitiveSnapshot, Session,
+    SessionSnapshotEntry, SessionTransaction, SessionTransactionError,
 };
 pub use types::{CleanDocument, RawDocument, Value};

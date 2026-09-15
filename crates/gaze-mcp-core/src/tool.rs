@@ -25,6 +25,17 @@ pub enum ToolTier {
     Operator,
 }
 
+/// Request contract a tool explicitly supports. Not transport metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum RequestMode {
+    /// Legacy arguments are protected before invocation.
+    #[default]
+    Protected,
+    /// Arguments are untrusted execution data; only metadata is audited.
+    UntrustedInvocation,
+}
+
 /// Dispatcher policy for redacting tool response payloads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
@@ -64,6 +75,8 @@ pub struct ToolDescriptor {
     output_schema: Option<serde_json::Value>,
     #[serde(skip)]
     response_redaction: ResponseRedaction,
+    #[serde(skip)]
+    request_mode: RequestMode,
 }
 
 impl ToolDescriptor {
@@ -78,6 +91,7 @@ impl ToolDescriptor {
             description: None,
             output_schema: None,
             response_redaction: ResponseRedaction::Apply,
+            request_mode: RequestMode::Protected,
         }
     }
 
@@ -92,7 +106,19 @@ impl ToolDescriptor {
             description: None,
             output_schema: None,
             response_redaction: ResponseRedaction::Apply,
+            request_mode: RequestMode::Protected,
         }
+    }
+
+    /// Opt into the matching envelope entry point. Mismatches reject before auth.
+    pub fn with_request_mode(mut self, mode: RequestMode) -> Self {
+        self.request_mode = mode;
+        self
+    }
+
+    /// Request contract supported by this implementation.
+    pub fn request_mode(&self) -> RequestMode {
+        self.request_mode
     }
 
     /// Declare trusted producer carriers independently of wire schemas.
@@ -258,8 +284,8 @@ pub trait Tool: Send + Sync {
     /// auth surface.
     fn descriptor(&self) -> &ToolDescriptor;
 
-    /// Run the tool body. The context exposes redacted args, the audit
-    /// session handle, the call id, and the principal id; everything else
-    /// (raw args, signing key, manifest store) is intentionally not reachable.
+    /// Run the tool body using the accessor selected by its request mode.
+    /// Untrusted invocation arguments require local validation and must never
+    /// be logged or persisted. Every response still crosses the envelope.
     async fn invoke(&self, ctx: &ToolCtx<'_>) -> Result<ToolResponse, ToolError>;
 }

@@ -4,7 +4,7 @@
 //! receives during dispatch. Its construction site is `pub(crate)` so the
 //! only thing that can build a `ToolCtx<'_>` is [`crate::dispatch::PiiEnvelope`]
 //! — which means a tool can never observe a tool context outside the
-//! redact → manifest.begin → invoke → redact-response → manifest.finish/fail
+//! request preparation → manifest.begin → invoke → redact-response → manifest.finish/fail
 //! chokepoint ordering.
 //!
 //! ## Why this seal exists
@@ -29,6 +29,29 @@ use std::marker::PhantomData;
 use ulid::Ulid;
 
 use crate::ManifestStore;
+
+/// Untrusted execution data. Access does not authorize logging, audit or egress.
+///
+/// This wrapper deliberately does not implement Serialize or Display.
+pub struct UntrustedInvocationArgs(serde_json::Value);
+
+impl UntrustedInvocationArgs {
+    /// Wrap a transport request without detection or transformation.
+    pub fn new(value: serde_json::Value) -> Self {
+        Self(value)
+    }
+
+    /// Borrow untrusted data for bounded, local request validation/restoration.
+    pub fn as_value(&self) -> &serde_json::Value {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for UntrustedInvocationArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("UntrustedInvocationArgs(<omitted>)")
+    }
+}
 
 /// Audit-correlation handle exposed to a [`crate::tool::Tool`] implementation.
 ///
@@ -160,6 +183,7 @@ pub struct ToolCtx<'a> {
     pub(crate) session: SessionHandle<'a>,
     pub(crate) resources: ToolResources<'a>,
     pub(crate) redacted_args: serde_json::Value,
+    invocation_args: Option<UntrustedInvocationArgs>,
     pub(crate) call_id: Ulid,
     pub(crate) tool_name: &'a str,
     pub(crate) principal_id: &'a str,
@@ -182,6 +206,7 @@ impl<'a> ToolCtx<'a> {
             session,
             resources,
             redacted_args,
+            invocation_args: None,
             call_id,
             tool_name,
             principal_id,
@@ -189,7 +214,19 @@ impl<'a> ToolCtx<'a> {
         }
     }
 
+    pub(crate) fn with_invocation_args(mut self, args: Option<UntrustedInvocationArgs>) -> Self {
+        self.invocation_args = args;
+        self
+    }
+
+    /// Untrusted execution arguments, present only for explicitly opted-in tools.
+    /// No fallback to protected arguments or an audit marker is performed.
+    pub fn invocation_args(&self) -> Option<&UntrustedInvocationArgs> {
+        self.invocation_args.as_ref()
+    }
+
     /// Redacted JSON arguments the dispatcher received from the transport.
+    /// Returns Null for an untrusted-invocation tool; use invocation_args there.
     /// These are post-redaction, safe to inspect, and safe to re-emit in
     /// the tool response without breaking the never-leak invariant.
     pub fn redacted_args(&self) -> &serde_json::Value {
@@ -234,6 +271,7 @@ impl std::fmt::Debug for ToolCtx<'_> {
             .field("session", &self.session)
             .field("resources", &self.resources)
             .field("redacted_args", &self.redacted_args)
+            .field("invocation_args", &self.invocation_args)
             .field("call_id", &self.call_id)
             .field("tool_name", &self.tool_name)
             .field("principal_id", &self.principal_id)

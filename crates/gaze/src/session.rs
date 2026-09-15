@@ -30,6 +30,21 @@ const SNAPSHOT_VERSION_V5: u8 = 5;
 
 pub type RestoreError = Error;
 
+/// Class-only failures for bounded restoration of untrusted request text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum BoundedRestoreError {
+    /// A recognized token is malformed or absent from the frozen session.
+    #[error("request token rejected")]
+    UnknownToken,
+    /// Restored UTF-8 bytes would exceed the caller's budget.
+    #[error("request restoration limit exceeded")]
+    CapExceeded,
+    /// Recognized token syntax is malformed.
+    #[error("request token malformed")]
+    MalformedToken,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RestoreEventKind {
@@ -968,6 +983,58 @@ impl<'session> SessionTransaction<'session> {
     pub fn restore_strict_text(&self, text: &str) -> std::result::Result<String, RestoreError> {
         restore_strict_text_with_provenance_from_state(&self.staged, text)
             .map(|restored| restored.text)
+    }
+
+    /// Restore tokens once, checking exact expansion before allocating output.
+    ///
+    /// Uses the frozen strict parser without detectors, mapping creation, or
+    /// commit. The budget counts output UTF-8 bytes; hosts also bound input and
+    /// aggregate escaped serialization. Errors never carry request text.
+    pub fn restore_strict_text_bounded(
+        &self,
+        text: &str,
+        max_bytes: usize,
+    ) -> std::result::Result<String, BoundedRestoreError> {
+        let tokens =
+            strict_restore_tokens(text).map_err(|_| BoundedRestoreError::MalformedToken)?;
+        let mut sum_raw = 0usize;
+        let mut sum_spans = 0usize;
+        for token in &tokens {
+            let raw = self
+                .staged
+                .value_by_token
+                .get(&token.parsed.raw)
+                .ok_or(BoundedRestoreError::UnknownToken)?;
+            sum_raw = sum_raw
+                .checked_add(raw.len())
+                .ok_or(BoundedRestoreError::CapExceeded)?;
+            sum_spans = sum_spans
+                .checked_add(token.end - token.start)
+                .ok_or(BoundedRestoreError::CapExceeded)?;
+        }
+        let size = text
+            .len()
+            .checked_sub(sum_spans)
+            .and_then(|unchanged| sum_raw.checked_add(unchanged))
+            .filter(|size| *size <= max_bytes)
+            .ok_or(BoundedRestoreError::CapExceeded)?;
+        let mut output = String::new();
+        output
+            .try_reserve_exact(size)
+            .map_err(|_| BoundedRestoreError::CapExceeded)?;
+        let mut cursor = 0;
+        for token in tokens {
+            let raw = self
+                .staged
+                .value_by_token
+                .get(&token.parsed.raw)
+                .ok_or(BoundedRestoreError::UnknownToken)?;
+            output.push_str(&text[cursor..token.start]);
+            output.push_str(raw);
+            cursor = token.end;
+        }
+        output.push_str(&text[cursor..]);
+        Ok(output)
     }
 
     pub fn restore_strict_text_with_provenance(
@@ -3130,5 +3197,71 @@ mod tests {
         assert!(transaction.validate_token_shapes(&would_be_fake).is_err());
         assert!(transaction.tokens().is_empty());
         assert!(session.tokens().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod bounded_request_restore_tests {
+    use super::*;
+
+    #[test]
+    fn repeated_large_mapping_checks_exact_expansion_before_output() {
+        let session = Session::new(Scope::Conversation("bounded-test".into())).unwrap();
+        let raw = "x".repeat(64 * 1024);
+        let token = session.tokenize(&PiiClass::Name, &raw).unwrap();
+        let request = token.repeat(16);
+        let before_export = session.export().unwrap().into_bytes();
+        let before_tokens = session.tokens();
+        let frozen = session.begin_transaction();
+        assert_eq!(
+            frozen.restore_strict_text_bounded(&request, 1024 * 1024 - 1),
+            Err(BoundedRestoreError::CapExceeded)
+        );
+        assert_eq!(
+            frozen
+                .restore_strict_text_bounded(&request, 1024 * 1024)
+                .unwrap(),
+            raw.repeat(16)
+        );
+        assert_eq!(
+            frozen.restore_strict_text_bounded(&token.repeat(10000), 1024),
+            Err(BoundedRestoreError::CapExceeded)
+        );
+        drop(frozen);
+        assert_eq!(session.tokens(), before_tokens);
+        assert_eq!(session.export().unwrap().into_bytes(), before_export);
+    }
+
+    #[test]
+    fn frozen_bounded_restore_is_read_only_atomic_and_single_pass() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let token = session
+            .tokenize(&PiiClass::Name, "a<00000000:Name_1>b")
+            .unwrap();
+        let before = session.snapshot_entries();
+        let generation = session.state.read().unwrap().generation;
+        let frozen = session.begin_transaction();
+        assert_eq!(
+            frozen.restore_strict_text_bounded(&token, 100).unwrap(),
+            "a<00000000:Name_1>b"
+        );
+        assert_eq!(
+            frozen.restore_strict_text_bounded("plain", 5).unwrap(),
+            "plain"
+        );
+        assert_eq!(
+            frozen.restore_strict_text_bounded("plain", 4),
+            Err(BoundedRestoreError::CapExceeded)
+        );
+        drop(frozen);
+        assert_eq!(session.snapshot_entries(), before);
+        assert_eq!(session.state.read().unwrap().generation, generation);
+        let frozen = session.begin_transaction();
+        let later = session.tokenize(&PiiClass::Name, "later").unwrap();
+        let error = frozen
+            .restore_strict_text_bounded(&format!("{token}{later}"), 100)
+            .unwrap_err();
+        assert_eq!(error, BoundedRestoreError::UnknownToken);
+        assert!(!format!("{error:?} {error}").contains(&later));
     }
 }
