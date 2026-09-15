@@ -30,10 +30,12 @@ fn fixture(format: bool) -> (Session, CleanText, String) {
     let session = Session::new(Scope::Ephemeral).unwrap();
     let token = if format {
         session
+            // fixture-cited(crates/gaze/src/pipeline_second_batch_tests.rs:pipeline::second_batch_tests::second_batch_single_and_multigap_owned_format_preserve_restore_trace_and_parent_metadata)
             .format_preserving_fake(&PiiClass::Email, "alice@example.invalid")
             .unwrap()
     } else {
         session
+            // fixture-cited(crates/gaze/src/pipeline_second_batch_tests.rs:pipeline::second_batch_tests::second_batch_single_and_multigap_owned_format_preserve_restore_trace_and_parent_metadata)
             .tokenize(&PiiClass::Email, "alice@example.invalid")
             .unwrap()
     };
@@ -45,6 +47,7 @@ fn fixture(format: bool) -> (Session, CleanText, String) {
             PiiClass::Email,
         )],
     };
+    // fixture-cited(crates/gaze/src/pipeline_second_batch_tests.rs:pipeline::second_batch_tests::second_batch_single_and_multigap_owned_format_preserve_restore_trace_and_parent_metadata)
     (session, clean, "pré alice@example.invalid 尾".into())
 }
 struct Capture(Arc<Mutex<Vec<RedactionEntry>>>);
