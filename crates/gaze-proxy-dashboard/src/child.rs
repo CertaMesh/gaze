@@ -13,13 +13,15 @@ use serde::Deserialize;
 use zeroize::Zeroizing;
 
 use crate::auth::{decode_secondary_header, AuthRegistry};
-use crate::ipc::{reject_immediate_trailing, DecodedInspectionFrame};
+use crate::ipc::{
+    reject_immediate_trailing, DecodedInspectionFrame, DeliveredAckV2, PairingEnvelopeV2,
+    PairingReadyV2,
+};
 use crate::security_headers::SECURITY_HEADERS;
 use crate::store::{EventStore, ResponseLease, RevealRegistry, SensitiveResponseBuffer};
 use crate::{
     CanonicalAuthorizationV1, ClientLimits, DashboardError, DashboardErrorCode, DashboardHttp1Gate,
-    IpcLimits, LoopbackBind, PairingEnvelopeV1, PairingSecret, RetentionLimits,
-    ValidatedDashboardRequestV1,
+    IpcLimits, LoopbackBind, PairingSecret, RetentionLimits, ValidatedDashboardRequestV1,
 };
 
 const CHILD_PURGE_REQUEST: u8 = 0x20;
@@ -282,14 +284,19 @@ fn child_pair(
     let mut nonce = [0_u8; 16];
     getrandom::fill(&mut nonce)
         .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
-    PairingEnvelopeV1::encode(nonce, authority, secret)
+    PairingEnvelopeV2::encode(nonce, authority, secret)
         .write_to(control)
         .and_then(|()| control.flush())
         .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
-    crate::DeliveredAckV1::read_from(control, nonce)?;
+    DeliveredAckV2::read_from(control, nonce)?;
     #[cfg(test)]
     pairing_proof::pause_before_trailing();
-    reject_immediate_trailing(control)
+    reject_immediate_trailing(control)?;
+    #[cfg(test)]
+    pairing_proof::child_validated();
+    PairingReadyV2::write_to(control, nonce)
+        .and_then(|()| control.flush())
+        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))
 }
 
 fn inspection_loop(
@@ -1234,4 +1241,4 @@ mod tests {
 
 #[cfg(test)]
 #[path = "pairing_proof.rs"]
-mod pairing_proof;
+pub(crate) mod pairing_proof;

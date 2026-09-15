@@ -147,6 +147,129 @@ impl DeliveredAckV1 {
     }
 }
 
+// Runtime pairing is deliberately incompatible with V1 peers: neither side may
+// activate until the child has accepted delivery and acknowledged completion.
+const PAIR_VERSION_V2: u8 = 2;
+const ENVELOPE_V2: u8 = 1;
+const DELIVERED_V2: u8 = 2;
+const READY_V2: u8 = 3;
+
+pub(crate) struct PairingEnvelopeV2 {
+    bytes: Zeroizing<[u8; 60]>,
+}
+
+impl PairingEnvelopeV2 {
+    pub(crate) fn encode(nonce: [u8; 16], authority: SocketAddrV4, secret: &PairingSecret) -> Self {
+        let mut bytes = Zeroizing::new([0; 60]);
+        bytes[..4].copy_from_slice(PAIR_MAGIC);
+        bytes[4] = PAIR_VERSION_V2;
+        bytes[5] = ENVELOPE_V2;
+        bytes[6..22].copy_from_slice(&nonce);
+        bytes[22..26].copy_from_slice(&authority.ip().octets());
+        bytes[26..28].copy_from_slice(&authority.port().to_be_bytes());
+        secret.with_bytes(|secret| bytes[28..].copy_from_slice(secret));
+        Self { bytes }
+    }
+
+    pub(crate) fn read_exact(reader: &mut impl Read) -> Result<Self, DashboardError> {
+        let mut bytes = Zeroizing::new([0; 60]);
+        reader
+            .read_exact(&mut bytes[..6])
+            .map_err(|_| pairing_failed())?;
+        if &bytes[..4] != PAIR_MAGIC || bytes[4] != PAIR_VERSION_V2 || bytes[5] != ENVELOPE_V2 {
+            return Err(pairing_failed());
+        }
+        reader
+            .read_exact(&mut bytes[6..])
+            .map_err(|_| pairing_failed())?;
+        let envelope = Self { bytes };
+        let authority = envelope.authority();
+        if !authority.ip().is_loopback() || authority.port() == 0 {
+            return Err(pairing_failed());
+        }
+        Ok(envelope)
+    }
+
+    pub(crate) fn authority(&self) -> SocketAddrV4 {
+        SocketAddrV4::new(
+            Ipv4Addr::new(
+                self.bytes[22],
+                self.bytes[23],
+                self.bytes[24],
+                self.bytes[25],
+            ),
+            u16::from_be_bytes([self.bytes[26], self.bytes[27]]),
+        )
+    }
+
+    pub(crate) fn nonce(&self) -> [u8; 16] {
+        self.bytes[6..22].try_into().expect("fixed nonce slice")
+    }
+
+    pub(crate) fn secret(&self) -> PairingSecret {
+        PairingSecret::from_pairing_frame(
+            self.bytes[28..60].try_into().expect("fixed secret slice"),
+        )
+    }
+
+    pub(crate) fn write_to(&self, writer: &mut impl Write) -> io::Result<()> {
+        writer.write_all(self.bytes.as_ref())
+    }
+}
+
+pub(crate) struct DeliveredAckV2;
+pub(crate) struct PairingReadyV2;
+
+impl DeliveredAckV2 {
+    pub(crate) fn write_to(writer: &mut impl Write, nonce: [u8; 16]) -> io::Result<()> {
+        writer.write_all(&pairing_status_frame(DELIVERED_V2, nonce))
+    }
+
+    pub(crate) fn read_from(reader: &mut impl Read, nonce: [u8; 16]) -> Result<(), DashboardError> {
+        read_pairing_status(reader, DELIVERED_V2, nonce)
+    }
+}
+
+impl PairingReadyV2 {
+    pub(crate) fn write_to(writer: &mut impl Write, nonce: [u8; 16]) -> io::Result<()> {
+        writer.write_all(&pairing_status_frame(READY_V2, nonce))
+    }
+
+    pub(crate) fn read_from(reader: &mut impl Read, nonce: [u8; 16]) -> Result<(), DashboardError> {
+        read_pairing_status(reader, READY_V2, nonce)
+    }
+}
+
+// Delivered and Ready share nonce/status validation, but have distinct wire kinds.
+fn pairing_status_frame(kind: u8, nonce: [u8; 16]) -> [u8; 23] {
+    let mut bytes = [0; 23];
+    bytes[..4].copy_from_slice(PAIR_MAGIC);
+    bytes[4] = PAIR_VERSION_V2;
+    bytes[5] = kind;
+    bytes[6..22].copy_from_slice(&nonce);
+    bytes[22] = 1;
+    bytes
+}
+
+fn read_pairing_status(
+    reader: &mut impl Read,
+    kind: u8,
+    nonce: [u8; 16],
+) -> Result<(), DashboardError> {
+    let mut bytes = [0; 23];
+    reader
+        .read_exact(&mut bytes)
+        .map_err(|_| pairing_failed())?;
+    if bytes != pairing_status_frame(kind, nonce) {
+        return Err(pairing_failed());
+    }
+    Ok(())
+}
+
+fn pairing_failed() -> DashboardError {
+    DashboardError::new(DashboardErrorCode::PairingFailed)
+}
+
 pub(crate) fn reject_immediate_trailing(control: &mut UnixStream) -> Result<(), DashboardError> {
     control
         .set_nonblocking(true)

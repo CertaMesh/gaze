@@ -17,12 +17,10 @@ use gaze_types::inspection::DashboardCaptureDescriptorV1;
 use zeroize::Zeroize;
 
 use crate::collector::WriterHandle;
-use crate::ipc::reject_immediate_trailing;
+use crate::ipc::{reject_immediate_trailing, DeliveredAckV2, PairingEnvelopeV2, PairingReadyV2};
 use crate::runtime::{DashboardLaunch, RuntimeParts};
 use crate::sink::{Admission, DashboardInspectionSink};
-use crate::{
-    DashboardError, DashboardErrorCode, DashboardStartupConfig, DeliveredAckV1, PairingEnvelopeV1,
-};
+use crate::{DashboardError, DashboardErrorCode, DashboardStartupConfig};
 
 const CHILD_PURGE_REQUEST: u8 = 0x20;
 const PARENT_PURGE: u8 = 0x10;
@@ -383,7 +381,7 @@ fn acknowledge_pairing(
     delivery: &mut dyn PairingDelivery,
     authority_matches: impl FnOnce(SocketAddrV4) -> bool,
 ) -> Result<SocketAddrV4, DashboardError> {
-    let envelope = PairingEnvelopeV1::read_exact(control)?;
+    let envelope = PairingEnvelopeV2::read_exact(control)?;
     reject_immediate_trailing(control)?;
     let authority = envelope.authority();
     if !authority_matches(authority) {
@@ -396,10 +394,13 @@ fn acknowledge_pairing(
         .deliver(authority, token.as_ref())
         .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
     token.zeroize();
-    DeliveredAckV1::delivered(nonce)
-        .write_to(control)
+    DeliveredAckV2::write_to(control, nonce)
         .and_then(|()| control.flush())
         .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
+    #[cfg(test)]
+    crate::child::pairing_proof::parent_waiting();
+    PairingReadyV2::read_from(control, nonce)?;
+    reject_immediate_trailing(control)?;
     Ok(authority)
 }
 
