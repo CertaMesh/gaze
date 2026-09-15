@@ -51,6 +51,7 @@ struct Store {
 #[async_trait]
 impl ManifestStore for Store {
     async fn begin_call(&self, ctx: BeginCallContext<'_>) -> Result<CallHandle, ManifestError> {
+        assert!(ctx.args_audit.is_none());
         self.events.lock().unwrap().push("begin");
         if let Some(session) = &self.mutate_begin {
             session
@@ -90,6 +91,7 @@ impl Tool for Producer {
         &self.descriptor
     }
     async fn invoke(&self, ctx: &ToolCtx<'_>) -> Result<ToolResponse, ToolError> {
+        assert!(ctx.invocation_args().is_none());
         self.events.lock().unwrap().push("invoke");
         if self.mutate {
             ctx.resources()
