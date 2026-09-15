@@ -11,6 +11,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [bundle-tokenization-drift] The `core` snapshot records rulepack version0.5.3; detection entries, spans, classes, sources, token shapes and counts are unchanged.
 
+- **A safety-net fallback document now gets one reversible round before it can
+  be denied.** Under `SafetyNetMode::Resolve` with `SafetyNetFallback::Redact`,
+  the terminal scan that runs after a fallback deletion used to deny the
+  document on *any* unprotected suspect it reported. That scan is the fourth
+  full model pass, and the deletion changes the whole input string, so it
+  routinely reports a 1–5 byte sub-word span the three earlier passes read and
+  accepted — a finding no stage was permitted to act on, over bytes the denial
+  protected no better than completing would have. The terminal report now gets:
+  one reversible round that tokenizes what it can (restore-exact, never
+  deleted), one bounded deletion of a suspect that **contains** a deletion seam
+  — a shape the fallback itself manufactured by joining two fragments — and then
+  a typed admission. **Denials are now named:** a suspect covering bytes the
+  fallback's own audit rows say it removed, a second seam-manufactured shape, a
+  suspect that names no real range of the document, or a round the resolver
+  refuses. Everything else is merged into the returned `LeakReport` and the
+  document completes carrying it, exactly as completing documents already ship
+  their own final report.
+  **What this costs:** a fallback document that reports something at the
+  terminal scan now runs one extra model pass, and a fresh finding that appears
+  only *after* that round ships raw in the output with an honest report, because
+  both bounds are spent. Measured on the v0.15 production corpus this is 42
+  bytes across 16 spans, 0 of them overlapping gold — a measurement on that
+  corpus, not a bound for other documents. Admission is strictly wider than
+  before, so no document that completed under v0.14 can start denying.
+  Audit rows for the extra round are `decided_by: resolve`, `action: tokenize`
+  with the fallback reason attached — the combination that distinguishes them
+  from the second batch's rows. The protection trace projects them as an
+  ordinary `("safety_net", "resolve", "tokenize")`; no new wire keys.
+- **Clean-to-raw mapping understands deletions.** `map_clean_span_to_raw` and
+  `validate_clean_manifest` previously assumed every untokenized clean run stood
+  for an equal-length raw run, which a fallback deletion breaks. They now
+  reconstruct the document's layout from the deletion ledger's raw coordinates
+  and reconcile it against the manifest, so a manifest that disagrees with its
+  own deletion ledger fails closed instead of mapping onto the wrong bytes. A
+  document with no deletions takes the unchanged affine path. A resolution gap
+  must now map to exactly as many raw bytes as it has clean bytes, which is what
+  stops a token from ever standing for bytes on both sides of a deletion.
+
 - **Residual coverage is on by default.** Every pipeline built through
   `Pipeline::builder()` now protects raw bytes that admitted originals evidenced
   but conflict resolution did not keep, instead of leaving them in the clear.
