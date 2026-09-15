@@ -2816,6 +2816,13 @@ impl RequestResidualScan<'_> {
         // that is discarded here and emits no manifest entry, so reading `spans` alone accepts
         // the very position a net just flagged and forwards the raw bytes to the provider.
         let untouched = matches!(&clean, CleanDocument::Text(cleaned) if cleaned == text);
+        // Three conjuncts, deliberately overlapping. Under the policy this call site pins
+        // (`SafetyNetPolicy::default()` = Resolve + Redact) a deletion always leaves BOTH a
+        // changed text and a surviving suspect, so `untouched` and `report.suspects` are each
+        // redundant TODAY -- a mutation probe kills neither on its own. Keep both anyway:
+        // `untouched` states directly what `Ok` promises here (these exact bytes get forwarded),
+        // and `report.suspects` is the only backstop left if a future mode reports without
+        // mutating. Dropping either narrows the guard to an assumption about the current policy.
         if untouched && spans.is_empty() && report.suspects.is_empty() {
             return Ok(());
         }
@@ -5193,6 +5200,27 @@ mod tests {
             "\u{00e4}x",
             "\u{00e4}x",
             &[span(0..1, 0..1)]
+        ));
+    }
+
+    #[test]
+    fn manifest_accounting_refuses_a_deletion_that_falls_between_two_entries() {
+        // Every other fixture reaches the fallback-deletion state with an EMPTY manifest, so the
+        // TAIL comparison is what refuses them and the gap comparison is never the deciding
+        // check. This is the shape where it is: two entries that both reconstruct, the last one
+        // ending the string so both tails are empty and equal, and the deleted bytes living
+        // entirely in the gap between them.
+        //
+        // Reachable, not hypothetical -- detected PII either side of a net-only marker is
+        // ordinary provider output. Without the gap comparison this pair reads as accounted for
+        // and `validate` admits a candidate that still holds the deleted bytes.
+        //
+        // raw:   "a@b GONE c@d"  entries at 0..3 and 9..12
+        // clean: "<T1> <T2>"     entries at 0..4 and 5..9
+        assert!(!manifest_accounts_for_every_change(
+            "a@b GONE c@d",
+            "<T1> <T2>",
+            &[span(0..4, 0..3), span(5..9, 9..12)],
         ));
     }
 }
