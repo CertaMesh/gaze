@@ -928,14 +928,129 @@ fn residual_parent_order_cannot_replace_the_legacy_representative() {
     );
 }
 
+/// `SOURCE_ID_PATTERN` from scripts/bench/gaze_bench_score.py:397, spelled out:
+/// a first `[a-z][a-z0-9]*` part, then `[._:/-]`-joined `[a-z0-9]+` parts, at
+/// most 128 characters. The pattern only admits ASCII, so byte length is
+/// character length here.
+fn is_metadata_only_source_id(value: &str) -> bool {
+    if value.is_empty() || value.len() > 128 {
+        return false;
+    }
+    let alnum = |part: &str| part.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+    let mut parts = value.split(['.', '_', ':', '/', '-']);
+    let first = parts.next().expect("split always yields one part");
+    first.starts_with(|c: char| c.is_ascii_lowercase())
+        && alnum(first)
+        && parts.all(|part| !part.is_empty() && alnum(part))
+}
+
+/// Assert the unchanged benchmark validator's closed contract, clause for
+/// clause, against a real emission: scripts/bench/gaze_bench_score.py:381-396
+/// (exact key sets, the four allowed stage/decision/action tuples, the
+/// source-ID shape) and :663-749 (canonical class, non-empty sorted
+/// duplicate-free source IDs, in-bounds char-boundary geometry, sorted
+/// disjoint trace spans, and tokenize/manifest agreement by multiplicity).
+///
+/// B1's whole compatibility claim is that a residual emission survives that
+/// untouched scorer, so this fixture has to fail when the projection drifts.
+/// Serializing and printing it would prove nothing.
 fn wire_fixture(raw: &str, manifest: &[EmittedTokenSpan], trace: &[GazeLocalProtectionTraceItem]) {
-    // Match the existing benchmark serializer's closed compatibility projection.
-    let manifest=manifest.iter().map(|s|serde_json::json!({"raw_start":s.raw_span.start,"raw_end":s.raw_span.end,"clean_start":s.clean_span.start,"clean_end":s.clean_span.end,"class":s.class.to_canonical_str()})).collect::<Vec<_>>();
-    let trace=trace.iter().map(|t|serde_json::json!({"raw_start":t.raw_start(),"raw_end":t.raw_end(),"class":t.class().to_canonical_str(),"action":t.action(),"provenance":{"stage":t.stage(),"decision":t.decision(),"source_ids":t.source_ids()}})).collect::<Vec<_>>();
-    eprintln!(
-        "B1_WIRE {}",
-        serde_json::json!({"raw":raw,"manifest":manifest,"trace":trace})
+    let boundaries = raw
+        .char_indices()
+        .map(|(index, _)| index)
+        .chain([raw.len()])
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut previous_raw_end = 0usize;
+    let mut tokenize_items = BTreeMap::<(usize, usize, String), usize>::new();
+    let mut protected_raw_values = Vec::new();
+    let mut source_identifiers = Vec::<&str>::new();
+
+    for (index, item) in trace.iter().enumerate() {
+        let class = item.class().to_canonical_str();
+        assert!(
+            ["email", "name", "location", "organization"].contains(&class.as_str())
+                || class.strip_prefix("custom:").is_some_and(|rest| !rest.is_empty()),
+            "trace[{index}].class: {class} is not a canonical PiiClass representation"
+        );
+        let projection = (item.stage(), item.decision(), item.action());
+        assert!(
+            matches!(projection.2, "tokenize" | "redact"),
+            "trace[{index}].action: unknown action {}",
+            projection.2
+        );
+        assert!(
+            [
+                ("primary_pipeline", "policy", "tokenize"),
+                ("safety_net", "resolve", "tokenize"),
+                ("safety_net", "redact", "redact"),
+                ("safety_net", "fallback_redact", "redact"),
+            ]
+            .contains(&projection),
+            "trace[{index}].provenance: {projection:?} is outside the closed scorer set"
+        );
+
+        let sources = item.source_ids();
+        assert!(
+            !sources.is_empty(),
+            "trace[{index}].provenance.source_ids: expected non-empty metadata IDs"
+        );
+        for id in sources {
+            assert!(
+                is_metadata_only_source_id(id),
+                "trace[{index}].provenance.source_ids: {id} is not a metadata-only stable identifier"
+            );
+        }
+        assert!(
+            sources.windows(2).all(|pair| pair[0] < pair[1]),
+            "trace[{index}].provenance.source_ids: expected sorted duplicate-free IDs, got {sources:?}"
+        );
+
+        let (start, end) = (item.raw_start(), item.raw_end());
+        assert!(
+            start < end && end <= raw.len(),
+            "trace[{index}]: invalid original-text bounds {start}:{end}"
+        );
+        assert!(
+            boundaries.contains(&start) && boundaries.contains(&end),
+            "trace[{index}]: span endpoints are not original-text UTF-8 char boundaries"
+        );
+        assert!(
+            start >= previous_raw_end,
+            "trace[{index}]: trace spans must be sorted and disjoint"
+        );
+        previous_raw_end = end;
+        protected_raw_values.push(&raw[start..end]);
+        source_identifiers.extend(sources.iter().map(String::as_str));
+        if projection.2 == "tokenize" {
+            *tokenize_items.entry((start, end, class)).or_default() += 1;
+        }
+    }
+
+    let mut manifest_items = BTreeMap::<(usize, usize, String), usize>::new();
+    for span in manifest {
+        *manifest_items
+            .entry((
+                span.raw_span.start,
+                span.raw_span.end,
+                span.class.to_canonical_str(),
+            ))
+            .or_default() += 1;
+    }
+    assert_eq!(
+        tokenize_items, manifest_items,
+        "tokenize trace items must agree 1:1 with the final manifest by multiplicity"
     );
+
+    // The scorer loads its committed vocabulary from the embedded rulepacks;
+    // these synthetic recognizer IDs sit outside it on purpose, so the rule that
+    // still bites is the leak one: an out-of-vocabulary ID must never be
+    // protected raw text.
+    for id in source_identifiers {
+        assert!(
+            !protected_raw_values.contains(&id),
+            "source ID {id} leaks protected raw text"
+        );
+    }
 }
 
 #[test]
