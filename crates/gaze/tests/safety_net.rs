@@ -1413,13 +1413,28 @@ fn safety_net_policy_lowering_covers_all_twelve_representable_pairs() {
                     assert_eq!(rows[0].action, Action::Preserve, "{mode:?}/{fallback:?}");
                 }
                 (gaze::SafetyNetMode::Resolve, gaze::SafetyNetFallback::Redact) => {
-                    let (clean_b, _, _) =
+                    let (clean_b, manifest_b, _) =
                         result_b.unwrap_or_else(|err| panic!("{mode:?}/{fallback:?} B: {err:?}"));
                     let clean_b = text(clean_b);
-                    // The shipped default: the residual is gone, and the row says Redact.
                     assert!(!clean_b.contains(RESIDUAL_MARKER), "{mode:?}/{fallback:?}");
-                    assert_eq!(rows.len(), 1, "{mode:?}/{fallback:?}");
-                    assert_eq!(rows[0].action, Action::Redact, "{mode:?}/{fallback:?}");
+                    assert_eq!(manifest_b.len(), 2);
+                    assert_eq!(
+                        session_b.restore_strict_text(&clean_b).unwrap(),
+                        RESIDUAL_RAW
+                    );
+                    assert!(
+                        rows.is_empty(),
+                        "complete reversible follow-up avoids deletion"
+                    );
+                    assert_eq!(
+                        logger
+                            .entries()
+                            .iter()
+                            .filter(|r| r.decided_by == ConflictTier::Resolve
+                                && r.action == Action::Tokenize)
+                            .count(),
+                        1
+                    );
                 }
                 _ => panic!("unhandled pair {mode:?}/{fallback:?}"),
             }
@@ -1428,14 +1443,9 @@ fn safety_net_policy_lowering_covers_all_twelve_representable_pairs() {
     assert_eq!(covered.len(), 12, "all representable pairs must be covered");
 }
 
-/// Axis-1 + axis-4: the `Resolve` fallback must act on the report that produced the reason.
-///
-/// When the resolve pass converges and the post-resolution re-run flags a residual, the residual
-/// lives in the *re-run* report at post-resolve coordinates. Acting on the primary report there
-/// redacts stale spans (or, when the primary report was empty, nothing at all) and ships the
-/// residual bytes under a policy that promised to remove them.
+/// The new complete follow-up acts on scan2, retaining the primary token and original bytes.
 #[test]
-fn resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report() {
+fn resolve_followup_uses_the_residual_report_not_the_stale_primary_report() {
     let logger = MemoryLogger::new();
     let session = session();
     let (clean, manifest, _) = clean_with_policy(
@@ -1447,27 +1457,26 @@ fn resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report() {
     )
     .expect("default policy clean");
     let clean = text(clean);
-
-    // The residual is gone...
     assert!(!clean.contains(RESIDUAL_MARKER));
-    // ...and the email token the primary pass minted is intact, so restore still works for it.
-    assert_eq!(manifest.len(), 1);
+    assert_eq!(manifest.len(), 2);
+    assert_eq!(manifest[0].raw_span, 0..21);
+    assert_eq!(manifest[1].raw_span, 22..29);
     assert_eq!(
         session.restore_strict_text(&clean).expect("restore"),
-        "alice@example.invalid "
+        RESIDUAL_RAW
     );
-
-    // The audit row names the residual suspect and states what was done to its bytes.
-    let rows = fallback_rows(&logger);
+    assert!(fallback_rows(&logger).is_empty());
+    let rows: Vec<_> = logger
+        .entries()
+        .into_iter()
+        .filter(|r| r.decided_by == ConflictTier::Resolve)
+        .collect();
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].action, Action::Redact);
+    assert_eq!(rows[0].action, Action::Tokenize);
     assert_eq!(rows[0].class, PiiClass::Name);
     assert_eq!(rows[0].source, "safety_net.second-pass");
-    assert!(rows[0].conflict_loser);
-    assert_eq!(
-        rows[0].fallback_triggered,
-        Some(FallbackReason::ResidualSuspect)
-    );
+    assert!(!rows[0].conflict_loser);
+    assert_eq!(rows[0].fallback_triggered, None);
 }
 
 /// `GazeLocalProtectionTraceKind::SafetyNetFallbackRedact` is reachable and distinct from the
@@ -1476,8 +1485,25 @@ fn resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report() {
 #[test]
 fn fallback_redaction_is_traced_as_fallback_redact() {
     let session = session();
+    // Valid unsupported classification keeps this a fallback-trace test after batch2 support.
+    let pipeline = Pipeline::builder()
+        .detector(FixedDetector {
+            span: 0..21,
+            class: PiiClass::Email,
+        })
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(MixedSecondPassNet::new(
+            RESIDUAL_MARKER,
+            LeakKind::ClassMismatch {
+                pipeline_class: PiiClass::Email,
+                safety_net_class: PiiClass::Name,
+            },
+        ))
+        .build()
+        .unwrap();
     let (_, _, _, trace) = traced_clean(
-        &residual_pipeline(MemoryLogger::new()),
+        &pipeline,
         &session,
         RESIDUAL_RAW,
         gaze::SafetyNetPolicy::default(),
@@ -1487,9 +1513,10 @@ fn fallback_redaction_is_traced_as_fallback_redact() {
         .iter()
         .find(|item| item.decision() == "fallback_redact")
         .expect("fallback redaction must be traced");
+    assert_eq!(fallback.raw_start()..fallback.raw_end(), 22..29);
     assert_eq!(fallback.stage(), "safety_net");
     assert_eq!(fallback.action(), "redact");
-    assert_eq!(fallback.source_ids(), &["second-pass".to_string()]);
+    assert_eq!(fallback.source_ids(), &["mixed-second-pass".to_string()]);
 }
 
 /// Reports nothing on the first `check`, then a *mixed* residual: one class mismatch lying wholly
@@ -1501,9 +1528,8 @@ fn fallback_redaction_is_traced_as_fallback_redact() {
 #[derive(Clone)]
 struct MixedSecondPassNet {
     residual_marker: &'static str,
-    /// Kind reported for the actionable residual. `Uncovered` drives the fallback through
-    /// `ResidualSuspect`; `ClassMismatch` drives it through `OverlapConflict`. Both reasons reach
-    /// the same unfiltered redaction path, so both must be covered.
+    /// Uncovered can take the complete second batch; ClassMismatch retains the old fallback.
+    /// Both paths must preserve the independently owned primary token.
     residual_kind: LeakKind,
     calls: Arc<AtomicUsize>,
 }
@@ -1611,6 +1637,33 @@ fn resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens(
         .unwrap_or_else(|err| panic!("{expected_reason:?}: {err:?}"));
         let clean = text(clean);
 
+        if expected_reason == FallbackReason::ResidualSuspect {
+            assert!(!clean.contains(RESIDUAL_MARKER));
+            assert_eq!(manifest.len(), 2);
+            assert_eq!(session.restore_strict_text(&clean).unwrap(), RESIDUAL_RAW);
+            let rows = logger.entries();
+            assert_eq!(
+                rows.iter()
+                    .filter(|r| r.decided_by == ConflictTier::Fallback)
+                    .count(),
+                0
+            );
+            assert_eq!(
+                rows.iter()
+                    .filter(
+                        |r| r.decided_by == ConflictTier::Resolve && r.action == Action::Tokenize
+                    )
+                    .count(),
+                1
+            );
+            assert_eq!(
+                rows.iter().filter(|r| r.action == Action::Preserve).count(),
+                2,
+                "one primary-token observation in each follow-up phase"
+            );
+            continue;
+        }
+
         // The residual is gone...
         assert!(
             !clean.contains(RESIDUAL_MARKER),
@@ -1711,7 +1764,7 @@ impl SafetyNet for TwoMarkerNet {
 /// bytes that have since become part of a minted token — deleting the token and leaving the actual
 /// residual in place.
 #[test]
-fn resolve_fallback_does_not_redact_stale_pre_resolve_spans() {
+fn resolve_followup_does_not_act_on_stale_pre_resolve_spans() {
     let pipeline = Pipeline::builder()
         .rule(DefaultRule::new(Action::Preserve))
         .register_safety_net(TwoMarkerNet {
@@ -1734,20 +1787,21 @@ fn resolve_fallback_does_not_redact_stale_pre_resolve_spans() {
     .expect("default policy clean");
     let clean = text(clean);
 
-    // The first-pass suspect was resolved into a token, and that token is intact: the fallback
-    // did not delete it by acting on its pre-resolve span.
-    assert_eq!(manifest.len(), 1, "the resolved name token must survive");
-    assert!(
-        clean.starts_with(&clean[..manifest[0].clean_span.end]),
-        "the minted token must be whole"
-    );
     assert_eq!(
-        session.restore_strict_text(&clean).expect("restore"),
-        "Dr. Schmidt ",
-        "the resolved name restores; only the residual is gone"
+        manifest.len(),
+        2,
+        "both batches preserve their original raw intervals"
     );
-    // The second-pass residual is the thing that got removed.
-    assert!(!clean.contains("tail"), "the residual must be redacted");
+    assert_eq!(manifest[0].raw_span, 0..11);
+    assert_eq!(manifest[1].raw_span, 12..16);
+    assert_eq!(
+        session
+            .restore(&clean[manifest[0].clean_span.clone()])
+            .as_deref(),
+        Some("Dr. Schmidt")
+    );
+    assert_eq!(session.restore_strict_text(&clean).expect("restore"), raw);
+    assert!(!clean.contains("tail"), "the residual must be replaced");
 }
 
 /// The returned `LeakReport` must mention a residual that only the post-resolution re-run saw.
