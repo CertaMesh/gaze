@@ -200,17 +200,19 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: current-release -->
 
-**v0.14.0** — measured on the released tree.
+**v0.15.0** **(provisional)** — *not* measured on the released tree.
+
+> Candidate measured at signed preparation commit 75b7176bbeffdc6a5840e4b01e60077b9dc0f85e with a clean tree. Release readiness FAILED (exit 4); regression passed against v0.14.0. This row records evidence, not release approval.
 
 | Provenance | Value |
 | --- | --- |
-| Release | `v0.14.0` |
-| Commit | `f66a3f2b86691956c596a53273635188971f59e8` |
-| Measured | 2026-09-11 |
-| Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) |
+| Release | `v0.15.0` |
+| Commit | `75b7176bbeffdc6a5840e4b01e60077b9dc0f85e` |
+| Measured | 2026-09-15 |
+| Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71) |
 | Harness | [`scripts/bench/run_no_opf_benchmark.py`](../../../scripts/bench/run_no_opf_benchmark.py) |
-| Scorecard | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) |
-| Scorecard sha256 | `364f6643ffa6e7a5793ee2924ddfe0b834ce0cebe2a4b223fa3689456d686c81` |
+| Scorecard | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) |
+| Scorecard sha256 | `1dd8b18e5e9619948cd21d8e65f607cf8676a792433e6b51798d42d4e46d878c` |
 | Corpus | `DataikuNLP/kiji-pii-training-data+gaze` @ `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1` |
 | Corpus sha256 | `11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2` |
 | Corpus component `dataiku` | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
@@ -224,9 +226,9 @@ Two consequences worth stating plainly:
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `rule-floor-extended` | 130,282 | 93,850 | 72.0360% | 5,423 | 0.870434 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 3.97 |
-| `pass2-ner` | 130,282 | 27,000 | 20.7243% | 28,030 | 0.786539 | 40.4467% | 100.0000% | 100.0000% | 100.0000% | 0 | 76.44 |
-| `full-stack-kiji-resolve` **(shipped default)** | 130,282 | 25,179 | 19.3265% | 168,276 | 0.384459 | 40.6186% | 78.4192% | 100.0000% | 100.0000% | 0 | 195.86 |
+| `rule-floor-extended` | 130,282 | 93,850 | 72.0360% | 5,423 | 0.870434 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 2.87 |
+| `pass2-ner` | 130,282 | 27,000 | 20.7243% | 28,030 | 0.786539 | 40.4467% | 100.0000% | 100.0000% | 100.0000% | 0 | 69.65 |
+| `full-stack-kiji-resolve` **(shipped default)** | 130,282 | 25,179 | 19.3265% | 168,276 | 0.384459 | 40.6186% | 78.4192% | 100.0000% | 100.0000% | 0 | 188.69 |
 
 <!-- END GENERATED: current-release -->
 
@@ -236,11 +238,11 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: charts -->
 
-**Surviving PII bytes per arm — v0.14.0.** Lower is better; the goal is zero.
+**Surviving PII bytes per arm — v0.15.0.** Lower is better; the goal is zero.
 
 ```mermaid
 xychart-beta
-    title "Surviving PII bytes per arm - v0.14.0"
+    title "Surviving PII bytes per arm - v0.15.0"
     x-axis ["rule-floor-extended", "pass2-ner", "full-stack-kiji-resolve"]
     y-axis "Surviving PII bytes (lower is better)" 0 --> 104000
     bar [93850, 27000, 25179]
@@ -248,7 +250,13 @@ xychart-beta
 
 **Trend across releases — `full-stack-kiji-resolve`.**
 
-> One measured release so far (1 point). The trend chart renders from two releases onward.
+```mermaid
+xychart-beta
+    title "Surviving PII bytes on full-stack-kiji-resolve across releases"
+    x-axis ["v0.14.0", "v0.15.0"]
+    y-axis "Surviving PII bytes (lower is better)" 0 --> 28000
+    line [25179, 25179]
+```
 
 <!-- END GENERATED: charts -->
 
@@ -265,6 +273,7 @@ machine-readable evidence.
 | Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |
 | --- | --- | --- | --- | --- | ---: |
 | v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | 25,179 |
+| v0.15.0 *(provisional)* | 2026-09-15 | `75b7176` | MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | 25,179 |
 
 <!-- END GENERATED: history -->
 
@@ -272,6 +281,47 @@ Rows marked *(provisional)* were not measured on the released tree; their note
 records what was measured instead.
 
 ### Per-release notes
+
+**v0.15.0 candidate: release readiness failed (harness exit 4).** This is a
+fresh full measurement of signed preparation commit
+`75b7176bbeffdc6a5840e4b01e60077b9dc0f85e`, with `gaze.dirty=false`.
+The scorecard was copied byte-for-byte from
+`target/bench-data/no-opf/full/scorecard-v4.json`; its revision names the
+measured source, not the later commit that adds these artifacts. The candidate
+is provisional and has not been approved for release. Before any release,
+verify no drift from that measured commit under `crates`, `scripts/bench`,
+`Cargo.toml`, and `Cargo.lock`.
+
+- **Readiness fails seven production-cell gates:** 25,179 surviving labeled
+  UTF-8 bytes across 1,728 documents, 4,069 uncovered entities, 323 residual
+  suspects, 1,860 strict rejections, 1,607 redact actions, and 628 exact-restore
+  failures. Each gate requires zero. Regression passing does not waive them.
+- **Exact restoration is 2,282/2,910 documents (78.4192%).** The scorecard records
+  628 documents with one-way redact fallback. All 2,910 manifests are valid and
+  token-restore integrity errors are zero, but valid manifests do not turn
+  irreversible fallback into an exact round trip.
+- **Regression passes the explicit v0.14.0 comparator.** The pinned corpus,
+  model bundles, sampling order, and identified scored population match.
+  Surviving labeled bytes remain 93,850 / 27,000 / 25,179 for the rule-only,
+  NER, and production arms, respectively. All three complete 2,910 documents
+  with zero failed-closed documents. No baseline was accepted or replaced,
+  no gate was waived, and the holdout was not used for tuning.
+- **Timing is informational.** Clean p95 is 2.87 / 69.65 / 188.69 ms, compared
+  with 3.97 / 76.44 / 195.86 ms in v0.14.0. The 20% tolerance check passes and
+  is not a correctness gate. This run uses one discarded warmup and one
+  measured repetition per arm, Rust 1.96.0 and Python 3.13.13 on the recorded
+  M5 Max host. Cargo builds use four jobs, no incremental compilation, and
+  no dev/test debug information. Targets started empty; OS/model page caches
+  were not flushed, thermals and scheduling were uncontrolled, and the host
+  reported no recorded thermal/performance warning at launch. The full harness
+  ran from 23:55:25 UTC on September 14 to 00:06:10 UTC on September 15,
+  including its producer/probe builds; the separate bootstrap is excluded.
+  Observed duration does not replace the runner's planning estimate.
+
+The exact machine-readable scorecard is linked above. Private full-run output
+also retains `regression-status.json`, `release-readiness-status.json`,
+`performance-status.json`, and diagnostics. These results block a release-ready
+claim; further runtime work requires separate review.
 
 **v0.14.0.** Measured on `f66a3f2b`, whose `crates/` tree is identical to the
 release branch head; the tag lands on the release merge commit and differs from
