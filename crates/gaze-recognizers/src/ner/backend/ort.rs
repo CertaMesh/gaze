@@ -201,10 +201,17 @@ fn tokenized_chunk_ranges(
     tokenizer: &tokenizers::Tokenizer,
     input: &str,
 ) -> Result<Vec<Range<usize>>, NerRuntimeError> {
-    let mut tokenizer = tokenizer.clone();
-    tokenizer
-        .with_truncation(None)
-        .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+    // Avoid copying the vocabulary when truncation is already disabled.
+    let mut untruncated;
+    let tokenizer = if tokenizer.get_truncation().is_none() {
+        tokenizer
+    } else {
+        untruncated = tokenizer.clone();
+        untruncated
+            .with_truncation(None)
+            .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+        &untruncated
+    };
     let encoded = tokenizer
         .encode(input, true)
         .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
@@ -567,5 +574,182 @@ mod tests {
         assert_eq!(out[0].span, 0..4);
         assert_eq!(out[0].class, PiiClass::Name);
         assert!((f64::from(out[0].score) - expected).abs() < 1e-6);
+    }
+
+    // Frozen pre-optimization helper, independent of the guarded production path.
+    fn original_chunk_ranges(
+        tokenizer: &tokenizers::Tokenizer,
+        input: &str,
+    ) -> Result<Vec<Range<usize>>, NerRuntimeError> {
+        let mut tokenizer = tokenizer.clone();
+        tokenizer
+            .with_truncation(None)
+            .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+        let encoded = tokenizer
+            .encode(input, true)
+            .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+        let tokens: Vec<Range<usize>> = encoded
+            .get_offsets()
+            .iter()
+            .filter_map(|&(start, end)| {
+                if start < end
+                    && end <= input.len()
+                    && input.is_char_boundary(start)
+                    && input.is_char_boundary(end)
+                {
+                    Some(start..end)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if tokens.len() <= NER_CHUNK_TOKEN_BUDGET {
+            return Ok(std::iter::once(0..input.len()).collect());
+        }
+
+        const _: () = assert!(NER_CHUNK_TOKEN_OVERLAP < NER_CHUNK_TOKEN_BUDGET);
+        let stride = NER_CHUNK_TOKEN_BUDGET - NER_CHUNK_TOKEN_OVERLAP;
+        let mut chunks = Vec::new();
+        let mut token_start = 0;
+        while token_start < tokens.len() {
+            let token_end = (token_start + NER_CHUNK_TOKEN_BUDGET).min(tokens.len());
+            chunks.push(tokens[token_start].start..tokens[token_end - 1].end);
+            if token_end == tokens.len() {
+                break;
+            }
+            token_start += stride;
+        }
+
+        Ok(chunks)
+    }
+
+    fn chunk_tokenizer(truncated: bool) -> tokenizers::Tokenizer {
+        use tokenizers::{
+            models::wordpiece::WordPiece, pre_tokenizers::whitespace::WhitespaceSplit,
+            processors::bert::BertProcessing, TruncationParams,
+        };
+        let words = [
+            "[UNK]",
+            "[CLS]",
+            "[SEP]",
+            "a",
+            "grün",
+            "東京",
+            "مرحبا",
+            "🙂",
+        ];
+        let vocab: [(String, u32); 8] = std::array::from_fn(|id| (words[id].to_owned(), id as u32));
+        let mut tokenizer =
+            tokenizers::Tokenizer::new(WordPiece::builder().vocab(vocab).build().unwrap());
+        tokenizer.with_pre_tokenizer(Some(WhitespaceSplit));
+        tokenizer.with_post_processor(Some(BertProcessing::new(
+            ("[SEP]".into(), 2),
+            ("[CLS]".into(), 1),
+        )));
+        if truncated {
+            tokenizer
+                .with_truncation(Some(TruncationParams {
+                    max_length: 16,
+                    stride: 3,
+                    ..Default::default()
+                }))
+                .unwrap();
+        }
+        tokenizer
+    }
+
+    fn original_encoding(tokenizer: &tokenizers::Tokenizer, input: &str) -> tokenizers::Encoding {
+        let mut tokenizer = tokenizer.clone();
+        tokenizer.with_truncation(None).unwrap();
+        tokenizer.encode(input, true).unwrap()
+    }
+
+    #[test]
+    fn chunk_borrow_matches_original_for_unicode_and_window_boundaries() {
+        let mut inputs = vec![
+            String::new(),
+            " \n\t".into(),
+            "grün 東京 مرحبا 🙂 e\u{301}".into(),
+        ];
+        for count in [479, 480, 481, 930, 931, 1400] {
+            inputs.push(vec!["a"; count].join(" "));
+            inputs.push(vec!["grün 東京 مرحبا 🙂"; count].join(" "));
+        }
+        for truncated in [false, true] {
+            let tokenizer = chunk_tokenizer(truncated);
+            let config = serde_json::to_value(&tokenizer).unwrap();
+            for input in &inputs {
+                assert_eq!(
+                    tokenized_chunk_ranges(&tokenizer, input).unwrap(),
+                    original_chunk_ranges(&tokenizer, input).unwrap(),
+                    "truncated={truncated}, bytes={}",
+                    input.len()
+                );
+                // Compare every Encoding field, including overflow and special-token state.
+                let mut copy;
+                let selected = if tokenizer.get_truncation().is_none() {
+                    &tokenizer
+                } else {
+                    copy = tokenizer.clone();
+                    copy.with_truncation(None).unwrap();
+                    &copy
+                };
+                assert_eq!(
+                    serde_json::to_value(selected.encode(input.as_str(), true).unwrap()).unwrap(),
+                    serde_json::to_value(original_encoding(&tokenizer, input)).unwrap()
+                );
+                assert_eq!(serde_json::to_value(&tokenizer).unwrap(), config);
+            }
+        }
+    }
+
+    #[test]
+    fn chunk_borrow_preserves_long_truncated_input_and_overlap() {
+        for truncated in [false, true] {
+            let tokenizer = chunk_tokenizer(truncated);
+            let config = serde_json::to_value(&tokenizer).unwrap();
+            let input = vec!["a"; 931].join(" ");
+            if truncated {
+                let encoded = tokenizer.encode(input.as_str(), true).unwrap();
+                assert_eq!(encoded.len(), 16);
+                assert!(!encoded.get_overflowing().is_empty());
+            }
+            let chunks = tokenized_chunk_ranges(&tokenizer, &input).unwrap();
+            assert_eq!(chunks, vec![0..959, 900..1859, 1800..1861]);
+            assert_eq!(
+                input[chunks[0].start..chunks[0].end]
+                    .split_whitespace()
+                    .count(),
+                480
+            );
+            assert_eq!(
+                input[chunks[1].start..chunks[0].end]
+                    .split_whitespace()
+                    .count(),
+                30
+            );
+            assert_eq!(serde_json::to_value(&tokenizer).unwrap(), config);
+            let boundary = vec!["a"; 480].join(" ");
+            assert_eq!(
+                tokenized_chunk_ranges(&tokenizer, &boundary).unwrap(),
+                vec![0..boundary.len()]
+            );
+        }
+    }
+
+    #[test]
+    fn chunk_borrow_preserves_tokenizer_error_and_configuration() {
+        for truncated in [false, true] {
+            let mut tokenizer = chunk_tokenizer(truncated);
+            // An unknown token with no UNK vocabulary entry makes WordPiece fail.
+            tokenizer.with_model(tokenizers::models::wordpiece::WordPiece::default());
+            let config = serde_json::to_value(&tokenizer).unwrap();
+            let actual = tokenized_chunk_ranges(&tokenizer, "unknown").unwrap_err();
+            let expected = original_chunk_ranges(&tokenizer, "unknown").unwrap_err();
+            assert!(matches!(actual, NerRuntimeError::Tokenizer(_)));
+            assert_eq!(actual.to_string(), expected.to_string());
+            assert_eq!(serde_json::to_value(&tokenizer).unwrap(), config);
+        }
     }
 }
