@@ -533,3 +533,25 @@ fn second_batch_false_single_gap_and_protected_source_mismatch_are_fatal() {
     )
     .is_err());
 }
+
+#[test]
+fn second_batch_unowned_neighbor_cannot_hide_false_uncovered_owned_intersection() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let owned = session.tokenize(&PiiClass::Email, "X").unwrap();
+    let clean = CleanText {
+        text: format!("a{owned}[REDACTED]z"),
+        manifest: vec![
+            EmittedTokenSpan::new(1..1 + owned.len(), 1..2, PiiClass::Email),
+            EmittedTokenSpan::new(1 + owned.len()..11 + owned.len(), 2..3, PiiClass::Email),
+        ],
+    };
+    let before = session.tokens();
+    assert!(plan_followup_resolutions(
+        &ProtectionTarget::Live(&session),
+        &clean,
+        &report(vec![suspect(0..clean.text.len(), LeakKind::Uncovered)]),
+        Some("aXYz")
+    )
+    .is_err());
+    assert_eq!(session.tokens(), before);
+}
