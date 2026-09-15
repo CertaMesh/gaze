@@ -578,3 +578,55 @@ fn child_survives_control_idle_after_pairing() {
     drop(launch);
     assert_process_reaped(pid);
 }
+
+#[test]
+#[cfg(not(target_os = "macos"))]
+fn rotate_immediately_followed_by_purge_and_shutdown_keeps_control_frames_intact() {
+    let temp = tempfile::tempdir().unwrap();
+    let (paired, pid, _) = spawn_paired_dashboard(&temp.path().join("child.pid"));
+    let (pending, consumer, descriptor) = paired.into_pending_activation().unwrap();
+    let (producer, activated) =
+        install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer).unwrap();
+    let launch = pending.commit(activated).unwrap();
+    let control = launch.control();
+    control
+        .rotate_pairing_secret(Box::new(|_, _: &[u8]| Ok(())))
+        .unwrap();
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Running(1));
+    control.purge().unwrap();
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Running(2));
+    assert!(producer.begin_logical().is_ok());
+    control.shutdown().unwrap();
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
+    drop(launch);
+    assert_process_reaped(pid);
+}
+
+#[test]
+#[cfg(not(target_os = "macos"))]
+fn failed_rotation_delivery_disables_registration_and_reaps_child() {
+    let temp = tempfile::tempdir().unwrap();
+    let (paired, pid, _) = spawn_paired_dashboard(&temp.path().join("child.pid"));
+    let (pending, consumer, descriptor) = paired.into_pending_activation().unwrap();
+    let (producer, activated) =
+        install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer).unwrap();
+    let launch = pending.commit(activated).unwrap();
+    let control = launch.control();
+    let error = control
+        .rotate_pairing_secret(Box::new(|_, _: &[u8]| {
+            Err(io::Error::other("synthetic delivery failure"))
+        }))
+        .unwrap_err();
+    assert_eq!(
+        error.code(),
+        gaze_proxy_dashboard::DashboardErrorCode::PairingFailed
+    );
+    // Drop joins the runtime's existing disable/reap path before observing it.
+    drop(launch);
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
+    assert!(matches!(
+        producer.begin_logical(),
+        Err(InspectionBeginLogicalErrorV1::Disabled)
+    ));
+    assert_process_reaped(pid);
+}
