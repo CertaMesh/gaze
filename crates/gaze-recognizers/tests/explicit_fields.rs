@@ -241,6 +241,8 @@ fn malformed_or_unrelated_records_add_no_field_candidate() {
         "password: \"a\"b\"",
         "password: \"a\\q\"",
         "password: \"a\\",
+        "password: x\r",
+        "password: x\rpassword: y",
         "password: a\\b",
         "password: a'b",
         "prefixpassword: x",
@@ -298,4 +300,643 @@ fn grammar_units_bound_full_values_without_prefix_fallback() {
             }
         }
     }
+}
+
+fn assert_source_capture(pipeline: &gaze::Pipeline, raw: &str, captured: &str, source: &str) {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let (clean, spans, _, trace) = pipeline
+        .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+            &session,
+            raw,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        )
+        .unwrap();
+    let gaze::CleanDocument::Text(clean) = clean else {
+        panic!("text")
+    };
+    assert_eq!(spans.len(), 1, "{raw:?}: {spans:?}");
+    let span = &spans[0];
+    assert_eq!(&raw[span.raw_span.clone()], captured, "{raw:?}");
+    assert_eq!(
+        session.restore(&clean[span.clean_span.clone()]).as_deref(),
+        Some(captured)
+    );
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+    assert_eq!(&clean[..span.clean_span.start], &raw[..span.raw_span.start]);
+    assert_eq!(&clean[span.clean_span.end..], &raw[span.raw_span.end..]);
+    assert_eq!(trace.len(), 1);
+    assert!(trace[0].source_ids().contains(&source.to_string()));
+    let expected_class = if source == "email.global" {
+        gaze::PiiClass::Email
+    } else {
+        gaze::PiiClass::custom(source.split('.').next().unwrap()).unwrap()
+    };
+    assert_eq!(span.class, expected_class);
+    assert_eq!(trace[0].class(), &span.class);
+    assert_eq!(trace[0].raw_start()..trace[0].raw_end(), span.raw_span);
+    assert_eq!(trace[0].action(), "tokenize");
+}
+
+#[test]
+fn actual_assembly_normalization_exposes_source_boundaries_and_raw_size_limitations() {
+    let core = CorePipelineConfig::new().build().unwrap();
+    for (raw, captured) in [
+        ("password: \"\u{200d}a\"", "a"),
+        ("password: \"a\u{200c}\"", "a"),
+        ("password: \"a\u{200d}\u{200c}b\"", "a\u{200d}\u{200c}b"),
+        ("password: \"e\u{301}\"", "e\u{301}"),
+        ("ｐａｓｓｗｏｒｄ： ＂ａ＼＂ｂ＼＼ｃ＂", "ａ＼＂ｂ＼＼ｃ"),
+        ("password: 'a\\'b\\\\c'", "a\\'b\\\\c"),
+        ("password: \"a\\\"b\\\\c\"", "a\\\"b\\\\c"),
+        (
+            "password: \"nur ein erfundenes Kennwort!\"\r\n",
+            "nur ein erfundenes Kennwort!",
+        ),
+        ("password: required", "required"),
+    ] {
+        assert_source_capture(core.pipeline(), raw, captured, "password.field");
+    }
+    // Removed interior scalars have no raw-size ceiling, despite two grammar units.
+    let captured = format!("a{}b", "\u{200d}".repeat(1024));
+    assert_source_capture(
+        core.pipeline(),
+        &format!("password: \"{captured}\""),
+        &captured,
+        "password.field",
+    );
+    let raw = "password: \"\u{200c}\u{200d}\"";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let (clean, spans, _) = core
+        .pipeline()
+        .clean_with_safety_net(
+            &session,
+            gaze::RawDocument::Text(raw.into()),
+            &[LocaleTag::Global],
+        )
+        .unwrap();
+    assert!(spans.is_empty());
+    let gaze::CleanDocument::Text(clean) = clean else {
+        panic!("text")
+    };
+    assert_eq!(clean, raw);
+
+    for units in [255, 256, 257] {
+        for value in [
+            "試".repeat(units),
+            "\\\"".repeat(units),
+            (0..units)
+                .map(|i| if i % 2 == 0 { "é" } else { "\\\\" })
+                .collect::<String>(),
+        ] {
+            let raw = format!("password: \"{value}\"");
+            if units <= 256 {
+                assert_source_capture(core.pipeline(), &raw, &value, "password.field");
+            } else {
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let (clean, spans, _) = core
+                    .pipeline()
+                    .clean_with_safety_net(
+                        &session,
+                        gaze::RawDocument::Text(raw.clone()),
+                        &[LocaleTag::Global],
+                    )
+                    .unwrap();
+                assert!(spans.is_empty(), "no 257-unit prefix");
+                let gaze::CleanDocument::Text(clean) = clean else {
+                    panic!("text")
+                };
+                assert_eq!(clean, raw);
+            }
+        }
+    }
+}
+
+fn assembled(
+    rules: Vec<gaze::RuleSpec>,
+    competitors: &[(&str, gaze::PiiClass, i32)],
+) -> gaze::Pipeline {
+    let mut pack = gaze::Rulepack::load(gaze::RulepackSource::Embedded(
+        gaze_recognizers::embedded("core").unwrap(),
+    ))
+    .unwrap();
+    // Competing synthetic candidates exercise real assembly/arbitration without a model.
+    for (index, (pattern, class, priority)) in competitors.iter().enumerate() {
+        let mut spec = pack
+            .recognizers
+            .iter()
+            .find(|r| r.id == "password.field")
+            .unwrap()
+            .clone();
+        spec.id = format!("synthetic.competitor.{index}");
+        spec.class = class.clone();
+        spec.matcher = gaze::RawMatch::Regex {
+            pattern: Some(pattern.to_string()),
+            pattern_template: None,
+            capture_groups: None,
+        };
+        spec.scoring.priority = *priority;
+        pack.recognizers.push(spec);
+    }
+    let mut policy = gaze::Policy::default();
+    policy.rules = rules;
+    let context = gaze::Context {
+        dictionaries: Default::default(),
+        class_map: Default::default(),
+        fields: Default::default(),
+    };
+    gaze_assembly::build_pipeline(
+        &policy,
+        &context,
+        &[pack],
+        &gaze::LocaleChain::from(&[LocaleTag::Global][..]),
+        None,
+    )
+    .unwrap()
+}
+
+fn tokenize_rules() -> Vec<gaze::RuleSpec> {
+    vec![gaze::RuleSpec::Default {
+        action: gaze::Action::Tokenize,
+    }]
+}
+
+#[test]
+fn actual_assembly_nested_builtin_and_custom_fragments_keep_full_field_source() {
+    use gaze::PiiClass;
+    let core = CorePipelineConfig::new().build().unwrap();
+    for value in [
+        "prefix alice@example.invalid suffix",
+        "prefix +49 1555 0112233 suffix",
+        "prefix 192.0.2.1 suffix",
+        "prefix 2001:db8::1 suffix",
+        "prefix secret: SYNTHETICabcdef012345 suffix",
+    ] {
+        assert_source_capture(
+            core.pipeline(),
+            &format!("password: \"{value}\""),
+            value,
+            "password.field",
+        );
+    }
+    for class in [
+        PiiClass::Name,
+        PiiClass::Location,
+        PiiClass::Email,
+        PiiClass::custom("phone").unwrap(),
+        PiiClass::custom("ip").unwrap(),
+        PiiClass::custom("security_token").unwrap(),
+        PiiClass::custom("username").unwrap(),
+    ] {
+        for reverse in [false, true] {
+            let mut competitors = vec![
+                ("inside", class.clone(), 87),
+                ("side", PiiClass::custom("fragment").unwrap(), 80),
+            ];
+            if reverse {
+                competitors.reverse();
+            }
+            let pipeline = assembled(tokenize_rules(), &competitors);
+            assert_source_capture(
+                &pipeline,
+                "password: \"left inside right\"",
+                "left inside right",
+                "password.field",
+            );
+        }
+    }
+}
+
+#[test]
+fn same_span_email_winner_selects_email_policy_instead_of_username_policy() {
+    use gaze::{Action, PiiClass, RuleSpec};
+    let raw = "username: alice@example.invalid";
+    let rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::custom("username").unwrap(),
+            action: Action::Preserve,
+        },
+        RuleSpec::Class {
+            class: PiiClass::Email,
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ];
+    let pipeline = assembled(rules, &[]);
+    assert_source_capture(&pipeline, raw, "alice@example.invalid", "email.global");
+    let reverse_rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::custom("username").unwrap(),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Class {
+            class: PiiClass::Email,
+            action: Action::Preserve,
+        },
+        RuleSpec::Default {
+            action: Action::Tokenize,
+        },
+    ];
+    let pipeline = assembled(reverse_rules, &[]);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let (clean, spans, _) = pipeline
+        .clean_with_safety_net(
+            &session,
+            gaze::RawDocument::Text(raw.into()),
+            &[LocaleTag::Global],
+        )
+        .unwrap();
+    assert!(spans.is_empty());
+    let gaze::CleanDocument::Text(clean) = clean else {
+        panic!("text")
+    };
+    assert_eq!(clean, raw);
+}
+
+#[derive(Clone)]
+struct CapturedLogs(std::sync::Arc<std::sync::Mutex<Vec<gaze::RedactionEntry>>>);
+impl gaze::RedactionLogger for CapturedLogs {
+    fn log(&self, entry: &gaze::RedactionEntry) -> Result<(), gaze::RedactionLogError> {
+        self.0.lock().unwrap().push(entry.clone());
+        Ok(())
+    }
+}
+
+#[test]
+fn validator_veto_belongs_to_card_or_phone_not_declared_password() {
+    for (value, veto_id) in [
+        ("4111-1111-1111-1112", "card.structural"),
+        ("+99999999", "phone"),
+    ] {
+        let logs = CapturedLogs(Default::default());
+        let core = CorePipelineConfig::new()
+            .build()
+            .unwrap()
+            .into_pipeline()
+            .with_redaction_logger(logs.clone());
+        assert_source_capture(
+            &core,
+            &format!("password: \"{value}\""),
+            value,
+            "password.field",
+        );
+        let rows = logs.0.lock().unwrap();
+        assert!(rows
+            .iter()
+            .any(|r| r.recognizer_id.as_deref() == Some("password.field")
+                && r.validator_fail_reason.is_none()
+                && !r.conflict_loser));
+        assert!(
+            rows.iter().any(|r| r
+                .recognizer_id
+                .as_deref()
+                .is_some_and(|id| id.contains(veto_id))
+                && r.validator_fail_reason.is_some()),
+            "own veto missing: {rows:?}"
+        );
+    }
+    for value in ["4111-1111-1111-1111", "+49 1555 0112233"] {
+        let core = CorePipelineConfig::new().build().unwrap();
+        assert_source_capture(
+            core.pipeline(),
+            &format!("password: \"prefix {value} suffix\""),
+            &format!("prefix {value} suffix"),
+            "password.field",
+        );
+    }
+}
+
+#[test]
+fn builtin_container_and_custom_competitor_order_preserve_existing_arbitration() {
+    for reverse in [false, true] {
+        let mut rivals = vec![
+            (r#"password: "left right""#, gaze::PiiClass::Name, 0),
+            ("left", gaze::PiiClass::custom("username").unwrap(), 87),
+        ];
+        if reverse {
+            rivals.reverse();
+        }
+        let pipeline = assembled(tokenize_rules(), &rivals);
+        let raw = "password: \"left right\"";
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, spans, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                raw,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        let gaze::CleanDocument::Text(clean) = clean else {
+            panic!("text")
+        };
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].raw_span, 0..raw.len());
+        assert_eq!(spans[0].class, gaze::PiiClass::Name);
+        assert!(trace[0].source_ids().contains(&"password.field".into()));
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+    }
+}
+
+#[derive(Clone, Copy)]
+enum NetResponse {
+    Owned,
+    Residual,
+    Error,
+}
+struct FieldNet {
+    response: NetResponse,
+    seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+impl gaze::SafetyNet for FieldNet {
+    fn id(&self) -> &str {
+        "synthetic.field.net"
+    }
+    fn supported_locales(&self) -> &[LocaleTag] {
+        &[LocaleTag::Global]
+    }
+    fn check(
+        &self,
+        text: &str,
+        ctx: gaze::SafetyNetContext<'_>,
+    ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+        self.seen.lock().unwrap().push(text.into());
+        let (span, class) = match self.response {
+            NetResponse::Error => {
+                return Err(gaze::SafetyNetError::Runtime {
+                    message: "synthetic failure".into(),
+                })
+            }
+            NetResponse::Owned => {
+                if let Some(span) = ctx.manifest.spans.first() {
+                    (span.clean_span.clone(), span.class.clone())
+                } else {
+                    let start = text.find("synthetic").unwrap();
+                    (
+                        start..start + 9,
+                        gaze::PiiClass::custom("password").unwrap(),
+                    )
+                }
+            }
+            NetResponse::Residual => (0..8, gaze::PiiClass::Name),
+        };
+        Ok(vec![gaze::LeakSuspect::new(
+            span,
+            class,
+            self.id(),
+            None,
+            gaze::LeakKind::Uncovered,
+            "synthetic",
+            None,
+        )])
+    }
+}
+
+#[test]
+fn repeated_fields_live_staged_trace_and_owned_replay_restore_exact_bytes() {
+    let pipeline = CorePipelineConfig::new().build().unwrap().into_pipeline();
+    for newline in ["\n", "\r\n"] {
+        let raw =
+            format!("password: synthetic{newline}password: synthetic{newline}DOB: 1990-02-03");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut tx = session.begin_transaction();
+        let (staged, spans, _) = pipeline
+            .clean_transaction_with_safety_net_policy_detect_context(
+                &mut tx,
+                gaze::RawDocument::Text(raw.clone()),
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        let gaze::CleanDocument::Text(staged) = staged else {
+            panic!("text")
+        };
+        assert_eq!(spans.len(), 3);
+        assert_eq!(
+            &staged[spans[0].clean_span.clone()],
+            &staged[spans[1].clean_span.clone()]
+        );
+        assert_eq!(tx.tokens().len(), 2);
+        assert!(session.tokens().is_empty());
+        assert_eq!(tx.restore_strict_text(&staged).unwrap(), raw);
+        tx.commit().unwrap();
+        let (live, live_spans, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                &raw,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        let gaze::CleanDocument::Text(live) = live else {
+            panic!("text")
+        };
+        assert_eq!(live, staged);
+        assert_eq!(live_spans, spans);
+        assert_eq!(trace.len(), 3);
+        for (span, trace) in spans.iter().zip(trace) {
+            assert_eq!(trace.raw_start()..trace.raw_end(), span.raw_span);
+            assert_eq!(
+                session.restore(&live[span.clean_span.clone()]).unwrap(),
+                raw[span.raw_span.clone()]
+            );
+        }
+        let mut replay = session.begin_transaction();
+        let clean = pipeline
+            .protect_text_transaction(
+                &mut replay,
+                &staged,
+                gaze::ProtectionContext::strict(&[LocaleTag::Global], &DictionaryBundle::default()),
+            )
+            .unwrap();
+        assert_eq!(clean, staged);
+        assert_eq!(replay.restore_strict_text(&clean).unwrap(), raw);
+        assert_eq!(replay.tokens().len(), 2);
+    }
+}
+
+#[test]
+fn configured_fake_net_sees_final_fields_and_stage_errors_publish_nothing() {
+    for response in [
+        NetResponse::Owned,
+        NetResponse::Residual,
+        NetResponse::Error,
+    ] {
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let pipeline = CorePipelineConfig::new()
+            .build()
+            .unwrap()
+            .into_pipeline()
+            .with_safety_net(FieldNet {
+                response,
+                seen: seen.clone(),
+            });
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut tx = session.begin_transaction();
+        let result = pipeline.protect_text_transaction(
+            &mut tx,
+            "password: synthetic",
+            gaze::ProtectionContext::strict(&[LocaleTag::Global], &DictionaryBundle::default()),
+        );
+        assert!(session.tokens().is_empty());
+        assert!(!tx.tokens().is_empty());
+        match response {
+            NetResponse::Owned => {
+                let clean = result.unwrap();
+                assert_eq!(
+                    tx.restore_strict_text(&clean).unwrap(),
+                    "password: synthetic"
+                );
+                assert_eq!(seen.lock().unwrap().as_slice(), &[clean]);
+            }
+            NetResponse::Residual => {
+                assert!(matches!(result, Err(gaze::ProtectionError::Residual)))
+            }
+            NetResponse::Error => assert!(matches!(result, Err(gaze::ProtectionError::SafetyNet))),
+        }
+        drop(tx);
+        assert!(session.tokens().is_empty());
+        assert_eq!(seen.lock().unwrap().len(), 1);
+    }
+}
+
+#[test]
+fn caller_actions_remain_authoritative_and_strict_does_not_promise_no_new_denials() {
+    use gaze::{Action, PiiClass, RuleSpec};
+    let raw = "password: synthetic";
+    for action in [
+        Action::Preserve,
+        Action::Redact,
+        Action::Generalize,
+        Action::FormatPreserve,
+    ] {
+        let pipeline = assembled(
+            vec![
+                RuleSpec::Class {
+                    class: PiiClass::custom("password").unwrap(),
+                    action,
+                },
+                RuleSpec::Default {
+                    action: Action::Tokenize,
+                },
+            ],
+            &[],
+        );
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, spans, _) = pipeline
+            .clean_with_safety_net(
+                &session,
+                gaze::RawDocument::Text(raw.into()),
+                &[LocaleTag::Global],
+            )
+            .unwrap();
+        let gaze::CleanDocument::Text(clean) = clean else {
+            panic!("text")
+        };
+        match action {
+            Action::Preserve => {
+                assert_eq!(clean, raw);
+                assert!(spans.is_empty());
+            }
+            Action::Redact => {
+                assert_eq!(clean, "password: [REDACTED]");
+                assert!(session.tokens().is_empty());
+            }
+            Action::Generalize => {
+                assert!(!clean.contains("synthetic"));
+                assert!(session.tokens().is_empty());
+            }
+            Action::FormatPreserve => {
+                assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+                assert!(session.contains_token(&clean[spans[0].clean_span.clone()]));
+            }
+            _ => unreachable!(),
+        }
+        let trace = pipeline.clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+            &session,
+            raw,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        );
+        assert_eq!(trace.is_ok(), action == Action::Preserve);
+        let pipeline = pipeline.with_safety_net(FieldNet {
+            response: NetResponse::Owned,
+            seen: Default::default(),
+        });
+        let mut tx = session.begin_transaction();
+        let strict = pipeline.protect_text_transaction(
+            &mut tx,
+            raw,
+            gaze::ProtectionContext::strict(&[LocaleTag::Global], &DictionaryBundle::default()),
+        );
+        match action {
+            Action::Preserve => assert!(matches!(strict, Err(gaze::ProtectionError::Residual))),
+            Action::Redact | Action::Generalize => {
+                assert!(matches!(strict, Err(gaze::ProtectionError::Provenance)))
+            }
+            Action::FormatPreserve => assert!(strict.is_ok()),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[test]
+fn foreign_token_spelling_is_not_owned_field_protection() {
+    let pipeline = CorePipelineConfig::new().build().unwrap().into_pipeline();
+    let foreign = Session::new(Scope::Ephemeral).unwrap();
+    let token = foreign
+        .tokenize(&gaze::PiiClass::custom("password").unwrap(), "synthetic")
+        .unwrap();
+    let raw = format!("password: {token}");
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut tx = session.begin_transaction();
+    assert!(!tx.contains_token(&token));
+    let result = pipeline.protect_text_transaction(
+        &mut tx,
+        &raw,
+        gaze::ProtectionContext::strict(&[LocaleTag::Global], &DictionaryBundle::default()),
+    );
+    let clean = result.unwrap();
+    assert!(!clean.contains(&token));
+    assert!(!tx.contains_token(&token));
+    assert_eq!(tx.restore_strict_text(&clean).unwrap(), raw);
+    assert_eq!(tx.tokens().len(), 1);
+    let local = tx.tokens().pop().unwrap();
+    assert_eq!(tx.restore(&local).as_deref(), Some(token.as_str()));
+    drop(tx);
+    assert!(session.tokens().is_empty());
+}
+
+#[test]
+fn staged_clean_net_error_requires_discard_and_never_publishes_mappings() {
+    let seen = Default::default();
+    let pipeline = CorePipelineConfig::new()
+        .build()
+        .unwrap()
+        .into_pipeline()
+        .with_safety_net(FieldNet {
+            response: NetResponse::Error,
+            seen,
+        });
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut tx = session.begin_transaction();
+    let result = pipeline.clean_transaction_with_safety_net_policy_detect_context(
+        &mut tx,
+        gaze::RawDocument::Text("password: synthetic".into()),
+        &[LocaleTag::Global],
+        &DictionaryBundle::default(),
+        SafetyNetPolicy::default(),
+    );
+    assert!(result.is_err());
+    assert_eq!(tx.tokens().len(), 1);
+    assert!(session.tokens().is_empty());
+    drop(tx);
+    assert!(session.tokens().is_empty());
 }

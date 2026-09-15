@@ -262,3 +262,89 @@ the `Candidate`/`CollisionMembership` audit-row linkage are cataloged in
 
 The crate has a `test-support` feature for tests that need additional support
 surface without making it part of the default public runtime.
+
+## Explicit birth-date and credential fields
+
+The embedded `gaze-core` rulepack version **0.5.3** contains 39 recognizers.
+Three project-authored, globally active `safe_default` rules add narrow EN/DE
+field recognition through the existing assembly and `RegexDetector` machinery:
+
+| Rule / custom class | Complete, case-insensitive cues |
+| --- | --- |
+| `birth_date.cue` / `custom:birth_date` | `date of birth`, `birth date`, `birthdate`, `DOB`, `Geburtsdatum` |
+| `password.field` / `custom:password` | `password`, `passphrase`, `passwort`, `kennwort` |
+| `username.field` / `custom:username` | `username`, `user name`, `login name`, `benutzername`, `nutzername`, `Anmeldename` |
+
+### Supported grammar
+
+A record occupies a complete line: optional ASCII spaces/tabs, a complete cue,
+optional spaces/tabs, `:` or `=`, optional spaces/tabs, a nonempty value,
+optional spaces/tabs, then LF, CRLF or EOF. Adjacent records work independently.
+Multiword cues use the literal spaces shown above. This is string recognition,
+not JSON/schema parsing: `DetectContext.fields` remains a reserved unit value.
+
+Password and username values are either an unquoted atom without whitespace,
+quotes or backslashes, or paired single/double quotes around the full value.
+Quoted values permit spaces and only two escape forms: escaped matching quote
+and escaped backslash. Quotes and line separators stay outside the capture;
+value spelling is preserved exactly, with no unescaping. Terminal punctuation
+belongs to an unquoted value. Empty, malformed, multiline and overbound records
+produce no candidate from these rules, never a partial value prefix. Other
+recognizers can still detect content in an unsupported record.
+
+Credential values are bounded to **1–256 normalized grammar units**. A unit is
+one permitted plain Unicode scalar or one supported two-scalar escape. Quoted
+values can therefore contain up to **512 normalized scalars**. This is neither
+a raw-source size bound nor a bound on the cost of scanning a document.
+
+Birth dates accept `YYYY-MM-DD`, `D.M.YYYY` and slash dates with four-digit years.
+Month/day components are structurally bounded to 1–12 / 1–31, including either
+slash ordering, without inferring or rewriting that ordering. Calendar validity
+is not asserted: a declared `31.02.1990` is still sensitive. A separate prose arm
+accepts a word-bounded `born on` or `geboren am`, horizontal whitespace and a
+complete supported date. Attached letters, digits, underscores or date separators
+cannot extend a captured date prefix. A final period is accepted only before EOF
+or a non-word, non-date-separator character. Month names, partial dates, two-digit
+years and intervening prose are outside this grammar.
+
+### Protection and policy limits
+
+**Whole-value protection is conditional on the existing conflict winner and
+caller policy.** Default assembly tokenizes these custom classes using ordinary
+counter tokens. Their priority 100 exceeds embedded custom substring rules
+(maximum 87). Strictly contained builtin fragments normally yield to the custom
+container, but collision families and anchors are considered earlier. Same-span
+Email, partial builtin overlaps and builtin containers can win. Arbitration is
+unchanged; a different winner can select a different caller action.
+
+A reproducible synthetic limitation is `password: "left right"` with a competing
+builtin Name span over `password: "left`. Existing arbitration selects raw bytes
+`0..15`, leaving ` right"` raw, both before and after adding these rules. The
+standalone [collision control](tests/explicit_field_collision_control.rs) checks
+the exact source range, manifest, merged trace sources and remaining suffix.
+Collision repair is a separate scope; restoring the original text does not prove
+that every sensitive byte was protected.
+
+The unchanged pipeline normalizer removes U+200C/U+200D and maps fullwidth ASCII
+before matching. Removed leading/trailing joiners may remain outside a token;
+arbitrarily many interior joiners can lie inside its translated raw span.
+All-joiner values normalize to empty and yield no field candidate. Captured
+original bytes still restore exactly. There is no claim that all raw field bytes
+are protected or that translated captures have a maximum raw length.
+
+Explicit `Preserve`, `Redact`, `Generalize` and `FormatPreserve` policies remain
+authoritative. Preserve can leave a field raw and strict admission can reject;
+Redact/Generalize remain one-way and unsupported by the protection-trace entry
+point. FormatPreserve relies on actual session ownership. Failed transactions
+must be discarded. Configured safety nets still inspect the final output.
+There is no promise of zero new strict denials or reversal of one-way actions.
+
+Short values such as `password: x` and ambiguous declarations such as
+`password: required` intentionally match. Quoted templates/prose can match too;
+no entropy threshold, minimum length or stopword list establishes authenticity.
+An independent declared-password candidate does not bypass a card/phone
+candidate's own validator veto.
+
+These rules add deterministic coverage for supported text fields. Synthetic
+proofs do not establish a production leaked-byte reduction, zero rejects or
+latency nonregression. Additional regex work has not been benchmarked here.
