@@ -92,7 +92,7 @@ fn second_batch_single_and_multigap_owned_format_preserve_restore_trace_and_pare
                 if multigap {
                     vec![0..5, 26..30]
                 } else {
-                    vec![0..5]
+                    std::iter::once(0..5).collect::<Vec<_>>()
                 }
             );
             assert!(plan
