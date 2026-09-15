@@ -642,3 +642,58 @@ fn second_batch_terminal_registry_malformed_spans_are_enforced_before_conversion
         assert!(inputs.lock().unwrap().is_empty());
     }
 }
+
+#[test]
+fn second_batch_then_fallback_trace_keeps_original_raw_coordinates() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let a = session
+        .tokenize_with_family("safety_net", &PiiClass::Name, "a")
+        .unwrap();
+    let b = session
+        .tokenize_with_family("safety_net", &PiiClass::Name, "b")
+        .unwrap();
+    let final_text = format!("{a} {b} ");
+    let (p, steps) = pipeline(vec![
+        ("a b c".into(), Ok(vec![raw(0..1)])),
+        (format!("{a} b c"), Ok(vec![raw(a.len() + 1..a.len() + 2)])),
+        (
+            format!("{a} {b} c"),
+            Ok(vec![raw(a.len() + b.len() + 2..a.len() + b.len() + 3)]),
+        ),
+        (
+            final_text.clone(),
+            Ok(vec![raw(a.len() + 1..a.len() + 1 + b.len())]),
+        ),
+    ]);
+    let (CleanDocument::Text(text), spans, report, trace) = p
+        .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+            &session,
+            "a b c",
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        )
+        .unwrap()
+    else {
+        panic!("text")
+    };
+    assert_eq!(text, final_text);
+    assert_eq!(session.restore_strict_text(&text).unwrap(), "a b ");
+    assert_eq!(
+        spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
+        [0..1, 2..3]
+    );
+    assert_eq!(
+        trace
+            .iter()
+            .map(|t| (t.raw_start(), t.raw_end(), t.decision()))
+            .collect::<Vec<_>>(),
+        [
+            (0, 1, "resolve"),
+            (2, 3, "resolve"),
+            (4, 5, "fallback_redact")
+        ]
+    );
+    assert_eq!(report.stats.suspect_count, 3);
+    assert!(steps.lock().unwrap().is_empty());
+}

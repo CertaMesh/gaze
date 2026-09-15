@@ -1533,37 +1533,14 @@ impl Pipeline {
 
         // Phase 3: apply right-to-left, so an applied plan never shifts an unapplied one.
         for plan in plans.into_iter().rev() {
-            let suspect = plan.suspect;
-            let replacement =
-                target.tokenize_with_family("safety_net", &suspect.class, &plan.raw)?;
-            self.log_safety_net_entry(
+            self.apply_safety_net_resolution(
                 target,
-                suspect,
+                clean,
+                plan,
                 document_kind,
                 field_path,
-                Action::Tokenize,
-                false,
-                ConflictTier::Resolve,
-                None,
+                protection_trace.as_deref_mut(),
             )?;
-            replace_clean_span_checked(
-                clean,
-                plan.clean_span.clone(),
-                &replacement,
-                Some(EmittedTokenSpan::new(
-                    plan.clean_span.start..plan.clean_span.start + replacement.len(),
-                    plan.raw_span.clone(),
-                    suspect.class.clone(),
-                )),
-            )?;
-            if let Some(trace) = protection_trace.as_deref_mut() {
-                trace.record(
-                    plan.raw_span,
-                    suspect.class.clone(),
-                    GazeLocalProtectionTraceKind::SafetyNetResolveTokenize,
-                    vec![suspect.safety_net_id.clone()],
-                )?;
-            }
         }
         // UNREACHABLE DEFENSE IN DEPTH — the phase-2 checks above already prove these
         // postconditions. Keep main's #403 verification after trace-aware application.
@@ -1575,6 +1552,49 @@ impl Pipeline {
             assert_resolution_preserved_restore(&baseline, &restored)?;
         }
         Ok(None)
+    }
+
+    /// Both reversible batches use identical publication, audit and trace ordering.
+    fn apply_safety_net_resolution(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        clean: &mut CleanText,
+        plan: PlannedSafetyNetResolution<'_>,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+        protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+    ) -> Result<()> {
+        let suspect = plan.suspect;
+        let replacement = target.tokenize_with_family("safety_net", &suspect.class, &plan.raw)?;
+        self.log_safety_net_entry(
+            target,
+            suspect,
+            document_kind,
+            field_path,
+            Action::Tokenize,
+            false,
+            ConflictTier::Resolve,
+            None,
+        )?;
+        replace_clean_span_checked(
+            clean,
+            plan.clean_span.clone(),
+            &replacement,
+            Some(EmittedTokenSpan::new(
+                plan.clean_span.start..plan.clean_span.start + replacement.len(),
+                plan.raw_span.clone(),
+                suspect.class.clone(),
+            )),
+        )?;
+        if let Some(trace) = protection_trace {
+            trace.record(
+                plan.raw_span,
+                suspect.class.clone(),
+                GazeLocalProtectionTraceKind::SafetyNetResolveTokenize,
+                vec![suspect.safety_net_id.clone()],
+            )?;
+        }
+        Ok(())
     }
 
     fn apply_followup_resolutions(
@@ -1601,37 +1621,14 @@ impl Pipeline {
             )?;
         }
         for gap in plan.gaps.into_iter().rev() {
-            let suspect = gap.suspect;
-            let replacement =
-                target.tokenize_with_family("safety_net", &suspect.class, &gap.raw)?;
-            self.log_safety_net_entry(
+            self.apply_safety_net_resolution(
                 target,
-                suspect,
+                clean,
+                gap,
                 document_kind,
                 field_path,
-                Action::Tokenize,
-                false,
-                ConflictTier::Resolve,
-                None,
+                protection_trace.as_deref_mut(),
             )?;
-            replace_clean_span_checked(
-                clean,
-                gap.clean_span.clone(),
-                &replacement,
-                Some(EmittedTokenSpan::new(
-                    gap.clean_span.start..gap.clean_span.start + replacement.len(),
-                    gap.raw_span.clone(),
-                    suspect.class.clone(),
-                )),
-            )?;
-            if let Some(trace) = protection_trace.as_deref_mut() {
-                trace.record(
-                    gap.raw_span,
-                    suspect.class.clone(),
-                    GazeLocalProtectionTraceKind::SafetyNetResolveTokenize,
-                    vec![suspect.safety_net_id.clone()],
-                )?;
-            }
         }
         validate_clean_manifest(clean)?;
         if let Some(baseline) = restore_baseline {

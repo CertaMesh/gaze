@@ -555,3 +555,55 @@ fn second_batch_unowned_neighbor_cannot_hide_false_uncovered_owned_intersection(
     .is_err());
     assert_eq!(session.tokens(), before);
 }
+
+#[test]
+fn second_batch_preflight_failure_keeps_existing_trace_manifest_and_audit_untouched() {
+    for invalid_source in [false, true] {
+        let (session, mut clean, mut original) = fixture(false);
+        let mut item = suspect(0..5, LeakKind::Uncovered);
+        if invalid_source {
+            original.replace_range(0..5, "xxxxx");
+        } else {
+            item.safety_net_id = " \t".into();
+        }
+        let rows = Arc::new(Mutex::new(vec![]));
+        let pipeline = Pipeline::builder()
+            .register_safety_net(Reports(Mutex::new(vec![report(vec![
+                mismatch(0..5),
+                item,
+            ])])))
+            .redaction_logger(Capture(rows.clone()))
+            .build()
+            .unwrap();
+        let mut trace = ProtectionTraceCollector::new(&original);
+        trace
+            .record(
+                5..26,
+                PiiClass::Email,
+                GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
+                vec!["primary.fixture".into()],
+            )
+            .unwrap();
+        let before_text = clean.text.clone();
+        let before_tokens = session.tokens();
+        let before_span = clean.manifest[0].clone();
+        assert!(pipeline
+            .apply_safety_net_policy(
+                &mut ProtectionTarget::Live(&session),
+                &mut clean,
+                &mut report(vec![]),
+                DocumentKind::Text,
+                &[crate::LocaleTag::Global],
+                None,
+                SafetyNetPolicy::default().decision(),
+                Some(&mut trace)
+            )
+            .is_err());
+        assert_eq!(session.tokens(), before_tokens);
+        assert_eq!(clean.text, before_text);
+        assert_eq!(clean.manifest, [before_span]);
+        assert_eq!(trace.items.len(), 1);
+        assert_eq!(trace.items[0].raw_span, 5..26);
+        assert!(rows.lock().unwrap().is_empty());
+    }
+}
