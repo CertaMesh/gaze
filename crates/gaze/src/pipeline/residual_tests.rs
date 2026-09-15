@@ -1252,6 +1252,45 @@ fn forged_residual_ids_bounds_parent_membership_and_ownership_fail_closed() {
     }
 }
 
+/// The public fragment discriminator and the internal origin are two spellings
+/// of one fact, derived at a single site. Consumers decide whether to index a
+/// replacement as an entity on the strength of the public one, so a record where
+/// they disagree is forged or drifted state and must not validate.
+///
+/// Both directions matter: a whole relabelled as a fragment loses a searchable
+/// entity, and a fragment relabelled as whole is indexed as an entity it is not.
+#[test]
+fn a_record_whose_two_origins_disagree_fails_closed() {
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&pipeline(pair(), true), &session, RAW).unwrap();
+    let records = output.manifest.records().to_vec();
+    let fragment = records
+        .iter()
+        .position(|r| matches!(r.origin, Origin::Residual { .. }))
+        .expect("the pair fixture emits one residual");
+    let whole = records
+        .iter()
+        .position(|r| matches!(r.origin, Origin::Selection { .. }))
+        .expect("the pair fixture emits one whole");
+    assert!(records[fragment].emitted.origin.is_residual_fragment());
+    assert!(records[whole].emitted.origin.is_whole());
+
+    for (label, index, forged) in [
+        ("fragment claiming to be whole", fragment, gaze_types::EmittedTokenOrigin::Whole),
+        ("whole claiming to be a fragment", whole, gaze_types::EmittedTokenOrigin::ResidualFragment),
+    ] {
+        let mut bad = Ledger::new(output.manifest.segment().clone());
+        for (position, record) in records.iter().enumerate() {
+            let mut record = record.clone();
+            if position == index {
+                record.emitted.origin = forged;
+            }
+            bad.insert(record);
+        }
+        assert!(bad.validate().is_err(), "{label} must not validate");
+    }
+}
+
 #[test]
 fn preview_disagreement_never_overrides_action_or_allocates_a_residual() {
     struct Fault {

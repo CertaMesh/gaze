@@ -1192,12 +1192,23 @@ impl Pipeline {
                 Some(replacement) => {
                     let clean_start = out.len();
                     out.push_str(&replacement);
-                    ledger.insert(Occurrence::new(
-                        EmittedTokenSpan::new(clean_start..out.len(), span.clone(), class.clone()),
-                        action,
-                        owned,
-                        origin.clone(),
-                    ));
+                    // Consumers that turn replacements into entities need to tell
+                    // a whole selection from a residual fragment. Derive the public
+                    // discriminator from the internal origin at the one shared
+                    // insertion point; `Ledger::validate` rejects any disagreement.
+                    let emitted = match origin {
+                        Origin::Residual { .. } => EmittedTokenSpan::residual_fragment(
+                            clean_start..out.len(),
+                            span.clone(),
+                            class.clone(),
+                        ),
+                        _ => EmittedTokenSpan::new(
+                            clean_start..out.len(),
+                            span.clone(),
+                            class.clone(),
+                        ),
+                    };
+                    ledger.insert(Occurrence::new(emitted, action, owned, origin.clone()));
                 }
                 None => out.push_str(&text[span.clone()]),
             }

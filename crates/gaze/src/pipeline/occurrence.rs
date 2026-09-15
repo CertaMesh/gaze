@@ -336,6 +336,19 @@ impl Ledger {
             if segment.originals.len() != segment.original_raw.len() {
                 return Err(manifest_integrity_error("evidence length mismatch"));
             }
+            // The public fragment discriminator is derived from the internal
+            // origin, so a record where they disagree is forged or drifted state.
+            // Consumers decide whether to index a replacement as an entity on the
+            // strength of it, so this fails closed rather than trusting either.
+            for record in &self.records {
+                if record.emitted.origin.is_residual_fragment()
+                    != matches!(record.origin, Origin::Residual { .. })
+                {
+                    return Err(manifest_integrity_error(
+                        "emitted span origin disagrees with occurrence origin",
+                    ));
+                }
+            }
             super::residual::validate(segment)?;
             use crate::resolver::{PairOutcome, ResolutionEvent};
             let mut pairs = BTreeMap::new();
