@@ -15,6 +15,7 @@ pub fn resolve_candidates_with_policy(
     resolve_candidates_inner(&mut candidates, policy, None)
 }
 
+#[cfg(test)]
 pub(crate) fn resolve_candidates_with_policy_and_anchors(
     mut candidates: Vec<Candidate>,
     policy: &FamilyPolicyTable,
@@ -40,76 +41,222 @@ struct AnchorContext<'a> {
     locale_chain: &'a [LocaleTag],
 }
 
+// Original ids refer to immutable detector payloads, never source labels.
+pub(crate) struct CandidatePool {
+    originals: Vec<Candidate>,
+    pub(crate) order: Vec<usize>,
+    pub(crate) events: Vec<ResolutionEvent>,
+    next_node: usize,
+    #[cfg(test)]
+    pub(crate) work: ResolutionWork,
+}
+
+#[cfg(test)]
+#[derive(Default, Debug)]
+pub(crate) struct ResolutionWork {
+    pub(crate) pools: usize,
+    pub(crate) candidates: usize,
+    pub(crate) overlap_probes: usize,
+}
+
+pub(crate) struct WholeCandidate {
+    pub(crate) candidate: Candidate,
+    pub(crate) members: Vec<usize>,
+    pub(crate) node: usize,
+}
+
+// A compact private decision graph. Node ids below originals.len() are evidence;
+// subsequent ids refer to earlier Pair events, without recursively cloning history.
+#[derive(Debug)]
+#[allow(dead_code)]
+pub(crate) enum ResolutionEvent {
+    Pair {
+        existing: usize,
+        incoming: usize,
+        result: usize,
+        outcome: PairOutcome,
+    },
+    Collateral {
+        removed: usize,
+        replacing: usize,
+    },
+    Recovery {
+        node: usize,
+        normalized: Range<usize>,
+        raw: Range<usize>,
+    },
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub(crate) enum PairOutcome {
+    Merge,
+    Family,
+    Incoming(ConflictTier),
+    Existing(ConflictTier),
+}
+
+impl CandidatePool {
+    pub(crate) fn originals(&self) -> &[Candidate] {
+        &self.originals
+    }
+
+    pub(crate) fn new(originals: Vec<Candidate>) -> Self {
+        let mut order = (0..originals.len()).collect::<Vec<_>>();
+        // Keep the legacy stable key, including its input-order ties.
+        order.sort_by(|&a, &b| {
+            let (a, b) = (&originals[a], &originals[b]);
+            a.span
+                .start
+                .cmp(&b.span.start)
+                .then_with(|| b.span.end.cmp(&a.span.end))
+                .then_with(|| class_priority(&b.class).cmp(&class_priority(&a.class)))
+                .then_with(|| b.priority.cmp(&a.priority))
+                .then_with(|| b.score.total_cmp(&a.score))
+                .then_with(|| a.recognizer_id.cmp(&b.recognizer_id))
+        });
+        Self {
+            next_node: originals.len(),
+            originals,
+            order,
+            events: Vec::new(),
+            #[cfg(test)]
+            work: ResolutionWork::default(),
+        }
+    }
+
+    pub(crate) fn resolve(
+        &mut self,
+        ids: &[usize],
+        policy: &FamilyPolicyTable,
+        anchors: Option<(&AnchorResolver, &str, &[LocaleTag])>,
+    ) -> Vec<WholeCandidate> {
+        #[cfg(test)]
+        {
+            self.work.pools += 1;
+            self.work.candidates += ids.len();
+        }
+        let anchor_ctx = anchors.map(|(resolver, input, locale_chain)| AnchorContext {
+            resolver,
+            input,
+            locale_chain,
+        });
+        let mut resolved = Vec::new();
+        for &id in ids {
+            let candidate = WholeCandidate {
+                candidate: self.originals[id].clone(),
+                members: vec![id],
+                node: id,
+            };
+            self.insert(&mut resolved, candidate, policy, anchor_ctx);
+        }
+        if let Some(ctx) = anchor_ctx {
+            resolved = resolved
+                .into_iter()
+                .map(|mut node| {
+                    node.candidate = apply_missing_anchor_fallback(node.candidate, policy, ctx);
+                    node
+                })
+                .collect();
+        }
+        resolved.sort_by_key(|node| node.candidate.span.start);
+        resolved
+    }
+
+    fn insert(
+        &mut self,
+        resolved: &mut Vec<WholeCandidate>,
+        candidate: WholeCandidate,
+        policy: &FamilyPolicyTable,
+        anchor_ctx: Option<AnchorContext<'_>>,
+    ) {
+        for index in 0..resolved.len() {
+            #[cfg(test)]
+            {
+                self.work.overlap_probes += 1;
+            }
+            let Some(overlap) =
+                Overlap::classify(&resolved[index].candidate.span, &candidate.candidate.span)
+            else {
+                continue;
+            };
+            let existing = resolved[index].node;
+            let incoming = candidate.node;
+            let result = self.next_node;
+            self.next_node += 1;
+            let mut removal = None;
+            let outcome = match arbitrate(
+                &resolved[index].candidate,
+                &candidate.candidate,
+                overlap,
+                policy,
+                anchor_ctx,
+            ) {
+                Arbitration::Merge => {
+                    resolved[index].members.extend(candidate.members);
+                    merge_same_span_same_class(&mut resolved[index].candidate, candidate.candidate);
+                    PairOutcome::Merge
+                }
+                Arbitration::Family(tie) => {
+                    resolved[index].members.extend(candidate.members);
+                    resolved[index].candidate = tie;
+                    removal = Some(ConflictTier::CollisionPolicy);
+                    PairOutcome::Family
+                }
+                Arbitration::CandidateWins(tier) => {
+                    let mut candidate = candidate;
+                    candidate.candidate.decided_by = tier;
+                    candidate
+                        .candidate
+                        .merged_sources
+                        .push(resolved[index].candidate.source.clone());
+                    // Defeated candidates are provenance, not structural members.
+                    resolved[index] = candidate;
+                    removal = Some(tier);
+                    PairOutcome::Incoming(tier)
+                }
+                Arbitration::ExistingWins(tier) => {
+                    resolved[index].candidate.decided_by = tier;
+                    resolved[index]
+                        .candidate
+                        .merged_sources
+                        .push(candidate.candidate.source);
+                    PairOutcome::Existing(tier)
+                }
+            };
+            resolved[index].node = result;
+            self.events.push(ResolutionEvent::Pair {
+                existing,
+                incoming,
+                result,
+                outcome,
+            });
+            if overlap != Overlap::Exact {
+                if let Some(tier) = removal {
+                    remove_overlaps(resolved, index, tier, &mut self.events);
+                }
+            }
+            return;
+        }
+        resolved.push(candidate);
+    }
+}
+
 fn resolve_candidates_inner(
     candidates: &mut Vec<Candidate>,
     policy: &FamilyPolicyTable,
     anchor_ctx: Option<AnchorContext<'_>>,
 ) -> Vec<Candidate> {
-    candidates.sort_by(|a, b| {
-        a.span
-            .start
-            .cmp(&b.span.start)
-            .then_with(|| b.span.end.cmp(&a.span.end))
-            .then_with(|| class_priority(&b.class).cmp(&class_priority(&a.class)))
-            .then_with(|| b.priority.cmp(&a.priority))
-            .then_with(|| b.score.total_cmp(&a.score))
-            .then_with(|| a.recognizer_id.cmp(&b.recognizer_id))
-    });
-
-    let mut resolved: Vec<Candidate> = Vec::new();
-    for candidate in std::mem::take(candidates) {
-        insert_candidate(&mut resolved, candidate, policy, anchor_ctx);
-    }
-    if let Some(anchor_ctx) = anchor_ctx {
-        resolved = resolved
-            .into_iter()
-            .map(|candidate| apply_missing_anchor_fallback(candidate, policy, anchor_ctx))
-            .collect();
-    }
-    resolved.sort_by_key(|candidate| candidate.span.start);
-    resolved
-}
-
-fn insert_candidate(
-    resolved: &mut Vec<Candidate>,
-    candidate: Candidate,
-    policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) {
-    let mut index = 0;
-    while index < resolved.len() {
-        let Some(overlap) = Overlap::classify(&resolved[index].span, &candidate.span) else {
-            index += 1;
-            continue;
-        };
-
-        match arbitrate(&resolved[index], &candidate, overlap, policy, anchor_ctx) {
-            Arbitration::Merge => merge_same_span_same_class(&mut resolved[index], candidate),
-            Arbitration::Family(tie) => {
-                resolved[index] = tie;
-                if overlap != Overlap::Exact {
-                    remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
-                }
-            }
-            Arbitration::CandidateWins(tier) => {
-                let mut candidate = candidate;
-                candidate.decided_by = tier;
-                candidate
-                    .merged_sources
-                    .push(resolved[index].source.clone());
-                resolved[index] = candidate;
-                if overlap != Overlap::Exact {
-                    remove_overlaps(resolved, index, tier);
-                }
-            }
-            Arbitration::ExistingWins(tier) => {
-                resolved[index].decided_by = tier;
-                resolved[index].merged_sources.push(candidate.source);
-            }
-        }
-        return;
-    }
-    resolved.push(candidate);
+    let mut pool = CandidatePool::new(std::mem::take(candidates));
+    let order = pool.order.clone();
+    pool.resolve(
+        &order,
+        policy,
+        anchor_ctx.map(|ctx| (ctx.resolver, ctx.input, ctx.locale_chain)),
+    )
+    .into_iter()
+    .map(|node| node.candidate)
+    .collect()
 }
 
 /// Geometric relation between an already-resolved span and an incoming one.
@@ -417,22 +564,34 @@ thread_local! {
     static REMOVE_OVERLAPS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-fn remove_overlaps(resolved: &mut Vec<Candidate>, winner_index: usize, tier: ConflictTier) {
+fn remove_overlaps(
+    resolved: &mut Vec<WholeCandidate>,
+    winner_index: usize,
+    tier: ConflictTier,
+    events: &mut Vec<ResolutionEvent>,
+) {
     #[cfg(test)]
     REMOVE_OVERLAPS_CALLS.with(|calls| calls.set(calls.get() + 1));
 
-    let winner_span = resolved[winner_index].span.clone();
+    let winner_span = resolved[winner_index].candidate.span.clone();
     let mut index = 0;
     while index < resolved.len() {
-        if index != winner_index && overlaps(&resolved[index].span, &winner_span) {
+        if index != winner_index && overlaps(&resolved[index].candidate.span, &winner_span) {
             let loser = resolved.remove(index);
             let target = if index < winner_index {
                 winner_index - 1
             } else {
                 winner_index
             };
-            resolved[target].merged_sources.push(loser.source);
-            resolved[target].decided_by = tier;
+            events.push(ResolutionEvent::Collateral {
+                removed: loser.node,
+                replacing: resolved[target].node,
+            });
+            resolved[target]
+                .candidate
+                .merged_sources
+                .push(loser.candidate.source);
+            resolved[target].candidate.decided_by = tier;
             continue;
         }
         index += 1;
@@ -1216,5 +1375,63 @@ mod tests {
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].class, PiiClass::Location);
         assert_eq!(resolved[0].decided_by, ConflictTier::ClassPriority);
+    }
+}
+
+#[cfg(test)]
+mod recovery_event_tests {
+    use super::*;
+    #[test]
+    fn collateral_removal_has_no_fabricated_pair_outcome_or_membership() {
+        let make = |span, class, id| {
+            Candidate::new(
+                span,
+                class,
+                id,
+                0.9,
+                0,
+                None,
+                "counter",
+                id,
+                ConflictTier::None,
+                vec![],
+            )
+        };
+        let mut pool = CandidatePool::new(vec![
+            make(0..5, PiiClass::Name, "a"),
+            make(10..15, PiiClass::Name, "b"),
+            make(3..12, PiiClass::Email, "c"),
+        ]);
+        let mut nodes = (0..2)
+            .map(|id| WholeCandidate {
+                candidate: pool.originals[id].clone(),
+                members: vec![id],
+                node: id,
+            })
+            .collect::<Vec<_>>();
+        let incoming = WholeCandidate {
+            candidate: pool.originals[2].clone(),
+            members: vec![2],
+            node: 2,
+        };
+        pool.insert(&mut nodes, incoming, &FamilyPolicyTable::EMPTY, None);
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].members, vec![2]);
+        assert!(matches!(
+            pool.events.as_slice(),
+            [
+                ResolutionEvent::Pair {
+                    existing: 0,
+                    incoming: 2,
+                    result: 3,
+                    outcome: PairOutcome::Incoming(ConflictTier::ClassPriority)
+                },
+                ResolutionEvent::Collateral {
+                    removed: 1,
+                    replacing: 3
+                }
+            ]
+        ));
+        assert_eq!(pool.originals[1].span, 10..15);
     }
 }

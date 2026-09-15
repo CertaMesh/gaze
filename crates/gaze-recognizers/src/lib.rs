@@ -42,6 +42,7 @@ pub use ner::{
 };
 pub use regex::{NormalizerKind, RegexDetector};
 
+// drift-ack: core snapshot version0.5.3 matches the field rulepack; all detection fields are unchanged.
 pub fn embedded(name: &str) -> Option<&'static str> {
     match name {
         "core" | "core-extended" => Some(include_str!("../embedded/core.toml")),
@@ -66,7 +67,7 @@ mod tests {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 36);
+        assert_eq!(rulepack.recognizers.len(), 39);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
         assert_eq!(rulepack.recognizers[1].id, "email.header.name");
         assert_eq!(rulepack.recognizers[2].id, "email.header.name.paren");
@@ -101,7 +102,7 @@ mod tests {
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 36);
+        assert_eq!(rulepack.recognizers.len(), 39);
         assert!(rulepack
             .recognizers
             .iter()

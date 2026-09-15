@@ -3,7 +3,6 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::anchor_resolver::AnchorResolver;
-use crate::resolver::resolve_candidates_with_policy_and_anchors;
 pub use gaze_types::{Candidate, DetectContext, DetectError, Recognizer};
 use gaze_types::{CollisionMembership, LocaleBasis, LocaleChain, LocaleTag, PiiClass};
 
@@ -507,6 +506,41 @@ impl RecognizerRegistry {
         input: &str,
         ctx: &DetectContext<'_>,
     ) -> Result<(Vec<Candidate>, Vec<crate::validator_veto::VetoedCandidate>), DetectError> {
+        let (mut pool, vetoed) = self.detect_candidate_pool(input, ctx)?;
+        let order = pool.order.clone();
+        let resolved = self.resolve_pool(&mut pool, &order, input, ctx.locale_chain);
+        Ok((
+            resolved.into_iter().map(|node| node.candidate).collect(),
+            vetoed,
+        ))
+    }
+
+    pub(crate) fn resolve_pool(
+        &self,
+        pool: &mut crate::resolver::CandidatePool,
+        ids: &[usize],
+        input: &str,
+        locale_chain: &[LocaleTag],
+    ) -> Vec<crate::resolver::WholeCandidate> {
+        let locale_chain = LocaleChain::from(locale_chain);
+        pool.resolve(
+            ids,
+            self.family_policy(),
+            Some((&self.anchor_resolver, input, locale_chain.as_slice())),
+        )
+    }
+
+    pub(crate) fn detect_candidate_pool(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> Result<
+        (
+            crate::resolver::CandidatePool,
+            Vec<crate::validator_veto::VetoedCandidate>,
+        ),
+        DetectError,
+    > {
         let locale_chain = LocaleChain::from(ctx.locale_chain);
         let classes = self
             .entries
@@ -558,16 +592,7 @@ impl RecognizerRegistry {
         }
 
         let (candidates, vetoed) = crate::validator_veto::apply(candidates, self, input);
-        Ok((
-            resolve_candidates_with_policy_and_anchors(
-                candidates,
-                self.family_policy(),
-                &self.anchor_resolver,
-                input,
-                locale_chain.as_slice(),
-            ),
-            vetoed,
-        ))
+        Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }
 
     pub fn recognizer(&self, id: &str) -> Option<&Arc<dyn Recognizer>> {
