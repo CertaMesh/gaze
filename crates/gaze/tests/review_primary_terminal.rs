@@ -113,3 +113,103 @@ fn review_primary_generalize_live() {
 fn review_primary_generalize_staged() {
     prove_primary_action(Action::Generalize, true);
 }
+
+/// Reflag the retained primary replacement, rather than the token created by Resolve.
+struct ReflagPrimary;
+impl SafetyNet for ReflagPrimary {
+    fn id(&self) -> &str {
+        Net.id()
+    }
+    fn supported_locales(&self) -> &[LocaleTag] {
+        Net.supported_locales()
+    }
+    fn check(
+        &self,
+        text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+        if text.contains("seed") || text.contains("barrier ") {
+            return Net.check(text, context);
+        }
+        let primary = context
+            .manifest
+            .spans
+            .iter()
+            .find(|s| s.class == PiiClass::Email)
+            .unwrap();
+        Ok(vec![LeakSuspect::new(
+            primary.clean_span.clone(),
+            PiiClass::Name,
+            self.id(),
+            None,
+            LeakKind::ClassMismatch {
+                pipeline_class: PiiClass::Email,
+                safety_net_class: PiiClass::Name,
+            },
+            "synthetic",
+            None,
+        )])
+    }
+}
+
+fn reflag_primary(action: Action, staged: bool) {
+    let pipeline = Pipeline::builder()
+        .detector(Primary)
+        .rule(DefaultRule::new(action))
+        .register_safety_net(ReflagPrimary)
+        .build()
+        .unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let raw = RawDocument::Text("seed primary barrier residual é".into());
+    let result = if staged {
+        pipeline.clean_transaction_with_safety_net_policy_detect_context(
+            &mut transaction,
+            raw,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        )
+    } else {
+        pipeline.clean_with_safety_net(&session, raw, &[LocaleTag::Global])
+    };
+    if action == Action::FormatPreserve {
+        let (CleanDocument::Text(text), manifest, _) = result.unwrap() else {
+            panic!("text")
+        };
+        let primary = &manifest[1];
+        assert_eq!(primary.raw_span, 5..12);
+        let replacement = &text[primary.clean_span.clone()];
+        let restored = if staged {
+            transaction.restore(replacement)
+        } else {
+            session.restore(replacement)
+        };
+        assert_eq!(restored.as_deref(), Some("primary"));
+        assert!(text.ends_with(" residual é"));
+    } else {
+        assert!(
+            matches!(result, Err(Error::SafetyNetFallback(_))),
+            "unowned replacement cannot exempt a suspect: {result:?}"
+        );
+    }
+    if staged {
+        assert!(session.tokens().is_empty());
+    }
+}
+
+#[test]
+fn retained_primary_unowned_reflags_still_reject() {
+    for action in [Action::Redact, Action::Generalize] {
+        for staged in [false, true] {
+            reflag_primary(action, staged);
+        }
+    }
+}
+
+#[test]
+fn retained_format_preserve_uses_actual_live_and_staged_ownership() {
+    for staged in [false, true] {
+        reflag_primary(Action::FormatPreserve, staged);
+    }
+}

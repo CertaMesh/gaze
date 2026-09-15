@@ -1326,7 +1326,7 @@ impl Pipeline {
                     }
                 };
                 if let Some(reason) = reason {
-                    let (acted_on, terminal_raw_len) = {
+                    let (acted_on, terminal_provenance) = {
                         // Neither producer of `reason` audits its protected suspects: both return
                         // the moment they find an actionable one. Classify once here, so the
                         // protected ones get their `Preserve` row and the fallback is handed only
@@ -1343,17 +1343,13 @@ impl Pipeline {
                             .iter()
                             .map(|suspect| (*suspect).clone())
                             .collect::<Vec<_>>();
-                        // Freeze the original bound while clean/raw gaps are still affine.
-                        let terminal_raw_len = if matches!(on_residual, SafetyNetFallback::Redact) {
-                            Some(
-                                map_clean_boundary_to_raw(&clean.manifest, clean.text.len())
-                                    .ok_or_else(|| {
-                                        manifest_integrity_error("invalid original length")
-                                    })?,
-                            )
-                        } else {
-                            None
-                        };
+                        // Freeze pipeline-produced replacements before deletion shifts clean spans.
+                        let terminal_provenance =
+                            if matches!(on_residual, SafetyNetFallback::Redact) {
+                                Some(TerminalManifestProvenance::capture(target, clean)?)
+                            } else {
+                                None
+                            };
                         self.apply_safety_net_fallback(
                             target,
                             clean,
@@ -1364,7 +1360,7 @@ impl Pipeline {
                             reason,
                             protection_trace,
                         )?;
-                        (acted_on, terminal_raw_len)
+                        (acted_on, terminal_provenance)
                     };
                     // A residual found by the post-resolution re-run is absent from the primary
                     // report the caller receives. Surfacing it matters beyond tidiness: a boundary
@@ -1375,7 +1371,7 @@ impl Pipeline {
                     if residual_report.is_some() {
                         report.extend(LeakReport::from_parts(acted_on, Vec::new()));
                     }
-                    if let Some(original_raw_len) = terminal_raw_len {
+                    if let Some(provenance) = terminal_provenance {
                         // Deletion can expose new context. Admit only after a terminal scan of
                         // the actual output; never resolve again or delete a protected token.
                         let final_report = self.run_safety_nets(
@@ -1388,7 +1384,7 @@ impl Pipeline {
                             decision,
                         )?;
                         if !final_report.suspects.is_empty() {
-                            validate_terminal_manifest(target, clean, original_raw_len)?;
+                            validate_terminal_manifest(target, clean, &provenance)?;
                         }
                         if let Some(reason) =
                             unprotected_suspect_reason(target, clean, &final_report)
@@ -2206,14 +2202,61 @@ fn assert_resolution_preserved_restore(baseline: &str, restored: &str) -> Result
     Ok(())
 }
 
+/// Private provenance from the pipeline's validated output, before fallback can delete entries.
+/// A retained replacement is not necessarily a token: primary Redact and Generalize emit text.
+/// This snapshot proves continuity only; live ownership still decides suspect exemptions.
+struct TerminalManifestProvenance {
+    original_raw_len: usize,
+    entries: Vec<TerminalReplacement>,
+}
+
+struct TerminalReplacement {
+    emitted: EmittedTokenSpan,
+    replacement: String,
+    owned: bool,
+}
+
+impl TerminalManifestProvenance {
+    fn capture(target: &ProtectionTarget<'_, '_>, clean: &CleanText) -> Result<Self> {
+        validate_clean_manifest(clean)?;
+        let original_raw_len = map_clean_boundary_to_raw(&clean.manifest, clean.text.len())
+            .ok_or_else(|| manifest_integrity_error("invalid original length"))?;
+        let mut entries = Vec::with_capacity(clean.manifest.len());
+        for emitted in &clean.manifest {
+            let replacement = clean.text.get(emitted.clean_span.clone()).ok_or_else(|| {
+                manifest_integrity_error("invalid pre-fallback replacement bounds")
+            })?;
+            let owned = target.contains_token(replacement);
+            if replacement.is_empty()
+                || emitted.raw_span.start >= emitted.raw_span.end
+                || emitted.raw_span.end > original_raw_len
+                || (owned && !emitted_is_live_token(target, clean, emitted))
+            {
+                return Err(manifest_integrity_error("invalid pre-fallback provenance"));
+            }
+            entries.push(TerminalReplacement {
+                emitted: emitted.clone(),
+                replacement: replacement.to_owned(),
+                owned,
+            });
+        }
+        Ok(Self {
+            original_raw_len,
+            entries,
+        })
+    }
+}
+
 /// Terminal-only validation after planned deletion. Original gaps may shrink in clean text,
 /// but cannot grow; raw provenance stays ordered and bounded by the pre-deletion document.
 /// This cannot replace the affine mapper used to plan mutations.
 fn validate_terminal_manifest(
     target: &ProtectionTarget<'_, '_>,
     clean: &CleanText,
-    original_raw_len: usize,
+    provenance: &TerminalManifestProvenance,
 ) -> Result<()> {
+    let original_raw_len = provenance.original_raw_len;
+    let mut originals = provenance.entries.iter();
     let mut clean_cursor = 0;
     let mut raw_cursor = 0;
     for emitted in &clean.manifest {
@@ -2224,10 +2267,24 @@ fn validate_terminal_manifest(
             || emitted.raw_span.start >= emitted.raw_span.end
             || emitted.raw_span.end > original_raw_len
             || emitted.clean_span.start - clean_cursor > emitted.raw_span.start - raw_cursor
-            || !emitted_is_live_token(target, clean, emitted)
         {
             return Err(manifest_integrity_error(
                 "invalid terminal token provenance",
+            ));
+        }
+        // Fallback may remove whole entries, but cannot invent, reorder or rewrite survivors.
+        let Some(original) =
+            originals.find(|original| original.emitted.raw_span.start >= emitted.raw_span.start)
+        else {
+            return Err(manifest_integrity_error("unknown terminal replacement"));
+        };
+        if original.emitted.raw_span != emitted.raw_span
+            || original.emitted.class != emitted.class
+            || clean.text.get(emitted.clean_span.clone()) != Some(original.replacement.as_str())
+            || (original.owned && !emitted_is_live_token(target, clean, emitted))
+        {
+            return Err(manifest_integrity_error(
+                "changed terminal replacement provenance",
             ));
         }
         clean_cursor = emitted.clean_span.end;
@@ -2291,11 +2348,13 @@ fn emitted_is_live_token(
     let Some(token) = clean.text.get(emitted.clean_span.clone()) else {
         return false;
     };
+    if !target.contains_token(token) {
+        return false;
+    }
     let Some(restored) = target.restore(token) else {
         return false;
     };
-    target.contains_token(token)
-        && emitted.raw_span.start < emitted.raw_span.end
+    emitted.raw_span.start < emitted.raw_span.end
         && restored.len() == emitted.raw_span.end - emitted.raw_span.start
 }
 
@@ -4432,7 +4491,19 @@ mod tests {
                 EmittedTokenSpan::new(token.len() + 5..2 * token.len() + 5, 20..24, PiiClass::Name),
             ],
         };
-        validate_terminal_manifest(&target, &sound(), 24).unwrap();
+        let before = CleanText {
+            text: format!("barrier {token} gapgap {token}"),
+            manifest: vec![
+                EmittedTokenSpan::new(8..8 + token.len(), 8..12, PiiClass::Name),
+                EmittedTokenSpan::new(
+                    16 + token.len()..16 + 2 * token.len(),
+                    20..24,
+                    PiiClass::Name,
+                ),
+            ],
+        };
+        let provenance = TerminalManifestProvenance::capture(&target, &before).unwrap();
+        validate_terminal_manifest(&target, &sound(), &provenance).unwrap();
         assert_manifest_integrity(validate_clean_manifest(&sound()).unwrap_err());
         for corruption in 0..14 {
             let mut clean = sound();
@@ -4457,14 +4528,74 @@ mod tests {
                 }
                 _ => unreachable!(),
             }
-            assert_manifest_integrity(validate_terminal_manifest(&target, &clean, 24).unwrap_err());
+            assert_manifest_integrity(
+                validate_terminal_manifest(&target, &clean, &provenance).unwrap_err(),
+            );
         }
         let foreign_session = Session::new(Scope::Ephemeral).unwrap();
         let foreign_target = ProtectionTarget::Live(&foreign_session);
         assert_manifest_integrity(
-            validate_terminal_manifest(&foreign_target, &sound(), 24).unwrap_err(),
+            validate_terminal_manifest(&foreign_target, &sound(), &provenance).unwrap_err(),
         );
         assert_eq!(session.tokens().len(), 1);
+    }
+
+    #[test]
+    fn terminal_manifest_requires_exact_retained_primary_provenance() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let token = session.tokenize(&PiiClass::Name, "seed").unwrap();
+        let other_token = session.tokenize(&PiiClass::Name, "reed").unwrap();
+        let target = ProtectionTarget::Live(&session);
+        for replacement in ["[REDACTED]", "[EMAIL]"] {
+            let n = replacement.len();
+            let before = CleanText {
+                text: format!("seed {replacement} barrier {token} tail"),
+                manifest: vec![
+                    EmittedTokenSpan::new(5..5 + n, 5..12, PiiClass::Email),
+                    EmittedTokenSpan::new(14 + n..14 + n + token.len(), 21..25, PiiClass::Name),
+                ],
+            };
+            let provenance = TerminalManifestProvenance::capture(&target, &before).unwrap();
+            let sound = || CleanText {
+                text: format!("{replacement}{token} tail"),
+                manifest: vec![
+                    EmittedTokenSpan::new(0..n, 5..12, PiiClass::Email),
+                    EmittedTokenSpan::new(n..n + token.len(), 21..25, PiiClass::Name),
+                ],
+            };
+            validate_terminal_manifest(&target, &sound(), &provenance).unwrap();
+            for corruption in 0..8 {
+                let mut clean = sound();
+                match corruption {
+                    0 => clean.text.replace_range(0..1, "!"),
+                    1 => clean.manifest[0].class = PiiClass::Name,
+                    2 => clean.manifest[0].raw_span = 4..11,
+                    3 => clean.manifest[0].clean_span.end -= 1,
+                    4 => clean.manifest.push(EmittedTokenSpan::new(
+                        n + token.len() + 1..clean.text.len(),
+                        26..30,
+                        PiiClass::Name,
+                    )), // Previously unmanifested raw text is not a retained replacement.
+                    5 => clean.text.replace_range(n..n + token.len(), &other_token),
+                    6 => clean.manifest[0].raw_span.end += 1,
+                    7 => clean.manifest.swap(0, 1),
+                    _ => unreachable!(),
+                }
+                assert_manifest_integrity(
+                    validate_terminal_manifest(&target, &clean, &provenance).unwrap_err(),
+                );
+            }
+            // Deleting a whole primary replacement is allowed; the surviving token keeps its raw span.
+            let survivor = CleanText {
+                text: format!("{token} tail"),
+                manifest: vec![EmittedTokenSpan::new(
+                    0..token.len(),
+                    21..25,
+                    PiiClass::Name,
+                )],
+            };
+            validate_terminal_manifest(&target, &survivor, &provenance).unwrap();
+        }
     }
 
     /// Call-site coverage for the resolve-entry precondition.
