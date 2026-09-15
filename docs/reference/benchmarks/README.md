@@ -200,7 +200,7 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: current-release -->
 
-**v0.15.0** **(provisional)** — *not* measured on the released tree.
+**v0.15.0 (provisional)** — *not* measured on the released tree.
 
 > Candidate measured at signed preparation commit 75b7176bbeffdc6a5840e4b01e60077b9dc0f85e with a clean tree. Release readiness FAILED (exit 4); regression passed against v0.14.0. This row records evidence, not release approval.
 
@@ -238,22 +238,28 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: charts -->
 
-**Surviving PII bytes per arm — v0.15.0.** Lower is better; the goal is zero.
+**Surviving PII bytes per arm — v0.15.0 (provisional).** Lower is better; the goal is zero.
+
+> **v0.15.0 (provisional): not measured on the released tree.**
+> Candidate measured at signed preparation commit 75b7176bbeffdc6a5840e4b01e60077b9dc0f85e with a clean tree. Release readiness FAILED (exit 4); regression passed against v0.14.0. This row records evidence, not release approval.
 
 ```mermaid
 xychart-beta
-    title "Surviving PII bytes per arm - v0.15.0"
+    title "Surviving PII bytes per arm - v0.15.0 (provisional)"
     x-axis ["rule-floor-extended", "pass2-ner", "full-stack-kiji-resolve"]
     y-axis "Surviving PII bytes (lower is better)" 0 --> 104000
     bar [93850, 27000, 25179]
 ```
 
-**Trend across releases — `full-stack-kiji-resolve`.**
+**Trend across releases and candidates — `full-stack-kiji-resolve`.**
+
+> **v0.15.0 (provisional): not measured on the released tree.**
+> Candidate measured at signed preparation commit 75b7176bbeffdc6a5840e4b01e60077b9dc0f85e with a clean tree. Release readiness FAILED (exit 4); regression passed against v0.14.0. This row records evidence, not release approval.
 
 ```mermaid
 xychart-beta
-    title "Surviving PII bytes on full-stack-kiji-resolve across releases"
-    x-axis ["v0.14.0", "v0.15.0"]
+    title "Surviving PII bytes on full-stack-kiji-resolve across releases and candidates"
+    x-axis ["v0.14.0", "v0.15.0 (provisional)"]
     y-axis "Surviving PII bytes (lower is better)" 0 --> 28000
     line [25179, 25179]
 ```
@@ -273,7 +279,7 @@ machine-readable evidence.
 | Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |
 | --- | --- | --- | --- | --- | ---: |
 | v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | 25,179 |
-| v0.15.0 *(provisional)* | 2026-09-15 | `75b7176` | MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | 25,179 |
+| v0.15.0 (provisional) | 2026-09-15 | `75b7176` | MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | 25,179 |
 
 <!-- END GENERATED: history -->
 

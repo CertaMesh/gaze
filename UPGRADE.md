@@ -65,7 +65,7 @@ consistently across its normalization paths.
 
 ### Bridge session capacity (action required for Rust configuration)
 
-Add `max_sessions: 1000` to `gaze_mcp_bridge::SessionCfg` literals, or choose a
+Add `max_sessions: 1000` to `gaze_mcp_bridge::config::SessionCfg` literals, or choose a
 positive deployment-specific capacity. TOML omission defaults to 1,000:
 
 ```toml
