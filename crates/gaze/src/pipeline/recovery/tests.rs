@@ -76,7 +76,7 @@ fn six_permutations_recover_original_payload_and_keep_primary() {
 #[test]
 fn reverse_geometry_and_two_productive_recovery_rounds() {
     let registry = RecognizerRegistry::builder().build();
-    let reverse = vec![
+    let reverse = [
         candidate(10..20, custom(), "f"),
         candidate(0..12, PiiClass::Name, "a"),
         candidate(15..18, PiiClass::Name, "b"),
