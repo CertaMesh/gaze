@@ -2329,6 +2329,7 @@ fn plan_followup_resolutions<'a>(
         let mut cursor = suspect.span.start;
         let mut raw_gaps = Vec::new();
         let mut intersects = false;
+        let mut intersects_owned = false;
         let mut unowned = false;
         for emitted in clean
             .manifest
@@ -2338,6 +2339,7 @@ fn plan_followup_resolutions<'a>(
             intersects = true;
             let token = &clean.text[emitted.clean_span.clone()];
             if target.contains_token(token) {
+                intersects_owned = true;
                 let restored = target.restore(token).ok_or_else(|| {
                     manifest_integrity_error("owned follow-up token cannot restore")
                 })?;
@@ -2376,7 +2378,7 @@ fn plan_followup_resolutions<'a>(
             suspect.kind,
             LeakKind::Uncovered | LeakKind::PartialBleed { .. }
         );
-        if matches!(suspect.kind, LeakKind::Uncovered) && intersects && !unowned {
+        if matches!(suspect.kind, LeakKind::Uncovered) && intersects_owned {
             return Err(protection_trace_error("false follow-up uncovered claim"));
         }
         // Validate even unsupported parents' actual raw gaps before declining the whole report.
