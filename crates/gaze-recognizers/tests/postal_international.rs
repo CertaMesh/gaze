@@ -217,6 +217,29 @@ fn gb_alphanumeric_outward_is_tokenized() {
 }
 
 #[test]
+fn gb_inward_code_alphabet_is_pinned() {
+    // Royal Mail never uses `C I K M O V` in the inward code's two letters. Restricting them is
+    // what drops this rule's matches that overlap a DIFFERENT gold label from 3 to 1, so the
+    // restriction is load-bearing and gets its own negative pin: without this fixture, widening
+    // the inward class back to `[A-Z]{2}` passes the whole suite silently.
+    assert_value_survives("Marker ZZ9 9CV is internal.", "ZZ9 9CV");
+    assert_value_survives("Marker ZZ9 9IK is internal.", "ZZ9 9IK");
+    assert_value_survives("Marker ZZ9 9MO is internal.", "ZZ9 9MO");
+}
+
+#[test]
+fn gb_compact_form_without_a_separator_is_tokenized() {
+    // The separator is `{0,2}`, so the compact form must work for the ordinary outward branches
+    // and not only for the `GIR0AA` special case. Pins that a future `{1,2}` tightening is
+    // deliberate rather than accidental.
+    assert_postal_removed(
+        "Compact ZZ99ZZ appears in the export.",
+        "ZZ99ZZ",
+        &["Compact ", " appears in the export."],
+    );
+}
+
+#[test]
 fn gb_outward_code_alone_is_deliberately_not_tokenized() {
     // `A{2}9` (3 entities) and `A{2}9{2}` (1) are outward-code-only golds — 4 of 85. They are NOT
     // covered: an isolated 1-2 letter + 1-2 digit token is indistinguishable from an ordinary
