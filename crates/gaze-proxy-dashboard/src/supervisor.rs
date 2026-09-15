@@ -512,3 +512,12 @@ mod tests {
         assert_eq!(error.code(), DashboardErrorCode::InvalidInheritedHandle);
     }
 }
+
+#[cfg(test)]
+pub(crate) fn acknowledge_pairing_for_proof(
+    control: &mut UnixStream,
+    delivery: &mut dyn PairingDelivery,
+    authority_matches: impl FnOnce(SocketAddrV4) -> bool,
+) -> Result<SocketAddrV4, DashboardError> {
+    acknowledge_pairing(control, delivery, authority_matches)
+}

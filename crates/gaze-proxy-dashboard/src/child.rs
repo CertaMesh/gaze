@@ -287,6 +287,8 @@ fn child_pair(
         .and_then(|()| control.flush())
         .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
     crate::DeliveredAckV1::read_from(control, nonce)?;
+    #[cfg(test)]
+    pairing_proof::pause_before_trailing();
     reject_immediate_trailing(control)
 }
 
@@ -1229,3 +1231,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "pairing_proof.rs"]
+mod pairing_proof;
