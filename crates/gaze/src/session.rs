@@ -3211,6 +3211,7 @@ mod bounded_request_restore_tests {
         let token = session.tokenize(&PiiClass::Name, &raw).unwrap();
         let request = token.repeat(16);
         let before_export = session.export().unwrap().into_bytes();
+        let before_generation = session.state.read().unwrap().generation;
         let before_tokens = session.tokens();
         let frozen = session.begin_transaction();
         assert_eq!(
@@ -3229,7 +3230,21 @@ mod bounded_request_restore_tests {
         );
         drop(frozen);
         assert_eq!(session.tokens(), before_tokens);
-        assert_eq!(session.export().unwrap().into_bytes(), before_export);
+        assert_eq!(session.state.read().unwrap().generation, before_generation);
+        let after_export = session.export().unwrap().into_bytes();
+        Session::import(SensitiveSnapshot(before_export.clone())).unwrap();
+        Session::import(SensitiveSnapshot(after_export.clone())).unwrap();
+        assert_eq!(&after_export[..33], &before_export[..33]);
+        let mut before_payload: serde_json::Value =
+            serde_json::from_slice(&before_export[97..]).unwrap();
+        let mut after_payload: serde_json::Value =
+            serde_json::from_slice(&after_export[97..]).unwrap();
+        // Export timestamps and their signatures may change across a second boundary.
+        for payload in [&mut before_payload, &mut after_payload] {
+            assert!(payload["issued_at"].as_u64().is_some());
+            payload.as_object_mut().unwrap().remove("issued_at");
+        }
+        assert_eq!(after_payload, before_payload);
     }
 
     #[test]
