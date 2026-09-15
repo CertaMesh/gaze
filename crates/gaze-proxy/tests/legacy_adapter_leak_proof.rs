@@ -1076,8 +1076,8 @@ mod fallback_deleting_net;
 /// contract. The net fired, said so in the report, and the request shipped anyway.
 #[tokio::test]
 async fn regression_fallback_deletion_does_not_admit_an_unsurfaced_marker_to_the_provider() {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use fallback_deleting_net::{FallbackDeletingNet, MARKER};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let hits = Arc::new(AtomicUsize::new(0));
     let pipeline = Pipeline::builder()
@@ -1117,5 +1117,8 @@ async fn regression_fallback_deletion_does_not_admit_an_unsurfaced_marker_to_the
     );
     assert_eq!(forwarded.len(), 0, "the request must not be forwarded");
     assert!(!accepted, "the proxy must fail closed");
-    assert!(!returned.contains(MARKER), "the error must not echo the value");
+    assert!(
+        !returned.contains(MARKER),
+        "the error must not echo the value"
+    );
 }

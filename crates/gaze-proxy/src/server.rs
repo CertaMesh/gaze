@@ -12,8 +12,9 @@ use axum::routing::get;
 use axum::Router;
 use futures_util::StreamExt;
 use gaze::{
-    token_shape, CleanDocument, CommittedSessionSnapshot, DictionaryBundle, LocaleTag, Pipeline,
-    PrefixCacheWriteMode, RawDocument, Scope, Session, SessionTransaction, SessionTransactionError,
+    token_shape, CleanDocument, CommittedSessionSnapshot, DictionaryBundle, EmittedTokenSpan,
+    LocaleTag, Pipeline, PrefixCacheWriteMode, RawDocument, Scope, Session, SessionTransaction,
+    SessionTransactionError,
 };
 use reqwest::{Client, ClientBuilder};
 use serde::de::{MapAccess, SeqAccess, Visitor};
@@ -1431,7 +1432,7 @@ impl ResponseResidualValidator for PipelineResponseResidualValidator<'_, '_> {
         value: &str,
         authorized_output_ranges: &[std::ops::Range<usize>],
     ) -> Result<(), CodecErrorCode> {
-        let (_, spans, _) = self
+        let (clean, spans, _) = self
             .pipeline
             .clean_with_safety_net_detect_context(
                 &self.validation_session,
@@ -1440,6 +1441,19 @@ impl ResponseResidualValidator for PipelineResponseResidualValidator<'_, '_> {
                 self.dictionaries,
             )
             .map_err(|_| CodecErrorCode::ProviderOriginPii)?;
+        let CleanDocument::Text(clean_text) = clean else {
+            return Err(CodecErrorCode::ProviderOriginPii);
+        };
+        // PRECONDITION of the range check below, not a nicety. `authorized_output_ranges` are
+        // `value` coordinates, and the manifest is the only evidence that carries `value`
+        // coordinates too -- so a change no manifest entry describes leaves nothing to compare.
+        // A safety-net fallback DELETION is exactly that change: it writes
+        // `replace_clean_span_checked(.., "", None)`, removing the bytes from the clean text
+        // this validator discards while emitting no entry. Deciding on `spans` alone then reads
+        // an empty manifest as "no PII found" and admits the `value` still held here verbatim.
+        if !manifest_accounts_for_every_change(value, &clean_text, &spans) {
+            return Err(CodecErrorCode::ProviderOriginPii);
+        }
         for span in spans {
             if !authorized_output_ranges.iter().any(|authorized| {
                 authorized.start <= span.raw_span.start && authorized.end >= span.raw_span.end
@@ -1449,6 +1463,47 @@ impl ResponseResidualValidator for PipelineResponseResidualValidator<'_, '_> {
         }
         Ok(())
     }
+}
+
+/// True when `clean` is `raw` with each manifest entry's raw span replaced by the clean text at
+/// that entry's clean span, and nothing else changed.
+///
+/// Every byte the pipeline touched is then described by an entry carrying `raw` coordinates,
+/// which is what lets a caller decide whether that particular change was authorized. This
+/// refuses rather than interprets whenever the entries cannot describe the pair -- reordered,
+/// overlapping, or out-of-bounds spans included -- because the alternative is to conclude
+/// "nothing was found" about bytes it cannot account for.
+fn manifest_accounts_for_every_change(raw: &str, clean: &str, spans: &[EmittedTokenSpan]) -> bool {
+    let mut ordered: Vec<&EmittedTokenSpan> = spans.iter().collect();
+    ordered.sort_by_key(|span| span.clean_span.start);
+    let mut raw_cursor = 0usize;
+    let mut clean_cursor = 0usize;
+    for span in ordered {
+        if span.raw_span.start < raw_cursor || span.clean_span.start < clean_cursor {
+            return false;
+        }
+        let (Some(raw_gap), Some(clean_gap)) = (
+            raw.get(raw_cursor..span.raw_span.start),
+            clean.get(clean_cursor..span.clean_span.start),
+        ) else {
+            return false;
+        };
+        if raw_gap != clean_gap {
+            return false;
+        }
+        // Both ends must be real indices on their own string, or the entry does not describe
+        // this pair at all. `get` also rejects an inverted span and a non-char-boundary end.
+        if raw.get(span.raw_span.clone()).is_none() || clean.get(span.clean_span.clone()).is_none()
+        {
+            return false;
+        }
+        raw_cursor = span.raw_span.end;
+        clean_cursor = span.clean_span.end;
+    }
+    matches!(
+        (raw.get(raw_cursor..), clean.get(clean_cursor..)),
+        (Some(raw_tail), Some(clean_tail)) if raw_tail == clean_tail
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2746,7 +2801,7 @@ struct RequestResidualScan<'a> {
 
 impl RequestResidualScan<'_> {
     fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
-        let (_, spans, _) = self
+        let (clean, spans, report) = self
             .pipeline
             .clean_with_safety_net_detect_context(
                 &self.session,
@@ -2755,7 +2810,13 @@ impl RequestResidualScan<'_> {
                 self.dictionaries,
             )
             .map_err(|source| ProxyError::Pipeline { source })?;
-        if spans.is_empty() {
+        // This walk forwards `text` unchanged when it returns `Ok`, so the only thing that
+        // justifies `Ok` is the pipeline having done NOTHING to this position. An empty `spans`
+        // does not say that: a safety-net fallback DELETION removes the PII from a clean text
+        // that is discarded here and emits no manifest entry, so reading `spans` alone accepts
+        // the very position a net just flagged and forwards the raw bytes to the provider.
+        let untouched = matches!(&clean, CleanDocument::Text(cleaned) if cleaned == text);
+        if untouched && spans.is_empty() && report.suspects.is_empty() {
             return Ok(());
         }
         Err(ProxyError::UnsurfacedPii {
@@ -5062,5 +5123,76 @@ mod tests {
             started_at: Instant::now(),
         };
         assert_eq!(health_snapshot(&state).adapters[0].name, "openai");
+    }
+
+    fn span(clean: std::ops::Range<usize>, raw: std::ops::Range<usize>) -> EmittedTokenSpan {
+        EmittedTokenSpan::new(clean, raw, gaze::PiiClass::Email)
+    }
+
+    #[test]
+    fn manifest_accounting_accepts_an_untouched_pair_and_a_described_substitution() {
+        assert!(manifest_accounts_for_every_change(
+            "no pii here",
+            "no pii here",
+            &[]
+        ));
+        // "lead a@b tail" -> "lead <T> tail"
+        assert!(manifest_accounts_for_every_change(
+            "lead a@b tail",
+            "lead <T> tail",
+            &[span(5..8, 5..8)],
+        ));
+        // Two entries, and a token longer than the bytes it replaced, so the two cursors
+        // genuinely diverge rather than staying accidentally aligned.
+        assert!(manifest_accounts_for_every_change(
+            "a@b and c@d",
+            "<TOKEN1> and <TOKEN2>",
+            &[span(0..8, 0..3), span(13..21, 8..11)],
+        ));
+    }
+
+    #[test]
+    fn manifest_accounting_refuses_a_deletion_no_entry_describes() {
+        // The shape a safety-net fallback deletion produces: the bytes are gone from the clean
+        // text and NOTHING in the manifest says where they were. Accepting this is the defect.
+        assert!(!manifest_accounts_for_every_change(
+            "lead deleted@example.invalid tail",
+            "lead  tail",
+            &[],
+        ));
+        // Same, alongside an unrelated entry that does reconstruct.
+        assert!(!manifest_accounts_for_every_change(
+            "a@b and deleted@example.invalid",
+            "<T> and ",
+            &[span(0..3, 0..3)],
+        ));
+    }
+
+    #[test]
+    fn manifest_accounting_refuses_entries_that_cannot_describe_the_pair() {
+        // Out of bounds on the raw side.
+        assert!(!manifest_accounts_for_every_change(
+            "short",
+            "short",
+            &[span(0..5, 0..99)]
+        ));
+        // Overlapping raw spans: the pair cannot be a sequence of disjoint substitutions.
+        assert!(!manifest_accounts_for_every_change(
+            "a@b c@d",
+            "<T><T>",
+            &[span(0..3, 0..4), span(3..6, 2..7)],
+        ));
+        // An entry that reconstructs, but with a tail the manifest does not account for.
+        assert!(!manifest_accounts_for_every_change(
+            "a@b tail",
+            "<T> other",
+            &[span(0..3, 0..3)]
+        ));
+        // Entry spans that are not char boundaries cannot index their own string.
+        assert!(!manifest_accounts_for_every_change(
+            "\u{00e4}x",
+            "\u{00e4}x",
+            &[span(0..1, 0..1)]
+        ));
     }
 }
