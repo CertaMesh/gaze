@@ -1091,6 +1091,7 @@ impl Pipeline {
             out.push_str(&text[cursor..]);
         }
 
+        ledger.validate()?;
         Ok(CleanText {
             text: out,
             manifest: ledger,
@@ -2695,7 +2696,7 @@ fn validate_clean_manifest(clean: &CleanText) -> Result<()> {
             manifest_integrity_error("manifest entry has no unambiguous original span")
         })?;
     }
-    Ok(())
+    clean.manifest.validate()
 }
 
 /// A safety-net resolution replaces raw bytes with a token that restores to exactly those bytes,

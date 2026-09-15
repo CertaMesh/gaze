@@ -490,3 +490,31 @@ fn recovered_pool_raw_collision_is_rejected_even_with_valid_primary() {
         ))
     ));
 }
+
+#[test]
+fn evidence_retains_original_ids_and_recovered_geometry_without_relabeling_members() {
+    let result = run(
+        triple(),
+        &RecognizerRegistry::builder().build(),
+        "password: \"left right\"\nmarker",
+    );
+    assert_eq!(result.evidence.originals.len(), 3);
+    assert_eq!(result.evidence.original_raw, vec![11..15, 11..21, 16..29]);
+    assert_eq!(result.evidence.selections.len(), 2);
+    let recovered = result
+        .evidence
+        .selections
+        .iter()
+        .find(|s| s.recovered)
+        .unwrap();
+    assert_eq!(recovered.raw, 11..15);
+    assert_eq!(recovered.members, vec![0]);
+    let primary = result
+        .evidence
+        .selections
+        .iter()
+        .find(|s| !s.recovered)
+        .unwrap();
+    assert_eq!(primary.raw, 16..29);
+    assert_eq!(primary.members, vec![2]);
+}

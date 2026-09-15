@@ -165,7 +165,9 @@ impl Ledger {
         self.projection.take();
         record.id = self.next_id;
         self.next_id += 1;
-        let index = self.records.partition_point(|r| r.emitted.clean_span.start <= record.emitted.clean_span.start);
+        let index = self
+            .records
+            .partition_point(|r| r.emitted.clean_span.start <= record.emitted.clean_span.start);
         self.records.insert(index, record);
     }
     pub(super) fn phase(&mut self, text_len: usize, batch: Batch) -> usize {
@@ -316,8 +318,12 @@ impl Ledger {
             if segment.originals.len() != segment.original_raw.len() {
                 return Err(manifest_integrity_error("evidence length mismatch"));
             }
+            let mut nodes = std::collections::BTreeSet::new();
+            let mut members = std::collections::BTreeSet::new();
             for selection in &segment.selections {
-                if selection.members.is_empty()
+                if !nodes.insert(selection.node)
+                    || selection.members.iter().any(|id| !members.insert(*id))
+                    || selection.members.is_empty()
                     || selection
                         .members
                         .iter()
@@ -849,6 +855,151 @@ mod tests {
         assert_eq!(clean.manifest.segments[0].originals.as_ptr(), original);
         assert_eq!(clean.manifest.evidence_count(), 64);
         assert_eq!(Arc::strong_count(clean.manifest.project_arc()), 2);
+    }
+
+    #[test]
+    fn many_gap_production_retains_one_payload_table_and_one_phase_projection() {
+        let raw = format!(
+            " {}",
+            std::iter::repeat_n("alice@example.invalid ", 64).collect::<String>()
+        );
+        let (session, mut clean) = primary(&raw, Action::Tokenize);
+        let payloads = clean.manifest.segments[0].originals.as_ptr();
+        let end = clean.text.len();
+        resolve(
+            &mut clean,
+            &session,
+            vec![suspect(0..end, LeakKind::PartialBleed { uncovered: 0..1 })],
+            Batch::First,
+        );
+        assert_eq!(clean.manifest.records.len(), 129);
+        assert_eq!(clean.manifest.evidence_count(), 64);
+        assert_eq!(clean.manifest.segments[0].originals.as_ptr(), payloads);
+        assert_eq!(clean.manifest.observations.len(), 1);
+        assert_eq!(clean.manifest.phases.len(), 1);
+        assert_eq!(clean.manifest.phases[0].projection.spans.len(), 64);
+        assert_eq!(clean.manifest.projections.get(), 1);
+        for _ in 0..16 {
+            assert_eq!(clean.manifest.projection().spans.len(), 129);
+        }
+        assert_eq!(clean.manifest.projections.get(), 2);
+        assert_eq!(session.restore_strict_text(&clean.text).unwrap(), raw);
+    }
+
+    #[test]
+    fn deletion_before_between_after_keeps_original_raw_relations() {
+        let (session, mut clean) = primary(
+            "aaalice@example.invalidbbalice@example.invalidcc",
+            Action::Tokenize,
+        );
+        let original_ids = clean
+            .manifest
+            .records
+            .iter()
+            .map(|r| r.id)
+            .collect::<Vec<_>>();
+        let first = clean.manifest[0].clean_span.clone();
+        let second = clean.manifest[1].clean_span.clone();
+        let reports = [
+            suspect(0..2, LeakKind::Uncovered),
+            suspect(first.end..second.start, LeakKind::Uncovered),
+            suspect(second.end..clean.text.len(), LeakKind::Uncovered),
+        ];
+        let pipeline = Pipeline::builder().build().unwrap();
+        let mut target = ProtectionTarget::Live(&session);
+        let before = TerminalManifestProvenance::capture(&target, &clean).unwrap();
+        pipeline
+            .redact_safety_net_suspects(
+                &mut target,
+                &mut clean,
+                &reports.iter().collect::<Vec<_>>(),
+                DocumentKind::Text,
+                None,
+                None,
+                true,
+                None,
+            )
+            .unwrap();
+        validate_terminal_manifest(&target, &clean, &before).unwrap();
+        assert_eq!(
+            clean
+                .manifest
+                .records
+                .iter()
+                .map(|r| r.id)
+                .collect::<Vec<_>>(),
+            original_ids
+        );
+        assert_eq!(
+            clean
+                .manifest
+                .deletions
+                .iter()
+                .map(|d| d.raw.clone().unwrap())
+                .collect::<Vec<_>>(),
+            vec![46..48, 23..25, 0..2]
+        );
+        assert_eq!(clean.manifest.phases.len(), 1);
+        assert_eq!(clean.manifest.observations.len(), 3);
+        assert!(clean
+            .manifest
+            .deletions
+            .iter()
+            .all(|d| d.removed.is_empty()));
+    }
+
+    #[test]
+    fn observed_segment_composition_remaps_phase_ids_and_checks_bad_ownership() {
+        let (session, mut clean) = primary("aaalice@example.invalidbb", Action::Tokenize);
+        let end = clean.text.len();
+        resolve(
+            &mut clean,
+            &session,
+            vec![suspect(0..end, LeakKind::PartialBleed { uncovered: 0..2 })],
+            Batch::First,
+        );
+        let mut combined = Ledger::default();
+        combined.append(clean.manifest.clone(), 3, 4).unwrap();
+        combined.append(clean.manifest, 100, 120).unwrap();
+        combined.validate().unwrap();
+        assert_eq!(combined.observations[1].phase, 1);
+        assert_eq!(combined.phases[1].raw_offset, 100);
+        assert!(matches!(
+            combined.records[3].origin,
+            Origin::SafetyNet {
+                observation: 1,
+                relation: Relation::Gap,
+                ..
+            }
+        ));
+        for mode in 0..5 {
+            let mut corrupt = combined.clone();
+            match mode {
+                0 => corrupt.records[3].owned = false,
+                1 => corrupt.records[3].emitted.raw_span = 101..103,
+                2 => {
+                    corrupt.records[3].origin = Origin::SafetyNet {
+                        observation: 1,
+                        relation: Relation::WholeSuspect,
+                        clean: 0..2,
+                    }
+                }
+                3 => corrupt.observations[1].phase = 100,
+                4 => corrupt.observations[1].suspect.span.end = usize::MAX,
+                _ => unreachable!(),
+            }
+            assert!(corrupt.validate().is_err(), "mode {mode}");
+        }
+    }
+
+    #[test]
+    fn compatibility_projection_serializes_only_existing_geometry_fields() {
+        let ledger: Ledger = vec![EmittedTokenSpan::new(1..4, 1..22, PiiClass::Email)].into();
+        assert_eq!(
+            serde_json::to_string(&ledger.projection().spans).unwrap(),
+            r#"[{"clean_span":{"start":1,"end":4},"raw_span":{"start":1,"end":22},"class":"Email"}]"#
+        );
+        assert_eq!(ledger.records[0].origin, Origin::Unknown);
     }
 
     #[test]
