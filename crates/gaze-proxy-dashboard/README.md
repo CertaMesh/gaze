@@ -21,8 +21,12 @@ outbound client, analytics, telemetry, or a crash-dump handler.
 - Dashboard-on always authorizes ProviderVisible. OwnerRaw and OwnerRestored each require their own
   launch-time acknowledgement type.
 - No browser request can promote capture.
-- Pairing uses a 59-byte child frame, a 22-byte nonce-bound acknowledgement, and the one canonical
-  43-byte unpadded base64url launch credential.
+- Runtime pairing uses an internal V2 protocol: a 60-byte envelope, a 23-byte nonce-bound
+  Delivered acknowledgement, and a distinct 23-byte Ready response after child validation. The parent
+  waits for Ready before completing startup or rotation. The launch credential remains the canonical
+  43-byte unpadded base64url token. Public V1 codecs remain unchanged; mixed V1/V2 runtime binaries
+  are unsupported and fail closed before delivery or activation. Ready confirms pairing completion,
+  not the infallibility of subsequent child startup operations.
 - The provider process performs one bounded nonblocking ingress send. A dedicated non-request
   writer owns typed, capped IPC.
 - Listener, launch/session/CSRF authentication, retention, reveal state, and response buffers live
