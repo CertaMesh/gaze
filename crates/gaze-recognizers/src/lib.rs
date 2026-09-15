@@ -42,6 +42,7 @@ pub use ner::{
 };
 pub use regex::{NormalizerKind, RegexDetector};
 
+// drift-ack: core snapshot version0.5.3 matches the field rulepack; all detection fields are unchanged.
 pub fn embedded(name: &str) -> Option<&'static str> {
     match name {
         "core" | "core-extended" => Some(include_str!("../embedded/core.toml")),
