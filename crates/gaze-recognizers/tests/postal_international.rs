@@ -423,7 +423,11 @@ fn a_postal_code_split_across_a_newline_is_not_one_token() {
 fn gb_gir_0aa_is_tokenized() {
     // The Royal Mail Girobank pseudo-postcode: the one valid UK postcode outside the six outward
     // forms, so the generic outward branches cannot reach it.
-    assert_postal_removed("Girobank sits at GIR 0AA in Bootle.", "GIR 0AA", &["Girobank sits at "]);
+    assert_postal_removed(
+        "Girobank sits at GIR 0AA in Bootle.",
+        "GIR 0AA",
+        &["Girobank sits at "],
+    );
     assert_postal_removed("Compact GIR0AA in the export.", "GIR0AA", &["Compact "]);
 }
 
@@ -431,12 +435,20 @@ fn gb_gir_0aa_is_tokenized() {
 fn ie_d6w_routing_key_is_tokenized() {
     // `D6W` (Dublin 6 West) is the one assigned Eircode routing key that is not
     // `LETTER + 2 digits`, so every D6W address leaked before it was matched explicitly.
-    assert_postal_removed("Registered at D6W FN82 in Dublin.", "D6W FN82", &["Registered at "]);
+    assert_postal_removed(
+        "Registered at D6W FN82 in Dublin.",
+        "D6W FN82",
+        &["Registered at "],
+    );
 }
 
 #[test]
 fn ie_compact_d6w_is_tokenized() {
-    assert_postal_removed("Compact D6WFN82 in the CSV column.", "D6WFN82", &["Compact "]);
+    assert_postal_removed(
+        "Compact D6WFN82 in the CSV column.",
+        "D6WFN82",
+        &["Compact "],
+    );
 }
 
 #[test]
@@ -457,8 +469,13 @@ fn ie_all_digit_identifiers_are_a_documented_gap() {
 
 #[test]
 fn css_hex_colours_are_not_postal_codes() {
-    for colour in ["#D3D3D3", "#A9A9A9", "#A1B2C3", "#B1C2D3", "#F0E1D2", "#FF00AA", "#E1F5FE"] {
-        assert_value_survives(&format!("Set the divider to {colour} in the stylesheet."), colour);
+    for colour in [
+        "#D3D3D3", "#A9A9A9", "#A1B2C3", "#B1C2D3", "#F0E1D2", "#FF00AA", "#E1F5FE",
+    ] {
+        assert_value_survives(
+            &format!("Set the divider to {colour} in the stylesheet."),
+            colour,
+        );
     }
 }
 
@@ -491,7 +508,10 @@ fn business_reference_codes_are_not_eircodes() {
         "REQ K21 8890",
         "LOT X99 4471",
     ] {
-        assert_value_survives(&format!("Please quote {reference} when you call."), reference);
+        assert_value_survives(
+            &format!("Please quote {reference} when you call."),
+            reference,
+        );
     }
 }
 
@@ -531,18 +551,38 @@ fn ca_digit_positions_must_be_digits() {
 
 #[test]
 fn a_postal_code_at_the_start_of_the_input_is_tokenized() {
-    assert_postal_removed("Z1Z 9Z9 is the mailing code.", "Z1Z 9Z9", &[" is the mailing code."]);
-    assert_postal_removed("ZZ9 9ZZ is the registered office.", "ZZ9 9ZZ", &[" is the registered office."]);
+    assert_postal_removed(
+        "Z1Z 9Z9 is the mailing code.",
+        "Z1Z 9Z9",
+        &[" is the mailing code."],
+    );
+    assert_postal_removed(
+        "ZZ9 9ZZ is the registered office.",
+        "ZZ9 9ZZ",
+        &[" is the registered office."],
+    );
 }
 
 #[test]
 fn adjacent_postal_codes_separated_by_one_character_both_tokenize() {
     let cleaned = clean("Ship to Z1Z 9Z9,Z2Z 8Z8 today.");
-    assert!(!cleaned.contains("Z1Z 9Z9"), "first code survived in {cleaned:?}");
-    assert!(!cleaned.contains("Z2Z 8Z8"), "second code survived in {cleaned:?}");
+    assert!(
+        !cleaned.contains("Z1Z 9Z9"),
+        "first code survived in {cleaned:?}"
+    );
+    assert!(
+        !cleaned.contains("Z2Z 8Z8"),
+        "second code survived in {cleaned:?}"
+    );
     let cleaned = clean("Offices ZZ9 9ZZ ZZ8 8ZZ both apply.");
-    assert!(!cleaned.contains("ZZ9 9ZZ"), "first code survived in {cleaned:?}");
-    assert!(!cleaned.contains("ZZ8 8ZZ"), "second code survived in {cleaned:?}");
+    assert!(
+        !cleaned.contains("ZZ9 9ZZ"),
+        "first code survived in {cleaned:?}"
+    );
+    assert!(
+        !cleaned.contains("ZZ8 8ZZ"),
+        "second code survived in {cleaned:?}"
+    );
 }
 
 // ======================================================= locale contract: format-basis everywhere
