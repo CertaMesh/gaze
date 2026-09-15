@@ -1705,3 +1705,82 @@ async fn no_net_remains_an_explicit_request_coverage_limit() {
     assert_eq!(captures.len(), 1);
     assert!(String::from_utf8_lossy(&captures[0].body).contains(route_net::RESIDUAL));
 }
+
+#[path = "support/fallback_deleting_net.rs"]
+mod fallback_deleting_net;
+
+/// A configured net that DELETES rather than resolves must still stop provider-origin PII.
+///
+/// `configured_net_direct_response_rejects_after_one_provider_call` above covers the
+/// resolve-SUCCESS half: the single suspect becomes a token whose `raw_span` points into the
+/// candidate the validator was given, and `PipelineResponseResidualValidator::validate` rejects
+/// it for lying outside every authorized output range.
+///
+/// This is the resolve-FAILURE half. The suspect is routed into the Redact fallback instead,
+/// deletion emits no manifest entry, and `validate` iterates only over the manifest. With no
+/// span to test there is nothing to compare against `authorized_output_ranges`, so the loop
+/// body never runs and the validator returns `Ok(())` — over a candidate it never looked at
+/// again, and whose raw bytes the codec then admits to the client.
+///
+/// Covered for both wire formats the direct path serves, because the validator sits behind
+/// both: the buffered JSON body and each SSE `text_delta`.
+#[tokio::test]
+async fn regression_fallback_deletion_does_not_admit_provider_origin_pii() {
+    use fallback_deleting_net::{FallbackDeletingNet, MARKER};
+
+    for stream in [false, true] {
+        let upstream = spawn_upstream_with_provider_text(MARKER).await;
+        let hits = Arc::new(AtomicUsize::new(0));
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("alice@example\\.invalid", PiiClass::Email).unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(FallbackDeletingNet { hits: hits.clone() })
+            .build()
+            .unwrap();
+        let proxy = spawn_proxy_with_observability(
+            AnthropicAdapter::new(upstream.origin.clone()),
+            pipeline,
+            DictionaryBundle::default(),
+            None,
+            None,
+        )
+        .await;
+
+        let response = sdk_client_request(&Client::new(), &proxy, stream)
+            .send()
+            .await
+            .unwrap();
+        let status_ok = response.status().is_success();
+        let returned = response.text().await.unwrap();
+
+        // Control: a net that never fired would make every assertion below vacuous.
+        assert!(
+            hits.load(Ordering::SeqCst) > 0,
+            "stream={stream}: the net must have seen the marker"
+        );
+        assert_eq!(
+            upstream.captures.lock().await.len(),
+            1,
+            "stream={stream}: exactly one provider call"
+        );
+        assert!(
+            !returned.contains(MARKER),
+            "stream={stream}: provider-origin PII reached the client after a successful \
+             fallback deletion: {returned}"
+        );
+        // The buffered path can still choose its status code; the streaming path has already
+        // sent its head, so it fails closed in band with the frozen error frame instead.
+        if stream {
+            assert!(
+                returned.contains("proxy_validation_failed"),
+                "stream={stream}: the stream must carry the frozen error frame: {returned}"
+            );
+        } else {
+            assert!(
+                !status_ok,
+                "stream={stream}: the proxy must fail closed on provider-origin PII"
+            );
+        }
+    }
+}
