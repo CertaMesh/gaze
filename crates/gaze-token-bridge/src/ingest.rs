@@ -13,7 +13,7 @@ use crate::adapter::CorpusIndexStore;
 use crate::error::BridgeError;
 use crate::model::{CanonicalEntity, IndexDomain, IndexEntity, IndexSearchHit};
 use crate::traits::DomainProjector;
-use crate::util::domain_alias;
+use crate::util::{domain_alias, fragment_placeholder};
 
 /// Redact-before-index corpus ingestor.
 ///
@@ -143,6 +143,20 @@ fn build_index_hit(
     for span in spans {
         let raw_value = slice(raw_text, span.raw_span.clone(), "raw")?;
         slice(&snippet, span.clean_span.clone(), "clean")?;
+
+        if span.origin.is_residual_fragment() {
+            // A residual fragment is a protected byte range, not an entity. It can
+            // be a single space, quote or letter carved out of an entity's middle,
+            // so canonicalizing it would both forge a whole entity and, because
+            // `translate` fails closed when any entity raw value survives into
+            // agent output, make that guard true for almost any prose. Protect it
+            // by location instead: no canonical entity, no index entity, no
+            // posting, and a class-derived placeholder in the stored snippet.
+            //
+            // Documented consequence: a fragment is protected but unsearchable.
+            replacements.push((span.clean_span.clone(), fragment_placeholder(&span.class)));
+            continue;
+        }
 
         let canonical = CanonicalEntity::from_raw(span.class.clone(), raw_value);
         let index_ref = projector.project(domain, &canonical)?;
@@ -290,6 +304,76 @@ mod tests {
         assert!(!hit.snippet.contains(RAW_EMAIL));
         assert!(!hit.snippet.contains(":Email_1>"));
         assert!(hit.snippet.starts_with("Email <Email_"));
+    }
+
+    /// A residual fragment is a protected byte range, not an entity.
+    ///
+    /// Before residual coverage every emitted span was a whole selection, so
+    /// `build_index_hit` could canonicalize all of them. A fragment breaks that
+    /// assumption twice over: canonicalizing it forges a whole entity and makes
+    /// it query-reachable by fingerprint, and because `translate` fails closed
+    /// when any entity raw value survives into agent output, a fragment whose raw
+    /// value is a single space would deny every subsequent translation.
+    ///
+    /// So a fragment is protected by location: placeholder in the stored snippet,
+    /// no canonical entity, no index entity, no posting. The documented
+    /// consequence is that a fragment is protected but not searchable.
+    #[test]
+    fn residual_fragments_are_protected_by_location_and_never_become_entities() {
+        let raw = "Email alice@example.invalid about the case.";
+        // Two overlapping known-Tokenize Email originals cover 6..33; conflict
+        // resolution keeps 6..27, so 27..33 (" about") is the residual.
+        let clean = "Email <tok> <frag> the case.";
+        let spans = vec![
+            EmittedTokenSpan::new(6..11, 6..27, PiiClass::Email),
+            EmittedTokenSpan::residual_fragment(12..18, 27..33, PiiClass::Email),
+        ];
+        let projector = RecordingProjector::default();
+        let domain = domain();
+
+        let hit = build_index_hit(
+            "doc-1".to_string(),
+            raw,
+            clean.to_string(),
+            &spans,
+            &domain,
+            &projector,
+        )
+        .unwrap();
+
+        // The fragment was never canonicalized, so it has no fingerprint and no
+        // posting, and nothing can retrieve it.
+        assert_eq!(
+            projector.canonical_values.borrow().as_slice(),
+            ["email:alice@example.invalid"],
+            "a residual fragment must never be canonicalized as a whole entity"
+        );
+        assert_eq!(
+            hit.entities.len(),
+            1,
+            "a fragment must not become an entity"
+        );
+        assert_eq!(hit.entities[0].raw_value, RAW_EMAIL);
+
+        // It is still protected: its raw bytes do not reach the stored snippet.
+        assert!(
+            !hit.snippet.contains(" about"),
+            "fragment raw bytes leaked into the persistent snippet: {:?}",
+            hit.snippet
+        );
+        assert!(
+            hit.snippet
+                .contains(&fragment_placeholder(&PiiClass::Email)),
+            "expected a location-only placeholder, got {:?}",
+            hit.snippet
+        );
+
+        // The placeholder carries no value, no fingerprint and no session token,
+        // and must not read as a domain alias to the translator leak guard.
+        let placeholder = fragment_placeholder(&PiiClass::Email);
+        assert!(!crate::util::contains_domain_alias(&placeholder));
+        assert!(!placeholder.contains(RAW_EMAIL));
+        assert!(!placeholder.contains("about"));
     }
 
     #[test]

@@ -71,6 +71,16 @@ pub fn domain_alias(class: &PiiClass, fingerprint_hex: &str) -> String {
     format!("<{}_{}>", class.class_name(), suffix)
 }
 
+/// Location-only stand-in for a residual fragment in an owner-side snippet.
+///
+/// Carries the class and nothing else: no raw bytes, no fingerprint, and no
+/// ingest-session token, because an ephemeral token must never persist in a
+/// stored snippet. Bracket-delimited so it can neither collide with
+/// [`domain_alias`]'s `<Class_...>` form nor trip [`contains_domain_alias`].
+pub fn fragment_placeholder(class: &PiiClass) -> String {
+    format!("[gaze:fragment:{}]", class.to_canonical_str())
+}
+
 /// True if `value` still contains an index-domain alias (translator leak guard).
 pub fn contains_domain_alias(value: &str) -> bool {
     [

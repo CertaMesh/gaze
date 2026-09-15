@@ -11,6 +11,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [bundle-tokenization-drift] The `core` snapshot records rulepack version0.5.3; detection entries, spans, classes, sources, token shapes and counts are unchanged.
 
+- **Residual coverage is on by default.** Every pipeline built through
+  `Pipeline::builder()` now protects raw bytes that admitted originals evidenced
+  but conflict resolution did not keep, instead of leaving them in the clear.
+  One recognized value can therefore contribute more than one replacement, so a
+  manifest span count is a count of *replacements*, not of distinct recognized
+  values. Restore is unaffected. Bytes that no original evidenced remain
+  uncovered. See
+  [Residual coverage](docs/reference/redaction-classes.md#residual-coverage).
+  The bundled `core` tokenization snapshot is unchanged.
+- `EmittedTokenSpan` gained `origin: EmittedTokenOrigin` (`Whole` |
+  `ResidualFragment`) so a consumer can tell a whole selection from a residual
+  fragment before it indexes, canonicalizes or counts. `Whole` is the default
+  and is omitted on the wire, so existing whole-span JSON is byte-identical and
+  pre-v0.15 JSON reads back as `Whole`. `EmittedTokenSpan::new` keeps its
+  signature; `EmittedTokenSpan::residual_fragment` is the new constructor.
+  **Unmigrated readers:** there is no `deny_unknown_fields`, so a consumer built
+  before v0.15 ignores the new key and counts a fragment as a whole span, and no
+  version field distinguishes the two. Rebuild entity-counting consumers against
+  v0.15.
+- `gaze-document` `BundleReport::pii_token_count`, `pii_tokens_by_class` and
+  `ClassCount::count` are documented as replacement counts, not entity counts.
+  `bundle_version` is unchanged.
+- `gaze-token-bridge` protects a residual fragment **by location**: a
+  class-derived placeholder in the stored snippet, and no `CanonicalEntity`, no
+  `IndexEntity` and no posting. Fragment raw bytes no longer reach the
+  persistent index. Documented consequence: a residual fragment is **protected
+  but unsearchable**. Whole entities remain searchable exactly as before.
+
 ### Fixed
 
 - Custom class names that normalize to empty (for example `custom:!!!`) are now

@@ -1320,6 +1320,41 @@ impl<'a> SafetyNetContext<'a> {
     }
 }
 
+/// What a replacement covers: a whole recognized selection, or a residual
+/// fragment of the admitted raw union that whole-candidate arbitration dropped.
+///
+/// This is the distinction a consumer needs before it may treat a replacement as
+/// an entity. A fragment is a real protected byte range, but it is *not* an
+/// entity: it can be a single space, quote or letter carved out of the middle of
+/// one. Indexing or counting it as an entity produces a falsehood.
+///
+/// Serialization is backward compatible in both directions. `Whole` is the
+/// default and is omitted from output, so JSON written for existing whole-value
+/// spans stays byte-identical, and JSON written before this field existed
+/// deserializes as `Whole`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum EmittedTokenOrigin {
+    /// Covers a whole selection chosen by conflict resolution.
+    #[default]
+    Whole,
+    /// Covers raw bytes that admitted originals evidenced but no selection kept.
+    ResidualFragment,
+}
+
+impl EmittedTokenOrigin {
+    /// Whether this replacement covers a whole selection.
+    pub fn is_whole(&self) -> bool {
+        matches!(self, Self::Whole)
+    }
+
+    /// Whether this replacement covers a residual fragment.
+    pub fn is_residual_fragment(&self) -> bool {
+        matches!(self, Self::ResidualFragment)
+    }
+}
+
 /// A replacement emitted by the pseudonymization pipeline.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -1330,15 +1365,33 @@ pub struct EmittedTokenSpan {
     pub raw_span: Range<usize>,
     /// PII class represented by the emitted token.
     pub class: PiiClass,
+    /// Whether this replacement covers a whole selection or a residual fragment.
+    #[serde(default, skip_serializing_if = "EmittedTokenOrigin::is_whole")]
+    pub origin: EmittedTokenOrigin,
 }
 
 impl EmittedTokenSpan {
-    /// Builds an emitted token span.
+    /// Builds an emitted token span covering a whole selection.
     pub fn new(clean_span: Range<usize>, raw_span: Range<usize>, class: PiiClass) -> Self {
         Self {
             clean_span,
             raw_span,
             class,
+            origin: EmittedTokenOrigin::Whole,
+        }
+    }
+
+    /// Builds an emitted token span covering a residual fragment.
+    pub fn residual_fragment(
+        clean_span: Range<usize>,
+        raw_span: Range<usize>,
+        class: PiiClass,
+    ) -> Self {
+        Self {
+            clean_span,
+            raw_span,
+            class,
+            origin: EmittedTokenOrigin::ResidualFragment,
         }
     }
 }
@@ -3397,11 +3450,7 @@ mod safety_net_manifest_tests {
     use super::*;
 
     fn span(start: usize, end: usize, class: PiiClass) -> EmittedTokenSpan {
-        EmittedTokenSpan {
-            clean_span: start..end,
-            raw_span: start..end,
-            class,
-        }
+        EmittedTokenSpan::new(start..end, start..end, class)
     }
 
     fn diff(manifest: Manifest, suspect: Range<usize>, class: PiiClass) -> Option<LeakKind> {
@@ -3745,4 +3794,61 @@ fn canonical_other(raw: &str) -> String {
         .chain(rest)
         .collect::<Vec<_>>()
         .join("-")
+}
+
+#[cfg(test)]
+mod emitted_token_origin_tests {
+    use super::*;
+
+    /// The exact JSON a whole-value span produced before `origin` existed.
+    /// It is a byte-for-byte snapshot on purpose: this field is persisted in
+    /// session snapshots and document-extension bundles, so a stored whole span
+    /// must serialize identically after the field was added, or every existing
+    /// file on disk changes meaning.
+    const LEGACY_WHOLE_JSON: &str =
+        r#"{"clean_span":{"start":0,"end":8},"raw_span":{"start":0,"end":12},"class":"Email"}"#;
+
+    #[test]
+    fn whole_spans_serialize_byte_identically_to_the_pre_origin_snapshot() {
+        let span = EmittedTokenSpan::new(0..8, 0..12, PiiClass::Email);
+        let json = serde_json::to_string(&span).unwrap();
+        assert_eq!(
+            json, LEGACY_WHOLE_JSON,
+            "adding `origin` changed the on-disk form of an existing whole span"
+        );
+        assert!(!json.contains("origin"));
+    }
+
+    #[test]
+    fn json_written_before_the_field_existed_reads_back_as_whole() {
+        let span: EmittedTokenSpan = serde_json::from_str(LEGACY_WHOLE_JSON).unwrap();
+        assert_eq!(span.origin, EmittedTokenOrigin::Whole);
+        assert!(span.origin.is_whole());
+        assert_eq!(span, EmittedTokenSpan::new(0..8, 0..12, PiiClass::Email));
+    }
+
+    #[test]
+    fn fragments_serialize_explicitly_and_round_trip() {
+        let fragment = EmittedTokenSpan::residual_fragment(12..18, 27..33, PiiClass::Email);
+        let json = serde_json::to_string(&fragment).unwrap();
+        assert!(
+            json.contains(r#""origin":"residual_fragment""#),
+            "a fragment must say so on the wire: {json}"
+        );
+        assert_eq!(
+            serde_json::from_str::<EmittedTokenSpan>(&json).unwrap(),
+            fragment
+        );
+        assert!(fragment.origin.is_residual_fragment());
+        assert!(!fragment.origin.is_whole());
+    }
+
+    #[test]
+    fn a_fragment_is_never_equal_to_the_same_geometry_as_a_whole() {
+        // Consumers branch on this, so the distinction has to survive equality
+        // and not collapse into "same span, same class".
+        let whole = EmittedTokenSpan::new(12..18, 27..33, PiiClass::Email);
+        let fragment = EmittedTokenSpan::residual_fragment(12..18, 27..33, PiiClass::Email);
+        assert_ne!(whole, fragment);
+    }
 }

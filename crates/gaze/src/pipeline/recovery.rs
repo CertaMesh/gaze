@@ -5,6 +5,7 @@ use crate::resolver::{CandidatePool, ResolutionEvent, WholeCandidate};
 use crate::{Candidate, LocaleTag, RecognizerRegistry, Result};
 
 pub(super) struct WholePlan {
+    pub(super) order: Vec<usize>,
     pub(super) evidence: super::occurrence::Segment,
     pub(super) primary: Vec<Candidate>,
     pub(super) recovered: Vec<Candidate>,
@@ -43,7 +44,13 @@ pub(super) fn plan(
         false,
         &mut selections,
     )?;
-    let mut work = gaps(order, &original_spans, &consumed, &primary, 0..raw.len());
+    let mut work = gaps(
+        order.clone(),
+        &original_spans,
+        &consumed,
+        &primary,
+        0..raw.len(),
+    );
     let mut recovered = Vec::new();
     // Only gaps whose pending pool changes are visited. Each productive pool
     // consumes a new member; no iteration or candidate cap can discard evidence.
@@ -70,10 +77,13 @@ pub(super) fn plan(
     recovered.sort_by_key(|candidate| candidate.span.start);
     let events: std::sync::Arc<[ResolutionEvent]> = std::mem::take(&mut pool.events).into();
     Ok(WholePlan {
+        order,
         evidence: super::occurrence::Segment {
             originals: pool.take_originals(),
             original_raw: original_spans,
             selections,
+            residuals: Vec::new(),
+            residual_order: Vec::new(),
             events: std::sync::Arc::clone(&events),
             raw_offset: 0,
             clean_offset: 0,

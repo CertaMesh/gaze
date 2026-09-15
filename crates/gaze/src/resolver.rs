@@ -96,6 +96,23 @@ pub(crate) enum PairOutcome {
     Existing(ConflictTier),
 }
 
+pub(crate) fn candidate_order(originals: &[Candidate]) -> Vec<usize> {
+    let mut order = (0..originals.len()).collect::<Vec<_>>();
+    // Keep the legacy stable key, including its input-order ties.
+    order.sort_by(|&a, &b| {
+        let (a, b) = (&originals[a], &originals[b]);
+        a.span
+            .start
+            .cmp(&b.span.start)
+            .then_with(|| b.span.end.cmp(&a.span.end))
+            .then_with(|| class_priority(&b.class).cmp(&class_priority(&a.class)))
+            .then_with(|| b.priority.cmp(&a.priority))
+            .then_with(|| b.score.total_cmp(&a.score))
+            .then_with(|| a.recognizer_id.cmp(&b.recognizer_id))
+    });
+    order
+}
+
 impl CandidatePool {
     pub(crate) fn take_originals(&mut self) -> Vec<Candidate> {
         std::mem::take(&mut self.originals)
@@ -106,19 +123,7 @@ impl CandidatePool {
     }
 
     pub(crate) fn new(originals: Vec<Candidate>) -> Self {
-        let mut order = (0..originals.len()).collect::<Vec<_>>();
-        // Keep the legacy stable key, including its input-order ties.
-        order.sort_by(|&a, &b| {
-            let (a, b) = (&originals[a], &originals[b]);
-            a.span
-                .start
-                .cmp(&b.span.start)
-                .then_with(|| b.span.end.cmp(&a.span.end))
-                .then_with(|| class_priority(&b.class).cmp(&class_priority(&a.class)))
-                .then_with(|| b.priority.cmp(&a.priority))
-                .then_with(|| b.score.total_cmp(&a.score))
-                .then_with(|| a.recognizer_id.cmp(&b.recognizer_id))
-        });
+        let order = candidate_order(&originals);
         Self {
             next_node: originals.len(),
             originals,
@@ -509,19 +514,50 @@ fn apply_missing_anchor_fallback(
     policy: &FamilyPolicyTable,
     anchor_ctx: AnchorContext<'_>,
 ) -> Candidate {
-    if candidate.decided_by == ConflictTier::CollisionPolicy {
-        return candidate;
+    match missing_anchor_family(&candidate, policy, anchor_ctx) {
+        Some(family) => family_fallback_candidate(candidate, family, ConflictTier::AnchoredContext),
+        None => candidate,
     }
-    match anchor_ctx.resolver.resolve(
-        &candidate,
-        anchor_ctx.input,
+}
+
+fn missing_anchor_family(
+    candidate: &Candidate,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: AnchorContext<'_>,
+) -> Option<String> {
+    if candidate.decided_by == ConflictTier::CollisionPolicy {
+        return None;
+    }
+    match anchor_ctx
+        .resolver
+        .resolve(candidate, anchor_ctx.input, policy, anchor_ctx.locale_chain)
+    {
+        AnchorOutcome::Missing { family, .. } => Some(family),
+        AnchorOutcome::Found | AnchorOutcome::NotRequired => None,
+    }
+}
+
+pub(crate) fn effective_view(
+    candidate: &Candidate,
+    policy: &FamilyPolicyTable,
+    resolver: &AnchorResolver,
+    input: &str,
+    locale_chain: &[LocaleTag],
+) -> (PiiClass, String) {
+    match missing_anchor_family(
+        candidate,
         policy,
-        anchor_ctx.locale_chain,
+        AnchorContext {
+            resolver,
+            input,
+            locale_chain,
+        },
     ) {
-        AnchorOutcome::Missing { family, .. } => {
-            family_fallback_candidate(candidate, family, ConflictTier::AnchoredContext)
-        }
-        AnchorOutcome::Found | AnchorOutcome::NotRequired => candidate,
+        Some(family) => (
+            PiiClass::family(&family),
+            format!("collision-family:{family}"),
+        ),
+        None => (candidate.class.clone(), candidate.token_family.clone()),
     }
 }
 

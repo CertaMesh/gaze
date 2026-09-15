@@ -324,3 +324,62 @@ to avoid that document-basis compatibility expansion. Format-basis identifiers
 format rows in the coverage matrix) are active in both rows; the locale chain
 is not a suppression mechanism for them, so an adopter that must not tokenize
 one of them has to disable that recognizer.
+
+## Residual coverage
+
+Residual coverage is **on by default** for every pipeline built through
+`Pipeline::builder()` (`crates/gaze/src/pipeline.rs`, `PipelineBuilder::build`
+sets `residual_coverage: true`). There is no flag to turn it on; it is the
+shipped behavior, and `gaze clean`, `gaze daemon`, `gaze-assembly`, and the
+library API all get it.
+
+### What it covers
+
+Conflict resolution picks one winning selection per overlap and discards the
+losers. When a losing original covered raw bytes that the winner does not, those
+bytes previously survived into the clean text **in the clear**. Residual coverage
+emits a second reversible replacement over them.
+
+Coverage is limited to the **admitted union**: the bytes that admitted originals
+actually evidenced. Two consequences follow, and both are deliberate:
+
+- A component is admitted only when *every* member's class previews as
+  `Tokenize` under the active rules. Mixed or unknown components stay on the
+  legacy path and emit no residual, so `Preserve` and `FormatPreserve` are never
+  reinterpreted.
+- Bytes that **no** original evidenced are still not protected. For
+  `password: "left right"` with a `password.field` original matching `0..21` and
+  a Name selection winning `0..15`, the residual covers `15..21` (`" right"`).
+  The closing quote at byte 21 sits outside the union and stays in the clear.
+  See
+  [`crates/gaze-recognizers/tests/explicit_field_collision_control.rs`](../../crates/gaze-recognizers/tests/explicit_field_collision_control.rs),
+  which pins exactly that geometry on the real `core` rulepack.
+
+### What changes in the token stream
+
+**One recognized value can now produce more than one replacement.** Adopters
+counting manifest entries are counting *replacements*, not distinct recognized
+values. Anything that reported "N values found" from a span count now reports a
+number that can exceed the number of entities. See
+[`EmittedTokenOrigin`](metrics.md#52-per-call-output) for how to tell the two
+apart, and `BundleReport::pii_token_count` in `gaze-document` for the same
+distinction on the bundle side.
+
+Restore is unaffected: a residual replacement is an ordinary reversible token, and
+`Session::restore_strict_text` round-trips a document containing one.
+
+Activation does **not** move the bundled `core` tokenization snapshot: the
+`bundle-tokenization-drift` corpus contains only contained overlaps, never a
+partial one, so it produces no residual and
+`crates/xtask/snapshots/core-no-policy.json` is unchanged. A future corpus edit
+that introduces a *partial* overlap will move that snapshot and will need the
+gate's `--verify-ack` acknowledgement.
+
+### Provenance
+
+A residual is traceable like any other emission. Its audit row carries the
+representative parent original's `source` and `recognizer_id` /
+`recognizer_version_id`, with `provenance_stage = "primary_pipeline.residual"`
+(`log_residual_entry` in `crates/gaze/src/pipeline.rs`). In the protection trace
+it projects to the existing `primary_pipeline` / `policy` / `tokenize` tuple,
+which does not on its own certify a whole entity.
