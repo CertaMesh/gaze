@@ -312,7 +312,7 @@ fn second_batch_all_item_preflight_cannot_hide_fatal_after_unsupported() {
         invalid_class,
         blank_id,
         raw(0..0),
-        raw(4..2),
+        raw(std::ops::Range { start: 4, end: 2 }),
         raw(0..99),
         raw(1..2),
         false_gap,

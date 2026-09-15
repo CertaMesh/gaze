@@ -1528,9 +1528,8 @@ fn fallback_redaction_is_traced_as_fallback_redact() {
 #[derive(Clone)]
 struct MixedSecondPassNet {
     residual_marker: &'static str,
-    /// Kind reported for the actionable residual. `Uncovered` drives the fallback through
-    /// `ResidualSuspect`; `ClassMismatch` drives it through `OverlapConflict`. Both reasons reach
-    /// the same unfiltered redaction path, so both must be covered.
+    /// Uncovered can take the complete second batch; ClassMismatch retains the old fallback.
+    /// Both paths must preserve the independently owned primary token.
     residual_kind: LeakKind,
     calls: Arc<AtomicUsize>,
 }
