@@ -144,6 +144,20 @@ fn build_index_hit(
         let raw_value = slice(raw_text, span.raw_span.clone(), "raw")?;
         slice(&snippet, span.clean_span.clone(), "clean")?;
 
+        if span.origin.is_residual_fragment() {
+            // A residual fragment is a protected byte range, not an entity. It can
+            // be a single space, quote or letter carved out of an entity's middle,
+            // so canonicalizing it would both forge a whole entity and, because
+            // `translate` fails closed when any entity raw value survives into
+            // agent output, make that guard true for almost any prose. Protect it
+            // by location instead: no canonical entity, no index entity, no
+            // posting, and a class-derived placeholder in the stored snippet.
+            //
+            // Documented consequence: a fragment is protected but unsearchable.
+            replacements.push((span.clean_span.clone(), fragment_placeholder(&span.class)));
+            continue;
+        }
+
         let canonical = CanonicalEntity::from_raw(span.class.clone(), raw_value);
         let index_ref = projector.project(domain, &canonical)?;
         let alias = domain_alias(&span.class, &index_ref.fingerprint_hex);
