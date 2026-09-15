@@ -92,8 +92,11 @@ See [Validator Veto](../explanation/detection/validator-veto.md) and
 | `core, core-extended` | `ssn.us` | `regex` | Cue-anchored US Social Security numbers in dashed or nine-digit form | `custom:ssn` | `en-US` | `none` | `none` | `safe_default` | yes | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:616-632` |
 | `core, core-extended` | `nino.uk` | `regex` | Cue-anchored UK National Insurance numbers with allocation-constrained prefixes | `custom:nino` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:634-653` |
 | `core, core-extended` | `pan.in` | `regex` | Cue-anchored Indian Permanent Account Numbers in the ten-character PAN shape | `custom:pan` | `en-IN, hi-IN` | `none` | `none` | `safe_default` | yes | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:655-671` |
-| `core, core-extended` | `postal.de` | `regex` | Bare five-digit German postal-code shapes | `custom:postal_code` | `de-DE` | `none` | `none` | `locale_gated` | no | 0.70 | 70 | `crates/gaze-recognizers/embedded/core.toml:673-695` |
-| `core, core-extended` | `postal.us` | `regex` | US five-digit ZIP or ZIP+4 shapes | `custom:postal_code` | `en-US` | `none` | `none` | `locale_gated` | no | 0.70 | 70 | `crates/gaze-recognizers/embedded/core.toml:697-719` |
+| `core, core-extended` | `postal.de` | `regex` | Bare five-digit German postal-code shapes | `custom:postal_code` | `de-DE` | `none` | `none` | `locale_gated` | no | 0.70 | 70 | `crates/gaze-recognizers/embedded/core.toml:725-742` |
+| `core, core-extended` | `postal.us` | `regex` | US five-digit ZIP or ZIP+4 shapes | `custom:postal_code` | `en-US` | `none` | `none` | `locale_gated` | no | 0.70 | 70 | `crates/gaze-recognizers/embedded/core.toml:744-761` |
+| `core, core-extended` | `postal.ca` | `regex` | Canadian `A9A 9A9` postal codes, optionally hyphenated or written without a separator | `custom:postal_code` | `en-CA` | `none` | `none` | `safe_default` | yes | 0.80 | 72 | `crates/gaze-recognizers/embedded/core.toml:771-792` |
+| `core, core-extended` | `postal.gb` | `regex` | UK postcodes across all six Royal Mail outward forms followed by the `9AA` inward code | `custom:postal_code` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.80 | 72 | `crates/gaze-recognizers/embedded/core.toml:807-828` |
+| `core, core-extended` | `postal.ie` | `regex` | Irish Eircodes: routing key plus four-character identifier over the restricted Eircode alphabet | `custom:postal_code` | `en-IE` | `none` | `none` | `safe_default` | yes | 0.80 | 72 | `crates/gaze-recognizers/embedded/core.toml:841-862` |
 | `core, core-extended` | `url.anchored` | `regex` | URLs beginning with `http://`, `https://`, or `www.` through the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 | `crates/gaze-recognizers/embedded/core.toml:721-760` |
 | `core, core-extended` | `security_token.anchored` | `regex` | Cue-anchored credential values plus structurally prefixed AWS access keys and three-segment JWTs | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 87 | `crates/gaze-recognizers/embedded/core.toml:762-847` |
 | `core, core-extended` | `ssn.de_cue` | `regex` | Cue-anchored SSN values after German social-insurance cues (Sozialversicherungsnummer, SV-Nummer) in dashed, dotted, or 9 to 11 digit form; format basis; DACH provenance describes cue vocabulary until native SVNR/AHV shapes ship in #2926 | `custom:ssn` | `de-DE, de-AT, de-CH` | `none` | `none` | `safe_default` | yes | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:937-964` |
@@ -309,8 +312,8 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, password.field, phone.e164.spaced, phone.national.us, phone.structural, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, username.field, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1112`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, password.field, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.de, postal.us, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, username.field, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, password.field, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, username.field, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1225`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, password.field, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.ca, postal.de, postal.gb, postal.ie, postal.us, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, username.field, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate
@@ -320,10 +323,20 @@ authoritative: the widened US/German compatibility locale chain also makes the
 listed document-basis cue-anchored and locale-specific recognizers eligible.
 Pass `--locale=global`, or use an explicit policy with narrower locale gating,
 to avoid that document-basis compatibility expansion. Format-basis identifiers
-(`ssn.us`, `ssn.de_cue`, `steuer_id.de`, `phone.national.us`, and the other
-format rows in the coverage matrix) are active in both rows; the locale chain
-is not a suppression mechanism for them, so an adopter that must not tokenize
-one of them has to disable that recognizer.
+(`ssn.us`, `ssn.de_cue`, `steuer_id.de`, `phone.national.us`, the alphanumeric
+postal rules `postal.ca`, `postal.gb`, and `postal.ie`, and the other format
+rows in the coverage matrix) are active in both rows; the locale chain is not a
+suppression mechanism for them, so an adopter that must not tokenize one of them
+has to disable that recognizer.
+
+The two postal groups differ on purpose. `postal.de` and `postal.us` match bare
+five-digit strings, a shape carrying no structural signal, so they stay
+document-basis and locale-gated and appear only in the second row.
+`postal.ca`, `postal.gb`, and `postal.ie` interleave letters and digits in
+positions ordinary prose and identifiers do not produce, so they are
+format-basis and run at every locale including `--locale=global`. An adopter
+who must not tokenize Canadian, UK, or Irish postal codes cannot suppress them
+with a locale chain and has to disable the recognizer.
 
 ## Residual coverage
 

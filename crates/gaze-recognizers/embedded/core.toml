@@ -698,17 +698,35 @@ priority = 86
 
 [recognizers.token]
 
-# Postal collision warning (research-855 §Collision matrix conclusion):
-# `postal.de` and `postal.us` both accept naked five-digit numeric strings.
-# This is safe only when active locale chains keep DE and US projections apart.
-# Avoid broad chains such as [global, en-US, de-DE] for postal-only workflows.
-# Prefer a single active country locale, or split processing by locale_chain.
-# Loader lint warns or fails strict mode when this collision class can co-fire.
+# Postal collision policy (supersedes the research-855 two-rule note, which described a world with
+# only `postal.de` and `postal.us` in it).
+#
+# `custom:postal_code` is served by five recognizers in two groups that cannot overlap:
+#
+#   NUMERIC — document-basis, locale-gated: `postal.de`, `postal.us`
+#     Both accept naked five-digit strings, a shape that carries no structural signal whatsoever and
+#     is indistinguishable from a year, an order number, or an amount. The DOCUMENT-locale gate is
+#     the only thing standing in for that missing structure, which is why these two stay gated.
+#     Both projections accept the same bare shape, so a chain activating both (e.g.
+#     [global, en-US, de-DE]) lets them co-fire: prefer a single active country locale, or split
+#     processing by locale_chain. The loader lint warns, and fails strict mode, on that class.
+#
+#   ALPHANUMERIC — format-basis, always-on: `postal.ca`, `postal.gb`, `postal.ie`
+#     These interleave letters and digits in positions that ordinary prose, source code, reference
+#     identifiers, and currency do not produce. That structure IS the precision mechanism, so they
+#     need no document-locale gate and run at every locale including `--locale=global` — the same
+#     treatment the other format-basis national identifiers in this pack already get (`nhs.uk`,
+#     `nino.uk`, `ssn.us`, `nir.fr`, `bsn.nl`, `cpf.br`). Measured on the committed 1,024-document
+#     A4 negative corpus: ZERO matches for all three. Measured across all nine holdout document
+#     locales: ONE false positive in 1,886 documents, pinned in `postal_international.rs`.
+#
+# The groups cannot collide: every alphanumeric pattern below requires a letter in at least one
+# position where the numeric patterns require a digit.
 [[recognizers]]
 id = "postal.de"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.us"]
+cooperates_with = ["postal.us", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-DE"]
 locale_basis = "document"
@@ -723,17 +741,11 @@ priority = 70
 
 [recognizers.token]
 
-# Postal collision warning (research-855 §Collision matrix conclusion):
-# `postal.de` and `postal.us` both accept naked five-digit numeric strings.
-# This is safe only when active locale chains keep DE and US projections apart.
-# Avoid broad chains such as [global, en-US, de-DE] for postal-only workflows.
-# Prefer a single active country locale, or split processing by locale_chain.
-# Loader lint warns or fails strict mode when this collision class can co-fire.
 [[recognizers]]
 id = "postal.us"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de"]
+cooperates_with = ["postal.de", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-US"]
 locale_basis = "document"
@@ -748,6 +760,106 @@ priority = 70
 
 [recognizers.token]
 
+# Canadian postal code: `A9A 9A9`, optionally hyphenated or written compactly. 71 of the 74 en-CA
+# gold ZIP entities in the Dataiku EN/DE holdout carry exactly this shape (497 of 512 gold bytes);
+# the remaining 3 are bare five-digit strings that only `postal.us` shapes cover.
+#
+# The official first-letter exclusions (`D F I O Q U`, and no `W`/`Z` in position 1) are
+# deliberately NOT encoded. They would add a second failure mode for zero measured benefit: this
+# pattern already scores 0 false positives across the 1,024 A4 negative documents and 0 across all
+# 1,886 holdout documents. Restricting the alphabet can only reject real codes, never find more.
+[[recognizers]]
+id = "postal.ca"
+safety_tier = "safe_default"
+class = "custom:postal_code"
+cooperates_with = ["postal.de", "postal.us", "postal.gb", "postal.ie"]
+enabled = true
+locales = ["en-CA"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''\b[A-Z]\d[A-Z][ -]?\d[A-Z]\d\b'''
+
+[recognizers.scoring]
+base = 0.80
+priority = 72
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# UK postcode: all six official Royal Mail outward forms (`A9`, `A99`, `A9A`, `AA9`, `AA99`,
+# `AA9A`) followed by the invariant `9AA` inward code. Measured on the holdout: 80 of the 85 en-GB
+# gold ZIP entities, plus 3 more in en-IE (Northern-Ireland-shaped codes in the Irish set), for 83
+# entities and ~590 gold bytes.
+#
+# Known, accepted gaps and costs, all measured rather than assumed:
+#   * Outward-code-only golds (`AA9` x3, `AA99` x1, 4 of 85) are NOT covered. An isolated one-to-two
+#     letter plus one-to-two digit token is indistinguishable from an ordinary reference code.
+#   * ONE false positive across all 1,886 holdout documents: shape `AA9 9AA` — the canonical form,
+#     not the wide branch — in all-lowercase running prose with no gold annotation at that offset.
+#     Accepted knowingly: that same branch carries 58 of the 85 en-GB golds, the context makes an
+#     unannotated gold at least as likely as a true error, and axis 1 beats one reversible token.
+#   * ZERO matches across the 1,024 A4 negative documents.
+[[recognizers]]
+id = "postal.gb"
+safety_tier = "safe_default"
+class = "custom:postal_code"
+cooperates_with = ["postal.de", "postal.us", "postal.ca", "postal.ie"]
+enabled = true
+locales = ["en-GB"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''\b[A-Z]{1,2}\d[A-Z\d]?[ ]?\d[A-Z]{2}\b'''
+
+[recognizers.scoring]
+base = 0.80
+priority = 72
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# Irish Eircode: a three-character routing key (`A99`) followed by a four-character unique
+# identifier, conventionally spaced but also written compactly. 60 of the 78 en-IE gold ZIP
+# entities, 479 gold bytes.
+#
+# The restricted alphabet is the whole precision story and is why this rule needs no validator:
+# Eircode excludes `B G I J L M O Q S U Z` from BOTH halves, so the character set itself rejects
+# most look-alike reference codes. Measured: 0 false positives on the 1,024 A4 negative documents,
+# 0 on all 1,886 holdout documents, and 0 matches of any kind outside en-IE.
+#
+# The `A99 9AA` tail shape (2 of 78) is not covered: a three-character inward part is the UK form,
+# and widening this pattern to accept it would let it shadow `postal.gb` on genuine UK codes.
+[[recognizers]]
+id = "postal.ie"
+safety_tier = "safe_default"
+class = "custom:postal_code"
+cooperates_with = ["postal.de", "postal.us", "postal.ca", "postal.gb"]
+enabled = true
+locales = ["en-IE"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''\b[AC-FHKNPRTV-Y]\d{2}[ ]?[0-9AC-FHKNPRTV-Y]{4}\b'''
+
+[recognizers.scoring]
+base = 0.80
+priority = 72
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
 # URL detection is anchored on an explicit scheme (`http://`, `https://`) or a `www.` host
 # prefix. Measured against the EN/DE holdout, those two anchors carry 232 of 276 gold URL spans
 # and 6,385 of 7,209 leaked URL bytes (88.6%), while matching NOTHING in all 1,024 documents of

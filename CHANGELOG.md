@@ -7,7 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Postal-code coverage for Canada, the UK, and Ireland** (`postal.ca`,
+  `postal.gb`, `postal.ie`). `custom:postal_code` was previously served only by
+  `postal.de` (`de-DE`) and `postal.us` (`en-US`), both
+  `locale_basis = "document"`, so seven of the nine document locales in the
+  EN/DE holdout had no postal recognizer at all and ZIP was the largest single
+  leak bucket. Measured gold ZIP recall was 334 of 1,090 entities, which is the
+  locale-gated population to within 2 entities of incidental overlap.
+
+  The three new rules are `locale_basis = "format"` and `safety_tier =
+  "safe_default"`, matching the treatment `nhs.uk`, `nino.uk`, `ssn.us`,
+  `nir.fr`, `bsn.nl`, and `cpf.br` already receive: letter/digit interleaving is
+  itself the precision mechanism, so they need no document-locale gate and run
+  at every locale, including `--locale=global`. **Adopters who must not tokenize
+  Canadian, UK, or Irish postal codes cannot suppress them with a locale chain
+  and have to disable the recognizer.**
+
+  Measured on the rule-floor arm over the 1,886-document holdout: gold ZIP byte
+  recall rises from 30.8% to 59.7%, recovering **1,567 gold bytes**; per locale,
+  `en-CA` 97.1%, `en-GB` 96.9%, `en-IE` 87.9%. Precision cost is one false
+  positive across all 1,886 documents (shape `AA9 9AA` in lowercase prose) and
+  **zero across all 1,024 committed A4 negative documents**. The bundle
+  tokenization drift snapshot is unchanged: none of the three patterns match the
+  drift corpus.
+
+  The 4-digit locales (`de-AT`, `de-CH`, `en-AU`, `en-NZ`) are deliberately not
+  covered. Unanchored `\d{4}` is 19% precise on the holdout (516 of 2,723 runs
+  are gold ZIP) and fires 1,717 times across 62.5% of the negative corpus, so it
+  requires a cue anchor and is tracked separately.
+
 ### Changed
+
+- `cooperates_with` is now symmetric across all five `custom:postal_code`
+  recognizers, and the stale research-855 collision comment in `core.toml` —
+  which described a two-rule world — is replaced by a two-group policy note
+  explaining why the numeric rules stay locale-gated and the alphanumeric ones
+  do not.
 
 - [bundle-tokenization-drift] The `core` snapshot records rulepack version0.5.3; detection entries, spans, classes, sources, token shapes and counts are unchanged.
 

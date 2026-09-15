@@ -211,6 +211,11 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "nir.fr",
             "pan.in",
             "phone.national.us",
+            // Alphanumeric postal codes: letter/digit interleaving is the precision
+            // mechanism, so these need no document-locale gate and run at every locale.
+            "postal.ca",
+            "postal.gb",
+            "postal.ie",
             // Explicit expansion of the #414 promotion set: the German-cue SSN arm shares
             // `ssn.us`'s class and national identifier shape and replays A4-clean when run
             // everywhere, so it is a format-basis sibling rather than a document-gated cue rule.
@@ -221,7 +226,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 39);
+    assert_eq!(core.recognizers.len(), 42);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -1791,11 +1796,31 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         } if name == "ip_address"
     ));
 
-    let one_postal_side_removed = raw.replace("cooperates_with = [\"postal.de\"]\n", "");
+    // `custom:postal_code` is served by five recognizers, so each names the other four. Dropping
+    // ONE rule's list leaves every pair it belongs to still covered from the other side, which the
+    // loader permits. Dropping a SECOND leaves the (postal.ca, postal.de) pair with neither side
+    // naming the other, which must fail closed. Both target strings are asserted unique first: a
+    // `str.replace` that matches nothing is a silent no-op, which would turn this probe into a
+    // Potemkin pass that asserts the loader accepts an unmutated pack.
+    let ca_list =
+        "cooperates_with = [\"postal.de\", \"postal.us\", \"postal.gb\", \"postal.ie\"]\n";
+    let de_list =
+        "cooperates_with = [\"postal.us\", \"postal.ca\", \"postal.gb\", \"postal.ie\"]\n";
+    assert_eq!(
+        raw.matches(ca_list).count(),
+        1,
+        "postal.ca cooperation site must be unique for the mutation to bite"
+    );
+    assert_eq!(
+        raw.matches(de_list).count(),
+        1,
+        "postal.de cooperation site must be unique for the mutation to bite"
+    );
+
+    let one_postal_side_removed = raw.replace(ca_list, "");
     Rulepack::parse(&one_postal_side_removed).expect("one-sided postal cooperation remains valid");
 
-    let both_postal_sides_removed =
-        one_postal_side_removed.replace("cooperates_with = [\"postal.us\"]\n", "");
+    let both_postal_sides_removed = one_postal_side_removed.replace(de_list, "");
     let err = Rulepack::parse(&both_postal_sides_removed)
         .expect_err("both-side postal cooperation drop must fail closed");
     assert!(matches!(
