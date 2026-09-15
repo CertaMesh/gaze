@@ -1260,7 +1260,7 @@ fn forged_residual_ids_bounds_parent_membership_and_ownership_fail_closed() {
     input.push(input[1].clone());
     let session = Session::new(crate::Scope::Ephemeral).unwrap();
     let output = clean(&pipeline(input, true), &session, RAW).unwrap();
-    for mode in 0..6 {
+    for mode in 0..8 {
         let mut segment = output.manifest.segment().clone();
         let mut records = output.manifest.records().to_vec();
         match mode {
@@ -1276,7 +1276,14 @@ fn forged_residual_ids_bounds_parent_membership_and_ownership_fail_closed() {
                     residual: 99,
                 }
             }
-            _ => records[1].action = Some(Action::Preserve),
+            5 => records[1].action = Some(Action::Preserve),
+            // The emitted class is what reaches the public manifest span, the audit
+            // row and the scorer, so it has to be pinned to its cell independently
+            // of geometry and ownership.
+            6 => records[1].emitted.class = PiiClass::Email,
+            // Forge the record's raw span while leaving the cell alone, so only the
+            // record-to-cell geometry term of the residual disposition can reject it.
+            _ => records[1].emitted.raw_span.end += 1,
         }
         let mut bad = Ledger::new(segment);
         for r in records {
@@ -1331,6 +1338,48 @@ fn a_record_whose_two_origins_disagree_fails_closed() {
         }
         assert!(bad.validate().is_err(), "{label} must not validate");
     }
+}
+
+/// Two adjacent residual cells can agree on representative, class and family and
+/// still cover different parent sets, so the parent set has to stay in the
+/// coalescing key. Arbitration here selects `11..15` and `35..45`, leaving the
+/// admitted union of `synthetic.wide` split into `15..25` (one parent) and
+/// `25..35` (two, once `synthetic.inner` becomes active). Merging them would
+/// hand one of the two ranges a parent list that is not true of it.
+#[test]
+fn adjacent_cells_sharing_a_representative_keep_their_distinct_parent_sets() {
+    let raw = "x".repeat(50);
+    let input = vec![
+        candidate(11..15, PiiClass::Name, "synthetic.left"),
+        candidate(11..40, field(), "synthetic.wide"),
+        candidate(25..40, field(), "synthetic.inner"),
+        candidate(35..45, PiiClass::Name, "synthetic.right"),
+    ];
+    let p = pipeline(input, true);
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&p, &session, &raw).unwrap();
+    assert_eq!(
+        output
+            .manifest
+            .iter()
+            .map(|s| s.raw_span.clone())
+            .collect::<Vec<_>>(),
+        vec![11..15, 15..25, 25..35, 35..45]
+    );
+    let cells = &output.manifest.segment().residuals;
+    assert_eq!(
+        cells.iter().map(|c| c.raw.clone()).collect::<Vec<_>>(),
+        vec![15..25, 25..35],
+        "a shared representative must not coalesce two different parent sets"
+    );
+    assert_eq!(cells[0].raw.end, cells[1].raw.start);
+    assert_eq!(cells[0].representative, cells[1].representative);
+    assert_eq!(cells[0].class, cells[1].class);
+    assert_eq!(cells[0].family, cells[1].family);
+    assert_eq!(cells[0].parents.len(), 1);
+    assert_eq!(cells[1].parents.len(), 2);
+    assert_eq!(cells[1].parents[0], cells[0].parents[0]);
+    assert_eq!(session.restore_strict_text(&output.text).unwrap(), raw);
 }
 
 #[test]
