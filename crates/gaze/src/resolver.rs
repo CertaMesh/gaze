@@ -43,10 +43,20 @@ struct AnchorContext<'a> {
 
 // Original ids refer to immutable detector payloads, never source labels.
 pub(crate) struct CandidatePool {
-    pub(crate) originals: Vec<Candidate>,
+    originals: Vec<Candidate>,
     pub(crate) order: Vec<usize>,
     pub(crate) events: Vec<ResolutionEvent>,
     next_node: usize,
+    #[cfg(test)]
+    pub(crate) work: ResolutionWork,
+}
+
+#[cfg(test)]
+#[derive(Default, Debug)]
+pub(crate) struct ResolutionWork {
+    pub(crate) pools: usize,
+    pub(crate) candidates: usize,
+    pub(crate) overlap_probes: usize,
 }
 
 pub(crate) struct WholeCandidate {
@@ -87,6 +97,10 @@ pub(crate) enum PairOutcome {
 }
 
 impl CandidatePool {
+    pub(crate) fn originals(&self) -> &[Candidate] {
+        &self.originals
+    }
+
     pub(crate) fn new(originals: Vec<Candidate>) -> Self {
         let mut order = (0..originals.len()).collect::<Vec<_>>();
         // Keep the legacy stable key, including its input-order ties.
@@ -106,6 +120,8 @@ impl CandidatePool {
             originals,
             order,
             events: Vec::new(),
+            #[cfg(test)]
+            work: ResolutionWork::default(),
         }
     }
 
@@ -115,6 +131,11 @@ impl CandidatePool {
         policy: &FamilyPolicyTable,
         anchors: Option<(&AnchorResolver, &str, &[LocaleTag])>,
     ) -> Vec<WholeCandidate> {
+        #[cfg(test)]
+        {
+            self.work.pools += 1;
+            self.work.candidates += ids.len();
+        }
         let anchor_ctx = anchors.map(|(resolver, input, locale_chain)| AnchorContext {
             resolver,
             input,
@@ -130,9 +151,13 @@ impl CandidatePool {
             self.insert(&mut resolved, candidate, policy, anchor_ctx);
         }
         if let Some(ctx) = anchor_ctx {
-            for node in &mut resolved {
-                node.candidate = apply_missing_anchor_fallback(node.candidate.clone(), policy, ctx);
-            }
+            resolved = resolved
+                .into_iter()
+                .map(|mut node| {
+                    node.candidate = apply_missing_anchor_fallback(node.candidate, policy, ctx);
+                    node
+                })
+                .collect();
         }
         resolved.sort_by_key(|node| node.candidate.span.start);
         resolved
@@ -146,6 +171,10 @@ impl CandidatePool {
         anchor_ctx: Option<AnchorContext<'_>>,
     ) {
         for index in 0..resolved.len() {
+            #[cfg(test)]
+            {
+                self.work.overlap_probes += 1;
+            }
             let Some(overlap) =
                 Overlap::classify(&resolved[index].candidate.span, &candidate.candidate.span)
             else {
@@ -1346,5 +1375,63 @@ mod tests {
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].class, PiiClass::Location);
         assert_eq!(resolved[0].decided_by, ConflictTier::ClassPriority);
+    }
+}
+
+#[cfg(test)]
+mod recovery_event_tests {
+    use super::*;
+    #[test]
+    fn collateral_removal_has_no_fabricated_pair_outcome_or_membership() {
+        let make = |span, class, id| {
+            Candidate::new(
+                span,
+                class,
+                id,
+                0.9,
+                0,
+                None,
+                "counter",
+                id,
+                ConflictTier::None,
+                vec![],
+            )
+        };
+        let mut pool = CandidatePool::new(vec![
+            make(0..5, PiiClass::Name, "a"),
+            make(10..15, PiiClass::Name, "b"),
+            make(3..12, PiiClass::Email, "c"),
+        ]);
+        let mut nodes = (0..2)
+            .map(|id| WholeCandidate {
+                candidate: pool.originals[id].clone(),
+                members: vec![id],
+                node: id,
+            })
+            .collect::<Vec<_>>();
+        let incoming = WholeCandidate {
+            candidate: pool.originals[2].clone(),
+            members: vec![2],
+            node: 2,
+        };
+        pool.insert(&mut nodes, incoming, &FamilyPolicyTable::EMPTY, None);
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].members, vec![2]);
+        assert!(matches!(
+            pool.events.as_slice(),
+            [
+                ResolutionEvent::Pair {
+                    existing: 0,
+                    incoming: 2,
+                    result: 3,
+                    outcome: PairOutcome::Incoming(ConflictTier::ClassPriority)
+                },
+                ResolutionEvent::Collateral {
+                    removed: 1,
+                    replacing: 3
+                }
+            ]
+        ));
+        assert_eq!(pool.originals[1].span, 10..15);
     }
 }

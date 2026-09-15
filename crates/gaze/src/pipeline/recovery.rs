@@ -9,6 +9,8 @@ pub(super) struct WholePlan {
     pub(super) recovered: Vec<Candidate>,
     #[allow(dead_code)]
     pub(super) events: Vec<ResolutionEvent>,
+    #[cfg(test)]
+    pub(super) work: crate::resolver::ResolutionWork,
 }
 
 pub(super) fn plan(
@@ -20,7 +22,7 @@ pub(super) fn plan(
 ) -> Result<WholePlan> {
     let order = pool.order.clone();
     let original_spans = pool
-        .originals
+        .originals()
         .iter()
         .map(|candidate| map_span(&candidate.span, normalized, raw))
         .collect::<Result<Vec<_>>>()?;
@@ -28,7 +30,7 @@ pub(super) fn plan(
     // normalized scalars can still collide after mapping; freeze checks that
     // separately before any policy, audit or token allocation occurs.
     let primary = registry.resolve_pool(&mut pool, &order, &normalized.text, locales);
-    let mut consumed = vec![false; pool.originals.len()];
+    let mut consumed = vec![false; pool.originals().len()];
     let primary = freeze(
         primary,
         &mut pool,
@@ -66,6 +68,8 @@ pub(super) fn plan(
         primary,
         recovered,
         events: pool.events,
+        #[cfg(test)]
+        work: pool.work,
     })
 }
 
@@ -170,3 +174,5 @@ fn gaps(
         .collect()
 }
 
+#[cfg(test)]
+mod tests;
