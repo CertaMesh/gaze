@@ -351,10 +351,10 @@ fn multiple_gap_nonintersecting_unowned_entry_does_not_globally_reject() {
 fn multiple_gap_reused_values_stay_owned_and_original_entries_unchanged() {
     let (session, mut clean, _) = fixture();
     let item = parent(&clean);
-    clean.text.replace_range(
-        clean.manifest[1].clean_span.clone(),
-        &clean.text[clean.manifest[0].clean_span.clone()].to_string(),
-    );
+    let reused_token = clean.text[clean.manifest[0].clean_span.clone()].to_owned();
+    clean
+        .text
+        .replace_range(clean.manifest[1].clean_span.clone(), &reused_token);
     let raw = "aaXbbXcc";
     let report = report(vec![item]);
     assert_eq!(session.restore_strict_text(&clean.text).unwrap(), raw);
