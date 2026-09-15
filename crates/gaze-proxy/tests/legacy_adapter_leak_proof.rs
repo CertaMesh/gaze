@@ -918,3 +918,60 @@ fn unsurfaced_pii_error_discloses_the_field_path_but_never_the_value() {
     assert!(!debugged.contains(EMAIL), "Debug leaked the value");
     assert!(!debugged.contains(ORDER_ID_DIGITS), "Debug leaked digits");
 }
+
+#[path = "support/route_net.rs"]
+mod route_net;
+
+// RED contract proposal: configured-net enforcement on surfaced request text.
+// Keep private until the route's policy compatibility decision and repair are reviewed.
+#[tokio::test]
+async fn configured_net_request_boundary_rejects_surfaced_and_unsurfaced_markers() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let mut observations = Vec::new();
+    for error in [false, true] {
+        for surfaced in [false, true] {
+            let hits = Arc::new(AtomicUsize::new(0));
+            let pipeline = Pipeline::builder()
+                .detector(RegexDetector::new("alice@example\\.invalid", PiiClass::Email).unwrap())
+                .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+                .rule(DefaultRule::new(Action::Preserve))
+                .register_safety_net(route_net::RouteNet {
+                    error,
+                    hits: hits.clone(),
+                })
+                .build()
+                .unwrap();
+            let (upstream, proxy) = spawn_openai_with(pipeline).await;
+            let body = if surfaced {
+                json!({"model":"synthetic", "messages":[{"role":"user","content":route_net::RESIDUAL}]})
+            } else {
+                json!({"model":"synthetic", "messages":[{"role":"user","content":"benign"}],"synthetic_carrier":route_net::RESIDUAL})
+            };
+            let response = post_json(&proxy, "/v1/chat/completions", body).await;
+            let accepted = response.status().is_success();
+            let returned = response.text().await.unwrap();
+            assert!(!returned.contains(route_net::RESIDUAL));
+            let forwarded = upstream.forwarded.lock().await;
+            let raw_on_wire = forwarded
+                .iter()
+                .any(|body| body.to_string().contains(route_net::RESIDUAL));
+            observations.push((
+                error,
+                surfaced,
+                accepted,
+                forwarded.len(),
+                raw_on_wire,
+                hits.load(Ordering::SeqCst),
+            ));
+        }
+    }
+    // The unsurfaced controls prove the configured net actually recognizes/errors on the marker.
+    for row in observations.iter().filter(|row| !row.1) {
+        assert!(
+            !row.2 && row.3 == 0 && row.5 > 0,
+            "unsurfaced control: {row:?}"
+        );
+    }
+    assert!(observations.iter().all(|row| !row.2 && row.3 == 0),
+        "(error, surfaced, accepted, provider calls, raw on wire, net marker hits): {observations:?}");
+}

@@ -1519,3 +1519,81 @@ with client.messages.stream(**request) as stream:
         second["messages"][0]["content"]
     );
 }
+
+#[path = "support/route_net.rs"]
+mod route_net;
+
+fn route_net_pipeline(error: bool, hits: Arc<AtomicUsize>) -> Pipeline {
+    Pipeline::builder()
+        .detector(RegexDetector::new("alice@example\\.invalid", PiiClass::Email).unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(route_net::RouteNet { error, hits })
+        .build()
+        .unwrap()
+}
+
+// RED contract proposal, not an assertion that today's primary-only API promises this.
+#[tokio::test]
+async fn configured_net_direct_request_rejects_before_provider_io() {
+    let mut observations = Vec::new();
+    for error in [false, true] {
+        let upstream = spawn_upstream_with_provider_text("benign").await;
+        let hits = Arc::new(AtomicUsize::new(0));
+        let proxy = spawn_proxy_with_observability(
+            AnthropicAdapter::new(upstream.origin.clone()),
+            route_net_pipeline(error, hits.clone()),
+            DictionaryBundle::default(),
+            None,
+            None,
+        )
+        .await;
+        let mut request = sdk_request(false);
+        request["messages"][0]["content"] = json!(route_net::RESIDUAL);
+        let response = sdk_client_request(&Client::new(), &proxy, false)
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        let accepted = response.status().is_success();
+        assert!(!response.text().await.unwrap().contains(route_net::RESIDUAL));
+        let captures = upstream.captures.lock().await;
+        let raw_on_wire = captures
+            .iter()
+            .any(|capture| String::from_utf8_lossy(&capture.body).contains(route_net::RESIDUAL));
+        observations.push((
+            error,
+            accepted,
+            upstream.connections.load(Ordering::SeqCst),
+            captures.len(),
+            raw_on_wire,
+            hits.load(Ordering::SeqCst),
+        ));
+    }
+    assert!(observations.iter().all(|row| !row.1 && row.2 == 0 && row.3 == 0),
+        "(error, accepted, provider connections, provider calls, raw on wire, net marker hits): {observations:?}");
+}
+
+#[tokio::test]
+async fn configured_net_direct_response_rejects_after_one_provider_call() {
+    for error in [false, true] {
+        let upstream = spawn_upstream_with_provider_text(route_net::RESIDUAL).await;
+        let hits = Arc::new(AtomicUsize::new(0));
+        let proxy = spawn_proxy_with_observability(
+            AnthropicAdapter::new(upstream.origin.clone()),
+            route_net_pipeline(error, hits.clone()),
+            DictionaryBundle::default(),
+            None,
+            None,
+        )
+        .await;
+        let response = sdk_client_request(&Client::new(), &proxy, false)
+            .send()
+            .await
+            .unwrap();
+        assert!(!response.status().is_success());
+        assert!(!response.text().await.unwrap().contains(route_net::RESIDUAL));
+        assert_eq!(upstream.captures.lock().await.len(), 1);
+        assert!(hits.load(Ordering::SeqCst) > 0);
+    }
+}
