@@ -221,7 +221,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 36);
+    assert_eq!(core.recognizers.len(), 39);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",

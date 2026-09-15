@@ -1,6 +1,6 @@
 schema_version = "0.1.0"
 rulepack_id = "gaze-core"
-rulepack_version = "0.5.2"
+rulepack_version = "0.5.3"
 default_locales = ["global"]
 
 [locale.email_headers]
@@ -1167,3 +1167,81 @@ precedence = 15
 origin = "project-authored"
 license = "Apache-2.0"
 
+
+# Explicit EN/DE field records. Capture values only; no semantic validity claim.
+# CRLF-aware anchors leave line separators unconsumed for consecutive records.
+# Credential values: 1..256 normalized grammar units, plain scalar or escaped
+# matching quote/backslash. Require the full closing quote and record boundary.
+# The pipeline removes joiners before matching, so this is NOT a raw-size bound
+# or protection of removed edge joiners. Source spelling is never unescaped.
+# Priority 100 exceeds embedded custom substrings (maximum 87); builtin exact,
+# partial and containing spans still follow existing arbitration and caller policy.
+
+[[recognizers]]
+id = "birth_date.cue"
+safety_tier = "safe_default"
+class = "custom:birth_date"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?imR)(?:^[ \t]*(?:date of birth|birth date|birthdate|DOB|Geburtsdatum)[ \t]*[:=][ \t]*(?:"((?:[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])|(?:0?[1-9]|[12][0-9]|3[01])\.(?:0?[1-9]|1[0-2])\.[0-9]{4}|(?:(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12][0-9]|3[01])|(?:0?[1-9]|[12][0-9]|3[01])/(?:0?[1-9]|1[0-2]))/[0-9]{4}))"|'((?:[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])|(?:0?[1-9]|[12][0-9]|3[01])\.(?:0?[1-9]|1[0-2])\.[0-9]{4}|(?:(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12][0-9]|3[01])|(?:0?[1-9]|[12][0-9]|3[01])/(?:0?[1-9]|1[0-2]))/[0-9]{4}))'|((?:[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])|(?:0?[1-9]|[12][0-9]|3[01])\.(?:0?[1-9]|1[0-2])\.[0-9]{4}|(?:(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12][0-9]|3[01])|(?:0?[1-9]|[12][0-9]|3[01])/(?:0?[1-9]|1[0-2]))/[0-9]{4})))[ \t]*$|\b(?:born on|geboren am)[ \t]+((?:[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])|(?:0?[1-9]|[12][0-9]|3[01])\.(?:0?[1-9]|1[0-2])\.[0-9]{4}|(?:(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12][0-9]|3[01])|(?:0?[1-9]|[12][0-9]|3[01])/(?:0?[1-9]|1[0-2]))/[0-9]{4}))(?:[^\w./-]|\.(?:[^\w./-]|\z)|\z))'''
+capture_groups = [1, 2, 3, 4]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+id = "password.field"
+safety_tier = "safe_default"
+class = "custom:password"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?imR)^[ \t]*(?:password|passphrase|passwort|kennwort)[ \t]*[:=][ \t]*(?:"((?:[^"\\\r\n]|\\["\\]){1,256})"|'((?:[^'\\\r\n]|\\['\\]){1,256})'|([^\s"'\\]{1,256}))[ \t]*$'''
+capture_groups = [1, 2, 3]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+id = "username.field"
+safety_tier = "safe_default"
+class = "custom:username"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?imR)^[ \t]*(?:username|user name|login name|benutzername|nutzername|Anmeldename)[ \t]*[:=][ \t]*(?:"((?:[^"\\\r\n]|\\["\\]){1,256})"|'((?:[^'\\\r\n]|\\['\\]){1,256})'|([^\s"'\\]{1,256}))[ \t]*$'''
+capture_groups = [1, 2, 3]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
