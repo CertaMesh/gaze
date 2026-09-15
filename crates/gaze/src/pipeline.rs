@@ -1306,7 +1306,7 @@ impl Pipeline {
                 )? {
                     Some(reason) => (Some(reason), None),
                     None => {
-                        let follow_up = self.run_safety_nets(
+                        let mut follow_up = self.run_safety_nets(
                             target,
                             &clean.text,
                             &Manifest::from_spans(clean.manifest.clone()),
@@ -1315,13 +1315,51 @@ impl Pipeline {
                             field_path,
                             decision,
                         )?;
-                        let reason = self.post_resolution_fallback_reason(
+                        let mut reason = self.post_resolution_fallback_reason(
                             target,
                             clean,
                             &follow_up,
                             document_kind,
                             field_path,
                         )?;
+                        // Only a successful first resolve (including a no-op) reaches here.
+                        // Freeze a complete second batch before effects, then replace the residual
+                        // source with a fresh report. Historical observations never drive deletion.
+                        if reason.is_some() && matches!(on_residual, SafetyNetFallback::Redact) {
+                            if let FollowupResolution::Ready(plan) = plan_followup_resolutions(
+                                target,
+                                clean,
+                                &follow_up,
+                                protection_trace.as_deref().map(|trace| trace.raw_text),
+                            )? {
+                                let acted_on = plan.parents.iter().map(|s| (*s).clone()).collect();
+                                self.apply_followup_resolutions(
+                                    target,
+                                    clean,
+                                    plan,
+                                    document_kind,
+                                    field_path,
+                                    protection_trace.as_deref_mut(),
+                                )?;
+                                report.extend(LeakReport::from_parts(acted_on, Vec::new()));
+                                follow_up = self.run_safety_nets(
+                                    target,
+                                    &clean.text,
+                                    &Manifest::from_spans(clean.manifest.clone()),
+                                    document_kind,
+                                    locale_chain,
+                                    field_path,
+                                    decision,
+                                )?;
+                                reason = self.post_resolution_fallback_reason(
+                                    target,
+                                    clean,
+                                    &follow_up,
+                                    document_kind,
+                                    field_path,
+                                )?;
+                            }
+                        }
                         (reason, Some(follow_up))
                     }
                 };
@@ -1537,6 +1575,72 @@ impl Pipeline {
             assert_resolution_preserved_restore(&baseline, &restored)?;
         }
         Ok(None)
+    }
+
+    fn apply_followup_resolutions(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        clean: &mut CleanText,
+        plan: CompleteFollowupPlan<'_>,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+        mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+    ) -> Result<()> {
+        // Captured before audits as well as mappings; neither target rolls back audit attempts.
+        let restore_baseline = target.restore_strict_text(&clean.text).ok();
+        for suspect in plan.protected {
+            self.log_safety_net_entry(
+                target,
+                suspect,
+                document_kind,
+                field_path,
+                Action::Preserve,
+                true,
+                ConflictTier::Resolve,
+                None,
+            )?;
+        }
+        for gap in plan.gaps.into_iter().rev() {
+            let suspect = gap.suspect;
+            let replacement =
+                target.tokenize_with_family("safety_net", &suspect.class, &gap.raw)?;
+            self.log_safety_net_entry(
+                target,
+                suspect,
+                document_kind,
+                field_path,
+                Action::Tokenize,
+                false,
+                ConflictTier::Resolve,
+                None,
+            )?;
+            replace_clean_span_checked(
+                clean,
+                gap.clean_span.clone(),
+                &replacement,
+                Some(EmittedTokenSpan::new(
+                    gap.clean_span.start..gap.clean_span.start + replacement.len(),
+                    gap.raw_span.clone(),
+                    suspect.class.clone(),
+                )),
+            )?;
+            if let Some(trace) = protection_trace.as_deref_mut() {
+                trace.record(
+                    gap.raw_span,
+                    suspect.class.clone(),
+                    GazeLocalProtectionTraceKind::SafetyNetResolveTokenize,
+                    vec![suspect.safety_net_id.clone()],
+                )?;
+            }
+        }
+        validate_clean_manifest(clean)?;
+        if let Some(baseline) = restore_baseline {
+            let restored = target
+                .restore_strict_text(&clean.text)
+                .map_err(|_| manifest_integrity_error("resolution left unrestorable clean text"))?;
+            assert_resolution_preserved_restore(&baseline, &restored)?;
+        }
+        Ok(())
     }
 
     /// Post-resolution verdict: replaces the bare `uncovered + partial_bleed > 0` count.
@@ -2170,6 +2274,174 @@ struct PlannedSafetyNetResolution<'a> {
     clean_span: Range<usize>,
     raw_span: Range<usize>,
     raw: String,
+}
+
+enum FollowupResolution<'a> {
+    NotApplicable,
+    Ready(CompleteFollowupPlan<'a>),
+}
+
+struct CompleteFollowupPlan<'a> {
+    gaps: Vec<PlannedSafetyNetResolution<'a>>,
+    parents: Vec<&'a LeakSuspect>,
+    protected: Vec<&'a LeakSuspect>,
+}
+
+/// New-path preflight is deliberately separate from the first resolver's legacy refusals.
+/// A valid unsupported item cannot hide a later malformed item in any report ordering.
+fn plan_followup_resolutions<'a>(
+    target: &ProtectionTarget<'_, '_>,
+    clean: &CleanText,
+    report: &'a LeakReport,
+    original: Option<&str>,
+) -> Result<FollowupResolution<'a>> {
+    validate_clean_manifest(clean)?;
+    let mut declined = false;
+    let mut gaps = Vec::new();
+    let mut parents = Vec::new();
+    let mut protected = Vec::new();
+    for suspect in &report.suspects {
+        validate_followup_span(&clean.text, &suspect.span)?;
+        suspect
+            .class
+            .validate_custom_name()
+            .map_err(|_| protection_trace_error("invalid follow-up class"))?;
+        if original.is_some() && suspect.safety_net_id.trim().is_empty() {
+            return Err(protection_trace_error("empty protection source id"));
+        }
+        if let LeakKind::ClassMismatch {
+            pipeline_class,
+            safety_net_class,
+        } = &suspect.kind
+        {
+            for class in [pipeline_class, safety_net_class] {
+                class
+                    .validate_custom_name()
+                    .map_err(|_| protection_trace_error("invalid follow-up class"))?;
+            }
+        }
+        if let LeakKind::PartialBleed { uncovered } = &suspect.kind {
+            validate_followup_span(&clean.text, uncovered)?;
+            if uncovered.start < suspect.span.start || uncovered.end > suspect.span.end {
+                return Err(protection_trace_error("false follow-up gap"));
+            }
+        }
+        let mut cursor = suspect.span.start;
+        let mut raw_gaps = Vec::new();
+        let mut intersects = false;
+        let mut unowned = false;
+        for emitted in clean
+            .manifest
+            .iter()
+            .filter(|entry| ranges_overlap(&entry.clean_span, &suspect.span))
+        {
+            intersects = true;
+            let token = &clean.text[emitted.clean_span.clone()];
+            if target.contains_token(token) {
+                let restored = target.restore(token).ok_or_else(|| {
+                    manifest_integrity_error("owned follow-up token cannot restore")
+                })?;
+                if emitted.raw_span.start >= emitted.raw_span.end
+                    || restored.len() != emitted.raw_span.end - emitted.raw_span.start
+                {
+                    return Err(manifest_integrity_error("invalid owned follow-up raw span"));
+                }
+                if original.is_some_and(|source| {
+                    source.get(emitted.raw_span.clone()) != Some(restored.as_str())
+                }) {
+                    return Err(protection_trace_error("follow-up token source mismatch"));
+                }
+            } else {
+                unowned = true;
+            }
+            let start = emitted.clean_span.start.max(suspect.span.start);
+            if cursor < start {
+                raw_gaps.push(cursor..start);
+            }
+            cursor = cursor.max(emitted.clean_span.end.min(suspect.span.end));
+        }
+        if cursor < suspect.span.end {
+            raw_gaps.push(cursor..suspect.span.end);
+        }
+        if let LeakKind::PartialBleed { uncovered } = &suspect.kind {
+            if !intersects || raw_gaps.first() != Some(uncovered) {
+                return Err(protection_trace_error("false follow-up gap"));
+            }
+        }
+        if suspect_is_inside_live_token(target, clean, suspect) {
+            protected.push(suspect);
+            continue;
+        }
+        let supported = matches!(
+            suspect.kind,
+            LeakKind::Uncovered | LeakKind::PartialBleed { .. }
+        );
+        if matches!(suspect.kind, LeakKind::Uncovered) && intersects && !unowned {
+            return Err(protection_trace_error("false follow-up uncovered claim"));
+        }
+        // Validate even unsupported parents' actual raw gaps before declining the whole report.
+        for span in raw_gaps {
+            validate_followup_span(&clean.text, &span)?;
+            let raw_span = map_clean_span_to_raw(clean, &span)?;
+            let raw = clean.text[span.clone()].to_owned();
+            if original.is_some_and(|source| source.get(raw_span.clone()) != Some(raw.as_str())) {
+                return Err(protection_trace_error("follow-up raw source mismatch"));
+            }
+            gaps.push(PlannedSafetyNetResolution {
+                suspect,
+                clean_span: span,
+                raw_span,
+                raw,
+            });
+        }
+        declined |= !supported || unowned;
+        parents.push(suspect);
+    }
+    gaps.sort_by(|a, b| {
+        (
+            a.clean_span.start,
+            a.clean_span.end,
+            a.suspect.class.to_canonical_str(),
+            a.suspect.safety_net_id.as_str(),
+            a.suspect.span.start,
+            a.suspect.span.end,
+        )
+            .cmp(&(
+                b.clean_span.start,
+                b.clean_span.end,
+                b.suspect.class.to_canonical_str(),
+                b.suspect.safety_net_id.as_str(),
+                b.suspect.span.start,
+                b.suspect.span.end,
+            ))
+    });
+    if declined
+        || gaps.is_empty()
+        || gaps.windows(2).any(|pair| {
+            pair[0].clean_span.end > pair[1].clean_span.start
+                || pair[0].raw_span.end > pair[1].raw_span.start
+        })
+    {
+        return Ok(FollowupResolution::NotApplicable);
+    }
+    sort_safety_net_suspects(&mut protected);
+    sort_safety_net_suspects(&mut parents);
+    Ok(FollowupResolution::Ready(CompleteFollowupPlan {
+        gaps,
+        parents,
+        protected,
+    }))
+}
+
+fn validate_followup_span(text: &str, span: &Range<usize>) -> Result<()> {
+    if span.start >= span.end || !is_char_boundary_range(text, span) {
+        return Err(Error::SafetyNetSpanInvalid {
+            start: span.start,
+            end: span.end,
+            text_len: text.len(),
+        });
+    }
+    Ok(())
 }
 
 /// Expand only reports containing a truthful multi-gap PartialBleed. `None` means resume
