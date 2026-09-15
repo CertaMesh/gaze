@@ -1057,3 +1057,65 @@ async fn no_net_remains_an_explicit_surfaced_request_coverage_limit() {
     assert_eq!(forwarded.len(), 1);
     assert!(forwarded[0].to_string().contains(route_net::RESIDUAL));
 }
+
+#[path = "support/fallback_deleting_net.rs"]
+mod fallback_deleting_net;
+
+/// A configured net that DELETES rather than resolves must still stop the unsurfaced marker.
+///
+/// `configured_net_request_boundary_rejects_surfaced_and_unsurfaced_markers` above covers the
+/// resolve-SUCCESS half: one suspect becomes a token, the token has a `raw_span`, and
+/// `RequestResidualScan::probe` sees a non-empty `spans` and rejects.
+///
+/// This is the resolve-FAILURE half. The suspect is routed into the Redact fallback instead,
+/// deletion emits no manifest entry, and `probe` reads only `spans`. An empty `spans` there
+/// means "no PII found", not "the PII was removed" — and `probe` does not hold the cleaned
+/// text it would have had to forward, so admitting on that signal forwards the ORIGINAL body.
+///
+/// Axis 1: the marker reaching the provider is PII reaching an LLM outside the manifest
+/// contract. The net fired, said so in the report, and the request shipped anyway.
+#[tokio::test]
+async fn regression_fallback_deletion_does_not_admit_an_unsurfaced_marker_to_the_provider() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use fallback_deleting_net::{FallbackDeletingNet, MARKER};
+
+    let hits = Arc::new(AtomicUsize::new(0));
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::new("alice@example\\.invalid", PiiClass::Email).unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(FallbackDeletingNet { hits: hits.clone() })
+        .build()
+        .unwrap();
+    let (upstream, proxy) = spawn_openai_with(pipeline).await;
+
+    let response = post_json(
+        &proxy,
+        "/v1/chat/completions",
+        json!({
+            "model": "synthetic",
+            "messages": [{"role": "user", "content": "benign"}],
+            "synthetic_carrier": MARKER
+        }),
+    )
+    .await;
+    let accepted = response.status().is_success();
+    let returned = response.text().await.unwrap();
+    let forwarded = upstream.forwarded.lock().await;
+    let raw_on_wire = forwarded
+        .iter()
+        .any(|body| body.to_string().contains(MARKER));
+
+    // Control: without this the whole test is vacuous — it would pass on a net that never ran.
+    assert!(
+        hits.load(Ordering::SeqCst) > 0,
+        "the net must have seen the marker for this to be a proof"
+    );
+    assert!(
+        !raw_on_wire,
+        "raw marker reached the provider after a successful fallback deletion: {forwarded:?}"
+    );
+    assert_eq!(forwarded.len(), 0, "the request must not be forwarded");
+    assert!(!accepted, "the proxy must fail closed");
+    assert!(!returned.contains(MARKER), "the error must not echo the value");
+}
