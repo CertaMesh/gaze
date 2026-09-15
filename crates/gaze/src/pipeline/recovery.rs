@@ -19,12 +19,15 @@ pub(super) fn plan(
     locales: &[LocaleTag],
 ) -> Result<WholePlan> {
     let order = pool.order.clone();
-    let primary = registry.resolve_pool(&mut pool, &order, &normalized.text, locales);
     let original_spans = pool
         .originals
         .iter()
         .map(|candidate| map_span(&candidate.span, normalized, raw))
         .collect::<Result<Vec<_>>>()?;
+    // Reject malformed source geometry before anchor code can slice it. Valid
+    // normalized scalars can still collide after mapping; freeze checks that
+    // separately before any policy, audit or token allocation occurs.
+    let primary = registry.resolve_pool(&mut pool, &order, &normalized.text, locales);
     let mut consumed = vec![false; pool.originals.len()];
     let primary = freeze(
         primary,
@@ -166,3 +169,4 @@ fn gaps(
         })
         .collect()
 }
+
