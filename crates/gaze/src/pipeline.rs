@@ -1,4 +1,5 @@
 mod protection;
+mod recovery;
 pub use protection::{ProtectionContext, ProtectionError};
 
 use std::collections::BTreeMap;
@@ -952,14 +953,17 @@ impl Pipeline {
         let normalized = normalize(text);
         let spans = &normalized.spans;
         let ctx = DetectContext::new(locale_chain, dictionaries);
-        let (resolved, vetoed) = self.registry.detect_all_resolved(&normalized.text, &ctx)?;
+        let (pool, vetoed) = self
+            .registry
+            .detect_candidate_pool(&normalized.text, &ctx)?;
+        let recovery::WholePlan {
+            primary: resolved,
+            recovered,
+            ..
+        } = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
         let vetoed = vetoed
             .into_iter()
             .filter_map(|vetoed| translate_vetoed_candidate(vetoed, spans))
-            .collect::<Vec<_>>();
-        let resolved = resolved
-            .into_iter()
-            .filter_map(|candidate| translate_candidate(candidate, spans))
             .collect::<Vec<_>>();
         let losers = merged_losers(&resolved, &self.registry);
         let mut detections = resolved
@@ -981,11 +985,13 @@ impl Pipeline {
         }
 
         detections.sort_by_key(|d| d.detection.span.start);
-        let mut out = String::with_capacity(text.len());
-        let mut emitted = Vec::with_capacity(detections.len());
-        let mut cursor = 0usize;
-
-        for detection in detections {
+        // Primary effects stay interleaved in legacy order. Recovery runs only
+        // after every primary action, logger and allocation has succeeded.
+        let mut prepared = Vec::with_capacity(detections.len() + recovered.len());
+        let recovered = recovered
+            .into_iter()
+            .map(|candidate| indexed_detection_from_candidate(candidate, &self.registry));
+        for detection in detections.into_iter().chain(recovered) {
             let raw = text[detection.detection.span.clone()].to_string();
             let context = build_context(field_name);
             let action = self.action_for(&detection.detection, &context);
@@ -1011,29 +1017,34 @@ impl Pipeline {
             };
 
             let span = detection.detection.span;
-            if span.start > cursor {
-                out.push_str(&text[cursor..span.start]);
+            if action == Action::Tokenize {
+                if let Some(trace) = protection_trace.as_deref_mut() {
+                    trace.record(
+                        span.clone(),
+                        detection.detection.class.clone(),
+                        GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
+                        detection.trace_source_ids.clone(),
+                    )?;
+                }
             }
+            prepared.push((span, detection.detection.class, replacement));
+        }
+
+        prepared.sort_by_key(|(span, _, _)| span.start);
+        let mut out = String::with_capacity(text.len());
+        let mut emitted = Vec::with_capacity(prepared.len());
+        let mut cursor = 0usize;
+        for (span, class, replacement) in prepared {
+            out.push_str(&text[cursor..span.start]);
             match replacement {
                 Some(replacement) => {
                     let clean_start = out.len();
                     out.push_str(&replacement);
-                    let class = detection.detection.class.clone();
                     emitted.push(EmittedTokenSpan::new(
                         clean_start..out.len(),
                         span.clone(),
-                        class.clone(),
+                        class,
                     ));
-                    if action == Action::Tokenize {
-                        if let Some(trace) = protection_trace.as_deref_mut() {
-                            trace.record(
-                                span.clone(),
-                                class,
-                                GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
-                                detection.trace_source_ids.clone(),
-                            )?;
-                        }
-                    }
                 }
                 None => out.push_str(&text[span.clone()]),
             }
