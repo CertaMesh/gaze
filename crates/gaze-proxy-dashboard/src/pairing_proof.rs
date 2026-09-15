@@ -47,6 +47,11 @@ fn sockets() -> (UnixStream, UnixStream) {
     }
     pair
 }
+fn fresh_nonce() -> [u8; 16] {
+    let mut nonce = [0_u8; 16];
+    getrandom::fill(&mut nonce).expect("test nonce entropy available");
+    nonce
+}
 fn authority() -> SocketAddrV4 {
     "127.0.0.1:54321".parse().unwrap()
 }
@@ -212,7 +217,8 @@ fn parent_rejects_envelope_trailing_authority_and_delivery_failure_before_ack() 
     for case in 0..3 {
         let (mut parent, mut child) = sockets();
         let secret = PairingSecret::from_pairing_frame([7; 32]);
-        PairingEnvelopeV2::encode([3; 16], authority(), &secret)
+        let nonce = fresh_nonce();
+        PairingEnvelopeV2::encode(nonce, authority(), &secret)
             .write_to(&mut child)
             .unwrap();
         if case == 0 {
@@ -249,14 +255,15 @@ fn missing_ready_times_out_instead_of_returning_success() {
         .unwrap();
     let (release_tx, release_rx) = mpsc::channel();
     let worker = thread::spawn(move || {
+        let nonce = fresh_nonce();
         PairingEnvelopeV2::encode(
-            [3; 16],
+            nonce,
             authority(),
             &PairingSecret::from_pairing_frame([7; 32]),
         )
         .write_to(&mut child)
         .unwrap();
-        DeliveredAckV2::read_from(&mut child, [3; 16]).unwrap();
+        DeliveredAckV2::read_from(&mut child, nonce).unwrap();
         release_rx.recv_timeout(BOUND).unwrap();
     });
     let result = acknowledge(&mut parent);
@@ -276,21 +283,22 @@ fn malformed_ready_never_completes_parent_pairing() {
         let (mut parent, mut child) = sockets();
         let (release_tx, release_rx) = mpsc::channel();
         let worker = thread::spawn(move || {
+            let nonce = fresh_nonce();
             PairingEnvelopeV2::encode(
-                [3; 16],
+                nonce,
                 authority(),
                 &PairingSecret::from_pairing_frame([7; 32]),
             )
             .write_to(&mut child)
             .unwrap();
-            DeliveredAckV2::read_from(&mut child, [3; 16]).unwrap();
+            DeliveredAckV2::read_from(&mut child, nonce).unwrap();
             let mut bytes = Vec::new();
-            PairingReadyV2::write_to(&mut bytes, [3; 16]).unwrap();
+            PairingReadyV2::write_to(&mut bytes, nonce).unwrap();
             match case {
                 0 => bytes[0] ^= 1,
                 1 => bytes[4] = 1,
                 2 => bytes[5] = 2,
-                3 => bytes[6..22].fill(2),
+                3 => bytes[6] ^= 1,
                 4 => bytes[22] = 0,
                 5 => {
                     bytes.pop();
@@ -321,7 +329,7 @@ fn malformed_ready_never_completes_parent_pairing() {
 fn v1_child_is_rejected_by_runtime_parent_before_delivery() {
     let (mut parent, mut child) = sockets();
     PairingEnvelopeV1::encode(
-        [3; 16],
+        fresh_nonce(),
         authority(),
         &PairingSecret::from_pairing_frame([7; 32]),
     )
@@ -367,7 +375,7 @@ fn malformed_v2_envelope_header_authority_and_truncation_never_deliver() {
         let (mut parent, mut child) = sockets();
         let mut bytes = Vec::new();
         PairingEnvelopeV2::encode(
-            [3; 16],
+            fresh_nonce(),
             authority(),
             &PairingSecret::from_pairing_frame([7; 32]),
         )
@@ -403,19 +411,23 @@ fn actual_parent_rotation_rejects_ready_replayed_from_previous_nonce() {
     let (release_tx, release_rx) = mpsc::channel();
     let worker = thread::spawn(move || {
         let secret = PairingSecret::from_pairing_frame([7; 32]);
-        PairingEnvelopeV2::encode([3; 16], authority(), &secret)
+        let nonce = fresh_nonce();
+        let mut next_nonce = nonce;
+        // The replay must differ for every entropy result.
+        next_nonce[0] ^= 1;
+        PairingEnvelopeV2::encode(nonce, authority(), &secret)
             .write_to(&mut child)
             .unwrap();
-        DeliveredAckV2::read_from(&mut child, [3; 16]).unwrap();
-        PairingReadyV2::write_to(&mut child, [3; 16]).unwrap();
+        DeliveredAckV2::read_from(&mut child, nonce).unwrap();
+        PairingReadyV2::write_to(&mut child, nonce).unwrap();
         let mut command = [0];
         child.read_exact(&mut command).unwrap();
         assert_eq!(command, [PARENT_ROTATE]);
-        PairingEnvelopeV2::encode([4; 16], authority(), &secret)
+        PairingEnvelopeV2::encode(next_nonce, authority(), &secret)
             .write_to(&mut child)
             .unwrap();
-        DeliveredAckV2::read_from(&mut child, [4; 16]).unwrap();
-        PairingReadyV2::write_to(&mut child, [3; 16]).unwrap();
+        DeliveredAckV2::read_from(&mut child, next_nonce).unwrap();
+        PairingReadyV2::write_to(&mut child, nonce).unwrap();
         release_rx.recv_timeout(BOUND).unwrap();
     });
     acknowledge(&mut parent).unwrap();
