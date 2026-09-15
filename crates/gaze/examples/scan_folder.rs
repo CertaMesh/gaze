@@ -85,7 +85,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         let counts = counts_by_class(&manifest);
 
         summary.files += 1;
-        summary.detections += manifest.len();
+        // Count detections, not replacements. With residual coverage on by
+        // default a recognized value can contribute a second span covering the
+        // evidenced-but-unselected bytes beside it; that fragment is protected
+        // output, not a thing we detected, so counting it would overstate.
+        summary.detections += manifest
+            .iter()
+            .filter(|span| span.origin.is_whole())
+            .count();
         for (class, count) in &counts {
             *summary.by_class.entry(class.clone()).or_insert(0) += count;
         }
@@ -204,7 +211,7 @@ fn read_text_files(root: &Path) -> Result<(Vec<InputFile>, usize), Box<dyn Error
 
 fn counts_by_class(manifest: &[EmittedTokenSpan]) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
-    for span in manifest {
+    for span in manifest.iter().filter(|span| span.origin.is_whole()) {
         *counts.entry(span.class.class_name()).or_insert(0) += 1;
     }
     counts
