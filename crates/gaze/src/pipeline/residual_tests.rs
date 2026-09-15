@@ -1042,7 +1042,10 @@ fn generic_production_registration_keeps_builtins_previewable_and_covering() {
 
     // Same shape as AssemblyBuilder::rule: the concrete type survives only
     // because the parameter stays generic all the way to PipelineBuilder::rule.
-    fn register<R: Rule + 'static>(builder: crate::PipelineBuilder, rule: R) -> crate::PipelineBuilder {
+    fn register<R: Rule + 'static>(
+        builder: crate::PipelineBuilder,
+        rule: R,
+    ) -> crate::PipelineBuilder {
         builder.rule(rule)
     }
 
@@ -1095,7 +1098,10 @@ fn is_metadata_only_source_id(value: &str) -> bool {
     if value.is_empty() || value.len() > 128 {
         return false;
     }
-    let alnum = |part: &str| part.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+    let alnum = |part: &str| {
+        part.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    };
     let mut parts = value.split(['.', '_', ':', '/', '-']);
     let first = parts.next().expect("split always yields one part");
     first.starts_with(|c: char| c.is_ascii_lowercase())
@@ -1128,7 +1134,9 @@ fn wire_fixture(raw: &str, manifest: &[EmittedTokenSpan], trace: &[GazeLocalProt
         let class = item.class().to_canonical_str();
         assert!(
             ["email", "name", "location", "organization"].contains(&class.as_str())
-                || class.strip_prefix("custom:").is_some_and(|rest| !rest.is_empty()),
+                || class
+                    .strip_prefix("custom:")
+                    .is_some_and(|rest| !rest.is_empty()),
             "trace[{index}].class: {class} is not a canonical PiiClass representation"
         );
         let projection = (item.stage(), item.decision(), item.action());
