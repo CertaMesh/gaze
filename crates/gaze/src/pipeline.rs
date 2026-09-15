@@ -724,7 +724,7 @@ impl Pipeline {
                 )?;
                 Ok((
                     CleanDocument::Text(clean.text),
-                    clean.manifest.into_spans(),
+                    clean.manifest.into_spans()?,
                     report,
                 ))
             }
@@ -781,7 +781,7 @@ impl Pipeline {
         let trace = protection_trace.finish(&clean.manifest.projection().spans)?;
         Ok((
             CleanDocument::Text(clean.text),
-            clean.manifest.into_spans(),
+            clean.manifest.into_spans()?,
             report,
             trace,
         ))
@@ -2806,7 +2806,7 @@ fn validate_terminal_manifest(
     if clean.text.len() - clean_cursor > original_raw_len - raw_cursor {
         return Err(manifest_integrity_error("invalid terminal trailing gap"));
     }
-    Ok(())
+    clean.manifest.validate()
 }
 
 /// Classify without audit or mutation. Callers validate the manifest for their coordinate phase.

@@ -133,6 +133,7 @@ impl Pipeline {
             &mut expected,
             &mut spans,
         )?;
+        spans.validate().map_err(|_| ProtectionError::Provenance)?;
         let manifest = spans.projection();
         let entries = transaction.snapshot_entries();
         let mut restored = String::new();
@@ -255,6 +256,7 @@ impl Pipeline {
             ));
             raw_cursor = raw_end;
         }
+        spans.validate().map_err(|_| ProtectionError::Provenance)?;
         let manifest = spans.projection();
         let report = self
             .run_safety_nets_in_context(

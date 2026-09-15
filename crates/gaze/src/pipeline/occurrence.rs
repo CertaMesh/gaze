@@ -83,6 +83,7 @@ pub(super) struct Segment {
     pub(super) originals: Vec<Candidate>,
     pub(super) original_raw: Vec<Range<usize>>,
     pub(super) selections: Vec<Selection>,
+    pub(super) events: Arc<[crate::resolver::ResolutionEvent]>,
     pub(super) raw_offset: usize,
     pub(super) clean_offset: usize,
     pub(super) basis: Basis,
@@ -158,8 +159,9 @@ impl Ledger {
             Arc::new(Manifest::from_spans(self.iter().cloned().collect()))
         })
     }
-    pub(super) fn into_spans(self) -> Vec<EmittedTokenSpan> {
-        self.records.into_iter().map(|r| r.emitted).collect()
+    pub(super) fn into_spans(self) -> Result<Vec<EmittedTokenSpan>> {
+        self.validate()?;
+        Ok(self.records.into_iter().map(|r| r.emitted).collect())
     }
     pub(super) fn insert(&mut self, mut record: Occurrence) {
         self.projection.take();
@@ -242,6 +244,7 @@ impl Ledger {
             originals: Vec::new(),
             original_raw: Vec::new(),
             selections: Vec::new(),
+            events: Arc::from([]),
             raw_offset: emitted.raw_span.start,
             clean_offset: emitted.clean_span.start,
             basis: Basis::ExpandedOwnedInput,
@@ -318,9 +321,72 @@ impl Ledger {
             if segment.originals.len() != segment.original_raw.len() {
                 return Err(manifest_integrity_error("evidence length mismatch"));
             }
+            use crate::resolver::{PairOutcome, ResolutionEvent};
+            let mut pairs = BTreeMap::new();
+            let mut structural_parents = std::collections::BTreeSet::new();
+            for event in segment.events.iter() {
+                if let ResolutionEvent::Pair {
+                    existing,
+                    incoming,
+                    result,
+                    outcome,
+                } = event
+                {
+                    if *result < segment.originals.len()
+                        || *existing >= *result
+                        || *incoming >= *result
+                        || existing == incoming
+                        || (*existing >= segment.originals.len() && !pairs.contains_key(existing))
+                        || (*incoming >= segment.originals.len() && !pairs.contains_key(incoming))
+                        || pairs
+                            .insert(*result, (*existing, *incoming, outcome))
+                            .is_some()
+                    {
+                        return Err(manifest_integrity_error("invalid resolver node identity"));
+                    }
+                    match outcome {
+                        PairOutcome::Merge | PairOutcome::Family => {
+                            structural_parents.insert(*existing);
+                            structural_parents.insert(*incoming);
+                        }
+                        PairOutcome::Existing(_) => {
+                            structural_parents.insert(*existing);
+                        }
+                        PairOutcome::Incoming(_) => {
+                            structural_parents.insert(*incoming);
+                        }
+                    }
+                }
+            }
             let mut nodes = std::collections::BTreeSet::new();
             let mut members = std::collections::BTreeSet::new();
             for selection in &segment.selections {
+                let mut pending = vec![selection.node];
+                let mut expected = Vec::new();
+                let mut visited = std::collections::BTreeSet::new();
+                while let Some(node) = pending.pop() {
+                    if !visited.insert(node) {
+                        return Err(manifest_integrity_error("repeated structural node"));
+                    }
+                    if node < segment.originals.len() {
+                        expected.push(node);
+                        continue;
+                    }
+                    let (existing, incoming, outcome) = pairs.get(&node).ok_or_else(|| {
+                        manifest_integrity_error("unknown resolver selection node")
+                    })?;
+                    match outcome {
+                        PairOutcome::Merge | PairOutcome::Family => {
+                            pending.push(*incoming);
+                            pending.push(*existing);
+                        }
+                        PairOutcome::Existing(_) => pending.push(*existing),
+                        PairOutcome::Incoming(_) => pending.push(*incoming),
+                    }
+                }
+                if expected != selection.members || (!selection.recovered && structural_parents.contains(&selection.node)) || (selection.recovered && !segment.events.iter().any(|e| matches!(e, ResolutionEvent::Recovery { node, raw, .. } if *node == selection.node && *raw == selection.raw))) {
+                    return Err(manifest_integrity_error("resolver selection identity mismatch"));
+                }
                 if !nodes.insert(selection.node)
                     || selection.members.iter().any(|id| !members.insert(*id))
                     || selection.members.is_empty()
@@ -338,8 +404,9 @@ impl Ledger {
                 .phases
                 .get(observation.phase)
                 .ok_or_else(|| manifest_integrity_error("invalid observation phase"))?;
-            if observation.suspect.span.start >= observation.suspect.span.end
-                || observation.suspect.span.end > phase.text_len
+            if phase.batch != Batch::Deletion
+                && (observation.suspect.span.start >= observation.suspect.span.end
+                    || observation.suspect.span.end > phase.text_len)
             {
                 return Err(manifest_integrity_error("invalid observed parent bounds"));
             }
@@ -428,6 +495,11 @@ impl Ledger {
                     }
                 }
                 Origin::Unknown => {}
+            }
+            if record.action == Some(Action::Tokenize) && !record.owned {
+                return Err(manifest_integrity_error(
+                    "tokenizing occurrence is not owned",
+                ));
             }
             if matches!(record.action, Some(Action::Redact | Action::Generalize)) && record.owned {
                 return Err(manifest_integrity_error(
@@ -834,19 +906,39 @@ mod tests {
         struct Ambiguous;
         impl Detector for Ambiguous {
             fn detect(&self, text: &str) -> Vec<Detection> {
-                vec![Detection::new(0..text.len(), PiiClass::Email, "synthetic.email"), Detection::new(0..text.len(), PiiClass::Name, "synthetic.name")]
+                vec![
+                    Detection::new(0..text.len(), PiiClass::Email, "synthetic.email"),
+                    Detection::new(0..text.len(), PiiClass::Name, "synthetic.name"),
+                ]
             }
         }
         let session = Session::new(crate::Scope::Ephemeral).unwrap();
-        let pipeline = Pipeline::builder().detector(Ambiguous).rule(crate::rule::DefaultRule::new(Action::Tokenize)).build().unwrap();
-        let clean = pipeline.redact_text_with_manifest_uncached(&mut ProtectionTarget::Live(&session), "alice@example.invalid", None, DocumentKind::Text, &[crate::LocaleTag::Global], &DictionaryBundle::default(), None).unwrap();
+        let pipeline = Pipeline::builder()
+            .detector(Ambiguous)
+            .rule(crate::rule::DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let clean = pipeline
+            .redact_text_with_manifest_uncached(
+                &mut ProtectionTarget::Live(&session),
+                "alice@example.invalid",
+                None,
+                DocumentKind::Text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                None,
+            )
+            .unwrap();
         let selected = &clean.manifest.segments[0].selections[0];
         assert_eq!(selected.members.len(), 1);
         let other = 1 - selected.members[0];
         for mode in 0..2 {
             let mut corrupt = clean.manifest.clone();
-            if mode == 0 { corrupt.segments[0].selections[0].members[0] = other; }
-            else { corrupt.segments[0].selections[0].node = other; }
+            if mode == 0 {
+                corrupt.segments[0].selections[0].members[0] = other;
+            } else {
+                corrupt.segments[0].selections[0].node = other;
+            }
             assert!(corrupt.validate().is_err(), "wrong source identity {mode}");
         }
     }
@@ -924,6 +1016,175 @@ mod tests {
         }
         assert_eq!(clean.manifest.projections.get(), 2);
         assert_eq!(session.restore_strict_text(&clean.text).unwrap(), raw);
+    }
+
+    #[test]
+    fn real_two_net_orchestration_reuses_then_invalidates_phase_projections() {
+        use std::sync::Mutex;
+        type Calls = Arc<Mutex<Vec<(usize, usize, String, usize, usize)>>>;
+        struct Script {
+            net: usize,
+            step: Mutex<usize>,
+            calls: Calls,
+        }
+        impl SafetyNet for Script {
+            fn id(&self) -> &str {
+                if self.net == 0 {
+                    "synthetic.net"
+                } else {
+                    "synthetic.observer"
+                }
+            }
+            fn supported_locales(&self) -> &[crate::LocaleTag] {
+                &[crate::LocaleTag::Global]
+            }
+            fn check(
+                &self,
+                text: &str,
+                context: SafetyNetContext<'_>,
+            ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+                let mut step = self.step.lock().unwrap();
+                self.calls.lock().unwrap().push((
+                    self.net,
+                    *step,
+                    text.to_owned(),
+                    context.manifest as *const Manifest as usize,
+                    context.manifest.spans.len(),
+                ));
+                assert!(*step < 4, "no extra sweep");
+                let result = if self.net == 1 {
+                    vec![]
+                } else {
+                    match *step {
+                        0 => vec![suspect(0..2, LeakKind::Uncovered)],
+                        1 => vec![suspect(text.len() - 4..text.len() - 2, LeakKind::Uncovered)],
+                        2 => vec![suspect(
+                            text.len() - 2..text.len(),
+                            LeakKind::ClassMismatch {
+                                pipeline_class: PiiClass::Email,
+                                safety_net_class: PiiClass::Name,
+                            },
+                        )],
+                        3 => vec![],
+                        _ => unreachable!(),
+                    }
+                };
+                *step += 1;
+                Ok(result)
+            }
+        }
+        let (session, mut clean) = primary("aaalice@example.invalidbbcc", Action::Tokenize);
+        let payloads = clean.manifest.segments[0].originals.as_ptr();
+        let calls = Calls::default();
+        let pipeline = Pipeline::builder()
+            .register_safety_net(Script {
+                net: 0,
+                step: Mutex::new(0),
+                calls: calls.clone(),
+            })
+            .register_safety_net(Script {
+                net: 1,
+                step: Mutex::new(0),
+                calls: calls.clone(),
+            })
+            .build()
+            .unwrap();
+        let mut target = ProtectionTarget::Live(&session);
+        let decision = SafetyNetDecision::Resolve {
+            on_residual: SafetyNetFallback::Redact,
+        };
+        let locales = &[crate::LocaleTag::Global];
+        let mut report = pipeline
+            .run_safety_nets(
+                &mut target,
+                &clean.text,
+                clean.manifest.projection(),
+                DocumentKind::Text,
+                locales,
+                None,
+                decision,
+            )
+            .unwrap();
+        pipeline
+            .apply_safety_net_policy(
+                &mut target,
+                &mut clean,
+                &mut report,
+                DocumentKind::Text,
+                locales,
+                None,
+                decision,
+                None,
+            )
+            .unwrap();
+        clean.manifest.validate().unwrap();
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 8);
+        for (phase, pair) in calls.chunks_exact(2).enumerate() {
+            assert_eq!((pair[0].0, pair[1].0), (0, 1));
+            assert_eq!((pair[0].1, pair[1].1), (phase, phase));
+            assert_eq!(pair[0].2, pair[1].2);
+            assert_eq!(pair[0].3, pair[1].3, "nets share the unchanged phase");
+            assert_eq!(
+                (pair[0].4, pair[1].4),
+                ([1, 2, 3, 3][phase], [1, 2, 3, 3][phase])
+            );
+            if phase > 0 {
+                assert_ne!(pair[0].2, calls[(phase - 1) * 2].2);
+                assert_ne!(
+                    pair[0].3,
+                    calls[(phase - 1) * 2].3,
+                    "changed output invalidates projection"
+                );
+            }
+        }
+        assert!(calls[0].2.starts_with("aa"));
+        assert!(calls[2].2.ends_with("bbcc"));
+        assert!(calls[4].2.ends_with("cc"));
+        assert_eq!(calls[6].2, clean.text);
+        assert_eq!(
+            session.restore_strict_text(&clean.text).unwrap(),
+            "aaalice@example.invalidbb"
+        );
+        assert_eq!(clean.manifest.projections.get(), 4);
+        assert_eq!(
+            clean
+                .manifest
+                .phases
+                .iter()
+                .map(|p| p.batch)
+                .collect::<Vec<_>>(),
+            vec![Batch::First, Batch::Second, Batch::Deletion]
+        );
+        for (i, phase) in clean.manifest.phases.iter().enumerate() {
+            assert_eq!(Arc::as_ptr(&phase.projection) as usize, calls[i * 2].3);
+        }
+        assert_eq!(clean.manifest.evidence_count(), 1);
+        assert_eq!(clean.manifest.segments[0].originals.as_ptr(), payloads);
+        assert_eq!(clean.manifest.observations.len(), 3);
+        assert_eq!(clean.manifest.deletions.len(), 1);
+        assert_eq!(clean.manifest.deletions[0].raw, Some(25..27));
+        assert!(clean.manifest.deletions[0].removed.is_empty());
+        assert_eq!(
+            clean
+                .manifest
+                .records
+                .iter()
+                .map(|r| r.emitted.raw_span.clone())
+                .collect::<Vec<_>>(),
+            vec![0..2, 2..23, 23..25]
+        );
+        // Retained geometry is 1 + 2 + 3 phase entries and 3 final entries, not one copy overall.
+        assert_eq!(
+            clean
+                .manifest
+                .phases
+                .iter()
+                .map(|p| p.projection.spans.len())
+                .sum::<usize>()
+                + clean.manifest.projection().spans.len(),
+            9
+        );
     }
 
     #[test]

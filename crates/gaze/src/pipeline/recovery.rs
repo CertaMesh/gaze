@@ -9,7 +9,7 @@ pub(super) struct WholePlan {
     pub(super) primary: Vec<Candidate>,
     pub(super) recovered: Vec<Candidate>,
     #[allow(dead_code)]
-    pub(super) events: Vec<ResolutionEvent>,
+    pub(super) events: std::sync::Arc<[ResolutionEvent]>,
     #[cfg(test)]
     pub(super) work: crate::resolver::ResolutionWork,
 }
@@ -68,18 +68,20 @@ pub(super) fn plan(
         recovered.extend(selected);
     }
     recovered.sort_by_key(|candidate| candidate.span.start);
+    let events: std::sync::Arc<[ResolutionEvent]> = std::mem::take(&mut pool.events).into();
     Ok(WholePlan {
         evidence: super::occurrence::Segment {
             originals: pool.take_originals(),
             original_raw: original_spans,
             selections,
+            events: std::sync::Arc::clone(&events),
             raw_offset: 0,
             clean_offset: 0,
             basis: super::occurrence::Basis::OriginalInput,
         },
         primary,
         recovered,
-        events: pool.events,
+        events,
         #[cfg(test)]
         work: pool.work,
     })
