@@ -928,6 +928,40 @@ fn residual_parent_order_cannot_replace_the_legacy_representative() {
     );
 }
 
+/// Everything else in this file reaches the engine through the `pipeline`
+/// helper, which sets `residual_coverage` explicitly. That is fine for proving
+/// behavior and useless for proving activation: a feature that only the tests
+/// switch on protects nothing.
+///
+/// So build the pipeline the way an adopter does, touch no internal field, and
+/// assert both that the default is on and that it actually covers. If someone
+/// flips the default back, this is the test that says so.
+#[test]
+fn residual_coverage_is_on_by_default_with_no_test_only_switch() {
+    let p = Pipeline::builder()
+        .recognizer(Fixed(pair()))
+        .rule(crate::rule::DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    assert!(
+        p.residual_coverage,
+        "residual coverage must be the shipped default, not an opt-in"
+    );
+
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&p, &session, RAW).unwrap();
+    assert_eq!(
+        output
+            .manifest
+            .iter()
+            .map(|s| s.raw_span.clone())
+            .collect::<Vec<_>>(),
+        vec![0..15, 15..21],
+        "the default build must emit the residual, not just admit it"
+    );
+    assert_eq!(session.restore_strict_text(&output.text).unwrap(), RAW);
+}
+
 /// Success measured only over eligible components is not coverage accounting.
 /// A real document mixes them, so pin both sides of the ledger on one input:
 /// what the admitted component gained, and exactly which admitted-union bytes

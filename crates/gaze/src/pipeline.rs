@@ -3521,7 +3521,7 @@ impl PipelineBuilder {
             optimization_config: self.optimization_config,
             restore_boundary_dlp_audit: self.restore_boundary_dlp_audit,
             rules: self.rules,
-            residual_coverage: false,
+            residual_coverage: true,
         })
     }
 }
