@@ -218,7 +218,9 @@ impl SafetyNet for RejectingNet {
         let first = &context.manifest.spans[0].clean_span;
         let span = match self.rejection {
             Rejection::Gap => {
-                let i = text.find("gap").unwrap();
+                let Some(i) = text.find("gap") else {
+                    return Ok(vec![]);
+                };
                 i..i + 3
             }
             Rejection::Spill => first.start..first.end + 1,
@@ -252,10 +254,85 @@ impl SafetyNet for RejectingNet {
     }
 }
 
+/// A raw gap the terminal scan reports is the one shape the deletion *does* now authorize acting
+/// on — reversibly. It is plain surviving text that touches no token and contains no seam, so the
+/// terminal round tokenizes it and the document completes with its original bytes named.
 #[test]
-fn deletion_does_not_authorize_raw_gaps_spills_foreign_tokens_or_malformed_reports() {
+fn deletion_authorizes_one_reversible_round_over_a_raw_gap() {
+    for route in [Route::Live, Route::Staged, Route::Trace] {
+        let foreign = Session::new(Scope::Ephemeral)
+            .unwrap()
+            .tokenize(&PiiClass::Name, "synthetic")
+            .unwrap();
+        let raw = format!("barrier seed gap seed residual {foreign} é");
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(RejectingNet {
+                ordering: OrderingNet(seen.clone()),
+                rejection: Rejection::Gap,
+            })
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let dictionaries = DictionaryBundle::default();
+        let result = match route {
+            Route::Live => pipeline.clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text(raw.clone()),
+                &[LocaleTag::Global],
+                &dictionaries,
+                SafetyNetPolicy::default(),
+            ),
+            Route::Staged => pipeline.clean_transaction_with_safety_net_policy_detect_context(
+                &mut transaction,
+                RawDocument::Text(raw.clone()),
+                &[LocaleTag::Global],
+                &dictionaries,
+                SafetyNetPolicy::default(),
+            ),
+            Route::Trace => pipeline
+                .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                    &session,
+                    &raw,
+                    &[LocaleTag::Global],
+                    &dictionaries,
+                    SafetyNetPolicy::default(),
+                )
+                .map(|(doc, spans, report, _)| (doc, spans, report)),
+        };
+        let (CleanDocument::Text(text), spans, _) =
+            result.unwrap_or_else(|error| panic!("{route:?}: {error:?}"))
+        else {
+            panic!("text")
+        };
+        assert!(!text.contains("gap"), "{route:?} shipped the gap raw");
+        assert_eq!(
+            spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
+            [8..12, 13..16, 17..21],
+            "{route:?}: the round names the gap's ORIGINAL bytes, past the deleted barrier"
+        );
+        let target: &dyn Fn(&str) -> Option<String> = &|token| match route {
+            Route::Staged => transaction.restore(token),
+            _ => session.restore(token),
+        };
+        assert_eq!(
+            target(&text[spans[1].clean_span.clone()]).as_deref(),
+            Some("gap")
+        );
+        assert_eq!(
+            seen.lock().unwrap().len(),
+            4,
+            "{route:?}: one extra sweep, and only one"
+        );
+        drop(transaction);
+    }
+}
+
+#[test]
+fn deletion_does_not_authorize_spills_foreign_tokens_or_malformed_reports() {
     for rejection in [
-        Rejection::Gap,
         Rejection::Spill,
         Rejection::AcrossGap,
         Rejection::ForeignToken,
@@ -317,6 +394,10 @@ fn deletion_does_not_authorize_raw_gaps_spills_foreign_tokens_or_malformed_repor
                     "{route:?} {rejection:?}: {result:?}"
                 );
             } else {
+                // Spill and AcrossGap claim `Uncovered` over bytes a live token owns; the rest
+                // name no real range at all. Either way the suspect contradicts the document it
+                // was computed against, so it cannot be judged — and therefore cannot be
+                // resolved, admitted or deleted.
                 assert!(
                     matches!(
                         result,

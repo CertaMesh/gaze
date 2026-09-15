@@ -33,6 +33,9 @@ pub(super) enum Batch {
     First,
     Second,
     Deletion,
+    /// The one reversible round the terminal phase runs on its own scan, after the fallback has
+    /// already deleted. Its own batch so the ledger records which round minted a token.
+    Terminal,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Basis {
@@ -100,6 +103,10 @@ struct Phase {
     projection: Arc<Manifest>,
     batch: Batch,
     raw_offset: usize,
+    /// Original ranges already removed when this phase was taken, phase-local like `projection`.
+    /// Without them the projection alone describes a document that no longer exists, and the raw
+    /// re-derivation below would reject every token the terminal round mints.
+    removed: Vec<Range<usize>>,
 }
 #[derive(Clone, Debug, PartialEq)]
 struct Observation {
@@ -146,6 +153,15 @@ impl Ledger {
     pub(super) fn records(&self) -> &[Occurrence] {
         &self.records
     }
+    /// Original-request ranges the fallback removed, in the order they were applied.
+    ///
+    /// Raw coordinates: unlike the clean spans on every other record, nothing a later edit does
+    /// to the clean text shifts these, which is what makes a post-deletion clean/raw layout
+    /// reconstructible at all. `None` is an undescribed deletion, which the caller fails closed
+    /// on rather than guessing.
+    pub(super) fn deleted_raw(&self) -> impl ExactSizeIterator<Item = Option<&Range<usize>>> {
+        self.deletions.iter().map(|deletion| deletion.raw.as_ref())
+    }
     pub(super) fn iter(
         &self,
     ) -> impl DoubleEndedIterator<Item = &EmittedTokenSpan> + ExactSizeIterator {
@@ -186,6 +202,11 @@ impl Ledger {
         self.records.insert(index, record);
     }
     pub(super) fn phase(&mut self, text_len: usize, batch: Batch) -> usize {
+        let removed = self
+            .deletions
+            .iter()
+            .filter_map(|deletion| deletion.raw.clone())
+            .collect();
         let projection = Arc::clone(self.project_arc());
         let id = self.phases.len();
         self.phases.push(Phase {
@@ -193,6 +214,7 @@ impl Ledger {
             projection,
             batch,
             raw_offset: 0,
+            removed,
         });
         id
     }
@@ -507,10 +529,27 @@ impl Ledger {
                             "invalid observed replacement relation",
                         ));
                     }
-                    let start = map_clean_boundary_to_raw(&phase.projection.spans, clean.start)
-                        .and_then(|v| v.checked_add(phase.raw_offset));
-                    let end = map_clean_boundary_to_raw(&phase.projection.spans, clean.end)
-                        .and_then(|v| v.checked_add(phase.raw_offset));
+                    // `map_clean_boundary_to_raw` assumes the projection describes the whole
+                    // document, which stops being true the moment the fallback deletes from it,
+                    // so a phase that follows a deletion is re-derived through its own layout.
+                    let (start, end) = if phase.removed.is_empty() {
+                        (
+                            map_clean_boundary_to_raw(&phase.projection.spans, clean.start),
+                            map_clean_boundary_to_raw(&phase.projection.spans, clean.end),
+                        )
+                    } else {
+                        let layout = CleanLayout::from_parts(
+                            phase.projection.spans.iter(),
+                            phase.removed.clone(),
+                            phase.text_len,
+                        )?;
+                        (
+                            layout.boundary(clean.start, Side::Start),
+                            layout.boundary(clean.end, Side::End),
+                        )
+                    };
+                    let start = start.and_then(|v| v.checked_add(phase.raw_offset));
+                    let end = end.and_then(|v| v.checked_add(phase.raw_offset));
                     if start != Some(record.emitted.raw_span.start)
                         || end != Some(record.emitted.raw_span.end)
                     {
@@ -723,11 +762,11 @@ mod tests {
                     .unwrap(),
                 None
             ),
-            Batch::Second => {
+            Batch::Second | Batch::Terminal => {
                 let FollowupResolution::Ready(plan) =
                     plan_followup_resolutions(&target, clean, &report, None).unwrap()
                 else {
-                    panic!("ready second batch")
+                    panic!("ready follow-up batch")
                 };
                 pipeline
                     .apply_followup_resolutions(
@@ -735,6 +774,8 @@ mod tests {
                         clean,
                         plan,
                         DocumentKind::Text,
+                        None,
+                        batch,
                         None,
                         None,
                     )

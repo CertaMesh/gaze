@@ -209,6 +209,53 @@ core. A safety net cannot rewrite, append to, or veto the clean text: under an
 enforcing policy it is still the core's tokenizer and redactor that mutate the
 document, driven by the report, never the backend.
 
+### Terminal admission after a `Redact` fallback
+
+Under `Resolve` + `Redact` the fallback *deletes* the residual spans it could
+not resolve. Deleting bytes changes the whole input string, so the scan that
+follows is the first pass to see that text, and it routinely reports a short
+sub-word span that the earlier passes read and accepted. Denying on every such
+span held a fallback document to a standard no completing document has to meet.
+
+The terminal report instead gets one reversible round and one bounded deletion,
+and each remaining suspect is classified into a closed set:
+
+| Case | Condition | Outcome |
+|------|-----------|---------|
+| `FallbackIncomplete` | The suspect covers bytes the fallback's own audit rows say it removed. | Deny. Nothing further is deleted first. |
+| `SeamManufactured` | The suspect's span strictly **contains** a deletion seam, so part of its shape exists only because the fallback removed what sat between two fragments. Abutting a seam is not this. | One bounded deletion through the ordinary fallback path. A second one denies. |
+| `Unjudgeable` | The suspect names no real range of the document, its own coverage claim contradicts the manifest, or the bytes it covers carry a token shape this pipeline never minted. | Deny. |
+| `Admit` | Anything else: a finding about the document that no stage is permitted to act on. | Merged into the returned `LeakReport`; the document completes carrying it. |
+
+Both bounds — one reversible round, one deletion — are straight-line code, not a
+loop with a counter. After they are spent, one more scan runs and the same
+classification applies: `Admit` ships with an honest report, anything else
+denies. Admission is strictly wider than the rule it replaced, so no document
+that completed before can begin denying.
+
+The round tokenizes; it never deletes. Its audit rows are
+`decided_by: Resolve` with `action: Tokenize`, carrying the `FallbackReason`
+that made the round run — the combination that tells them apart from the
+second batch's rows. The protection trace projects them as an ordinary
+`("safety_net", "resolve", "tokenize")`, so the benchmark scorer's closed
+provenance set is unchanged.
+
+**Coordinates.** `map_clean_boundary_to_raw` infers original-request offsets
+from the manifest alone, assuming every untokenized clean run stands for an
+equal-length raw run. A deletion removes clean bytes and no raw bytes, so that
+assumption fails for everything after the first removed region. The terminal
+phase therefore works through a layout rebuilt from the deletion ledger's raw
+coordinates — the one system no later edit shifts — reconciled against the
+manifest's clean spans; a document that disagrees with its own ledger fails
+closed. A clean boundary landing exactly on a seam has two truthful raw images,
+so it resolves by direction: a span **starts** at the first surviving byte after
+the removed range and **ends** at the last surviving byte before it. A
+resolution gap must map to exactly as many raw bytes as it has clean bytes,
+which is what prevents a token standing for bytes on both sides of a seam.
+
+**Cost.** A fallback document whose terminal scan reports anything runs one
+extra model pass. Only documents that reach the `Redact` fallback can.
+
 ### Locale gating
 
 Each `SafetyNet` declares `supported_locales`. When the session-level locale

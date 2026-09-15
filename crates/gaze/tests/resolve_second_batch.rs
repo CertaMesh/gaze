@@ -141,6 +141,9 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
         let b = session
             .tokenize_with_family("safety_net", &PiiClass::Name, "bé")
             .unwrap();
+        let tail = session
+            .tokenize_with_family("safety_net", &PiiClass::Name, "tail")
+            .unwrap();
         let first = "a bé delete primary tail";
         let scan1 = "a bé delete [REDACTED] tail";
         let scan2 = format!("{a} bé delete [REDACTED] tail");
@@ -158,7 +161,7 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
             3 => Ok(vec![raw(0..0)]),
             _ => Ok(vec![raw(0..final_text.len() + 1)]),
         };
-        let queue = Arc::new(Mutex::new(VecDeque::from(vec![
+        let mut sweeps = vec![
             (scan1.into(), Ok(vec![raw(0..1)])),
             (scan2.clone(), Ok(vec![raw(a.len() + 1..a.len() + 4)])),
             (
@@ -166,7 +169,14 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
                 Ok(vec![raw(a.len() + b.len() + 2..a.len() + b.len() + 9)]),
             ),
             (final_text.clone(), terminal_report),
-        ])));
+        ];
+        // Case 1 is the only terminal report the round can act on: a fresh finding on plain
+        // surviving text. It gets one reversible round and one settled sweep.
+        let resolved = format!("{a} {b} [REDACTED] {tail}");
+        if terminal == 1 {
+            sweeps.push((resolved.clone(), Ok(vec![])));
+        }
+        let queue = Arc::new(Mutex::new(VecDeque::from(sweeps)));
         let rows = Arc::new(Mutex::new(vec![]));
         let p = Pipeline::builder()
             .detector(Primary)
@@ -180,6 +190,39 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
             .build()
             .unwrap();
         let result = run(&p, &session, first, SafetyNetPolicy::default());
+        if terminal == 1 {
+            let (CleanDocument::Text(text), spans, _) = result.unwrap() else {
+                panic!("text")
+            };
+            assert_eq!(text, resolved);
+            assert_eq!(
+                spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
+                [0..1, 2..5, 13..20, 21..25],
+                "the terminal round names the tail's ORIGINAL bytes across the deleted range"
+            );
+            assert_eq!(
+                session.restore_strict_text(&text).unwrap(),
+                "a bé [REDACTED] tail"
+            );
+            assert!(queue.lock().unwrap().is_empty());
+            assert_eq!(
+                rows.lock()
+                    .unwrap()
+                    .iter()
+                    .map(|r| (r.action, r.fallback_triggered.is_some()))
+                    .collect::<Vec<_>>(),
+                [
+                    (Action::Redact, false),
+                    (Action::Tokenize, false),
+                    (Action::Tokenize, false),
+                    (Action::Redact, true),
+                    // The terminal round's row carries the reason that made it run, which is
+                    // what separates it from the second batch's rows above.
+                    (Action::Tokenize, true),
+                ]
+            );
+            continue;
+        }
         if terminal == 0 {
             let (CleanDocument::Text(text), spans, report) = result.unwrap() else {
                 panic!("text")
@@ -463,7 +506,7 @@ fn second_batch_success_then_backend_failure_retains_new_mapping_without_fallbac
 }
 
 #[test]
-fn second_batch_four_sweeps_can_mean_eight_backend_calls_and_never_a_third_batch() {
+fn five_sweeps_can_mean_ten_backend_calls_and_still_only_one_second_batch() {
     let session = Session::new(Scope::Ephemeral).unwrap();
     let a = session
         .tokenize_with_family("safety_net", &PiiClass::Name, "a")
@@ -471,11 +514,15 @@ fn second_batch_four_sweeps_can_mean_eight_backend_calls_and_never_a_third_batch
     let b = session
         .tokenize_with_family("safety_net", &PiiClass::Name, "b")
         .unwrap();
+    let c = session
+        .tokenize_with_family("safety_net", &PiiClass::Name, "é")
+        .unwrap();
     let texts = [
         "a b c é".to_owned(),
         format!("{a} b c é"),
         format!("{a} {b} c é"),
         format!("{a} {b}  é"),
+        format!("{a} {b}  {c}"),
     ];
     let active = Arc::new(Mutex::new(VecDeque::from(vec![
         (texts[0].clone(), Ok(vec![raw(0..1)])),
@@ -488,6 +535,7 @@ fn second_batch_four_sweeps_can_mean_eight_backend_calls_and_never_a_third_batch
             texts[3].clone(),
             Ok(vec![raw(texts[3].len() - 2..texts[3].len())]),
         ),
+        (texts[4].clone(), Ok(vec![])),
     ])));
     let passive = Arc::new(Mutex::new(
         texts
@@ -501,13 +549,26 @@ fn second_batch_four_sweeps_can_mean_eight_backend_calls_and_never_a_third_batch
         .register_safety_net(Script(passive.clone()))
         .build()
         .unwrap();
-    assert!(matches!(
-        run(&p, &session, &texts[0], SafetyNetPolicy::default()),
-        Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
-    ));
+    let (CleanDocument::Text(text), spans, _) =
+        run(&p, &session, &texts[0], SafetyNetPolicy::default()).unwrap()
+    else {
+        panic!("text")
+    };
+    assert_eq!(text, texts[4]);
+    assert_eq!(
+        spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
+        [0..1, 2..3, 6..8]
+    );
+    // Restore is exact for everything the fallback did not delete; `c` is gone by the documented
+    // `Redact` contract.
+    assert_eq!(session.restore_strict_text(&text).unwrap(), "a b  é");
     assert!(active.lock().unwrap().is_empty());
     assert!(passive.lock().unwrap().is_empty());
-    assert_eq!(session.tokens().len(), 2, "no terminal tokenization");
+    assert_eq!(
+        session.tokens().len(),
+        3,
+        "one token per batch: first resolve, second batch, terminal round — and no more"
+    );
 }
 
 #[test]

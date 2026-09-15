@@ -1557,6 +1557,8 @@ impl Pipeline {
                                     plan,
                                     document_kind,
                                     field_path,
+                                    Batch::Second,
+                                    None,
                                     protection_trace.as_deref_mut(),
                                 )?;
                                 report.extend(LeakReport::from_parts(acted_on, Vec::new()));
@@ -1599,10 +1601,15 @@ impl Pipeline {
                             .iter()
                             .map(|suspect| (*suspect).clone())
                             .collect::<Vec<_>>();
-                        // Freeze pipeline-produced replacements before deletion shifts clean spans.
+                        // Freeze pipeline-produced replacements, and what the fallback's audit
+                        // rows are about to claim, before deletion shifts clean spans and the
+                        // affine mapper stops being exact.
                         let terminal_provenance =
                             if matches!(on_residual, SafetyNetFallback::Redact) {
-                                Some(TerminalManifestProvenance::capture(target, clean)?)
+                                Some((
+                                    TerminalManifestProvenance::capture(target, clean)?,
+                                    FallbackPromise::capture(clean, &actionable)?,
+                                ))
                             } else {
                                 None
                             };
@@ -1614,7 +1621,7 @@ impl Pipeline {
                             field_path,
                             on_residual,
                             reason,
-                            protection_trace,
+                            protection_trace.as_deref_mut(),
                         )?;
                         (acted_on, terminal_provenance)
                     };
@@ -1627,31 +1634,204 @@ impl Pipeline {
                     if residual_report.is_some() {
                         report.extend(LeakReport::from_parts(acted_on, Vec::new()));
                     }
-                    if let Some(provenance) = terminal_provenance {
-                        // Deletion can expose new context. Admit only after a terminal scan of
-                        // the actual output; never resolve again or delete a protected token.
-                        let final_report = self.run_safety_nets(
+                    if let Some((provenance, promise)) = terminal_provenance {
+                        self.admit_terminal_output(
                             target,
-                            &clean.text,
-                            clean.manifest.projection(),
+                            clean,
+                            report,
                             document_kind,
                             locale_chain,
                             field_path,
                             decision,
+                            provenance,
+                            promise,
+                            protection_trace,
                         )?;
-                        if !final_report.suspects.is_empty() {
-                            validate_terminal_manifest(target, clean, &provenance)?;
-                        }
-                        if let Some(reason) =
-                            unprotected_suspect_reason(target, clean, &final_report)
-                        {
-                            return Err(Error::SafetyNetFallback(reason));
-                        }
                     }
                 }
                 Ok(())
             }
         }
+    }
+
+    /// Decide a document the `Redact` fallback has just deleted from.
+    ///
+    /// The deletion changes the whole input string, so the terminal scan is the first pass to see
+    /// this text, and it routinely reports a sub-word span the three earlier passes read and
+    /// accepted. Denying on all of them held fallback documents to a standard no completing
+    /// document has to meet, over findings no stage was permitted to act on.
+    ///
+    /// So the terminal report gets one reversible round (tokenize, never delete) and one bounded
+    /// deletion of a shape the fallback itself manufactured, and then what is left is admitted
+    /// with an honest report — unless it names a concrete fallback failure, which still denies.
+    ///
+    /// Both bounds are spent in straight-line code: there is no loop to bound, and the counters
+    /// are the `Option` and the emptied `Vec`, not a convention.
+    #[allow(clippy::too_many_arguments)]
+    fn admit_terminal_output(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        clean: &mut CleanText,
+        report: &mut LeakReport,
+        document_kind: DocumentKind,
+        locale_chain: &[crate::LocaleTag],
+        field_path: Option<&str>,
+        decision: SafetyNetDecision,
+        provenance: TerminalManifestProvenance,
+        mut promise: FallbackPromise,
+        mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+    ) -> Result<()> {
+        let scanned = self.run_safety_nets(
+            target,
+            &clean.text,
+            clean.manifest.projection(),
+            document_kind,
+            locale_chain,
+            field_path,
+            decision,
+        )?;
+        if !scanned.suspects.is_empty() {
+            validate_terminal_manifest(target, clean, &provenance)?;
+        }
+        if unprotected_suspect_reason(target, clean, &scanned).is_none() {
+            return Ok(());
+        }
+
+        // Every judgement below is made against the ACTUAL current text. `CleanLayout::of` also
+        // reconciles the manifest against the deletion ledger, so a document whose own record of
+        // itself is wrong fails closed before anything acts on it.
+        let layout = CleanLayout::of(clean)?;
+        let survivors = promise.survivors(&layout);
+        let mut manufactured = None;
+        let mut resolvable = Vec::new();
+        for suspect in &scanned.suspects {
+            if suspect_is_inside_live_token(target, clean, suspect) {
+                continue;
+            }
+            let admission = layout.classify(clean, suspect, &survivors);
+            admission.observe("terminal_scan");
+            match admission {
+                TerminalAdmission::FallbackIncomplete { .. }
+                | TerminalAdmission::Unjudgeable { .. } => {
+                    return Err(Error::SafetyNetFallback(fallback_reason_for(suspect)));
+                }
+                // Bound: one deletion. A second manufactured shape in one report means the
+                // deletion is producing them at least as fast as it removes them, and unbounded
+                // byte deletion is worse than a denial.
+                TerminalAdmission::SeamManufactured { .. } => {
+                    if manufactured.replace(suspect.clone()).is_some() {
+                        return Err(Error::SafetyNetFallback(fallback_reason_for(suspect)));
+                    }
+                }
+                TerminalAdmission::Admit => resolvable.push(suspect.clone()),
+            }
+        }
+
+        if let Some(suspect) = manufactured {
+            // The deletion moves every clean offset after it, so the reversible round's targets
+            // are frozen in raw coordinates first — the only ones a mutation cannot move — and
+            // rebased afterwards.
+            let frozen = resolvable
+                .iter()
+                .map(|suspect| layout.map_span(&suspect.span))
+                .collect::<Result<Vec<_>>>()?;
+            let reason = fallback_reason_for(&suspect);
+            let claimed = layout.map_span(&expand_span_to_overlapping_manifest_entries(
+                clean,
+                round_span_outward_to_char_boundaries(&clean.text, suspect_action_span(&suspect))?,
+            ))?;
+            self.log_safety_net_entry(
+                target,
+                &suspect,
+                document_kind,
+                field_path,
+                Action::Redact,
+                true,
+                ConflictTier::Fallback,
+                Some(reason),
+            )?;
+            self.redact_safety_net_suspects(
+                target,
+                clean,
+                &[&suspect],
+                document_kind,
+                field_path,
+                Some(reason),
+                false,
+                protection_trace.as_deref_mut(),
+            )?;
+            report.extend(LeakReport::from_parts(vec![suspect], Vec::new()));
+            promise.claim(claimed);
+            // Byte check, not another model pass: whether the recorded bytes are still in the
+            // output is a fact about the output, and asking the model again would only produce
+            // another opinion to adjudicate.
+            let layout = CleanLayout::of(clean)?;
+            if !promise.survivors(&layout).is_empty() {
+                return Err(Error::SafetyNetFallback(reason));
+            }
+            for (suspect, raw) in resolvable.iter_mut().zip(frozen) {
+                suspect.span = layout
+                    .plain_clean_span_of_raw(&raw)
+                    .ok_or(Error::SafetyNetFallback(reason))?;
+            }
+        }
+
+        // Round one of one: tokenize, never delete. The `Redact` fallback is not re-entered here
+        // — a terminal deletion is only ever of a shape the fallback itself manufactured.
+        let round = LeakReport::from_parts(resolvable, Vec::new());
+        if !round.suspects.is_empty() {
+            let deny = unprotected_suspect_reason(target, clean, &round)
+                .unwrap_or(FallbackReason::ResidualSuspect);
+            let original = protection_trace.as_deref().map(|trace| trace.raw_text);
+            let FollowupResolution::Ready(plan) =
+                plan_followup_resolutions(target, clean, &round, original)?
+            else {
+                return Err(Error::SafetyNetFallback(deny));
+            };
+            let resolved = plan
+                .parents
+                .iter()
+                .map(|suspect| (*suspect).clone())
+                .collect::<Vec<_>>();
+            self.apply_followup_resolutions(
+                target,
+                clean,
+                plan,
+                document_kind,
+                field_path,
+                Batch::Terminal,
+                Some(deny),
+                protection_trace,
+            )?;
+            report.extend(LeakReport::from_parts(resolved, Vec::new()));
+        }
+
+        // One more pass over what the rounds produced, with both bounds spent: a suspect that
+        // still names a fallback failure denies, and anything else is a finding nothing is
+        // permitted to act on, so it ships in the report the caller receives.
+        let settled = self.run_safety_nets(
+            target,
+            &clean.text,
+            clean.manifest.projection(),
+            document_kind,
+            locale_chain,
+            field_path,
+            decision,
+        )?;
+        let layout = CleanLayout::of(clean)?;
+        let survivors = promise.survivors(&layout);
+        for suspect in &settled.suspects {
+            if suspect_is_inside_live_token(target, clean, suspect) {
+                continue;
+            }
+            let admission = layout.classify(clean, suspect, &survivors);
+            admission.observe("terminal_settled");
+            if !matches!(admission, TerminalAdmission::Admit) {
+                return Err(Error::SafetyNetFallback(fallback_reason_for(suspect)));
+            }
+        }
+        report.extend(LeakReport::from_parts(settled.suspects, Vec::new()));
+        Ok(())
     }
 
     fn resolve_safety_net_suspects(
@@ -1712,6 +1892,11 @@ impl Pipeline {
             // Establish the ORIGINAL-request interval before tokenization mutates the
             // session or any clean-text / manifest state.
             let raw_span = map_clean_span_to_raw(clean, &span)?;
+            if !resolution_gap_is_contiguous(&span, &raw_span) {
+                return Err(clean_to_raw_mapping_error(
+                    "resolution gap crosses removed bytes",
+                ));
+            }
             let raw = clean.text[span.clone()].to_string();
             plans.push(PlannedSafetyNetResolution {
                 suspect,
@@ -1759,6 +1944,7 @@ impl Pipeline {
                 origin,
                 document_kind,
                 field_path,
+                None,
                 protection_trace.as_deref_mut(),
             )?;
         }
@@ -1776,6 +1962,7 @@ impl Pipeline {
 
     /// Both reversible batches use identical publication, audit and trace ordering.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_resolution(
         &self,
         target: &mut ProtectionTarget<'_, '_>,
@@ -1784,6 +1971,10 @@ impl Pipeline {
         origin: Origin,
         document_kind: DocumentKind,
         field_path: Option<&str>,
+        // Set only for the terminal round, which resolves *because* the fallback fired. The row
+        // stays `decided_by: Resolve` with `action: Tokenize` — what happened to the bytes is
+        // unchanged — and the reason is what tells an auditor which round minted this token.
+        fallback_reason: Option<FallbackReason>,
         protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<()> {
         let suspect = plan.suspect;
@@ -1796,7 +1987,7 @@ impl Pipeline {
             Action::Tokenize,
             false,
             ConflictTier::Resolve,
-            None,
+            fallback_reason,
         )?;
         replace_clean_span_checked(
             clean,
@@ -1824,6 +2015,7 @@ impl Pipeline {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn apply_followup_resolutions(
         &self,
         target: &mut ProtectionTarget<'_, '_>,
@@ -1831,6 +2023,8 @@ impl Pipeline {
         plan: CompleteFollowupPlan<'_>,
         document_kind: DocumentKind,
         field_path: Option<&str>,
+        batch: Batch,
+        fallback_reason: Option<FallbackReason>,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<()> {
         // Captured before audits as well as mappings; neither target rolls back audit attempts.
@@ -1847,7 +2041,7 @@ impl Pipeline {
                 None,
             )?;
         }
-        let origins = resolution_origins(clean, &plan.gaps, Batch::Second);
+        let origins = resolution_origins(clean, &plan.gaps, batch);
         for (gap, origin) in plan.gaps.into_iter().zip(origins).rev() {
             self.apply_safety_net_resolution(
                 target,
@@ -1856,6 +2050,7 @@ impl Pipeline {
                 origin,
                 document_kind,
                 field_path,
+                fallback_reason,
                 protection_trace.as_deref_mut(),
             )?;
         }
@@ -2490,6 +2685,17 @@ fn redaction_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
     suspects
 }
 
+/// A reversible token stands for exactly the bytes it replaced, so a resolution gap's raw span
+/// must be as long as its clean span.
+///
+/// Before the fallback deletes, a gap is a token-free run of the document and this is always
+/// true. After it, this is the rejection that matters: a clean span containing a deletion seam
+/// maps onto a raw range with the removed bytes inside it, so its bytes are adjacent only in the
+/// output. Tokenizing it would mint a token whose restore re-inserts bytes the fallback removed.
+fn resolution_gap_is_contiguous(clean_span: &Range<usize>, raw_span: &Range<usize>) -> bool {
+    raw_span.end - raw_span.start == clean_span.end - clean_span.start
+}
+
 fn suspect_action_span(suspect: &LeakSuspect) -> Range<usize> {
     match &suspect.kind {
         LeakKind::PartialBleed { uncovered } => uncovered.clone(),
@@ -2654,6 +2860,11 @@ fn plan_followup_resolutions<'a>(
         for span in raw_gaps {
             validate_followup_span(&clean.text, &span)?;
             let raw_span = map_clean_span_to_raw(clean, &span)?;
+            if !resolution_gap_is_contiguous(&span, &raw_span) {
+                return Err(clean_to_raw_mapping_error(
+                    "resolution gap crosses removed bytes",
+                ));
+            }
             let raw = clean.text[span.clone()].to_owned();
             if original.is_some_and(|source| source.get(raw_span.clone()) != Some(raw.as_str())) {
                 return Err(protection_trace_error("follow-up raw source mismatch"));
@@ -2795,6 +3006,9 @@ fn plan_multiple_gap_resolutions<'a>(
                 return Ok(None);
             }
             let raw_span = map_clean_span_to_raw(clean, &span)?;
+            if !resolution_gap_is_contiguous(&span, &raw_span) {
+                return Ok(None);
+            }
             let raw = clean.text[span.clone()].to_string();
             if original.is_some_and(|text| text.get(raw_span.clone()) != Some(raw.as_str())) {
                 return Ok(None);
@@ -2861,10 +3075,18 @@ fn manifest_integrity_error(message: &'static str) -> Error {
 /// instead of letting those decisions silently read a manifest that lies. The corruption shape it
 /// rejects is an entry whose clean span was rewritten while its `raw_span` kept its old length.
 fn validate_clean_manifest(clean: &CleanText) -> Result<()> {
-    for emitted in &clean.manifest {
-        map_clean_span_to_raw(clean, &emitted.clean_span).map_err(|_| {
-            manifest_integrity_error("manifest entry has no unambiguous original span")
-        })?;
+    if clean.manifest.deleted_raw().len() > 0 {
+        // Building the layout *is* the check here: it reconciles every entry's clean span
+        // against the deletion ledger in raw order and fails closed on any disagreement. The
+        // affine per-entry check below cannot be used, because a deletion is exactly the thing
+        // that breaks the equal-run assumption it rests on.
+        CleanLayout::of(clean)?;
+    } else {
+        for emitted in &clean.manifest {
+            map_clean_span_to_raw(clean, &emitted.clean_span).map_err(|_| {
+                manifest_integrity_error("manifest entry has no unambiguous original span")
+            })?;
+        }
     }
     clean.manifest.validate()
 }
@@ -2977,6 +3199,162 @@ fn validate_terminal_manifest(
         return Err(manifest_integrity_error("invalid terminal trailing gap"));
     }
     clean.manifest.validate()
+}
+
+/// What the `Redact` fallback recorded that it removed, frozen in original-request coordinates
+/// before it ran.
+///
+/// The audit rows name whole suspects, so that is what the fallback is held to, not the narrower
+/// sub-span the redactor acts on for a `PartialBleed`. Raw coordinates because they are the only
+/// ones a later edit cannot move.
+struct FallbackPromise {
+    claimed: Vec<Range<usize>>,
+}
+
+impl FallbackPromise {
+    /// Capture while the affine mapper is still exact — i.e. before the first deletion.
+    fn capture(clean: &CleanText, actionable: &[&LeakSuspect]) -> Result<Self> {
+        let mut claimed = Vec::with_capacity(actionable.len());
+        for suspect in actionable {
+            let span = round_span_outward_to_char_boundaries(&clean.text, suspect.span.clone())?;
+            claimed.push(map_clean_span_to_raw(clean, &span)?);
+        }
+        claimed.sort_by_key(|range| (range.start, range.end));
+        Ok(Self { claimed })
+    }
+
+    fn claim(&mut self, raw: Range<usize>) {
+        self.claimed.push(raw);
+        self.claimed.sort_by_key(|range| (range.start, range.end));
+    }
+
+    /// Clean spans of bytes the fallback said it removed and that are still in the document.
+    ///
+    /// Empty is the fallback keeping its word. Anything else is a promise it recorded and did not
+    /// honour, which is not a state any admission rule may reason past.
+    fn survivors(&self, layout: &CleanLayout) -> Vec<Range<usize>> {
+        let mut survivors = Vec::new();
+        for run in &layout.runs {
+            let Some((clean, raw)) = run.spans() else {
+                continue;
+            };
+            for promised in &self.claimed {
+                if !ranges_overlap(raw, promised) {
+                    continue;
+                }
+                survivors.push(match run {
+                    // Byte for byte, so the overlap maps straight across.
+                    Run::Plain { .. } => {
+                        clean.start + promised.start.saturating_sub(raw.start)
+                            ..clean.end - raw.end.saturating_sub(promised.end)
+                    }
+                    // A replacement is indivisible: any surviving overlap means all of it is
+                    // still there.
+                    _ => clean.clone(),
+                });
+            }
+        }
+        survivors
+    }
+}
+
+/// What a suspect in the terminal report is, once the fallback's own effects are accounted for.
+///
+/// Until this existed, *any* unprotected suspect anywhere in the terminal report denied the
+/// document. That held a fallback document to a standard no completing document has to meet —
+/// four model passes, all clean — and it conflated three different facts into one verdict.
+enum TerminalAdmission {
+    /// A finding about the document that no stage is permitted to act on any more. It is merged
+    /// into the returned report and the document completes carrying it, exactly as a completing
+    /// document already ships its own final report.
+    Admit,
+    /// The suspect covers bytes the fallback's audit rows say it removed. The fallback did not do
+    /// what it recorded, so nothing downstream can be trusted about this document.
+    FallbackIncomplete { span: Range<usize> },
+    /// The suspect strictly contains a deletion seam, so part of its shape is gaze's own
+    /// artefact: those bytes are adjacent only because the fallback removed what sat between
+    /// them. Abutting a seam is not this — no byte of an abutting suspect was manufactured.
+    SeamManufactured { seam: usize, span: Range<usize> },
+    /// The suspect cannot be judged against this document at all: it names no real range
+    /// (empty, reversed, out of bounds, splitting a character), its own coverage claim
+    /// contradicts the manifest, or the bytes it covers carry a token shape this pipeline does
+    /// not own. None of those can be admitted, resolved or deleted, and the blanket rule denied
+    /// every one of them too.
+    Unjudgeable { span: Range<usize> },
+}
+
+impl CleanLayout {
+    fn classify(
+        &self,
+        clean: &CleanText,
+        suspect: &LeakSuspect,
+        survivors: &[Range<usize>],
+    ) -> TerminalAdmission {
+        let span = suspect.span.clone();
+        if span.start >= span.end
+            || !is_char_boundary_range(&clean.text, &span)
+            || !suspect_action_span_matches_manifest(clean, suspect)
+            // An `Uncovered` suspect touches no entry of ours, so a token shape inside it belongs
+            // to someone else. Resolving it would mint a token that restores to another
+            // session's token, and admitting it would ship that token as if gaze had made it.
+            || crate::token_shape::find_token(&clean.text[span.clone()]).is_some()
+        {
+            return TerminalAdmission::Unjudgeable { span };
+        }
+        // A broken promise outranks a manufactured shape: it says the fallback's own record of
+        // the document is wrong, which makes every other judgement about it unsafe.
+        if let Some(surviving) = survivors.iter().find(|s| ranges_overlap(s, &span)) {
+            return TerminalAdmission::FallbackIncomplete {
+                span: surviving.clone(),
+            };
+        }
+        if let Some(seam) = self
+            .seams()
+            .find(|seam| span.start < *seam && *seam < span.end)
+        {
+            return TerminalAdmission::SeamManufactured { seam, span };
+        }
+        TerminalAdmission::Admit
+    }
+}
+
+impl TerminalAdmission {
+    /// One line per terminal finding the admission would not simply pass. Offsets only — the
+    /// suspect's bytes never reach a log. Axis 4: a terminal outcome that cannot say which
+    /// concrete case it is would be the blanket rule this replaced.
+    fn observe(&self, stage: &'static str) {
+        match self {
+            Self::Admit => {}
+            Self::FallbackIncomplete { span } => tracing::warn!(
+                stage,
+                clean_span_start = span.start,
+                clean_span_end = span.end,
+                "safety net fallback left bytes its own audit rows claim it removed"
+            ),
+            Self::SeamManufactured { seam, span } => tracing::warn!(
+                stage,
+                seam = seam,
+                clean_span_start = span.start,
+                clean_span_end = span.end,
+                "terminal suspect contains a safety net deletion seam"
+            ),
+            Self::Unjudgeable { span } => tracing::warn!(
+                stage,
+                clean_span_start = span.start,
+                clean_span_end = span.end,
+                "terminal suspect cannot be judged against this document"
+            ),
+        }
+    }
+}
+
+/// Which typed fallback reason a suspect denies under, matching `unprotected_suspect_reason`.
+fn fallback_reason_for(suspect: &LeakSuspect) -> FallbackReason {
+    if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
+        FallbackReason::OverlapConflict
+    } else {
+        FallbackReason::ResidualSuspect
+    }
 }
 
 /// Classify without audit or mutation. Callers validate the manifest for their coordinate phase.
@@ -3132,6 +3510,9 @@ fn map_clean_span_to_raw(clean: &CleanText, span: &Range<usize>) -> Result<Range
             text_len: clean.text.len(),
         });
     }
+    if clean.manifest.deleted_raw().len() > 0 {
+        return CleanLayout::of(clean)?.map_span(span);
+    }
     let start = map_clean_boundary_to_raw(&clean.manifest, span.start)
         .ok_or_else(|| clean_to_raw_mapping_error("clean-to-raw start mapping failed"))?;
     let end = map_clean_boundary_to_raw(&clean.manifest, span.end)
@@ -3140,6 +3521,254 @@ fn map_clean_span_to_raw(clean: &CleanText, span: &Range<usize>) -> Result<Range
         return Err(clean_to_raw_mapping_error("empty clean-to-raw mapping"));
     }
     Ok(start..end)
+}
+
+/// One contiguous stretch of the clean document and the original bytes behind it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Run {
+    /// Untokenized text, byte for byte: `clean.len() == raw.len()`.
+    Plain {
+        clean: Range<usize>,
+        raw: Range<usize>,
+    },
+    /// A manifest entry standing for `raw` — a live token, or a one-way replacement the primary
+    /// pass emitted. Indivisible: it is present or it is not.
+    Replacement {
+        clean: Range<usize>,
+        raw: Range<usize>,
+    },
+    /// Original bytes the fallback deleted. No clean bytes at all, so its clean position is a
+    /// single offset — the seam.
+    Removed { clean: usize, raw: Range<usize> },
+}
+
+impl Run {
+    fn spans(&self) -> Option<(&Range<usize>, &Range<usize>)> {
+        match self {
+            Self::Plain { clean, raw } | Self::Replacement { clean, raw } => Some((clean, raw)),
+            Self::Removed { .. } => None,
+        }
+    }
+}
+
+/// Where the clean document sits in original-request coordinates once the fallback has deleted.
+///
+/// [`map_clean_boundary_to_raw`] infers raw offsets from the manifest alone: it assumes every
+/// untokenized clean run stands for an equal-length raw run. A fallback deletion removes clean
+/// bytes and no raw bytes, so from the first removed region onwards that assumption is false and
+/// the affine mapper fails closed. That arithmetic — not policy — is why the terminal phase could
+/// never plan another mutation, and it is the only thing that stood between a terminal report and
+/// a reversible answer to it.
+///
+/// The deletions are recorded in raw coordinates, which nothing a later edit to the clean text
+/// can shift, so the layout is rebuilt in raw order and then reconciled against the manifest's own
+/// clean spans. A manifest and a deletion ledger that disagree fail closed here rather than
+/// mapping a mutation onto the wrong bytes.
+#[derive(Debug)]
+struct CleanLayout {
+    /// Ascending and contiguous in both coordinate systems, covering the whole clean document.
+    runs: Vec<Run>,
+}
+
+/// Which end of a span a clean boundary is.
+///
+/// A boundary landing exactly on a seam has two truthful raw images — the byte before the removed
+/// range and the byte after it — so the span's own direction picks: a span starts at the first
+/// surviving byte after the hole and ends at the last surviving byte before it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Start,
+    End,
+}
+
+impl CleanLayout {
+    fn of(clean: &CleanText) -> Result<Self> {
+        let mut holes = Vec::with_capacity(clean.manifest.deleted_raw().len());
+        for raw in clean.manifest.deleted_raw() {
+            holes.push(
+                raw.ok_or_else(|| manifest_integrity_error("undescribed deletion"))?
+                    .clone(),
+            );
+        }
+        Self::from_parts(clean.manifest.iter(), holes, clean.text.len())
+    }
+
+    /// Lay out a phase snapshot: its projected entries, the ranges already removed when it was
+    /// taken, and the clean length it described. The ledger's own integrity checks re-derive raw
+    /// spans this way, and they have to see the deletions for the same reason the planners do.
+    fn from_parts<'a>(
+        entries: impl Iterator<Item = &'a EmittedTokenSpan>,
+        mut holes: Vec<Range<usize>>,
+        text_len: usize,
+    ) -> Result<Self> {
+        if holes.iter().any(|hole| hole.start >= hole.end) {
+            return Err(manifest_integrity_error("invalid deletion raw span"));
+        }
+        holes.sort_by_key(|hole| (hole.start, hole.end));
+        // A later deletion can re-cover raw bytes an earlier one already removed: a clean span
+        // that abuts or contains an existing seam maps onto them. The removed set is the union,
+        // so the document has one seam there and not two.
+        let mut merged: Vec<Range<usize>> = Vec::with_capacity(holes.len());
+        for hole in holes {
+            match merged.last_mut() {
+                Some(last) if hole.start <= last.end => last.end = last.end.max(hole.end),
+                _ => merged.push(hole),
+            }
+        }
+
+        let mut runs = Vec::new();
+        let mut entries = entries.peekable();
+        let mut holes = merged.into_iter().peekable();
+        let mut clean_cursor = 0usize;
+        let mut raw_cursor = 0usize;
+        loop {
+            let next_entry = entries.peek().map(|entry| entry.raw_span.start);
+            let next_hole = holes.peek().map(|hole| hole.start);
+            let Some(next) = next_entry.into_iter().chain(next_hole).min() else {
+                break;
+            };
+            // Entries and removed ranges partition the raw document: the redactor swallows every
+            // entry its span overlaps, so a survivor can never share a raw byte with a hole.
+            if next < raw_cursor || next_entry == next_hole {
+                return Err(manifest_integrity_error("overlapping terminal provenance"));
+            }
+            if next > raw_cursor {
+                let len = next - raw_cursor;
+                if clean_cursor + len > text_len {
+                    return Err(manifest_integrity_error(
+                        "deletion ledger overruns clean text",
+                    ));
+                }
+                runs.push(Run::Plain {
+                    clean: clean_cursor..clean_cursor + len,
+                    raw: raw_cursor..next,
+                });
+                clean_cursor += len;
+                // `raw_cursor` is not advanced here: both arms below set it from their own end.
+            }
+            if next_entry == Some(next) {
+                let entry = entries.next().expect("peeked");
+                // The reconciliation: the layout rebuilt from raw order has to land the entry
+                // exactly where the manifest says it is.
+                if entry.clean_span.start != clean_cursor
+                    || entry.clean_span.start >= entry.clean_span.end
+                    || entry.raw_span.start >= entry.raw_span.end
+                    || entry.clean_span.end > text_len
+                {
+                    return Err(manifest_integrity_error(
+                        "manifest entry contradicts the deletion ledger",
+                    ));
+                }
+                runs.push(Run::Replacement {
+                    clean: entry.clean_span.clone(),
+                    raw: entry.raw_span.clone(),
+                });
+                clean_cursor = entry.clean_span.end;
+                raw_cursor = entry.raw_span.end;
+            } else {
+                let hole = holes.next().expect("peeked");
+                raw_cursor = hole.end;
+                runs.push(Run::Removed {
+                    clean: clean_cursor,
+                    raw: hole,
+                });
+            }
+        }
+        if clean_cursor > text_len {
+            return Err(manifest_integrity_error(
+                "deletion ledger overruns clean text",
+            ));
+        }
+        if clean_cursor < text_len {
+            let len = text_len - clean_cursor;
+            runs.push(Run::Plain {
+                clean: clean_cursor..text_len,
+                raw: raw_cursor..raw_cursor + len,
+            });
+        }
+        Ok(Self { runs })
+    }
+
+    /// Clean offsets where the fallback removed bytes, ascending.
+    fn seams(&self) -> impl Iterator<Item = usize> + '_ {
+        self.runs.iter().filter_map(|run| match run {
+            Run::Removed { clean, .. } => Some(*clean),
+            _ => None,
+        })
+    }
+
+    fn boundary(&self, offset: usize, side: Side) -> Option<usize> {
+        // A run that ENDS at the offset never answers on its own: a seam may sit at that same
+        // clean offset, and the seam is what makes the answer ambiguous. Carrying the running
+        // raw end and letting the loop reach the next run is what keeps the two apart.
+        let mut ended_at = Some(0usize);
+        for run in &self.runs {
+            match run {
+                // Zero clean bytes, so a boundary here has two truthful answers and the side
+                // decides which one this span means.
+                Run::Removed { clean, raw } => {
+                    if *clean == offset {
+                        return Some(match side {
+                            Side::Start => raw.end,
+                            Side::End => raw.start,
+                        });
+                    }
+                    ended_at = Some(raw.end);
+                }
+                Run::Plain { clean, raw } => {
+                    if offset < clean.start {
+                        return None;
+                    }
+                    if offset < clean.end {
+                        return Some(raw.start + (offset - clean.start));
+                    }
+                    ended_at = Some(raw.end);
+                }
+                Run::Replacement { clean, raw } => {
+                    if offset == clean.start {
+                        return Some(raw.start);
+                    }
+                    // Strictly inside a replacement there is no answer: the token's bytes are
+                    // not the document's bytes.
+                    if offset < clean.end {
+                        return None;
+                    }
+                    ended_at = Some(raw.end);
+                }
+            }
+        }
+        ended_at
+    }
+
+    /// Clean span standing for `raw`, when one contiguous run of plain surviving text covers it.
+    ///
+    /// `None` means those original bytes are no longer a contiguous, untokenized, undeleted run
+    /// of the output — they were deleted, tokenized, or split by a seam. Callers fail closed on
+    /// it rather than guessing which of those happened.
+    fn plain_clean_span_of_raw(&self, raw: &Range<usize>) -> Option<Range<usize>> {
+        self.runs.iter().find_map(|run| match run {
+            Run::Plain {
+                clean,
+                raw: covered,
+            } if covered.start <= raw.start && raw.end <= covered.end => Some(
+                clean.start + (raw.start - covered.start)..clean.start + (raw.end - covered.start),
+            ),
+            _ => None,
+        })
+    }
+
+    fn map_span(&self, span: &Range<usize>) -> Result<Range<usize>> {
+        let start = self
+            .boundary(span.start, Side::Start)
+            .ok_or_else(|| clean_to_raw_mapping_error("clean-to-raw start mapping failed"))?;
+        let end = self
+            .boundary(span.end, Side::End)
+            .ok_or_else(|| clean_to_raw_mapping_error("clean-to-raw end mapping failed"))?;
+        if start >= end {
+            return Err(clean_to_raw_mapping_error("empty clean-to-raw mapping"));
+        }
+        Ok(start..end)
+    }
 }
 
 /// Map a single clean-text byte boundary to its original-request byte boundary.
@@ -4740,6 +5369,11 @@ mod tests {
         );
     }
 
+    /// The fixture removes a clean byte without recording which original bytes went with it.
+    /// That is the one shape a deletion ledger cannot describe, so the layout refuses to guess
+    /// and the document fails closed with nothing mutated and no trace item written. A *described*
+    /// deletion is a different thing: the layout can place it, and the terminal round plans
+    /// through it.
     #[test]
     fn non_affine_manifest_fails_before_mutation_with_traced_untraced_parity() {
         fn fixture() -> (Session, CleanText, LeakReport, String) {
@@ -4801,8 +5435,7 @@ mod tests {
             assert!(matches!(
                 error,
                 Error::SafetyNet(SafetyNetError::InvalidOutput { message })
-                    if message
-                        == "manifest-integrity: manifest entry has no unambiguous original span"
+                    if message == "manifest-integrity: undescribed deletion"
             ));
         }
         assert_eq!((traced_clean.text, traced_clean.manifest), traced_before);
@@ -5100,6 +5733,99 @@ mod tests {
             format!("{error}").contains("manifest-integrity"),
             "manifest corruption must surface as the manifest-integrity class, got {error}"
         );
+    }
+
+    /// Ranges the fallback removed, spelled as pairs so a one-element list is still a list.
+    fn holes(list: &[(usize, usize)]) -> Vec<Range<usize>> {
+        list.iter().map(|(start, end)| *start..*end).collect()
+    }
+
+    /// `"abcdefghij"` with `[2,5)` tokenized to a five-byte replacement and `[6,8)` deleted, so
+    /// the clean document is `ab<TOK>fij` — 10 bytes that stand for 10 raw bytes through a seam.
+    fn deleted_layout() -> CleanLayout {
+        CleanLayout::from_parts(
+            [EmittedTokenSpan::new(2..7, 2..5, PiiClass::Email)].iter(),
+            holes(&[(6, 8)]),
+            10,
+        )
+        .expect("a manifest that agrees with its deletion ledger must lay out")
+    }
+
+    #[test]
+    fn clean_layout_answers_both_sides_of_a_deletion_seam() {
+        let layout = deleted_layout();
+        assert_eq!(layout.seams().collect::<Vec<_>>(), [8]);
+        // A span starting at the seam begins after the removed range; one ending there ends
+        // before it. Same offset, two truthful answers, and the direction picks.
+        assert_eq!(layout.boundary(8, Side::Start), Some(8));
+        assert_eq!(layout.boundary(8, Side::End), Some(6));
+        assert_eq!(layout.boundary(0, Side::Start), Some(0));
+        assert_eq!(layout.boundary(2, Side::Start), Some(2));
+        assert_eq!(layout.boundary(7, Side::End), Some(5));
+        assert_eq!(layout.boundary(10, Side::End), Some(10));
+        // Strictly inside the replacement there is no original byte to name.
+        assert_eq!(layout.boundary(4, Side::Start), None);
+    }
+
+    #[test]
+    fn a_span_across_a_seam_maps_to_more_raw_bytes_than_it_has() {
+        let layout = deleted_layout();
+        // `fi` in the clean document: one byte either side of the seam, four raw bytes apart.
+        let across = 7..9;
+        let raw = layout
+            .map_span(&across)
+            .expect("a covering range still exists");
+        assert_eq!(raw, 5..9);
+        assert!(
+            !resolution_gap_is_contiguous(&across, &raw),
+            "a resolution across a seam must fail the contiguity invariant, not be tokenized"
+        );
+        // The same two bytes, entirely after the seam, are contiguous and resolvable.
+        let after = 8..10;
+        let raw = layout.map_span(&after).expect("surviving bytes map");
+        assert_eq!(raw, 8..10);
+        assert!(resolution_gap_is_contiguous(&after, &raw));
+    }
+
+    #[test]
+    fn raw_ranges_rebase_only_while_they_stay_one_plain_run() {
+        let layout = deleted_layout();
+        assert_eq!(layout.plain_clean_span_of_raw(&(8..10)), Some(8..10));
+        assert_eq!(layout.plain_clean_span_of_raw(&(5..6)), Some(7..8));
+        // Split by the seam, and inside the replacement: neither is a run of plain output.
+        assert_eq!(layout.plain_clean_span_of_raw(&(5..9)), None);
+        assert_eq!(layout.plain_clean_span_of_raw(&(3..4)), None);
+    }
+
+    #[test]
+    fn clean_layout_rejects_a_manifest_that_contradicts_its_deletion_ledger() {
+        // The same entry, but the ledger says the removed range sits where the entry does.
+        let error = CleanLayout::from_parts(
+            [EmittedTokenSpan::new(2..7, 2..5, PiiClass::Email)].iter(),
+            holes(&[(3, 4)]),
+            10,
+        )
+        .expect_err("an entry sharing raw bytes with a removed range cannot both be true");
+        assert!(format!("{error}").contains("manifest-integrity"), "{error}");
+
+        // Entry clean start that the raw-order reconstruction cannot reach.
+        let error = CleanLayout::from_parts(
+            [EmittedTokenSpan::new(4..9, 2..5, PiiClass::Email)].iter(),
+            holes(&[(6, 8)]),
+            10,
+        )
+        .expect_err("an entry the layout cannot place must fail closed");
+        assert!(format!("{error}").contains("manifest-integrity"), "{error}");
+    }
+
+    #[test]
+    fn overlapping_removed_ranges_are_one_seam() {
+        // A terminal deletion of a span that abuts an existing seam re-covers its raw bytes.
+        let layout =
+            CleanLayout::from_parts([].iter(), holes(&[(2, 5), (4, 7)]), 6).expect("union");
+        assert_eq!(layout.seams().collect::<Vec<_>>(), [2]);
+        assert_eq!(layout.boundary(2, Side::Start), Some(7));
+        assert_eq!(layout.boundary(2, Side::End), Some(2));
     }
 
     /// A `CleanText` whose entries cannot both be true: one clean byte separates them while four
