@@ -830,6 +830,35 @@ mod tests {
     }
 
     #[test]
+    fn valid_but_wrong_source_member_and_node_cannot_replace_selected_identity() {
+        struct Ambiguous;
+        impl Detector for Ambiguous {
+            fn detect(&self, text: &str) -> Vec<Detection> {
+                vec![Detection::new(0..text.len(), PiiClass::Email, "synthetic.email"), Detection::new(0..text.len(), PiiClass::Name, "synthetic.name")]
+            }
+        }
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let pipeline = Pipeline::builder().detector(Ambiguous).rule(crate::rule::DefaultRule::new(Action::Tokenize)).build().unwrap();
+        let clean = pipeline.redact_text_with_manifest_uncached(&mut ProtectionTarget::Live(&session), "alice@example.invalid", None, DocumentKind::Text, &[crate::LocaleTag::Global], &DictionaryBundle::default(), None).unwrap();
+        let selected = &clean.manifest.segments[0].selections[0];
+        assert_eq!(selected.members.len(), 1);
+        let other = 1 - selected.members[0];
+        for mode in 0..2 {
+            let mut corrupt = clean.manifest.clone();
+            if mode == 0 { corrupt.segments[0].selections[0].members[0] = other; }
+            else { corrupt.segments[0].selections[0].node = other; }
+            assert!(corrupt.validate().is_err(), "wrong source identity {mode}");
+        }
+    }
+
+    #[test]
+    fn tokenizing_selection_cannot_lose_its_actual_owned_disposition() {
+        let (_, mut clean) = primary("alice@example.invalid", Action::Tokenize);
+        clean.manifest.records[0].owned = false;
+        assert!(clean.manifest.validate().is_err());
+    }
+
+    #[test]
     fn repeated_member_identity_cannot_fabricate_independent_evidence() {
         let (_, mut clean) = primary("alice@example.invalid", Action::Tokenize);
         clean.manifest.segments[0].selections[0].members.push(0);
