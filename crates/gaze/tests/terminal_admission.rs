@@ -306,7 +306,8 @@ fn terminal_deletes_a_seam_manufactured_suspect_once() {
     assert_eq!(text_of(clean), deleted);
     assert_eq!(
         spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-        [0..5]
+        vec![0..5],
+        "the seam deletion leaves the second batch's token untouched"
     );
     assert!(h.drained());
     assert_eq!(

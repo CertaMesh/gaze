@@ -1801,7 +1801,7 @@ impl Pipeline {
                 field_path,
                 Batch::Terminal,
                 Some(deny),
-                protection_trace.as_deref_mut(),
+                protection_trace,
             )?;
             report.extend(LeakReport::from_parts(resolved, Vec::new()));
         }
@@ -5735,12 +5735,17 @@ mod tests {
         );
     }
 
+    /// Ranges the fallback removed, spelled as pairs so a one-element list is still a list.
+    fn holes(list: &[(usize, usize)]) -> Vec<Range<usize>> {
+        list.iter().map(|(start, end)| *start..*end).collect()
+    }
+
     /// `"abcdefghij"` with `[2,5)` tokenized to a five-byte replacement and `[6,8)` deleted, so
     /// the clean document is `ab<TOK>fij` — 10 bytes that stand for 10 raw bytes through a seam.
     fn deleted_layout() -> CleanLayout {
         CleanLayout::from_parts(
             [EmittedTokenSpan::new(2..7, 2..5, PiiClass::Email)].iter(),
-            vec![6..8],
+            holes(&[(6, 8)]),
             10,
         )
         .expect("a manifest that agrees with its deletion ledger must lay out")
@@ -5797,7 +5802,7 @@ mod tests {
         // The same entry, but the ledger says the removed range sits where the entry does.
         let error = CleanLayout::from_parts(
             [EmittedTokenSpan::new(2..7, 2..5, PiiClass::Email)].iter(),
-            vec![3..4],
+            holes(&[(3, 4)]),
             10,
         )
         .expect_err("an entry sharing raw bytes with a removed range cannot both be true");
@@ -5806,7 +5811,7 @@ mod tests {
         // Entry clean start that the raw-order reconstruction cannot reach.
         let error = CleanLayout::from_parts(
             [EmittedTokenSpan::new(4..9, 2..5, PiiClass::Email)].iter(),
-            vec![6..8],
+            holes(&[(6, 8)]),
             10,
         )
         .expect_err("an entry the layout cannot place must fail closed");
@@ -5816,7 +5821,8 @@ mod tests {
     #[test]
     fn overlapping_removed_ranges_are_one_seam() {
         // A terminal deletion of a span that abuts an existing seam re-covers its raw bytes.
-        let layout = CleanLayout::from_parts([].iter(), vec![2..5, 4..7], 6).expect("union");
+        let layout =
+            CleanLayout::from_parts([].iter(), holes(&[(2, 5), (4, 7)]), 6).expect("union");
         assert_eq!(layout.seams().collect::<Vec<_>>(), [2]);
         assert_eq!(layout.boundary(2, Side::Start), Some(7));
         assert_eq!(layout.boundary(2, Side::End), Some(2));
