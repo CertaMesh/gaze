@@ -928,6 +928,73 @@ fn residual_parent_order_cannot_replace_the_legacy_representative() {
     );
 }
 
+/// The benchmark reaches this engine through production assembly, not through a
+/// hand-built `RuleEntry`: scripts/bench/run_no_opf_benchmark.py:474-486 runs
+/// clean_for_bench, which registers exactly `ClassRule` / `ColumnRule` /
+/// `DefaultRule` values (crates/gaze-recognizers/examples/clean_for_bench.rs:775-812)
+/// through `gaze_assembly` (crates/gaze-assembly/src/lib.rs:114-129), whose
+/// `AssemblyBuilder::rule` forwards them as a generic `R: Rule + 'static` to
+/// `PipelineBuilder::rule` (crates/gaze-assembly/src/registration.rs:61-67).
+/// `PipelineBuilder::rule` is the concrete-to-erased boundary where the
+/// immutable preview is captured.
+///
+/// That forwarding is the single point of silent failure for the whole feature.
+/// If it ever stops preserving the preview -- boxing the rule, wrapping it,
+/// taking `Arc<dyn Rule>` -- `rule::preview` answers Unknown for every class,
+/// the planner admits nothing, and B1 protects zero bytes in production while
+/// every other test in this file still passes. Reproduce the generic hop here,
+/// where preview is visible, and pin the coverage it is supposed to produce.
+#[test]
+fn generic_production_registration_keeps_builtins_previewable_and_covering() {
+    use crate::rule::{preview, ClassRule, ColumnRule, DefaultRule};
+
+    // Same shape as AssemblyBuilder::rule: the concrete type survives only
+    // because the parameter stays generic all the way to PipelineBuilder::rule.
+    fn register<R: Rule + 'static>(builder: crate::PipelineBuilder, rule: R) -> crate::PipelineBuilder {
+        builder.rule(rule)
+    }
+
+    let mut builder = Pipeline::builder().recognizer(Fixed(pair()));
+    builder = register(builder, ClassRule::new(PiiClass::Name, Action::Tokenize));
+    builder = register(builder, ColumnRule::new("password", Action::Tokenize));
+    builder = register(builder, DefaultRule::new(Action::Tokenize));
+    let mut p = builder.build().unwrap();
+
+    // Every effective class these fixtures can present stays known-Tokenize, in
+    // and out of a field context. A hypothetical unused class must not silently
+    // disable an otherwise fully admitted component.
+    for class in [
+        PiiClass::Name,
+        PiiClass::Email,
+        field(),
+        PiiClass::family("document"),
+    ] {
+        for field_name in [None, Some("password"), Some("other")] {
+            assert_eq!(
+                preview(&p.rules, &class, &build_context(field_name)),
+                Some(Action::Tokenize),
+                "{class:?} with field {field_name:?} lost static recognizability \
+                 across the generic production registration hop"
+            );
+        }
+    }
+
+    // The consequence that actually matters: real coverage, not just a preview.
+    p.residual_coverage = true;
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let covered = clean(&p, &session, RAW).unwrap();
+    assert_eq!(
+        covered
+            .manifest
+            .iter()
+            .map(|s| s.raw_span.clone())
+            .collect::<Vec<_>>(),
+        vec![0..15, 15..21],
+        "production-shaped registration must still admit the residual"
+    );
+    assert_eq!(session.restore_strict_text(&covered.text).unwrap(), RAW);
+}
+
 /// `SOURCE_ID_PATTERN` from scripts/bench/gaze_bench_score.py:397, spelled out:
 /// a first `[a-z][a-z0-9]*` part, then `[._:/-]`-joined `[a-z0-9]+` parts, at
 /// most 128 characters. The pattern only admits ASCII, so byte length is
