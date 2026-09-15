@@ -89,10 +89,10 @@
     },
     {
       "version": "v0.15.0",
-      "commit": "75b7176bbeffdc6a5840e4b01e60077b9dc0f85e",
+      "commit": "7238894097054027850df56eb8aa5aa9497dbc2b",
       "date": "2026-09-15",
       "scorecard": "scorecard-v0.15.0.json",
-      "scorecard_sha256": "1dd8b18e5e9619948cd21d8e65f607cf8676a792433e6b51798d42d4e46d878c",
+      "scorecard_sha256": "ac77709e0550cd4ebf92c6be1e3c6b1a3e7cccfcb747a221a1b42a7d706cf23c",
       "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71)",
       "harness_entry": "scripts/bench/run_no_opf_benchmark.py",
       "dataset": {
@@ -128,7 +128,7 @@
         "ner_threshold": 0.3
       },
       "provisional": true,
-      "note": "Candidate measured at signed preparation commit 75b7176bbeffdc6a5840e4b01e60077b9dc0f85e with a clean tree. Release readiness FAILED (exit 4); regression passed against v0.14.0. This row records evidence, not release approval.",
+      "note": "Measured at signed clean D 7238894097054027850df56eb8aa5aa9497dbc2b. Release readiness FAILED; regression FAILED against v0.14.0 (harness exit 3). Production completed 2,820/2,910; 90 failed closed. Leak and restore metrics cover completed documents only. Scored populations differ from v0.14.0; fewer surviving bytes do not establish improved detection. This row records evidence, not release approval.",
       "arms": {
         "rule-floor-extended": {
           "gold_pii_utf8_bytes": 130282,
@@ -141,7 +141,7 @@
           "manifest_valid_document_rate": 1.0,
           "availability_completion_rate": 1.0,
           "failed_closed_documents": 0,
-          "clean_ms_p95": 2.8723378
+          "clean_ms_p95": 2.9977060999999985
         },
         "pass2-ner": {
           "gold_pii_utf8_bytes": 130282,
@@ -154,20 +154,20 @@
           "manifest_valid_document_rate": 1.0,
           "availability_completion_rate": 1.0,
           "failed_closed_documents": 0,
-          "clean_ms_p95": 69.6515647
+          "clean_ms_p95": 72.1917811
         },
         "full-stack-kiji-resolve": {
-          "gold_pii_utf8_bytes": 130282,
-          "surviving_pii_utf8_bytes": 25179,
-          "leak_rate": 0.19326537817964107,
-          "false_positive_utf8_bytes": 168276,
-          "byte_precision": 0.3844589379579265,
-          "zero_leak_document_rate": 0.4061855670103093,
-          "restore_exact_rate": 0.784192439862543,
+          "gold_pii_utf8_bytes": 124745,
+          "surviving_pii_utf8_bytes": 24140,
+          "leak_rate": 0.19351477013106733,
+          "false_positive_utf8_bytes": 156271,
+          "byte_precision": 0.3916481103723197,
+          "zero_leak_document_rate": 0.4124113475177305,
+          "restore_exact_rate": 0.8092198581560284,
           "manifest_valid_document_rate": 1.0,
-          "availability_completion_rate": 1.0,
-          "failed_closed_documents": 0,
-          "clean_ms_p95": 188.68769824999995
+          "availability_completion_rate": 0.9690721649484536,
+          "failed_closed_documents": 90,
+          "clean_ms_p95": 546.6652493999994
         }
       }
     }

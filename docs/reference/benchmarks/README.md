@@ -202,17 +202,17 @@ Two consequences worth stating plainly:
 
 **v0.15.0 (provisional)** — *not* measured on the released tree.
 
-> Candidate measured at signed preparation commit 75b7176bbeffdc6a5840e4b01e60077b9dc0f85e with a clean tree. Release readiness FAILED (exit 4); regression passed against v0.14.0. This row records evidence, not release approval.
+> Measured at signed clean D 7238894097054027850df56eb8aa5aa9497dbc2b. Release readiness FAILED; regression FAILED against v0.14.0 (harness exit 3). Production completed 2,820/2,910; 90 failed closed. Leak and restore metrics cover completed documents only. Scored populations differ from v0.14.0; fewer surviving bytes do not establish improved detection. This row records evidence, not release approval.
 
 | Provenance | Value |
 | --- | --- |
 | Release | `v0.15.0` |
-| Commit | `75b7176bbeffdc6a5840e4b01e60077b9dc0f85e` |
+| Commit | `7238894097054027850df56eb8aa5aa9497dbc2b` |
 | Measured | 2026-09-15 |
 | Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71) |
 | Harness | [`scripts/bench/run_no_opf_benchmark.py`](../../../scripts/bench/run_no_opf_benchmark.py) |
 | Scorecard | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) |
-| Scorecard sha256 | `1dd8b18e5e9619948cd21d8e65f607cf8676a792433e6b51798d42d4e46d878c` |
+| Scorecard sha256 | `ac77709e0550cd4ebf92c6be1e3c6b1a3e7cccfcb747a221a1b42a7d706cf23c` |
 | Corpus | `DataikuNLP/kiji-pii-training-data+gaze` @ `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1` |
 | Corpus sha256 | `11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2` |
 | Corpus component `dataiku` | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
@@ -226,9 +226,9 @@ Two consequences worth stating plainly:
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `rule-floor-extended` | 130,282 | 93,850 | 72.0360% | 5,423 | 0.870434 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 2.87 |
-| `pass2-ner` | 130,282 | 27,000 | 20.7243% | 28,030 | 0.786539 | 40.4467% | 100.0000% | 100.0000% | 100.0000% | 0 | 69.65 |
-| `full-stack-kiji-resolve` **(shipped default)** | 130,282 | 25,179 | 19.3265% | 168,276 | 0.384459 | 40.6186% | 78.4192% | 100.0000% | 100.0000% | 0 | 188.69 |
+| `rule-floor-extended` | 130,282 | 93,850 | 72.0360% | 5,423 | 0.870434 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 3.00 |
+| `pass2-ner` | 130,282 | 27,000 | 20.7243% | 28,030 | 0.786539 | 40.4467% | 100.0000% | 100.0000% | 100.0000% | 0 | 72.19 |
+| `full-stack-kiji-resolve` **(shipped default)** | 124,745 | 24,140 | 19.3515% | 156,271 | 0.391648 | 41.2411% | 80.9220% | 100.0000% | 96.9072% | 90 | 546.67 |
 
 <!-- END GENERATED: current-release -->
 
@@ -241,27 +241,27 @@ Two consequences worth stating plainly:
 **Surviving PII bytes per arm — v0.15.0 (provisional).** Lower is better; the goal is zero.
 
 > **v0.15.0 (provisional): not measured on the released tree.**
-> Candidate measured at signed preparation commit 75b7176bbeffdc6a5840e4b01e60077b9dc0f85e with a clean tree. Release readiness FAILED (exit 4); regression passed against v0.14.0. This row records evidence, not release approval.
+> Measured at signed clean D 7238894097054027850df56eb8aa5aa9497dbc2b. Release readiness FAILED; regression FAILED against v0.14.0 (harness exit 3). Production completed 2,820/2,910; 90 failed closed. Leak and restore metrics cover completed documents only. Scored populations differ from v0.14.0; fewer surviving bytes do not establish improved detection. This row records evidence, not release approval.
 
 ```mermaid
 xychart-beta
     title "Surviving PII bytes per arm - v0.15.0 (provisional)"
     x-axis ["rule-floor-extended", "pass2-ner", "full-stack-kiji-resolve"]
     y-axis "Surviving PII bytes (lower is better)" 0 --> 104000
-    bar [93850, 27000, 25179]
+    bar [93850, 27000, 24140]
 ```
 
 **Trend across releases and candidates — `full-stack-kiji-resolve`.**
 
 > **v0.15.0 (provisional): not measured on the released tree.**
-> Candidate measured at signed preparation commit 75b7176bbeffdc6a5840e4b01e60077b9dc0f85e with a clean tree. Release readiness FAILED (exit 4); regression passed against v0.14.0. This row records evidence, not release approval.
+> Measured at signed clean D 7238894097054027850df56eb8aa5aa9497dbc2b. Release readiness FAILED; regression FAILED against v0.14.0 (harness exit 3). Production completed 2,820/2,910; 90 failed closed. Leak and restore metrics cover completed documents only. Scored populations differ from v0.14.0; fewer surviving bytes do not establish improved detection. This row records evidence, not release approval.
 
 ```mermaid
 xychart-beta
     title "Surviving PII bytes on full-stack-kiji-resolve across releases and candidates"
     x-axis ["v0.14.0", "v0.15.0 (provisional)"]
     y-axis "Surviving PII bytes (lower is better)" 0 --> 28000
-    line [25179, 25179]
+    line [25179, 24140]
 ```
 
 <!-- END GENERATED: charts -->
@@ -279,7 +279,7 @@ machine-readable evidence.
 | Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |
 | --- | --- | --- | --- | --- | ---: |
 | v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | 25,179 |
-| v0.15.0 (provisional) | 2026-09-15 | `75b7176` | MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | 25,179 |
+| v0.15.0 (provisional) | 2026-09-15 | `7238894` | MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | 24,140 |
 
 <!-- END GENERATED: history -->
 

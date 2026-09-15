@@ -1,8 +1,8 @@
 {
   "schema_version": 4,
-  "generated_at": "2026-09-15T00:06:10.403096+00:00",
+  "generated_at": "2026-09-15T08:19:20.798278+00:00",
   "gaze": {
-    "revision": "75b7176bbeffdc6a5840e4b01e60077b9dc0f85e",
+    "revision": "7238894097054027850df56eb8aa5aa9497dbc2b",
     "dirty": false
   },
   "dataset": {
@@ -7546,48 +7546,48 @@
       },
       "latency_ms": {
         "clean_ms": {
-          "mean": 1.2189576092783505,
-          "median": 0.6368545,
-          "p95": 2.8723378,
-          "p99": 7.232636119999991,
-          "max": 351.93204099999997
+          "mean": 1.2608781233676976,
+          "median": 0.665229,
+          "p95": 2.9977060999999985,
+          "p99": 7.364767529999995,
+          "max": 358.99058299999996
         },
         "restore_ms": {
-          "mean": 0.43992189312714775,
-          "median": 0.335833,
-          "p95": 1.4194043499999995,
-          "p99": 1.77968263,
-          "max": 2.361916
+          "mean": 0.45588011580756016,
+          "median": 0.3397295,
+          "p95": 1.4499605999999996,
+          "p99": 1.8529145299999992,
+          "max": 2.6860410000000003
         }
       },
       "warm_latency_ms": {
         "clean_ms": {
-          "mean": 1.2192544750773462,
-          "median": 0.636875,
-          "p95": 2.8723836,
-          "p99": 7.233264440000005,
-          "max": 351.93204099999997
+          "mean": 1.2611839996562393,
+          "median": 0.6653749999999999,
+          "p95": 2.9979331999999994,
+          "p99": 7.365168360000003,
+          "max": 358.99058299999996
         },
         "restore_ms": {
-          "mean": 0.43993810897215535,
-          "median": 0.33575,
-          "p95": 1.4194752,
-          "p99": 1.77968556,
-          "max": 2.361916
+          "mean": 0.45589859470608457,
+          "median": 0.339667,
+          "p95": 1.4500251999999998,
+          "p99": 1.8529703600000005,
+          "max": 2.6860410000000003
         }
       },
       "process": {
-        "wall_seconds": 7.378974957995524,
-        "documents_per_second": 820.3730731801427,
-        "start_to_first_response_ms": 1488.997415995982,
-        "cold_start_to_first_validated_response_ms": 1488.997415995982,
+        "wall_seconds": 7.671281499991892,
+        "documents_per_second": 793.0980651239198,
+        "start_to_first_response_ms": 1469.8832079884596,
+        "cold_start_to_first_validated_response_ms": 1469.8832079884596,
         "warmup_count": 1,
         "discarded_warmup_samples": [
           {
             "sample": 1,
-            "round_trip_ms": 1483.7947909982176,
-            "clean_ms": 5.729166,
-            "restore_ms": 2.2105829999999997,
+            "round_trip_ms": 1464.409665990388,
+            "clean_ms": 5.940666,
+            "restore_ms": 2.2443329999999997,
             "post_policy_scan_ms": null,
             "correctness": {
               "leaked_labeled_utf8_bytes": 0,
@@ -11660,48 +11660,48 @@
       },
       "latency_ms": {
         "clean_ms": {
-          "mean": 46.24844882027491,
-          "median": 42.975479,
-          "p95": 69.6515647,
-          "p99": 71.60095353,
-          "max": 391.738291
+          "mean": 49.16433108453608,
+          "median": 44.901624999999996,
+          "p95": 72.1917811,
+          "p99": 95.24401371999971,
+          "max": 392.735458
         },
         "restore_ms": {
-          "mean": 0.7878818127147765,
-          "median": 0.6350834999999999,
-          "p95": 1.9726893999999995,
-          "p99": 2.406279999999999,
-          "max": 3.426875
+          "mean": 0.8273303941580755,
+          "median": 0.6666460000000001,
+          "p95": 2.0138999999999996,
+          "p99": 2.5318099999999997,
+          "max": 22.243125
         }
       },
       "warm_latency_ms": {
         "clean_ms": {
-          "mean": 46.24207936026126,
-          "median": 42.973749999999995,
-          "p95": 69.6521084,
-          "p99": 71.60144936,
-          "max": 391.738291
+          "mean": 49.158647544173256,
+          "median": 44.901542,
+          "p95": 72.1918332,
+          "p99": 95.26283164000013,
+          "max": 392.735458
         },
         "restore_ms": {
-          "mean": 0.7879959006531455,
-          "median": 0.6351249999999999,
-          "p95": 1.9727747999999998,
-          "p99": 2.4063600000000007,
-          "max": 3.426875
+          "mean": 0.8274566964592645,
+          "median": 0.666708,
+          "p95": 2.013925,
+          "p99": 2.5318450000000006,
+          "max": 22.243125
         }
       },
       "process": {
-        "wall_seconds": 145.76686591700127,
-        "documents_per_second": 21.62234681396728,
-        "start_to_first_response_ms": 6818.294124997919,
-        "cold_start_to_first_validated_response_ms": 6818.294124997919,
+        "wall_seconds": 154.55949350001174,
+        "documents_per_second": 20.339949266889047,
+        "start_to_first_response_ms": 6799.938541007577,
+        "cold_start_to_first_validated_response_ms": 6799.938541007577,
         "warmup_count": 1,
         "discarded_warmup_samples": [
           {
             "sample": 1,
-            "round_trip_ms": 6815.550207997148,
-            "clean_ms": 74.81,
-            "restore_ms": 2.201416,
+            "round_trip_ms": 6797.067916006199,
+            "clean_ms": 75.140709,
+            "restore_ms": 2.201334,
             "post_policy_scan_ms": null,
             "correctness": {
               "leaked_labeled_utf8_bytes": 0,
@@ -11719,7 +11719,7 @@
     {
       "config": "full-stack-kiji-resolve",
       "scored_population": {
-        "documents": 2910,
+        "documents": 2820,
         "document_ids": [
           "dataiku-test-0",
           "dataiku-test-10",
@@ -11731,13 +11731,10 @@
           "dataiku-test-102",
           "dataiku-test-1028",
           "dataiku-test-1032",
-          "dataiku-test-1033",
           "dataiku-test-1034",
           "dataiku-test-1036",
           "dataiku-test-1038",
           "dataiku-test-104",
-          "dataiku-test-1042",
-          "dataiku-test-1043",
           "dataiku-test-1049",
           "dataiku-test-1050",
           "dataiku-test-1053",
@@ -11755,7 +11752,6 @@
           "dataiku-test-1085",
           "dataiku-test-1090",
           "dataiku-test-1091",
-          "dataiku-test-1092",
           "dataiku-test-1094",
           "dataiku-test-1096",
           "dataiku-test-1099",
@@ -11780,7 +11776,6 @@
           "dataiku-test-1155",
           "dataiku-test-1156",
           "dataiku-test-1157",
-          "dataiku-test-1158",
           "dataiku-test-1164",
           "dataiku-test-1165",
           "dataiku-test-1167",
@@ -11812,7 +11807,6 @@
           "dataiku-test-1234",
           "dataiku-test-1236",
           "dataiku-test-1240",
-          "dataiku-test-1242",
           "dataiku-test-1243",
           "dataiku-test-1245",
           "dataiku-test-125",
@@ -11822,7 +11816,6 @@
           "dataiku-test-126",
           "dataiku-test-1263",
           "dataiku-test-1266",
-          "dataiku-test-1267",
           "dataiku-test-1270",
           "dataiku-test-1274",
           "dataiku-test-1276",
@@ -11884,7 +11877,6 @@
           "dataiku-test-1432",
           "dataiku-test-1433",
           "dataiku-test-1435",
-          "dataiku-test-1440",
           "dataiku-test-1447",
           "dataiku-test-1449",
           "dataiku-test-145",
@@ -11918,10 +11910,8 @@
           "dataiku-test-1519",
           "dataiku-test-1520",
           "dataiku-test-1521",
-          "dataiku-test-1522",
           "dataiku-test-1525",
           "dataiku-test-1530",
-          "dataiku-test-1531",
           "dataiku-test-1534",
           "dataiku-test-1536",
           "dataiku-test-1539",
@@ -11936,7 +11926,6 @@
           "dataiku-test-1559",
           "dataiku-test-156",
           "dataiku-test-1563",
-          "dataiku-test-1565",
           "dataiku-test-1567",
           "dataiku-test-157",
           "dataiku-test-1576",
@@ -11949,12 +11938,10 @@
           "dataiku-test-1589",
           "dataiku-test-159",
           "dataiku-test-1591",
-          "dataiku-test-1592",
           "dataiku-test-1596",
           "dataiku-test-1597",
           "dataiku-test-1598",
           "dataiku-test-1599",
-          "dataiku-test-16",
           "dataiku-test-1603",
           "dataiku-test-1605",
           "dataiku-test-1609",
@@ -11962,7 +11949,6 @@
           "dataiku-test-1614",
           "dataiku-test-1616",
           "dataiku-test-162",
-          "dataiku-test-1620",
           "dataiku-test-1621",
           "dataiku-test-1622",
           "dataiku-test-1623",
@@ -11992,7 +11978,6 @@
           "dataiku-test-1685",
           "dataiku-test-1688",
           "dataiku-test-169",
-          "dataiku-test-1690",
           "dataiku-test-1691",
           "dataiku-test-1692",
           "dataiku-test-1695",
@@ -12009,7 +11994,6 @@
           "dataiku-test-1719",
           "dataiku-test-172",
           "dataiku-test-1720",
-          "dataiku-test-1724",
           "dataiku-test-1726",
           "dataiku-test-1727",
           "dataiku-test-1730",
@@ -12034,7 +12018,6 @@
           "dataiku-test-1772",
           "dataiku-test-1775",
           "dataiku-test-1777",
-          "dataiku-test-1780",
           "dataiku-test-1784",
           "dataiku-test-1790",
           "dataiku-test-1793",
@@ -12057,7 +12040,6 @@
           "dataiku-test-1829",
           "dataiku-test-183",
           "dataiku-test-1830",
-          "dataiku-test-1838",
           "dataiku-test-1841",
           "dataiku-test-1843",
           "dataiku-test-1845",
@@ -12075,7 +12057,6 @@
           "dataiku-test-1875",
           "dataiku-test-1878",
           "dataiku-test-188",
-          "dataiku-test-1883",
           "dataiku-test-1889",
           "dataiku-test-189",
           "dataiku-test-1891",
@@ -12105,7 +12086,6 @@
           "dataiku-test-1949",
           "dataiku-test-1953",
           "dataiku-test-1954",
-          "dataiku-test-1955",
           "dataiku-test-1958",
           "dataiku-test-1959",
           "dataiku-test-196",
@@ -12126,7 +12106,6 @@
           "dataiku-test-2008",
           "dataiku-test-2009",
           "dataiku-test-2010",
-          "dataiku-test-2012",
           "dataiku-test-2013",
           "dataiku-test-2014",
           "dataiku-test-202",
@@ -12134,7 +12113,6 @@
           "dataiku-test-2023",
           "dataiku-test-2024",
           "dataiku-test-2028",
-          "dataiku-test-2031",
           "dataiku-test-2032",
           "dataiku-test-2038",
           "dataiku-test-204",
@@ -12200,7 +12178,6 @@
           "dataiku-test-2157",
           "dataiku-test-2159",
           "dataiku-test-216",
-          "dataiku-test-2160",
           "dataiku-test-2167",
           "dataiku-test-2168",
           "dataiku-test-2169",
@@ -12218,16 +12195,12 @@
           "dataiku-test-2199",
           "dataiku-test-220",
           "dataiku-test-2203",
-          "dataiku-test-2206",
           "dataiku-test-2209",
           "dataiku-test-221",
           "dataiku-test-2210",
-          "dataiku-test-2213",
           "dataiku-test-2215",
-          "dataiku-test-2218",
           "dataiku-test-222",
           "dataiku-test-2224",
-          "dataiku-test-2232",
           "dataiku-test-2233",
           "dataiku-test-2236",
           "dataiku-test-2237",
@@ -12238,7 +12211,6 @@
           "dataiku-test-2247",
           "dataiku-test-2248",
           "dataiku-test-2249",
-          "dataiku-test-225",
           "dataiku-test-2251",
           "dataiku-test-2256",
           "dataiku-test-2257",
@@ -12250,7 +12222,6 @@
           "dataiku-test-2265",
           "dataiku-test-2267",
           "dataiku-test-2270",
-          "dataiku-test-2271",
           "dataiku-test-2272",
           "dataiku-test-2282",
           "dataiku-test-229",
@@ -12299,7 +12270,6 @@
           "dataiku-test-2415",
           "dataiku-test-2417",
           "dataiku-test-2418",
-          "dataiku-test-2421",
           "dataiku-test-2427",
           "dataiku-test-243",
           "dataiku-test-2430",
@@ -12351,7 +12321,6 @@
           "dataiku-test-2533",
           "dataiku-test-2537",
           "dataiku-test-254",
-          "dataiku-test-2540",
           "dataiku-test-2543",
           "dataiku-test-2544",
           "dataiku-test-2548",
@@ -12388,14 +12357,11 @@
           "dataiku-test-2609",
           "dataiku-test-261",
           "dataiku-test-2611",
-          "dataiku-test-2615",
           "dataiku-test-2617",
           "dataiku-test-2620",
           "dataiku-test-2622",
-          "dataiku-test-2624",
           "dataiku-test-2625",
           "dataiku-test-2626",
-          "dataiku-test-2627",
           "dataiku-test-2635",
           "dataiku-test-2636",
           "dataiku-test-2637",
@@ -12415,12 +12381,10 @@
           "dataiku-test-2677",
           "dataiku-test-2679",
           "dataiku-test-2685",
-          "dataiku-test-2692",
           "dataiku-test-2693",
           "dataiku-test-2696",
           "dataiku-test-2699",
           "dataiku-test-2700",
-          "dataiku-test-2701",
           "dataiku-test-2702",
           "dataiku-test-2704",
           "dataiku-test-2705",
@@ -12476,7 +12440,6 @@
           "dataiku-test-2839",
           "dataiku-test-2841",
           "dataiku-test-2842",
-          "dataiku-test-2845",
           "dataiku-test-2849",
           "dataiku-test-285",
           "dataiku-test-2854",
@@ -12494,7 +12457,6 @@
           "dataiku-test-2887",
           "dataiku-test-2890",
           "dataiku-test-2898",
-          "dataiku-test-29",
           "dataiku-test-2903",
           "dataiku-test-2905",
           "dataiku-test-2906",
@@ -12567,7 +12529,6 @@
           "dataiku-test-3057",
           "dataiku-test-3059",
           "dataiku-test-3061",
-          "dataiku-test-3064",
           "dataiku-test-3066",
           "dataiku-test-307",
           "dataiku-test-3074",
@@ -12604,7 +12565,6 @@
           "dataiku-test-3145",
           "dataiku-test-3146",
           "dataiku-test-3147",
-          "dataiku-test-3149",
           "dataiku-test-315",
           "dataiku-test-3150",
           "dataiku-test-3151",
@@ -12633,7 +12593,6 @@
           "dataiku-test-3203",
           "dataiku-test-3205",
           "dataiku-test-3206",
-          "dataiku-test-3209",
           "dataiku-test-3214",
           "dataiku-test-3216",
           "dataiku-test-3218",
@@ -12649,7 +12608,6 @@
           "dataiku-test-3253",
           "dataiku-test-3258",
           "dataiku-test-3259",
-          "dataiku-test-326",
           "dataiku-test-3261",
           "dataiku-test-3263",
           "dataiku-test-3269",
@@ -12675,9 +12633,7 @@
           "dataiku-test-3338",
           "dataiku-test-3339",
           "dataiku-test-3340",
-          "dataiku-test-3341",
           "dataiku-test-3343",
-          "dataiku-test-3345",
           "dataiku-test-3346",
           "dataiku-test-3348",
           "dataiku-test-3349",
@@ -12687,7 +12643,6 @@
           "dataiku-test-3360",
           "dataiku-test-3361",
           "dataiku-test-3363",
-          "dataiku-test-3364",
           "dataiku-test-3371",
           "dataiku-test-3374",
           "dataiku-test-3377",
@@ -12704,10 +12659,8 @@
           "dataiku-test-3401",
           "dataiku-test-3406",
           "dataiku-test-3409",
-          "dataiku-test-3412",
           "dataiku-test-3419",
           "dataiku-test-342",
-          "dataiku-test-3421",
           "dataiku-test-3423",
           "dataiku-test-3428",
           "dataiku-test-3430",
@@ -12748,22 +12701,18 @@
           "dataiku-test-3513",
           "dataiku-test-3514",
           "dataiku-test-3519",
-          "dataiku-test-352",
           "dataiku-test-3520",
           "dataiku-test-3521",
           "dataiku-test-3524",
           "dataiku-test-3525",
           "dataiku-test-3526",
-          "dataiku-test-3528",
           "dataiku-test-3530",
-          "dataiku-test-3535",
           "dataiku-test-3537",
           "dataiku-test-3546",
           "dataiku-test-355",
           "dataiku-test-3554",
           "dataiku-test-3555",
           "dataiku-test-3559",
-          "dataiku-test-3560",
           "dataiku-test-3564",
           "dataiku-test-3567",
           "dataiku-test-3568",
@@ -12789,7 +12738,6 @@
           "dataiku-test-3612",
           "dataiku-test-3614",
           "dataiku-test-3617",
-          "dataiku-test-3618",
           "dataiku-test-362",
           "dataiku-test-3621",
           "dataiku-test-3622",
@@ -12818,10 +12766,8 @@
           "dataiku-test-3688",
           "dataiku-test-369",
           "dataiku-test-3690",
-          "dataiku-test-3691",
           "dataiku-test-3692",
           "dataiku-test-3694",
-          "dataiku-test-3701",
           "dataiku-test-3702",
           "dataiku-test-3705",
           "dataiku-test-3709",
@@ -12855,7 +12801,6 @@
           "dataiku-test-3793",
           "dataiku-test-3794",
           "dataiku-test-3797",
-          "dataiku-test-3798",
           "dataiku-test-3799",
           "dataiku-test-38",
           "dataiku-test-3801",
@@ -12887,7 +12832,6 @@
           "dataiku-test-3872",
           "dataiku-test-3877",
           "dataiku-test-3878",
-          "dataiku-test-3882",
           "dataiku-test-3886",
           "dataiku-test-3888",
           "dataiku-test-3889",
@@ -12905,7 +12849,6 @@
           "dataiku-test-3921",
           "dataiku-test-3924",
           "dataiku-test-3928",
-          "dataiku-test-3933",
           "dataiku-test-3934",
           "dataiku-test-3936",
           "dataiku-test-3937",
@@ -12978,7 +12921,6 @@
           "dataiku-test-4092",
           "dataiku-test-4093",
           "dataiku-test-4094",
-          "dataiku-test-4097",
           "dataiku-test-4099",
           "dataiku-test-4101",
           "dataiku-test-4102",
@@ -12992,7 +12934,6 @@
           "dataiku-test-4122",
           "dataiku-test-4124",
           "dataiku-test-4126",
-          "dataiku-test-4127",
           "dataiku-test-4129",
           "dataiku-test-413",
           "dataiku-test-4131",
@@ -13009,12 +12950,10 @@
           "dataiku-test-4163",
           "dataiku-test-4164",
           "dataiku-test-4168",
-          "dataiku-test-4171",
           "dataiku-test-4175",
           "dataiku-test-4176",
           "dataiku-test-4177",
           "dataiku-test-4178",
-          "dataiku-test-4180",
           "dataiku-test-4182",
           "dataiku-test-4192",
           "dataiku-test-4196",
@@ -13024,7 +12963,6 @@
           "dataiku-test-4203",
           "dataiku-test-4205",
           "dataiku-test-4209",
-          "dataiku-test-4210",
           "dataiku-test-4216",
           "dataiku-test-4217",
           "dataiku-test-422",
@@ -13044,7 +12982,6 @@
           "dataiku-test-425",
           "dataiku-test-4250",
           "dataiku-test-4251",
-          "dataiku-test-4252",
           "dataiku-test-4253",
           "dataiku-test-4255",
           "dataiku-test-4256",
@@ -13079,7 +13016,6 @@
           "dataiku-test-4328",
           "dataiku-test-4329",
           "dataiku-test-4332",
-          "dataiku-test-4335",
           "dataiku-test-4338",
           "dataiku-test-4341",
           "dataiku-test-4343",
@@ -13093,16 +13029,13 @@
           "dataiku-test-4360",
           "dataiku-test-4361",
           "dataiku-test-4363",
-          "dataiku-test-4364",
           "dataiku-test-4367",
           "dataiku-test-4370",
           "dataiku-test-4373",
           "dataiku-test-4375",
           "dataiku-test-4377",
           "dataiku-test-4378",
-          "dataiku-test-4385",
           "dataiku-test-4386",
-          "dataiku-test-4387",
           "dataiku-test-4388",
           "dataiku-test-4389",
           "dataiku-test-4390",
@@ -13120,7 +13053,6 @@
           "dataiku-test-4412",
           "dataiku-test-4414",
           "dataiku-test-4415",
-          "dataiku-test-4416",
           "dataiku-test-4417",
           "dataiku-test-4419",
           "dataiku-test-4421",
@@ -13152,7 +13084,6 @@
           "dataiku-test-4478",
           "dataiku-test-4479",
           "dataiku-test-4480",
-          "dataiku-test-4483",
           "dataiku-test-4484",
           "dataiku-test-4485",
           "dataiku-test-4489",
@@ -13223,7 +13154,6 @@
           "dataiku-test-4623",
           "dataiku-test-4624",
           "dataiku-test-4627",
-          "dataiku-test-4628",
           "dataiku-test-4631",
           "dataiku-test-4635",
           "dataiku-test-4642",
@@ -13281,7 +13211,6 @@
           "dataiku-test-4765",
           "dataiku-test-4769",
           "dataiku-test-4770",
-          "dataiku-test-4777",
           "dataiku-test-4778",
           "dataiku-test-4781",
           "dataiku-test-4784",
@@ -13301,7 +13230,6 @@
           "dataiku-test-4825",
           "dataiku-test-4826",
           "dataiku-test-4828",
-          "dataiku-test-4829",
           "dataiku-test-483",
           "dataiku-test-4831",
           "dataiku-test-4832",
@@ -13327,14 +13255,12 @@
           "dataiku-test-4891",
           "dataiku-test-4899",
           "dataiku-test-4902",
-          "dataiku-test-4909",
           "dataiku-test-491",
           "dataiku-test-4912",
           "dataiku-test-4914",
           "dataiku-test-4917",
           "dataiku-test-4918",
           "dataiku-test-4921",
-          "dataiku-test-4922",
           "dataiku-test-4923",
           "dataiku-test-4931",
           "dataiku-test-4934",
@@ -13370,7 +13296,6 @@
           "dataiku-test-5007",
           "dataiku-test-5009",
           "dataiku-test-5011",
-          "dataiku-test-5012",
           "dataiku-test-5014",
           "dataiku-test-5016",
           "dataiku-test-5017",
@@ -13383,7 +13308,6 @@
           "dataiku-test-5035",
           "dataiku-test-5042",
           "dataiku-test-5048",
-          "dataiku-test-505",
           "dataiku-test-5051",
           "dataiku-test-5054",
           "dataiku-test-5057",
@@ -13407,7 +13331,6 @@
           "dataiku-test-513",
           "dataiku-test-5132",
           "dataiku-test-5134",
-          "dataiku-test-5135",
           "dataiku-test-5136",
           "dataiku-test-514",
           "dataiku-test-5143",
@@ -13416,7 +13339,6 @@
           "dataiku-test-515",
           "dataiku-test-52",
           "dataiku-test-528",
-          "dataiku-test-531",
           "dataiku-test-534",
           "dataiku-test-535",
           "dataiku-test-536",
@@ -13529,7 +13451,6 @@
           "dataiku-test-791",
           "dataiku-test-792",
           "dataiku-test-794",
-          "dataiku-test-8",
           "dataiku-test-80",
           "dataiku-test-800",
           "dataiku-test-803",
@@ -13537,7 +13458,6 @@
           "dataiku-test-806",
           "dataiku-test-808",
           "dataiku-test-815",
-          "dataiku-test-816",
           "dataiku-test-826",
           "dataiku-test-829",
           "dataiku-test-83",
@@ -13575,7 +13495,6 @@
           "dataiku-test-922",
           "dataiku-test-926",
           "dataiku-test-927",
-          "dataiku-test-930",
           "dataiku-test-937",
           "dataiku-test-938",
           "dataiku-test-939",
@@ -13592,7 +13511,6 @@
           "dataiku-test-954",
           "dataiku-test-955",
           "dataiku-test-96",
-          "dataiku-test-964",
           "dataiku-test-97",
           "dataiku-test-970",
           "dataiku-test-972",
@@ -13759,7 +13677,6 @@
           "neg-de-documentation-network-0021",
           "neg-de-documentation-network-0022",
           "neg-de-documentation-network-0023",
-          "neg-de-documentation-network-0024",
           "neg-de-documentation-network-0025",
           "neg-de-documentation-network-0026",
           "neg-de-documentation-network-0027",
@@ -13780,7 +13697,6 @@
           "neg-de-documentation-network-0042",
           "neg-de-documentation-network-0043",
           "neg-de-documentation-network-0044",
-          "neg-de-documentation-network-0045",
           "neg-de-documentation-network-0046",
           "neg-de-documentation-network-0047",
           "neg-de-documentation-network-0048",
@@ -13793,12 +13709,10 @@
           "neg-de-documentation-network-0055",
           "neg-de-documentation-network-0056",
           "neg-de-documentation-network-0057",
-          "neg-de-documentation-network-0058",
           "neg-de-documentation-network-0059",
           "neg-de-documentation-network-0060",
           "neg-de-documentation-network-0061",
           "neg-de-documentation-network-0062",
-          "neg-de-documentation-network-0063",
           "neg-de-generic-roles-0000",
           "neg-de-generic-roles-0001",
           "neg-de-generic-roles-0002",
@@ -13899,7 +13813,6 @@
           "neg-de-invalid-identifiers-0033",
           "neg-de-invalid-identifiers-0034",
           "neg-de-invalid-identifiers-0035",
-          "neg-de-invalid-identifiers-0036",
           "neg-de-invalid-identifiers-0037",
           "neg-de-invalid-identifiers-0038",
           "neg-de-invalid-identifiers-0039",
@@ -13919,7 +13832,6 @@
           "neg-de-invalid-identifiers-0053",
           "neg-de-invalid-identifiers-0054",
           "neg-de-invalid-identifiers-0055",
-          "neg-de-invalid-identifiers-0056",
           "neg-de-invalid-identifiers-0057",
           "neg-de-invalid-identifiers-0058",
           "neg-de-invalid-identifiers-0059",
@@ -13960,7 +13872,6 @@
           "neg-de-public-entities-0030",
           "neg-de-public-entities-0031",
           "neg-de-public-entities-0032",
-          "neg-de-public-entities-0033",
           "neg-de-public-entities-0034",
           "neg-de-public-entities-0035",
           "neg-de-public-entities-0036",
@@ -13987,7 +13898,6 @@
           "neg-de-public-entities-0057",
           "neg-de-public-entities-0058",
           "neg-de-public-entities-0059",
-          "neg-de-public-entities-0060",
           "neg-de-public-entities-0061",
           "neg-de-public-entities-0062",
           "neg-de-public-entities-0063",
@@ -14634,83 +14544,630 @@
         ],
         "document_ids_digest": {
           "algorithm": "sha256",
-          "value": "2b9d49cd46f2723e90ae38d60564198d1cf920496b96db2e981521c27bb0ac0f"
+          "value": "3d883ca0a3045cbf498bc90a0620cd3f022d293a5747641f7b603abe8a01f012"
         }
       },
       "failed_closed_population": {
-        "documents": 0,
-        "document_ids": [],
+        "documents": 90,
+        "document_ids": [
+          "dataiku-test-1033",
+          "dataiku-test-1042",
+          "dataiku-test-1043",
+          "dataiku-test-1092",
+          "dataiku-test-1158",
+          "dataiku-test-1242",
+          "dataiku-test-1267",
+          "dataiku-test-1440",
+          "dataiku-test-1522",
+          "dataiku-test-1531",
+          "dataiku-test-1565",
+          "dataiku-test-1592",
+          "dataiku-test-16",
+          "dataiku-test-1620",
+          "dataiku-test-1690",
+          "dataiku-test-1724",
+          "dataiku-test-1780",
+          "dataiku-test-1838",
+          "dataiku-test-1883",
+          "dataiku-test-1955",
+          "dataiku-test-2012",
+          "dataiku-test-2031",
+          "dataiku-test-2160",
+          "dataiku-test-2206",
+          "dataiku-test-2213",
+          "dataiku-test-2218",
+          "dataiku-test-2232",
+          "dataiku-test-225",
+          "dataiku-test-2271",
+          "dataiku-test-2421",
+          "dataiku-test-2540",
+          "dataiku-test-2615",
+          "dataiku-test-2624",
+          "dataiku-test-2627",
+          "dataiku-test-2692",
+          "dataiku-test-2701",
+          "dataiku-test-2845",
+          "dataiku-test-29",
+          "dataiku-test-3064",
+          "dataiku-test-3149",
+          "dataiku-test-3209",
+          "dataiku-test-326",
+          "dataiku-test-3341",
+          "dataiku-test-3345",
+          "dataiku-test-3364",
+          "dataiku-test-3412",
+          "dataiku-test-3421",
+          "dataiku-test-352",
+          "dataiku-test-3528",
+          "dataiku-test-3535",
+          "dataiku-test-3560",
+          "dataiku-test-3618",
+          "dataiku-test-3691",
+          "dataiku-test-3701",
+          "dataiku-test-3798",
+          "dataiku-test-3882",
+          "dataiku-test-3933",
+          "dataiku-test-4097",
+          "dataiku-test-4127",
+          "dataiku-test-4171",
+          "dataiku-test-4180",
+          "dataiku-test-4210",
+          "dataiku-test-4252",
+          "dataiku-test-4335",
+          "dataiku-test-4364",
+          "dataiku-test-4385",
+          "dataiku-test-4387",
+          "dataiku-test-4416",
+          "dataiku-test-4483",
+          "dataiku-test-4628",
+          "dataiku-test-4777",
+          "dataiku-test-4829",
+          "dataiku-test-4909",
+          "dataiku-test-4922",
+          "dataiku-test-5012",
+          "dataiku-test-505",
+          "dataiku-test-5135",
+          "dataiku-test-531",
+          "dataiku-test-8",
+          "dataiku-test-816",
+          "dataiku-test-930",
+          "dataiku-test-964",
+          "neg-de-documentation-network-0024",
+          "neg-de-documentation-network-0045",
+          "neg-de-documentation-network-0058",
+          "neg-de-documentation-network-0063",
+          "neg-de-invalid-identifiers-0036",
+          "neg-de-invalid-identifiers-0056",
+          "neg-de-public-entities-0033",
+          "neg-de-public-entities-0060"
+        ],
         "document_ids_digest": {
           "algorithm": "sha256",
-          "value": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          "value": "04b711096fa4829fb087ec215bc0835937debb8c7b195161e788780a921eaf6c"
         },
-        "excluded_documents": [],
-        "reason_counts": {},
-        "stage_counts": {}
+        "excluded_documents": [
+          {
+            "document_id": "dataiku-test-1033",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1042",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1043",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1092",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1158",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1242",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1267",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1440",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1522",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1531",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1565",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1592",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-16",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1620",
+            "reason": "safety_net_fallback_residual_suspect",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1690",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1724",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1780",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1838",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1883",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-1955",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2012",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2031",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2160",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2206",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2213",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2218",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2232",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-225",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2271",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2421",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2540",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2615",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2624",
+            "reason": "safety_net_fallback_residual_suspect",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2627",
+            "reason": "safety_net_fallback_residual_suspect",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2692",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2701",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-2845",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-29",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3064",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3149",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3209",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-326",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3341",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3345",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3364",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3412",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3421",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-352",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3528",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3535",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3560",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3618",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3691",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3701",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3798",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3882",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-3933",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4097",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4127",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4171",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4180",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4210",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4252",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4335",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4364",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4385",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4387",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4416",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4483",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4628",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4777",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4829",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4909",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-4922",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-5012",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-505",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-5135",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-531",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-8",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-816",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-930",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "dataiku-test-964",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "neg-de-documentation-network-0024",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "neg-de-documentation-network-0045",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "neg-de-documentation-network-0058",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "neg-de-documentation-network-0063",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "neg-de-invalid-identifiers-0036",
+            "reason": "safety_net_fallback_residual_suspect",
+            "stage": "clean"
+          },
+          {
+            "document_id": "neg-de-invalid-identifiers-0056",
+            "reason": "safety_net_fallback_residual_suspect",
+            "stage": "clean"
+          },
+          {
+            "document_id": "neg-de-public-entities-0033",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          },
+          {
+            "document_id": "neg-de-public-entities-0060",
+            "reason": "safety_net_invalid_output_other",
+            "stage": "clean"
+          }
+        ],
+        "reason_counts": {
+          "safety_net_fallback_residual_suspect": 5,
+          "safety_net_invalid_output_other": 85
+        },
+        "stage_counts": {
+          "clean": 90
+        }
       },
       "metrics": {
-        "documents": 2910,
-        "zero_leak_document_rate": 0.4061855670103093,
-        "documents_without_leaks": 1182,
-        "documents_with_false_positives": 2509,
+        "documents": 2820,
+        "zero_leak_document_rate": 0.4124113475177305,
+        "documents_without_leaks": 1163,
+        "documents_with_false_positives": 2419,
         "utf8_bytes": {
-          "pii": 130282,
-          "predicted": 273379,
-          "true_positive": 105103,
-          "false_positive": 168276,
-          "leaked": 25179,
-          "precision": 0.3844589379579265,
-          "recall": 0.8067346218203589,
-          "leak_rate": 0.19326537817964107,
-          "f1": 0.5207488461852892,
-          "f2": 0.6614353303369259,
-          "false_positive_rate": 0.20304967885098274
+          "pii": 124745,
+          "predicted": 256876,
+          "true_positive": 100605,
+          "false_positive": 156271,
+          "leaked": 24140,
+          "precision": 0.3916481103723197,
+          "recall": 0.8064852298689327,
+          "leak_rate": 0.19351477013106733,
+          "f1": 0.5272508588363848,
+          "f2": 0.6655037467454119,
+          "false_positive_rate": 0.19714086392233
         },
         "entities": {
-          "gold": 14719,
-          "fully_covered": 10650,
-          "overlapped": 11072,
-          "exact_boundary": 7633,
-          "full_coverage_recall": 0.7235545893063388,
-          "overlap_recall": 0.7522250152863645,
-          "exact_boundary_recall": 0.5185814253685712
+          "gold": 14096,
+          "fully_covered": 10189,
+          "overlapped": 10591,
+          "exact_boundary": 7295,
+          "full_coverage_recall": 0.7228291713961408,
+          "overlap_recall": 0.7513479001135074,
+          "exact_boundary_recall": 0.5175227014755959
         },
         "prediction_spans": {
-          "total": 39463,
-          "overlapped_gold": 9951,
-          "overlap_precision": 0.25216025137470544
+          "total": 37019,
+          "overlapped_gold": 9518,
+          "overlap_precision": 0.2571112131608093
         }
       },
       "direct_identifier_recall": {
-        "entities": 7482,
-        "fully_covered": 5611,
-        "overlapped": 5721,
-        "full_coverage_recall": 0.7499331729484096,
-        "overlap_recall": 0.7646351242983159,
-        "utf8_bytes": 69181,
-        "covered_utf8_bytes": 60428,
-        "byte_recall": 0.87347682167069,
-        "leaked_utf8_bytes": 8753
+        "entities": 7181,
+        "fully_covered": 5379,
+        "overlapped": 5487,
+        "full_coverage_recall": 0.749060019495892,
+        "overlap_recall": 0.7640997075616209,
+        "utf8_bytes": 66472,
+        "covered_utf8_bytes": 58049,
+        "byte_recall": 0.8732849921771573,
+        "leaked_utf8_bytes": 8423
       },
       "contextual_pii_recall": {
-        "entities": 7237,
-        "fully_covered": 5039,
-        "overlapped": 5351,
-        "full_coverage_recall": 0.696282990189305,
-        "overlap_recall": 0.7393947768412326,
-        "utf8_bytes": 61283,
-        "covered_utf8_bytes": 44813,
-        "byte_recall": 0.731246838438066,
-        "leaked_utf8_bytes": 16470
+        "entities": 6915,
+        "fully_covered": 4810,
+        "overlapped": 5104,
+        "full_coverage_recall": 0.695589298626175,
+        "overlap_recall": 0.7381055676066522,
+        "utf8_bytes": 58444,
+        "covered_utf8_bytes": 42686,
+        "byte_recall": 0.7303743754705359,
+        "leaked_utf8_bytes": 15758
       },
       "pipeline_contract": {
-        "documents": 2910,
+        "documents": 2820,
         "restore_exact_documents": 2282,
-        "restore_exact_rate": 0.784192439862543,
-        "restore_success_decisions": 2910,
+        "restore_exact_rate": 0.8092198581560284,
+        "restore_success_decisions": 2820,
         "restore_success_decision_rate": 1.0,
-        "manifest_spans": 37856,
-        "manifest_valid_documents": 2910,
+        "manifest_spans": 35700,
+        "manifest_valid_documents": 2820,
         "manifest_valid_document_rate": 1.0,
         "manifest_integrity_errors": {
           "invalid_clean_bounds": 0,
@@ -14720,250 +15177,255 @@
           "raw_value_mismatches": 0,
           "token_restore_failures": 0
         },
-        "initial_safety_net_suspects": 27374,
-        "initial_actionable_suspects": 27198,
-        "initial_class_mismatches": 176,
-        "strict_would_reject_documents": 1860,
-        "strict_acceptance_rate": 0.3608247422680413,
-        "post_policy_scanned_documents": 2910,
-        "post_policy_suspects": 323,
-        "final_protection_trace_items": 39463,
-        "tokenize_actions": 37856,
-        "redact_actions": 1607,
-        "documents_with_redact": 628,
+        "initial_safety_net_suspects": 25453,
+        "initial_actionable_suspects": 25281,
+        "initial_class_mismatches": 172,
+        "strict_would_reject_documents": 1770,
+        "strict_acceptance_rate": 0.37234042553191493,
+        "post_policy_scanned_documents": 2820,
+        "post_policy_suspects": 173,
+        "final_protection_trace_items": 37019,
+        "tokenize_actions": 35700,
+        "redact_actions": 1319,
+        "documents_with_redact": 538,
         "post_policy_zero_suspect_documents": 2683,
-        "post_policy_zero_suspect_rate": 0.9219931271477664
+        "post_policy_zero_suspect_rate": 0.951418439716312
       },
       "pipeline_availability": {
         "attempted_documents": 2910,
-        "completed_documents": 2910,
-        "completion_rate": 1.0,
-        "failed_closed_documents": 0,
-        "errors": {},
-        "error_stages": {}
+        "completed_documents": 2820,
+        "completion_rate": 0.9690721649484536,
+        "failed_closed_documents": 90,
+        "errors": {
+          "safety_net_fallback_residual_suspect": 5,
+          "safety_net_invalid_output_other": 85
+        },
+        "error_stages": {
+          "clean": 90
+        }
       },
       "per_language": {
         "de": {
-          "documents": 1365,
-          "zero_leak_document_rate": 0.42344322344322344,
-          "documents_without_leaks": 578,
-          "documents_with_false_positives": 1356,
+          "documents": 1279,
+          "zero_leak_document_rate": 0.4370602032838155,
+          "documents_without_leaks": 559,
+          "documents_with_false_positives": 1270,
           "utf8_bytes": {
-            "pii": 57835,
-            "predicted": 194601,
-            "true_positive": 47247,
-            "false_positive": 147354,
-            "leaked": 10588,
-            "precision": 0.24278909152573727,
-            "recall": 0.8169274660672603,
-            "leak_rate": 0.1830725339327397,
-            "f1": 0.37432854268012483,
-            "f2": 0.554619066959978,
-            "false_positive_rate": 0.35007269720899736
+            "pii": 52520,
+            "predicted": 178374,
+            "true_positive": 42878,
+            "false_positive": 135496,
+            "leaked": 9642,
+            "precision": 0.24038256696603766,
+            "recall": 0.8164127951256664,
+            "leak_rate": 0.18358720487433355,
+            "f1": 0.3714085251240829,
+            "f2": 0.5519057597553378,
+            "false_positive_rate": 0.35036602047439147
           },
           "entities": {
-            "gold": 6693,
-            "fully_covered": 4879,
-            "overlapped": 5042,
-            "exact_boundary": 3493,
-            "full_coverage_recall": 0.7289705662632602,
-            "overlap_recall": 0.7533243687434633,
-            "exact_boundary_recall": 0.5218885402659496
+            "gold": 6088,
+            "fully_covered": 4430,
+            "overlapped": 4577,
+            "exact_boundary": 3163,
+            "full_coverage_recall": 0.7276609724047306,
+            "overlap_recall": 0.7518068331143233,
+            "exact_boundary_recall": 0.5195466491458607
           },
           "prediction_spans": {
-            "total": 30565,
-            "overlapped_gold": 4492,
-            "overlap_precision": 0.14696548339604124
+            "total": 28156,
+            "overlapped_gold": 4076,
+            "overlap_precision": 0.14476488137519533
           }
         },
         "en": {
-          "documents": 1545,
-          "zero_leak_document_rate": 0.39093851132686086,
+          "documents": 1541,
+          "zero_leak_document_rate": 0.39195327709279687,
           "documents_without_leaks": 604,
-          "documents_with_false_positives": 1153,
+          "documents_with_false_positives": 1149,
           "utf8_bytes": {
-            "pii": 72447,
-            "predicted": 78778,
-            "true_positive": 57856,
-            "false_positive": 20922,
-            "leaked": 14591,
-            "precision": 0.7344182385945315,
-            "recall": 0.7985975954835949,
-            "leak_rate": 0.20140240451640512,
-            "f1": 0.7651644899983469,
-            "f2": 0.7848797772990455,
-            "false_positive_rate": 0.05130217081597473
+            "pii": 72225,
+            "predicted": 78502,
+            "true_positive": 57727,
+            "false_positive": 20775,
+            "leaked": 14498,
+            "precision": 0.7353570609665996,
+            "recall": 0.7992661820699204,
+            "leak_rate": 0.2007338179300796,
+            "f1": 0.7659808793381411,
+            "f2": 0.7856108567726904,
+            "false_positive_rate": 0.05117499261010937
           },
           "entities": {
-            "gold": 8026,
-            "fully_covered": 5771,
-            "overlapped": 6030,
-            "exact_boundary": 4140,
-            "full_coverage_recall": 0.7190381260902068,
-            "overlap_recall": 0.7513082481933715,
-            "exact_boundary_recall": 0.5158235733864939
+            "gold": 8008,
+            "fully_covered": 5759,
+            "overlapped": 6014,
+            "exact_boundary": 4132,
+            "full_coverage_recall": 0.7191558441558441,
+            "overlap_recall": 0.750999000999001,
+            "exact_boundary_recall": 0.515984015984016
           },
           "prediction_spans": {
-            "total": 8898,
-            "overlapped_gold": 5459,
-            "overlap_precision": 0.6135086536300293
+            "total": 8863,
+            "overlapped_gold": 5442,
+            "overlap_precision": 0.6140133137763737
           }
         }
       },
       "per_label_recall": {
         "AGE": {
-          "entities": 210,
+          "entities": 200,
           "fully_covered": 2,
           "overlapped": 2,
-          "full_coverage_recall": 0.009523809523809525,
-          "overlap_recall": 0.009523809523809525,
-          "utf8_bytes": 420,
+          "full_coverage_recall": 0.01,
+          "overlap_recall": 0.01,
+          "utf8_bytes": 400,
           "covered_utf8_bytes": 4,
-          "byte_recall": 0.009523809523809525,
-          "leaked_utf8_bytes": 416
+          "byte_recall": 0.01,
+          "leaked_utf8_bytes": 396
         },
         "BUILDINGNUM": {
-          "entities": 1437,
-          "fully_covered": 66,
-          "overlapped": 70,
-          "full_coverage_recall": 0.04592901878914405,
-          "overlap_recall": 0.04871259568545581,
-          "utf8_bytes": 3185,
-          "covered_utf8_bytes": 131,
-          "byte_recall": 0.04113029827315542,
-          "leaked_utf8_bytes": 3054
+          "entities": 1381,
+          "fully_covered": 60,
+          "overlapped": 64,
+          "full_coverage_recall": 0.04344677769732078,
+          "overlap_recall": 0.04634322954380883,
+          "utf8_bytes": 3079,
+          "covered_utf8_bytes": 121,
+          "byte_recall": 0.039298473530367,
+          "leaked_utf8_bytes": 2958
         },
         "CITY": {
-          "entities": 1571,
-          "fully_covered": 1565,
-          "overlapped": 1571,
-          "full_coverage_recall": 0.9961807765754297,
+          "entities": 1506,
+          "fully_covered": 1500,
+          "overlapped": 1506,
+          "full_coverage_recall": 0.9960159362549801,
           "overlap_recall": 1.0,
-          "utf8_bytes": 11668,
-          "covered_utf8_bytes": 11647,
-          "byte_recall": 0.9982002056907782,
+          "utf8_bytes": 11224,
+          "covered_utf8_bytes": 11203,
+          "byte_recall": 0.9981290092658589,
           "leaked_utf8_bytes": 21
         },
         "COMPANYNAME": {
-          "entities": 419,
-          "fully_covered": 409,
-          "overlapped": 419,
-          "full_coverage_recall": 0.9761336515513126,
+          "entities": 404,
+          "fully_covered": 394,
+          "overlapped": 404,
+          "full_coverage_recall": 0.9752475247524752,
           "overlap_recall": 1.0,
-          "utf8_bytes": 5708,
-          "covered_utf8_bytes": 5653,
-          "byte_recall": 0.990364400840925,
+          "utf8_bytes": 5579,
+          "covered_utf8_bytes": 5524,
+          "byte_recall": 0.9901416024377129,
           "leaked_utf8_bytes": 55
         },
         "COUNTRY": {
-          "entities": 365,
-          "fully_covered": 357,
-          "overlapped": 363,
-          "full_coverage_recall": 0.9780821917808219,
-          "overlap_recall": 0.9945205479452055,
-          "utf8_bytes": 3353,
-          "covered_utf8_bytes": 3301,
-          "byte_recall": 0.9844915001491202,
-          "leaked_utf8_bytes": 52
+          "entities": 348,
+          "fully_covered": 341,
+          "overlapped": 346,
+          "full_coverage_recall": 0.9798850574712644,
+          "overlap_recall": 0.9942528735632183,
+          "utf8_bytes": 3187,
+          "covered_utf8_bytes": 3137,
+          "byte_recall": 0.9843112645120803,
+          "leaked_utf8_bytes": 50
         },
         "CREDITCARDNUMBER": {
-          "entities": 126,
-          "fully_covered": 27,
-          "overlapped": 32,
-          "full_coverage_recall": 0.21428571428571427,
-          "overlap_recall": 0.25396825396825395,
-          "utf8_bytes": 1971,
-          "covered_utf8_bytes": 531,
-          "byte_recall": 0.2694063926940639,
-          "leaked_utf8_bytes": 1440
+          "entities": 120,
+          "fully_covered": 26,
+          "overlapped": 31,
+          "full_coverage_recall": 0.21666666666666667,
+          "overlap_recall": 0.25833333333333336,
+          "utf8_bytes": 1860,
+          "covered_utf8_bytes": 512,
+          "byte_recall": 0.2752688172043011,
+          "leaked_utf8_bytes": 1348
         },
         "DATEOFBIRTH": {
-          "entities": 280,
+          "entities": 271,
           "fully_covered": 0,
           "overlapped": 10,
           "full_coverage_recall": 0.0,
-          "overlap_recall": 0.03571428571428571,
-          "utf8_bytes": 2926,
+          "overlap_recall": 0.03690036900369004,
+          "utf8_bytes": 2832,
           "covered_utf8_bytes": 49,
-          "byte_recall": 0.01674641148325359,
-          "leaked_utf8_bytes": 2877
+          "byte_recall": 0.01730225988700565,
+          "leaked_utf8_bytes": 2783
         },
         "DRIVERLICENSENUM": {
-          "entities": 216,
-          "fully_covered": 134,
-          "overlapped": 137,
-          "full_coverage_recall": 0.6203703703703703,
-          "overlap_recall": 0.6342592592592593,
-          "utf8_bytes": 2160,
-          "covered_utf8_bytes": 1295,
-          "byte_recall": 0.5995370370370371,
-          "leaked_utf8_bytes": 865
+          "entities": 204,
+          "fully_covered": 125,
+          "overlapped": 128,
+          "full_coverage_recall": 0.6127450980392157,
+          "overlap_recall": 0.6274509803921569,
+          "utf8_bytes": 2044,
+          "covered_utf8_bytes": 1208,
+          "byte_recall": 0.5909980430528375,
+          "leaked_utf8_bytes": 836
         },
         "EMAIL": {
-          "entities": 375,
-          "fully_covered": 373,
-          "overlapped": 375,
-          "full_coverage_recall": 0.9946666666666667,
+          "entities": 367,
+          "fully_covered": 365,
+          "overlapped": 367,
+          "full_coverage_recall": 0.9945504087193461,
           "overlap_recall": 1.0,
-          "utf8_bytes": 8806,
-          "covered_utf8_bytes": 8787,
-          "byte_recall": 0.9978423801953213,
+          "utf8_bytes": 8604,
+          "covered_utf8_bytes": 8585,
+          "byte_recall": 0.9977917247791724,
           "leaked_utf8_bytes": 19
         },
         "FIRSTNAME": {
-          "entities": 2001,
-          "fully_covered": 1981,
-          "overlapped": 1986,
-          "full_coverage_recall": 0.9900049975012494,
-          "overlap_recall": 0.992503748125937,
-          "utf8_bytes": 10071,
-          "covered_utf8_bytes": 10003,
-          "byte_recall": 0.9932479396286367,
-          "leaked_utf8_bytes": 68
+          "entities": 1915,
+          "fully_covered": 1897,
+          "overlapped": 1902,
+          "full_coverage_recall": 0.9906005221932115,
+          "overlap_recall": 0.9932114882506528,
+          "utf8_bytes": 9613,
+          "covered_utf8_bytes": 9553,
+          "byte_recall": 0.9937584520961198,
+          "leaked_utf8_bytes": 60
         },
         "IBAN": {
-          "entities": 207,
-          "fully_covered": 142,
-          "overlapped": 177,
-          "full_coverage_recall": 0.6859903381642513,
-          "overlap_recall": 0.855072463768116,
-          "utf8_bytes": 4789,
-          "covered_utf8_bytes": 3366,
-          "byte_recall": 0.7028607224890374,
-          "leaked_utf8_bytes": 1423
+          "entities": 195,
+          "fully_covered": 131,
+          "overlapped": 165,
+          "full_coverage_recall": 0.6717948717948717,
+          "overlap_recall": 0.8461538461538461,
+          "utf8_bytes": 4511,
+          "covered_utf8_bytes": 3108,
+          "byte_recall": 0.6889824872533806,
+          "leaked_utf8_bytes": 1403
         },
         "IDCARDNUM": {
-          "entities": 188,
-          "fully_covered": 142,
-          "overlapped": 147,
-          "full_coverage_recall": 0.7553191489361702,
-          "overlap_recall": 0.7819148936170213,
-          "utf8_bytes": 1946,
-          "covered_utf8_bytes": 1460,
-          "byte_recall": 0.750256937307297,
-          "leaked_utf8_bytes": 486
+          "entities": 177,
+          "fully_covered": 134,
+          "overlapped": 139,
+          "full_coverage_recall": 0.7570621468926554,
+          "overlap_recall": 0.7853107344632768,
+          "utf8_bytes": 1809,
+          "covered_utf8_bytes": 1356,
+          "byte_recall": 0.7495854063018242,
+          "leaked_utf8_bytes": 453
         },
         "LICENSEPLATENUM": {
-          "entities": 215,
+          "entities": 203,
           "fully_covered": 0,
-          "overlapped": 84,
+          "overlapped": 74,
           "full_coverage_recall": 0.0,
-          "overlap_recall": 0.39069767441860465,
-          "utf8_bytes": 1782,
-          "covered_utf8_bytes": 171,
-          "byte_recall": 0.09595959595959595,
-          "leaked_utf8_bytes": 1611
+          "overlap_recall": 0.3645320197044335,
+          "utf8_bytes": 1683,
+          "covered_utf8_bytes": 154,
+          "byte_recall": 0.0915032679738562,
+          "leaked_utf8_bytes": 1529
         },
         "NATIONALID": {
-          "entities": 200,
-          "fully_covered": 151,
-          "overlapped": 152,
-          "full_coverage_recall": 0.755,
-          "overlap_recall": 0.76,
-          "utf8_bytes": 2315,
-          "covered_utf8_bytes": 1759,
-          "byte_recall": 0.7598272138228942,
-          "leaked_utf8_bytes": 556
+          "entities": 192,
+          "fully_covered": 145,
+          "overlapped": 146,
+          "full_coverage_recall": 0.7552083333333334,
+          "overlap_recall": 0.7604166666666666,
+          "utf8_bytes": 2215,
+          "covered_utf8_bytes": 1688,
+          "byte_recall": 0.762076749435666,
+          "leaked_utf8_bytes": 527
         },
         "ORGANIZATION": {
           "entities": 3,
@@ -14977,36 +15439,36 @@
           "leaked_utf8_bytes": 0
         },
         "PASSPORTID": {
-          "entities": 224,
-          "fully_covered": 211,
-          "overlapped": 211,
-          "full_coverage_recall": 0.9419642857142857,
-          "overlap_recall": 0.9419642857142857,
-          "utf8_bytes": 2013,
-          "covered_utf8_bytes": 1895,
-          "byte_recall": 0.9413810233482365,
+          "entities": 208,
+          "fully_covered": 195,
+          "overlapped": 195,
+          "full_coverage_recall": 0.9375,
+          "overlap_recall": 0.9375,
+          "utf8_bytes": 1865,
+          "covered_utf8_bytes": 1747,
+          "byte_recall": 0.9367292225201073,
           "leaked_utf8_bytes": 118
         },
         "PASSWORD": {
-          "entities": 208,
+          "entities": 196,
           "fully_covered": 5,
-          "overlapped": 85,
-          "full_coverage_recall": 0.02403846153846154,
-          "overlap_recall": 0.40865384615384615,
-          "utf8_bytes": 2322,
-          "covered_utf8_bytes": 509,
-          "byte_recall": 0.21920757967269594,
-          "leaked_utf8_bytes": 1813
+          "overlapped": 82,
+          "full_coverage_recall": 0.025510204081632654,
+          "overlap_recall": 0.41836734693877553,
+          "utf8_bytes": 2189,
+          "covered_utf8_bytes": 491,
+          "byte_recall": 0.22430333485609869,
+          "leaked_utf8_bytes": 1698
         },
         "PHONENUMBER": {
-          "entities": 359,
-          "fully_covered": 270,
-          "overlapped": 270,
-          "full_coverage_recall": 0.7520891364902507,
-          "overlap_recall": 0.7520891364902507,
-          "utf8_bytes": 4956,
-          "covered_utf8_bytes": 3788,
-          "byte_recall": 0.7643260694108152,
+          "entities": 350,
+          "fully_covered": 261,
+          "overlapped": 261,
+          "full_coverage_recall": 0.7457142857142857,
+          "overlap_recall": 0.7457142857142857,
+          "utf8_bytes": 4818,
+          "covered_utf8_bytes": 3650,
+          "byte_recall": 0.7575757575757576,
           "leaked_utf8_bytes": 1168
         },
         "REGION": {
@@ -15021,70 +15483,70 @@
           "leaked_utf8_bytes": 0
         },
         "SECURITYTOKEN": {
-          "entities": 219,
-          "fully_covered": 151,
-          "overlapped": 165,
-          "full_coverage_recall": 0.6894977168949772,
-          "overlap_recall": 0.7534246575342466,
-          "utf8_bytes": 4342,
-          "covered_utf8_bytes": 3118,
-          "byte_recall": 0.7181022570244127,
-          "leaked_utf8_bytes": 1224
+          "entities": 206,
+          "fully_covered": 144,
+          "overlapped": 155,
+          "full_coverage_recall": 0.6990291262135923,
+          "overlap_recall": 0.7524271844660194,
+          "utf8_bytes": 4085,
+          "covered_utf8_bytes": 2981,
+          "byte_recall": 0.7297429620563035,
+          "leaked_utf8_bytes": 1104
         },
         "SSN": {
-          "entities": 217,
-          "fully_covered": 175,
-          "overlapped": 175,
-          "full_coverage_recall": 0.8064516129032258,
-          "overlap_recall": 0.8064516129032258,
-          "utf8_bytes": 2513,
-          "covered_utf8_bytes": 2068,
-          "byte_recall": 0.8229208117787505,
-          "leaked_utf8_bytes": 445
+          "entities": 198,
+          "fully_covered": 160,
+          "overlapped": 160,
+          "full_coverage_recall": 0.8080808080808081,
+          "overlap_recall": 0.8080808080808081,
+          "utf8_bytes": 2267,
+          "covered_utf8_bytes": 1883,
+          "byte_recall": 0.8306131451257168,
+          "leaked_utf8_bytes": 384
         },
         "STATE": {
-          "entities": 913,
-          "fully_covered": 837,
-          "overlapped": 853,
-          "full_coverage_recall": 0.9167579408543264,
-          "overlap_recall": 0.9342825848849945,
-          "utf8_bytes": 7222,
-          "covered_utf8_bytes": 7064,
-          "byte_recall": 0.9781224037662697,
-          "leaked_utf8_bytes": 158
+          "entities": 881,
+          "fully_covered": 806,
+          "overlapped": 822,
+          "full_coverage_recall": 0.9148694665153235,
+          "overlap_recall": 0.9330306469920545,
+          "utf8_bytes": 6903,
+          "covered_utf8_bytes": 6747,
+          "byte_recall": 0.9774011299435028,
+          "leaked_utf8_bytes": 156
         },
         "STREET": {
-          "entities": 1384,
-          "fully_covered": 1341,
-          "overlapped": 1384,
-          "full_coverage_recall": 0.9689306358381503,
+          "entities": 1332,
+          "fully_covered": 1290,
+          "overlapped": 1332,
+          "full_coverage_recall": 0.9684684684684685,
           "overlap_recall": 1.0,
-          "utf8_bytes": 18910,
-          "covered_utf8_bytes": 18743,
-          "byte_recall": 0.9911686938127975,
-          "leaked_utf8_bytes": 167
+          "utf8_bytes": 18202,
+          "covered_utf8_bytes": 18037,
+          "byte_recall": 0.99093506208109,
+          "leaked_utf8_bytes": 165
         },
         "SURNAME": {
-          "entities": 1697,
-          "fully_covered": 1688,
-          "overlapped": 1692,
-          "full_coverage_recall": 0.99469652327637,
-          "overlap_recall": 0.9970536240424278,
-          "utf8_bytes": 10831,
-          "covered_utf8_bytes": 10803,
-          "byte_recall": 0.9974148278090665,
+          "entities": 1625,
+          "fully_covered": 1616,
+          "overlapped": 1620,
+          "full_coverage_recall": 0.9944615384615385,
+          "overlap_recall": 0.9969230769230769,
+          "utf8_bytes": 10380,
+          "covered_utf8_bytes": 10352,
+          "byte_recall": 0.9973025048169557,
           "leaked_utf8_bytes": 28
         },
         "TAXNUM": {
-          "entities": 212,
-          "fully_covered": 46,
-          "overlapped": 62,
-          "full_coverage_recall": 0.2169811320754717,
-          "overlap_recall": 0.29245283018867924,
-          "utf8_bytes": 2495,
-          "covered_utf8_bytes": 624,
-          "byte_recall": 0.2501002004008016,
-          "leaked_utf8_bytes": 1871
+          "entities": 204,
+          "fully_covered": 45,
+          "overlapped": 60,
+          "full_coverage_recall": 0.22058823529411764,
+          "overlap_recall": 0.29411764705882354,
+          "utf8_bytes": 2396,
+          "covered_utf8_bytes": 603,
+          "byte_recall": 0.251669449081803,
+          "leaked_utf8_bytes": 1793
         },
         "TITLE": {
           "entities": 5,
@@ -15098,44 +15560,44 @@
           "leaked_utf8_bytes": 12
         },
         "URL": {
-          "entities": 276,
-          "fully_covered": 229,
-          "overlapped": 251,
-          "full_coverage_recall": 0.8297101449275363,
-          "overlap_recall": 0.9094202898550725,
-          "utf8_bytes": 7209,
-          "covered_utf8_bytes": 6407,
-          "byte_recall": 0.8887501733943681,
+          "entities": 265,
+          "fully_covered": 218,
+          "overlapped": 240,
+          "full_coverage_recall": 0.8226415094339623,
+          "overlap_recall": 0.9056603773584906,
+          "utf8_bytes": 6874,
+          "covered_utf8_bytes": 6072,
+          "byte_recall": 0.8833284841431481,
           "leaked_utf8_bytes": 802
         },
         "USERNAME": {
-          "entities": 101,
+          "entities": 97,
           "fully_covered": 6,
           "overlapped": 35,
-          "full_coverage_recall": 0.0594059405940594,
-          "overlap_recall": 0.3465346534653465,
-          "utf8_bytes": 1034,
+          "full_coverage_recall": 0.061855670103092786,
+          "overlap_recall": 0.36082474226804123,
+          "utf8_bytes": 991,
           "covered_utf8_bytes": 236,
-          "byte_recall": 0.22823984526112184,
-          "leaked_utf8_bytes": 798
+          "byte_recall": 0.23814328960645811,
+          "leaked_utf8_bytes": 755
         },
         "ZIP": {
-          "entities": 1090,
-          "fully_covered": 337,
-          "overlapped": 359,
-          "full_coverage_recall": 0.3091743119266055,
-          "overlap_recall": 0.3293577981651376,
-          "utf8_bytes": 5423,
-          "covered_utf8_bytes": 1747,
-          "byte_recall": 0.3221464134243039,
-          "leaked_utf8_bytes": 3676
+          "entities": 1042,
+          "fully_covered": 318,
+          "overlapped": 340,
+          "full_coverage_recall": 0.30518234165067176,
+          "overlap_recall": 0.32629558541266795,
+          "utf8_bytes": 5212,
+          "covered_utf8_bytes": 1652,
+          "byte_recall": 0.31696085955487335,
+          "leaked_utf8_bytes": 3560
         }
       },
       "validator_recall_by_label": {
         "AGE": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 210,
+          "gold_spans": 200,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15144,7 +15606,7 @@
         "BUILDINGNUM": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 1437,
+          "gold_spans": 1381,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15153,7 +15615,7 @@
         "CITY": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 1571,
+          "gold_spans": 1506,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15162,7 +15624,7 @@
         "COMPANYNAME": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 419,
+          "gold_spans": 404,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15171,7 +15633,7 @@
         "COUNTRY": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 365,
+          "gold_spans": 348,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15182,36 +15644,36 @@
           "validator_kinds": [
             "luhn"
           ],
-          "gold_spans": 126,
-          "validator_passed_gold_spans": 30,
-          "validator_failed_gold_spans": 96,
+          "gold_spans": 120,
+          "validator_passed_gold_spans": 29,
+          "validator_failed_gold_spans": 91,
           "validator_backed_recall": {
-            "entities": 126,
-            "fully_covered": 26,
-            "overlapped": 26,
-            "full_coverage_recall": 0.20634920634920634,
-            "overlap_recall": 0.20634920634920634,
-            "utf8_bytes": 1971,
-            "covered_utf8_bytes": 482,
-            "byte_recall": 0.24454591577879248,
-            "leaked_utf8_bytes": 1489
+            "entities": 120,
+            "fully_covered": 25,
+            "overlapped": 25,
+            "full_coverage_recall": 0.20833333333333334,
+            "overlap_recall": 0.20833333333333334,
+            "utf8_bytes": 1860,
+            "covered_utf8_bytes": 463,
+            "byte_recall": 0.2489247311827957,
+            "leaked_utf8_bytes": 1397
           },
           "shape_only_recall": {
-            "entities": 126,
-            "fully_covered": 94,
-            "overlapped": 94,
-            "full_coverage_recall": 0.746031746031746,
-            "overlap_recall": 0.746031746031746,
-            "utf8_bytes": 1971,
-            "covered_utf8_bytes": 1768,
-            "byte_recall": 0.8970065956367326,
+            "entities": 120,
+            "fully_covered": 88,
+            "overlapped": 88,
+            "full_coverage_recall": 0.7333333333333333,
+            "overlap_recall": 0.7333333333333333,
+            "utf8_bytes": 1860,
+            "covered_utf8_bytes": 1657,
+            "byte_recall": 0.8908602150537634,
             "leaked_utf8_bytes": 203
           }
         },
         "DATEOFBIRTH": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 280,
+          "gold_spans": 271,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15220,7 +15682,7 @@
         "DRIVERLICENSENUM": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 216,
+          "gold_spans": 204,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15231,36 +15693,36 @@
           "validator_kinds": [
             "email_rfc"
           ],
-          "gold_spans": 375,
-          "validator_passed_gold_spans": 375,
+          "gold_spans": 367,
+          "validator_passed_gold_spans": 367,
           "validator_failed_gold_spans": 0,
           "validator_backed_recall": {
-            "entities": 375,
-            "fully_covered": 373,
-            "overlapped": 375,
-            "full_coverage_recall": 0.9946666666666667,
+            "entities": 367,
+            "fully_covered": 365,
+            "overlapped": 367,
+            "full_coverage_recall": 0.9945504087193461,
             "overlap_recall": 1.0,
-            "utf8_bytes": 8806,
-            "covered_utf8_bytes": 8787,
-            "byte_recall": 0.9978423801953213,
+            "utf8_bytes": 8604,
+            "covered_utf8_bytes": 8585,
+            "byte_recall": 0.9977917247791724,
             "leaked_utf8_bytes": 19
           },
           "shape_only_recall": {
-            "entities": 375,
-            "fully_covered": 373,
-            "overlapped": 375,
-            "full_coverage_recall": 0.9946666666666667,
+            "entities": 367,
+            "fully_covered": 365,
+            "overlapped": 367,
+            "full_coverage_recall": 0.9945504087193461,
             "overlap_recall": 1.0,
-            "utf8_bytes": 8806,
-            "covered_utf8_bytes": 8787,
-            "byte_recall": 0.9978423801953213,
+            "utf8_bytes": 8604,
+            "covered_utf8_bytes": 8585,
+            "byte_recall": 0.9977917247791724,
             "leaked_utf8_bytes": 19
           }
         },
         "FIRSTNAME": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 2001,
+          "gold_spans": 1915,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15271,36 +15733,36 @@
           "validator_kinds": [
             "iban_mod97"
           ],
-          "gold_spans": 207,
-          "validator_passed_gold_spans": 140,
-          "validator_failed_gold_spans": 67,
+          "gold_spans": 195,
+          "validator_passed_gold_spans": 129,
+          "validator_failed_gold_spans": 66,
           "validator_backed_recall": {
-            "entities": 207,
+            "entities": 195,
             "fully_covered": 1,
             "overlapped": 1,
-            "full_coverage_recall": 0.004830917874396135,
-            "overlap_recall": 0.004830917874396135,
-            "utf8_bytes": 4789,
+            "full_coverage_recall": 0.005128205128205128,
+            "overlap_recall": 0.005128205128205128,
+            "utf8_bytes": 4511,
             "covered_utf8_bytes": 24,
-            "byte_recall": 0.005011484652328252,
-            "leaked_utf8_bytes": 4765
+            "byte_recall": 0.005320328086898692,
+            "leaked_utf8_bytes": 4487
           },
           "shape_only_recall": {
-            "entities": 207,
-            "fully_covered": 76,
-            "overlapped": 77,
-            "full_coverage_recall": 0.3671497584541063,
-            "overlap_recall": 0.3719806763285024,
-            "utf8_bytes": 4789,
-            "covered_utf8_bytes": 2067,
-            "byte_recall": 0.4316141156817707,
-            "leaked_utf8_bytes": 2722
+            "entities": 195,
+            "fully_covered": 71,
+            "overlapped": 72,
+            "full_coverage_recall": 0.3641025641025641,
+            "overlap_recall": 0.36923076923076925,
+            "utf8_bytes": 4511,
+            "covered_utf8_bytes": 1935,
+            "byte_recall": 0.42895145200620705,
+            "leaked_utf8_bytes": 2576
           }
         },
         "IDCARDNUM": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 188,
+          "gold_spans": 177,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15309,7 +15771,7 @@
         "LICENSEPLATENUM": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 215,
+          "gold_spans": 203,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15318,7 +15780,7 @@
         "NATIONALID": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 200,
+          "gold_spans": 192,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15336,7 +15798,7 @@
         "PASSPORTID": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 224,
+          "gold_spans": 208,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15345,7 +15807,7 @@
         "PASSWORD": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 208,
+          "gold_spans": 196,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15358,29 +15820,29 @@
             "e164_phone_national_de",
             "e164_phone_national_us"
           ],
-          "gold_spans": 359,
-          "validator_passed_gold_spans": 318,
+          "gold_spans": 350,
+          "validator_passed_gold_spans": 309,
           "validator_failed_gold_spans": 41,
           "validator_backed_recall": {
-            "entities": 359,
-            "fully_covered": 271,
-            "overlapped": 271,
-            "full_coverage_recall": 0.754874651810585,
-            "overlap_recall": 0.754874651810585,
-            "utf8_bytes": 4956,
-            "covered_utf8_bytes": 3800,
-            "byte_recall": 0.7667473769168685,
+            "entities": 350,
+            "fully_covered": 262,
+            "overlapped": 262,
+            "full_coverage_recall": 0.7485714285714286,
+            "overlap_recall": 0.7485714285714286,
+            "utf8_bytes": 4818,
+            "covered_utf8_bytes": 3662,
+            "byte_recall": 0.7600664176006642,
             "leaked_utf8_bytes": 1156
           },
           "shape_only_recall": {
-            "entities": 359,
-            "fully_covered": 324,
-            "overlapped": 325,
-            "full_coverage_recall": 0.9025069637883009,
-            "overlap_recall": 0.9052924791086351,
-            "utf8_bytes": 4956,
-            "covered_utf8_bytes": 4521,
-            "byte_recall": 0.912227602905569,
+            "entities": 350,
+            "fully_covered": 315,
+            "overlapped": 316,
+            "full_coverage_recall": 0.9,
+            "overlap_recall": 0.9028571428571428,
+            "utf8_bytes": 4818,
+            "covered_utf8_bytes": 4383,
+            "byte_recall": 0.9097135740971357,
             "leaked_utf8_bytes": 435
           }
         },
@@ -15396,7 +15858,7 @@
         "SECURITYTOKEN": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 219,
+          "gold_spans": 206,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15405,7 +15867,7 @@
         "SSN": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 217,
+          "gold_spans": 198,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15414,7 +15876,7 @@
         "STATE": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 913,
+          "gold_spans": 881,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15423,7 +15885,7 @@
         "STREET": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 1384,
+          "gold_spans": 1332,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15432,7 +15894,7 @@
         "SURNAME": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 1697,
+          "gold_spans": 1625,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15443,30 +15905,30 @@
           "validator_kinds": [
             "de_steuer_id_mod1110"
           ],
-          "gold_spans": 212,
+          "gold_spans": 204,
           "validator_passed_gold_spans": 2,
-          "validator_failed_gold_spans": 210,
+          "validator_failed_gold_spans": 202,
           "validator_backed_recall": {
-            "entities": 212,
+            "entities": 204,
             "fully_covered": 0,
             "overlapped": 0,
             "full_coverage_recall": 0.0,
             "overlap_recall": 0.0,
-            "utf8_bytes": 2495,
+            "utf8_bytes": 2396,
             "covered_utf8_bytes": 0,
             "byte_recall": 0.0,
-            "leaked_utf8_bytes": 2495
+            "leaked_utf8_bytes": 2396
           },
           "shape_only_recall": {
-            "entities": 212,
+            "entities": 204,
             "fully_covered": 0,
             "overlapped": 0,
             "full_coverage_recall": 0.0,
             "overlap_recall": 0.0,
-            "utf8_bytes": 2495,
+            "utf8_bytes": 2396,
             "covered_utf8_bytes": 0,
             "byte_recall": 0.0,
-            "leaked_utf8_bytes": 2495
+            "leaked_utf8_bytes": 2396
           }
         },
         "TITLE": {
@@ -15481,7 +15943,7 @@
         "URL": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 276,
+          "gold_spans": 265,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15490,7 +15952,7 @@
         "USERNAME": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 101,
+          "gold_spans": 97,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15499,7 +15961,7 @@
         "ZIP": {
           "applicability": "not_applicable",
           "validator_kinds": [],
-          "gold_spans": 1090,
+          "gold_spans": 1042,
           "validator_passed_gold_spans": null,
           "validator_failed_gold_spans": null,
           "validator_backed_recall": null,
@@ -15574,22 +16036,22 @@
           }
         },
         "documentation_network": {
-          "documents": 128,
+          "documents": 124,
           "zero_leak_document_rate": 1.0,
-          "documents_without_leaks": 128,
-          "documents_with_false_positives": 128,
+          "documents_without_leaks": 124,
+          "documents_with_false_positives": 124,
           "utf8_bytes": {
             "pii": 0,
-            "predicted": 6519,
+            "predicted": 6285,
             "true_positive": 0,
-            "false_positive": 6519,
+            "false_positive": 6285,
             "leaked": 0,
             "precision": 0.0,
             "recall": 1.0,
             "leak_rate": 0.0,
             "f1": 0.0,
             "f2": 0.0,
-            "false_positive_rate": 0.2663316582914573
+            "false_positive_rate": 0.26586294416243655
           },
           "entities": {
             "gold": 0,
@@ -15601,7 +16063,7 @@
             "exact_boundary_recall": 1.0
           },
           "prediction_spans": {
-            "total": 1163,
+            "total": 1121,
             "overlapped_gold": 0,
             "overlap_precision": 0.0
           }
@@ -15640,22 +16102,22 @@
           }
         },
         "invalid_identifiers": {
-          "documents": 128,
+          "documents": 126,
           "zero_leak_document_rate": 1.0,
-          "documents_without_leaks": 128,
-          "documents_with_false_positives": 64,
+          "documents_without_leaks": 126,
+          "documents_with_false_positives": 62,
           "utf8_bytes": {
             "pii": 0,
-            "predicted": 5597,
+            "predicted": 5406,
             "true_positive": 0,
-            "false_positive": 5597,
+            "false_positive": 5406,
             "leaked": 0,
             "precision": 0.0,
             "recall": 1.0,
             "leak_rate": 0.0,
             "f1": 0.0,
             "f2": 0.0,
-            "false_positive_rate": 0.20819074542478797
+            "false_positive_rate": 0.20452481840193704
           },
           "entities": {
             "gold": 0,
@@ -15667,28 +16129,28 @@
             "exact_boundary_recall": 1.0
           },
           "prediction_spans": {
-            "total": 1496,
+            "total": 1442,
             "overlapped_gold": 0,
             "overlap_precision": 0.0
           }
         },
         "public_entities": {
-          "documents": 128,
+          "documents": 126,
           "zero_leak_document_rate": 1.0,
-          "documents_without_leaks": 128,
-          "documents_with_false_positives": 128,
+          "documents_without_leaks": 126,
+          "documents_with_false_positives": 126,
           "utf8_bytes": {
             "pii": 0,
-            "predicted": 8852,
+            "predicted": 8621,
             "true_positive": 0,
-            "false_positive": 8852,
+            "false_positive": 8621,
             "leaked": 0,
             "precision": 0.0,
             "recall": 1.0,
             "leak_rate": 0.0,
             "f1": 0.0,
             "f2": 0.0,
-            "false_positive_rate": 0.44209159466613396
+            "false_positive_rate": 0.43841537835638733
           },
           "entities": {
             "gold": 0,
@@ -15700,7 +16162,7 @@
             "exact_boundary_recall": 1.0
           },
           "prediction_spans": {
-            "total": 1045,
+            "total": 1022,
             "overlapped_gold": 0,
             "overlap_precision": 0.0
           }
@@ -15774,63 +16236,63 @@
       },
       "latency_ms": {
         "clean_ms": {
-          "mean": 107.55184917353952,
-          "median": 101.483041,
-          "p95": 188.68769824999995,
-          "p99": 209.6850825,
-          "max": 500.121042
+          "mean": 195.57327122056736,
+          "median": 134.4687705,
+          "p95": 546.6652493999994,
+          "p99": 1004.9409289799999,
+          "max": 2068.620208
         },
         "post_policy_scan_ms": {
-          "mean": 36.255420458762885,
-          "median": 30.256708000000003,
-          "p95": 87.32150449999999,
-          "p99": 88.31516675,
-          "max": 111.247709
+          "mean": 59.69872323687944,
+          "median": 39.4165,
+          "p95": 194.7599922999998,
+          "p99": 361.41765374999983,
+          "max": 644.9785
         },
         "restore_ms": {
-          "mean": 0.5442253539518901,
-          "median": 0.5297915,
-          "p95": 1.3021852999999997,
-          "p99": 1.59599253,
-          "max": 2.9255
+          "mean": 0.8001861890070922,
+          "median": 0.6161665000000001,
+          "p95": 2.026318149999996,
+          "p99": 7.005967249999993,
+          "max": 22.823584
         }
       },
       "warm_latency_ms": {
         "clean_ms": {
-          "mean": 107.54484577002407,
-          "median": 101.458916,
-          "p95": 188.697667,
-          "p99": 209.685865,
-          "max": 500.121042
+          "mean": 195.5828055193331,
+          "median": 134.453083,
+          "p95": 546.7679577999999,
+          "p99": 1004.9704085600005,
+          "max": 2068.620208
         },
         "post_policy_scan_ms": {
-          "mean": 36.25375823375731,
-          "median": 30.249916000000002,
-          "p95": 87.32196699999999,
-          "p99": 88.315588,
-          "max": 111.247709
+          "mean": 59.70539067754523,
+          "median": 39.381167000000005,
+          "p95": 194.79715059999995,
+          "p99": 361.45175750000055,
+          "max": 644.9785
         },
         "restore_ms": {
-          "mean": 0.5443882021313166,
-          "median": 0.530042,
-          "p95": 1.3022665999999998,
-          "p99": 1.59599336,
-          "max": 2.9255
+          "mean": 0.8004455079815538,
+          "median": 0.6162080000000001,
+          "p95": 2.0270952999999987,
+          "p99": 7.00716850000002,
+          "max": 22.823584
         }
       },
       "process": {
-        "wall_seconds": 439.94846891600173,
-        "documents_per_second": 9.297841066279178,
-        "start_to_first_response_ms": 15831.267790999846,
-        "cold_start_to_first_validated_response_ms": 15831.267790999846,
+        "wall_seconds": 777.9529085419927,
+        "documents_per_second": 5.113173153770082,
+        "start_to_first_response_ms": 16088.506999993115,
+        "cold_start_to_first_validated_response_ms": 16088.506999993115,
         "warmup_count": 1,
         "discarded_warmup_samples": [
           {
             "sample": 1,
-            "round_trip_ms": 15828.438040996843,
-            "clean_ms": 9073.199917,
-            "restore_ms": 0.07341700000000001,
-            "post_policy_scan_ms": 41.1405,
+            "round_trip_ms": 16082.935416998225,
+            "clean_ms": 9157.527291999999,
+            "restore_ms": 0.092208,
+            "post_policy_scan_ms": 41.062957999999995,
             "correctness": {
               "leaked_labeled_utf8_bytes": 0,
               "uncovered_entities": 0,
@@ -15876,14 +16338,14 @@
         "runs": [
           {
             "config": "rule-floor-extended",
-            "cold_start_to_first_validated_response_ms": 1488.997415995982,
+            "cold_start_to_first_validated_response_ms": 1469.8832079884596,
             "warmup_count": 1,
             "discarded_warmup_samples": [
               {
                 "sample": 1,
-                "round_trip_ms": 1483.7947909982176,
-                "clean_ms": 5.729166,
-                "restore_ms": 2.2105829999999997,
+                "round_trip_ms": 1464.409665990388,
+                "clean_ms": 5.940666,
+                "restore_ms": 2.2443329999999997,
                 "post_policy_scan_ms": null,
                 "correctness": {
                   "leaked_labeled_utf8_bytes": 0,
@@ -15897,23 +16359,23 @@
               }
             ],
             "clean_ms": {
-              "mean": 1.2189576092783505,
-              "median": 0.6368545,
-              "p95": 2.8723378,
-              "p99": 7.232636119999991,
-              "max": 351.93204099999997
+              "mean": 1.2608781233676976,
+              "median": 0.665229,
+              "p95": 2.9977060999999985,
+              "p99": 7.364767529999995,
+              "max": 358.99058299999996
             }
           },
           {
             "config": "pass2-ner",
-            "cold_start_to_first_validated_response_ms": 6818.294124997919,
+            "cold_start_to_first_validated_response_ms": 6799.938541007577,
             "warmup_count": 1,
             "discarded_warmup_samples": [
               {
                 "sample": 1,
-                "round_trip_ms": 6815.550207997148,
-                "clean_ms": 74.81,
-                "restore_ms": 2.201416,
+                "round_trip_ms": 6797.067916006199,
+                "clean_ms": 75.140709,
+                "restore_ms": 2.201334,
                 "post_policy_scan_ms": null,
                 "correctness": {
                   "leaked_labeled_utf8_bytes": 0,
@@ -15927,24 +16389,24 @@
               }
             ],
             "clean_ms": {
-              "mean": 46.24844882027491,
-              "median": 42.975479,
-              "p95": 69.6515647,
-              "p99": 71.60095353,
-              "max": 391.738291
+              "mean": 49.16433108453608,
+              "median": 44.901624999999996,
+              "p95": 72.1917811,
+              "p99": 95.24401371999971,
+              "max": 392.735458
             }
           },
           {
             "config": "full-stack-kiji-resolve",
-            "cold_start_to_first_validated_response_ms": 15831.267790999846,
+            "cold_start_to_first_validated_response_ms": 16088.506999993115,
             "warmup_count": 1,
             "discarded_warmup_samples": [
               {
                 "sample": 1,
-                "round_trip_ms": 15828.438040996843,
-                "clean_ms": 9073.199917,
-                "restore_ms": 0.07341700000000001,
-                "post_policy_scan_ms": 41.1405,
+                "round_trip_ms": 16082.935416998225,
+                "clean_ms": 9157.527291999999,
+                "restore_ms": 0.092208,
+                "post_policy_scan_ms": 41.062957999999995,
                 "correctness": {
                   "leaked_labeled_utf8_bytes": 0,
                   "uncovered_entities": 0,
@@ -15957,11 +16419,11 @@
               }
             ],
             "clean_ms": {
-              "mean": 107.55184917353952,
-              "median": 101.483041,
-              "p95": 188.68769824999995,
-              "p99": 209.6850825,
-              "max": 500.121042
+              "mean": 195.57327122056736,
+              "median": 134.4687705,
+              "p95": 546.6652493999994,
+              "p99": 1004.9409289799999,
+              "max": 2068.620208
             }
           }
         ]
