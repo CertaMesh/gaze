@@ -7,14 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-15
+
+### Changed
+
+- **Breaking: `PiiClass::custom` is fallible.** It returns
+  `Result<PiiClass, EmptyCustomClassName>`, rejecting names when normalization
+  leaves no ASCII letters or digits. Policy loading and live/staged tokenization reject invalid
+  custom classes before changing session state, including classes constructed
+  directly through the enum. The token bridge normalizes custom-entity
+  whitespace consistently (#553, #577).
+- **Breaking: `SessionCfg` adds `max_sessions`.** Rust struct literals must set
+  it; configuration files that omit it default to 1,000. Zero is rejected.
+  Ephemeral stores reject new sessions at capacity. File stores persist an
+  inactive, exclusively owned session before eviction and reject admission if
+  persistence fails or strong/weak handles prevent exclusive ownership (#578).
+- **Prefix reuse now always rescans the complete input.** Existing optimization
+  APIs remain source-compatible but retain and replay no prefixes. Each call
+  uses current field, locale, dictionaries, recognizers, and rules. This closes
+  stale-context PII leaks at the cost of full-scan latency on growing inputs;
+  audit consumers see actual rule/recognizer provenance (#579).
+- Subprocess diagnostics drain verbose stderr without aborting valid inference.
+  Opt-in diagnostics retain only a bounded, sanitized prefix; stdout limits,
+  invalid output, I/O failures, and deadlines still fail closed. Unix and
+  Windows cleanup cancels pipe workers and reaps the direct child (#580).
+
 ### Fixed
 
-- Custom class names that normalize to empty (for example `custom:!!!`) are now
-  a typed load-time error. `PiiClass::custom` returns `Result<PiiClass,
-  EmptyCustomClassName>`; callers must handle invalid names. Live and staged
-  sessions also reject empty custom classes constructed directly through the
-  enum before changing session state. Valid session tokens continue to
-  round-trip through the token bridge's strict parser (#507).
+- Resolve safety-net policy with a Redact fallback now scans the final text and
+  manifest before returning success. Remaining unprotected or malformed suspects
+  and net errors reject; verified live-token hits remain allowed. This adds one
+  inference after fallback, without another mutation or retry (#584).
+- Direct Anthropic and legacy proxy request surfaces now run configured-net
+  admission after primary pseudonymization and before provider I/O. Actual owned
+  token reflags remain allowed; raw residuals, malformed spans, registry failures,
+  and inference errors reject. Admission scans complete transformed surfaces and
+  codec validation views, adding denials and inference cost (#585).
+- Strict protection resolves across the full locale chain and preserves mapped
+  protected-dictionary precedence. Empty safety registries skip consistently,
+  and collision metadata is registered only after recognizer construction
+  succeeds (#574, #561, #558).
+- Detection preserves byte-adjacent NER entities, valid name endpoints after
+  particle trimming, and hyphenated dictionary identifiers. Exclusions match
+  consistently across ASCII case (#564, #563, #568, #567).
+- Policy and rulepack loaders reject unsupported two-digit minor schema
+  versions. Inline comments no longer disable strict overlap lint, and CLI
+  path rulepacks tokenize without an explicit policy (#576, #562, #545).
+- Restoration recognizes family-namespace tokens in prose and known bare
+  session tokens after leading ASCII/Unicode word characters. Matching uses
+  original input and the longest known keys once, without recursively restoring
+  replacement text. Family fallbacks retain accumulated resolver provenance;
+  document path checks use the central restore scanner (#552, #581, #566, #571).
+- Document ingestion repairs fragmented email domain labels and counts
+  characters from the final Markdown artifact (#565, #556).
+- Proxy response checks guard carriers spanning content blocks, surface
+  structured OpenAI Responses text, and rebuild safe legacy response headers.
+  MCP calls with unchanged arguments avoid unnecessary transaction conflicts
+  (#544, #548, #549, #546).
+- Daemon pidfile cleanup follows locked ownership. Eviction audit failures
+  surface safely; ingress blocks record their deciding rule; terminal MCP calls
+  retain journal context; JSONL exports keep restore telemetry; index searches
+  consider allowed classes without hiding policy denials
+  (#572, #570, #554, #582, #555, #569).
+- Dashboard browser navigation headers are accepted, purge notifications use an
+  isolated channel, and the pairing timeout is cleared before idle control
+  (#547, #550, #551).
+
+### Added
+
+- `gaze_proxy::serve_with_listener` accepts an owned listener, validates its
+  address against configuration, and reports its actual bound port. Inspection
+  tests keep the listener reserved through server startup (#581).
+- Migration guidance for both source breaks, session capacity, full rescanning,
+  manifest-authorized complete-text restoration, and agent/operator response
+  boundaries. See [UPGRADE.md](UPGRADE.md) (#557, #559, #560).
+
+### Security
+
+- The workspace lock updates `rustls` to 0.23.45 and `rustls-webpki` to 0.103.15
+  as part of the subprocess/runtime integration (#580).
+
+### Known limitations
+
+- Configured-net admission does not require a model globally. Missing nets,
+  locale-skipped custom nets, and detector misses remain coverage limits.
+  Primary Preserve/Redact policy and public legacy clean defaults are unchanged;
+  successful Redact fallback remains one-way. Direct proxy failures discard
+  staging before commit/send, but legacy mappings already published remain live
+  on denial. Snapshot admission does not provide whole-request rollback or
+  serialization (#584, #585).
+- `max_sessions` bounds cached sessions, not the per-ID file-lock registry,
+  which remains unbounded. Capacity can reject admission while handles remain.
+- Restore remains manifest-authorized. Trailing word boundaries and ambiguous
+  family-token hyphen suffixes stay guarded; separate family tokens from a
+  following hyphen with whitespace. No universal unknown-suffix guarantee is
+  introduced.
+- Diagnostic sanitization is heuristic and does not detect arbitrary PII.
+  Cleanup does not kill descendants and is not a hard real-time guarantee.
+  Subprocess adapters outside Unix and Windows fail before spawn.
+- Detection completeness and exact restoration must be judged from the fresh
+  [release benchmark](docs/reference/benchmarks/README.md). The previous
+  v0.14.0 scorecard failed readiness with residual labeled PII and one-way
+  fallback; these fixes alone do not establish zero leakage or release readiness.
 
 ## [0.14.0] - 2026-09-11
 
@@ -2149,7 +2243,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/CertaMesh/gaze/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/CertaMesh/gaze/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/CertaMesh/gaze/compare/v0.12.0...v0.13.0
 [0.6.4]: https://github.com/EmpireTwo/gaze/compare/v0.6.3...v0.6.4

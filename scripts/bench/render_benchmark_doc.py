@@ -441,6 +441,22 @@ _NO_RELEASES = (
 )
 
 
+def _display_version(entry: Mapping[str, Any]) -> str:
+    return entry["version"] + (" (provisional)" if entry.get("provisional") else "")
+
+
+def _chart_caveat(entry: Mapping[str, Any]) -> list[str]:
+    if not entry.get("provisional"):
+        return []
+    # Carry the recorded disposition; provisional alone does not imply failure.
+    lines = [
+        f"> **{_display_version(entry)}: not measured on the released tree.**"
+    ]
+    if entry.get("note"):
+        lines.append(f"> {entry['note']}")
+    return lines
+
+
 def render_current_release(history: Mapping[str, Any]) -> str:
     releases = history["releases"]
     if not releases:
@@ -448,10 +464,10 @@ def render_current_release(history: Mapping[str, Any]) -> str:
     entry = releases[-1]
     lines: list[str] = []
     if entry.get("provisional"):
-        claim = "**(provisional)** — *not* measured on the released tree."
+        claim = "— *not* measured on the released tree."
     else:
         claim = "— measured on the released tree."
-    lines.append(f"**{entry['version']}** {claim}")
+    lines.append(f"**{_display_version(entry)}** {claim}")
     lines.append("")
     if entry.get("note"):
         lines.append(f"> {entry['note']}")
@@ -538,12 +554,14 @@ def render_charts(history: Mapping[str, Any]) -> str:
     surviving = [block["surviving_pii_utf8_bytes"] for _, block in arms]
 
     lines = [
-        f"**Surviving PII bytes per arm — {entry['version']}.** Lower is better; "
+        f"**Surviving PII bytes per arm — {_display_version(entry)}.** Lower is better; "
         "the goal is zero.",
         "",
+        *_chart_caveat(entry),
+        *([""] if entry.get("provisional") else []),
         "```mermaid",
         "xychart-beta",
-        f'    title "Surviving PII bytes per arm - {entry["version"]}"',
+        f'    title "Surviving PII bytes per arm - {_display_version(entry)}"',
         f"    x-axis {_mermaid_labels([arm for arm, _ in arms])}",
         f'    y-axis "Surviving PII bytes (lower is better)" 0 --> {_axis_max(surviving)}',
         f"    bar [{', '.join(str(int(value)) for value in surviving)}]",
@@ -551,18 +569,28 @@ def render_charts(history: Mapping[str, Any]) -> str:
     ]
 
     default_arm = history.get("shipped_default_arm", SHIPPED_DEFAULT_ARM)
+    trend_entries = [item for item in releases if default_arm in item["arms"]]
     trend = [
-        (item["version"], item["arms"][default_arm]["surviving_pii_utf8_bytes"])
-        for item in releases
-        if default_arm in item["arms"]
+        (_display_version(item), item["arms"][default_arm]["surviving_pii_utf8_bytes"])
+        for item in trend_entries
     ]
-    lines.extend(["", f"**Trend across releases — `{default_arm}`.**"])
+    population = (
+        "releases and candidates"
+        if any(item.get("provisional") for item in trend_entries)
+        else "releases"
+    )
+    lines.extend(["", f"**Trend across {population} — `{default_arm}`.**"])
+    for item in trend_entries:
+        caveat = _chart_caveat(item)
+        if caveat:
+            lines.extend(["", *caveat])
     if len(trend) < 2:
         lines.extend(
             [
                 "",
-                f"> One measured release so far ({len(trend)} point). The trend "
-                "chart renders from two releases onward.",
+                f"> One measured {'candidate' if entry.get('provisional') else 'release'} "
+                f"so far ({len(trend)} point). The trend chart renders from two "
+                f"{population} onward.",
             ]
         )
         return "\n".join(lines)
@@ -571,7 +599,7 @@ def render_charts(history: Mapping[str, Any]) -> str:
             "",
             "```mermaid",
             "xychart-beta",
-            f'    title "Surviving PII bytes on {default_arm} across releases"',
+            f'    title "Surviving PII bytes on {default_arm} across {population}"',
             f"    x-axis {_mermaid_labels([version for version, _ in trend])}",
             '    y-axis "Surviving PII bytes (lower is better)" 0 --> '
             f"{_axis_max([value for _, value in trend])}",
@@ -602,9 +630,7 @@ def render_history(history: Mapping[str, Any]) -> str:
         surviving = (
             _fmt("int", block["surviving_pii_utf8_bytes"]) if block else "n/a"
         )
-        version = entry["version"]
-        if entry.get("provisional"):
-            version += " *(provisional)*"
+        version = _display_version(entry)
         lines.append(
             f"| {version} | {entry['date']} | `{entry['commit'][:7]}` | "
             f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "

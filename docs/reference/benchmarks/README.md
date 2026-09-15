@@ -200,17 +200,19 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: current-release -->
 
-**v0.14.0** — measured on the released tree.
+**v0.15.0 (provisional)** — *not* measured on the released tree.
+
+> Measured at signed clean D 7238894097054027850df56eb8aa5aa9497dbc2b. Release readiness FAILED; regression FAILED against v0.14.0 (harness exit 3). Production completed 2,820/2,910; 90 failed closed. Leak and restore metrics cover completed documents only. Scored populations differ from v0.14.0; fewer surviving bytes do not establish improved detection. This row records evidence, not release approval.
 
 | Provenance | Value |
 | --- | --- |
-| Release | `v0.14.0` |
-| Commit | `f66a3f2b86691956c596a53273635188971f59e8` |
-| Measured | 2026-09-11 |
-| Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) |
+| Release | `v0.15.0` |
+| Commit | `7238894097054027850df56eb8aa5aa9497dbc2b` |
+| Measured | 2026-09-15 |
+| Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71) |
 | Harness | [`scripts/bench/run_no_opf_benchmark.py`](../../../scripts/bench/run_no_opf_benchmark.py) |
-| Scorecard | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) |
-| Scorecard sha256 | `364f6643ffa6e7a5793ee2924ddfe0b834ce0cebe2a4b223fa3689456d686c81` |
+| Scorecard | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) |
+| Scorecard sha256 | `ac77709e0550cd4ebf92c6be1e3c6b1a3e7cccfcb747a221a1b42a7d706cf23c` |
 | Corpus | `DataikuNLP/kiji-pii-training-data+gaze` @ `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1` |
 | Corpus sha256 | `11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2` |
 | Corpus component `dataiku` | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
@@ -224,9 +226,9 @@ Two consequences worth stating plainly:
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `rule-floor-extended` | 130,282 | 93,850 | 72.0360% | 5,423 | 0.870434 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 3.97 |
-| `pass2-ner` | 130,282 | 27,000 | 20.7243% | 28,030 | 0.786539 | 40.4467% | 100.0000% | 100.0000% | 100.0000% | 0 | 76.44 |
-| `full-stack-kiji-resolve` **(shipped default)** | 130,282 | 25,179 | 19.3265% | 168,276 | 0.384459 | 40.6186% | 78.4192% | 100.0000% | 100.0000% | 0 | 195.86 |
+| `rule-floor-extended` | 130,282 | 93,850 | 72.0360% | 5,423 | 0.870434 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 3.00 |
+| `pass2-ner` | 130,282 | 27,000 | 20.7243% | 28,030 | 0.786539 | 40.4467% | 100.0000% | 100.0000% | 100.0000% | 0 | 72.19 |
+| `full-stack-kiji-resolve` **(shipped default)** | 124,745 | 24,140 | 19.3515% | 156,271 | 0.391648 | 41.2411% | 80.9220% | 100.0000% | 96.9072% | 90 | 546.67 |
 
 <!-- END GENERATED: current-release -->
 
@@ -236,19 +238,31 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: charts -->
 
-**Surviving PII bytes per arm — v0.14.0.** Lower is better; the goal is zero.
+**Surviving PII bytes per arm — v0.15.0 (provisional).** Lower is better; the goal is zero.
+
+> **v0.15.0 (provisional): not measured on the released tree.**
+> Measured at signed clean D 7238894097054027850df56eb8aa5aa9497dbc2b. Release readiness FAILED; regression FAILED against v0.14.0 (harness exit 3). Production completed 2,820/2,910; 90 failed closed. Leak and restore metrics cover completed documents only. Scored populations differ from v0.14.0; fewer surviving bytes do not establish improved detection. This row records evidence, not release approval.
 
 ```mermaid
 xychart-beta
-    title "Surviving PII bytes per arm - v0.14.0"
+    title "Surviving PII bytes per arm - v0.15.0 (provisional)"
     x-axis ["rule-floor-extended", "pass2-ner", "full-stack-kiji-resolve"]
     y-axis "Surviving PII bytes (lower is better)" 0 --> 104000
-    bar [93850, 27000, 25179]
+    bar [93850, 27000, 24140]
 ```
 
-**Trend across releases — `full-stack-kiji-resolve`.**
+**Trend across releases and candidates — `full-stack-kiji-resolve`.**
 
-> One measured release so far (1 point). The trend chart renders from two releases onward.
+> **v0.15.0 (provisional): not measured on the released tree.**
+> Measured at signed clean D 7238894097054027850df56eb8aa5aa9497dbc2b. Release readiness FAILED; regression FAILED against v0.14.0 (harness exit 3). Production completed 2,820/2,910; 90 failed closed. Leak and restore metrics cover completed documents only. Scored populations differ from v0.14.0; fewer surviving bytes do not establish improved detection. This row records evidence, not release approval.
+
+```mermaid
+xychart-beta
+    title "Surviving PII bytes on full-stack-kiji-resolve across releases and candidates"
+    x-axis ["v0.14.0", "v0.15.0 (provisional)"]
+    y-axis "Surviving PII bytes (lower is better)" 0 --> 28000
+    line [25179, 24140]
+```
 
 <!-- END GENERATED: charts -->
 
@@ -265,6 +279,7 @@ machine-readable evidence.
 | Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |
 | --- | --- | --- | --- | --- | ---: |
 | v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | 25,179 |
+| v0.15.0 (provisional) | 2026-09-15 | `7238894` | MacBook Pro, Apple M5 Max, 18 cores, 64 GiB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | 24,140 |
 
 <!-- END GENERATED: history -->
 
@@ -272,6 +287,60 @@ Rows marked *(provisional)* were not measured on the released tree; their note
 records what was measured instead.
 
 ### Per-release notes
+
+**v0.15.0 candidate: release readiness and regression failed (harness exit 3).**
+This fresh full measurement used signed preparation commit
+`7238894097054027850df56eb8aa5aa9497dbc2b`, with `gaze.dirty=false`.
+The scorecard was copied byte-for-byte from
+`target/bench-data/no-opf/full/scorecard-v4.json`; its revision names the
+measured source, not the later documentation head. The candidate is provisional
+and has not been approved for release. Before any release, verify no drift from
+that measured commit under `crates`, `scripts/bench`, `Cargo.toml`, and `Cargo.lock`.
+
+- **Readiness fails eight production-cell gates:** 90 failed-closed documents,
+  538 exact-restore failures, 1,770 strict would-reject diagnostics, 1,657
+  documents with leaks, 24,140 surviving labeled UTF-8 bytes, 3,907 uncovered
+  entities, 173 residual suspects, and 1,319 redact actions. Each gate requires
+  zero. Strict would-reject diagnostics are separate from actual denials;
+  residual-suspect telemetry is not a count of proven raw leaks.
+- **Production completes 2,820/2,910 documents (96.9072%), with 90 denials.**
+  All denials occur at `clean`: 85 `safety_net_invalid_output_other` and five
+  `safety_net_fallback_residual_suspect`. The 85 OTHER causes remain
+  unattributed; the recorded category does not establish a root cause.
+  Denied documents are excluded from scored output, not counted as zero-leak
+  successes.
+- **Exact restoration is 2,282/2,820 completed documents (80.9220%).** The
+  remaining 538 completed documents use one-way redact fallback. All 2,820
+  completed manifests are valid and token-restore integrity errors are zero,
+  but valid manifests do not imply an exact whole-text round trip. Relative to
+  all attempts, exact restoration is still 2,282/2,910 (78.4192%), the same
+  successful numerator as the [historical, superseded A measurement](https://github.com/CertaMesh/gaze/blob/c568c852b0863d6e412494a12f05a15581a802f0/docs/reference/benchmarks/scorecard-v0.15.0.json).
+- **Regression fails 31 findings against the explicit v0.14.0 comparator:**
+  two population-identity gates and 29 class-population evaluability gates.
+  The pinned corpus, models and full sampling match, but the production scored
+  population changed. Scored gold is 14,096 entities / 124,745 labeled bytes,
+  versus 14,719 / 130,282 previously. Lower surviving bytes and the higher
+  completed-document restore percentage do not demonstrate like-for-like
+  improvement. Surviving labeled bytes are 93,850 / 27,000 / 24,140 for the
+  rule-only, NER and production arms; the first two each complete all 2,910
+  documents with zero denials. No baseline was accepted or replaced, no gate
+  was waived, and the holdout was not used for tuning.
+- **Timing is informational; the performance comparison fails.** Clean p95
+  is 3.00 / 72.19 / 546.67 ms, compared with 3.97 / 76.44 / 195.86 ms in
+  v0.14.0. Production exceeds the 20% tolerance limit of 235.04 ms. Timing is
+  not a correctness gate and does not waive the readiness failures. This run
+  uses one discarded warmup and one measured repetition per arm, Rust 1.96.0
+  and Python 3.13.13 on the recorded M5 Max host. Cargo builds use four jobs,
+  no incremental compilation, and no dev/test debug information. OS/model
+  caches were not flushed; thermals and scheduling were uncontrolled. The full
+  harness ran from 08:02:54 to 08:19:20 UTC on September 15, including its
+  producer/probe builds; the separate 79-second bootstrap is excluded.
+  Observed duration does not replace the runner's planning estimate.
+
+The exact machine-readable scorecard is linked above. Private full-run output
+also retains `regression-status.json`, `release-readiness-status.json`,
+`performance-status.json`, and diagnostics. These results block a release-ready
+claim; further runtime work requires separate review.
 
 **v0.14.0.** Measured on `f66a3f2b`, whose `crates/` tree is identical to the
 release branch head; the tag lands on the release merge commit and differs from
@@ -490,7 +559,7 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full
   --seed 20260710 --no-download
 
 # 2. Commit it under its release name and regenerate this document.
-cp target/bench-data/no-opf/scorecard-v4.json \
+cp target/bench-data/no-opf/full/scorecard-v4.json \
    docs/reference/benchmarks/scorecard-vX.Y.Z.json
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
