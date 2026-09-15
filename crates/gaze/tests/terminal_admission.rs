@@ -469,6 +469,39 @@ fn an_unjudgeable_terminal_suspect_denies() {
     }
 }
 
+/// The fallback's audit row says it redacted a span, and part of that span is still in the
+/// output. That is the fallback breaking its own promise, and it must stay denied.
+///
+/// The terminal suspect also CONTAINS the deletion seam, so the two denial clauses genuinely
+/// collide here. Without that collision the test would pass on whichever clause happened to fire
+/// and would prove nothing about precedence: a broken promise means the document's own record of
+/// itself is wrong, which has to outrank a shape the deletion manufactured.
+#[test]
+fn a_surviving_acted_on_span_stays_denied() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let primary = "[REDACTED] tail rest";
+    let deleted = "[REDACTED] rest";
+    let h = harness(
+        vec![
+            (primary.into(), Ok(vec![])),
+            (primary.into(), Ok(vec![bleed(0..15, 10..15)])),
+            (deleted.into(), Ok(vec![bleed(0..15, 10..15)])),
+        ],
+        true,
+    );
+    assert!(
+        matches!(
+            h.run(&session, "primary tail rest", SafetyNetPolicy::default()),
+            Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
+        ),
+        "a span the fallback claims to have removed, still present, must fail closed"
+    );
+    assert!(
+        h.drained(),
+        "no terminal round on a broken fallback promise"
+    );
+}
+
 /// The broken promise is only visible after the round has run. The extra scan is what finds it,
 /// so admitting on the pre-round classification alone would ship the document.
 #[test]
