@@ -286,6 +286,7 @@ pub struct Pipeline {
     optimization_config: PipelineOptimizationConfig,
     restore_boundary_dlp_audit: bool,
     rules: Vec<Arc<dyn Rule>>,
+    residual_coverage: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -956,6 +957,7 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<CleanText> {
+        let _ = self.residual_coverage;
         let normalized = normalize(text);
         let spans = &normalized.spans;
         let ctx = DetectContext::new(locale_chain, dictionaries);
@@ -3351,6 +3353,7 @@ impl PipelineBuilder {
             optimization_config: self.optimization_config,
             restore_boundary_dlp_audit: self.restore_boundary_dlp_audit,
             rules: self.rules,
+            residual_coverage: false,
         })
     }
 }
@@ -6592,3 +6595,6 @@ mod second_batch_tests;
 #[cfg(test)]
 #[path = "pipeline/occurrence_tests.rs"]
 mod occurrence_tests;
+
+#[cfg(test)]
+mod residual_tests;
