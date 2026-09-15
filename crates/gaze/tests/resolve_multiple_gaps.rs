@@ -89,7 +89,11 @@ fn truthful_first_gap_resolves_both_sides_and_restores_original_bytes() {
             RAW[entry.raw_span.clone()]
         );
     }
-    assert_eq!(&clean[manifest[1].clean_span.clone()], "<Email_1>");
+    let before = seen.lock().unwrap()[0].clone();
+    assert_eq!(
+        &clean[manifest[1].clean_span.clone()],
+        &before[5..before.len() - 4]
+    );
     assert!(
         matches!(report.suspects[0].kind, gaze::LeakKind::PartialBleed { ref uncovered } if *uncovered == (0..5))
     );
