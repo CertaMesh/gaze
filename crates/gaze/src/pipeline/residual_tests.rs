@@ -928,6 +928,98 @@ fn residual_parent_order_cannot_replace_the_legacy_representative() {
     );
 }
 
+/// Success measured only over eligible components is not coverage accounting.
+/// A real document mixes them, so pin both sides of the ledger on one input:
+/// what the admitted component gained, and exactly which admitted-union bytes
+/// the excluded component still ships in the clear.
+///
+/// The exclusion is the honest one from the conservative contract -- component
+/// B's winner is tokenized exactly as before, but a suppressed member of the
+/// same component previews Preserve, so the component is ineligible and its gap
+/// keeps Stage A byte for byte. Those gap bytes are a disclosed B1 limitation,
+/// not something it quietly protects. The test fails in both directions: if
+/// coverage silently widens to the excluded component, or silently narrows on
+/// the admitted one.
+#[test]
+fn coverage_accounting_names_the_excluded_component_and_its_uncovered_bytes() {
+    use crate::rule::{ClassRule, DefaultRule};
+
+    let head = "password: \"left right\"\nmarker ";
+    let tail = "password: \"left right\"";
+    let raw = format!("{head}{tail}");
+    let base = head.len();
+    let preserved = PiiClass::custom("apikey").unwrap();
+
+    // A: Name 0..15 over custom("password") 11..21, both known-Tokenize.
+    // B: the same geometry, but its suppressed member previews Preserve.
+    let input = vec![
+        candidate(0..15, PiiClass::Name, "synthetic.name"),
+        candidate(11..21, field(), "synthetic.field"),
+        candidate(base..base + 15, PiiClass::Name, "synthetic.name.b"),
+        candidate(base + 11..base + 21, preserved.clone(), "synthetic.apikey"),
+    ];
+    let build = |enabled: bool| {
+        let mut p = Pipeline::builder()
+            .recognizer(Fixed(input.clone()))
+            .rule(ClassRule::new(preserved.clone(), Action::Preserve))
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        p.residual_coverage = enabled;
+        p
+    };
+
+    let stage_a_session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let stage_a = clean(&build(false), &stage_a_session, &raw).unwrap();
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let covered = clean(&build(true), &session, &raw).unwrap();
+
+    let spans = |c: &CleanText| {
+        c.manifest
+            .iter()
+            .map(|s| s.raw_span.clone())
+            .collect::<Vec<_>>()
+    };
+    let (before, after) = (spans(&stage_a), spans(&covered));
+    assert_eq!(
+        before,
+        vec![0..15, base..base + 15],
+        "both components must select their whole exactly as Stage A does"
+    );
+
+    // Exactly one new protected interval, and it is component A's gap.
+    let gained = after
+        .iter()
+        .filter(|span| !before.contains(span))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(gained, vec![15..21], "coverage changed outside component A");
+    assert!(
+        before.iter().all(|span| after.contains(span)),
+        "an admitted component must never lose a Stage A selection: {before:?} -> {after:?}"
+    );
+
+    // Name the admitted-union bytes component B still ships in the clear.
+    let uncovered = base + 15..base + 21;
+    assert!(
+        covered.text.contains(&raw[uncovered.clone()]),
+        "excluded gap {uncovered:?} ({:?}) must stay visibly uncovered, not quietly protected",
+        &raw[uncovered.clone()]
+    );
+    assert!(
+        !after
+            .iter()
+            .any(|span| span.start < uncovered.end && uncovered.start < span.end),
+        "excluded gap {uncovered:?} must not be claimed by any emitted span"
+    );
+    eprintln!(
+        "B1 accounting admitted=0..21 covered={after:?} excluded={:?} uncovered={uncovered:?}",
+        base..base + 21
+    );
+
+    assert_eq!(session.restore_strict_text(&covered.text).unwrap(), raw);
+}
+
 /// The benchmark reaches this engine through production assembly, not through a
 /// hand-built `RuleEntry`: scripts/bench/run_no_opf_benchmark.py:474-486 runs
 /// clean_for_bench, which registers exactly `ClassRule` / `ColumnRule` /
