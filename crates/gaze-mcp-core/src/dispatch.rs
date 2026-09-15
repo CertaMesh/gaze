@@ -36,6 +36,9 @@ use crate::tool::{ResponseRedaction, ToolError, ToolResponse, ToolTier};
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum DispatchError {
+    /// The entry point does not match the registered request contract.
+    #[error("request mode rejected")]
+    RequestMode,
     /// Strict boundary failure, containing class-only diagnostics.
     #[error("protection failed: {0}")]
     Protection(#[from] gaze::ProtectionError),
@@ -100,6 +103,20 @@ pub struct PiiEnvelope<'a> {
     pub session_id_policy: &'a SessionIdPolicy,
 }
 
+enum RequestState {
+    Protected(serde_json::Value),
+    Untrusted(crate::UntrustedInvocationArgs),
+}
+
+impl RequestState {
+    fn mode(&self) -> crate::RequestMode {
+        match self {
+            Self::Protected(_) => crate::RequestMode::Protected,
+            Self::Untrusted(_) => crate::RequestMode::UntrustedInvocation,
+        }
+    }
+}
+
 impl<'a> PiiEnvelope<'a> {
     /// Construct a new envelope. All references are borrowed — adopters
     /// build the collaborators once and hand them to the envelope per
@@ -142,6 +159,41 @@ impl<'a> PiiEnvelope<'a> {
         raw_args: serde_json::Value,
         external_session_id: Option<&str>,
     ) -> Result<ToolResponse, DispatchError> {
+        self.dispatch_with(
+            principal,
+            tool_name,
+            RequestState::Protected(raw_args),
+            external_session_id,
+        )
+        .await
+    }
+
+    /// Invoke an opted-in tool without detecting or transforming request data.
+    /// Only a constant metadata record is audited. Tools must validate locally;
+    /// response protection, commit and durable finish remain mandatory.
+    pub async fn dispatch_request(
+        &self,
+        principal: &Principal,
+        tool_name: &str,
+        args: crate::UntrustedInvocationArgs,
+        external_session_id: Option<&str>,
+    ) -> Result<ToolResponse, DispatchError> {
+        self.dispatch_with(
+            principal,
+            tool_name,
+            RequestState::Untrusted(args),
+            external_session_id,
+        )
+        .await
+    }
+
+    async fn dispatch_with(
+        &self,
+        principal: &Principal,
+        tool_name: &str,
+        request: RequestState,
+        external_session_id: Option<&str>,
+    ) -> Result<ToolResponse, DispatchError> {
         // 1. Validate the session id (cheapest fail-closed check; do this
         //    before any auth call to avoid leaking which session ids exist).
         if let Some(sid) = external_session_id {
@@ -156,6 +208,12 @@ impl<'a> PiiEnvelope<'a> {
             .ok_or_else(|| DispatchError::UnknownTool(tool_name.to_string()))?;
         let descriptor = tool.descriptor();
         let tier = descriptor.tier();
+        if descriptor.request_mode() != request.mode()
+            || (request.mode() == crate::RequestMode::UntrustedInvocation
+                && descriptor.response_redaction() != ResponseRedaction::Apply)
+        {
+            return Err(DispatchError::RequestMode);
+        }
 
         // 3. Authorize. Errors here MUST NOT have written a manifest row —
         //    auth failures are pre-manifest by design (matches the plan's
@@ -165,12 +223,30 @@ impl<'a> PiiEnvelope<'a> {
             ToolTier::Operator => self.auth.authorize_operator(principal, tool_name).await?,
         };
 
-        // 4. Redact raw args. Errors before begin_call also stay pre-manifest.
-        descriptor.argument_carriers().preflight(&raw_args)?;
+        // 4. Prepare the registered request contract before opening audit.
         let context = gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries);
-        let mut args_transaction = self.session.begin_transaction();
-        let pre_commit_token_count = args_transaction.tokens().len();
-        let redacted_args = protect_json(self.pipeline, &mut args_transaction, context, &raw_args)?;
+        let (redacted_args, args_transaction, invocation_args, args_audit) = match request {
+            RequestState::Protected(raw_args) => {
+                descriptor.argument_carriers().preflight(&raw_args)?;
+                let mut transaction = self.session.begin_transaction();
+                let pre_commit_token_count = transaction.tokens().len();
+                let protected = protect_json(self.pipeline, &mut transaction, context, &raw_args)?;
+                (
+                    protected,
+                    Some((transaction, pre_commit_token_count)),
+                    None,
+                    None,
+                )
+            }
+            RequestState::Untrusted(args) => (
+                serde_json::Value::Null,
+                None,
+                Some(args),
+                Some(
+                    serde_json::json!({"gaze_request_audit": 1, "mode": "metadata_only", "arguments": "omitted"}),
+                ),
+            ),
+        };
 
         // Generate the call id once and reuse it as the manifest handle.
         let call_id = Ulid::new();
@@ -184,23 +260,26 @@ impl<'a> PiiEnvelope<'a> {
             principal_id: principal.id.as_str(),
             tool_name,
             redacted_args: &redacted_args,
+            args_audit: args_audit.as_ref(),
             started_at,
         };
         let handle = self.manifest.begin_call(begin_ctx).await?;
-        if args_transaction.tokens().len() != pre_commit_token_count {
-            if let Err(error) = args_transaction.commit() {
-                self.manifest
-                    .fail_call(
-                        handle,
-                        FailureReason::RedactionFailed {
-                            message: "session transaction conflict".into(),
-                        },
-                    )
-                    .await?;
-                return Err(error.into());
+        if let Some((transaction, pre_commit_token_count)) = args_transaction {
+            if transaction.tokens().len() != pre_commit_token_count {
+                if let Err(error) = transaction.commit() {
+                    self.manifest
+                        .fail_call(
+                            handle,
+                            FailureReason::RedactionFailed {
+                                message: "session transaction conflict".into(),
+                            },
+                        )
+                        .await?;
+                    return Err(error.into());
+                }
+            } else {
+                std::mem::drop(transaction);
             }
-        } else {
-            std::mem::drop(args_transaction);
         }
 
         // 6. Build the sealed ToolCtx — pub(crate) constructor; this is the
@@ -226,7 +305,8 @@ impl<'a> PiiEnvelope<'a> {
             call_id,
             tool_name,
             principal.id.as_str(),
-        );
+        )
+        .with_invocation_args(invocation_args);
 
         // 7. Invoke the tool. On error, fail_call MUST run before we return.
         let raw_response = match tool.invoke(&ctx).await {

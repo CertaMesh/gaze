@@ -61,6 +61,10 @@ pub struct BeginCallContext<'a> {
     /// Redacted JSON arguments passed to the tool. The dispatcher guarantees
     /// these are post-redaction; adopters should treat them as safe to persist.
     pub redacted_args: &'a serde_json::Value,
+    /// Explicit metadata-only audit record for untrusted invocation mode.
+    /// When present, redacted_args is Null and no request values are retained.
+    /// None denotes the legacy protected-arguments audit contract.
+    pub args_audit: Option<&'a serde_json::Value>,
     /// Wall-clock instant the dispatcher accepted the call. Adopters use this
     /// for ordering and schema fields like `started_at`.
     pub started_at: SystemTime,

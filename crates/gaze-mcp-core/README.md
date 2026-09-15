@@ -331,3 +331,25 @@ Safety-net reconstructed `raw_span` offsets address expanded input, with owned
 tokens replaced by their stored raw values; they cannot index the literal
 input containing those tokens. Observer `nets_run` remains a configured count
 (a nonempty registry counts as one), not an executed-model count.
+
+## Explicit untrusted request mode
+
+The default `dispatch` contract is unchanged. A tool must register
+`RequestMode::UntrustedInvocation` to use `dispatch_request`; both entry points
+reject a descriptor written for the other mode before authorization or audit.
+The new mode also rejects operator response bypass.
+
+`ToolCtx::invocation_args()` provides explicitly untrusted execution data. The
+host validates bounds and authorization and may restore existing session tokens
+locally. It must not log these arguments. The wrapper's Debug omits its payload;
+`redacted_args()` is Null in this mode, never an audit marker or raw arguments.
+
+`BeginCallContext::args_audit` contains only the versioned metadata-only omission
+record. Legacy `redacted_args` is Null. Stores must record the explicit audit
+format and report original arguments as omitted during replay, not restored.
+No request detection or new request mappings occur in the envelope. Response
+protection, transaction commit and durable finish use the same shared path as
+legacy dispatch. A failed finish retains response mappings but returns no output.
+Snapshots can restore separately captured tokenized output; they are not an
+archive of the response body. Detection is not a guarantee that every PII value
+will be recognized.

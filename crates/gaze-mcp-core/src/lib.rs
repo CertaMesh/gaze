@@ -67,7 +67,7 @@ pub mod operator_tools {
 }
 
 pub use crate::auth::{AuthError, AuthHook, DenyAllAuthHook, Principal};
-pub use crate::ctx::{SessionHandle, ToolCtx, ToolResources};
+pub use crate::ctx::{SessionHandle, ToolCtx, ToolResources, UntrustedInvocationArgs};
 pub use crate::dispatch::{DispatchError, PiiEnvelope};
 pub use crate::frontend::{DispatchHost, Frontend, FrontendError, ShutdownToken};
 pub use crate::manifest::{
@@ -75,7 +75,9 @@ pub use crate::manifest::{
 };
 pub use crate::registry::{ToolRegistry, ToolRegistryError};
 pub use crate::session_id::{SessionIdError, SessionIdFormat, SessionIdPolicy};
-pub use crate::tool::{ResponseRedaction, Tool, ToolDescriptor, ToolError, ToolResponse, ToolTier};
+pub use crate::tool::{
+    RequestMode, ResponseRedaction, Tool, ToolDescriptor, ToolError, ToolResponse, ToolTier,
+};
 
 mod carrier;
 pub use carrier::{CarrierDeclaration, CarrierError, CarrierPath, CarrierSegment};
