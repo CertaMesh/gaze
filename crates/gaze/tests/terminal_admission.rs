@@ -500,6 +500,12 @@ fn a_surviving_acted_on_span_stays_denied() {
         h.drained(),
         "no terminal round on a broken fallback promise"
     );
+    assert_eq!(
+        h.actions(),
+        // The primary pass's own `[REDACTED]`, then the fallback deletion. Nothing after.
+        [Action::Redact, Action::Redact],
+        "a document refused over a broken promise must not be deleted from first"
+    );
 }
 
 /// The broken promise is only visible after the round has run. The extra scan is what finds it,
