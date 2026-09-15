@@ -45,7 +45,8 @@ fn fixture(format: bool) -> (Session, CleanText, String) {
             5..5 + token.len(),
             5..26,
             PiiClass::Email,
-        )],
+        )]
+        .into(),
     };
     // fixture-cited(crates/gaze/src/pipeline_second_batch_tests.rs:pipeline::second_batch_tests::second_batch_single_and_multigap_owned_format_preserve_restore_trace_and_parent_metadata)
     (session, clean, "pré alice@example.invalid 尾".into())
@@ -128,7 +129,7 @@ fn second_batch_single_and_multigap_owned_format_preserve_restore_trace_and_pare
                 .unwrap();
             assert_eq!(session.restore_strict_text(&clean.text).unwrap(), original);
             assert_eq!(&clean.text[clean.manifest[1].clean_span.clone()], token);
-            let trace = trace.finish(&clean.manifest).unwrap();
+            let trace = trace.finish(&clean.manifest.projection().spans).unwrap();
             assert_eq!(trace.len(), if multigap { 3 } else { 2 });
             for item in trace.iter().filter(|t| t.class == PiiClass::Name) {
                 assert_eq!(item.source_ids, ["second.fixture"]);
@@ -153,7 +154,8 @@ fn second_batch_unowned_intersections_decline_but_nonintersecting_primary_is_eli
                 2..2 + replacement.len(),
                 2..3,
                 PiiClass::Email,
-            )],
+            )]
+            .into(),
         };
         let before = session.tokens();
         for partial in [false, true] {
@@ -201,7 +203,8 @@ fn second_batch_adjacent_owned_union_and_duplicate_claims_are_not_protection() {
         manifest: vec![
             EmittedTokenSpan::new(0..x.len(), 0..1, PiiClass::Email),
             EmittedTokenSpan::new(x.len()..x.len() + y.len(), 1..2, PiiClass::Email),
-        ],
+        ]
+        .into(),
     };
     let union = mismatch(0..x.len() + y.len());
     assert!(!suspect_is_inside_live_token(
@@ -410,7 +413,13 @@ fn second_batch_history_counts_parent_once_and_preserve_once_per_nonterminal_pha
     assert_eq!(history.replay_hash, None);
     assert_eq!(history.telemetry, [telemetry]);
     assert_eq!(session.restore_strict_text(&clean.text).unwrap(), original);
-    assert_eq!(trace.finish(&clean.manifest).unwrap().len(), 3);
+    assert_eq!(
+        trace
+            .finish(&clean.manifest.projection().spans)
+            .unwrap()
+            .len(),
+        3
+    );
     assert_eq!(
         rows.lock()
             .unwrap()
@@ -437,7 +446,8 @@ fn second_batch_utf8_before_between_after_two_tokens_keeps_exact_source_and_audi
         manifest: vec![
             EmittedTokenSpan::new(2..2 + x.len(), 2..3, PiiClass::Email),
             EmittedTokenSpan::new(5 + x.len()..5 + x.len() + y.len(), 6..7, PiiClass::Email),
-        ],
+        ]
+        .into(),
     };
     let report = report(vec![suspect(
         0..clean.text.len(),
@@ -483,7 +493,7 @@ fn second_batch_utf8_before_between_after_two_tokens_keeps_exact_source_and_audi
         )
         .unwrap();
     assert_eq!(session.restore_strict_text(&clean.text).unwrap(), original);
-    let trace = trace.finish(&clean.manifest).unwrap();
+    let trace = trace.finish(&clean.manifest.projection().spans).unwrap();
     assert_eq!(
         trace.iter().map(|t| t.raw_span.clone()).collect::<Vec<_>>(),
         [0..2, 2..3, 3..6, 6..7, 7..10]
@@ -546,7 +556,8 @@ fn second_batch_unowned_neighbor_cannot_hide_false_uncovered_owned_intersection(
         manifest: vec![
             EmittedTokenSpan::new(1..1 + owned.len(), 1..2, PiiClass::Email),
             EmittedTokenSpan::new(1 + owned.len()..11 + owned.len(), 2..3, PiiClass::Email),
-        ],
+        ]
+        .into(),
     };
     let before = session.tokens();
     assert!(plan_followup_resolutions(

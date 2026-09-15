@@ -67,7 +67,7 @@ pub(crate) struct WholeCandidate {
 
 // A compact private decision graph. Node ids below originals.len() are evidence;
 // subsequent ids refer to earlier Pair events, without recursively cloning history.
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
 pub(crate) enum ResolutionEvent {
     Pair {
@@ -87,7 +87,7 @@ pub(crate) enum ResolutionEvent {
     },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
 pub(crate) enum PairOutcome {
     Merge,
@@ -97,6 +97,10 @@ pub(crate) enum PairOutcome {
 }
 
 impl CandidatePool {
+    pub(crate) fn take_originals(&mut self) -> Vec<Candidate> {
+        std::mem::take(&mut self.originals)
+    }
+
     pub(crate) fn originals(&self) -> &[Candidate] {
         &self.originals
     }

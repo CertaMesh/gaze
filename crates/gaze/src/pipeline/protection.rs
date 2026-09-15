@@ -99,7 +99,7 @@ impl Pipeline {
             .map_err(|_| ProtectionError::Provenance)?;
         let mut clean = String::with_capacity(input.len());
         let mut expected = String::with_capacity(input.len());
-        let mut spans = Vec::new();
+        let mut spans = Ledger::default();
         let mut cursor = 0;
         for range in ranges {
             self.protect_gap(
@@ -118,7 +118,7 @@ impl Pipeline {
             let raw_start = expected.len();
             clean.push_str(&entry.token);
             expected.push_str(&entry.raw);
-            spans.push(EmittedTokenSpan::new(
+            spans.existing_owned(EmittedTokenSpan::new(
                 clean_start..clean.len(),
                 raw_start..expected.len(),
                 entry.class.clone(),
@@ -133,7 +133,8 @@ impl Pipeline {
             &mut expected,
             &mut spans,
         )?;
-        let manifest = Manifest::from_spans(spans);
+        spans.validate().map_err(|_| ProtectionError::Provenance)?;
+        let manifest = spans.projection();
         let entries = transaction.snapshot_entries();
         let mut restored = String::new();
         let mut cursor = 0;
@@ -178,7 +179,7 @@ impl Pipeline {
             .run_safety_nets_in_context(
                 &mut target,
                 &clean,
-                &manifest,
+                manifest,
                 DocumentKind::Text,
                 context.locale_chain,
                 None,
@@ -190,7 +191,7 @@ impl Pipeline {
                 Error::Protection(error) => error,
                 _ => ProtectionError::SafetyNet,
             })?;
-        reject_unprotected_suspects(&clean, &manifest, report)?;
+        reject_unprotected_suspects(&clean, manifest, report)?;
         Ok(clean)
     }
 
@@ -237,7 +238,7 @@ impl Pipeline {
         let ranges = transaction
             .restore_token_ranges(text)
             .map_err(|_| ProtectionError::Provenance)?;
-        let mut spans = Vec::with_capacity(ranges.len());
+        let mut spans = Ledger::default();
         let mut clean_cursor = 0;
         let mut raw_cursor = 0;
         for range in ranges {
@@ -248,19 +249,20 @@ impl Pipeline {
             raw_cursor += range.start - clean_cursor;
             let raw_end = raw_cursor + entry.raw.len();
             clean_cursor = range.end;
-            spans.push(EmittedTokenSpan::new(
+            spans.existing_owned(EmittedTokenSpan::new(
                 range,
                 raw_cursor..raw_end,
                 entry.class.clone(),
             ));
             raw_cursor = raw_end;
         }
-        let manifest = Manifest::from_spans(spans);
+        spans.validate().map_err(|_| ProtectionError::Provenance)?;
+        let manifest = spans.projection();
         let report = self
             .run_safety_nets_in_context(
                 &mut ProtectionTarget::Staged(transaction),
                 text,
-                &manifest,
+                manifest,
                 DocumentKind::Text,
                 locale_chain,
                 None,
@@ -272,7 +274,7 @@ impl Pipeline {
                 Error::Protection(error) => error,
                 _ => ProtectionError::SafetyNet,
             })?;
-        reject_unprotected_suspects(text, &manifest, report)
+        reject_unprotected_suspects(text, manifest, report)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -283,7 +285,7 @@ impl Pipeline {
         context: ProtectionContext<'_>,
         clean: &mut String,
         expected: &mut String,
-        spans: &mut Vec<EmittedTokenSpan>,
+        spans: &mut Ledger,
     ) -> std::result::Result<(), ProtectionError> {
         let clean_offset = clean.len();
         let raw_offset = expected.len();
@@ -304,13 +306,9 @@ impl Pipeline {
             )
             .map_err(|_| ProtectionError::Primary)?;
         clean.push_str(&result.text);
-        spans.extend(result.manifest.into_iter().map(|span| {
-            EmittedTokenSpan::new(
-                span.clean_span.start + clean_offset..span.clean_span.end + clean_offset,
-                span.raw_span.start + raw_offset..span.raw_span.end + raw_offset,
-                span.class,
-            )
-        }));
+        spans
+            .append(result.manifest, raw_offset, clean_offset)
+            .map_err(|_| ProtectionError::Provenance)?;
         Ok(())
     }
 }

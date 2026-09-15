@@ -5,10 +5,11 @@ use crate::resolver::{CandidatePool, ResolutionEvent, WholeCandidate};
 use crate::{Candidate, LocaleTag, RecognizerRegistry, Result};
 
 pub(super) struct WholePlan {
+    pub(super) evidence: super::occurrence::Segment,
     pub(super) primary: Vec<Candidate>,
     pub(super) recovered: Vec<Candidate>,
     #[allow(dead_code)]
-    pub(super) events: Vec<ResolutionEvent>,
+    pub(super) events: std::sync::Arc<[ResolutionEvent]>,
     #[cfg(test)]
     pub(super) work: crate::resolver::ResolutionWork,
 }
@@ -31,6 +32,7 @@ pub(super) fn plan(
     // separately before any policy, audit or token allocation occurs.
     let primary = registry.resolve_pool(&mut pool, &order, &normalized.text, locales);
     let mut consumed = vec![false; pool.originals().len()];
+    let mut selections = Vec::new();
     let primary = freeze(
         primary,
         &mut pool,
@@ -39,6 +41,7 @@ pub(super) fn plan(
         raw,
         0..raw.len(),
         false,
+        &mut selections,
     )?;
     let mut work = gaps(order, &original_spans, &consumed, &primary, 0..raw.len());
     let mut recovered = Vec::new();
@@ -54,6 +57,7 @@ pub(super) fn plan(
             raw,
             gap.clone(),
             true,
+            &mut selections,
         )?;
         if selected.is_empty() {
             return Err(super::clean_to_raw_mapping_error(
@@ -64,10 +68,20 @@ pub(super) fn plan(
         recovered.extend(selected);
     }
     recovered.sort_by_key(|candidate| candidate.span.start);
+    let events: std::sync::Arc<[ResolutionEvent]> = std::mem::take(&mut pool.events).into();
     Ok(WholePlan {
+        evidence: super::occurrence::Segment {
+            originals: pool.take_originals(),
+            original_raw: original_spans,
+            selections,
+            events: std::sync::Arc::clone(&events),
+            raw_offset: 0,
+            clean_offset: 0,
+            basis: super::occurrence::Basis::OriginalInput,
+        },
         primary,
         recovered,
-        events: pool.events,
+        events,
         #[cfg(test)]
         work: pool.work,
     })
@@ -102,6 +116,7 @@ fn freeze(
     raw: &str,
     gap: Range<usize>,
     recovery: bool,
+    selections: &mut Vec<super::occurrence::Selection>,
 ) -> Result<Vec<Candidate>> {
     let mut selected = Vec::with_capacity(nodes.len());
     let mut end = gap.start;
@@ -130,6 +145,14 @@ fn freeze(
             });
         }
         end = span.end;
+        selections.push(super::occurrence::Selection {
+            node: node.node,
+            class: node.candidate.class.clone(),
+            members: node.members,
+            raw: span.clone(),
+            recovered: recovery,
+            action: None,
+        });
         selected.push(node.candidate.with_span(span));
     }
     Ok(selected)
