@@ -1597,3 +1597,111 @@ async fn configured_net_direct_response_rejects_after_one_provider_call() {
         assert!(hits.load(Ordering::SeqCst) > 0);
     }
 }
+
+#[path = "support/admission_net.rs"]
+mod admission_net;
+
+#[tokio::test]
+async fn admission_reflags_restore_and_reuse_tokens_but_bad_reports_never_send() {
+    use admission_net::{AdmissionNet, Mode};
+    for mode in [Mode::Reflag, Mode::Malformed, Mode::Spill, Mode::Error] {
+        let upstream = spawn_upstream().await;
+        let hits = Arc::new(AtomicUsize::new(0));
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(AdmissionNet {
+                mode,
+                hits: hits.clone(),
+            })
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let adapter = AnthropicAdapter::builder(upstream.origin.clone())
+            .session_registry_config(SessionRegistryConfig::default())
+            .build()
+            .unwrap();
+        let proxy = spawn_proxy_with_observability(
+            adapter,
+            pipeline,
+            DictionaryBundle::default(),
+            None,
+            None,
+        )
+        .await;
+        let mut request = sdk_request(false);
+        let original = format!("{EMAIL} tail");
+        request["messages"][0]["content"] = json!(original);
+        let mut previous = None;
+        for _ in 0..2 {
+            let response = sdk_client_request(&Client::new(), &proxy, false)
+                .header("x-gaze-session-id", "123e4567-e89b-42d3-a456-426614174000")
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status().is_success(),
+                matches!(mode, Mode::Reflag),
+                "{mode:?}"
+            );
+            if matches!(mode, Mode::Reflag) {
+                let body: Value = response.json().await.unwrap();
+                assert_eq!(body["content"][0]["text"], original);
+                let captures = upstream.captures.lock().await;
+                let captured: Value =
+                    serde_json::from_slice(&captures.last().unwrap().body).unwrap();
+                let protected = captured["messages"][0]["content"].clone();
+                assert!(!protected.to_string().contains(EMAIL));
+                if let Some(previous) = previous {
+                    assert_eq!(protected, previous);
+                }
+                previous = Some(protected.clone());
+                // The second request supplies the owned token, exercising the reuse path.
+                request["messages"][0]["content"] = protected;
+            } else {
+                assert!(!response.text().await.unwrap().contains(EMAIL));
+            }
+        }
+        assert!(hits.load(Ordering::SeqCst) > 0);
+        let captures = upstream.captures.lock().await;
+        assert_eq!(
+            captures.len(),
+            if matches!(mode, Mode::Reflag) { 2 } else { 0 }
+        );
+        if !matches!(mode, Mode::Reflag) {
+            assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+        }
+    }
+}
+
+#[tokio::test]
+async fn no_net_remains_an_explicit_request_coverage_limit() {
+    let upstream = spawn_upstream_with_provider_text("benign").await;
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::new(r"alice@example\.invalid", PiiClass::Email).unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    let proxy = spawn_proxy_with_observability(
+        AnthropicAdapter::new(upstream.origin.clone()),
+        pipeline,
+        DictionaryBundle::default(),
+        None,
+        None,
+    )
+    .await;
+    let mut request = sdk_request(false);
+    request["messages"][0]["content"] = json!(route_net::RESIDUAL);
+    let response = sdk_client_request(&Client::new(), &proxy, false)
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let captures = upstream.captures.lock().await;
+    assert_eq!(captures.len(), 1);
+    assert!(String::from_utf8_lossy(&captures[0].body).contains(route_net::RESIDUAL));
+}

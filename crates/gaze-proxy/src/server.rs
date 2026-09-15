@@ -1334,6 +1334,31 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         input: &str,
         prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
+        let output = self.protect_preserving_tokens(input, prefix_cache_write_mode)?;
+        self.pipeline
+            .admit_safety_nets_transaction(
+                self.transaction,
+                &output,
+                self.locale_chain,
+                self.dictionaries,
+            )
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        Ok(output)
+    }
+
+    fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {
+        self.transaction
+            .validate_token_shapes(input)
+            .map_err(|_| CodecErrorCode::RestoreFailedClosed)
+    }
+}
+
+impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
+    fn protect_preserving_tokens(
+        &mut self,
+        input: &str,
+        prefix_cache_write_mode: PrefixCacheWriteMode,
+    ) -> Result<String, CodecErrorCode> {
         self.validate_token_shapes(input)?;
         let mut tokens = self.transaction.tokens();
         if tokens.is_empty() {
@@ -1372,12 +1397,6 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             cursor = start + token.len();
         }
         Ok(output)
-    }
-
-    fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {
-        self.transaction
-            .validate_token_shapes(input)
-            .map_err(|_| CodecErrorCode::RestoreFailedClosed)
     }
 }
 
@@ -2641,8 +2660,9 @@ const CARRIER_SUBTREE_KEYS: &[&str] = &[
 /// Redacts every surface an adapter claims and returns the field paths it covered.
 ///
 /// The returned set is the authorization input for [`residual_scan_request`]: a position the
-/// adapter surfaced has already been through the pipeline and whatever it decided there
-/// (tokenize, or preserve by policy) is authorized. Every other position is not.
+/// adapter surfaced has passed primary policy and configured-net admission. Primary preserve
+/// remains allowed unless a configured net reports an unprotected suspect. Other positions
+/// require the separate residual scan.
 ///
 /// `locale_chain` is the adopter-configured chain from
 /// [`crate::ProxyConfig::with_locale_chain`], NOT the `[LocaleTag::Global]` that
@@ -2667,6 +2687,11 @@ fn redact_surfaces(
             )
             .map_err(|source| ProxyError::Pipeline { source })?;
         if let CleanDocument::Text(text) = clean {
+            pipeline
+                .admit_safety_nets(session, &text, locale_chain, dictionaries)
+                .map_err(|source| ProxyError::Pipeline {
+                    source: source.into(),
+                })?;
             *surface.text = text;
         }
         surfaced.insert(surface.field_path);
@@ -3048,6 +3073,92 @@ mod tests {
             .rule(DefaultRule::new(Action::Preserve))
             .build()
             .unwrap()
+    }
+
+    #[test]
+    fn net_admission_failure_discards_direct_staging_but_retains_legacy_live_mappings() {
+        struct RejectNet;
+        impl gaze::SafetyNet for RejectNet {
+            fn id(&self) -> &str {
+                "synthetic-reject"
+            }
+            fn supported_locales(&self) -> &[LocaleTag] {
+                &[LocaleTag::Global]
+            }
+            fn check(
+                &self,
+                text: &str,
+                _: gaze::SafetyNetContext<'_>,
+            ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+                if text.contains("reject-this") {
+                    Err(gaze::SafetyNetError::Runtime {
+                        message: "synthetic failure".into(),
+                    })
+                } else {
+                    Ok(vec![])
+                }
+            }
+        }
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(RejectNet)
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let body = format!(
+            r#"{{"model":"claude-test","max_tokens":32,"system":"{SYNTHETIC_EMAIL}","messages":[{{"role":"user","content":"reject-this"}}]}}"#
+        );
+        let request = direct_request(
+            Url::parse("http://127.0.0.1:1/v1/messages").unwrap(),
+            WireFormat::Json,
+            body.as_bytes(),
+        )
+        .unwrap();
+        assert!(prepare_and_commit_direct_request(
+            &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+            &session,
+            &crate::codecs::anthropic::AnthropicMessagesCodec,
+            body.as_bytes(),
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+            false,
+            DEFAULT_MAX_REQUEST_BYTES,
+        )
+        .is_err());
+        assert!(session.tokens().is_empty());
+        assert_eq!(session.prefix_cache_entry_count(), 0);
+
+        let mut first = SYNTHETIC_EMAIL.to_owned();
+        let mut second = "reject-this".to_owned();
+        assert!(redact_surfaces(
+            &pipeline,
+            &session,
+            vec![
+                crate::adapter::PiiSurface {
+                    field_path: "$.first".into(),
+                    text: &mut first
+                },
+                crate::adapter::PiiSurface {
+                    field_path: "$.second".into(),
+                    text: &mut second
+                },
+            ],
+            &[LocaleTag::Global],
+            &DictionaryBundle::default()
+        )
+        .is_err());
+        assert_eq!(session.tokens().len(), 1);
+        assert_eq!(
+            session.restore_strict_text(&first).unwrap(),
+            SYNTHETIC_EMAIL
+        );
     }
 
     const DIRECT_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}]}"#;

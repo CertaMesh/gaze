@@ -184,36 +184,95 @@ impl Pipeline {
                 None,
                 SafetyNetDecision::Observe { strict: true },
                 context.dictionaries,
-                true,
+                SafetyNetExecution::Strict,
             )
             .map_err(|error| match error {
                 Error::Protection(error) => error,
                 _ => ProtectionError::SafetyNet,
             })?;
-        for suspect in report.suspects {
-            if suspect.span.start >= suspect.span.end || clean.get(suspect.span.clone()).is_none() {
-                return Err(ProtectionError::Residual);
-            }
-            // Coverage is geometric: even a backend class disagreement entirely inside
-            // verified token bytes cannot expose raw data. Any raw gap still rejects.
-            let mut cursor = suspect.span.start;
-            for span in &manifest.spans {
-                if span.clean_span.end <= cursor {
-                    continue;
-                }
-                if span.clean_span.start > cursor {
-                    break;
-                }
-                cursor = span.clean_span.end;
-                if cursor >= suspect.span.end {
-                    break;
-                }
-            }
-            if cursor < suspect.span.end {
-                return Err(ProtectionError::Residual);
-            }
-        }
+        reject_unprotected_suspects(&clean, &manifest, report)?;
         Ok(clean)
+    }
+
+    /// Admit already-transformed text against configured safety nets, using live token ownership.
+    /// This read-only snapshot does not roll back mappings already published by the caller.
+    /// See [`Self::admit_safety_nets_transaction`] for the coverage and proof limits.
+    pub fn admit_safety_nets(
+        &self,
+        session: &Session,
+        text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> std::result::Result<(), ProtectionError> {
+        self.admit_safety_nets_transaction(
+            &mut session.begin_transaction(),
+            text,
+            locale_chain,
+            dictionaries,
+        )
+    }
+
+    /// Admit a complete final text leaf against all applicable configured nets.
+    ///
+    /// This neither transforms text nor commits mappings. It is not a primary-policy or
+    /// reversibility proof: callers retain responsibility for those and for literal-token
+    /// collisions. Token coverage uses the target's actual restore boundaries and values;
+    /// nets receive raw coordinates in the expanded token interpretation.
+    ///
+    /// Raw-gap, malformed suspects and net/registry errors reject. Verified token-contained
+    /// reflags are safe even with class disagreement. Observer skip optimizations do not
+    /// apply. No nets or locale-skipped custom nets leave coverage gaps; model-registry
+    /// resolution still fails closed. Public clean policy and strict protection are unchanged.
+    pub fn admit_safety_nets_transaction(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> std::result::Result<(), ProtectionError> {
+        if self.safety_nets_len() == 0 {
+            return Ok(());
+        }
+        let entries = transaction.snapshot_entries();
+        let ranges = transaction
+            .restore_token_ranges(text)
+            .map_err(|_| ProtectionError::Provenance)?;
+        let mut spans = Vec::with_capacity(ranges.len());
+        let mut clean_cursor = 0;
+        let mut raw_cursor = 0;
+        for range in ranges {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.token == text[range.clone()])
+                .ok_or(ProtectionError::Provenance)?;
+            raw_cursor += range.start - clean_cursor;
+            let raw_end = raw_cursor + entry.raw.len();
+            clean_cursor = range.end;
+            spans.push(EmittedTokenSpan::new(
+                range,
+                raw_cursor..raw_end,
+                entry.class.clone(),
+            ));
+            raw_cursor = raw_end;
+        }
+        let manifest = Manifest::from_spans(spans);
+        let report = self
+            .run_safety_nets_in_context(
+                &mut ProtectionTarget::Staged(transaction),
+                text,
+                &manifest,
+                DocumentKind::Text,
+                locale_chain,
+                None,
+                SafetyNetDecision::Observe { strict: true },
+                dictionaries,
+                SafetyNetExecution::Admission,
+            )
+            .map_err(|error| match error {
+                Error::Protection(error) => error,
+                _ => ProtectionError::SafetyNet,
+            })?;
+        reject_unprotected_suspects(text, &manifest, report)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -254,4 +313,36 @@ impl Pipeline {
         }));
         Ok(())
     }
+}
+
+// Shared by strict reversible protection and net-only admission. Neither may accept raw gaps.
+fn reject_unprotected_suspects(
+    clean: &str,
+    manifest: &Manifest,
+    report: LeakReport,
+) -> std::result::Result<(), ProtectionError> {
+    for suspect in report.suspects {
+        if suspect.span.start >= suspect.span.end || clean.get(suspect.span.clone()).is_none() {
+            return Err(ProtectionError::Residual);
+        }
+        // Coverage is geometric: even a backend class disagreement entirely inside
+        // verified token bytes cannot expose raw data. Any raw gap still rejects.
+        let mut cursor = suspect.span.start;
+        for span in &manifest.spans {
+            if span.clean_span.end <= cursor {
+                continue;
+            }
+            if span.clean_span.start > cursor {
+                break;
+            }
+            cursor = span.clean_span.end;
+            if cursor >= suspect.span.end {
+                break;
+            }
+        }
+        if cursor < suspect.span.end {
+            return Err(ProtectionError::Residual);
+        }
+    }
+    Ok(())
 }

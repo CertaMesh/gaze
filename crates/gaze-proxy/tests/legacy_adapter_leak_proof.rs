@@ -975,3 +975,85 @@ async fn configured_net_request_boundary_rejects_surfaced_and_unsurfaced_markers
     assert!(observations.iter().all(|row| !row.2 && row.3 == 0),
         "(error, surfaced, accepted, provider calls, raw on wire, net marker hits): {observations:?}");
 }
+
+#[path = "support/admission_net.rs"]
+mod admission_net;
+
+#[tokio::test]
+async fn admission_token_reflags_pass_but_malformed_spilling_and_error_reports_prevent_send() {
+    use admission_net::{AdmissionNet, Mode};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    for mode in [Mode::Reflag, Mode::Malformed, Mode::Spill, Mode::Error] {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(AdmissionNet {
+                mode,
+                hits: hits.clone(),
+            })
+            .build()
+            .unwrap();
+        let upstream = spawn_upstream(|body| json!({
+            "id":"synthetic", "choices":[{"message":{"role":"assistant","content":body["messages"][0]["content"]}}]
+        })).await;
+        let proxy = spawn_proxy(
+            Arc::new(OpenAiAdapter::new(upstream.base_url.clone())),
+            pipeline,
+        )
+        .await;
+        let original = format!("{EMAIL} tail");
+        let response = post_json(
+            &proxy,
+            "/v1/chat/completions",
+            json!({
+                "model":"synthetic", "messages":[{"role":"user","content":original}]
+            }),
+        )
+        .await;
+        assert_eq!(
+            response.status().is_success(),
+            matches!(mode, Mode::Reflag),
+            "{mode:?}"
+        );
+        if matches!(mode, Mode::Reflag) {
+            let body: Value = response.json().await.unwrap();
+            assert_eq!(body["choices"][0]["message"]["content"], original);
+        } else {
+            assert!(!response.text().await.unwrap().contains(EMAIL));
+        }
+        assert!(hits.load(Ordering::SeqCst) > 0);
+        let forwarded = upstream.forwarded.lock().await;
+        assert_eq!(
+            forwarded.len(),
+            if matches!(mode, Mode::Reflag) { 1 } else { 0 }
+        );
+        assert!(forwarded
+            .iter()
+            .all(|body| !body.to_string().contains(EMAIL)));
+    }
+}
+
+#[tokio::test]
+async fn no_net_remains_an_explicit_surfaced_request_coverage_limit() {
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::new(r"alice@example\.invalid", PiiClass::Email).unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    let (upstream, proxy) = spawn_openai_with(pipeline).await;
+    let response = post_json(
+        &proxy,
+        "/v1/chat/completions",
+        json!({
+            "model":"synthetic", "messages":[{"role":"user","content":route_net::RESIDUAL}]
+        }),
+    )
+    .await;
+    assert!(response.status().is_success());
+    let forwarded = upstream.forwarded.lock().await;
+    assert_eq!(forwarded.len(), 1);
+    assert!(forwarded[0].to_string().contains(route_net::RESIDUAL));
+}

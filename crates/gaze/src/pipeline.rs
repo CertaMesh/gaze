@@ -285,6 +285,16 @@ pub struct Pipeline {
     rules: Vec<Arc<dyn Rule>>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SafetyNetExecution {
+    // Preserve legacy observer optimizations and registry selection.
+    Legacy,
+    // All applicable nets, without making custom-net locale skips an error.
+    Admission,
+    // Also require every installed custom net to cover the active locales.
+    Strict,
+}
+
 enum ProtectionTarget<'target, 'session> {
     Live(&'target Session),
     Staged(&'target mut SessionTransaction<'session>),
@@ -810,7 +820,7 @@ impl Pipeline {
             None,
             SafetyNetDecision::Observe { strict: true },
             dictionaries,
-            false,
+            SafetyNetExecution::Legacy,
         )?;
         Ok(SafetyNetResult { nets_run, report })
     }
@@ -1060,7 +1070,7 @@ impl Pipeline {
             field_path,
             decision,
             &DictionaryBundle::default(),
-            false,
+            SafetyNetExecution::Legacy,
         )
     }
 
@@ -1075,8 +1085,9 @@ impl Pipeline {
         field_path: Option<&str>,
         decision: SafetyNetDecision,
         dictionaries: &DictionaryBundle,
-        mandatory: bool,
+        execution: SafetyNetExecution,
     ) -> Result<LeakReport> {
+        let mandatory = execution != SafetyNetExecution::Legacy;
         if self.safety_nets_len() == 0 {
             return Ok(LeakReport::default());
         }
@@ -1091,7 +1102,7 @@ impl Pipeline {
         let active = gaze_types::LocaleChain::from(locale_chain);
         for net in &self.safety_nets {
             if !active.intersects(net.supported_locales()) {
-                if mandatory {
+                if execution == SafetyNetExecution::Strict {
                     return Err(ProtectionError::UnsupportedCoverage.into());
                 }
                 telemetry.push(LeakReportTelemetry::LocaleSkipped {
@@ -2976,7 +2987,7 @@ fn walk_structured_value(
                     Some(field_path),
                     decision,
                     dictionaries,
-                    false,
+                    SafetyNetExecution::Legacy,
                 )?;
                 report.extend(field_report);
                 Ok(Some(Value::String(clean.text)))
@@ -2992,7 +3003,7 @@ fn walk_structured_value(
                         Some(field_path),
                         op.decision(),
                         dictionaries,
-                        false,
+                        SafetyNetExecution::Legacy,
                     )?;
                     report.extend(field_report);
                 }
@@ -3050,7 +3061,7 @@ fn walk_structured_value(
                         Some(field_path),
                         op.decision(),
                         dictionaries,
-                        false,
+                        SafetyNetExecution::Legacy,
                     )?;
                     report.extend(field_report);
                 }
