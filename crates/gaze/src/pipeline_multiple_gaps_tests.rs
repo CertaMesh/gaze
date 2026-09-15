@@ -20,7 +20,8 @@ fn fixture() -> (Session, CleanText, String) {
         manifest: vec![
             EmittedTokenSpan::new(2..2 + x.len(), 2..3, PiiClass::Email),
             EmittedTokenSpan::new(4 + x.len()..4 + x.len() + y.len(), 5..6, PiiClass::Email),
-        ],
+        ]
+        .into(),
     };
     (session, clean, "aaXbbYcc".into())
 }
@@ -142,7 +143,7 @@ fn multiple_gap_parent_overlap_on_owned_bytes_is_permutation_deterministic() {
             .unwrap();
         assert_eq!(reason, None);
         assert_eq!(tx.restore_strict_text(&copy.text).unwrap(), baseline);
-        let trace = trace.finish(&copy.manifest).unwrap();
+        let trace = trace.finish(&copy.manifest.projection().spans).unwrap();
         assert_eq!(
             trace.iter().map(|t| t.raw_span.clone()).collect::<Vec<_>>(),
             [0..2, 2..3, 3..5, 5..6, 6..8]
@@ -530,7 +531,8 @@ fn multiple_gap_unowned_replacement_and_format_lookalikes_never_plan() {
                 2..2 + replacement.len(),
                 2..3,
                 PiiClass::Email,
-            )],
+            )]
+            .into(),
         };
         let report = report(vec![parent(&clean)]);
         assert!(!session.contains_token(replacement));

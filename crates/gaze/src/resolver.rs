@@ -97,6 +97,10 @@ pub(crate) enum PairOutcome {
 }
 
 impl CandidatePool {
+    pub(crate) fn take_originals(&mut self) -> Vec<Candidate> {
+        std::mem::take(&mut self.originals)
+    }
+
     pub(crate) fn originals(&self) -> &[Candidate] {
         &self.originals
     }

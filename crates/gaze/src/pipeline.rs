@@ -1,4 +1,6 @@
+mod occurrence;
 mod protection;
+use occurrence::{Batch, Ledger, Occurrence, Origin, Relation};
 mod recovery;
 pub use protection::{ProtectionContext, ProtectionError};
 
@@ -704,7 +706,7 @@ impl Pipeline {
                 let mut report = self.run_safety_nets(
                     target,
                     &clean.text,
-                    &Manifest::from_spans(clean.manifest.clone()),
+                    clean.manifest.projection(),
                     DocumentKind::Text,
                     locale_chain,
                     None,
@@ -720,7 +722,11 @@ impl Pipeline {
                     decision,
                     None,
                 )?;
-                Ok((CleanDocument::Text(clean.text), clean.manifest, report))
+                Ok((
+                    CleanDocument::Text(clean.text),
+                    clean.manifest.into_spans(),
+                    report,
+                ))
             }
             _ => Err(Error::UnsupportedRawDocumentVariant),
         }
@@ -756,7 +762,7 @@ impl Pipeline {
         let mut report = self.run_safety_nets(
             &mut target,
             &clean.text,
-            &Manifest::from_spans(clean.manifest.clone()),
+            clean.manifest.projection(),
             DocumentKind::Text,
             locale_chain,
             None,
@@ -772,10 +778,10 @@ impl Pipeline {
             decision,
             Some(&mut protection_trace),
         )?;
-        let trace = protection_trace.finish(&clean.manifest)?;
+        let trace = protection_trace.finish(&clean.manifest.projection().spans)?;
         Ok((
             CleanDocument::Text(clean.text),
-            clean.manifest,
+            clean.manifest.into_spans(),
             report,
             trace,
         ))
@@ -957,10 +963,12 @@ impl Pipeline {
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
         let recovery::WholePlan {
+            evidence,
             primary: resolved,
             recovered,
             ..
         } = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
+        let mut ledger = Ledger::new(evidence);
         let vetoed = vetoed
             .into_iter()
             .filter_map(|vetoed| translate_vetoed_candidate(vetoed, spans))
@@ -991,7 +999,8 @@ impl Pipeline {
         let recovered = recovered
             .into_iter()
             .map(|candidate| indexed_detection_from_candidate(candidate, &self.registry));
-        for detection in detections.into_iter().chain(recovered) {
+        let primary_count = detections.len();
+        for (index, detection) in detections.into_iter().chain(recovered).enumerate() {
             let raw = text[detection.detection.span.clone()].to_string();
             let context = build_context(field_name);
             let action = self.action_for(&detection.detection, &context);
@@ -1027,23 +1036,39 @@ impl Pipeline {
                     )?;
                 }
             }
-            prepared.push((span, detection.detection.class, replacement));
+            let selection = ledger.selection_for(&span, index >= primary_count)?;
+            ledger.set_selection_action(selection, action);
+            let owned = matches!(action, Action::Tokenize | Action::FormatPreserve)
+                && replacement
+                    .as_ref()
+                    .is_some_and(|value| target.contains_token(value));
+            prepared.push((
+                span,
+                detection.detection.class,
+                replacement,
+                action,
+                owned,
+                selection,
+            ));
         }
 
-        prepared.sort_by_key(|(span, _, _)| span.start);
+        prepared.sort_by_key(|(span, ..)| span.start);
         let mut out = String::with_capacity(text.len());
-        let mut emitted = Vec::with_capacity(prepared.len());
         let mut cursor = 0usize;
-        for (span, class, replacement) in prepared {
+        for (span, class, replacement, action, owned, selection) in prepared {
             out.push_str(&text[cursor..span.start]);
             match replacement {
                 Some(replacement) => {
                     let clean_start = out.len();
                     out.push_str(&replacement);
-                    emitted.push(EmittedTokenSpan::new(
-                        clean_start..out.len(),
-                        span.clone(),
-                        class,
+                    ledger.insert(Occurrence::new(
+                        EmittedTokenSpan::new(clean_start..out.len(), span.clone(), class),
+                        action,
+                        owned,
+                        Origin::Selection {
+                            segment: 0,
+                            selection,
+                        },
                     ));
                 }
                 None => out.push_str(&text[span.clone()]),
@@ -1057,7 +1082,7 @@ impl Pipeline {
 
         Ok(CleanText {
             text: out,
-            manifest: emitted,
+            manifest: ledger,
         })
     }
 
@@ -1320,7 +1345,7 @@ impl Pipeline {
                         let mut follow_up = self.run_safety_nets(
                             target,
                             &clean.text,
-                            &Manifest::from_spans(clean.manifest.clone()),
+                            clean.manifest.projection(),
                             document_kind,
                             locale_chain,
                             field_path,
@@ -1356,7 +1381,7 @@ impl Pipeline {
                                 follow_up = self.run_safety_nets(
                                     target,
                                     &clean.text,
-                                    &Manifest::from_spans(clean.manifest.clone()),
+                                    clean.manifest.projection(),
                                     document_kind,
                                     locale_chain,
                                     field_path,
@@ -1426,7 +1451,7 @@ impl Pipeline {
                         let final_report = self.run_safety_nets(
                             target,
                             &clean.text,
-                            &Manifest::from_spans(clean.manifest.clone()),
+                            clean.manifest.projection(),
                             document_kind,
                             locale_chain,
                             field_path,
@@ -1542,12 +1567,14 @@ impl Pipeline {
         // exact-restore preservation is undefined there, so it is not this pass's invariant.
         let restore_baseline = target.restore_strict_text(&clean.text).ok();
 
+        let origins = resolution_origins(clean, &plans, Batch::First);
         // Phase 3: apply right-to-left, so an applied plan never shifts an unapplied one.
-        for plan in plans.into_iter().rev() {
+        for (plan, origin) in plans.into_iter().zip(origins).rev() {
             self.apply_safety_net_resolution(
                 target,
                 clean,
                 plan,
+                origin,
                 document_kind,
                 field_path,
                 protection_trace.as_deref_mut(),
@@ -1566,11 +1593,13 @@ impl Pipeline {
     }
 
     /// Both reversible batches use identical publication, audit and trace ordering.
+    #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_resolution(
         &self,
         target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
         plan: PlannedSafetyNetResolution<'_>,
+        origin: Origin,
         document_kind: DocumentKind,
         field_path: Option<&str>,
         protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
@@ -1591,10 +1620,15 @@ impl Pipeline {
             clean,
             plan.clean_span.clone(),
             &replacement,
-            Some(EmittedTokenSpan::new(
-                plan.clean_span.start..plan.clean_span.start + replacement.len(),
-                plan.raw_span.clone(),
-                suspect.class.clone(),
+            Some(Occurrence::new(
+                EmittedTokenSpan::new(
+                    plan.clean_span.start..plan.clean_span.start + replacement.len(),
+                    plan.raw_span.clone(),
+                    suspect.class.clone(),
+                ),
+                Action::Tokenize,
+                true,
+                origin,
             )),
         )?;
         if let Some(trace) = protection_trace {
@@ -1631,11 +1665,13 @@ impl Pipeline {
                 None,
             )?;
         }
-        for gap in plan.gaps.into_iter().rev() {
+        let origins = resolution_origins(clean, &plan.gaps, Batch::Second);
+        for (gap, origin) in plan.gaps.into_iter().zip(origins).rev() {
             self.apply_safety_net_resolution(
                 target,
                 clean,
                 gap,
+                origin,
                 document_kind,
                 field_path,
                 protection_trace.as_deref_mut(),
@@ -1823,6 +1859,13 @@ impl Pipeline {
         // Phase 2: normalize the plan set into ascending, disjoint regions. Frozen spans may only
         // be applied right-to-left once that holds; see `merge_overlapping_redaction_plans`.
         let plans = merge_overlapping_redaction_plans(plans);
+        let phase = clean.manifest.phase(clean.text.len(), Batch::Deletion);
+        let mut observations = std::collections::HashMap::new();
+        for suspect in suspects {
+            observations
+                .entry(*suspect as *const LeakSuspect)
+                .or_insert_with(|| clean.manifest.observe(phase, suspect));
+        }
         // Phase 3: apply right-to-left, so an applied region never shifts an unapplied one.
         for plan in plans.into_iter().rev() {
             for existing in clean
@@ -1858,6 +1901,13 @@ impl Pipeline {
                 }
             }
             replace_clean_span_checked(clean, plan.clean_span, "", None)?;
+            clean.manifest.describe_deletion(
+                plan.raw_span.clone(),
+                plan.suspects
+                    .iter()
+                    .map(|s| observations[&(*s as *const LeakSuspect)])
+                    .collect(),
+            );
             if let Some(trace) = protection_trace.as_deref_mut() {
                 // A merged region is one deletion, so it is one trace item: it carries the class
                 // of its lowest-offset suspect and the ids of every suspect that drove it.
@@ -2122,7 +2172,7 @@ struct IndexedDetection {
 
 struct CleanText {
     text: String,
-    manifest: Vec<EmittedTokenSpan>,
+    manifest: Ledger,
 }
 
 /// One contiguous region the safety net will delete, and every suspect that asked for it.
@@ -2282,6 +2332,35 @@ struct PlannedSafetyNetResolution<'a> {
     clean_span: Range<usize>,
     raw_span: Range<usize>,
     raw: String,
+}
+
+fn resolution_origins(
+    clean: &mut CleanText,
+    plans: &[PlannedSafetyNetResolution<'_>],
+    batch: Batch,
+) -> Vec<Origin> {
+    let phase = clean.manifest.phase(clean.text.len(), batch);
+    let mut observations = std::collections::HashMap::new();
+    plans
+        .iter()
+        .map(|plan| {
+            let observation = *observations
+                .entry(plan.suspect as *const LeakSuspect)
+                .or_insert_with(|| clean.manifest.observe(phase, plan.suspect));
+            let relation = if matches!(plan.suspect.kind, LeakKind::PartialBleed { .. })
+                || plan.clean_span != plan.suspect.span
+            {
+                Relation::Gap
+            } else {
+                Relation::WholeSuspect
+            };
+            Origin::SafetyNet {
+                observation,
+                relation,
+                clean: plan.clean_span.clone(),
+            }
+        })
+        .collect()
 }
 
 enum FollowupResolution<'a> {
@@ -2882,7 +2961,10 @@ fn map_clean_span_to_raw(clean: &CleanText, span: &Range<usize>) -> Result<Range
 /// runs advance both by the same amount, and each emitted token jumps them to its own
 /// clean/raw ends. Returns `None` (caller fails closed) when the offset falls strictly inside
 /// an emitted token, or when the manifest is not monotonic / not gap-preserving.
-fn map_clean_boundary_to_raw(manifest: &[EmittedTokenSpan], offset: usize) -> Option<usize> {
+fn map_clean_boundary_to_raw<'a>(
+    manifest: impl IntoIterator<Item = &'a EmittedTokenSpan>,
+    offset: usize,
+) -> Option<usize> {
     let mut clean_cursor = 0usize;
     let mut raw_cursor = 0usize;
     for emitted in manifest {
@@ -3073,18 +3155,10 @@ fn replace_clean_span(
     clean: &mut CleanText,
     span: Range<usize>,
     replacement: &str,
-    emitted: Option<EmittedTokenSpan>,
+    emitted: Option<Occurrence>,
 ) {
-    let removed_len = span.end - span.start;
-    let replacement_len = replacement.len();
     clean.text.replace_range(span.clone(), replacement);
-    clean.manifest = clean
-        .manifest
-        .iter()
-        .filter_map(|existing| adjust_emitted_span(existing, &span, replacement_len, removed_len))
-        .chain(emitted)
-        .collect();
-    clean.manifest.sort_by_key(|span| span.clean_span.start);
+    clean.manifest.replace(&span, replacement.len(), emitted);
 }
 
 /// Prove a planned span still fits the LIVE document before applying it.
@@ -3105,7 +3179,7 @@ fn replace_clean_span_checked(
     clean: &mut CleanText,
     span: Range<usize>,
     replacement: &str,
-    emitted: Option<EmittedTokenSpan>,
+    emitted: Option<Occurrence>,
 ) -> Result<()> {
     if !is_char_boundary_range(&clean.text, &span) {
         return Err(Error::SafetyNetSpanInvalid {
@@ -3116,30 +3190,6 @@ fn replace_clean_span_checked(
     }
     replace_clean_span(clean, span, replacement, emitted);
     Ok(())
-}
-
-fn adjust_emitted_span(
-    existing: &EmittedTokenSpan,
-    edited: &Range<usize>,
-    replacement_len: usize,
-    removed_len: usize,
-) -> Option<EmittedTokenSpan> {
-    if existing.clean_span.start < edited.end && edited.start < existing.clean_span.end {
-        return None;
-    }
-    let mut span = existing.clone();
-    if span.clean_span.start >= edited.end {
-        if replacement_len >= removed_len {
-            let delta = replacement_len - removed_len;
-            span.clean_span.start += delta;
-            span.clean_span.end += delta;
-        } else {
-            let delta = removed_len - replacement_len;
-            span.clean_span.start -= delta;
-            span.clean_span.end -= delta;
-        }
-    }
-    Some(span)
 }
 
 /// Builder for [`Pipeline`].
@@ -3512,7 +3562,7 @@ fn walk_structured_value(
                 let field_report = pipeline.run_safety_nets_in_context(
                     target,
                     &clean.text,
-                    &Manifest::from_spans(clean.manifest),
+                    clean.manifest.projection(),
                     DocumentKind::Structured,
                     locale_chain,
                     Some(field_path),
@@ -4317,7 +4367,8 @@ mod tests {
                     phone_raw_start..phone_raw_start + phone_raw.len(),
                     phone_class,
                 ),
-            ],
+            ]
+            .into(),
         };
         let report = LeakReport::from_parts(
             vec![
@@ -4418,7 +4469,7 @@ mod tests {
                     .expect("session");
             let clean = CleanText {
                 text: raw.to_string(),
-                manifest: Vec::new(),
+                manifest: Vec::new().into(),
             };
             let report = LeakReport::from_parts(
                 vec![LeakSuspect::new(
@@ -4686,7 +4737,7 @@ mod tests {
                     .expect("session");
             let mut clean = CleanText {
                 text: raw.to_string(),
-                manifest: Vec::new(),
+                manifest: Vec::new().into(),
             };
             let report = LeakReport::from_parts(
                 spans
@@ -4738,7 +4789,8 @@ mod tests {
                 0..existing_token.len(),
                 0.."alice@example.invalid".len(),
                 PiiClass::Email,
-            )],
+            )]
+            .into(),
         };
         let report = LeakReport::from_parts(
             vec![LeakSuspect::new(
@@ -4839,7 +4891,7 @@ mod tests {
         // "<tok> tail" where the entry claims to stand for 21 raw bytes.
         let sound = CleanText {
             text: "<aabbccdd:Email_1> tail".to_string(),
-            manifest: vec![EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email)],
+            manifest: vec![EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email)].into(),
         };
         validate_clean_manifest(&sound).expect("a gap-preserving manifest must validate");
 
@@ -4851,7 +4903,8 @@ mod tests {
             manifest: vec![
                 EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email),
                 EmittedTokenSpan::new(19..23, 25..29, PiiClass::Email),
-            ],
+            ]
+            .into(),
         };
         let error = validate_clean_manifest(&corrupt)
             .expect_err("a manifest that contradicts its own alignment must fail closed");
@@ -4870,7 +4923,8 @@ mod tests {
             manifest: vec![
                 EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email),
                 EmittedTokenSpan::new(19..23, 25..29, PiiClass::Email),
-            ],
+            ]
+            .into(),
         }
     }
 
@@ -4906,7 +4960,8 @@ mod tests {
             manifest: vec![
                 EmittedTokenSpan::new(0..token.len(), 8..12, PiiClass::Name),
                 EmittedTokenSpan::new(token.len() + 5..2 * token.len() + 5, 20..24, PiiClass::Name),
-            ],
+            ]
+            .into(),
         };
         let before = CleanText {
             text: format!("barrier {token} gapgap {token}"),
@@ -4917,7 +4972,8 @@ mod tests {
                     20..24,
                     PiiClass::Name,
                 ),
-            ],
+            ]
+            .into(),
         };
         let provenance = TerminalManifestProvenance::capture(&target, &before).unwrap();
         validate_terminal_manifest(&target, &sound(), &provenance).unwrap();
@@ -4970,7 +5026,8 @@ mod tests {
                 manifest: vec![
                     EmittedTokenSpan::new(5..5 + n, 5..12, PiiClass::Email),
                     EmittedTokenSpan::new(14 + n..14 + n + token.len(), 21..25, PiiClass::Name),
-                ],
+                ]
+                .into(),
             };
             let provenance = TerminalManifestProvenance::capture(&target, &before).unwrap();
             let sound = || CleanText {
@@ -4978,7 +5035,8 @@ mod tests {
                 manifest: vec![
                     EmittedTokenSpan::new(0..n, 5..12, PiiClass::Email),
                     EmittedTokenSpan::new(n..n + token.len(), 21..25, PiiClass::Name),
-                ],
+                ]
+                .into(),
             };
             validate_terminal_manifest(&target, &sound(), &provenance).unwrap();
             for corruption in 0..8 {
@@ -5009,7 +5067,8 @@ mod tests {
                     0..token.len(),
                     21..25,
                     PiiClass::Name,
-                )],
+                )]
+                .into(),
             };
             validate_terminal_manifest(&target, &survivor, &provenance).unwrap();
         }
@@ -5109,7 +5168,7 @@ mod tests {
     fn overlapping_expansion_clean_text() -> CleanText {
         CleanText {
             text: "Dr Schmidt<aabbccdd:Email_1> end".to_string(),
-            manifest: vec![EmittedTokenSpan::new(10..28, 10..24, PiiClass::Email)],
+            manifest: vec![EmittedTokenSpan::new(10..28, 10..24, PiiClass::Email)].into(),
         }
     }
 
@@ -5226,7 +5285,9 @@ mod tests {
             )
             .expect("overlapping redaction spans must merge rather than fail, and never panic");
 
-        let items = trace.finish(&clean.manifest).expect("protection trace");
+        let items = trace
+            .finish(&clean.manifest.projection().spans)
+            .expect("protection trace");
         assert_eq!(items.len(), 1, "a merged region is one redaction, one item");
         // Clean 0..28 maps back through the unmutated manifest to original bytes 0..24, so #402's
         // original-coordinate contract still holds for a merged plan.
@@ -5358,7 +5419,7 @@ mod tests {
     fn replace_clean_span_checked_refuses_a_span_past_the_live_text() {
         let mut clean = CleanText {
             text: "Dr Schmidt".to_string(),
-            manifest: Vec::new(),
+            manifest: Vec::new().into(),
         };
 
         let error = replace_clean_span_checked(&mut clean, 0..28, "", None)
@@ -5379,7 +5440,7 @@ mod tests {
         // A span off a char boundary is the other way `replace_range` panics.
         let mut multibyte = CleanText {
             text: "Grüße".to_string(),
-            manifest: Vec::new(),
+            manifest: Vec::new().into(),
         };
         assert!(
             matches!(
