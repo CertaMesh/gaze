@@ -6496,3 +6496,7 @@ mod tests {
 #[cfg(test)]
 #[path = "pipeline_multiple_gaps_tests.rs"]
 mod multiple_gaps_tests;
+
+#[cfg(test)]
+#[path = "pipeline_second_batch_tests.rs"]
+mod second_batch_tests;
