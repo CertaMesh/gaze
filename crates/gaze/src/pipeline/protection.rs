@@ -178,7 +178,7 @@ impl Pipeline {
             .run_safety_nets_in_context(
                 &mut target,
                 &clean,
-                &manifest,
+                manifest,
                 DocumentKind::Text,
                 context.locale_chain,
                 None,
@@ -190,7 +190,7 @@ impl Pipeline {
                 Error::Protection(error) => error,
                 _ => ProtectionError::SafetyNet,
             })?;
-        reject_unprotected_suspects(&clean, &manifest, report)?;
+        reject_unprotected_suspects(&clean, manifest, report)?;
         Ok(clean)
     }
 
@@ -260,7 +260,7 @@ impl Pipeline {
             .run_safety_nets_in_context(
                 &mut ProtectionTarget::Staged(transaction),
                 text,
-                &manifest,
+                manifest,
                 DocumentKind::Text,
                 locale_chain,
                 None,
@@ -272,7 +272,7 @@ impl Pipeline {
                 Error::Protection(error) => error,
                 _ => ProtectionError::SafetyNet,
             })?;
-        reject_unprotected_suspects(text, &manifest, report)
+        reject_unprotected_suspects(text, manifest, report)
     }
 
     #[allow(clippy::too_many_arguments)]

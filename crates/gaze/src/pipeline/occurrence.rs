@@ -72,6 +72,7 @@ impl Occurrence {
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Selection {
     pub(super) node: usize,
+    pub(super) class: PiiClass,
     pub(super) members: Vec<usize>,
     pub(super) raw: Range<usize>,
     pub(super) recovered: bool,
@@ -125,17 +126,9 @@ impl Ledger {
             ..Self::default()
         }
     }
-    pub(super) fn selection_for(&self, raw: &Range<usize>, recovered: bool) -> Result<usize> {
-        self.segments[0]
-            .selections
-            .iter()
-            .position(|s| s.raw == *raw && s.recovered == recovered)
-            .ok_or_else(|| manifest_integrity_error("missing selection evidence"))
-    }
     pub(super) fn set_selection_action(&mut self, selection: usize, action: Action) {
         self.segments[0].selections[selection].action = Some(action);
     }
-    #[cfg(test)]
     pub(super) fn records(&self) -> &[Occurrence] {
         &self.records
     }
@@ -172,8 +165,8 @@ impl Ledger {
         self.projection.take();
         record.id = self.next_id;
         self.next_id += 1;
-        self.records.push(record);
-        self.records.sort_by_key(|r| r.emitted.clean_span.start);
+        let index = self.records.partition_point(|r| r.emitted.clean_span.start <= record.emitted.clean_span.start);
+        self.records.insert(index, record);
     }
     pub(super) fn phase(&mut self, text_len: usize, batch: Batch) -> usize {
         let projection = Arc::clone(self.project_arc());
@@ -353,7 +346,8 @@ impl Ledger {
                         .selections
                         .get(*selection)
                         .ok_or_else(|| manifest_integrity_error("invalid selection id"))?;
-                    if selected.action != record.action
+                    if selected.class != record.emitted.class
+                        || selected.action != record.action
                         || shift(&selected.raw, segment.raw_offset)? != record.emitted.raw_span
                     {
                         return Err(manifest_integrity_error("selection raw mismatch"));
@@ -540,33 +534,76 @@ mod tests {
         let pipeline = Pipeline::builder()
             .detector(Email)
             .rule(crate::rule::DefaultRule::new(action))
-            .build().unwrap();
-        let clean = pipeline.redact_text_with_manifest_uncached(
-            &mut ProtectionTarget::Live(&session), raw, None, DocumentKind::Text,
-            &[crate::LocaleTag::Global], &DictionaryBundle::default(), None,
-        ).unwrap();
+            .build()
+            .unwrap();
+        let clean = pipeline
+            .redact_text_with_manifest_uncached(
+                &mut ProtectionTarget::Live(&session),
+                raw,
+                None,
+                DocumentKind::Text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                None,
+            )
+            .unwrap();
         (session, clean)
     }
     struct Email;
     impl Detector for Email {
         fn detect(&self, text: &str) -> Vec<Detection> {
             text.match_indices("alice@example.invalid")
-                .map(|(start, s)| Detection::new(start..start+s.len(), PiiClass::Email, "synthetic.email"))
+                .map(|(start, s)| {
+                    Detection::new(start..start + s.len(), PiiClass::Email, "synthetic.email")
+                })
                 .collect()
         }
     }
     fn suspect(span: Range<usize>, kind: LeakKind) -> LeakSuspect {
-        LeakSuspect::new(span, PiiClass::Name, "synthetic.net", Some(0.9), kind, "synthetic", None)
+        LeakSuspect::new(
+            span,
+            PiiClass::Name,
+            "synthetic.net",
+            Some(0.9),
+            kind,
+            "synthetic",
+            None,
+        )
     }
     fn resolve(clean: &mut CleanText, session: &Session, suspects: Vec<LeakSuspect>, batch: Batch) {
         let report = LeakReport::from_parts(suspects, Vec::new());
         let pipeline = Pipeline::builder().build().unwrap();
         let mut target = ProtectionTarget::Live(session);
         match batch {
-            Batch::First => assert_eq!(pipeline.resolve_safety_net_suspects(&mut target, clean, &report, DocumentKind::Text, None, None).unwrap(), None),
+            Batch::First => assert_eq!(
+                pipeline
+                    .resolve_safety_net_suspects(
+                        &mut target,
+                        clean,
+                        &report,
+                        DocumentKind::Text,
+                        None,
+                        None
+                    )
+                    .unwrap(),
+                None
+            ),
             Batch::Second => {
-                let FollowupResolution::Ready(plan) = plan_followup_resolutions(&target, clean, &report, None).unwrap() else { panic!("ready second batch") };
-                pipeline.apply_followup_resolutions(&mut target, clean, plan, DocumentKind::Text, None, None).unwrap();
+                let FollowupResolution::Ready(plan) =
+                    plan_followup_resolutions(&target, clean, &report, None).unwrap()
+                else {
+                    panic!("ready second batch")
+                };
+                pipeline
+                    .apply_followup_resolutions(
+                        &mut target,
+                        clean,
+                        plan,
+                        DocumentKind::Text,
+                        None,
+                        None,
+                    )
+                    .unwrap();
             }
             Batch::Deletion => unreachable!(),
         }
@@ -578,23 +615,59 @@ mod tests {
         for batch in [Batch::First, Batch::Second] {
             let (session, mut clean) = primary("aaalice@example.invalidbb", Action::Tokenize);
             let end = clean.text.len();
-            resolve(&mut clean, &session, vec![suspect(0..end, LeakKind::PartialBleed { uncovered: 0..2 })], batch);
+            resolve(
+                &mut clean,
+                &session,
+                vec![suspect(0..end, LeakKind::PartialBleed { uncovered: 0..2 })],
+                batch,
+            );
             assert_eq!(clean.manifest.observations.len(), 1);
             assert_eq!(clean.manifest.phases.len(), 1);
             assert_eq!(clean.manifest.phases[0].batch, batch);
             assert_eq!(clean.manifest.phases[0].text_len, end);
             assert_eq!(clean.manifest.observations[0].suspect.span, 0..end);
-            let gaps = clean.manifest.records.iter().filter(|r| matches!(r.origin, Origin::SafetyNet { .. })).collect::<Vec<_>>();
+            let gaps = clean
+                .manifest
+                .records
+                .iter()
+                .filter(|r| matches!(r.origin, Origin::SafetyNet { .. }))
+                .collect::<Vec<_>>();
             assert_eq!(gaps.len(), 2);
-            assert!(gaps.iter().all(|r| matches!(r.origin, Origin::SafetyNet { observation: 0, relation: Relation::Gap, .. })));
-            assert_eq!(gaps.iter().map(|r| r.emitted.raw_span.clone()).collect::<Vec<_>>(), vec![0..2,23..25]);
-            assert_eq!(session.restore_strict_text(&clean.text).unwrap(), "aaalice@example.invalidbb");
+            assert!(gaps.iter().all(|r| matches!(
+                r.origin,
+                Origin::SafetyNet {
+                    observation: 0,
+                    relation: Relation::Gap,
+                    ..
+                }
+            )));
+            assert_eq!(
+                gaps.iter()
+                    .map(|r| r.emitted.raw_span.clone())
+                    .collect::<Vec<_>>(),
+                vec![0..2, 23..25]
+            );
+            assert_eq!(
+                session.restore_strict_text(&clean.text).unwrap(),
+                "aaalice@example.invalidbb"
+            );
             // A clean parent may cross a token interior. Its observation remains phase-local.
             let (session, mut interior) = primary("aaalice@example.invalidbb", Action::Tokenize);
             let end = interior.manifest[0].clean_span.start + 3;
-            resolve(&mut interior, &session, vec![suspect(0..end, LeakKind::PartialBleed { uncovered: 0..2 })], batch);
+            resolve(
+                &mut interior,
+                &session,
+                vec![suspect(0..end, LeakKind::PartialBleed { uncovered: 0..2 })],
+                batch,
+            );
             assert_eq!(interior.manifest.observations[0].suspect.span, 0..end);
-            assert!(matches!(interior.manifest.records[0].origin, Origin::SafetyNet { relation: Relation::Gap, .. }));
+            assert!(matches!(
+                interior.manifest.records[0].origin,
+                Origin::SafetyNet {
+                    relation: Relation::Gap,
+                    ..
+                }
+            ));
             assert_eq!(interior.manifest.records[0].emitted.raw_span, 0..2);
         }
     }
@@ -602,26 +675,68 @@ mod tests {
     #[test]
     fn second_batch_uses_its_own_phase_and_whole_observation_is_not_selection() {
         let (session, mut clean) = primary("aaalice@example.invalidbbcc", Action::Tokenize);
-        resolve(&mut clean, &session, vec![suspect(0..2, LeakKind::Uncovered)], Batch::First);
+        resolve(
+            &mut clean,
+            &session,
+            vec![suspect(0..2, LeakKind::Uncovered)],
+            Batch::First,
+        );
         let old_len = clean.text.len();
-        resolve(&mut clean, &session, vec![suspect(old_len-4..old_len-2, LeakKind::Uncovered)], Batch::Second);
+        resolve(
+            &mut clean,
+            &session,
+            vec![suspect(old_len - 4..old_len - 2, LeakKind::Uncovered)],
+            Batch::Second,
+        );
         assert_eq!(clean.manifest.phases.len(), 2);
         assert_eq!(clean.manifest.phases[1].text_len, old_len);
         assert_eq!(clean.manifest.observations[1].phase, 1);
-        assert!(clean.manifest.records.iter().filter(|r| matches!(r.origin, Origin::SafetyNet { relation: Relation::WholeSuspect, .. })).count() == 2);
-        assert_eq!(session.restore_strict_text(&clean.text).unwrap(), "aaalice@example.invalidbbcc");
+        assert!(
+            clean
+                .manifest
+                .records
+                .iter()
+                .filter(|r| matches!(
+                    r.origin,
+                    Origin::SafetyNet {
+                        relation: Relation::WholeSuspect,
+                        ..
+                    }
+                ))
+                .count()
+                == 2
+        );
+        assert_eq!(
+            session.restore_strict_text(&clean.text).unwrap(),
+            "aaalice@example.invalidbbcc"
+        );
     }
 
     #[test]
     fn one_way_and_format_preserve_ownership_stays_separate_from_selection() {
-        for action in [Action::Tokenize, Action::FormatPreserve, Action::Redact, Action::Generalize, Action::Preserve] {
+        for action in [
+            Action::Tokenize,
+            Action::FormatPreserve,
+            Action::Redact,
+            Action::Generalize,
+            Action::Preserve,
+        ] {
             let (session, clean) = primary("alice@example.invalid", action);
-            assert_eq!(clean.manifest.segments[0].selections[0].action, Some(action));
+            assert_eq!(
+                clean.manifest.segments[0].selections[0].action,
+                Some(action)
+            );
             clean.manifest.validate().unwrap();
-            if action == Action::Preserve { assert!(clean.manifest.records.is_empty()); continue; }
+            if action == Action::Preserve {
+                assert!(clean.manifest.records.is_empty());
+                continue;
+            }
             let record = &clean.manifest.records[0];
             assert_eq!(record.action, Some(action));
-            assert_eq!(record.owned, matches!(action, Action::Tokenize | Action::FormatPreserve));
+            assert_eq!(
+                record.owned,
+                matches!(action, Action::Tokenize | Action::FormatPreserve)
+            );
             assert_eq!(record.owned, session.contains_token(&clean.text));
             assert!(matches!(record.origin, Origin::Selection { .. }));
         }
@@ -642,9 +757,21 @@ mod tests {
         assert_eq!(ledger.segments[1].originals.as_ptr(), right_ptr);
         assert_eq!(ledger.records[0].emitted.raw_span, 2..23);
         assert_eq!(ledger.records[1].emitted.raw_span, 30..51);
-        assert_eq!(ledger.records[1].origin, Origin::Selection { segment: 1, selection: 0 });
-        assert_eq!(ledger.records[2].origin, Origin::ExistingOwnedUnknown { segment: 2 });
-        assert!(ledger.segments.iter().all(|s| s.basis == Basis::ExpandedOwnedInput));
+        assert_eq!(
+            ledger.records[1].origin,
+            Origin::Selection {
+                segment: 1,
+                selection: 0
+            }
+        );
+        assert_eq!(
+            ledger.records[2].origin,
+            Origin::ExistingOwnedUnknown { segment: 2 }
+        );
+        assert!(ledger
+            .segments
+            .iter()
+            .all(|s| s.basis == Basis::ExpandedOwnedInput));
     }
 
     #[test]
@@ -654,8 +781,18 @@ mod tests {
             let mut ledger = clean.manifest.clone();
             match corruption {
                 0 => ledger.records[0].id = 100,
-                1 => ledger.records[0].origin = Origin::Selection { segment: 100, selection: 0 },
-                2 => ledger.records[0].origin = Origin::Selection { segment: 0, selection: 100 },
+                1 => {
+                    ledger.records[0].origin = Origin::Selection {
+                        segment: 100,
+                        selection: 0,
+                    }
+                }
+                2 => {
+                    ledger.records[0].origin = Origin::Selection {
+                        segment: 0,
+                        selection: 100,
+                    }
+                }
                 3 => ledger.segments[0].selections[0].members = vec![100],
                 4 => ledger.records[0].emitted.raw_span = 1..22,
                 5 => ledger.records[0].action = Some(Action::Redact),
@@ -664,11 +801,22 @@ mod tests {
             }
             assert!(ledger.validate().is_err(), "corruption {corruption}");
         }
-        let mut ledger: Ledger = vec![EmittedTokenSpan::new(0..3,0..2,PiiClass::Name)].into();
+        let mut ledger: Ledger = vec![EmittedTokenSpan::new(0..3, 0..2, PiiClass::Name)].into();
         assert_eq!(ledger.records[0].origin, Origin::Unknown);
         assert!(!ledger.records[0].owned);
-        ledger.records[0].origin = Origin::SafetyNet { observation: 3, relation: Relation::WholeSuspect, clean: 0..3 };
+        ledger.records[0].origin = Origin::SafetyNet {
+            observation: 3,
+            relation: Relation::WholeSuspect,
+            clean: 0..3,
+        };
         assert!(ledger.validate().is_err());
+    }
+
+    #[test]
+    fn repeated_member_identity_cannot_fabricate_independent_evidence() {
+        let (_, mut clean) = primary("alice@example.invalid", Action::Tokenize);
+        clean.manifest.segments[0].selections[0].members.push(0);
+        assert!(clean.manifest.validate().is_err());
     }
 
     #[test]
@@ -687,9 +835,15 @@ mod tests {
         let raw = std::iter::repeat_n("alice@example.invalid ", 64).collect::<String>();
         let (_, mut clean) = primary(&raw, Action::Tokenize);
         let original = clean.manifest.segments[0].originals.as_ptr();
-        for _ in 0..128 { assert_eq!(clean.manifest.projection().spans.len(), 64); }
+        for _ in 0..128 {
+            assert_eq!(clean.manifest.projection().spans.len(), 64);
+        }
         let phase = clean.manifest.phase(clean.text.len(), Batch::First);
-        for _ in 0..128 { clean.manifest.observe(phase, &suspect(0..2, LeakKind::Uncovered)); }
+        for _ in 0..128 {
+            clean
+                .manifest
+                .observe(phase, &suspect(0..2, LeakKind::Uncovered));
+        }
         assert_eq!(clean.manifest.projections.get(), 1);
         assert_eq!(clean.manifest.phases.len(), 1);
         assert_eq!(clean.manifest.segments[0].originals.as_ptr(), original);
@@ -699,19 +853,37 @@ mod tests {
 
     #[test]
     fn deletion_retains_disposition_and_never_an_empty_emission() {
-        let (session, mut clean) = primary("aaalice@example.invalidbbalice@example.invalidcc", Action::Tokenize);
+        let (session, mut clean) = primary(
+            "aaalice@example.invalidbbalice@example.invalidcc",
+            Action::Tokenize,
+        );
         let pipeline = Pipeline::builder().build().unwrap();
         let original_id = clean.manifest.records[0].id;
         let first = clean.manifest[0].clean_span.clone();
-        let report = vec![suspect(first, LeakKind::Uncovered)];
-        pipeline.redact_safety_net_suspects(&mut ProtectionTarget::Live(&session), &mut clean, &report.iter().collect::<Vec<_>>(), DocumentKind::Text, None, None, true, None).unwrap();
+        let report = [suspect(first, LeakKind::Uncovered)];
+        pipeline
+            .redact_safety_net_suspects(
+                &mut ProtectionTarget::Live(&session),
+                &mut clean,
+                &report.iter().collect::<Vec<_>>(),
+                DocumentKind::Text,
+                None,
+                None,
+                true,
+                None,
+            )
+            .unwrap();
         assert_eq!(clean.manifest.records.len(), 1);
         assert_eq!(clean.manifest.deletions.len(), 1);
         assert_eq!(clean.manifest.deletions[0].removed[0].id, original_id);
         assert_eq!(clean.manifest.deletions[0].raw, Some(2..23));
         assert_eq!(clean.manifest.deletions[0].observations.len(), 1);
         assert_eq!(clean.manifest.records[0].emitted.raw_span, 25..46);
-        assert!(clean.manifest.records.iter().all(|r| !r.emitted.clean_span.is_empty()));
+        assert!(clean
+            .manifest
+            .records
+            .iter()
+            .all(|r| !r.emitted.clean_span.is_empty()));
         clean.manifest.validate().unwrap();
     }
 }

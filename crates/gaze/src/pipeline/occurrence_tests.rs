@@ -11,6 +11,7 @@ fn primary_occurrences_retain_distinct_original_evidence_and_ownership() {
     let clean = pipeline
         .redact_text_with_manifest_uncached(
             &mut ProtectionTarget::Live(&session),
+            // fixture-cited(crates/gaze/src/pipeline/occurrence_tests.rs:pipeline::occurrence_tests::primary_occurrences_retain_distinct_original_evidence_and_ownership)
             "alice@example.invalid alice@example.invalid",
             None,
             DocumentKind::Text,
@@ -32,6 +33,7 @@ fn primary_occurrences_retain_distinct_original_evidence_and_ownership() {
     );
     assert_eq!(
         session.restore_strict_text(&clean.text).unwrap(),
+        // fixture-cited(crates/gaze/src/pipeline/occurrence_tests.rs:pipeline::occurrence_tests::primary_occurrences_retain_distinct_original_evidence_and_ownership)
         "alice@example.invalid alice@example.invalid"
     );
 }
@@ -39,6 +41,7 @@ fn primary_occurrences_retain_distinct_original_evidence_and_ownership() {
 struct RepeatedEmail;
 impl Detector for RepeatedEmail {
     fn detect(&self, text: &str) -> Vec<Detection> {
+        // fixture-cited(crates/gaze/src/pipeline/occurrence_tests.rs:pipeline::occurrence_tests::primary_occurrences_retain_distinct_original_evidence_and_ownership)
         text.match_indices("alice@example.invalid")
             .map(|(start, value)| {
                 Detection::new(

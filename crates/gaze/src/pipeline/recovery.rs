@@ -145,6 +145,7 @@ fn freeze(
         end = span.end;
         selections.push(super::occurrence::Selection {
             node: node.node,
+            class: node.candidate.class.clone(),
             members: node.members,
             raw: span.clone(),
             recovered: recovery,

@@ -968,6 +968,17 @@ impl Pipeline {
             recovered,
             ..
         } = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
+        let selection_ids = evidence
+            .selections
+            .iter()
+            .enumerate()
+            .map(|(id, selected)| {
+                (
+                    (selected.raw.start, selected.raw.end, selected.recovered),
+                    id,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
         let mut ledger = Ledger::new(evidence);
         let vetoed = vetoed
             .into_iter()
@@ -1036,7 +1047,7 @@ impl Pipeline {
                     )?;
                 }
             }
-            let selection = ledger.selection_for(&span, index >= primary_count)?;
+            let selection = selection_ids[&(span.start, span.end, index >= primary_count)];
             ledger.set_selection_action(selection, action);
             let owned = matches!(action, Action::Tokenize | Action::FormatPreserve)
                 && replacement
@@ -2707,6 +2718,7 @@ struct TerminalManifestProvenance {
 }
 
 struct TerminalReplacement {
+    occurrence_id: Option<usize>,
     emitted: EmittedTokenSpan,
     replacement: String,
     owned: bool,
@@ -2718,7 +2730,8 @@ impl TerminalManifestProvenance {
         let original_raw_len = map_clean_boundary_to_raw(&clean.manifest, clean.text.len())
             .ok_or_else(|| manifest_integrity_error("invalid original length"))?;
         let mut entries = Vec::with_capacity(clean.manifest.len());
-        for emitted in &clean.manifest {
+        for record in clean.manifest.records() {
+            let emitted = &record.emitted;
             let replacement = clean.text.get(emitted.clean_span.clone()).ok_or_else(|| {
                 manifest_integrity_error("invalid pre-fallback replacement bounds")
             })?;
@@ -2731,6 +2744,7 @@ impl TerminalManifestProvenance {
                 return Err(manifest_integrity_error("invalid pre-fallback provenance"));
             }
             entries.push(TerminalReplacement {
+                occurrence_id: (!matches!(record.origin, Origin::Unknown)).then_some(record.id),
                 emitted: emitted.clone(),
                 replacement: replacement.to_owned(),
                 owned,
@@ -2755,7 +2769,8 @@ fn validate_terminal_manifest(
     let mut originals = provenance.entries.iter();
     let mut clean_cursor = 0;
     let mut raw_cursor = 0;
-    for emitted in &clean.manifest {
+    for record in clean.manifest.records() {
+        let emitted = &record.emitted;
         if emitted.clean_span.start < clean_cursor
             || emitted.clean_span.start >= emitted.clean_span.end
             || !is_char_boundary_range(&clean.text, &emitted.clean_span)
@@ -2774,7 +2789,8 @@ fn validate_terminal_manifest(
         else {
             return Err(manifest_integrity_error("unknown terminal replacement"));
         };
-        if original.emitted.raw_span != emitted.raw_span
+        if original.occurrence_id.is_some_and(|id| id != record.id)
+            || original.emitted.raw_span != emitted.raw_span
             || original.emitted.class != emitted.class
             || clean.text.get(emitted.clean_span.clone()) != Some(original.replacement.as_str())
             || (original.owned && !emitted_is_live_token(target, clean, emitted))
