@@ -950,10 +950,7 @@ mod tests {
             "a residual fragment is its own replacement and is counted"
         );
         assert_eq!(
-            spans
-                .iter()
-                .filter(|span| span.origin.is_whole())
-                .count(),
+            spans.iter().filter(|span| span.origin.is_whole()).count(),
             1,
             "but only one of them covers a whole recognized value"
         );

@@ -1310,8 +1310,16 @@ fn a_record_whose_two_origins_disagree_fails_closed() {
     assert!(records[whole].emitted.origin.is_whole());
 
     for (label, index, forged) in [
-        ("fragment claiming to be whole", fragment, gaze_types::EmittedTokenOrigin::Whole),
-        ("whole claiming to be a fragment", whole, gaze_types::EmittedTokenOrigin::ResidualFragment),
+        (
+            "fragment claiming to be whole",
+            fragment,
+            gaze_types::EmittedTokenOrigin::Whole,
+        ),
+        (
+            "whole claiming to be a fragment",
+            whole,
+            gaze_types::EmittedTokenOrigin::ResidualFragment,
+        ),
     ] {
         let mut bad = Ledger::new(output.manifest.segment().clone());
         for (position, record) in records.iter().enumerate() {

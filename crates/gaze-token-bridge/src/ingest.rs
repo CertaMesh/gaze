@@ -348,7 +348,11 @@ mod tests {
             ["email:alice@example.invalid"],
             "a residual fragment must never be canonicalized as a whole entity"
         );
-        assert_eq!(hit.entities.len(), 1, "a fragment must not become an entity");
+        assert_eq!(
+            hit.entities.len(),
+            1,
+            "a fragment must not become an entity"
+        );
         assert_eq!(hit.entities[0].raw_value, RAW_EMAIL);
 
         // It is still protected: its raw bytes do not reach the stored snippet.
@@ -358,7 +362,8 @@ mod tests {
             hit.snippet
         );
         assert!(
-            hit.snippet.contains(&fragment_placeholder(&PiiClass::Email)),
+            hit.snippet
+                .contains(&fragment_placeholder(&PiiClass::Email)),
             "expected a location-only placeholder, got {:?}",
             hit.snippet
         );
