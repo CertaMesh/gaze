@@ -122,7 +122,9 @@ pub enum SafetyNetFallback {
     Strict,
     /// Ship the residual bytes untouched. Dev-only.
     Tolerant,
-    /// Delete the residual spans (one-way), as [`SafetyNetMode::Redact`] would.
+    /// Delete the residual spans (one-way), then scan once more with the live manifest.
+    /// Reject with [`Error::SafetyNetFallback`] if an actionable suspect remains; net errors
+    /// propagate. This checks configured nets only, not detection completeness.
     Redact,
 }
 
@@ -281,6 +283,16 @@ pub struct Pipeline {
     optimization_config: PipelineOptimizationConfig,
     restore_boundary_dlp_audit: bool,
     rules: Vec<Arc<dyn Rule>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SafetyNetExecution {
+    // Preserve legacy observer optimizations and registry selection.
+    Legacy,
+    // All applicable nets, without making custom-net locale skips an error.
+    Admission,
+    // Also require every installed custom net to cover the active locales.
+    Strict,
 }
 
 enum ProtectionTarget<'target, 'session> {
@@ -808,7 +820,7 @@ impl Pipeline {
             None,
             SafetyNetDecision::Observe { strict: true },
             dictionaries,
-            false,
+            SafetyNetExecution::Legacy,
         )?;
         Ok(SafetyNetResult { nets_run, report })
     }
@@ -1058,7 +1070,7 @@ impl Pipeline {
             field_path,
             decision,
             &DictionaryBundle::default(),
-            false,
+            SafetyNetExecution::Legacy,
         )
     }
 
@@ -1073,8 +1085,9 @@ impl Pipeline {
         field_path: Option<&str>,
         decision: SafetyNetDecision,
         dictionaries: &DictionaryBundle,
-        mandatory: bool,
+        execution: SafetyNetExecution,
     ) -> Result<LeakReport> {
+        let mandatory = execution != SafetyNetExecution::Legacy;
         if self.safety_nets_len() == 0 {
             return Ok(LeakReport::default());
         }
@@ -1089,7 +1102,7 @@ impl Pipeline {
         let active = gaze_types::LocaleChain::from(locale_chain);
         for net in &self.safety_nets {
             if !active.intersects(net.supported_locales()) {
-                if mandatory {
+                if execution == SafetyNetExecution::Strict {
                     return Err(ProtectionError::UnsupportedCoverage.into());
                 }
                 telemetry.push(LeakReportTelemetry::LocaleSkipped {
@@ -1172,11 +1185,24 @@ impl Pipeline {
                             }
                         })?;
                     for span in spans {
-                        if mandatory
-                            && (span.byte_range.start >= span.byte_range.end
-                                || clean_text.get(span.byte_range.clone()).is_none())
+                        if span.byte_range.start >= span.byte_range.end
+                            || clean_text.get(span.byte_range.clone()).is_none()
                         {
-                            return Err(ProtectionError::Residual.into());
+                            if mandatory {
+                                return Err(ProtectionError::Residual.into());
+                            }
+                            // Manifest correlation discards empty/reversed spans and can hide
+                            // invalid token-contained spans. They cannot prove admission safe.
+                            if matches!(
+                                decision,
+                                SafetyNetDecision::Resolve {
+                                    on_residual: SafetyNetFallback::Redact
+                                }
+                            ) {
+                                return Err(Error::SafetyNetFallback(
+                                    FallbackReason::ResidualSuspect,
+                                ));
+                            }
                         }
                         if let Some(suspect) =
                             model_span_to_suspect(span, model.name(), manifest, field_path)
@@ -1338,6 +1364,24 @@ impl Pipeline {
                     if residual_report.is_some() {
                         report.extend(LeakReport::from_parts(acted_on, Vec::new()));
                     }
+                    if matches!(on_residual, SafetyNetFallback::Redact) {
+                        // Deletion can expose new context. Admit only after a terminal scan of
+                        // the actual output; never resolve again or delete a protected token.
+                        let final_report = self.run_safety_nets(
+                            target,
+                            &clean.text,
+                            &Manifest::from_spans(clean.manifest.clone()),
+                            document_kind,
+                            locale_chain,
+                            field_path,
+                            decision,
+                        )?;
+                        if let Some(reason) =
+                            unprotected_suspect_reason(target, clean, &final_report)?
+                        {
+                            return Err(Error::SafetyNetFallback(reason));
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -1488,26 +1532,10 @@ impl Pipeline {
         document_kind: DocumentKind,
         field_path: Option<&str>,
     ) -> Result<Option<FallbackReason>> {
-        if report.suspects.is_empty() {
-            return Ok(None);
-        }
-        // Precondition for the live-token classification below. Unreachable from the public
-        // surface; driven directly by
-        // `post_resolution_fallback_reason_refuses_a_proven_inconsistent_manifest`.
-        validate_clean_manifest(clean)?;
-        let mut protected = Vec::new();
-        for suspect in &report.suspects {
-            if suspect_is_inside_live_token(target, clean, suspect) {
-                protected.push(suspect);
-                continue;
-            }
-            let reason = if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
-                FallbackReason::OverlapConflict
-            } else {
-                FallbackReason::ResidualSuspect
-            };
+        if let Some(reason) = unprotected_suspect_reason(target, clean, report)? {
             return Ok(Some(reason));
         }
+        let mut protected = report.suspects.iter().collect::<Vec<_>>();
         sort_safety_net_suspects(&mut protected);
         for suspect in protected {
             self.log_safety_net_entry(
@@ -2158,6 +2186,29 @@ fn assert_resolution_preserved_restore(baseline: &str, restored: &str) -> Result
         ));
     }
     Ok(())
+}
+
+/// Classify without audit or mutation so terminal admission does not repeat fallback rows.
+fn unprotected_suspect_reason(
+    target: &ProtectionTarget<'_, '_>,
+    clean: &CleanText,
+    report: &LeakReport,
+) -> Result<Option<FallbackReason>> {
+    if report.suspects.is_empty() {
+        return Ok(None);
+    }
+    validate_clean_manifest(clean)?;
+    Ok(report
+        .suspects
+        .iter()
+        .find(|suspect| !suspect_is_inside_live_token(target, clean, suspect))
+        .map(|suspect| {
+            if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
+                FallbackReason::OverlapConflict
+            } else {
+                FallbackReason::ResidualSuspect
+            }
+        }))
 }
 
 /// True when the suspect span lies wholly inside exactly one live token.
@@ -2936,7 +2987,7 @@ fn walk_structured_value(
                     Some(field_path),
                     decision,
                     dictionaries,
-                    false,
+                    SafetyNetExecution::Legacy,
                 )?;
                 report.extend(field_report);
                 Ok(Some(Value::String(clean.text)))
@@ -2952,7 +3003,7 @@ fn walk_structured_value(
                         Some(field_path),
                         op.decision(),
                         dictionaries,
-                        false,
+                        SafetyNetExecution::Legacy,
                     )?;
                     report.extend(field_report);
                 }
@@ -3010,7 +3061,7 @@ fn walk_structured_value(
                         Some(field_path),
                         op.decision(),
                         dictionaries,
-                        false,
+                        SafetyNetExecution::Legacy,
                     )?;
                     report.extend(field_report);
                 }

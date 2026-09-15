@@ -649,4 +649,41 @@ mod locale_chain_registry {
         );
         assert_eq!(*calls.lock().unwrap(), vec![("global", LocaleTag::Global)]);
     }
+    #[test]
+    fn net_admission_runs_all_selected_models_and_preserves_registry_failures() {
+        let (p, calls) = configured(vec![
+            ("en-first", vec![LocaleTag::EnUs], false),
+            ("en-second", vec![LocaleTag::EnUs], false),
+            ("de", vec![LocaleTag::DeDe], true),
+        ]);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        assert_eq!(
+            p.admit_safety_nets(
+                &session,
+                "transfer DE00370400440532013000 now",
+                &[LocaleTag::EnUs, LocaleTag::DeDe],
+                &DictionaryBundle::default()
+            ),
+            Err(ProtectionError::Residual)
+        );
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec![
+                ("en-first", LocaleTag::EnUs),
+                ("en-second", LocaleTag::EnUs),
+                ("de", LocaleTag::DeDe)
+            ]
+        );
+        let (p, calls) = configured(vec![("en", vec![LocaleTag::EnUs], false)]);
+        assert_eq!(
+            p.admit_safety_nets(
+                &session,
+                "benign",
+                &[LocaleTag::EnUs, LocaleTag::DeDe],
+                &DictionaryBundle::default()
+            ),
+            Err(ProtectionError::UnsupportedCoverage)
+        );
+        assert!(calls.lock().unwrap().is_empty());
+    }
 }

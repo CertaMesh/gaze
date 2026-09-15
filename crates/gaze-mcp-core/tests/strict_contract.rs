@@ -842,3 +842,123 @@ async fn structured_observer_requires_explicit_producer_document_shape() {
     ));
     assert_eq!(*store.events.lock().unwrap(), ["begin", "finish"]);
 }
+
+#[tokio::test]
+async fn configured_net_error_stops_at_the_correct_dispatch_boundary() {
+    struct ErrorNet;
+    impl gaze::SafetyNet for ErrorNet {
+        fn id(&self) -> &str {
+            "synthetic-error"
+        }
+        fn supported_locales(&self) -> &[gaze::LocaleTag] {
+            &[gaze::LocaleTag::Global]
+        }
+        fn check(
+            &self,
+            text: &str,
+            _: gaze::SafetyNetContext<'_>,
+        ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+            if text == "synthetic-error-trigger" {
+                Err(gaze::SafetyNetError::Runtime {
+                    message: "synthetic failure".into(),
+                })
+            } else {
+                Ok(vec![])
+            }
+        }
+    }
+    let pipeline = gaze::Pipeline::builder()
+        .detector(Primary)
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .register_safety_net(ErrorNet)
+        .build()
+        .unwrap();
+    for response_error in [false, true] {
+        let store = Store::default();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let registry = registry(
+            &store,
+            Default::default(),
+            Some(json!([FRESH, "synthetic-error-trigger"])),
+            false,
+            false,
+        );
+        let args = if response_error {
+            json!(EMAIL)
+        } else {
+            json!([EMAIL, "synthetic-error-trigger"])
+        };
+        assert!(matches!(
+            dispatch(&registry, &store, &pipeline, &session, args).await,
+            Err(DispatchError::Protection(gaze::ProtectionError::SafetyNet))
+        ));
+        let expected = if response_error {
+            vec!["begin", "invoke", "fail"]
+        } else {
+            vec![]
+        };
+        assert_eq!(*store.events.lock().unwrap(), expected);
+        let entries = session.snapshot_entries();
+        assert_eq!(
+            entries.iter().any(|entry| entry.raw == EMAIL),
+            response_error
+        );
+        assert!(!entries.iter().any(|entry| entry.raw == FRESH));
+    }
+}
+
+#[tokio::test]
+async fn configured_token_reflags_preserve_dispatch_roundtrip_and_manifest_order() {
+    struct TokenNet(Arc<Mutex<usize>>);
+    impl gaze::SafetyNet for TokenNet {
+        fn id(&self) -> &str {
+            "synthetic-token-reflag"
+        }
+        fn supported_locales(&self) -> &[gaze::LocaleTag] {
+            &[gaze::LocaleTag::Global]
+        }
+        fn check(
+            &self,
+            text: &str,
+            context: gaze::SafetyNetContext<'_>,
+        ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+            assert!(!text.contains("@example.invalid"));
+            assert_eq!(context.manifest.spans.len(), 1);
+            *self.0.lock().unwrap() += 1;
+            Ok(context
+                .manifest
+                .spans
+                .iter()
+                .map(|span| {
+                    gaze::LeakSuspect::new(
+                        span.clean_span.clone(),
+                        PiiClass::Name,
+                        self.id(),
+                        None,
+                        gaze::LeakKind::Uncovered,
+                        "synthetic class disagreement inside verified token",
+                        None,
+                    )
+                })
+                .collect())
+        }
+    }
+    let checks = Arc::new(Mutex::new(0));
+    let pipeline = gaze::Pipeline::builder()
+        .detector(Primary)
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .register_safety_net(TokenNet(checks.clone()))
+        .build()
+        .unwrap();
+    let store = Store::default();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let registry = registry(&store, Default::default(), None, false, false);
+    let result = dispatch(&registry, &store, &pipeline, &session, json!(EMAIL))
+        .await
+        .unwrap();
+    let token = result.payload.as_str().unwrap();
+    assert_eq!(session.restore_strict_text(token).unwrap(), EMAIL);
+    assert_eq!(session.tokens().len(), 1);
+    assert_eq!(*checks.lock().unwrap(), 2);
+    assert_eq!(*store.events.lock().unwrap(), ["begin", "invoke", "finish"]);
+}

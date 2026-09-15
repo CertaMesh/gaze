@@ -126,3 +126,27 @@ principal resolver protects a non-loopback listener. See the
 [strict Anthropic Messages contract](../../docs/explanation/proxy/anthropic-messages-contract.md)
 for the complete wire, proof, inspection, migration, and manual SDK-test
 contract.
+
+### Configured safety nets at request admission
+
+Surfaced request text in the direct Anthropic and legacy adapter paths now passes
+configured safety-net admission after primary pseudonymization and before provider
+I/O. Nets inspect the complete transformed surface with a manifest built from the
+actual session token ownership and restore boundaries. Token-contained reflags,
+including class disagreements, remain allowed; raw-gap or malformed suspects and
+net execution errors reject the request. No destructive clean fallback is used.
+
+**Compatibility:** configured nets can now deny requests that previously reached
+the provider, including text preserved by primary policy when a net flags it.
+Admission adds inference on surfaced text and codec validation views, bypasses
+observer skip optimizations, and runs all registry backends selected across the
+locale chain. Registry resolution and inference errors fail closed. This can
+increase latency and inference cost. Primary Preserve/Redact actions and public
+legacy clean defaults are unchanged; admission does not certify their reversibility.
+
+No installed net, a custom net skipped for locale coverage, or a detector miss
+remains a coverage limitation. A model is not required globally. Existing strict
+protection still requires its full primary and locale contract. Direct failures
+abandon staged mappings before commit/send. Legacy mappings are already live and
+remain so on failure; there is no whole-request rollback guarantee. Response
+restoration and response residual validation retain their existing contracts.
