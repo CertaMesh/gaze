@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Resolve safety-net policy with a Redact fallback now scans the final text and
+  manifest before returning success. Remaining unprotected or malformed suspects
+  and net errors reject; verified live-token hits remain allowed. This adds one
+  inference after fallback, without another mutation or retry (#584).
+- Direct Anthropic and legacy proxy request surfaces now run configured-net
+  admission after primary pseudonymization and before provider I/O. Actual owned
+  token reflags remain allowed; raw residuals, malformed spans, registry failures,
+  and inference errors reject. Admission scans complete transformed surfaces and
+  codec validation views, adding denials and inference cost (#585).
 - Strict protection resolves across the full locale chain and preserves mapped
   protected-dictionary precedence. Empty safety registries skip consistently,
   and collision metadata is registered only after recognizer construction
@@ -80,6 +89,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known limitations
 
+- Configured-net admission does not require a model globally. Missing nets,
+  locale-skipped custom nets, and detector misses remain coverage limits.
+  Primary Preserve/Redact policy and public legacy clean defaults are unchanged;
+  successful Redact fallback remains one-way. Direct proxy failures discard
+  staging before commit/send, but legacy mappings already published remain live
+  on denial. Snapshot admission does not provide whole-request rollback or
+  serialization (#584, #585).
 - `max_sessions` bounds cached sessions, not the per-ID file-lock registry,
   which remains unbounded. Capacity can reject admission while handles remain.
 - Restore remains manifest-authorized. Trailing word boundaries and ambiguous

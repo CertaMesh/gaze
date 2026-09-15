@@ -39,7 +39,8 @@ exists today.)
 
 1. Handle the result of `PiiClass::custom` and add `max_sessions` to Rust
    `SessionCfg` literals.
-2. Budget full-input scanning latency and handle session-capacity errors.
+2. Budget full-input and configured-net scanning latency; handle session-capacity
+   errors and new safety-net denials.
 3. Review the fresh [benchmark evidence](docs/reference/benchmarks/README.md).
    This release's fixes do not by themselves prove detection completeness.
 
@@ -116,6 +117,35 @@ Restoration guarantees only reconstruction authorized by the supplied manifest,
 not arbitrary suffix handling or universal unknown-suffix rejection.
 
 ### Agent surfaces and audit (review consumers)
+
+**Handle new configured-net denials and inference cost (#584, #585).** Resolve
+policy with a Redact fallback now runs a terminal scan of the final text and
+manifest. An unprotected or malformed suspect, or a net execution error, returns
+an error instead of success. Verified live-token hits remain allowed. This adds
+one inference after fallback, with no further mutation or retry. Successful
+fallback can still be one-way; a final scan does not certify exact restoration.
+
+Direct Anthropic and legacy proxy request surfaces run configured-net admission
+after primary pseudonymization and before provider I/O, including complete
+reconstructed surfaces and codec validation views. Nets use actual session token
+ownership and restore boundaries. Token-contained reflags, including class
+disagreements, are allowed; raw gaps, malformed suspects, registry failures, and
+net errors reject. Requests previously forwarded can now fail, including text
+preserved by primary policy. Budget the extra inference and handle errors without
+bypassing admission. Selected registry backends run across the locale chain;
+observer skip optimizations do not suppress admission.
+
+**Coverage and state limits remain.** No model is required globally; an absent
+net, a custom net skipped for locale coverage, or a detector miss still limits
+coverage. Existing strict protection retains its primary and locale requirements.
+Primary Preserve/Redact actions and public legacy clean defaults do not change.
+Direct failures abandon staged mappings before commit/send. Legacy mappings are
+already published and remain live on failure; admission uses an immutable
+snapshot, without a whole-request rollback or serialization guarantee. Core live
+session mappings can likewise remain after a failed fallback; caller-owned staging
+must be discarded rather than committed after failure. Response restoration and
+residual validation keep their existing contracts. See the
+[proxy admission contract](crates/gaze-proxy/README.md#configured-safety-nets-at-request-admission).
 
 Proxy integrations must accept rebuilt safe response headers and guards across
 content blocks and structured Responses text. Agent responses remain separate
