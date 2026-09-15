@@ -1367,6 +1367,9 @@ window_chars = 48
             BTreeSet::from([
                 PiiClass::Email,
                 PiiClass::Name,
+                PiiClass::custom("birth_date").expect("valid custom class"),
+                PiiClass::custom("password").expect("valid custom class"),
+                PiiClass::custom("username").expect("valid custom class"),
                 PiiClass::custom("phone").expect("valid custom class"),
                 PiiClass::custom("iban").expect("valid custom class"),
                 PiiClass::Custom("family:payment-card-or-iban".to_string()),
