@@ -1430,6 +1430,17 @@ impl Pipeline {
                 return Ok(Some(FallbackReason::ResidualSuspect));
             }
             if !suspect_action_span_matches_manifest(clean, suspect) {
+                // Only expand the truthful multi-gap case. A refused complete batch retains
+                // this exact legacy report/reason, before any token or protected audit row.
+                if let Some(complete) = plan_multiple_gap_resolutions(
+                    target,
+                    clean,
+                    report,
+                    protection_trace.as_deref().map(|trace| trace.raw_text),
+                )? {
+                    plans = complete;
+                    break;
+                }
                 return Ok(Some(FallbackReason::OverlapConflict));
             }
             // Establish the ORIGINAL-request interval before tokenization mutates the
@@ -2146,6 +2157,129 @@ struct PlannedSafetyNetResolution<'a> {
     clean_span: Range<usize>,
     raw_span: Range<usize>,
     raw: String,
+}
+
+/// Expand only reports containing a truthful multi-gap PartialBleed. `None` means resume
+/// the original resolver, including its refusal reason and configured fallback. Parent
+/// references retain the backend's class/source assertion; gaps are not new detections.
+fn plan_multiple_gap_resolutions<'a>(
+    target: &ProtectionTarget<'_, '_>,
+    clean: &CleanText,
+    report: &'a LeakReport,
+    original: Option<&str>,
+) -> Result<Option<Vec<PlannedSafetyNetResolution<'a>>>> {
+    validate_clean_manifest(clean)?;
+    let mut plans = Vec::new();
+    let mut has_multiple_gaps = false;
+    for suspect in &report.suspects {
+        if suspect.span.start >= suspect.span.end
+            || !is_char_boundary_range(&clean.text, &suspect.span)
+        {
+            return Ok(None);
+        }
+        // The existing exemption is containment in ONE owned token, never a token union.
+        match &suspect.kind {
+            LeakKind::Uncovered | LeakKind::ClassMismatch { .. }
+                if suspect_is_inside_live_token(target, clean, suspect) =>
+            {
+                continue;
+            }
+            LeakKind::Uncovered | LeakKind::PartialBleed { .. } => {}
+            _ => return Ok(None),
+        }
+        let spans = if suspect_action_span_matches_manifest(clean, suspect) {
+            vec![suspect_action_span(suspect)]
+        } else {
+            let LeakKind::PartialBleed { uncovered } = &suspect.kind else {
+                return Ok(None);
+            };
+            let mut cursor = suspect.span.start;
+            let mut gaps = Vec::new();
+            let mut intersects_owned = false;
+            for emitted in clean
+                .manifest
+                .iter()
+                .filter(|emitted| ranges_overlap(&emitted.clean_span, &suspect.span))
+            {
+                let Some(token) = clean.text.get(emitted.clean_span.clone()) else {
+                    return Ok(None);
+                };
+                let Some(restored) = target.restore(token) else {
+                    return Ok(None);
+                };
+                if !target.contains_token(token)
+                    || emitted.raw_span.start >= emitted.raw_span.end
+                    || restored.len() != emitted.raw_span.end - emitted.raw_span.start
+                    || original.is_some_and(|raw| {
+                        raw.get(emitted.raw_span.clone()) != Some(restored.as_str())
+                    })
+                {
+                    return Ok(None);
+                }
+                intersects_owned = true;
+                let start = emitted.clean_span.start.max(suspect.span.start);
+                let end = emitted.clean_span.end.min(suspect.span.end);
+                if cursor < start {
+                    gaps.push(cursor..start);
+                }
+                cursor = cursor.max(end);
+            }
+            if cursor < suspect.span.end {
+                gaps.push(cursor..suspect.span.end);
+            }
+            if !intersects_owned || gaps.len() < 2 || gaps.first() != Some(uncovered) {
+                return Ok(None);
+            }
+            has_multiple_gaps = true;
+            gaps
+        };
+        for span in spans {
+            if span.start >= span.end || !is_char_boundary_range(&clean.text, &span) {
+                return Ok(None);
+            }
+            let raw_span = map_clean_span_to_raw(clean, &span)?;
+            let raw = clean.text[span.clone()].to_string();
+            if original.is_some_and(|text| text.get(raw_span.clone()) != Some(raw.as_str())) {
+                return Ok(None);
+            }
+            plans.push(PlannedSafetyNetResolution {
+                suspect,
+                clean_span: span,
+                raw_span,
+                raw,
+            });
+        }
+    }
+    if !has_multiple_gaps {
+        return Ok(None);
+    }
+    // Parent order is not gap order: parents may overlap only on protected bytes. Freeze
+    // and check the flattened set, including ordinary single-gap plans, before mutation.
+    plans.sort_by(|left, right| {
+        (
+            left.clean_span.start,
+            left.clean_span.end,
+            left.suspect.class.to_canonical_str(),
+            left.suspect.safety_net_id.as_str(),
+            left.suspect.span.start,
+            left.suspect.span.end,
+        )
+            .cmp(&(
+                right.clean_span.start,
+                right.clean_span.end,
+                right.suspect.class.to_canonical_str(),
+                right.suspect.safety_net_id.as_str(),
+                right.suspect.span.start,
+                right.suspect.span.end,
+            ))
+    });
+    if plans.windows(2).any(|pair| {
+        pair[0].clean_span.end > pair[1].clean_span.start
+            || pair[0].raw_span.end > pair[1].raw_span.start
+    }) {
+        return Ok(None);
+    }
+    Ok(Some(plans))
 }
 
 /// Provable manifest corruption. Reached only when the manifest contradicts the document it
