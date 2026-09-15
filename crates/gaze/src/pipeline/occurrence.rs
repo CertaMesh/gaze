@@ -333,6 +333,17 @@ impl Ledger {
                 }
             }
         }
+        for observation in &self.observations {
+            let phase = self
+                .phases
+                .get(observation.phase)
+                .ok_or_else(|| manifest_integrity_error("invalid observation phase"))?;
+            if observation.suspect.span.start >= observation.suspect.span.end
+                || observation.suspect.span.end > phase.text_len
+            {
+                return Err(manifest_integrity_error("invalid observed parent bounds"));
+            }
+        }
         let mut ids = std::collections::BTreeSet::new();
         for record in self
             .records
