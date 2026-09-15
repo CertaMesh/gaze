@@ -26,9 +26,17 @@ struct ContextNet {
 }
 
 impl SafetyNet for ContextNet {
-    fn id(&self) -> &str { "synthetic-context" }
-    fn supported_locales(&self) -> &[LocaleTag] { &[LocaleTag::Global] }
-    fn check(&self, text: &str, context: SafetyNetContext<'_>) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+    fn id(&self) -> &str {
+        "synthetic-context"
+    }
+    fn supported_locales(&self) -> &[LocaleTag] {
+        &[LocaleTag::Global]
+    }
+    fn check(
+        &self,
+        text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
         self.seen.lock().unwrap().push(text.to_owned());
         let mismatch = || LeakKind::ClassMismatch {
             pipeline_class: gaze::PiiClass::Email,
@@ -42,19 +50,44 @@ impl SafetyNet for ContextNet {
         } else {
             match self.terminal {
                 Terminal::Clear => return Ok(vec![]),
-                Terminal::Error => return Err(SafetyNetError::Runtime { message: "synthetic terminal failure".into() }),
+                Terminal::Error => {
+                    return Err(SafetyNetError::Runtime {
+                        message: "synthetic terminal failure".into(),
+                    })
+                }
                 Terminal::Token => (context.manifest.spans[0].clean_span.clone(), mismatch()),
                 Terminal::Raw | Terminal::ClassMismatch => {
                     let start = text.find("residual").unwrap();
-                    (start..start + 8, if matches!(self.terminal, Terminal::Raw) { LeakKind::Uncovered } else { mismatch() })
+                    (
+                        start..start + 8,
+                        if matches!(self.terminal, Terminal::Raw) {
+                            LeakKind::Uncovered
+                        } else {
+                            mismatch()
+                        },
+                    )
                 }
                 Terminal::Empty => (text.len()..text.len(), LeakKind::Uncovered),
                 Terminal::OutOfBounds => (0..text.len() + 1, LeakKind::Uncovered),
-                Terminal::Reversed => { let end = text.len(); (end..end - 1, LeakKind::Uncovered) }
-                Terminal::SplitUtf8 => { let start = text.find('é').unwrap(); (start + 1..start + 2, LeakKind::Uncovered) }
+                Terminal::Reversed => {
+                    let end = text.len();
+                    (end..end - 1, LeakKind::Uncovered)
+                }
+                Terminal::SplitUtf8 => {
+                    let start = text.find('é').unwrap();
+                    (start + 1..start + 2, LeakKind::Uncovered)
+                }
             }
         };
-        Ok(vec![LeakSuspect::new(span, gaze::PiiClass::Name, self.id(), None, kind, "synthetic", None)])
+        Ok(vec![LeakSuspect::new(
+            span,
+            gaze::PiiClass::Name,
+            self.id(),
+            None,
+            kind,
+            "synthetic",
+            None,
+        )])
     }
 }
 
@@ -64,26 +97,73 @@ fn pipeline(terminal: Terminal) -> (Pipeline, Arc<Mutex<Vec<String>>>) {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let pipeline = Pipeline::builder()
         .rule(DefaultRule::new(Action::Preserve))
-        .register_safety_net(ContextNet { terminal, seen: Arc::clone(&seen) })
-        .build().unwrap();
+        .register_safety_net(ContextNet {
+            terminal,
+            seen: Arc::clone(&seen),
+        })
+        .build()
+        .unwrap();
     (pipeline, seen)
 }
 
 #[derive(Clone, Copy, Debug)]
-enum Route { Live, Staged, Trace }
+enum Route {
+    Live,
+    Staged,
+    Trace,
+}
 
-fn run(pipeline: &Pipeline, session: &Session, route: Route, policy: SafetyNetPolicy) -> gaze::Result<(CleanDocument, Vec<gaze::EmittedTokenSpan>, gaze::LeakReport)> {
+fn run(
+    pipeline: &Pipeline,
+    session: &Session,
+    route: Route,
+    policy: SafetyNetPolicy,
+) -> gaze::Result<(CleanDocument, Vec<gaze::EmittedTokenSpan>, gaze::LeakReport)> {
     let dictionaries = DictionaryBundle::default();
     match route {
-        Route::Live => pipeline.clean_with_safety_net_policy_detect_context(session, RawDocument::Text(RAW.into()), &[LocaleTag::Global], &dictionaries, policy),
-        Route::Trace => pipeline.clean_text_with_safety_net_policy_detect_context_and_protection_trace(session, RAW, &[LocaleTag::Global], &dictionaries, policy).map(|(doc, spans, report, trace)| {
-            assert_eq!(trace.len(), 2);
-            (doc, spans, report)
-        }),
+        Route::Live => pipeline.clean_with_safety_net_policy_detect_context(
+            session,
+            RawDocument::Text(RAW.into()),
+            &[LocaleTag::Global],
+            &dictionaries,
+            policy,
+        ),
+        Route::Trace => pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                session,
+                RAW,
+                &[LocaleTag::Global],
+                &dictionaries,
+                policy,
+            )
+            .map(|(doc, spans, report, trace)| {
+                assert_eq!(trace.len(), 2);
+                assert_eq!(trace[0].raw_start(), 0);
+                assert_eq!(trace[0].raw_end(), 4);
+                assert_eq!(trace[0].decision(), "resolve");
+                assert_eq!(trace[1].raw_start(), 5);
+                assert_eq!(trace[1].raw_end(), 13);
+                assert_eq!(trace[1].decision(), "fallback_redact");
+                (doc, spans, report)
+            }),
         Route::Staged => {
             let mut transaction = session.begin_transaction();
-            let result = pipeline.clean_transaction_with_safety_net_policy_detect_context(&mut transaction, RawDocument::Text(RAW.into()), &[LocaleTag::Global], &dictionaries, policy);
+            let result = pipeline.clean_transaction_with_safety_net_policy_detect_context(
+                &mut transaction,
+                RawDocument::Text(RAW.into()),
+                &[LocaleTag::Global],
+                &dictionaries,
+                policy,
+            );
             assert_eq!(transaction.tokens().len(), 1);
+            if let Ok((CleanDocument::Text(text), spans, _)) = &result {
+                assert_eq!(
+                    transaction
+                        .restore(&text[spans[0].clean_span.clone()])
+                        .unwrap(),
+                    "seed"
+                );
+            }
             assert!(session.tokens().is_empty());
             drop(transaction);
             assert!(session.tokens().is_empty());
@@ -98,7 +178,13 @@ fn final_admission_rejects_new_raw_residual_after_fallback_on_every_route() {
         let (pipeline, seen) = pipeline(Terminal::Raw);
         let session = Session::new(Scope::Ephemeral).unwrap();
         let result = run(&pipeline, &session, route, SafetyNetPolicy::default());
-        assert!(matches!(result, Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))), "{route:?} admitted a newly detectable raw residual: {result:?}");
+        assert!(
+            matches!(
+                result,
+                Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
+            ),
+            "{route:?} admitted a newly detectable raw residual: {result:?}"
+        );
         assert_eq!(seen.lock().unwrap().len(), 3);
     }
 }
@@ -109,12 +195,17 @@ fn final_admission_allows_live_token_reflags_without_destructive_fallback() {
         let (pipeline, seen) = pipeline(Terminal::Token);
         let session = Session::new(Scope::Ephemeral).unwrap();
         let (doc, spans, _) = run(&pipeline, &session, route, SafetyNetPolicy::default()).unwrap();
-        let CleanDocument::Text(text) = doc else { panic!("text"); };
+        let CleanDocument::Text(text) = doc else {
+            panic!("text");
+        };
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].raw_span, 0..4);
         assert!(text.ends_with(" residual é"));
         if !matches!(route, Route::Staged) {
-            assert_eq!(session.restore(&text[spans[0].clean_span.clone()]).unwrap(), "seed");
+            assert_eq!(
+                session.restore(&text[spans[0].clean_span.clone()]).unwrap(),
+                "seed"
+            );
         }
         assert!((2..=3).contains(&seen.lock().unwrap().len()));
     }
@@ -122,15 +213,31 @@ fn final_admission_allows_live_token_reflags_without_destructive_fallback() {
 
 #[test]
 fn final_admission_rejects_terminal_errors_and_malformed_or_mismatched_spans() {
-    for terminal in [Terminal::Error, Terminal::ClassMismatch, Terminal::Empty, Terminal::OutOfBounds, Terminal::Reversed, Terminal::SplitUtf8] {
+    for terminal in [
+        Terminal::Error,
+        Terminal::ClassMismatch,
+        Terminal::Empty,
+        Terminal::OutOfBounds,
+        Terminal::Reversed,
+        Terminal::SplitUtf8,
+    ] {
         for route in [Route::Live, Route::Staged, Route::Trace] {
             let (pipeline, seen) = pipeline(terminal);
             let session = Session::new(Scope::Ephemeral).unwrap();
             let result = run(&pipeline, &session, route, SafetyNetPolicy::default());
             match terminal {
-                Terminal::Error => assert!(matches!(result, Err(Error::SafetyNet(SafetyNetError::Runtime { .. })))),
-                Terminal::ClassMismatch => assert!(matches!(result, Err(Error::SafetyNetFallback(FallbackReason::OverlapConflict)))),
-                _ => assert!(matches!(result, Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect)))),
+                Terminal::Error => assert!(matches!(
+                    result,
+                    Err(Error::SafetyNet(SafetyNetError::Runtime { .. }))
+                )),
+                Terminal::ClassMismatch => assert!(matches!(
+                    result,
+                    Err(Error::SafetyNetFallback(FallbackReason::OverlapConflict))
+                )),
+                _ => assert!(matches!(
+                    result,
+                    Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
+                )),
             }
             assert_eq!(seen.lock().unwrap().len(), 3);
         }
@@ -142,8 +249,11 @@ fn final_admission_clear_output_retains_default_one_way_fallback_and_trace() {
     for route in [Route::Live, Route::Staged, Route::Trace] {
         let (pipeline, seen) = pipeline(Terminal::Clear);
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let (doc, spans, report) = run(&pipeline, &session, route, SafetyNetPolicy::default()).unwrap();
-        let CleanDocument::Text(text) = doc else { panic!("text"); };
+        let (doc, spans, report) =
+            run(&pipeline, &session, route, SafetyNetPolicy::default()).unwrap();
+        let CleanDocument::Text(text) = doc else {
+            panic!("text");
+        };
         assert_eq!(spans.len(), 1);
         assert!(text.ends_with(" residual é"));
         assert!(!text.contains("barrier"));
@@ -156,15 +266,135 @@ fn final_admission_clear_output_retains_default_one_way_fallback_and_trace() {
 fn final_admission_does_not_change_tolerant_fallback_or_no_net_contract() {
     let (pipeline, seen) = pipeline(Terminal::Raw);
     let session = Session::new(Scope::Ephemeral).unwrap();
-    let (doc, _, _) = run(&pipeline, &session, Route::Live, SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Tolerant)).unwrap();
-    let CleanDocument::Text(text) = doc else { panic!("text"); };
+    let (doc, _, _) = run(
+        &pipeline,
+        &session,
+        Route::Live,
+        SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Tolerant),
+    )
+    .unwrap();
+    let CleanDocument::Text(text) = doc else {
+        panic!("text");
+    };
     assert!(text.ends_with(" barrier residual é"));
     assert_eq!(seen.lock().unwrap().len(), 2);
 
     // An empty report with no nets proves no detection completeness.
-    let no_net = Pipeline::builder().rule(DefaultRule::new(Action::Preserve)).build().unwrap();
-    let (doc, spans, report) = run(&no_net, &session, Route::Live, SafetyNetPolicy::default()).unwrap();
+    let no_net = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    let (doc, spans, report) =
+        run(&no_net, &session, Route::Live, SafetyNetPolicy::default()).unwrap();
     assert!(matches!(doc, CleanDocument::Text(text) if text == RAW));
     assert!(spans.is_empty());
     assert!(report.suspects.is_empty());
+}
+
+#[cfg(feature = "bundled-recognizers")]
+#[test]
+fn final_admission_rejects_malformed_registry_spans_before_manifest_filtering() {
+    use gaze_recognizers::{
+        LocaleAwareModel, LocaleAwareModelRegistry, ModelError, ModelHints, ModelInput, ModelSpan,
+    };
+
+    struct MalformedModel(Terminal);
+    impl LocaleAwareModel for MalformedModel {
+        fn name(&self) -> &str {
+            "synthetic-malformed"
+        }
+        fn native_locales(&self) -> &[LocaleTag] {
+            &[LocaleTag::Global]
+        }
+        fn infer(&self, input: ModelInput, _: ModelHints) -> Result<Vec<ModelSpan>, ModelError> {
+            let text = input.text;
+            let spans = if text.contains("seed") {
+                // Overlapping raw hits force initial fallback, without a resolve mutation.
+                vec![0..4, 1..3]
+            } else {
+                let end = text.len();
+                vec![match self.0 {
+                    Terminal::Empty => end..end,
+                    Terminal::Reversed => end..end - 1,
+                    Terminal::OutOfBounds => 0..end + 1,
+                    Terminal::SplitUtf8 => end - 1..end,
+                    _ => unreachable!(),
+                }]
+            };
+            Ok(spans
+                .into_iter()
+                .map(|byte_range| ModelSpan {
+                    text: String::new(),
+                    byte_range,
+                    class: gaze::PiiClass::Name,
+                    confidence: None,
+                    model_name: self.name().into(),
+                })
+                .collect())
+        }
+    }
+    for terminal in [
+        Terminal::Empty,
+        Terminal::Reversed,
+        Terminal::OutOfBounds,
+        Terminal::SplitUtf8,
+    ] {
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .unwrap()
+            .with_safety_net_registry(LocaleAwareModelRegistry::from_backends(vec![Box::new(
+                MalformedModel(terminal),
+            )]));
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let result = run(&pipeline, &session, Route::Live, SafetyNetPolicy::default());
+        assert!(
+            matches!(
+                result,
+                Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
+            ),
+            "{terminal:?}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn final_admission_reversible_success_preserves_trace_and_staged_restore() {
+    let (pipeline, seen) = pipeline(Terminal::Token);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "seed residual é";
+    let dictionaries = DictionaryBundle::default();
+    let mut transaction = session.begin_transaction();
+    let (staged_doc, staged_spans, staged_report) = pipeline
+        .clean_transaction_with_safety_net_policy_detect_context(
+            &mut transaction,
+            RawDocument::Text(raw.into()),
+            &[LocaleTag::Global],
+            &dictionaries,
+            SafetyNetPolicy::default(),
+        )
+        .unwrap();
+    let CleanDocument::Text(staged_text) = staged_doc else {
+        panic!("text");
+    };
+    assert_eq!(transaction.restore_strict_text(&staged_text).unwrap(), raw);
+    assert!(session.tokens().is_empty());
+    let (live_doc, live_spans, live_report, trace) = pipeline
+        .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+            &session,
+            raw,
+            &[LocaleTag::Global],
+            &dictionaries,
+            SafetyNetPolicy::default(),
+        )
+        .unwrap();
+    let CleanDocument::Text(live_text) = live_doc else {
+        panic!("text");
+    };
+    assert_eq!(session.restore_strict_text(&live_text).unwrap(), raw);
+    assert_eq!(staged_text, live_text);
+    assert_eq!(staged_spans, live_spans);
+    assert_eq!(staged_report, live_report);
+    assert_eq!(trace.len(), 1);
+    assert_eq!(seen.lock().unwrap().len(), 4);
 }
