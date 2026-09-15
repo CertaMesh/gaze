@@ -109,9 +109,15 @@ fn immediate_commands_after_ready(rotate: bool) {
     let parent_worker = thread::spawn(move || {
         PHASES.with(|slot| *slot.borrow_mut() = Some(phases_tx));
         if rotate {
-            parent.write_all(&[PARENT_ROTATE]).unwrap();
+            crate::supervisor::rotate_pairing_for_proof(
+                &parent,
+                authority(),
+                &mut |_, _: &[u8]| Ok(()),
+            )
+            .unwrap();
+        } else {
+            acknowledge(&mut parent).unwrap();
         }
-        acknowledge(&mut parent).unwrap();
         phase(Phase::ParentReturned);
         purge_then_shutdown(&mut parent);
         // Keep the stream alive until child command processing finishes.
@@ -351,6 +357,77 @@ fn runtime_child_is_rejected_by_v1_parent_before_delivery() {
     parent.shutdown(Shutdown::Both).unwrap();
     assert_eq!(
         worker.join().unwrap().unwrap_err().code(),
+        DashboardErrorCode::PairingFailed
+    );
+}
+
+#[test]
+fn malformed_v2_envelope_header_authority_and_truncation_never_deliver() {
+    for offset in [0, 4, 5, 22, 26, 60] {
+        let (mut parent, mut child) = sockets();
+        let mut bytes = Vec::new();
+        PairingEnvelopeV2::encode(
+            [3; 16],
+            authority(),
+            &PairingSecret::from_pairing_frame([7; 32]),
+        )
+        .write_to(&mut bytes)
+        .unwrap();
+        match offset {
+            22 => bytes[22] = 8,
+            26 => bytes[26..28].fill(0),
+            60 => {
+                bytes.pop();
+            }
+            _ => bytes[offset] ^= 0xff,
+        }
+        child.write_all(&bytes).unwrap();
+        if offset == 60 {
+            child.shutdown(Shutdown::Write).unwrap();
+        }
+        let result = crate::supervisor::acknowledge_pairing_for_proof(
+            &mut parent,
+            &mut |_, _: &[u8]| panic!("malformed envelope delivered"),
+            |_| true,
+        );
+        assert_eq!(
+            result.unwrap_err().code(),
+            DashboardErrorCode::PairingFailed
+        );
+    }
+}
+
+#[test]
+fn actual_parent_rotation_rejects_ready_replayed_from_previous_nonce() {
+    let (mut parent, mut child) = sockets();
+    let (release_tx, release_rx) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        let secret = PairingSecret::from_pairing_frame([7; 32]);
+        PairingEnvelopeV2::encode([3; 16], authority(), &secret)
+            .write_to(&mut child)
+            .unwrap();
+        DeliveredAckV2::read_from(&mut child, [3; 16]).unwrap();
+        PairingReadyV2::write_to(&mut child, [3; 16]).unwrap();
+        let mut command = [0];
+        child.read_exact(&mut command).unwrap();
+        assert_eq!(command, [PARENT_ROTATE]);
+        PairingEnvelopeV2::encode([4; 16], authority(), &secret)
+            .write_to(&mut child)
+            .unwrap();
+        DeliveredAckV2::read_from(&mut child, [4; 16]).unwrap();
+        PairingReadyV2::write_to(&mut child, [3; 16]).unwrap();
+        release_rx.recv_timeout(BOUND).unwrap();
+    });
+    acknowledge(&mut parent).unwrap();
+    let result = crate::supervisor::rotate_pairing_for_proof(
+        &parent,
+        authority(),
+        &mut |_, _: &[u8]| Ok(()),
+    );
+    release_tx.send(()).unwrap();
+    worker.join().unwrap();
+    assert_eq!(
+        result.unwrap_err().code(),
         DashboardErrorCode::PairingFailed
     );
 }

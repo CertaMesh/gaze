@@ -522,3 +522,21 @@ pub(crate) fn acknowledge_pairing_for_proof(
 ) -> Result<SocketAddrV4, DashboardError> {
     acknowledge_pairing(control, delivery, authority_matches)
 }
+
+#[cfg(test)]
+pub(crate) fn rotate_pairing_for_proof(
+    control: &UnixStream,
+    authority: SocketAddrV4,
+    delivery: &mut dyn PairingDelivery,
+) -> Result<(), DashboardError> {
+    let (purge_request, _peer) = UnixStream::pair().unwrap();
+    let mut child = SpawnedDashboardChild {
+        child: None,
+        control: control.try_clone().unwrap(),
+        purge_request,
+        inspection: None,
+        paired_authority: Some(authority),
+        socket_dir: None,
+    };
+    child.rotate_pairing(delivery)
+}
