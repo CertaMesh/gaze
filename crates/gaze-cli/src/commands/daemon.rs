@@ -628,3 +628,41 @@ pub(crate) fn default_session_idle_timeout_secs() -> u64 {
 pub(crate) fn default_session_cap() -> usize {
     DEFAULT_SESSION_CAP
 }
+
+#[cfg(test)]
+mod residual_wire_tests {
+    use super::*;
+
+    /// The daemon hands clients the manifest verbatim, and a client that treats
+    /// one span as one recognized value would be wrong under residual coverage:
+    /// a fragment is a replacement, not an entity.
+    ///
+    /// The contract stays truthful because the span type now says which it is.
+    /// Pin that at this boundary rather than inferring it from the type's own
+    /// tests, since this is where the JSON a client actually parses is produced.
+    #[test]
+    fn clean_responses_distinguish_whole_spans_from_residual_fragments() {
+        let response = DaemonResponse::Clean {
+            session_id: "s-1".to_string(),
+            clean_text: "Email <tok> <frag> now".to_string(),
+            manifest: vec![
+                EmittedTokenSpan::new(6..11, 6..27, PiiClass::Email),
+                EmittedTokenSpan::residual_fragment(12..18, 27..33, PiiClass::Email),
+            ],
+            tokens: Vec::new(),
+        };
+        let value: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&response).unwrap()).unwrap();
+        let manifest = value["manifest"].as_array().unwrap();
+        assert_eq!(manifest.len(), 2);
+
+        // A whole span keeps the exact shape clients already parse: no new key.
+        assert!(
+            manifest[0].get("origin").is_none(),
+            "a whole span must serialize exactly as before: {}",
+            manifest[0]
+        );
+        // A fragment says so, so a client can choose not to count it as a value.
+        assert_eq!(manifest[1]["origin"], "residual_fragment");
+    }
+}

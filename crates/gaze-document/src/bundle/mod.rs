@@ -158,7 +158,8 @@ impl SafeBundle {
 pub struct ClassCount {
     /// Audit-canonical class name (e.g., `"email"`, `"custom:phone"`).
     pub class: String,
-    /// Number of token spans emitted for that class.
+    /// Number of token spans emitted for that class. A replacement count, not a
+    /// count of distinct recognized values: a residual fragment counts on its own.
     pub count: u32,
 }
 
@@ -250,8 +251,16 @@ pub struct BundleReport {
     /// Character count of the tokenized Markdown output.
     pub clean_char_count: usize,
     /// Total PII token spans across all classes.
+    ///
+    /// This counts *replacements*, not entities. Residual coverage can protect a
+    /// gap that whole-candidate arbitration left inside or beside a recognized
+    /// value, and that fragment is its own replacement, so one recognized value
+    /// can contribute more than one token span.
     pub pii_token_count: u32,
     /// Per-class breakdown of PII token counts.
+    ///
+    /// Same contract as [`BundleReport::pii_token_count`]: these are replacement
+    /// counts per class, not counts of distinct recognized values.
     pub pii_tokens_by_class: Vec<ClassCount>,
     /// PDF page count when the input was a PDF. `None` for image inputs.
     pub pdf_page_count: Option<i32>,
@@ -920,6 +929,34 @@ mod tests {
         let by_class: BTreeMap<_, _> = counts.iter().map(|c| (c.class.as_str(), c.count)).collect();
         assert_eq!(by_class.get("email"), Some(&2));
         assert_eq!(by_class.get("custom:phone"), Some(&1));
+    }
+
+    /// The report says "tokens", and under residual coverage that word has to
+    /// keep meaning replacements. One recognized email plus the fragment beside
+    /// it is two replacements of class email and one recognized value, so a
+    /// reader who takes this for an entity count is reading it wrong. Pin the
+    /// replacement reading rather than quietly letting the numbers drift.
+    #[test]
+    fn class_counts_count_replacements_so_a_fragment_counts_on_its_own() {
+        let spans = vec![
+            EmittedTokenSpan::new(0..10, 0..21, PiiClass::Email),
+            EmittedTokenSpan::residual_fragment(11..17, 21..27, PiiClass::Email),
+        ];
+        let counts = count_pii_by_class(&spans);
+        let by_class: BTreeMap<_, _> = counts.iter().map(|c| (c.class.as_str(), c.count)).collect();
+        assert_eq!(
+            by_class.get("email"),
+            Some(&2),
+            "a residual fragment is its own replacement and is counted"
+        );
+        assert_eq!(
+            spans
+                .iter()
+                .filter(|span| span.origin.is_whole())
+                .count(),
+            1,
+            "but only one of them covers a whole recognized value"
+        );
     }
 
     #[test]
