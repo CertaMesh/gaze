@@ -20,6 +20,8 @@ pub(crate) fn run(args: DoctorArgs) -> Result<(), CliError> {
         check_pdfium(),
         check_manifest_dir(&default_manifest_dir().join("calls")),
     ];
+    #[cfg(all(feature = "setup", feature = "safety-net-nym"))]
+    checks.push(check_nym_bundle(nym_model_dir()));
     for target in targets(Client::All)? {
         checks.push(check_client(target));
     }
@@ -168,6 +170,39 @@ fn check_pdfium() -> Check {
     }
 }
 
+/// Where `gaze setup --safety-net nym` installs the bundle, unless `GAZE_NYM_MODEL_DIR` says
+/// otherwise. `None` when neither the variable nor a home directory is available.
+#[cfg(all(feature = "setup", feature = "safety-net-nym"))]
+fn nym_model_dir() -> Option<PathBuf> {
+    std::env::var_os("GAZE_NYM_MODEL_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| gaze_model_setup::default_nym_model_dir().ok())
+}
+
+/// The Nym net is opt-in, so an absent bundle passes; a present bundle must verify against the
+/// pinned digests, because `--safety-net nym` would refuse to start on it.
+#[cfg(all(feature = "setup", feature = "safety-net-nym"))]
+fn check_nym_bundle(model_dir: Option<PathBuf>) -> Check {
+    const NAME: &str = "nym safety-net bundle";
+    let Some(model_dir) = model_dir.filter(|dir| dir.exists()) else {
+        return pass(
+            NAME,
+            "not installed (opt-in; `gaze setup --safety-net nym` installs it)",
+        );
+    };
+    match gaze_recognizers::safety_net::nym::verify_nym_bundle(&model_dir) {
+        Ok(()) => pass(NAME, format!("verified {}", model_dir.display())),
+        Err(err) => fail(
+            NAME,
+            format!(
+                "`{}` does not verify: {err}; re-run `gaze setup --safety-net nym`",
+                model_dir.display()
+            ),
+        ),
+    }
+}
+
 fn check_manifest_dir(path: &Path) -> Check {
     if !path.exists() {
         return warn(
@@ -287,4 +322,22 @@ fn paths_match(a: &Path, b: &Path) -> bool {
     let a = a.canonicalize().unwrap_or_else(|_| a.to_path_buf());
     let b = b.canonicalize().unwrap_or_else(|_| b.to_path_buf());
     a == b
+}
+
+#[cfg(all(test, feature = "setup", feature = "safety-net-nym"))]
+mod nym_bundle_tests {
+    use super::*;
+
+    #[test]
+    fn absent_nym_bundle_passes_and_an_invalid_one_fails() {
+        let root = tempfile::tempdir().unwrap();
+        let absent = check_nym_bundle(Some(root.path().join("nym-small-int8")));
+        assert_eq!(absent.state, CheckState::Pass);
+        assert!(absent.evidence.contains("opt-in"));
+        assert_eq!(check_nym_bundle(None).state, CheckState::Pass);
+
+        let invalid = check_nym_bundle(Some(root.path().to_path_buf()));
+        assert_eq!(invalid.state, CheckState::Fail, "{}", invalid.evidence);
+        assert!(invalid.evidence.contains("gaze setup --safety-net nym"));
+    }
 }

@@ -7,9 +7,14 @@ use gaze_recognizers::safety_net::kiji_distilbert::{
     verify_kiji_bundle, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
     KIJI_DISTILBERT_SHA256SUMS,
 };
+use gaze_recognizers::safety_net::nym::{
+    verify_nym_bundle, NYM_SMALL_CHECKSUM_FILE, NYM_SMALL_HF_COMMIT, NYM_SMALL_HF_REPO,
+    NYM_SMALL_INT8_SHA256SUMS,
+};
 pub use gaze_recognizers::safety_net::kiji_distilbert::{KijiDistilbertPrecision, SafetyNetError};
 
 const DEFAULT_MODEL_DIR_NAME: &str = "kiji-distilbert";
+const DEFAULT_NYM_MODEL_DIR_NAME: &str = "nym-small-int8";
 const MODEL_DOWNLOAD_MAX_REDIRECTS: u32 = 5;
 const KIJI_LABELS_JSON: &str = r#"{
   "schema_version": 1,
@@ -119,6 +124,32 @@ const KIJI_FP32_FILES: &[ArtifactFile] = &[
     },
 ];
 
+const NYM_SMALL_INT8_FILES: &[ArtifactFile] = &[
+    ArtifactFile {
+        source_path: Some("int8/config.json"),
+        file_name: "config.json",
+        inline_contents: None,
+    },
+    ArtifactFile {
+        source_path: Some("int8/model_int8.onnx"),
+        file_name: "model_int8.onnx",
+        inline_contents: None,
+    },
+    ArtifactFile {
+        source_path: Some("int8/tokenizer.json"),
+        file_name: "tokenizer.json",
+        inline_contents: None,
+    },
+];
+
+const NYM_SMALL_INT8_MANIFEST: ArtifactManifest = ArtifactManifest {
+    hf_repo: NYM_SMALL_HF_REPO,
+    hf_commit: NYM_SMALL_HF_COMMIT,
+    checksum_file_name: NYM_SMALL_CHECKSUM_FILE,
+    sha256sums: NYM_SMALL_INT8_SHA256SUMS,
+    files: NYM_SMALL_INT8_FILES,
+};
+
 fn kiji_manifest(precision: KijiDistilbertPrecision) -> Option<ArtifactManifest> {
     match precision {
         KijiDistilbertPrecision::Fp32 => Some(ArtifactManifest {
@@ -133,12 +164,22 @@ fn kiji_manifest(precision: KijiDistilbertPrecision) -> Option<ArtifactManifest>
 }
 
 pub fn default_kiji_model_dir() -> Result<PathBuf, SetupError> {
+    default_model_dir(DEFAULT_MODEL_DIR_NAME)
+}
+
+/// Default install directory of the Nym-small int8 bundle:
+/// `$XDG_DATA_HOME/gaze/models/nym-small-int8`, else `~/.local/share/gaze/models/nym-small-int8`.
+pub fn default_nym_model_dir() -> Result<PathBuf, SetupError> {
+    default_model_dir(DEFAULT_NYM_MODEL_DIR_NAME)
+}
+
+fn default_model_dir(name: &str) -> Result<PathBuf, SetupError> {
     if let Some(xdg_data_home) = std::env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty())
     {
         return Ok(PathBuf::from(xdg_data_home)
             .join("gaze")
             .join("models")
-            .join(DEFAULT_MODEL_DIR_NAME));
+            .join(name));
     }
     let Some(home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) else {
         return Err(SetupError::PathResolve {
@@ -150,7 +191,7 @@ pub fn default_kiji_model_dir() -> Result<PathBuf, SetupError> {
         .join("share")
         .join("gaze")
         .join("models")
-        .join(DEFAULT_MODEL_DIR_NAME))
+        .join(name))
 }
 
 pub fn install_kiji_bundle(opts: &InstallOptions) -> Result<InstallOutcome, SetupError> {
@@ -165,35 +206,10 @@ pub fn install_kiji_bundle_with_fetcher(
         Some(path) => absolute_path(path)?,
         None => default_kiji_model_dir()?,
     };
-
-    if model_dir.exists() {
-        match verify_kiji_bundle(&model_dir, opts.precision) {
-            Ok(()) => {
-                chmod_private_tree(&model_dir)?;
-                return Ok(InstallOutcome::AlreadyPresent { model_dir });
-            }
-            Err(error) => {
-                if is_mode_repairable_error(&error) && is_current_euid_owned_tree(&model_dir)? {
-                    repair_current_euid_owned_tree(&model_dir)?;
-                    match verify_kiji_bundle(&model_dir, opts.precision) {
-                        Ok(()) => return Ok(InstallOutcome::AlreadyPresent { model_dir }),
-                        Err(repaired_error) if !is_empty_dir(&model_dir)? => {
-                            return Err(SetupError::NonEmptyInvalidDir {
-                                path: model_dir,
-                                reason: repaired_error.to_string(),
-                            });
-                        }
-                        Err(_) => {}
-                    }
-                }
-                if !is_empty_dir(&model_dir)? {
-                    return Err(SetupError::NonEmptyInvalidDir {
-                        path: model_dir,
-                        reason: error.to_string(),
-                    });
-                }
-            }
-        }
+    let precision = opts.precision;
+    let verify = |dir: &Path| verify_kiji_bundle(dir, precision);
+    if let Some(outcome) = reuse_existing_bundle(&model_dir, &verify)? {
+        return Ok(outcome);
     }
 
     let Some(manifest) = kiji_manifest(opts.precision) else {
@@ -206,14 +222,87 @@ pub fn install_kiji_bundle_with_fetcher(
         });
     };
 
-    install_model_dir(&manifest, &model_dir, opts.precision, fetcher)?;
+    install_model_dir(&manifest, &model_dir, &verify, fetcher)?;
     Ok(InstallOutcome::Installed { model_dir })
+}
+
+/// Downloads the pinned Nym-small int8 bundle into `model_dir` (default
+/// [`default_nym_model_dir`]) and verifies it against `NYM_SMALL_INT8_BUNDLE_SHA256`. An
+/// existing verified bundle is kept; an existing invalid non-empty directory is an error.
+pub fn install_nym_bundle(model_dir: Option<&Path>) -> Result<InstallOutcome, SetupError> {
+    install_nym_bundle_with_fetcher(model_dir, &UreqFetcher)
+}
+
+pub fn install_nym_bundle_with_fetcher(
+    model_dir: Option<&Path>,
+    fetcher: &dyn ArtifactFetcher,
+) -> Result<InstallOutcome, SetupError> {
+    let model_dir = match model_dir {
+        Some(path) => absolute_path(path)?,
+        None => default_nym_model_dir()?,
+    };
+    if let Some(outcome) = reuse_existing_bundle(&model_dir, &verify_nym_bundle)? {
+        return Ok(outcome);
+    }
+    install_model_dir(
+        &NYM_SMALL_INT8_MANIFEST,
+        &model_dir,
+        &verify_nym_bundle,
+        fetcher,
+    )?;
+    Ok(InstallOutcome::Installed { model_dir })
+}
+
+/// `Some(AlreadyPresent)` when `model_dir` already holds a verified bundle (after repairing loose
+/// modes on a current-user tree), `None` when it is absent or empty and should be installed.
+fn reuse_existing_bundle(
+    model_dir: &Path,
+    verify: &dyn Fn(&Path) -> Result<(), SafetyNetError>,
+) -> Result<Option<InstallOutcome>, SetupError> {
+    if !model_dir.exists() {
+        return Ok(None);
+    }
+    let model_dir_buf = model_dir.to_path_buf();
+    match verify(model_dir) {
+        Ok(()) => {
+            chmod_private_tree(model_dir)?;
+            Ok(Some(InstallOutcome::AlreadyPresent {
+                model_dir: model_dir_buf,
+            }))
+        }
+        Err(error) => {
+            if is_mode_repairable_error(&error) && is_current_euid_owned_tree(model_dir)? {
+                repair_current_euid_owned_tree(model_dir)?;
+                match verify(model_dir) {
+                    Ok(()) => {
+                        return Ok(Some(InstallOutcome::AlreadyPresent {
+                            model_dir: model_dir_buf,
+                        }))
+                    }
+                    Err(repaired_error) if !is_empty_dir(model_dir)? => {
+                        return Err(SetupError::NonEmptyInvalidDir {
+                            path: model_dir_buf,
+                            reason: repaired_error.to_string(),
+                        });
+                    }
+                    Err(_) => {}
+                }
+            }
+            if !is_empty_dir(model_dir)? {
+                return Err(SetupError::NonEmptyInvalidDir {
+                    path: model_dir_buf,
+                    reason: error.to_string(),
+                });
+            }
+            Ok(None)
+        }
+    }
 }
 
 fn install_model_dir(
     manifest: &ArtifactManifest,
     model_dir: &Path,
-    precision: KijiDistilbertPrecision,
+    verify: &dyn Fn(&Path) -> Result<(), SafetyNetError>,
     fetcher: &dyn ArtifactFetcher,
 ) -> Result<(), SetupError> {
     let parent = model_dir.parent().ok_or_else(|| SetupError::PathResolve {
@@ -245,7 +334,7 @@ fn install_model_dir(
             .map_err(|err| io_error(&sums_path, err))?;
         set_file_private(&sums_path)?;
 
-        verify_kiji_bundle(&tmp_dir, precision).map_err(SetupError::Verify)
+        verify(&tmp_dir).map_err(SetupError::Verify)
     })();
 
     if let Err(error) = result {
@@ -364,10 +453,13 @@ fn unique_suffix() -> String {
 
 fn is_mode_repairable_error(error: &SafetyNetError) -> bool {
     match error {
-        SafetyNetError::ModelUnavailable { reason } => {
-            reason == "kiji sensitive directory must be mode 0700"
-                || reason == "kiji sensitive file must not be group/world writable"
-        }
+        SafetyNetError::ModelUnavailable { reason } => [
+            "kiji sensitive directory must be mode 0700",
+            "kiji sensitive file must not be group/world writable",
+            "nym sensitive directory must be mode 0700",
+            "nym sensitive file must not be group/world writable",
+        ]
+        .contains(&reason.as_str()),
         _ => false,
     }
 }
@@ -569,6 +661,63 @@ mod tests {
     }
 
     #[test]
+    fn nym_install_fetches_the_pinned_revision_and_fails_closed_on_wrong_bytes() {
+        let root = tempfile::tempdir().unwrap();
+        let model_dir = root.path().join("nym-small-int8");
+        let fetcher = SyntheticFetcher {
+            calls: Mutex::new(Vec::new()),
+        };
+
+        let err = install_nym_bundle_with_fetcher(Some(&model_dir), &fetcher).unwrap_err();
+
+        assert!(matches!(
+            err,
+            SetupError::Verify(SafetyNetError::ModelIntegrityMismatch { .. })
+        ));
+        assert!(!model_dir.exists(), "a failed install leaves nothing behind");
+        let urls = fetcher
+            .calls()
+            .into_iter()
+            .map(|(url, _)| url)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            [
+                "int8/config.json",
+                "int8/model_int8.onnx",
+                "int8/tokenizer.json"
+            ]
+            .map(|path| format!(
+                "https://huggingface.co/Wismut/nym-pii-multilingual-small/resolve/4348999cd3c2e20c49615e9af7c6bbb45b64cd85/{path}"
+            ))
+        );
+    }
+
+    #[test]
+    fn nym_install_refuses_a_non_empty_invalid_dir() {
+        let root = tempfile::tempdir().unwrap();
+        let model_dir = root.path().join("nym-small-int8");
+        std::fs::create_dir(&model_dir).unwrap();
+        #[cfg(unix)]
+        std::fs::set_permissions(&model_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(model_dir.join("model_int8.onnx"), b"stale").unwrap();
+        #[cfg(unix)]
+        std::fs::set_permissions(
+            model_dir.join("model_int8.onnx"),
+            std::fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        let fetcher = SyntheticFetcher {
+            calls: Mutex::new(Vec::new()),
+        };
+
+        let err = install_nym_bundle_with_fetcher(Some(&model_dir), &fetcher).unwrap_err();
+
+        assert!(matches!(err, SetupError::NonEmptyInvalidDir { .. }));
+        assert!(fetcher.calls().is_empty());
+    }
+
+    #[test]
     fn fetch_to_write_failure_maps_to_io() {
         let root = tempfile::tempdir().unwrap();
         let model_dir = root.path().join("kiji-distilbert");
@@ -666,6 +815,22 @@ mod tests {
         assert_eq!(file_meta.uid(), uid);
         assert_eq!(dir_meta.permissions().mode() & 0o777, 0o700);
         assert_eq!(file_meta.permissions().mode() & 0o777, 0o600);
+    }
+
+    #[test]
+    #[ignore = "hits Hugging Face (150 MB); run manually when validating the real Nym fetch path"]
+    fn downloads_and_verifies_pinned_nym_bundle() {
+        let root = tempfile::tempdir().unwrap();
+        let model_dir = root.path().join("nym-small-int8");
+
+        let outcome = install_nym_bundle(Some(&model_dir)).unwrap();
+
+        assert!(matches!(outcome, InstallOutcome::Installed { .. }));
+        verify_nym_bundle(&model_dir).unwrap();
+        assert!(matches!(
+            install_nym_bundle(Some(&model_dir)).unwrap(),
+            InstallOutcome::AlreadyPresent { .. }
+        ));
     }
 
     #[test]
