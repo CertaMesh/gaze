@@ -37,7 +37,11 @@ The manifest, the list that turns placeholders back into values, stays on your s
 ```text
 Dear <Name_1>,
 
-thank you for your patience. We received the headphones from order 2026-4471 and issued your refund today to the account <Custom:family:payment-card-or-iban_1>. It should arrive within 3 to 5 business days. A confirmation is on its way to <Email_1>.
+thank you for your patience. We received the headphones from order 2026-4471
+and issued your refund today to the account
+<Custom:family:payment-card-or-iban_1>.
+It should arrive within 3 to 5 business days.
+A confirmation is on its way to <Email_1>.
 
 Best regards,
 Support team
@@ -48,7 +52,11 @@ Support team
 ```text
 Dear Laura Meyer,
 
-thank you for your patience. We received the headphones from order 2026-4471 and issued your refund today to the account DE89 3704 0044 0532 0130 00. It should arrive within 3 to 5 business days. A confirmation is on its way to laura.meyer@example.com.
+thank you for your patience. We received the headphones from order 2026-4471
+and issued your refund today to the account
+DE89 3704 0044 0532 0130 00.
+It should arrive within 3 to 5 business days.
+A confirmation is on its way to laura.meyer@example.com.
 
 Best regards,
 Support team
