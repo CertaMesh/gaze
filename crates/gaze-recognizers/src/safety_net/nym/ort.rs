@@ -13,7 +13,7 @@ use super::artifacts::{
 };
 use super::decode::{
     check_char_coverage, decode_pieces, plan_windows, softmax_row, NymSpan, PieceScore, RowMerger,
-    NUM_LABELS,
+    ScoredPieces, NUM_LABELS,
 };
 
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
@@ -178,10 +178,7 @@ impl NymOrtBackend {
     }
 
     /// Tokenizes `clean` and scores every piece: `(char offsets, per-piece scores)`.
-    pub(crate) fn score_pieces(
-        &self,
-        clean: &str,
-    ) -> Result<(Vec<(usize, usize)>, Vec<PieceScore>), SafetyNetError> {
+    pub(crate) fn score_pieces(&self, clean: &str) -> Result<ScoredPieces, SafetyNetError> {
         if clean.len() > self.config.max_input_bytes {
             return Err(SafetyNetError::InputTooLarge {
                 limit: self.config.max_input_bytes,

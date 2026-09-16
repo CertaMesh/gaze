@@ -124,7 +124,7 @@ impl SafetyNet for NymSafetyNet {
 pub mod test_support {
     use std::ops::Range;
 
-    pub use super::decode::PieceScore;
+    pub use super::decode::{PieceScore, ScoredPieces};
     use super::*;
 
     /// A decoded span: byte range, label, score.
@@ -146,10 +146,7 @@ pub mod test_support {
     }
 
     /// Tokenizes and scores `text` with the real model: `(char offsets, piece scores)`.
-    pub fn capture(
-        net: &NymSafetyNet,
-        text: &str,
-    ) -> Result<(Vec<(usize, usize)>, Vec<PieceScore>), SafetyNetError> {
+    pub fn capture(net: &NymSafetyNet, text: &str) -> Result<ScoredPieces, SafetyNetError> {
         net.backend()?.score_pieces(text)
     }
 }

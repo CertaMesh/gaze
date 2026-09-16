@@ -172,6 +172,9 @@ impl PieceScore {
     }
 }
 
+/// Tokenizer character offsets plus the score of every piece, in piece order.
+pub type ScoredPieces = (Vec<(usize, usize)>, Vec<PieceScore>);
+
 /// A scored piece in byte offsets.
 #[derive(Debug, Clone, Copy)]
 struct Piece {
