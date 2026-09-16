@@ -43,7 +43,8 @@ exists today.)
 2. Handle the result of `PiiClass::custom` and add `max_sessions` to Rust
    `SessionCfg` literals — the two source breaks.
 3. Budget full-input and configured-net scanning latency; handle session-capacity
-   errors and new safety-net and proxy denials.
+   errors and new safety-net and proxy denials. Safety-net fallback documents run
+   one extra model pass and can complete carrying a finding in their leak report.
 4. If you run `gaze-proxy`, upgrade for the fallback-deletion leak fix. See
    [the CHANGELOG Security section](CHANGELOG.md).
 
@@ -180,12 +181,43 @@ Supported primary `Redact` and `Generalize` replacements produce manifest
 entries without live tokens, so output that was falsely rejected for lacking an
 owning token is accepted again.
 
-<!-- RELEASE-PREP HOLD: #599 (hybrid terminal admission) is not merged at the
-     time of writing. If it merges before the tag, state here that terminal
-     sub-word findings the fallback itself manufactured are admitted into the
-     returned leak report instead of denying the document, that admission is
-     strictly wider than v0.14 so nothing that completed starts denying, and
-     record its merge sha. If it does not merge, delete this comment. -->
+**A fallback document now gets one reversible round before it can be denied,
+and this is a widening.** Under `SafetyNetMode::Resolve` with
+`SafetyNetFallback::Redact`, the terminal scan after a fallback deletion used to
+deny the document on *any* unprotected suspect. That scan is the fourth full
+model pass over a string the deletion rewrote, so it routinely reported a 1–5
+byte sub-word span the three earlier passes had read and accepted. The terminal
+report now gets one reversible round (tokenize, never delete) and one bounded
+deletion of a suspect that *contains* a deletion seam, then a typed admission.
+Denials are named: a suspect covering bytes the fallback's own audit rows say it
+removed, a second seam-manufactured shape, a suspect naming no real range, or a
+round the resolver refuses. Everything else is merged into the returned
+`LeakReport` and the document completes carrying it.
+
+**Nothing that completed under v0.14 starts denying** — admission is strictly
+wider. Two costs you do have to budget for:
+
+- A fallback document that reports anything at the terminal scan now runs **one
+  extra model pass**.
+- A fresh finding that appears only *after* that round **ships raw** in the
+  output with an honest report, because both bounds are spent. Measured on the
+  v0.15 production corpus, that is **2 bytes in one document, overlapping 0
+  gold**, out of 42 bytes across 16 spans that previously denied. Treat those as
+  measurements on that corpus, seed, and model bundle, not as a bound for your
+  documents — and a shipped byte that overlaps no gold is not proof it is not
+  PII, only that the benchmark does not count it.
+
+Audit consumers: the extra round emits `decided_by: resolve`, `action: tokenize`
+with the fallback reason attached, which is what distinguishes it from the
+second batch's rows. The protection trace projects it as an ordinary
+`("safety_net", "resolve", "tokenize")`; there are no new wire keys.
+
+Clean-to-raw mapping now understands deletions: `map_clean_span_to_raw` and
+`validate_clean_manifest` reconstruct the document layout from the deletion
+ledger's raw coordinates and reconcile it against the manifest, so a manifest
+that disagrees with its own ledger fails closed instead of mapping onto the
+wrong bytes. A document with no deletions takes the unchanged affine path
+(#599).
 
 ### Agent surfaces and audit (review consumers)
 

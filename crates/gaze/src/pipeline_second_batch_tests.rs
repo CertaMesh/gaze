@@ -124,6 +124,8 @@ fn second_batch_single_and_multigap_owned_format_preserve_restore_trace_and_pare
                     plan,
                     DocumentKind::Text,
                     Some("field"),
+                    Batch::Second,
+                    None,
                     Some(&mut trace),
                 )
                 .unwrap();
@@ -488,6 +490,8 @@ fn second_batch_utf8_before_between_after_two_tokens_keeps_exact_source_and_audi
             &mut clean,
             plan,
             DocumentKind::Text,
+            None,
+            Batch::Second,
             None,
             Some(&mut trace),
         )

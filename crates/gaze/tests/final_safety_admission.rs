@@ -57,7 +57,11 @@ impl SafetyNet for ContextNet {
                 }
                 Terminal::Token => (context.manifest.spans[0].clean_span.clone(), mismatch()),
                 Terminal::Raw | Terminal::ClassMismatch => {
-                    let start = text.find("residual").unwrap();
+                    // Gone once the terminal round has tokenized it: the settled sweep sees a
+                    // document with nothing left to report.
+                    let Some(start) = text.find("residual") else {
+                        return Ok(vec![]);
+                    };
                     (
                         start..start + 8,
                         if matches!(self.terminal, Terminal::Raw) {
@@ -137,13 +141,25 @@ fn run(
                 policy,
             )
             .map(|(doc, spans, report, trace)| {
-                assert_eq!(trace.len(), 2);
-                assert_eq!(trace[0].raw_start(), 0);
-                assert_eq!(trace[0].raw_end(), 4);
-                assert_eq!(trace[0].decision(), "resolve");
-                assert_eq!(trace[1].raw_start(), 5);
-                assert_eq!(trace[1].raw_end(), 13);
-                assert_eq!(trace[1].decision(), "fallback_redact");
+                // The terminal round adds a third item on the routes that reach it, and it
+                // projects as an ordinary `resolve`/`tokenize` — no new wire key for the
+                // benchmark scorer to learn.
+                assert_eq!(
+                    trace
+                        .iter()
+                        .map(|item| (
+                            item.raw_start(),
+                            item.raw_end(),
+                            item.stage(),
+                            item.decision(),
+                            item.action()
+                        ))
+                        .collect::<Vec<_>>()[..2],
+                    [
+                        (0, 4, "safety_net", "resolve", "tokenize"),
+                        (5, 13, "safety_net", "fallback_redact", "redact"),
+                    ]
+                );
                 (doc, spans, report)
             }),
         Route::Staged => {
@@ -155,7 +171,12 @@ fn run(
                 &dictionaries,
                 policy,
             );
-            assert_eq!(transaction.tokens().len(), 1);
+            // One token per emitted span on success; on failure, only the `seed` token the
+            // first resolve minted before the document was refused.
+            assert_eq!(
+                transaction.tokens().len(),
+                result.as_ref().map_or(1, |(_, spans, _)| spans.len())
+            );
             if let Ok((CleanDocument::Text(text), spans, _)) = &result {
                 assert_eq!(
                     transaction
@@ -172,20 +193,44 @@ fn run(
     }
 }
 
+/// A raw residual that only the terminal scan reports is no longer a denial: it is a finding on
+/// text no earlier pass saw, and the terminal round tokenizes it reversibly. What has not changed
+/// is that it never *ships* raw while a round is still available to protect it.
 #[test]
-fn final_admission_rejects_new_raw_residual_after_fallback_on_every_route() {
+fn a_new_raw_residual_after_fallback_is_resolved_on_every_route() {
     for route in [Route::Live, Route::Staged, Route::Trace] {
         let (pipeline, seen) = pipeline(Terminal::Raw);
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let result = run(&pipeline, &session, route, SafetyNetPolicy::default());
+        let (doc, spans, report) = run(&pipeline, &session, route, SafetyNetPolicy::default())
+            .unwrap_or_else(|error| panic!("{route:?} denied a resolvable residual: {error:?}"));
+        let CleanDocument::Text(text) = doc else {
+            panic!("text");
+        };
         assert!(
-            matches!(
-                result,
-                Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
-            ),
-            "{route:?} admitted a newly detectable raw residual: {result:?}"
+            !text.contains("residual"),
+            "{route:?} shipped the terminal finding raw"
         );
-        assert_eq!(seen.lock().unwrap().len(), 3);
+        assert_eq!(
+            spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
+            [0..4, 13..21],
+            "{route:?} must name the residual's ORIGINAL bytes, not post-deletion ones"
+        );
+        assert!(
+            report
+                .suspects
+                .iter()
+                .any(|s| s.safety_net_id == "synthetic-context"),
+            "{route:?} must surface what the terminal round acted on"
+        );
+        assert_eq!(
+            seen.lock().unwrap().len(),
+            4,
+            "{route:?}: exactly one extra sweep, after the terminal round"
+        );
+        if matches!(route, Route::Trace) {
+            // Pinned here rather than in `run`, because only a completing document has one.
+            assert_eq!(spans[1].raw_span, 13..21);
+        }
     }
 }
 

@@ -163,21 +163,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disabled instead of cloning it and its WordPiece vocabulary on every call.
   Configured truncation retains the original clone, clear, encode, and typed
   error path (#587).
-<!-- RELEASE-PREP HOLD: #599 (hybrid terminal admission) is not merged at the
-     time of writing. If it merges before the tag, replace this comment with the
-     entry below and record its merge sha; if it does not, delete both. -->
-<!-- - **Safety-net terminal output is decided by what the fallback actually
-     did.** A Redact fallback deletion rewrites the whole input, so the terminal
-     scan is the first pass to read that text and routinely reports a 1–5 byte
-     sub-word span the three earlier passes accepted. Any such span previously
-     denied the document. The terminal report now gets one reversible round
-     (tokenize, never delete) and one bounded deletion of a shape the fallback
-     itself manufactured, then a typed admission: `FallbackIncomplete` and
-     `Unjudgeable` deny, `SeamManufactured` allows one bounded deletion and then
-     denies if it recurs, and `Admit` merges the finding into the returned leak
-     report so the document completes carrying it. Admission is strictly wider
-     than before, so no document that completed under v0.14 starts denying
-     (#599). -->
+- **A safety-net fallback document now gets one reversible round before it can
+  be denied.** Under `SafetyNetMode::Resolve` with `SafetyNetFallback::Redact`,
+  the terminal scan that runs after a fallback deletion used to deny the
+  document on *any* unprotected suspect it reported. That scan is the fourth
+  full model pass, and the deletion changes the whole input string, so it
+  routinely reports a 1–5 byte sub-word span the three earlier passes read and
+  accepted — a finding no stage was permitted to act on, over bytes the denial
+  protected no better than completing would have. The terminal report now gets:
+  one reversible round that tokenizes what it can (restore-exact, never
+  deleted), one bounded deletion of a suspect that **contains** a deletion seam
+  — a shape the fallback itself manufactured by joining two fragments — and then
+  a typed admission. **Denials are now named:** a suspect covering bytes the
+  fallback's own audit rows say it removed, a second seam-manufactured shape, a
+  suspect that names no real range of the document, or a round the resolver
+  refuses. Everything else is merged into the returned `LeakReport` and the
+  document completes carrying it, exactly as completing documents already ship
+  their own final report.
+  **What this costs:** a fallback document that reports something at the
+  terminal scan now runs one extra model pass, and a fresh finding that appears
+  only *after* that round ships raw in the output with an honest report, because
+  both bounds are spent. Measured on the v0.15 production corpus: the terminal
+  scans reported 42 bytes across 16 spans that used to deny, of which 37 bytes
+  are now tokenized reversibly and 5 bytes are the one seam-manufactured span
+  the bounded deletion removed; **2 bytes, in one document, ship raw** after the
+  round, and they overlap 0 gold. Those are measurements on that corpus, seed and
+  model bundle, not a bound for other documents, and a shipped byte that overlaps
+  no gold is not proof it is not PII — only that the benchmark does not count it.
+  Admission is strictly wider than before, so no document that completed under
+  v0.14 can start denying (#599).
+  Audit rows for the extra round are `decided_by: resolve`, `action: tokenize`
+  with the fallback reason attached — the combination that distinguishes them
+  from the second batch's rows. The protection trace projects them as an
+  ordinary `("safety_net", "resolve", "tokenize")`; no new wire keys.
+- **Clean-to-raw mapping understands deletions.** `map_clean_span_to_raw` and
+  `validate_clean_manifest` previously assumed every untokenized clean run stood
+  for an equal-length raw run, which a fallback deletion breaks. They now
+  reconstruct the document's layout from the deletion ledger's raw coordinates
+  and reconcile it against the manifest, so a manifest that disagrees with its
+  own deletion ledger fails closed instead of mapping onto the wrong bytes. A
+  document with no deletions takes the unchanged affine path. A resolution gap
+  must now map to exactly as many raw bytes as it has clean bytes, which is what
+  stops a token from ever standing for bytes on both sides of a deletion
+  (#599).
 
 ### Fixed
 
@@ -245,6 +273,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recognizers, and the stale collision comment in `core.toml` — which described
   a two-rule world — is replaced by a two-group policy note explaining why the
   numeric rules stay locale-gated and the alphanumeric ones do not (#598).
+- [bundle-tokenization-drift] The embedded `core` rulepack is version 0.5.3.
+  The drift snapshot's detection entries, spans, classes, sources, token shapes,
+  and counts are unchanged: none of the three new postal patterns match the
+  drift corpus (#598).
 - [docs] Every `core.toml` line citation in the recognizer coverage matrix of
   `docs/reference/redaction-classes.md` is regenerated. 35 of 37 rows pointed at
   stale line ranges: the doc gate reads the first twelve columns and never
@@ -275,6 +307,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Irish postal codes has to disable the recognizer; narrowing the locale chain
   does not suppress them. The residual precision cost is one holdout false
   positive on an uppercase UK-postcode-shaped token in lowercase prose (#598).
+- A safety-net fallback document can now ship a raw byte with an honest report:
+  a fresh finding that appears only after the terminal reversible round has no
+  bound left to spend. Measured on the v0.15 production corpus this is 2 bytes
+  in one document, overlapping 0 gold, and fallback documents run one extra
+  model pass. That is a measurement on that corpus, seed, and model bundle, and
+  a shipped byte that overlaps no gold is not proof it is not PII (#599).
 - `max_sessions` bounds cached sessions, not the per-ID file-lock registry,
   which remains unbounded. Capacity can reject admission while handles remain.
 - Restore remains manifest-authorized. Trailing word boundaries and ambiguous
