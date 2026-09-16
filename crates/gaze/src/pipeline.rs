@@ -2780,12 +2780,11 @@ fn suspect_is_unactionable_subword(text: &str, suspect: &LeakSuspect) -> bool {
         return false;
     }
     let span = suspect_action_span(suspect);
-    let Some(value) = text.get(span.clone()).filter(|value| !value.is_empty()) else {
+    if text.get(span.clone()).is_none_or(str::is_empty) {
         return false;
-    };
-    let word = |ch: Option<char>| ch.is_some_and(char::is_alphanumeric);
-    let starts_inside = word(text[..span.start].chars().next_back()) && word(value.chars().next());
-    let ends_inside = word(value.chars().next_back()) && word(text[span.end..].chars().next());
+    }
+    let starts_inside = gaze_types::is_inside_word(text, span.start);
+    let ends_inside = gaze_types::is_inside_word(text, span.end);
     // Inside a token shape the "word" is a token this pipeline may not own; that is not a
     // sub-word finding, and its existing handling (fallback, denial) must still see it.
     (starts_inside || ends_inside)

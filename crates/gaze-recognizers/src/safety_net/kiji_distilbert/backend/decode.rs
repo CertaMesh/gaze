@@ -1,5 +1,6 @@
 use super::RawSpan;
 use crate::ner::decode::{softmax_confidence, split_bio};
+use crate::safety_net::word_pieces::group_word_pieces;
 use gaze_types::SafetyNetError;
 
 pub(crate) const ID2LABEL: [&str; 9] = [
@@ -127,37 +128,6 @@ impl WordEntity {
     fn into_span(self) -> RawSpan {
         RawSpan::new(self.start, self.end, self.label, Some(self.score))
     }
-}
-
-/// Groups piece indices into words. The model labels WordPieces, but a span
-/// must never start or end inside a word, so the word is the smallest unit a
-/// span may cover. Two pieces belong to one word when they touch and the
-/// characters on both sides of the seam are alphanumeric; this reads the
-/// source text rather than `##` markers so every backend sharing this decoder
-/// gets the same boundaries. Zero-width special tokens are skipped.
-fn group_word_pieces(source: &str, subword_spans: &[(usize, usize)]) -> Vec<Vec<usize>> {
-    let mut words: Vec<Vec<usize>> = Vec::new();
-    let mut previous_end = None;
-    for (index, &(start, end)) in subword_spans.iter().enumerate() {
-        if start >= end {
-            continue;
-        }
-        let joins_previous = previous_end == Some(start)
-            && source
-                .get(..start)
-                .and_then(|head| head.chars().next_back())
-                .is_some_and(char::is_alphanumeric)
-            && source
-                .get(start..)
-                .and_then(|tail| tail.chars().next())
-                .is_some_and(char::is_alphanumeric);
-        match words.last_mut() {
-            Some(word) if joins_previous => word.push(index),
-            _ => words.push(vec![index]),
-        }
-        previous_end = Some(end);
-    }
-    words
 }
 
 /// Labels a whole word from its pieces. Any labelled piece makes the word an

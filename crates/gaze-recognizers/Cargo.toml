@@ -23,6 +23,7 @@ phone-parser = ["dep:phonenumber", "gaze-types/phone-parser"]
 safety-net = []
 safety-net-openai = ["safety-net"]
 safety-net-kiji = ["safety-net"]
+safety-net-nym = ["safety-net"]
 runtime-tract = ["safety-net-kiji", "dep:tract-onnx"]
 runtime-candle = ["safety-net-kiji", "dep:candle-core", "dep:candle-onnx"]
 test-support = ["safety-net"]
@@ -77,6 +78,10 @@ required-features = ["safety-net-openai"]
 [[test]]
 name = "kiji_distilbert_subprocess"
 required-features = ["safety-net-kiji", "test-support"]
+
+[[test]]
+name = "nym_safety_net"
+required-features = ["safety-net-nym", "test-support"]
 
 [[test]]
 name = "locale_aware_registry"

@@ -399,6 +399,10 @@ The output shape is the same `leak_report` block shown above; `suspect_count = 0
 
 Full Kiji setup, backend switching, and failure-mode notes: [`docs/how-to/safety-net/set-up-kiji-safetynet.md`](docs/how-to/safety-net/set-up-kiji-safetynet.md).
 
+#### Nym-small (opt-in)
+
+A third, opt-in net runs the multilingual Nym-small token classifier in process and flags only building numbers, licence plates, usernames and dates of birth by default: `gaze setup --safety-net nym`, then `gaze clean --safety-net nym --nym-model-dir <dir>`. The allowlist and thresholds are policy data (`[safety_net.nym]`). It does not change the default net. Contract, measurements and open items (latency, licence review): [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md#nym-small-adapter-opt-in).
+
 ## Audit and restore
 
 Restore is manifest-first. Tokens are session-scoped, counted by class, and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback.

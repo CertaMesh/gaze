@@ -4,6 +4,15 @@ pub mod openai_filter;
 #[cfg(feature = "safety-net-kiji")]
 pub mod kiji_distilbert;
 
+#[cfg(feature = "safety-net-nym")]
+pub mod nym;
+
+#[cfg(any(feature = "safety-net-kiji", feature = "safety-net-nym"))]
+mod word_pieces;
+
+#[cfg(feature = "safety-net-nym")]
+mod bundle;
+
 #[cfg(feature = "test-support")]
 pub mod test_support;
 

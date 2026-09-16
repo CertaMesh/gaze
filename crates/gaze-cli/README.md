@@ -212,8 +212,8 @@ Flags:
 | `--max-bytes <bytes>` | Stdin byte cap. Defaults to `10485760`. |
 | `--context-json <path>` | Typed context envelope with dictionaries, class map, and fields. |
 | `--audit-db <path>` | Optional SQLite redaction-log database path for metadata-only audit entries. |
-| `--safety-net <kind>` | Optional observer-only safety net. Accepts `openai-filter` (v0.6+) or `kiji-distilbert` (v0.8+). Activates the post-clean leak audit. |
-| `--safety-net-backend <backend>` | v0.8 single-backend selector: `openai-filter` or `kiji-distilbert`. When set alongside `--safety-net=<kind>`, this flag wins and lets adopters swap the Pass-3 implementation without re-typing the legacy `--safety-net` value. Cannot be combined with `--safety-net-registry`. |
+| `--safety-net <kind>` | Optional observer-only safety net. Accepts `openai-filter` (v0.6+), `kiji-distilbert` (v0.8+) or `nym` (opt-in). Activates the post-clean leak audit. |
+| `--safety-net-backend <backend>` | v0.8 single-backend selector: `openai-filter`, `kiji-distilbert` or `nym`. When set alongside `--safety-net=<kind>`, this flag wins and lets adopters swap the Pass-3 implementation without re-typing the legacy `--safety-net` value. Cannot be combined with `--safety-net-registry`. |
 | `--safety-net-registry` | Enables locale-aware Pass-3 dispatch through `LocaleAwareModelRegistry`. Requires one or more `--safety-net-add` flags. |
 | `--safety-net-add <backend>` | Adds one backend to the registry. Repeatable. First resolved backend wins for v1. |
 | `--openai-filter-command <path>` | Path to the local OpenAI Privacy Filter `opf` command. Required with the `openai-filter` backend. |
@@ -224,6 +224,8 @@ Flags:
 | `--kiji-distilbert-command <path>` | Path to the local Kiji DistilBERT subprocess command. Required with the `kiji-distilbert` backend. |
 | `--kiji-distilbert-model-dir <path>` | Path to the pinned Kiji DistilBERT model directory (must contain `SHA256SUMS`, `labels.json`, `model.onnx`, `tokenizer.json`). Required with the `kiji-distilbert` backend. |
 | `--kiji-distilbert-locales <tag[,tag...]>` | Native locales for the Kiji DistilBERT registry entry. Empty keeps the backend default. |
+| `--nym-model-dir <path>` | Pinned Nym-small int8 bundle (`SHA256SUMS`, `config.json`, `model_int8.onnx`, `tokenizer.json`). Required with the `nym` backend unless `GAZE_NYM_MODEL_DIR` is set; install with `gaze setup --safety-net nym`. |
+| `--nym-intra-threads <n>` | ONNX Runtime intra-op threads for the `nym` backend. Defaults to `1`. |
 | `--safety-net-timeout-ms <ms>` | Subprocess deadline. Defaults to `5000`. |
 | `--safety-net-input-limit-bytes <bytes>` | Clean-text input cap forwarded to the safety net. Defaults to `1048576`. |
 | `--safety-net-mode <strict\|tolerant\|redact\|resolve>` | Production action on `Uncovered`/`PartialBleed` suspects. `strict` exits `3`; `tolerant` emits warnings on stderr and continues (dev-only, fires a stderr warning on every invocation); `redact` **deletes** the suspect span (the bytes are removed outright, not replaced with a sentinel string, so there is no marker to grep for) and records an audit row; `resolve` promotes the suspect into a synthetic custom-recognizer match and re-runs the resolver. Defaults to `resolve`. Mode catalog and posture guide: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md). |
@@ -266,6 +268,13 @@ class set. Trade-offs: narrower closed label set
 or account-number suspects are not surfaced; pinned-artifact contract
 requires `SHA256SUMS` present on disk (Axis-1 fail-closed — no silent
 disable). The default remains `subprocess` for backwards compatibility.
+
+**`nym`** (opt-in) runs the pinned Nym-small v3 int8 token classifier in
+process. Only building numbers, licence plates, usernames and dates of birth
+can fire by default (op-B); `[safety_net.nym]` in policy.toml changes the
+allowlist and thresholds. It is not available through
+`--safety-net-registry`. Contract:
+[safety-nets.md](../../docs/explanation/safety-net/safety-nets.md#nym-small-adapter-opt-in).
 
 #### Setup
 

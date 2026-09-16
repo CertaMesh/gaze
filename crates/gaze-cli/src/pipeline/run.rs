@@ -60,6 +60,8 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) kiji_distilbert_command: Option<&'a Path>,
     pub(crate) kiji_distilbert_model_dir: Option<&'a Path>,
     pub(crate) kiji_distilbert_locales: &'a [String],
+    pub(crate) nym_model_dir: Option<&'a Path>,
+    pub(crate) nym_intra_threads: Option<std::num::NonZeroUsize>,
     pub(crate) safety_net_timeout_ms: u64,
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
@@ -108,7 +110,8 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let loaded_rulepacks = resolved.rulepacks;
     let locale_chain = resolved.locale_chain;
     let dictionaries = resolved.dictionaries;
-    let pipeline = maybe_register_safety_net(resolved.pipeline, &options)?;
+    let pipeline =
+        maybe_register_safety_net(resolved.pipeline, &options, effective_policy.as_ref())?;
     validate_safety_net_tolerant_gate(options.safety_net_mode, options.safety_net_fallback)?;
     // Lowered once, here. The library owns the (mode, fallback) -> decision mapping; the CLI
     // reads it rather than re-deriving which flag is consulted when.
@@ -200,7 +203,20 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
 pub(crate) fn maybe_register_safety_net(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
+    policy: Option<&gaze::Policy>,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
+    let nym_policy = policy.and_then(|policy| policy.safety_net.nym.as_ref());
+    // A policy that tunes the Nym net while a different net (or none) runs would read as
+    // protection that is not there; refuse instead of ignoring the table.
+    if nym_policy.is_some()
+        && (options.safety_net_registry
+            || effective_safety_net_backend(options) != Some(SafetyNetBackend::Nym))
+    {
+        return Err(CliError::SafetyNetConfigDetail(
+            "policy [safety_net.nym] requires --safety-net nym (or --safety-net-backend nym)"
+                .to_string(),
+        ));
+    }
     if options.safety_net_registry {
         if options.safety_net_backend.is_some() {
             return Err(CliError::SafetyNetConfigDetail(
@@ -221,7 +237,63 @@ pub(crate) fn maybe_register_safety_net(
     match backend {
         SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options),
         SafetyNetBackend::KijiDistilbert => register_kiji_distilbert(pipeline, options),
+        SafetyNetBackend::Nym => register_nym(pipeline, options, nym_policy),
     }
+}
+
+#[cfg(feature = "safety-net-nym")]
+fn register_nym(
+    pipeline: gaze::Pipeline,
+    options: &CleanOptions<'_>,
+    operating_point: Option<&gaze_types::nym::NymOperatingPoint>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    use gaze_recognizers::safety_net::nym::{
+        NymConfig, NymSafetyNet, REQUIRED_NYM_SMALL_ARTIFACTS,
+    };
+
+    let model_dir = options
+        .nym_model_dir
+        .map(Path::to_path_buf)
+        .or_else(|| std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from))
+        .ok_or_else(|| {
+            CliError::SafetyNetConfigDetail(
+                "--nym-model-dir (or GAZE_NYM_MODEL_DIR) is required for the nym safety net; install the bundle with `gaze setup --safety-net nym`"
+                    .to_string(),
+            )
+        })?;
+    // Missing files are a config error (exit 2) before the model loads; digest mismatches
+    // still fail closed inside the backend.
+    for required in REQUIRED_NYM_SMALL_ARTIFACTS {
+        let artifact = model_dir.join(required);
+        if !artifact.exists() {
+            return Err(CliError::SafetyNetArtifactMissing {
+                backend: "nym",
+                path: format!(
+                    "{} (install via gaze setup --safety-net nym)",
+                    artifact.display()
+                ),
+            });
+        }
+    }
+    let mut config = NymConfig::new(model_dir)
+        .with_max_input_bytes(options.safety_net_input_limit_bytes)
+        .with_operating_point(operating_point.cloned().unwrap_or_default());
+    if let Some(threads) = options.nym_intra_threads {
+        config = config.with_intra_threads(threads);
+    }
+    Ok(pipeline.with_safety_net(NymSafetyNet::new(config)))
+}
+
+#[cfg(not(feature = "safety-net-nym"))]
+fn register_nym(
+    _pipeline: gaze::Pipeline,
+    _options: &CleanOptions<'_>,
+    _operating_point: Option<&gaze_types::nym::NymOperatingPoint>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    Err(CliError::SafetyNetConfigDetail(
+        "nym backend requested but gaze-cli was not compiled with feature safety-net-nym"
+            .to_string(),
+    ))
 }
 
 #[cfg(any(feature = "safety-net-openai", feature = "safety-net-kiji"))]
@@ -259,6 +331,14 @@ fn register_safety_net_registry(
             SafetyNetBackend::OpenaiFilter => register_openai_filter_model(&mut registry, options)?,
             SafetyNetBackend::KijiDistilbert => {
                 register_kiji_distilbert_model(&mut registry, options)?
+            }
+            // Registry dispatch reports a model span's class, not the label and threshold that
+            // fired, so a Nym suspect there would lose its audit trail.
+            SafetyNetBackend::Nym => {
+                return Err(CliError::SafetyNetConfigDetail(
+                    "nym is not available through --safety-net-registry; use --safety-net nym"
+                        .to_string(),
+                ))
             }
         }
     }
@@ -556,6 +636,8 @@ fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Resul
         || options.kiji_distilbert_command.is_some()
         || options.kiji_distilbert_model_dir.is_some()
         || !options.kiji_distilbert_locales.is_empty()
+        || options.nym_model_dir.is_some()
+        || options.nym_intra_threads.is_some()
         || !options.safety_net_add.is_empty()
         || options.safety_net_timeout_ms != DEFAULT_SAFETY_NET_TIMEOUT_MS
         || options.safety_net_input_limit_bytes != DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES

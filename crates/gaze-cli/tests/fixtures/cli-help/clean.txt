@@ -30,13 +30,13 @@ Options:
       --audit-db <AUDIT_DB>
           Optional SQLite redaction-log database path
       --safety-net <SAFETY_NET>
-          Optional observer-only privacy safety net [possible values: openai-filter, kiji-distilbert]
+          Optional observer-only privacy safety net [possible values: openai-filter, kiji-distilbert, nym]
       --safety-net-backend <SAFETY_NET_BACKEND>
-          v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins. Lets adopters swap the Pass-3 backend without re-typing the legacy `--safety-net` value [possible values: openai-filter, kiji-distilbert]
+          v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins. Lets adopters swap the Pass-3 backend without re-typing the legacy `--safety-net` value [possible values: openai-filter, kiji-distilbert, nym]
       --safety-net-registry
           Enable locale-aware Pass-3 safety-net registry dispatch
       --safety-net-add <SAFETY_NET_ADD>
-          Add one backend to the locale-aware safety-net registry. Repeatable [possible values: openai-filter, kiji-distilbert]
+          Add one backend to the locale-aware safety-net registry. Repeatable [possible values: openai-filter, kiji-distilbert, nym]
       --openai-filter-command <OPENAI_FILTER_COMMAND>
           Path to the local OpenAI Privacy Filter `opf` command
       --openai-filter-checkpoint <OPENAI_FILTER_CHECKPOINT>
@@ -61,6 +61,10 @@ Options:
           Path to the pinned Kiji DistilBERT model directory (must contain SHA256SUMS, labels.json, model.onnx, tokenizer.json)
       --kiji-distilbert-locales <KIJI_DISTILBERT_LOCALES>
           Locale list for the Kiji DistilBERT registry entry
+      --nym-model-dir <NYM_MODEL_DIR>
+          Path to the pinned Nym-small int8 bundle from `gaze setup --safety-net nym` (default: GAZE_NYM_MODEL_DIR)
+      --nym-intra-threads <NYM_INTRA_THREADS>
+          ONNX Runtime intra-op threads for the Nym backend (default: 1)
       --safety-net-timeout-ms <SAFETY_NET_TIMEOUT_MS>
           Safety-net subprocess timeout in milliseconds [default: 5000]
       --safety-net-input-limit-bytes <SAFETY_NET_INPUT_LIMIT_BYTES>

@@ -27,6 +27,7 @@ enum BenchConfig {
     Pass2Ner,
     FullStackKijiResolve,
     FullStackOpfResolve,
+    FullStackNymResolve,
     Pass3Kiji,
     Pass3Opf,
     Pass3LocaleAware,
@@ -40,6 +41,7 @@ impl BenchConfig {
             Self::Pass2Ner => "pass2-ner",
             Self::FullStackKijiResolve => "full-stack-kiji-resolve",
             Self::FullStackOpfResolve => "full-stack-opf-resolve",
+            Self::FullStackNymResolve => "full-stack-nym-resolve",
             Self::Pass3Kiji => "pass3-kiji",
             Self::Pass3Opf => "pass3-opf",
             Self::Pass3LocaleAware => "pass3-locale-aware",
@@ -49,7 +51,10 @@ impl BenchConfig {
     fn uses_ner(self) -> bool {
         matches!(
             self,
-            Self::Pass2Ner | Self::FullStackKijiResolve | Self::FullStackOpfResolve
+            Self::Pass2Ner
+                | Self::FullStackKijiResolve
+                | Self::FullStackOpfResolve
+                | Self::FullStackNymResolve
         )
     }
 
@@ -269,7 +274,9 @@ fn handle_request(
 
     let (post_policy_safety_net_stats, post_policy_scan_ms) = if matches!(
         config,
-        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+        BenchConfig::FullStackKijiResolve
+            | BenchConfig::FullStackOpfResolve
+            | BenchConfig::FullStackNymResolve
     ) {
         let post_policy_scan_start = Instant::now();
         let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
@@ -641,6 +648,7 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
                 "pass2-ner" => BenchConfig::Pass2Ner,
                 "full-stack-kiji-resolve" => BenchConfig::FullStackKijiResolve,
                 "full-stack-opf-resolve" => BenchConfig::FullStackOpfResolve,
+                "full-stack-nym-resolve" => BenchConfig::FullStackNymResolve,
                 "pass3-kiji" => BenchConfig::Pass3Kiji,
                 "pass3-opf" => BenchConfig::Pass3Opf,
                 "pass3-locale-aware" => BenchConfig::Pass3LocaleAware,
@@ -670,6 +678,14 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
         }
         BenchConfig::FullStackOpfResolve => {
             pipeline = register_opf(pipeline).map_err(|source| {
+                BenchmarkBuildError::SafetyNetRegistration {
+                    cell: config.name(),
+                    source,
+                }
+            })?;
+        }
+        BenchConfig::FullStackNymResolve => {
+            pipeline = register_nym(pipeline).map_err(|source| {
                 BenchmarkBuildError::SafetyNetRegistration {
                     cell: config.name(),
                     source,
@@ -859,6 +875,22 @@ fn register_kiji(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Er
     Err("compile with gaze-recognizers feature safety-net-kiji".into())
 }
 
+/// Nym-small at op-B from `GAZE_NYM_MODEL_DIR` (`GAZE_NYM_INTRA_THREADS` optional).
+#[cfg(feature = "safety-net-nym")]
+fn register_nym(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
+    use gaze_recognizers::safety_net::nym::NymSafetyNet;
+
+    let net = NymSafetyNet::from_env()?;
+    // Load before the first document so a bad bundle fails the cell, not one record.
+    net.preload()?;
+    Ok(pipeline.with_safety_net(net))
+}
+
+#[cfg(not(feature = "safety-net-nym"))]
+fn register_nym(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
+    Err("compile with gaze-recognizers feature safety-net-nym".into())
+}
+
 #[cfg(feature = "safety-net-openai")]
 fn register_opf(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
     use gaze_recognizers::safety_net::openai_filter::{
@@ -964,7 +996,9 @@ fn leak_kind_name(kind: &LeakKind) -> &'static str {
 fn safety_net_policy(config: BenchConfig) -> SafetyNetPolicy {
     if matches!(
         config,
-        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+        BenchConfig::FullStackKijiResolve
+            | BenchConfig::FullStackOpfResolve
+            | BenchConfig::FullStackNymResolve
     ) {
         SafetyNetPolicy::default()
     } else {
