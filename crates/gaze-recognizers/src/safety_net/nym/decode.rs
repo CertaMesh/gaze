@@ -454,6 +454,23 @@ mod tests {
         rows[target][0] = 0.1;
         assert!(decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty());
 
+        // Same shape with USERNAME enabled at 0.3: its 0.35 clears the threshold, but GIVEN_NAME
+        // (0.55) is the piece's label, so it still produces nothing. Picking the argmax among
+        // enabled labels only would emit a USERNAME suspect here.
+        let low = NymOperatingPoint::new([(NymLabel::Username, 0.3)]).unwrap();
+        let mut rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::Username, 0.35);
+        rows[target][2 * index + 1] = 0.55;
+        rows[target][0] = 0.1;
+        assert!(decode_pieces(text, &offsets, &scores(&rows), &low)
+            .unwrap()
+            .is_empty());
+        rows[target][2 * index + 1] = 0.0;
+        rows[target][0] = 0.65;
+        assert_eq!(
+            texts(text, &decode_pieces(text, &offsets, &scores(&rows), &low).unwrap()),
+            vec!["anna84"]
+        );
+
         // DATE_OF_BIRTH needs 0.9 under op-B.
         let rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::DateOfBirth, 0.85);
         assert!(decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty());
