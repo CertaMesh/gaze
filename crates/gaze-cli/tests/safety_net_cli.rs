@@ -28,9 +28,9 @@ fn write_mock_opf(body: &str) -> (TempDir, PathBuf) {
     fs::write(
         &path,
         format!(
+            // The OPF adapter only accepts output that echoes the analysed text.
             r#"#!/bin/sh
-cat >/dev/null
-printf '%s\n' '{}'
+exec python3 -c 'import json,sys; print(json.dumps({{"text": open("/dev/stdin", encoding="utf-8").read(), "detected_spans": json.loads(sys.argv[1])}}))' '{}'
 "#,
             body
         ),
@@ -52,8 +52,7 @@ fn write_arg_logging_mock_opf(body: &str, arg_log: &Path) -> (TempDir, PathBuf) 
         format!(
             r#"#!/bin/sh
 printf '%s\n' "$@" > '{}'
-cat >/dev/null
-printf '%s\n' '{}'
+exec python3 -c 'import json,sys; print(json.dumps({{"text": open("/dev/stdin", encoding="utf-8").read(), "detected_spans": json.loads(sys.argv[1])}}))' '{}'
 "#,
             arg_log.display(),
             body

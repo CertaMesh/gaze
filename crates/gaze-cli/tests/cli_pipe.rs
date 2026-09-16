@@ -4518,7 +4518,7 @@ fn t_safety_net_registry_selects_locale_backend() {
     let dir = tempdir().unwrap();
     let opf = dir.path().join("opf");
     let kiji = dir.path().join("kiji");
-    fs::write(&opf, b"#!/bin/sh\ncat >/dev/null\nprintf '[]\\n'\n").unwrap();
+    fs::write(&opf, b"#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps({\"text\": open(\"/dev/stdin\", encoding=\"utf-8\").read(), \"detected_spans\": json.loads(sys.argv[1])}))' '[]'\n").unwrap();
     fs::write(&kiji, b"#!/bin/sh\nexit 91\n").unwrap();
     #[cfg(unix)]
     {
