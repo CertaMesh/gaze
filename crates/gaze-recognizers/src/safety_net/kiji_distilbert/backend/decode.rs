@@ -92,42 +92,119 @@ fn merge_kiji_bio_spans(
     let (effective_labels, effective_scores) =
         bridge_joiner_tokens(source, subword_spans, subword_labels, subword_scores);
     let mut out = Vec::new();
-    let mut index = 0usize;
-    while index < effective_labels.len() {
-        let tag = effective_labels[index].as_str();
-        let (prefix, entity) = split_bio(tag);
-        if prefix == 'O' || entity.is_empty() {
-            index += 1;
+    let mut open: Option<WordEntity> = None;
+    for word in group_word_pieces(source, subword_spans) {
+        let Some(current) = word_entity(subword_spans, &effective_labels, &effective_scores, &word)
+        else {
+            out.extend(open.take().map(WordEntity::into_span));
+            continue;
+        };
+        match open.as_mut() {
+            Some(span) if current.continues && span.label == current.label => {
+                span.end = current.end;
+                span.score = span.score.min(current.score);
+            }
+            _ => {
+                out.extend(open.replace(current).map(WordEntity::into_span));
+            }
+        }
+    }
+    out.extend(open.map(WordEntity::into_span));
+    out
+}
+
+/// One labelled word, or a run of labelled words being merged into an entity.
+struct WordEntity {
+    start: usize,
+    end: usize,
+    label: &'static str,
+    score: f32,
+    /// The word's first labelled piece is `I-`, so it may extend the previous entity.
+    continues: bool,
+}
+
+impl WordEntity {
+    fn into_span(self) -> RawSpan {
+        RawSpan::new(self.start, self.end, self.label, Some(self.score))
+    }
+}
+
+/// Groups piece indices into words. The model labels WordPieces, but a span
+/// must never start or end inside a word, so the word is the smallest unit a
+/// span may cover. Two pieces belong to one word when they touch and the
+/// characters on both sides of the seam are alphanumeric; this reads the
+/// source text rather than `##` markers so every backend sharing this decoder
+/// gets the same boundaries. Zero-width special tokens are skipped.
+fn group_word_pieces(source: &str, subword_spans: &[(usize, usize)]) -> Vec<Vec<usize>> {
+    let mut words: Vec<Vec<usize>> = Vec::new();
+    let mut previous_end = None;
+    for (index, &(start, end)) in subword_spans.iter().enumerate() {
+        if start >= end {
+            continue;
+        }
+        let joins_previous = previous_end == Some(start)
+            && source
+                .get(..start)
+                .and_then(|head| head.chars().next_back())
+                .is_some_and(char::is_alphanumeric)
+            && source
+                .get(start..)
+                .and_then(|tail| tail.chars().next())
+                .is_some_and(char::is_alphanumeric);
+        match words.last_mut() {
+            Some(word) if joins_previous => word.push(index),
+            _ => words.push(vec![index]),
+        }
+        previous_end = Some(end);
+    }
+    words
+}
+
+/// Labels a whole word from its pieces. Any labelled piece makes the word an
+/// entity, so the word's coverage is a superset of what the piece-level merge
+/// covered (a partial token would leave the rest of the word raw anyway). The
+/// strongest labelled piece picks the entity. The score is the minimum over
+/// the pieces that carry that entity: the entity is only as confident as its
+/// weakest supporting piece, and `O` or other-entity pieces are not evidence
+/// for it.
+fn word_entity(
+    subword_spans: &[(usize, usize)],
+    labels: &[String],
+    scores: &[f32],
+    word: &[usize],
+) -> Option<WordEntity> {
+    let mut first_prefix = None;
+    let mut best: Option<(&'static str, f32)> = None;
+    for &index in word {
+        let (prefix, entity) = split_bio(labels[index].as_str());
+        if prefix == 'O' {
             continue;
         }
         let Some(label) = kiji_entity_label(entity) else {
-            index += 1;
             continue;
         };
-        let (start, mut end) = subword_spans[index];
-        if start == end {
-            index += 1;
-            continue;
+        first_prefix.get_or_insert(prefix);
+        let score = *scores.get(index).unwrap_or(&0.0);
+        if best.is_none_or(|(_, best_score)| score > best_score) {
+            best = Some((label, score));
         }
-        let mut span_score = *effective_scores.get(index).unwrap_or(&0.0);
-        let mut next = index + 1;
-        while next < effective_labels.len() {
-            let (next_prefix, next_entity) = split_bio(effective_labels[next].as_str());
-            if next_prefix == 'I' && next_entity == entity {
-                let (next_start, next_end) = subword_spans[next];
-                if next_start != next_end {
-                    end = next_end;
-                    span_score = span_score.min(*effective_scores.get(next).unwrap_or(&0.0));
-                }
-                next += 1;
-            } else {
-                break;
-            }
-        }
-        out.push(RawSpan::new(start, end, label, Some(span_score)));
-        index = next;
     }
-    out
+    let (label, _) = best?;
+    let score = word
+        .iter()
+        .filter(|&&index| {
+            let (prefix, entity) = split_bio(labels[index].as_str());
+            prefix != 'O' && kiji_entity_label(entity) == Some(label)
+        })
+        .map(|&index| *scores.get(index).unwrap_or(&0.0))
+        .fold(f32::INFINITY, f32::min);
+    Some(WordEntity {
+        start: subword_spans[word[0]].0,
+        end: subword_spans[word[word.len() - 1]].1,
+        label,
+        score,
+        continues: first_prefix == Some('I'),
+    })
 }
 
 fn bridge_joiner_tokens(
@@ -306,7 +383,7 @@ mod label_registry_parity {
     use crate::ner::decode::{softmax_confidence, split_bio};
 
     /// Upstream `id2label` from the pinned model card (see module docs).
-    const UPSTREAM_ID2LABEL: [&str; 9] = [
+    pub(super) const UPSTREAM_ID2LABEL: [&str; 9] = [
         "O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-MISC", "I-MISC",
     ];
 
@@ -321,7 +398,7 @@ mod label_registry_parity {
     // crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/ort.rs @ 963773c,
     // with the only change that the label table is passed in instead of being a
     // module constant, so the same reference can be driven by either table.
-    fn reference_decode(
+    pub(super) fn reference_decode(
         id2label: &[&'static str; 9],
         clean: &str,
         offsets: &[(usize, usize)],
@@ -599,5 +676,293 @@ mod label_registry_parity {
             describe(&permuted),
             describe(&shared),
         );
+    }
+}
+
+/// Word-level span assembly.
+///
+/// The pinned model labels every WordPiece on its own. On German text it
+/// routinely labels continuation pieces (`##em`, `##wort`) and switches entity
+/// inside one word, so a piece-level merge emits suspects that start or end
+/// inside a word and the resolve path tokenizes half a word. These tests drive
+/// the decoder with real tokenizer offsets and model logits
+/// (`fixtures/kiji_pieces.json`, provenance inside the file).
+#[cfg(test)]
+mod word_alignment {
+    use super::label_registry_parity::{reference_decode, UPSTREAM_ID2LABEL};
+    use super::{decode_logits, merge_kiji_bio_spans, RawSpan};
+
+    const NUM_LABELS: usize = 9;
+
+    struct Case {
+        text: String,
+        offsets: Vec<(usize, usize)>,
+        flat: Vec<f32>,
+    }
+
+    fn fixture_case(id: &str) -> Case {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("fixtures/kiji_pieces.json"))
+                .expect("fixture is valid JSON");
+        let case = fixture["cases"]
+            .as_array()
+            .expect("cases array")
+            .iter()
+            .find(|case| case["id"] == id)
+            .unwrap_or_else(|| panic!("fixture case {id}"));
+        let offsets = case["offsets"]
+            .as_array()
+            .expect("offsets")
+            .iter()
+            .map(|pair| {
+                (
+                    pair[0].as_u64().expect("start") as usize,
+                    pair[1].as_u64().expect("end") as usize,
+                )
+            })
+            .collect::<Vec<_>>();
+        let flat = case["logits"]
+            .as_array()
+            .expect("logits")
+            .iter()
+            .flat_map(|row| {
+                row.as_array()
+                    .expect("logit row")
+                    .iter()
+                    .map(|value| value.as_f64().expect("logit") as f32)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        Case {
+            text: case["text"].as_str().expect("text").to_string(),
+            offsets,
+            flat,
+        }
+    }
+
+    fn decode_case(case: &Case) -> Vec<RawSpan> {
+        decode_logits(
+            &case.text,
+            &case.offsets,
+            &case.flat,
+            case.offsets.len(),
+            NUM_LABELS,
+        )
+        .expect("fixture logits decode")
+    }
+
+    fn is_word_char(ch: char) -> bool {
+        ch.is_alphanumeric()
+    }
+
+    /// A span edge at `at` splits a word when the characters on both sides are
+    /// word characters.
+    fn splits_word(text: &str, at: usize) -> bool {
+        let before = text[..at].chars().next_back();
+        let after = text[at..].chars().next();
+        matches!((before, after), (Some(left), Some(right)) if is_word_char(left) && is_word_char(right))
+    }
+
+    fn mid_word_spans<'a>(text: &'a str, spans: &[RawSpan]) -> Vec<(usize, usize, &'a str)> {
+        spans
+            .iter()
+            .filter(|span| splits_word(text, span.start) || splits_word(text, span.end))
+            .map(|span| (span.start, span.end, &text[span.start..span.end]))
+            .collect()
+    }
+
+    fn row(label_id: usize, peak: f32) -> [f32; NUM_LABELS] {
+        let mut out = [0.0; NUM_LABELS];
+        out[label_id] = peak;
+        out
+    }
+
+    fn synthetic(pieces: &[((usize, usize), usize, f32)]) -> (Vec<(usize, usize)>, Vec<f32>) {
+        (
+            pieces.iter().map(|(span, _, _)| *span).collect(),
+            pieces
+                .iter()
+                .flat_map(|(_, id, peak)| row(*id, *peak))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn real_german_document_decodes_to_word_aligned_spans() {
+        let case = fixture_case("dataiku-test-1068-clean");
+        let spans = decode_case(&case);
+        assert!(!spans.is_empty(), "the model still flags entities here");
+        let shredded = mid_word_spans(&case.text, &spans);
+        assert!(
+            shredded.is_empty(),
+            "{} of {} spans start or end inside a word: {shredded:?}",
+            shredded.len(),
+            spans.len()
+        );
+    }
+
+    fn assert_passwort_not_cut(text: &str, spans: &[RawSpan]) {
+        let word = text.find("Passwort").expect("word");
+        let inside = word + 1..word + "Passwort".len();
+        for span in spans {
+            assert!(
+                !inside.contains(&span.start) && !inside.contains(&span.end),
+                "span {}..{} cuts Passwort",
+                span.start,
+                span.end
+            );
+        }
+    }
+
+    #[test]
+    fn passwort_is_never_split() {
+        let case = fixture_case("user-passwort");
+        assert_passwort_not_cut(&case.text, &decode_case(&case));
+
+        // The explorer shape: only the first piece `Pass` fires, `##wo ##rt` stay O.
+        // Offsets are the real tokenizer's for this sentence.
+        let text = "Ihr Passwort ein";
+        let (offsets, flat) = synthetic(&[
+            ((0, 0), 0, 6.0),
+            ((0, 1), 0, 6.0),
+            ((1, 3), 0, 6.0),
+            ((4, 8), 1, 4.0),
+            ((8, 10), 0, 6.0),
+            ((10, 12), 0, 6.0),
+            ((13, 16), 0, 6.0),
+            ((16, 16), 0, 6.0),
+        ]);
+        let spans = decode_logits(text, &offsets, &flat, offsets.len(), NUM_LABELS).unwrap();
+        assert_passwort_not_cut(text, &spans);
+    }
+
+    #[test]
+    fn iban_pieces_become_one_span() {
+        let case = fixture_case("user-canadian-iban");
+        let spans = decode_case(&case);
+        let start = case.text.find("IBAN").expect("word");
+        let touching = spans
+            .iter()
+            .filter(|span| span.start < start + 4 && span.end > start)
+            .map(|span| (span.start, span.end))
+            .collect::<Vec<_>>();
+        assert_eq!(touching, vec![(start, start + 4)]);
+    }
+
+    #[test]
+    fn english_whole_word_entities_are_unchanged() {
+        let case = fixture_case("english-control");
+        let spans = decode_case(&case);
+        let described = spans
+            .iter()
+            .map(|span| (&case.text[span.start..span.end], span.label.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            described,
+            vec![("Alice Smith", "person"), ("Berlin", "location")]
+        );
+    }
+
+    #[test]
+    fn continuation_piece_never_starts_a_span() {
+        // `gh78DeF` tokenized as g ##h ##78 ##De ##F, only the last piece fires.
+        let text = "key gh78DeF end";
+        let (offsets, flat) = synthetic(&[
+            ((0, 0), 0, 6.0),
+            ((0, 3), 0, 6.0),
+            ((4, 5), 0, 6.0),
+            ((5, 6), 0, 6.0),
+            ((6, 8), 0, 6.0),
+            ((8, 10), 0, 6.0),
+            ((10, 11), 1, 6.0),
+            ((12, 15), 0, 6.0),
+            ((15, 15), 0, 6.0),
+        ]);
+        let spans = decode_logits(text, &offsets, &flat, offsets.len(), NUM_LABELS).unwrap();
+        assert_eq!(
+            spans
+                .iter()
+                .map(|span| (span.start, span.end))
+                .collect::<Vec<_>>(),
+            vec![(4, 11)]
+        );
+    }
+
+    #[test]
+    fn entity_switch_inside_a_word_yields_one_span() {
+        // `Firma`: Fi I-ORG, ##rma I-MISC (dataiku-test-1068).
+        let text = "der Firma Avalora";
+        let (offsets, flat) = synthetic(&[
+            ((0, 3), 0, 6.0),
+            ((4, 6), 4, 3.0),
+            ((6, 9), 8, 2.0),
+            ((10, 17), 0, 6.0),
+        ]);
+        let spans = decode_logits(text, &offsets, &flat, offsets.len(), NUM_LABELS).unwrap();
+        assert_eq!(spans.len(), 1, "{spans:?}");
+        assert_eq!((spans[0].start, spans[0].end), (4, 9));
+        assert_eq!(spans[0].label, "organization", "strongest piece decides");
+    }
+
+    #[test]
+    fn multi_word_entity_continues_across_continuation_pieces() {
+        // Anna(B-PER) Me(I-PER) ##ier(I-PER): one person span.
+        let text = "Anna Meier kam";
+        let (offsets, flat) = synthetic(&[
+            ((0, 4), 1, 6.0),
+            ((5, 7), 2, 6.0),
+            ((7, 10), 2, 6.0),
+            ((11, 14), 0, 6.0),
+        ]);
+        let spans = decode_logits(text, &offsets, &flat, offsets.len(), NUM_LABELS).unwrap();
+        assert_eq!(
+            spans
+                .iter()
+                .map(|span| (span.start, span.end, span.label.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(0, 10, "person")]
+        );
+    }
+
+    #[test]
+    fn entity_score_ignores_pieces_that_do_not_carry_the_entity() {
+        // Word `Kundin`: Ku I-ORG (high), ##ndi O (confident O), ##n I-ORG (high).
+        // The O piece's confidence is not entity evidence and must not become
+        // the entity score.
+        let text = "die Kundin kam";
+        let labels = ["O", "I-ORG", "O", "I-ORG", "O"];
+        let spans = [(0, 3), (4, 6), (6, 9), (9, 10), (11, 14)];
+        let scores = [0.99, 0.9, 0.2, 0.8, 0.99];
+        let out = merge_kiji_bio_spans(text, &spans, &labels, &scores);
+        assert_eq!(out, vec![RawSpan::new(4, 10, "organization", Some(0.8))]);
+    }
+
+    #[test]
+    fn word_coverage_is_a_superset_of_the_piece_level_decoder() {
+        for id in [
+            "dataiku-test-1068-clean",
+            "user-passwort",
+            "user-canadian-iban",
+            "english-control",
+        ] {
+            let case = fixture_case(id);
+            let old = reference_decode(
+                &UPSTREAM_ID2LABEL,
+                &case.text,
+                &case.offsets,
+                &case.flat,
+                case.offsets.len(),
+                NUM_LABELS,
+            );
+            let new = decode_case(&case);
+            for piece in &old {
+                for byte in piece.start..piece.end {
+                    assert!(
+                        new.iter().any(|span| span.start <= byte && byte < span.end),
+                        "{id}: byte {byte} covered by the piece-level decoder is uncovered now"
+                    );
+                }
+            }
+        }
     }
 }

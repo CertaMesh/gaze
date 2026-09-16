@@ -256,6 +256,43 @@ which is what prevents a token standing for bytes on both sides of a seam.
 **Cost.** A fallback document whose terminal scan reports anything runs one
 extra model pass. Only documents that reach the `Redact` fallback can.
 
+### Sub-word suspects are never acted on
+
+A name, location or organization suspect whose action span starts or ends
+between two letters or digits is a model firing on part of a word (`Pass` in
+`Passwort`). Tokenizing or deleting it protects nothing whole and hands the
+agent a mangled word, so under `Resolve` and `Redact` no stage acts on it: not
+the first pass, the second batch, the terminal round, `Redact` mode or the
+`Redact` fallback. Its bytes stay, it gets the same `Preserve` audit row as a
+suspect inside a live token, it stays in the returned report, and a
+`LeakReportTelemetry::UnactionableSubword` row (CLI JSON kind
+`UnactionableSubword`) carries its net, class and offsets. `Observe` modes are
+unchanged.
+
+| Rule | Why |
+|------|-----|
+| Judged in the text the net reported on | The terminal round judges at scan time, so a whole word that its own seam deletion later glues to a neighbour is still resolved. |
+| A token's `<`/`>` is a word boundary | A gap starting right after a token is a whole word. |
+| A span touching a token shape is never a sub-word | Foreign-token handling (fallback, `Unjudgeable`) must still see it. |
+| No minimum length | A standalone letter is a whole word and often an initial (`J.`). |
+| Identifier classes are exempt | Their values legitimately sit inside longer strings (`ID12345`). |
+| `FallbackIncomplete` and a second seam finding still deny | A sub-word shape does not excuse a fallback that failed or a deletion outpacing itself. |
+
+The Kiji decoder assembles spans from whole words (any labelled piece labels
+its word), so this guard is defense in depth for other nets and registry models.
+
+**Cost (axis 1).** A net that does not decode whole words (OPF, the Kiji
+subprocess backend, adopter nets) can flag a real name inside a longer word,
+for example `Meier` in `Meiers`. Under `Resolve` with the `Redact` fallback and
+in `Redact` mode that suspect ships raw, with its `Preserve` audit row and
+`UnactionableSubword` row. Under the `Strict` fallback it counts as a residual
+and the document is refused. Earlier releases tokenized or deleted the flagged
+part of the word instead.
+
+**Known limitation.** The Kiji tokenizer truncates input at 512 word pieces and
+the Kiji path does not chunk, so text past that point is not checked by the net
+and no telemetry records it.
+
 ### Locale gating
 
 Each `SafetyNet` declares `supported_locales`. When the session-level locale

@@ -887,6 +887,15 @@ enum LeakTelemetryResponse {
         #[serde(skip_serializing_if = "Option::is_none")]
         field_path: Option<String>,
     },
+    UnactionableSubword {
+        safety_net_id: String,
+        class: String,
+        start: usize,
+        end: usize,
+        document_kind: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        field_path: Option<String>,
+    },
 }
 
 impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
@@ -898,6 +907,20 @@ impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
                 field_path,
             } => Self::LocaleSkipped {
                 safety_net_id: safety_net_id.clone(),
+                document_kind: document_kind_label(*document_kind).to_string(),
+                field_path: field_path.clone(),
+            },
+            LeakReportTelemetry::UnactionableSubword {
+                safety_net_id,
+                class,
+                span,
+                document_kind,
+                field_path,
+            } => Self::UnactionableSubword {
+                safety_net_id: safety_net_id.clone(),
+                class: class.to_canonical_str(),
+                start: span.start,
+                end: span.end,
                 document_kind: document_kind_label(*document_kind).to_string(),
                 field_path: field_path.clone(),
             },
