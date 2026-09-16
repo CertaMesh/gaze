@@ -34,6 +34,7 @@ CONFIG_CHOICES = (
     "pass2-ner",
     "full-stack-kiji-resolve",
     "full-stack-opf-resolve",
+    "full-stack-nym-resolve",
 )
 
 COUNTRY_REGIONS = {
