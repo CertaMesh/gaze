@@ -1962,7 +1962,6 @@ impl Pipeline {
 
     /// Both reversible batches use identical publication, audit and trace ordering.
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_resolution(
         &self,
         target: &mut ProtectionTarget<'_, '_>,

@@ -31,10 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **What this costs:** a fallback document that reports something at the
   terminal scan now runs one extra model pass, and a fresh finding that appears
   only *after* that round ships raw in the output with an honest report, because
-  both bounds are spent. Measured on the v0.15 production corpus this is 42
-  bytes across 16 spans, 0 of them overlapping gold — a measurement on that
-  corpus, not a bound for other documents. Admission is strictly wider than
-  before, so no document that completed under v0.14 can start denying.
+  both bounds are spent. Measured on the v0.15 production corpus: the terminal
+  scans reported 42 bytes across 16 spans that used to deny, of which 37 bytes
+  are now tokenized reversibly and 5 bytes are the one seam-manufactured span
+  the bounded deletion removed; **2 bytes, in one document, ship raw** after the
+  round, and they overlap 0 gold. Those are measurements on that corpus, seed and
+  model bundle, not a bound for other documents, and a shipped byte that overlaps
+  no gold is not proof it is not PII — only that the benchmark does not count it.
+  Admission is strictly wider than before, so no document that completed under
+  v0.14 can start denying.
   Audit rows for the extra round are `decided_by: resolve`, `action: tokenize`
   with the fallback reason attached — the combination that distinguishes them
   from the second batch's rows. The protection trace projects them as an

@@ -317,6 +317,57 @@ fn terminal_deletes_a_seam_manufactured_suspect_once() {
     );
 }
 
+/// Both bounds spent on the same report. The deletion moves every clean offset after it, so the
+/// round's remaining targets are frozen in raw coordinates first and rebased against the document
+/// the deletion left. A rebase that were wrong would mint a token over the wrong bytes — a
+/// restore-breaking token with false provenance — so the original bytes are what this pins.
+#[test]
+fn a_bounded_deletion_rebases_the_round_onto_the_document_it_left() {
+    let doc = Doc::new();
+    let delta = doc.token("delta");
+    let deleted = format!("{} bravo{delta}", doc.alpha);
+    let h = doc.harness(vec![
+        (
+            doc.terminal.clone(),
+            Ok(vec![
+                uncovered(doc.seam_span.clone()),
+                uncovered(doc.delta_span.clone()),
+            ]),
+        ),
+        (deleted.clone(), Ok(vec![])),
+    ]);
+    let (clean, spans, report) = doc
+        .run(&h)
+        .expect("one deletion and one round are both spendable in the same report");
+    let text = text_of(clean);
+    assert_eq!(text, deleted);
+    assert_eq!(
+        spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
+        [0..5, 20..25],
+        "the rebased round must name delta's ORIGINAL bytes, not its pre-deletion offsets"
+    );
+    assert_eq!(
+        doc.session.restore_strict_text(&text).unwrap(),
+        "alpha bravodelta",
+        "both tokens restore their own source bytes"
+    );
+    assert!(
+        report.suspects.iter().any(|s| s.span == doc.seam_span),
+        "the deleted seam suspect must be surfaced"
+    );
+    assert!(h.drained(), "one terminal scan, one settled scan");
+    assert_eq!(
+        h.actions(),
+        [
+            Action::Tokenize,
+            Action::Redact,
+            Action::Redact,
+            Action::Tokenize
+        ],
+        "second batch, fallback deletion, bounded seam deletion, terminal round"
+    );
+}
+
 /// Abutting a seam is not containing it: no byte of the suspect was manufactured by the deletion,
 /// so it is a fresh finding and takes the reversible round. The token it mints must name the
 /// surviving original bytes, never the removed ones.
