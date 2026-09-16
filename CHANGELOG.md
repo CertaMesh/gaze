@@ -35,7 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Audit rows carry `safety_net_id = "nym-small-int8"`, the score, and
     `raw_label = "LABEL>=THRESHOLD"`. Nym is refused through
     `--safety-net-registry`, which would drop the label and threshold.
-  - New benchmark arm `full-stack-nym-resolve`. CHANGELOG_BENCH_PLACEHOLDER
+  - New benchmark arm `full-stack-nym-resolve`. On the 2,910-document
+    population it removes 6,154 leaked gold bytes under scored-label contract v2
+    (20,727 to 14,573) for 526 false-positive bytes, action precision 0.891,
+    one one-way deletion, 2,909 of 2,910 exact restores; timings provisional.
   - Open before any default change: an address-context guard for room and seat
     numbers, a quiet-host latency measurement, and a licence review of the
     Wikipedia-derived (CC-BY-SA) training data.

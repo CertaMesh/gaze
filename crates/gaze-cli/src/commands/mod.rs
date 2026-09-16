@@ -487,7 +487,7 @@ enum SafetyNetAuditCmd {
 pub(crate) enum SafetyNetKind {
     OpenaiFilter,
     KijiDistilbert,
-    /// Nym-small v3 int8, in process (opt-in).
+    // Nym-small v3 int8, in process (opt-in).
     Nym,
 }
 
@@ -500,7 +500,7 @@ pub(crate) enum SafetyNetKind {
 pub(crate) enum SafetyNetBackend {
     OpenaiFilter,
     KijiDistilbert,
-    /// Nym-small v3 int8, in process (opt-in).
+    // Nym-small v3 int8, in process (opt-in).
     Nym,
 }
 

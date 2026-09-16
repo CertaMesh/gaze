@@ -33,7 +33,7 @@ pub(crate) struct Args {
 pub(crate) enum SetupSafetyNet {
     Ner,
     Opf,
-    /// Download and verify the pinned Nym-small int8 bundle (opt-in net).
+    // Downloads and verifies the pinned Nym-small int8 bundle (opt-in net).
     Nym,
 }
 

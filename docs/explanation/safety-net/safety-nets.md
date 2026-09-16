@@ -574,7 +574,26 @@ measured: **6,017 leaked gold bytes bought** under scored-label contract v2,
 backend on the canonical harness (`clean_for_bench --config
 full-stack-nym-resolve`).
 
-REPRODUCTION_PLACEHOLDER
+### Reproduction in process
+
+The same population through `clean_for_bench --config full-stack-nym-resolve`
+(this backend, one intra-op thread) against `pass2-ner` on the same commit:
+
+| Row | Leaked bytes v2 | Bought v2 | False-positive bytes added | Action precision | One-way deletions | Exact restore |
+|---|---:|---:|---:|---:|---:|---:|
+| rules + NER, no net | 20,727 | | | | | 2,910 / 2,910 |
+| `full-stack-nym-resolve` | 14,573 | 6,154 | +526 | 0.891 | 1 | 2,909 / 2,910 |
+
+The 137 bytes more than the probe come from class routing: the probe mapped
+building numbers to `location` and plates to `account_number`, so a span next
+to a rule token of that class resolved against it; with their own classes 42
+more spans tokenize. Timings from that run are provisional (shared host under
+load) and are not a latency claim.
+
+Every residual suspect a post-policy re-scan reports sits inside a Gaze token:
+the model reads token text such as `Custom:building_number` as a building
+number. A suspect inside a live token is never acted on, so bytes and restore
+are unaffected; masking token text before the net reads it is a follow-up.
 
 ### Known gaps and open review items
 
