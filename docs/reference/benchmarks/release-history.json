@@ -86,6 +86,90 @@
           "clean_ms_p95": 195.8646645499999
         }
       }
+    },
+    {
+      "version": "v0.15.0",
+      "commit": "9a3a7884ecae9dd05f618d1a04eb451dd03d7ce8",
+      "date": "2026-09-16",
+      "scorecard": "scorecard-v0.15.0.json",
+      "scorecard_sha256": "872b7d81b07d5b10062139bf174cd3b893e2003ee575d3bb2a53d429580177b7",
+      "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+      "harness_entry": "scripts/bench/run_no_opf_benchmark.py",
+      "dataset": {
+        "repository": "DataikuNLP/kiji-pii-training-data+gaze",
+        "revision": "0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1",
+        "integrity": {
+          "sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "component_sha256": {
+            "dataiku": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+            "negative_corpus": "d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116"
+          }
+        },
+        "evaluated_population": {
+          "documents": 2910,
+          "entities": 14719
+        }
+      },
+      "provenance": {
+        "model_bundles": [
+          {
+            "model_id": "davlan-mbert-ner-hrl-onnx",
+            "expected_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16"
+          },
+          {
+            "model_id": "kiji-distilbert",
+            "expected_sha256": "c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f"
+          }
+        ]
+      },
+      "parameters": {
+        "profile": "full",
+        "sampling_seed": 20260710,
+        "ner_threshold": 0.3
+      },
+      "provisional": false,
+      "note": "Measured on runtime commit 9a3a788; the 0.15.0 release commit changes only version strings, release documentation, a renderer test and a probe lockfile pin, so the released runtime is byte-identical to the measured tree. Quiet-machine proof: zero competing build processes and at least 90% sustained CPU idle across the run, with the rule-floor control arm at 3.81 ms p95 against 3.97 ms for v0.14.0. A bare one-minute load threshold is not meaningful on this host, where load sits near 5 while CPU is 93-95% idle.",
+      "arms": {
+        "rule-floor-extended": {
+          "gold_pii_utf8_bytes": 130282,
+          "surviving_pii_utf8_bytes": 91234,
+          "leak_rate": 0.7002809290615741,
+          "false_positive_utf8_bytes": 5450,
+          "byte_precision": 0.8775225852847319,
+          "zero_leak_document_rate": 0.35223367697594504,
+          "restore_exact_rate": 1.0,
+          "manifest_valid_document_rate": 1.0,
+          "availability_completion_rate": 1.0,
+          "failed_closed_documents": 0,
+          "clean_ms_p95": 3.813197799999999
+        },
+        "pass2-ner": {
+          "gold_pii_utf8_bytes": 130282,
+          "surviving_pii_utf8_bytes": 24289,
+          "leak_rate": 0.18643404307578948,
+          "false_positive_utf8_bytes": 28062,
+          "byte_precision": 0.7906680093991272,
+          "zero_leak_document_rate": 0.4106529209621993,
+          "restore_exact_rate": 1.0,
+          "manifest_valid_document_rate": 1.0,
+          "availability_completion_rate": 1.0,
+          "failed_closed_documents": 0,
+          "clean_ms_p95": 37.2579772
+        },
+        "full-stack-kiji-resolve": {
+          "gold_pii_utf8_bytes": 130282,
+          "surviving_pii_utf8_bytes": 22491,
+          "leak_rate": 0.1726332110345251,
+          "false_positive_utf8_bytes": 168775,
+          "byte_precision": 0.3897478359595901,
+          "zero_leak_document_rate": 0.41237113402061853,
+          "restore_exact_rate": 0.9652920962199313,
+          "manifest_valid_document_rate": 1.0,
+          "availability_completion_rate": 1.0,
+          "failed_closed_documents": 0,
+          "clean_ms_p95": 251.36493559999985
+        }
+      }
     }
   ]
 }

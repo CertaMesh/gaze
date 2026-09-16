@@ -200,17 +200,19 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: current-release -->
 
-**v0.14.0** — measured on the released tree.
+**v0.15.0** — measured on the released tree.
+
+> Measured on runtime commit 9a3a788; the 0.15.0 release commit changes only version strings, release documentation, a renderer test and a probe lockfile pin, so the released runtime is byte-identical to the measured tree. Quiet-machine proof: zero competing build processes and at least 90% sustained CPU idle across the run, with the rule-floor control arm at 3.81 ms p95 against 3.97 ms for v0.14.0. A bare one-minute load threshold is not meaningful on this host, where load sits near 5 while CPU is 93-95% idle.
 
 | Provenance | Value |
 | --- | --- |
-| Release | `v0.14.0` |
-| Commit | `f66a3f2b86691956c596a53273635188971f59e8` |
-| Measured | 2026-09-11 |
+| Release | `v0.15.0` |
+| Commit | `9a3a7884ecae9dd05f618d1a04eb451dd03d7ce8` |
+| Measured | 2026-09-16 |
 | Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) |
 | Harness | [`scripts/bench/run_no_opf_benchmark.py`](../../../scripts/bench/run_no_opf_benchmark.py) |
-| Scorecard | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) |
-| Scorecard sha256 | `364f6643ffa6e7a5793ee2924ddfe0b834ce0cebe2a4b223fa3689456d686c81` |
+| Scorecard | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) |
+| Scorecard sha256 | `872b7d81b07d5b10062139bf174cd3b893e2003ee575d3bb2a53d429580177b7` |
 | Corpus | `DataikuNLP/kiji-pii-training-data+gaze` @ `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1` |
 | Corpus sha256 | `11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2` |
 | Corpus component `dataiku` | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
@@ -224,9 +226,9 @@ Two consequences worth stating plainly:
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `rule-floor-extended` | 130,282 | 93,850 | 72.0360% | 5,423 | 0.870434 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 3.97 |
-| `pass2-ner` | 130,282 | 27,000 | 20.7243% | 28,030 | 0.786539 | 40.4467% | 100.0000% | 100.0000% | 100.0000% | 0 | 76.44 |
-| `full-stack-kiji-resolve` **(shipped default)** | 130,282 | 25,179 | 19.3265% | 168,276 | 0.384459 | 40.6186% | 78.4192% | 100.0000% | 100.0000% | 0 | 195.86 |
+| `rule-floor-extended` | 130,282 | 91,234 | 70.0281% | 5,450 | 0.877523 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 3.81 |
+| `pass2-ner` | 130,282 | 24,289 | 18.6434% | 28,062 | 0.790668 | 41.0653% | 100.0000% | 100.0000% | 100.0000% | 0 | 37.26 |
+| `full-stack-kiji-resolve` **(shipped default)** | 130,282 | 22,491 | 17.2633% | 168,775 | 0.389748 | 41.2371% | 96.5292% | 100.0000% | 100.0000% | 0 | 251.36 |
 
 <!-- END GENERATED: current-release -->
 
@@ -236,19 +238,25 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: charts -->
 
-**Surviving PII bytes per arm — v0.14.0.** Lower is better; the goal is zero.
+**Surviving PII bytes per arm — v0.15.0.** Lower is better; the goal is zero.
 
 ```mermaid
 xychart-beta
-    title "Surviving PII bytes per arm - v0.14.0"
+    title "Surviving PII bytes per arm - v0.15.0"
     x-axis ["rule-floor-extended", "pass2-ner", "full-stack-kiji-resolve"]
-    y-axis "Surviving PII bytes (lower is better)" 0 --> 104000
-    bar [93850, 27000, 25179]
+    y-axis "Surviving PII bytes (lower is better)" 0 --> 101000
+    bar [91234, 24289, 22491]
 ```
 
 **Trend across releases — `full-stack-kiji-resolve`.**
 
-> One measured release so far (1 point). The trend chart renders from two releases onward.
+```mermaid
+xychart-beta
+    title "Surviving PII bytes on full-stack-kiji-resolve across releases"
+    x-axis ["v0.14.0", "v0.15.0"]
+    y-axis "Surviving PII bytes (lower is better)" 0 --> 28000
+    line [25179, 22491]
+```
 
 <!-- END GENERATED: charts -->
 
@@ -265,6 +273,7 @@ machine-readable evidence.
 | Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |
 | --- | --- | --- | --- | --- | ---: |
 | v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | 25,179 |
+| v0.15.0 | 2026-09-16 | `9a3a788` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | 22,491 |
 
 <!-- END GENERATED: history -->
 
