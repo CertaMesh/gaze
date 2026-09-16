@@ -165,6 +165,61 @@ printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97},{"lab
     assert_eq!(spans[0].model_name, "openai-privacy-filter");
 }
 
+// OPF reports offsets as Python `str` indices (Unicode scalar values). The fixture puts
+// multibyte text before, inside, and after the spans: umlauts and ß, an NFD combining acute
+// accent, an emoji, and an NBSP. Read as bytes, every one of these spans lands on the wrong text.
+const MULTIBYTE_CLEAN: &str =
+    "Grüße an Jürgen Müller: cafe\u{301} \u{1F600}\u{a0}bob@example.invalid, gezeichnet Zoë";
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn character_offsets_are_converted_to_clean_text_bytes() {
+    let opf = script(
+        "opf-char-offsets",
+        r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_person","start":9,"end":22},{"label":"private_email","start":32,"end":51},{"label":"private_person","start":64,"end":67}],"redacted_text":""}'
+"#,
+    )
+    .unwrap();
+
+    let spans = backend(opf).infer(MULTIBYTE_CLEAN).unwrap();
+
+    let texts = spans
+        .iter()
+        .map(|span| &MULTIBYTE_CLEAN[span.start..span.end])
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["Jürgen Müller", "bob@example.invalid", "Zoë"]);
+    assert_eq!(
+        spans
+            .iter()
+            .map(|span| (span.start, span.end))
+            .collect::<Vec<_>>(),
+        [(11, 26), (41, 60), (73, 77)]
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn character_offset_past_the_last_character_fails_closed() {
+    // 70 is inside the 77 UTF-8 bytes but past the 67 characters: only a byte reading accepts it.
+    let opf = script(
+        "opf-char-offsets-oob",
+        r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '[{"label":"private_person","start":64,"end":70}]'
+"#,
+    )
+    .unwrap();
+
+    let error = backend(opf).infer(MULTIBYTE_CLEAN).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SafetyNetError::InvalidOutput { ref message } if message == "opf returned out-of-bounds span"
+    ));
+}
+
 #[test]
 #[file_serial(gaze_subprocess)]
 fn unknown_valid_label_fails_closed() {

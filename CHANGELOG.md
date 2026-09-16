@@ -152,6 +152,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The OpenAI Privacy Filter safety net now reads OPF span offsets as
+  characters, not bytes.** Shipped defect since the `openai_filter` backend
+  landed in v0.6.0: OPF reports `start`/`end` as Python string indices (Unicode
+  characters), and the subprocess adapter used them as UTF-8 byte offsets into
+  the clean text. Any multibyte character before a span (an umlaut, `ß`, `€`, an
+  en dash, an NBSP) shifted it left. The shifted span then either failed closed
+  (`opf returned out-of-bounds span`, or a clean-to-raw mapping failure when it
+  landed inside a Gaze token) or, **when it happened to land on valid
+  boundaries, silently checked and protected the wrong bytes**. On the
+  full EN/DE population 624 of 655 OPF-arm refusals were on documents with
+  non-ASCII text. The adapter now converts character offsets to byte offsets
+  once, against the exact text sent to OPF; an offset past the last character
+  still fails closed as `InvalidOutput`. The Python OPF bench scorer
+  (`scripts/bench/safety_net_bench_lib.py`) had the same defect and is fixed.
+
 - **The Kiji safety net no longer tokenizes or deletes parts of words.** Shipped
   defect since at least v0.14.0: the shared Kiji decoder (ORT, tract, candle)
   merged BIO labels per WordPiece, so the pinned English model's piece-level

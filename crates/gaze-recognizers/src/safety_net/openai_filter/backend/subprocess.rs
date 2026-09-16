@@ -409,9 +409,44 @@ impl OpenAiFilterBackend for SubprocessOpenAiFilterBackend {
     fn infer(&self, clean: &str) -> Result<Vec<RawSpan>, SafetyNetError> {
         let stdout = self.run(clean)?;
         let output = parse_opf_output(&stdout)?;
-        let spans = output.into_raw_spans()?;
+        let spans = character_spans_to_byte_spans(output.into_raw_spans()?, clean)?;
         normalize_raw_spans(spans, clean)
     }
+}
+
+/// OPF reports `start`/`end` as Python `str` indices (Unicode scalar values), while `RawSpan`
+/// and everything after it use UTF-8 byte offsets into `clean`. Convert here, once, against the
+/// exact text written to OPF's stdin. Read as bytes instead, every span after a multibyte
+/// character shifts left: it either fails the char-boundary check or silently covers the wrong
+/// text. An offset past the last character fails closed.
+fn character_spans_to_byte_spans(
+    spans: Vec<RawSpan>,
+    clean: &str,
+) -> Result<Vec<RawSpan>, SafetyNetError> {
+    let byte_offsets = clean
+        .char_indices()
+        .map(|(byte, _)| byte)
+        .chain(std::iter::once(clean.len()))
+        .collect::<Vec<_>>();
+    let to_byte = |character: usize| {
+        byte_offsets
+            .get(character)
+            .copied()
+            .ok_or_else(|| SafetyNetError::InvalidOutput {
+                message: "opf returned out-of-bounds span".to_string(),
+            })
+    };
+
+    spans
+        .into_iter()
+        .map(|span| {
+            Ok(RawSpan {
+                start: to_byte(span.start)?,
+                end: to_byte(span.end)?,
+                ..span
+            })
+        })
+        .collect()
 }
 
 #[derive(Debug, Deserialize)]

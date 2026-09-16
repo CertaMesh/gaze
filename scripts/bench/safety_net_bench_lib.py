@@ -284,7 +284,10 @@ def run_opf(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]:
         pii_class = OPF_TO_GAZE.get(label)
         if pii_class is None:
             raise RuntimeError(f"{fixture_id}: unsupported OPF label {label!r}")
-        spans.append(Span(int(raw["start"]), int(raw["end"]), pii_class))
+        # OPF offsets are character indices; gold spans are UTF-8 byte offsets.
+        start = len(text[: int(raw["start"])].encode("utf-8"))
+        end = len(text[: int(raw["end"])].encode("utf-8"))
+        spans.append(Span(start, end, pii_class))
     return spans
 
 
