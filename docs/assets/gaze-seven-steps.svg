@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 430" width="960" height="430" role="img" aria-labelledby="t d">
+  <title id="t">The seven steps inside Gaze</title>
+  <desc id="d">Steps 1 to 4 (normalize, recognize, resolve, swap) form the deterministic floor. Step 5, the optional safety net, rereads the output; step 6, the output check, turns each suspect into a placeholder, deletes it, or refuses the document. The text then goes to the AI model, and step 7 restores the real values in the reply.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5B6B7C"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16202C; }
+    .num { font-size: 13px; font-weight: 700; fill: #0E7C7B; }
+    .name { font-size: 17px; font-weight: 600; }
+    .sub { font-size: 13px; fill: #4A5866; }
+    .group { font-size: 13px; font-weight: 700; fill: #0E7C7B; letter-spacing: 0.06em; }
+    .step { fill: #FFFFFF; stroke: #5B6B7C; stroke-width: 1.5; }
+    .model { fill: #F3F5F7; stroke: #5B6B7C; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .flow { fill: none; stroke: #5B6B7C; stroke-width: 1.8; }
+  </style>
+
+  <rect x="1" y="1" width="958" height="428" rx="16" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="2"/>
+
+  <!-- Row 1: deterministic floor -->
+  <rect x="24" y="24" width="912" height="170" rx="12" fill="#E8F4F3" stroke="#0E7C7B" stroke-width="1.5"/>
+  <text class="group" x="44" y="50">DETERMINISTIC FLOOR · SAME INPUT, SAME OUTPUT</text>
+
+  <rect class="step" x="44" y="68" width="190" height="106" rx="10"/>
+  <text class="num" x="60" y="92">1</text>
+  <text class="name" x="60" y="116">Normalize</text>
+  <text class="sub" x="60" y="140">Tidy Unicode and spacing,</text>
+  <text class="sub" x="60" y="158">keep a map to the original</text>
+
+  <rect class="step" x="270" y="68" width="190" height="106" rx="10"/>
+  <text class="num" x="286" y="92">2</text>
+  <text class="name" x="286" y="116">Recognize</text>
+  <text class="sub" x="286" y="140">Bundled rules plus one</text>
+  <text class="sub" x="286" y="158">name model propose spans</text>
+
+  <rect class="step" x="496" y="68" width="190" height="106" rx="10"/>
+  <text class="num" x="512" y="92">3</text>
+  <text class="name" x="512" y="116">Resolve</text>
+  <text class="sub" x="512" y="140">Overlaps: one winner,</text>
+  <text class="sub" x="512" y="158">losers are logged</text>
+
+  <rect class="step" x="722" y="68" width="194" height="106" rx="10"/>
+  <text class="num" x="738" y="92">4</text>
+  <text class="name" x="738" y="116">Swap</text>
+  <text class="sub" x="738" y="140">Placeholder in the text,</text>
+  <text class="sub" x="738" y="158">real value in the manifest</text>
+
+  <line class="flow" x1="234" y1="121" x2="266" y2="121" marker-end="url(#arrow)"/>
+  <line class="flow" x1="460" y1="121" x2="492" y2="121" marker-end="url(#arrow)"/>
+  <line class="flow" x1="686" y1="121" x2="718" y2="121" marker-end="url(#arrow)"/>
+
+  <!-- Down from step 4 to step 5 -->
+  <path class="flow" d="M819 174 V210 H200 V240" marker-end="url(#arrow)"/>
+
+  <!-- Row 2 -->
+  <text class="group" x="44" y="232">SECOND OPINION</text>
+
+  <rect class="step" x="44" y="244" width="190" height="124" rx="10"/>
+  <text class="num" x="60" y="268">5</text>
+  <text class="name" x="60" y="292">Safety net</text>
+  <text class="sub" x="60" y="316">Optional second model</text>
+  <text class="sub" x="60" y="334">rereads the output and</text>
+  <text class="sub" x="60" y="352">flags suspects, edits nothing</text>
+
+  <rect class="step" x="270" y="244" width="190" height="124" rx="10"/>
+  <text class="num" x="286" y="268">6</text>
+  <text class="name" x="286" y="292">Output check</text>
+  <text class="sub" x="286" y="316">Each suspect becomes a</text>
+  <text class="sub" x="286" y="334">placeholder, is deleted, or</text>
+  <text class="sub" x="286" y="352">the document is refused</text>
+
+  <rect class="model" x="496" y="244" width="190" height="124" rx="10"/>
+  <text class="name" x="512" y="292">AI model</text>
+  <text class="sub" x="512" y="316">Sees placeholders only,</text>
+  <text class="sub" x="512" y="334">writes its reply with them</text>
+
+  <rect class="step" x="722" y="244" width="194" height="124" rx="10"/>
+  <text class="num" x="738" y="268">7</text>
+  <text class="name" x="738" y="292">Restore</text>
+  <text class="sub" x="738" y="316">Placeholders become the</text>
+  <text class="sub" x="738" y="334">originals. Unknown ones</text>
+  <text class="sub" x="738" y="352">are refused, never guessed</text>
+
+  <line class="flow" x1="234" y1="306" x2="266" y2="306" marker-end="url(#arrow)"/>
+  <line class="flow" x1="460" y1="306" x2="492" y2="306" marker-end="url(#arrow)"/>
+  <line class="flow" x1="686" y1="306" x2="718" y2="306" marker-end="url(#arrow)"/>
+
+  <text class="sub" x="480" y="404" text-anchor="middle">Steps 1 to 6 run before anything leaves your server. Step 7 runs on the reply, with the manifest that never left.</text>
+</svg>
