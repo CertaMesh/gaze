@@ -17,6 +17,35 @@ inputs and update audit consumers to expect actual recognizer/rule rows instead
 of `prefix_cache` provenance. Token mappings and manifest restoration retain their
 normal behavior. See [the safety rationale](docs/explanation/pipeline/tier4-pipeline-gating.md).
 
+## Pending: credential recognizers move to the opt-in `secrets` rulepack
+
+**Action required if you rely on Gaze to tokenize credentials.** Credentials
+are not PII, so the `core` rulepack (0.6.0) no longer detects them:
+
+- `security_token.anchored` (`custom:security_token`: AWS access keys, JWTs,
+  cue-anchored API keys and tokens) and `password.field` (`custom:password`:
+  `password:` / `passwort:` records) moved unchanged into the bundled `secrets`
+  rulepack. It is opt-in and never loaded by default.
+- `username.field` (`custom:username`) is removed. No bundled recognizer emits
+  `custom:username` any more; keep a custom recognizer if you need it.
+
+To keep the previous credential protection, load `secrets` next to `core`:
+
+```toml
+[policy.rulepacks]
+bundled = ["core", "secrets"]
+```
+
+or, for one CLI run, `gaze clean --rulepack-bundled core,secrets`. Library
+callers using `CorePipelineConfig` add
+`.with_bundled_rulepack("secrets")`.
+
+Manifests written before this change still restore: token spellings and the
+restore contract are unchanged, only which spans get detected differs. Policy
+rules that name `custom:security_token`, `custom:password` or
+`custom:username` still parse; without `secrets` loaded the first two simply
+never match.
+
 ## How this file is organized
 
 - One H2 section per `MAJOR.MINOR` release in **reverse-chronological** order.

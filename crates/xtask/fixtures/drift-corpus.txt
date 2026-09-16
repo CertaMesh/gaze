@@ -29,3 +29,7 @@ Sequential digit run 000111222333 remains event metadata.
 ULID-like ID 01ARZ3NDEKTSV4RRFFQ69G5FAV remains tenant metadata.
 Cross-locale postal shape DE-under-US D80331 and US-under-DE U10001 are documented negatives.
 Email local-part embedded numerics user123@example.invalid should tokenize only as email.
+
+# Opt-in `secrets` bundle fixtures: tokenized only when `secrets` is loaded, inert under `core`.
+AWS documentation example key AKIAIOSFODNN7EXAMPLE is non-functional.
+password: synthetic-drift-credential

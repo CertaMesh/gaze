@@ -137,6 +137,7 @@ Loading failures are policy configuration failures in the CLI path.
 |------|------|---------|
 | `core` | [`embedded/core.toml`](embedded/core.toml) | Unified bundled recognizer set. Email/name, parser-backed phone, IBAN, payment-card, IP, ETH, and postal recognizers now live in one bundle. Each recognizer declares `safety_tier = "safe_default"`, `"locale_gated"`, or `"opt_in"` and `locale_basis = "document"` or `"format"`. Format-basis recognizers ignore the document locale for eligibility. |
 | `core-extended` | alias of `core` | Deprecated since v0.8.0 and scheduled for removal in v0.10.0. CLI use emits a warning and preserves v0.8.x compatibility by auto-activating locale-gated recognizers. |
+| `secrets` | [`embedded/secrets.toml`](embedded/secrets.toml) | Opt-in credential recognizers (`security_token.anchored`, `password.field`). Credentials are not PII, so this bundle is never part of a default activation; load it by name next to `core`. |
 | `locale-de` | [`embedded/locale-de.toml`](embedded/locale-de.toml) | DACH locale metadata such as German email headers. |
 | `locale-en` | [`embedded/locale-en.toml`](embedded/locale-en.toml) | English locale metadata such as English email headers. |
 
@@ -265,15 +266,18 @@ surface without making it part of the default public runtime.
 
 ## Explicit birth-date and credential fields
 
-The embedded `gaze-core` rulepack version **0.5.3** contains 39 recognizers.
-Three project-authored, globally active `safe_default` rules add narrow EN/DE
-field recognition through the existing assembly and `RegexDetector` machinery:
+The embedded `gaze-core` rulepack version **0.6.0** contains 39 recognizers.
+Two project-authored, globally active `safe_default` rules add narrow EN/DE
+field recognition through the existing assembly and `RegexDetector` machinery.
+`birth_date.cue` ships in `core`. `password.field` ships in the opt-in
+`secrets` bundle, because credentials are not PII; load it with
+`bundled = ["core", "secrets"]`. The former `username.field` rule was removed
+in core 0.6.0.
 
-| Rule / custom class | Complete, case-insensitive cues |
-| --- | --- |
-| `birth_date.cue` / `custom:birth_date` | `date of birth`, `birth date`, `birthdate`, `DOB`, `Geburtsdatum` |
-| `password.field` / `custom:password` | `password`, `passphrase`, `passwort`, `kennwort` |
-| `username.field` / `custom:username` | `username`, `user name`, `login name`, `benutzername`, `nutzername`, `Anmeldename` |
+| Rule / custom class | Bundle | Complete, case-insensitive cues |
+| --- | --- | --- |
+| `birth_date.cue` / `custom:birth_date` | `core` | `date of birth`, `birth date`, `birthdate`, `DOB`, `Geburtsdatum` |
+| `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
 
 ### Supported grammar
 
@@ -283,7 +287,7 @@ optional spaces/tabs, then LF, CRLF or EOF. Adjacent records work independently.
 Multiword cues use the literal spaces shown above. This is string recognition,
 not JSON/schema parsing: `DetectContext.fields` remains a reserved unit value.
 
-Password and username values are either an unquoted atom without whitespace,
+Password values are either an unquoted atom without whitespace,
 quotes or backslashes, or paired single/double quotes around the full value.
 Quoted values permit spaces and only two escape forms: escaped matching quote
 and escaped backslash. Quotes and line separators stay outside the capture;

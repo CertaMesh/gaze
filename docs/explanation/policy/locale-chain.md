@@ -95,7 +95,8 @@ format-basis rows, they record the identifier's format provenance.
 | `core-extended` | `postal.de` | `custom:postal_code` | document | `de-DE` | None |
 | `core-extended` | `postal.us` | `custom:postal_code` | document | `en-US` | None |
 | `core` | `url.anchored` | `custom:url` | document | `global` | None |
-| `core` | `security_token.anchored` | `custom:security_token` | document | `global` | None |
+| `secrets` (opt-in) | `security_token.anchored` | `custom:security_token` | document | `global` | None |
+| `secrets` (opt-in) | `password.field` | `custom:password` | document | `global` | None |
 | NER artifact | `ner` | `Name` | document | Policy-selected NER locale, or any locale when unset | None |
 
 The NER recognizer keeps semantic `recognizer_id = "ner"` for registry

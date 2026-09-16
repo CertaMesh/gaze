@@ -1,7 +1,7 @@
 # Redaction classes and recognizers
 
 This is the canonical inventory of what Gaze can detect through the embedded
-`core` and `core-extended` names. It covers the emitted classes, every bundled
+`core` and `core-extended` names and the opt-in `secrets` bundle. It covers the emitted classes, every bundled
 recognizer, validator and normalizer support, collision precedence, conflict
 resolution, deterministic gaps, and no-policy activation.
 
@@ -20,7 +20,15 @@ compatibility name for the same embedded `core.toml` bytes
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
 The shared payload currently contains exactly 39 recognizer specs
-(`crates/gaze-recognizers/src/lib.rs:62-110`).
+(`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
+
+The opt-in `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
+carries the two credential recognizers, `security_token.anchored` and
+`password.field`. Credentials are not PII, so `secrets` is never part of a
+default activation: its rows below are inert until a caller loads it by name
+with `[policy.rulepacks] bundled = ["core", "secrets"]` or
+`--rulepack-bundled core,secrets`. The former `username.field` recognizer was
+removed in core 0.6.0 and nothing emits `custom:username`.
 
 ## PII classes and resolver priority
 
@@ -98,15 +106,14 @@ See [Validator Veto](../explanation/detection/validator-veto.md) and
 | `core, core-extended` | `postal.gb` | `regex` | UK postcodes across all six Royal Mail outward forms plus `GIR 0AA`, followed by a `9AA` inward code over the official inward alphabet; space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE separator; not matched when preceded by `#` | `custom:postal_code` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.80 | 72 | `crates/gaze-recognizers/embedded/core.toml:841-863` |
 | `core, core-extended` | `postal.ie` | `regex` | Irish Eircodes: routing key including `D6W`, plus a four-character identifier over the restricted Eircode alphabet that must carry at least one letter | `custom:postal_code` | `en-IE` | `none` | `none` | `safe_default` | yes | 0.80 | 72 | `crates/gaze-recognizers/embedded/core.toml:893-914` |
 | `core, core-extended` | `url.anchored` | `regex` | URLs beginning with `http://`, `https://`, or `www.` through the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 | `crates/gaze-recognizers/embedded/core.toml:928-955` |
-| `core, core-extended` | `security_token.anchored` | `regex` | Cue-anchored credential values plus structurally prefixed AWS access keys and three-segment JWTs | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 87 | `crates/gaze-recognizers/embedded/core.toml:985-1043` |
 | `core, core-extended` | `ssn.de_cue` | `regex` | Cue-anchored SSN values after German social-insurance cues (Sozialversicherungsnummer, SV-Nummer) in dashed, dotted, or 9 to 11 digit form; format basis; DACH provenance describes cue vocabulary until native SVNR/AHV shapes ship in #2926 | `custom:ssn` | `de-DE, de-AT, de-CH` | `none` | `none` | `safe_default` | yes | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:1116-1143` |
 | `core, core-extended` | `tax_number.cue_anchored` | `regex` | Cue-anchored tax numbers with a three-digit lead and separated digit groups after German or English tax cues; bare digit runs and the checksummed 2-3-3-3 Steuer-ID shape are excluded | `custom:tax_number` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 | `crates/gaze-recognizers/embedded/core.toml:1184-1210` |
 | `core, core-extended` | `driver_license.cue_anchored` | `regex` | Letter-led alphanumeric licence numbers after German or English driving-licence cues | `custom:driver_license` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 83 | `crates/gaze-recognizers/embedded/core.toml:1224-1245` |
 | `core, core-extended` | `national_id.cue_anchored` | `regex` | Letter-led, digit-grouped, 9 to 13 digit, or Swiss AHV (`756.dddd.dddd.dd`) identifiers after German or English national-ID / identity-card / AHV cues | `custom:national_id` | `global` | `none` | `none` | `safe_default` | yes | 0.82 | 82 | `crates/gaze-recognizers/embedded/core.toml` (`id = "national_id.cue_anchored"`) |
 | `core, core-extended` | `passport.cue_anchored` | `regex` | Letter-led alphanumeric, Personalausweis-silhouette, or 9-digit passport numbers after passport / Reisepass cues | `custom:passport` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 | `crates/gaze-recognizers/embedded/core.toml` (`id = "passport.cue_anchored"`) |
 | `core, core-extended` | `birth_date.cue` | `regex` | Date-shaped values after explicit EN/DE birth-date field labels or born-on cues; format recognition only, no calendar-validity claim | `custom:birth_date` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 | `crates/gaze-recognizers/embedded/core.toml` (`id = "birth_date.cue"`) |
-| `core, core-extended` | `password.field` | `regex` | Values in explicit EN/DE password or passphrase records; 1 to 256 normalized grammar units, with matching quoted or plain scalar syntax; not a raw-byte ceiling | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 | `crates/gaze-recognizers/embedded/core.toml` (`id = "password.field"`) |
-| `core, core-extended` | `username.field` | `regex` | Values in explicit EN/DE username or login-name records; 1 to 256 normalized grammar units, with matching quoted or plain scalar syntax; not a raw-byte ceiling | `custom:username` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 | `crates/gaze-recognizers/embedded/core.toml` (`id = "username.field"`) |
+| `secrets` | `security_token.anchored` | `regex` | Cue-anchored credential values plus structurally prefixed AWS access keys and three-segment JWTs | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 87 | `crates/gaze-recognizers/embedded/secrets.toml` (`id = "security_token.anchored"`) |
+| `secrets` | `password.field` | `regex` | Values in explicit EN/DE password or passphrase records; 1 to 256 normalized grammar units, with matching quoted or plain scalar syntax; not a raw-byte ceiling | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 | `crates/gaze-recognizers/embedded/secrets.toml` (`id = "password.field"`) |
 <!-- redaction-classes-gate:recognizers:end -->
 
 ## Closed validator and normalizer sets
@@ -312,8 +319,8 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, password.field, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, username.field, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1225`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, password.field, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.ca, postal.de, postal.gb, postal.ie, postal.us, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, username.field, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1225`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.ca, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate
@@ -366,7 +373,7 @@ actually evidenced. Two consequences follow, and both are deliberate:
   The closing quote at byte 21 sits outside the union and stays in the clear.
   See
   [`crates/gaze-recognizers/tests/explicit_field_collision_control.rs`](../../crates/gaze-recognizers/tests/explicit_field_collision_control.rs),
-  which pins exactly that geometry on the real `core` rulepack.
+  which pins exactly that geometry on the real `core` and opt-in `secrets` rulepacks.
 
 ### What changes in the token stream
 
