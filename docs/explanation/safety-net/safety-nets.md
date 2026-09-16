@@ -281,6 +281,18 @@ unchanged.
 The Kiji decoder assembles spans from whole words (any labelled piece labels
 its word), so this guard is defense in depth for other nets and registry models.
 
+**Cost (axis 1).** A net that does not decode whole words (OPF, the Kiji
+subprocess backend, adopter nets) can flag a real name inside a longer word,
+for example `Meier` in `Meiers`. Under `Resolve` with the `Redact` fallback and
+in `Redact` mode that suspect ships raw, with its `Preserve` audit row and
+`UnactionableSubword` row. Under the `Strict` fallback it counts as a residual
+and the document is refused. Earlier releases tokenized or deleted the flagged
+part of the word instead.
+
+**Known limitation.** The Kiji tokenizer truncates input at 512 word pieces and
+the Kiji path does not chunk, so text past that point is not checked by the net
+and no telemetry records it.
+
 ### Locale gating
 
 Each `SafetyNet` declares `supported_locales`. When the session-level locale

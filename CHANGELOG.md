@@ -170,7 +170,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mislabels (`verpflichtet`, `Hauptniederlassung`) are now tokenized whole
   instead of in pieces, and the fallback deletes whole mislabelled words
   (80 bytes, none gold) instead of pieces (54 bytes). Model precision on German
-  is unchanged and tracked separately.
+  is unchanged and tracked separately. **Known limitations:** a net that does
+  not decode whole words (OPF, the Kiji subprocess backend, adopter nets) can
+  still report a sub-word name, location or organization suspect; under
+  `Resolve` with the `Redact` fallback and in `Redact` mode it now ships raw
+  with a `Preserve` audit row and an `UnactionableSubword` row where earlier
+  releases tokenized or deleted part of the word, and under the `Strict`
+  fallback the document is refused. The Kiji tokenizer truncates input at 512
+  word pieces and the net does not chunk, so text past that point is not
+  checked by the net and no telemetry says so.
 - Custom class names that normalize to empty (for example `custom:!!!`) are now
   a typed load-time error. `PiiClass::custom` returns `Result<PiiClass,
   EmptyCustomClassName>`; callers must handle invalid names. Live and staged
