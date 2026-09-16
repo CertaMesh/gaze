@@ -1,3 +1,79 @@
+//! Recognizer registry: the single chokepoint every detector passes through.
+//!
+//! Every type an out-of-crate recognizer needs is re-exported at the crate root, including
+//! [`DetectError`] — the error half of [`Recognizer::detect`]'s return type. Adopters who do
+//! not depend on `gaze-types` directly can therefore write the full signature with `gaze::`
+//! paths alone.
+//!
+//! ```
+//! use gaze::{Candidate, ConflictTier, DetectContext, DetectError, PiiClass, Recognizer};
+//!
+//! /// Recognizes a tenant-specific order identifier such as `ORD-4471`.
+//! struct OrderIdRecognizer {
+//!     class: PiiClass,
+//! }
+//!
+//! impl Recognizer for OrderIdRecognizer {
+//!     fn id(&self) -> &str {
+//!         "custom.order_id"
+//!     }
+//!
+//!     fn supported_class(&self) -> &PiiClass {
+//!         &self.class
+//!     }
+//!
+//!     fn token_family(&self) -> &str {
+//!         "order_id"
+//!     }
+//!
+//!     fn detect(
+//!         &self,
+//!         input: &str,
+//!         _ctx: &DetectContext<'_>,
+//!     ) -> Result<Vec<Candidate>, DetectError> {
+//!         // Fail closed: a backend that cannot scan reports an error instead of
+//!         // returning "nothing found", which would read as a clean document.
+//!         if input.len() > 1_000_000 {
+//!             return Err(DetectError::backend(self.id(), "input exceeds scan limit"));
+//!         }
+//!
+//!         let mut candidates = Vec::new();
+//!         for (start, _) in input.match_indices("ORD-") {
+//!             let digits = input[start + 4..]
+//!                 .chars()
+//!                 .take_while(char::is_ascii_digit)
+//!                 .count();
+//!             if digits == 0 {
+//!                 continue;
+//!             }
+//!             candidates.push(Candidate::new(
+//!                 start..start + 4 + digits,
+//!                 self.class.clone(),
+//!                 self.id(),
+//!                 0.9,
+//!                 100,
+//!                 None,
+//!                 self.token_family(),
+//!                 self.id(),
+//!                 ConflictTier::None,
+//!                 Vec::new(),
+//!             ));
+//!         }
+//!         Ok(candidates)
+//!     }
+//! }
+//!
+//! let recognizer = OrderIdRecognizer {
+//!     class: PiiClass::Custom("OrderId".to_string()),
+//! };
+//! let dictionaries = gaze::DictionaryBundle::default();
+//! let ctx = DetectContext::new(&[], &dictionaries);
+//!
+//! let found = recognizer.detect("ship ORD-4471 today", &ctx).unwrap();
+//! assert_eq!(found.len(), 1);
+//! assert_eq!(found[0].span, 5..13);
+//! ```
+
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
