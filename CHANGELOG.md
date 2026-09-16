@@ -167,6 +167,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still fails closed as `InvalidOutput`. The Python OPF bench scorer
   (`scripts/bench/safety_net_bench_lib.py`) had the same defect and is fixed.
 
+  Measured on the fixed 300-document EN/DE subset (`mode-opf-resolve-redact`,
+  contract v2): refusals fall from **75 to 5**, completed documents from 225
+  to 295. On the 225 documents that completed both before and after, leaked
+  bytes fall from 373 to 350 and false-positive bytes from 2,669 to 2,628,
+  which is the wrong-bytes effect going away. The 70 newly completed documents
+  leak 128 of 4,289 gold bytes. No document went from completed to refused.
+  The 5 remaining refusals include pure-ASCII documents and have a separate
+  cause.
+
 - **The Kiji safety net no longer tokenizes or deletes parts of words.** Shipped
   defect since at least v0.14.0: the shared Kiji decoder (ORT, tract, candle)
   merged BIO labels per WordPiece, so the pinned English model's piece-level
