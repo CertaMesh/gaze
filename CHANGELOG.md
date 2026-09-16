@@ -85,11 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SECURITYTOKEN` are unscored, so leaked PII bytes do not move; `USERNAME`
   stays scored and loses at most about 9 bytes of rule coverage.
 
-- [bundle-tokenization-drift] The `core` snapshot records rulepack version
-  0.6.0 and the extended drift corpus hash; its detection entries are
-  unchanged, which proves the new credential fixture lines stay inert under
-  `core`. The new `secrets` snapshot pins exactly one `security_token.anchored`
-  and one `password.field` detection on those lines.
+- [bundle-tokenization-drift] The `core` snapshot records rulepack version 0.6.0 and the extended drift corpus hash; its detection entries are unchanged, which proves the new credential fixture lines stay inert under `core`.
+
+- [bundle-tokenization-drift] The new `secrets` snapshot pins exactly one `security_token.anchored` and one `password.field` detection on the credential fixture lines appended to the drift corpus.
 
 - `cooperates_with` is now symmetric across all five `custom:postal_code`
   recognizers, and the stale research-855 collision comment in `core.toml` —
