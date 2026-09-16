@@ -26,13 +26,20 @@ fn infer(
         if kiji { "kiji" } else { "opf" }.into(),
         marker.as_os_str().to_owned(),
     ];
+    // The OPF stand-in echoes the analysed text, so the 2 MiB backpressure input comes back on
+    // stdout; every other mode keeps the small cap that `stdout-cap` relies on.
+    let max_stdout_bytes = if mode == "echo-count" {
+        4 * 1024 * 1024
+    } else {
+        1024
+    };
     if kiji {
         SubprocessKijiBackend::new(
             SubprocessKijiConfig::new("python")
                 .with_args(args)
                 .with_timeout(Duration::from_secs(2))
                 .with_max_input_bytes(input.len().max(1))
-                .with_max_stdout_bytes(1024)
+                .with_max_stdout_bytes(max_stdout_bytes)
                 .with_stderr_diagnostics(diagnostics),
         )
         .unwrap()
@@ -44,7 +51,7 @@ fn infer(
                 .with_args(args)
                 .with_timeout(Duration::from_secs(2))
                 .with_max_input_bytes(input.len().max(1))
-                .with_max_stdout_bytes(1024)
+                .with_max_stdout_bytes(max_stdout_bytes)
                 .with_stderr_diagnostics(diagnostics),
         )
         .unwrap()
