@@ -205,16 +205,6 @@ def load_fixtures(corpus_dir: Path) -> list[Fixture]:
     return fixtures
 
 
-def parse_first_json_object(stdout: str) -> Any:
-    decoder = json.JSONDecoder()
-    stripped = stdout.lstrip()
-    try:
-        value, _ = decoder.raw_decode(stripped)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("invalid JSON from backend") from exc
-    return value
-
-
 def run_kiji(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]:
     runner = args.repo_root / "scripts/bench/kiji-runner.py"
     proc = subprocess.run(
@@ -253,6 +243,8 @@ def run_kiji(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]
 
 
 def run_opf(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]:
+    if not text:
+        return []
     proc = subprocess.run(
         [
             str(args.opf),
@@ -266,28 +258,64 @@ def run_opf(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]:
             args.device,
             "--checkpoint",
             str(args.checkpoint),
+            # Piped stdin is analysed line by line with per-line offsets; read it as one file.
+            "--text-file",
+            "/dev/stdin",
         ],
-        input=text,
-        text=True,
-        encoding="utf-8",
+        input=text.encode("utf-8"),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"{fixture_id}: opf failed with {proc.returncode}: {proc.stderr.strip()}")
-    raw_output = parse_first_json_object(proc.stdout)
-    raw_spans = raw_output["detected_spans"] if isinstance(raw_output, dict) else raw_output
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"{fixture_id}: opf failed with {proc.returncode}: {stderr}")
+    return opf_output_to_spans(fixture_id, text, proc.stdout.decode("utf-8"))
+
+
+def opf_view_byte_offsets(text: str) -> tuple[str, list[int]]:
+    """Return the text as OPF reads it from a file, and each character's UTF-8 byte offset in
+    `text` (plus the total length). Python text mode turns CRLF and a lone CR into LF."""
+    view: list[str] = []
+    offsets: list[int] = []
+    byte = 0
+    index = 0
+    while index < len(text):
+        offsets.append(byte)
+        if text[index] == "\r" and text[index + 1 : index + 2] == "\n":
+            view.append("\n")
+            byte += 2
+            index += 2
+            continue
+        view.append("\n" if text[index] == "\r" else text[index])
+        byte += len(text[index].encode("utf-8"))
+        index += 1
+    offsets.append(byte)
+    return "".join(view), offsets
+
+
+def opf_output_to_spans(fixture_id: str, text: str, stdout: str) -> list[Span]:
+    """Parse exactly one `opf` JSON result and map its character offsets to UTF-8 bytes.
+
+    Fails loudly instead of scoring part of the fixture: more than one JSON document (line
+    splitting), a missing or different echoed `text`, or an offset past the text."""
+    try:
+        raw_output = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{fixture_id}: opf output was not exactly one JSON document") from exc
+    view, offsets = opf_view_byte_offsets(text)
+    if not isinstance(raw_output, dict) or raw_output.get("text") != view:
+        raise RuntimeError(f"{fixture_id}: opf analysed a different text than the one sent")
     spans: list[Span] = []
-    for raw in raw_spans:
+    for raw in raw_output["detected_spans"]:
         label = str(raw["label"])
         pii_class = OPF_TO_GAZE.get(label)
         if pii_class is None:
             raise RuntimeError(f"{fixture_id}: unsupported OPF label {label!r}")
-        # OPF offsets are character indices; gold spans are UTF-8 byte offsets.
-        start = len(text[: int(raw["start"])].encode("utf-8"))
-        end = len(text[: int(raw["end"])].encode("utf-8"))
-        spans.append(Span(start, end, pii_class))
+        start, end = int(raw["start"]), int(raw["end"])
+        if not 0 <= start < end < len(offsets):
+            raise RuntimeError(f"{fixture_id}: opf returned out-of-bounds span")
+        spans.append(Span(offsets[start], offsets[end], pii_class))
     return spans
 
 

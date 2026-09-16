@@ -198,11 +198,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which is the wrong-bytes effect going away. The 70 newly completed documents
   leak 128 of 4,289 gold bytes. No document went from completed to refused.
   The 5 remaining refusals include pure-ASCII documents and have a separate
-  cause. Known limitation, not fixed here: the stock `opf` CLI reads piped
-  stdin one line at a time and reports offsets relative to each line, so
-  clean text with more than one non-blank line fails closed, and clean text
-  whose only non-blank line follows blank lines gets offsets that are too
-  small. The benchmark daemon bridge sends the whole text and is unaffected.
+  cause. The line-by-line stdin limitation noted in review is fixed in the next
+  entry.
+
+- **The OpenAI Privacy Filter safety net now has the stock `opf` CLI analyse the
+  whole clean text as one input.** Shipped defect since v0.6.0, verified against
+  the pinned CLI (`privacy-filter` @ `f7f00ca7`): piped stdin is read one line
+  at a time, blank and whitespace-only lines are skipped, and every line gets
+  its own JSON result with offsets relative to that line. Clean text with two
+  non-blank lines failed closed as `opf stdout was not valid JSON`. **Clean text
+  whose only non-blank line followed blank lines came back as one valid result
+  whose spans landed too early, so the wrong bytes were checked and protected
+  with no refusal.** The CLI also prints an ANSI colour section after the JSON
+  unless `--no-print-color-coded-text` is passed, so with Gaze's default
+  arguments every call to the stock CLI failed closed; the silent case needed
+  that flag in the configured arguments. The benchmark daemon bridge sends the
+  whole text and was unaffected.
+
+  The adapter now appends `--no-print-color-coded-text --text-file /dev/stdin`
+  after the configured arguments, so the text still travels over the pipe and
+  never touches disk. `opf` reads that file in Python text mode, which turns
+  `\r\n` and a lone `\r` into `\n`; the adapter maps OPF's offsets back through
+  that translation to UTF-8 bytes. It also refuses, as `InvalidOutput`, any
+  result whose echoed `text` differs from the text it sent (`opf analysed a
+  different text than the one sent`), more than one JSON document, and output
+  without the echoed `text` (a bare span array is no longer accepted). Empty
+  clean text returns no spans without starting `opf`, which prints nothing for
+  an empty file. **Adopters wrapping `opf` in their own command must accept
+  `--no-print-color-coded-text --text-file <path>` and echo the analysed text.**
+  On Windows there is no `/dev/stdin`; multi-line text is refused there instead
+  of mis-mapped. The Python OPF bench scorer uses the same whole-text input and
+  fails loudly instead of scoring only the first line of a multi-line fixture.
 
 - **The Kiji safety net no longer tokenizes or deletes parts of words.** Shipped
   defect since at least v0.14.0: the shared Kiji decoder (ORT, tract, candle)

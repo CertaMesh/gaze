@@ -597,7 +597,8 @@ fn invalid_output_failure_reason(message: &str) -> PipelineFailureReason {
         | "opf stdout was not valid JSON"
         | "opf returned non-finite score"
         | "opf returned out-of-bounds span"
-        | "opf returned overlapping spans" => {
+        | "opf returned overlapping spans"
+        | "opf analysed a different text than the one sent" => {
             PipelineFailureReason::SafetyNetInvalidOutputMalformedBackendOutput
         }
         _ => PipelineFailureReason::SafetyNetInvalidOutputOther,

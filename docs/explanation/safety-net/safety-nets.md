@@ -342,6 +342,34 @@ fields, but it is not the v0.6 default.
 The adapter always invokes `opf --format json --output-mode typed`. Output
 mode `typed` is the only accepted shape; other modes are not parsed.
 
+### Whole-text input
+
+Piped stdin is not one input for the stock CLI: `opf` reads it line by line,
+skips blank lines, and prints one JSON result per line with offsets relative
+to that line. After the configured arguments (and `--checkpoint`), the adapter
+therefore always appends:
+
+```text
+--no-print-color-coded-text --text-file /dev/stdin
+```
+
+The text still travels over the stdin pipe and is never written to disk. The
+colour flag stops the ANSI section `opf` otherwise prints after the JSON.
+`opf` reads the file in Python text mode, so `\r\n` and a lone `\r` each become
+one `\n` character in the offsets it returns; the adapter maps those offsets
+back to UTF-8 byte offsets in the exact clean text it sent.
+
+The adapter accepts a result only if it is exactly one JSON object whose echoed
+`text` equals the text `opf` should have read. A second document, a missing
+`text`, or any other `text` (a line, a trimmed or rewritten input) is
+`InvalidOutput`, so offsets relative to some other text can never be applied.
+Empty clean text returns no spans without starting `opf`.
+
+A wrapper command configured instead of `opf` must accept these arguments and
+echo the analysed text. Windows has no `/dev/stdin`: there only the colour flag
+is appended, `opf` still splits lines, and the echo check refuses multi-line
+text rather than mis-mapping it.
+
 ### Subprocess configuration
 
 [`SubprocessOpenAiFilterConfig`](../../../crates/gaze-recognizers/src/safety_net/openai_filter/backend/subprocess.rs)
@@ -375,8 +403,9 @@ adapter:
   only `start`, `end`, `label`, and `score`. The `_text` and `_placeholder`
   fields drop on the same statement, with their `Drop` impl scrubbing the
   buffer.
-- Top-level `_text` and `_redacted_text` on the redaction-output shape
-  follow the same pattern.
+- The top-level `text` echo is held in a `PrivatePiiString`, compared with
+  the text the adapter sent, and scrubbed on drop. `redacted_text` is never
+  deserialized.
 
 After this projection, no part of Gaze that consumes safety-net output sees
 upstream raw bytes. The adversarial regression
