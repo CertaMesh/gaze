@@ -174,7 +174,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which is the wrong-bytes effect going away. The 70 newly completed documents
   leak 128 of 4,289 gold bytes. No document went from completed to refused.
   The 5 remaining refusals include pure-ASCII documents and have a separate
-  cause.
+  cause. Known limitation, not fixed here: the stock `opf` CLI reads piped
+  stdin one line at a time and reports offsets relative to each line, so
+  clean text with more than one non-blank line fails closed, and clean text
+  whose only non-blank line follows blank lines gets offsets that are too
+  small. The benchmark daemon bridge sends the whole text and is unaffected.
 
 - **The Kiji safety net no longer tokenizes or deletes parts of words.** Shipped
   defect since at least v0.14.0: the shared Kiji decoder (ORT, tract, candle)
