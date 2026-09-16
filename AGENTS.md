@@ -30,7 +30,7 @@ As of v0.9.0, the workspace has nine published-shape crates plus `xtask`:
 
 - `gaze` — core (pipeline, session, policy, registry, locale, rulepack). Re-exports `gaze_types::RedactionLogger` for source-compat. No `rusqlite` dep in any feature graph.
 - `gaze-types` — shared value contracts including the canonical `RedactionLogger` trait (serde-only, no ML/sql deps). Introduced in v0.5 Phase B.
-- `gaze-recognizers` — regex/dictionary/NER detection backends + embedded rulepacks.
+- `gaze-recognizers` — regex/dictionary/NER detection backends + embedded rulepacks, plus the safety-net backends (OPF subprocess, Kiji, and the opt-in in-process Nym-small net behind `safety-net-nym`).
 - `gaze-audit` — passive SQLite sink + audit-query API. `rusqlite` lives only here. Introduced in v0.5 Phase C.
 - `gaze-assembly` — policy-to-pipeline builder for CLI-style adopters.
 - `gaze-cli` — standalone `gaze` binary; only allowlisted `gaze-audit` consumer outside compatibility tests.

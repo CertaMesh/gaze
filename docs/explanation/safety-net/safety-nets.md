@@ -475,6 +475,126 @@ in [`class_map.rs`](../../../crates/gaze-recognizers/src/safety_net/openai_filte
 the `class-map-override-safety` xtask gate runs the
 `all_official_labels_map_exactly_to_gaze_classes` test on every PR.
 
+## Nym-small adapter (opt-in)
+
+`--safety-net nym` runs [`Wismut/nym-pii-multilingual-small`](https://huggingface.co/Wismut/nym-pii-multilingual-small)
+v3 (int8 ONNX, ModernBERT, 22 languages including German and English) in
+process through ONNX Runtime. It is **opt-in**: the default safety-net posture
+does not change, and nothing loads unless `nym` is selected. Source:
+[`crates/gaze-recognizers/src/safety_net/nym/`](../../../crates/gaze-recognizers/src/safety_net/nym/mod.rs),
+behind the `safety-net-nym` feature (on in the default `gaze-cli` build through
+`setup`).
+
+The net flags; the pipeline decides. Suspects go through the same resolve,
+fallback and audit path as every other net.
+
+### Pinned bundle
+
+`gaze setup --safety-net nym` downloads `int8/config.json`,
+`int8/model_int8.onnx` and `int8/tokenizer.json` at revision
+`4348999cd3c2e20c49615e9af7c6bbb45b64cd85` into
+`${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/nym-small-int8`, writes the
+canonical `SHA256SUMS`, and verifies it. At load the backend checks the SHA-256
+of `SHA256SUMS` against `NYM_SMALL_INT8_BUNDLE_SHA256`, every listed file
+against its digest, owner and modes (directory `0700`, no group/world write, no
+symlinks), and that `config.json` lists exactly the 81 BIO labels the decoder
+assumes. Any failure is a typed `SafetyNetError` before the model loads; there
+is no download at inference time. `gaze mcp doctor` reports the bundle: absent
+passes (the net is opt-in), present-but-invalid fails.
+
+### Which labels can fire
+
+The model labels 40 entity types. Six carry a Gaze class; the other 34 can
+never be enabled, and none is folded into a generic class such as `Name`.
+
+| Nym label | Gaze class | op-B default |
+|---|---|---|
+| `BUILDING_NUMBER` | `custom:building_number` | on, `>= 0.5` |
+| `LICENSE_PLATE` | `custom:license_plate` | on, `>= 0.5` |
+| `USERNAME` | `custom:username` | on, `>= 0.5` |
+| `DATE_OF_BIRTH` | `custom:date` | on, `>= 0.9` |
+| `TAX_ID` | `custom:tax_id` | off |
+| `ZIP_CODE` | `custom:postal_code` | off |
+
+The allowlist and thresholds are policy data (`[safety_net.nym]`, see
+[policy reference](../../reference/policy.md#safety_netnym)). Without the table
+the backend uses op-B, the operating point measured in the probe below. An
+unknown label, a label without a Gaze class, a label without a threshold, a
+threshold for a label that is not enabled, or a threshold outside `(0, 1]` fails
+at policy load. TAX_ID stays off because its precision was 0.23 to 0.26 at every
+threshold; ZIP_CODE stays off because it flagged the invalid-identifier decoys
+in the negative corpus (op-A precision 0.572 on the gate set).
+
+### Decoding
+
+Per piece, the entity mass of a label is `P(B-label) + P(I-label)`. The piece's
+label is the argmax over **all 40** labels, so a piece that looks most like
+`GIVEN_NAME` is never relabelled into an enabled label. It counts only when that
+label is enabled and its mass reaches the label's threshold. Spans are assembled
+from whole words with the same word rule as the pipeline's sub-word guard
+(`gaze_types::is_inside_word`, one definition): any counted piece labels its
+word, the strongest piece picks the label, the score is the minimum over the
+pieces carrying it, and a word whose first counted piece is `I-` extends an open
+span of the same label.
+
+The tokenizer reports character offsets; the decoder trims metaspace whitespace
+and converts them to UTF-8 byte offsets, with fixtures on umlauts, NFD combining
+marks, emoji, NBSP and NARROW NBSP.
+
+### Every byte is scanned
+
+Input is tokenized without truncation and scored in windows of 512 pieces that
+overlap by 64; a piece seen twice keeps the row from the window where it sits
+furthest from an edge. A piece no window scored, or a non-whitespace character
+no piece covers, is `SafetyNetError::InvalidOutput`, never a silent gap. Input
+above `--safety-net-input-limit-bytes` is `InputTooLarge`.
+
+### Audit
+
+Every suspect carries `safety_net_id = "nym-small-int8"`, the score, and
+`raw_label = "LABEL>=THRESHOLD"` (for example `LICENSE_PLATE>=0.5`), so the row
+records which rule fired without a schema change. For that reason Nym is not
+available through `--safety-net-registry`: registry dispatch reports a model
+span's class, not its label and threshold, and the CLI refuses the combination.
+
+### Runtime
+
+ONNX Runtime on CPU with deterministic compute, one inter-op thread and one
+intra-op thread by default (`--nym-intra-threads`, `GAZE_NYM_INTRA_THREADS`).
+The model weights are embedding-int8 with fp16 body weights and fp32 compute,
+so there is no int8-kernel speedup.
+
+### Measured
+
+The 2,910-document probe (todo 3675) ran op-B through the full pipeline and
+measured: **6,017 leaked gold bytes bought** under scored-label contract v2,
+**+517 false-positive bytes**, action precision 0.890, 1 false flag across
+1,024 PII-free documents, 1 one-way deletion. See
+[the in-process reproduction](#reproduction-in-process) for the numbers of this
+backend on the canonical harness (`clean_for_bench --config
+full-stack-nym-resolve`).
+
+REPRODUCTION_PLACEHOLDER
+
+### Known gaps and open review items
+
+- **Room, platform and seat numbers.** `BUILDING_NUMBER` fires on "Raum 204"
+  and "Gleis 9, Wagen 23, Platz 45": the 1,024-document negative corpus
+  contains none of these shapes, so its false-flag rate says nothing about them.
+  The fixture `room-number-known-gap` pins the current behaviour; an
+  address-context guard is a follow-up.
+- **Latency is not proven.** Measured p95 on a loaded shared host was 116 ms on
+  the 120-document pre-gate set but 390 ms on documents of 1 KB or more. A
+  quiet-host or in-process measurement decides whether this net can become a
+  default.
+- **Licence review (open, not resolved here).** The model card declares MIT
+  (inherited from `jhu-clsp/mmBERT-small`); the repository has no LICENSE file.
+  v3 training data includes 77.5k Wikipedia passages auto-labelled by
+  gemma-4-26b. Whether CC-BY-SA obligations reach weights trained on that text,
+  and whether the teacher model's terms add conditions, needs legal review
+  before Gaze redistributes or recommends the weights by default. Gaze does not
+  vendor the weights; `gaze setup` fetches them from the upstream repository.
+
 ## Structured-document per-field behavior
 
 `Pipeline::clean_with_safety_net_detect_context` traverses
@@ -625,9 +745,11 @@ see the "Future work" section below.
 ## Activation surface
 
 v0.6 activates the safety net through the CLI or the programmatic builder
-on `Pipeline`. There is **no policy-TOML surface** in v0.6. Policy support
-is a deliberately deferred decision so the activation contract can be locked
-down before TOML adopters take a dependency on the shape.
+on `Pipeline`. Activation still has no policy-TOML surface. The one
+safety-net table policy.toml accepts is `[safety_net.nym]`, which
+**configures** the opt-in Nym backend (allowlist and thresholds) and does not
+activate it; a policy that declares it while a different net or no net runs is
+refused, so the table can never read as protection that is not there.
 
 The minimum CLI form is:
 
