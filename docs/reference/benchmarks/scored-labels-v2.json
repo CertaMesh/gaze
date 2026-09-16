@@ -1,0 +1,217 @@
+{
+  "schema_version": 1,
+  "contract": "scored-labels-v2",
+  "contract_version": 2,
+  "corpus": {
+    "repository": "DataikuNLP/kiji-pii-training-data",
+    "revision": "0275550f0b1f1b8f2dc9356fd31ac1c788b8228b",
+    "file": "data/test-00000-of-00001.parquet",
+    "negative_corpus": "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl"
+  },
+  "semantics": "A label with scored=false is out of contract. Its gold spans are removed from every gold count, and the bytes they cover (where no scored gold span also covers them) are ignored: they are neither leaked, nor true positive, nor false positive, nor counted as non-PII text. Whether the pipeline still protected those bytes is reported separately under excluded_label_coverage. Every corpus label must be listed; an unlisted label fails closed.",
+  "labels": [
+    {
+      "label": "AGE",
+      "scored": true,
+      "category": "quasi_identifier",
+      "ruling": "settled",
+      "reason": "Quasi-identifier; stays in the byte score until a separate quasi-identifier score exists."
+    },
+    {
+      "label": "BUILDINGNUM",
+      "scored": true,
+      "category": "address_constituent",
+      "ruling": "settled",
+      "reason": "Address constituent; scored per label until a composite ADDRESS entity exists."
+    },
+    {
+      "label": "CITY",
+      "scored": true,
+      "category": "quasi_identifier",
+      "ruling": "settled",
+      "reason": "Quasi-identifier; stays in the byte score until a separate quasi-identifier score exists."
+    },
+    {
+      "label": "COMPANYNAME",
+      "scored": true,
+      "category": "quasi_identifier",
+      "ruling": "pending",
+      "reason": "Kept in; whether an employer name is personal data on its own needs an explicit ruling."
+    },
+    {
+      "label": "COUNTRY",
+      "scored": true,
+      "category": "quasi_identifier",
+      "ruling": "pending",
+      "reason": "Kept in; a country alone rarely identifies a person, so its place in the safety score needs an explicit ruling."
+    },
+    {
+      "label": "CREDITCARDNUMBER",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "DATEOFBIRTH",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "DRIVERLICENSENUM",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "EMAIL",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "FIRSTNAME",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "IBAN",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "IDCARDNUM",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "LICENSEPLATENUM",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "NATIONALID",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "ORGANIZATION",
+      "scored": true,
+      "category": "not_evaluable",
+      "ruling": "settled",
+      "reason": "Kept in for population identity; n=3 is too small to read as a recall figure."
+    },
+    {
+      "label": "PASSPORTID",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "PASSWORD",
+      "scored": false,
+      "category": "credential",
+      "ruling": "settled",
+      "reason": "Out of contract. A password is an authentication secret, not personal data. User ruling 2026-09-16: credentials are not PII and Gaze should not interfere with them."
+    },
+    {
+      "label": "PHONENUMBER",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "REGION",
+      "scored": true,
+      "category": "not_evaluable",
+      "ruling": "settled",
+      "reason": "Kept in for population identity; n=1 is too small to read as a recall figure."
+    },
+    {
+      "label": "SECURITYTOKEN",
+      "scored": true,
+      "category": "credential",
+      "ruling": "settled",
+      "reason": "Kept in for v2: an API key or token reaching an LLM is a real incident and Gaze ships a recognizer for it. A separate credential-exposure score is proposed but not part of v2."
+    },
+    {
+      "label": "SSN",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "STATE",
+      "scored": true,
+      "category": "quasi_identifier",
+      "ruling": "pending",
+      "reason": "Kept in; a state or province alone rarely identifies a person, so its place in the safety score needs an explicit ruling."
+    },
+    {
+      "label": "STREET",
+      "scored": true,
+      "category": "address_constituent",
+      "ruling": "settled",
+      "reason": "Address constituent; scored per label until a composite ADDRESS entity exists."
+    },
+    {
+      "label": "SURNAME",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier."
+    },
+    {
+      "label": "TAXNUM",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Direct identifier. Most corpus values fail the Steuer-ID checksum; see validator_recall_by_label."
+    },
+    {
+      "label": "TITLE",
+      "scored": true,
+      "category": "not_evaluable",
+      "ruling": "settled",
+      "reason": "Kept in for population identity; n=5 is too small to read as a recall figure."
+    },
+    {
+      "label": "URL",
+      "scored": true,
+      "category": "ruling_pending",
+      "ruling": "pending",
+      "reason": "Kept in; only a URL that points at a person is PII, while Gaze tokenizes every URL by design. Needs an explicit ruling."
+    },
+    {
+      "label": "USERNAME",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "pending",
+      "reason": "Kept in; an online identifier is personal data under GDPR Art. 4(1). Listed as pending because the research asked for the ruling to be confirmed."
+    },
+    {
+      "label": "ZIP",
+      "scored": true,
+      "category": "address_constituent",
+      "ruling": "settled",
+      "reason": "Address constituent; scored per label until a composite ADDRESS entity exists."
+    }
+  ]
+}

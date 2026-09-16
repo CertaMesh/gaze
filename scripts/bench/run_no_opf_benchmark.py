@@ -89,6 +89,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--negative-corpus", type=Path, default=NEGATIVE_CORPUS)
     parser.add_argument(
+        "--scored-labels",
+        type=Path,
+        help=(
+            "scored-label contract file (e.g. "
+            "docs/reference/benchmarks/scored-labels-v2.json); omitted means "
+            "contract v1, which scores every corpus label"
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("target/bench-data/no-opf"),
@@ -441,6 +450,22 @@ def composite_dataset_report(
     return metadata, report
 
 
+def load_scored_label_contract(
+    repo_root: Path, path: Path | None
+) -> score.ScoredLabelContract:
+    if path is None:
+        return score.SCORED_LABEL_CONTRACT_V1
+    resolved = repo_path(repo_root, path)
+    try:
+        display = resolved.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        display = resolved.as_posix()
+    try:
+        return score.load_scored_label_contract(resolved, display_path=display)
+    except score.ScoredLabelContractError as error:
+        raise CandidateError(str(error)) from error
+
+
 def build_no_opf_environment(source: Mapping[str, str]) -> dict[str, str]:
     def is_opf_key(key: str) -> bool:
         upper = key.upper()
@@ -595,6 +620,14 @@ def diagnostics(scorecard: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def _contract_label(scorecard: Mapping[str, object]) -> str:
+    contract_id, version, _ = score.scorecard_scored_label_contract_identity(scorecard)
+    block = scorecard.get("scoring", {}).get("scored_label_contract")
+    excluded = block.get("excluded_labels", []) if isinstance(block, dict) else []
+    suffix = f" (excludes {', '.join(excluded)})" if excluded else ""
+    return f"{contract_id} v{version}{suffix}"
+
+
 def markdown_summary(
     scorecard: Mapping[str, object],
     regression: Mapping[str, object],
@@ -604,6 +637,7 @@ def markdown_summary(
     lines = [
         "# Gaze canonical no-OPF benchmark",
         "",
+        f"- Scored-label contract: **{_contract_label(scorecard)}**",
         f"- Regression: **{regression['status']}**",
         f"- Release readiness: **{readiness['status']}**",
         f"- Performance: **{performance['disposition']} / {performance['status']}**",
@@ -752,6 +786,7 @@ def run(args: argparse.Namespace) -> int:
     negative_path = repo_path(repo_root, args.negative_corpus)
     davlan_model = args.model_dir.expanduser().resolve()
     kiji_model = args.kiji_model_dir.expanduser().resolve()
+    scored_label_contract = load_scored_label_contract(repo_root, args.scored_labels)
 
     model_provenance = validate_required_models(repo_root, davlan_model, kiji_model)
     if dataset_path.is_file():
@@ -771,6 +806,15 @@ def run(args: argparse.Namespace) -> int:
     )
     if args.profile == "full" and len(documents) != len(available_documents):
         raise CandidateError("full profile did not select the complete corpus")
+    # Applied after sampling: the sample is keyed by document identity only, so
+    # a contract changes which gold is scored, never which documents run.
+    try:
+        available_documents = score.apply_scored_label_contract(
+            available_documents, scored_label_contract
+        )
+        documents = score.apply_scored_label_contract(documents, scored_label_contract)
+    except score.ScoredLabelContractError as error:
+        raise CandidateError(str(error)) from error
 
     binary = (
         repo_root / "target/debug/examples/clean_for_bench"
@@ -823,6 +867,9 @@ def run(args: argparse.Namespace) -> int:
             "opf": False,
         },
         runs=runs,
+        scored_label_contract=score.scored_label_contract_report(
+            scored_label_contract, documents
+        ),
     )
     candidate["runner_provenance"] = {
         "entry_point": "scripts/bench/run_no_opf_benchmark.py",

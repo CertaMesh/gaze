@@ -325,6 +325,38 @@ def _dig(node: Any, path: Sequence[str], where: str) -> Any:
     return node
 
 
+def _scored_label_contract(scorecard: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The scorecard's scored-label contract, or None for implicit contract v1."""
+    scoring = scorecard.get("scoring")
+    block = scoring.get("scored_label_contract") if isinstance(scoring, Mapping) else None
+    if block is None:
+        return None
+    if not isinstance(block, Mapping):
+        raise RenderError("scorecard scoring.scored_label_contract must be an object")
+    if block.get("version") == 1:
+        return None
+    version = block.get("version")
+    if type(version) is not int or version < 2:
+        raise RenderError("scored-label contract version must be an integer >= 2")
+    excluded = block.get("excluded_labels")
+    if not isinstance(excluded, list) or not all(isinstance(x, str) for x in excluded):
+        raise RenderError("scored-label contract excluded_labels must be strings")
+    return {
+        "id": str(block.get("id")),
+        "version": version,
+        "file_sha256": _require_hex64(
+            block.get("file_sha256"), "scorecard scored_label_contract.file_sha256"
+        ),
+        "excluded_labels": list(excluded),
+    }
+
+
+def contract_label(entry: Mapping[str, Any]) -> str:
+    contract = entry.get("scored_label_contract")
+    version = contract["version"] if isinstance(contract, Mapping) else 1
+    return f"scored labels v{version}"
+
+
 def history_entry_from_scorecard(
     scorecard: Mapping[str, Any],
     *,
@@ -400,6 +432,7 @@ def history_entry_from_scorecard(
     }
 
     model_bundles = _require_model_bundles(provenance, "scorecard runner_provenance")
+    contract = _scored_label_contract(scorecard)
 
     return {
         "version": version,
@@ -426,6 +459,9 @@ def history_entry_from_scorecard(
         },
         "provisional": bool(provisional),
         "note": note,
+        # Absent means contract v1 (every corpus label scored), which keeps
+        # the rows recorded before contracts existed byte-identical.
+        **({"scored_label_contract": contract} if contract is not None else {}),
         "arms": arms,
     }
 
@@ -453,6 +489,14 @@ def render_current_release(history: Mapping[str, Any]) -> str:
         claim = "— measured on the released tree."
     lines.append(f"**{entry['version']}** {claim}")
     lines.append("")
+    if entry.get("scored_label_contract"):
+        contract = entry["scored_label_contract"]
+        excluded = ", ".join(contract["excluded_labels"]) or "none"
+        lines.append(
+            f"Measured under **{contract_label(entry)}** "
+            f"(`{contract['id']}`; out of contract: {excluded})."
+        )
+        lines.append("")
     if entry.get("note"):
         lines.append(f"> {entry['note']}")
         lines.append("")
@@ -605,6 +649,8 @@ def render_history(history: Mapping[str, Any]) -> str:
         version = entry["version"]
         if entry.get("provisional"):
             version += " *(provisional)*"
+        if entry.get("scored_label_contract"):
+            version += f" · {contract_label(entry)}"
         lines.append(
             f"| {version} | {entry['date']} | `{entry['commit'][:7]}` | "
             f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "
