@@ -2,63 +2,74 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/CertaMesh/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/CertaMesh/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/CertaMesh/gaze?style=social)](https://github.com/CertaMesh/gaze/stargazers)
 
-**Gaze swaps the personal details in your text for placeholders before an AI model sees it, then swaps the real details back into the model's reply.** The model works with `<Name_1>`; only your server knows that means Anna Berg.
+**Gaze swaps the personal details in your text for placeholders before an AI model sees it, then swaps the real details back into the model's reply.** The model works with `<Name_1>`; only your server knows that means Laura Meyer.
 
 *Pre-1.0, API stabilizing. Reversibility is guaranteed across minor versions — manifests written by an older minor restore on a newer minor (see [`UPGRADE.md`](UPGRADE.md)).*
 
 ## The promise in one picture
 
-```text
-your app    "Please call Anna Berg back."
-   │
-   ▼
-Gaze        finds the name, swaps it, remembers:
-   │        <Name_1> = Anna Berg   (this list stays with you)
-   ▼
-AI model    sees "Please call <Name_1> back."
-   │        replies "Calling <Name_1> now."
-   ▼
-Gaze        swaps back
-   ▼
-your app    "Calling Anna Berg now."
-```
+![Your app sends a ticket to Gaze on your server. Gaze swaps personal details for placeholders and keeps the manifest at home. Only placeholders reach the AI model. Gaze restores the real details in the reply.](docs/assets/gaze-promise-loop.svg)
 
-This is pseudonymization, not deletion. The reply still makes sense because Gaze keeps the mapping, and only you hold it.
+*Text version:* your app → Gaze swaps details for placeholders (the manifest stays on your server) → the AI model reads and writes placeholders only → Gaze restores the real details → your app.
 
-## One document, start to finish
+This is pseudonymization, not deletion. The model never needs to know who the customer is, only the shape of the task; your app puts the person back before anything leaves.
 
-A synthetic customer note goes in (the person and every value are made up):
+## A real support ticket, start to finish
+
+A support agent asks the model: *"Draft a short reply confirming the refund."* The app attaches the ticket. The customer and every value are synthetic:
 
 ```text
-Kundin Anna Berg, Hauptstraße 12, 1010 Wien, Tel +43 1 5550123, geb. 03.04.1988.
+Ticket #48213 from Laura Meyer <laura.meyer@example.com>, phone +49 30 5550 1234:
+I sent back the headphones from order 2026-4471 two weeks ago and still have no refund.
+Please pay it to my account DE89 3704 0044 0532 0130 00.
+Address: Lindenstraße 8, 10115 Berlin.
 ```
 
-The model receives this (placeholders shortened; real ones carry a per-session prefix such as `<f4f1d368:Name_1>`):
+**1. What the model receives** (real `gaze clean` output; the only edit is the per-session prefix, shortened from `<a37823d4:Name_1>` to `<Name_1>`):
 
 ```text
-<Name_2> <Name_1>, <Location_1> 12, 1010 <Location_2>, Tel <Custom:phone_1>, geb. 03.04.1988.
+Ticket #<Custom:postal_code_1> from <Name_1> <<Email_1>>, phone <Custom:phone_1>:
+I sent back the headphones from order 2026-4471 two weeks ago and still have no refund.
+Please pay it to my account <Custom:family:payment-card-or-iban_1>.
+Address: <Location_1> 8, <Custom:postal_code_2> <Location_2>.
 ```
 
-The manifest, the list that turns placeholders back into values, is never sent:
+The manifest, the list that turns placeholders back into values, stays on your server.
+
+**2. What the model replies**, written with the placeholders it was given:
 
 ```text
-Name_1          = Anna Berg
-Name_2          = Kundin
-Location_1      = Hauptstraße
-Location_2      = Wien
-Custom:phone_1  = +43 1 5550123
+Dear <Name_1>,
+
+thank you for your patience. We received the headphones from order 2026-4471 and issued your refund today to the account <Custom:family:payment-card-or-iban_1>. It should arrive within 3 to 5 business days. A confirmation is on its way to <Email_1>.
+
+Best regards,
+Support team
 ```
 
-A reply such as `Calling <Name_1> now at <Custom:phone_1>` restores to `Calling Anna Berg now at +43 1 5550123`.
+**3. What your app sends** after `gaze restore` (real output):
+
+```text
+Dear Laura Meyer,
+
+thank you for your patience. We received the headphones from order 2026-4471 and issued your refund today to the account DE89 3704 0044 0532 0130 00. It should arrive within 3 to 5 business days. A confirmation is on its way to laura.meyer@example.com.
+
+Best regards,
+Support team
+```
 
 What this run gets wrong, stated plainly:
 
-- **Still raw today:** the house number `12`, the Austrian postal code `1010`, and the birth date after `geb.`. No bundled recognizer detects these shapes yet, so they reach the model.
-- **Over-caught:** `Kundin` (German for "female customer") was flagged as a name by the safety net. That costs precision, not privacy, and it restores to the same word.
+- **Still raw:** the house number `8`. No bundled recognizer detects house numbers yet, so it reaches the model. The order number `2026-4471` also stays raw; order IDs are tenant-specific and need a custom recognizer in your policy.
+- **Over-caught:** the ticket number `48213` was taken for a postal code. That costs precision, not privacy, and it restores to the same value.
 
-This is the real output of the current `main` branch on this sentence, not a picked best case. On the v0.14.0 benchmark (2,910 documents), the shipped default still let **19.3 % of personal-data (PII) bytes** through; the goal is zero ([benchmark](docs/reference/benchmarks/README.md#current-release)). The exact policy and command: [reproduce this example](docs/explanation/how-gaze-works.md#reproduce-this-example).
+The same boundary applies to tool-call arguments in agent frameworks: the JSON the model fills in carries placeholders, and Gaze restores them before your tool runs ([how it fits your stack](docs/explanation/how-gaze-works.md#how-it-fits-your-stack)).
+
+This is the real output of the current `main` branch, not a picked best case. On the v0.14.0 benchmark (2,910 documents), the shipped default still let **19.3 % of personal-data (PII) bytes** through; the goal is zero ([benchmark](docs/reference/benchmarks/README.md#current-release)). The exact policy and commands: [reproduce this example](docs/explanation/how-gaze-works.md#reproduce-this-example).
 
 ## Seven steps
+
+![Steps 1 to 4, normalize, recognize, resolve and swap, are the deterministic floor. Step 5, the optional safety net, and step 6, the output check, give a second opinion. The AI model sees placeholders only, and step 7 restores the reply.](docs/assets/gaze-seven-steps.svg)
 
 1. **Normalize.** Tidy Unicode and spacing, and keep a map back to the original bytes.
 2. **Recognize.** About 40 bundled rules (formats, checksums, cue words) plus one NER model (a model that spots names and places) each propose candidates.
