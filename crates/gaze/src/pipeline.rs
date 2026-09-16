@@ -1432,6 +1432,21 @@ impl Pipeline {
             }
         }
 
+        // Observe acts on nothing, so only acting decisions say why a suspect will not be acted on.
+        if !matches!(decision, SafetyNetDecision::Observe { .. }) {
+            telemetry.extend(
+                suspects
+                    .iter()
+                    .filter(|suspect| suspect_is_unactionable_subword(clean_text, suspect))
+                    .map(|suspect| LeakReportTelemetry::UnactionableSubword {
+                        safety_net_id: suspect.safety_net_id.clone(),
+                        class: suspect.class.clone(),
+                        span: suspect_action_span(suspect),
+                        document_kind,
+                        field_path: suspect.field_path.clone(),
+                    }),
+            );
+        }
         Ok(LeakReport::from_parts(suspects, telemetry))
     }
 
@@ -1497,16 +1512,19 @@ impl Pipeline {
             // expands each span to swallow whatever manifest entry it overlaps. That is the
             // documented axis-2 cost of `Redact`, and it is why the `Resolve` fallback -- which
             // promises to preserve what resolve already protected -- uses the filtered set above.
-            SafetyNetDecision::Redact => self.redact_safety_net_suspects(
-                target,
-                clean,
-                &redaction_suspects(report),
-                document_kind,
-                field_path,
-                None,
-                true,
-                protection_trace,
-            ),
+            SafetyNetDecision::Redact => {
+                let actionable = without_unactionable_subwords(&clean.text, report);
+                self.redact_safety_net_suspects(
+                    target,
+                    clean,
+                    &redaction_suspects(&actionable),
+                    document_kind,
+                    field_path,
+                    None,
+                    true,
+                    protection_trace,
+                )
+            }
             SafetyNetDecision::Resolve { on_residual } => {
                 // The fallback acts on the report that produced the reason. When the resolve
                 // pass refuses up front, that is the original report against the unmutated text.
@@ -1533,6 +1551,7 @@ impl Pipeline {
                             field_path,
                             decision,
                         )?;
+                        merge_subword_telemetry(report, &follow_up);
                         let mut reason = self.post_resolution_fallback_reason(
                             target,
                             clean,
@@ -1544,10 +1563,14 @@ impl Pipeline {
                         // Freeze a complete second batch before effects, then replace the residual
                         // source with a fresh report. Historical observations never drive deletion.
                         if reason.is_some() && matches!(on_residual, SafetyNetFallback::Redact) {
+                            // Judged here, in the text the re-run reported on. The planner is
+                            // shared with the terminal round, whose targets were judged at scan
+                            // time and may since sit next to a seam its own deletion made.
+                            let plannable = without_unactionable_subwords(&clean.text, &follow_up);
                             if let FollowupResolution::Ready(plan) = plan_followup_resolutions(
                                 target,
                                 clean,
-                                &follow_up,
+                                &plannable,
                                 protection_trace.as_deref().map(|trace| trace.raw_text),
                             )? {
                                 let acted_on = plan.parents.iter().map(|s| (*s).clone()).collect();
@@ -1571,6 +1594,7 @@ impl Pipeline {
                                     field_path,
                                     decision,
                                 )?;
+                                merge_subword_telemetry(report, &follow_up);
                                 reason = self.post_resolution_fallback_reason(
                                     target,
                                     clean,
@@ -1690,6 +1714,7 @@ impl Pipeline {
             field_path,
             decision,
         )?;
+        merge_subword_telemetry(report, &scanned);
         if !scanned.suspects.is_empty() {
             validate_terminal_manifest(target, clean, &provenance)?;
         }
@@ -1715,6 +1740,10 @@ impl Pipeline {
                 | TerminalAdmission::Unjudgeable { .. } => {
                     return Err(Error::SafetyNetFallback(fallback_reason_for(suspect)));
                 }
+                // A sub-word is neither tokenized nor deleted, seam or not; it ships in the
+                // report. Bytes the fallback promised to remove still deny above.
+                TerminalAdmission::SeamManufactured { .. } | TerminalAdmission::Admit
+                    if suspect_is_unactionable_subword(&clean.text, suspect) => {}
                 // Bound: one deletion. A second manufactured shape in one report means the
                 // deletion is producing them at least as fast as it removes them, and unbounded
                 // byte deletion is worse than a denial.
@@ -1727,6 +1756,7 @@ impl Pipeline {
             }
         }
 
+        let seam_deletion_spent = manufactured.is_some();
         if let Some(suspect) = manufactured {
             // The deletion moves every clean offset after it, so the reversible round's targets
             // are frozen in raw coordinates first — the only ones a mutation cannot move — and
@@ -1818,6 +1848,7 @@ impl Pipeline {
             field_path,
             decision,
         )?;
+        merge_subword_telemetry(report, &settled);
         let layout = CleanLayout::of(clean)?;
         let survivors = promise.survivors(&layout);
         for suspect in &settled.suspects {
@@ -1826,7 +1857,16 @@ impl Pipeline {
             }
             let admission = layout.classify(clean, suspect, &survivors);
             admission.observe("terminal_settled");
-            if !matches!(admission, TerminalAdmission::Admit) {
+            // A seam inside a sub-word is admitted only while the one seam deletion is unspent:
+            // after it, a new seam shape is the deletion outpacing itself, which still denies.
+            let admitted = match admission {
+                TerminalAdmission::Admit => true,
+                TerminalAdmission::SeamManufactured { .. } => {
+                    !seam_deletion_spent && suspect_is_unactionable_subword(&clean.text, suspect)
+                }
+                _ => false,
+            };
+            if !admitted {
                 return Err(Error::SafetyNetFallback(fallback_reason_for(suspect)));
             }
         }
@@ -1850,13 +1890,20 @@ impl Pipeline {
         // surface (the primary pass is gap-preserving by construction) but driven directly by
         // `resolve_safety_net_suspects_refuses_a_proven_inconsistent_manifest`.
         validate_clean_manifest(clean)?;
+        // The multi-gap planner plans every suspect it is given, so it only sees the ones a
+        // stage may act on.
+        let plannable = without_unactionable_subwords(&clean.text, report);
 
         // Phase 1: classify. A suspect that lies wholly inside a live token is already
         // protected — acting on it would re-tokenize a token and destroy restore.
         let mut protected = Vec::new();
         let mut actionable = Vec::new();
         for suspect in &report.suspects {
-            if suspect_is_inside_live_token(target, clean, suspect) {
+            // A sub-word suspect is left alone like a protected one: its bytes stay, it gets the
+            // same `Preserve` row, and the report's telemetry says why.
+            if suspect_is_inside_live_token(target, clean, suspect)
+                || suspect_is_unactionable_subword(&clean.text, suspect)
+            {
                 protected.push(suspect);
             } else if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
                 return Ok(Some(FallbackReason::OverlapConflict));
@@ -1881,7 +1928,7 @@ impl Pipeline {
                 if let Some(complete) = plan_multiple_gap_resolutions(
                     target,
                     clean,
-                    report,
+                    &plannable,
                     protection_trace.as_deref().map(|trace| trace.raw_text),
                 )? {
                     plans = complete;
@@ -2080,7 +2127,7 @@ impl Pipeline {
         if !report.suspects.is_empty() {
             validate_clean_manifest(clean)?;
         }
-        if let Some(reason) = unprotected_suspect_reason(target, clean, report) {
+        if let Some(reason) = actionable_suspect_reason(target, clean, report) {
             return Ok(Some(reason));
         }
         let mut protected = report.suspects.iter().collect::<Vec<_>>();
@@ -2127,7 +2174,9 @@ impl Pipeline {
         let mut protected = Vec::new();
         let mut actionable = Vec::new();
         for suspect in &report.suspects {
-            if suspect_is_inside_live_token(target, clean, suspect) {
+            if suspect_is_inside_live_token(target, clean, suspect)
+                || suspect_is_unactionable_subword(&clean.text, suspect)
+            {
                 protected.push(suspect);
             } else {
                 actionable.push(suspect);
@@ -2693,6 +2742,72 @@ fn redaction_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
 /// output. Tokenizing it would mint a token whose restore re-inserts bytes the fallback removed.
 fn resolution_gap_is_contiguous(clean_span: &Range<usize>, raw_span: &Range<usize>) -> bool {
     raw_span.end - raw_span.start == clean_span.end - clean_span.start
+}
+
+/// True when acting on a word-like suspect would cut a word.
+///
+/// Names, locations and organizations are words: a span that starts or ends between two letters
+/// or digits is a model firing on part of a word (`Pass` in `Passwort`, `F` at the end of a
+/// credential string). Tokenizing or deleting it protects nothing whole and mangles the text, so
+/// no stage acts on it. A standalone single letter is still a word (an initial such as `J.`), so
+/// length alone never makes a suspect unactionable. Boundaries are read in the text the
+/// suspect was reported on, where a token's `<`/`>` is already a non-word character; a span that
+/// touches a token shape is never classed as a sub-word. Identifier classes are exempt: their
+/// values legitimately sit inside longer strings (`ID12345`).
+///
+/// The span judged is the action span (a partial bleed's uncovered gap). Malformed spans return
+/// false and keep their existing fail-closed handling.
+fn suspect_is_unactionable_subword(text: &str, suspect: &LeakSuspect) -> bool {
+    if !matches!(
+        suspect.class,
+        PiiClass::Name | PiiClass::Location | PiiClass::Organization
+    ) || !matches!(
+        suspect.kind,
+        LeakKind::Uncovered | LeakKind::PartialBleed { .. }
+    ) {
+        return false;
+    }
+    let span = suspect_action_span(suspect);
+    let Some(value) = text.get(span.clone()).filter(|value| !value.is_empty()) else {
+        return false;
+    };
+    let word = |ch: Option<char>| ch.is_some_and(char::is_alphanumeric);
+    let starts_inside = word(text[..span.start].chars().next_back()) && word(value.chars().next());
+    let ends_inside = word(value.chars().next_back()) && word(text[span.end..].chars().next());
+    // Inside a token shape the "word" is a token this pipeline may not own; that is not a
+    // sub-word finding, and its existing handling (fallback, denial) must still see it.
+    (starts_inside || ends_inside)
+        && !crate::token_shape::pattern()
+            .find_iter(text)
+            .any(|token| token.start() < span.end && span.start < token.end())
+}
+
+/// The report minus the suspects no stage may act on, judged in `clean_text`.
+fn without_unactionable_subwords(clean_text: &str, report: &LeakReport) -> LeakReport {
+    LeakReport::from_parts(
+        report
+            .suspects
+            .iter()
+            .filter(|suspect| !suspect_is_unactionable_subword(clean_text, suspect))
+            .cloned()
+            .collect(),
+        Vec::new(),
+    )
+}
+
+/// Carries a re-run's `UnactionableSubword` rows into the report the caller receives. A re-run
+/// usually re-reports the same sub-word at the same offsets; that is one finding, not two.
+fn merge_subword_telemetry(report: &mut LeakReport, rerun: &LeakReport) {
+    let fresh = rerun
+        .telemetry
+        .iter()
+        .filter(|event| matches!(event, LeakReportTelemetry::UnactionableSubword { .. }))
+        .filter(|event| !report.telemetry.contains(event))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !fresh.is_empty() {
+        report.extend(LeakReport::from_parts(Vec::new(), fresh));
+    }
 }
 
 fn suspect_action_span(suspect: &LeakSuspect) -> Range<usize> {
@@ -3373,6 +3488,24 @@ fn unprotected_suspect_reason(
                 FallbackReason::ResidualSuspect
             }
         })
+}
+
+/// Like [`unprotected_suspect_reason`], but a sub-word suspect is not a reason to fall back: no
+/// stage may act on it. The terminal admission keeps the unfiltered form, so a sub-word overlapping
+/// bytes the fallback promised to delete still denies.
+fn actionable_suspect_reason(
+    target: &ProtectionTarget<'_, '_>,
+    clean: &CleanText,
+    report: &LeakReport,
+) -> Option<FallbackReason> {
+    report
+        .suspects
+        .iter()
+        .find(|suspect| {
+            !suspect_is_inside_live_token(target, clean, suspect)
+                && !suspect_is_unactionable_subword(&clean.text, suspect)
+        })
+        .map(fallback_reason_for)
 }
 
 /// True when the suspect span lies wholly inside exactly one live token.

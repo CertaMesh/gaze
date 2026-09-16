@@ -1566,6 +1566,25 @@ pub enum LeakReportTelemetry {
         /// Optional structured field path when skip was recorded per field.
         field_path: Option<String>,
     },
+    /// A word-like suspect (name, location, organization) whose action span starts or ends
+    /// inside a word in the text it was reported on.
+    ///
+    /// The suspect is not tokenized and not deleted: acting on part of a word mangles the text
+    /// the agent reads and protects nothing whole. It stays in the report's suspects; this row
+    /// says why no stage acted on it. Offsets are in the text of the pass that reported it, so a
+    /// re-run after earlier tokens shifted the text can add a row for the same sub-word.
+    UnactionableSubword {
+        /// Safety-net backend identifier.
+        safety_net_id: String,
+        /// Class the net reported.
+        class: PiiClass,
+        /// Byte span of the would-be action in the text the net checked.
+        span: Range<usize>,
+        /// Document kind checked.
+        document_kind: DocumentKind,
+        /// Optional structured field path of the suspect.
+        field_path: Option<String>,
+    },
 }
 
 /// Aggregate leak report statistics.

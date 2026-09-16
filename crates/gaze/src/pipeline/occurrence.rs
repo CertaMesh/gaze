@@ -744,6 +744,10 @@ mod tests {
             None,
         )
     }
+    fn identifier(mut suspect: LeakSuspect) -> LeakSuspect {
+        suspect.class = PiiClass::custom("synthetic_id").unwrap();
+        suspect
+    }
     fn resolve(clean: &mut CleanText, session: &Session, suspects: Vec<LeakSuspect>, batch: Batch) {
         let report = LeakReport::from_parts(suspects, Vec::new());
         let pipeline = Pipeline::builder().build().unwrap();
@@ -1143,8 +1147,13 @@ mod tests {
                     vec![]
                 } else {
                     match *step {
-                        0 => vec![suspect(0..2, LeakKind::Uncovered)],
-                        1 => vec![suspect(text.len() - 4..text.len() - 2, LeakKind::Uncovered)],
+                        // Identifier class: these glued fixture spans cut words, and the
+                        // sub-word guard exempts only identifier classes.
+                        0 => vec![identifier(suspect(0..2, LeakKind::Uncovered))],
+                        1 => vec![identifier(suspect(
+                            text.len() - 4..text.len() - 2,
+                            LeakKind::Uncovered,
+                        ))],
                         2 => vec![suspect(
                             text.len() - 2..text.len(),
                             LeakKind::ClassMismatch {
