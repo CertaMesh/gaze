@@ -322,14 +322,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Diagnostic sanitization is heuristic and does not detect arbitrary PII.
   Cleanup does not kill descendants and is not a hard real-time guarantee.
   Subprocess adapters outside Unix and Windows fail before spawn.
-- Detection completeness and exact restoration must be judged from the release
-  benchmark in [docs/reference/benchmarks/README.md](docs/reference/benchmarks/README.md).
-  <!-- RELEASE-PREP HOLD: the v0.15.0 benchmark row and scorecard are produced by
-       the release benchmark lane on the release commit and are deliberately not
-       in this branch. -->
-  The previous v0.14.0 scorecard failed readiness with residual labeled PII and
-  one-way fallback; these fixes alone do not establish zero leakage or release
-  readiness.
+- **This release ships its own benchmark, and it is a mixed result.** Measured
+  on runtime commit `9a3a788` over all 2,910 production documents, on the
+  identical scored-document digest as v0.14.0 (14,719 gold entities / 130,282
+  gold bytes), so the comparison is like-for-like rather than an estimate:
+  surviving PII bytes **25,179 → 22,491 (−10.68%)**, leak rate **19.327% →
+  17.263%**, exact restoration **78.42% → 96.53%**, and **zero documents failed
+  closed** — the 11 that previously failed on a fallback residual suspect now
+  complete. Against that, **clean p95 regressed 195.86 ms → 251.36 ms (+28.3%)**
+  on the shipped default arm, which is the cost of full input rescanning plus
+  the additional configured-net and terminal model passes. Correctness axes beat
+  performance in this project, and the regression is disclosed rather than
+  traded away. **22,491 labeled PII bytes still survive**, so this is a
+  measured improvement, not a completeness claim. Full provenance — harness
+  invocation, seed, corpus and model-bundle checksums, and host — is in
+  [docs/reference/benchmarks/README.md](docs/reference/benchmarks/README.md)
+  and [`scorecard-v0.15.0.json`](docs/reference/benchmarks/scorecard-v0.15.0.json).
 
 ## [0.14.0] - 2026-09-11
 

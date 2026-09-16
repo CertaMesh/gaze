@@ -47,6 +47,8 @@ exists today.)
    one extra model pass and can complete carrying a finding in their leak report.
 4. If you run `gaze-proxy`, upgrade for the fallback-deletion leak fix. See
    [the CHANGELOG Security section](CHANGELOG.md).
+5. **Measured clean p95 regressed 28.3% (195.86 ms → 251.36 ms).** Size capacity
+   against that before rolling out if you are p95-sensitive.
 
 ### Residual coverage is on by default (action required for counting consumers)
 
@@ -299,10 +301,23 @@ NER chunk planning borrows the existing tokenizer when truncation is already
 disabled, instead of cloning it and its vocabulary on every call. This is a cost
 change only; configured truncation keeps its original path.
 
-Review this release's benchmark evidence in
-[docs/reference/benchmarks/README.md](docs/reference/benchmarks/README.md). A
-valid manifest alone does not prove detection completeness or a successful round
-trip, and these fixes by themselves do not establish release readiness.
+### Budget for the measured latency regression
+
+This release ships its own benchmark, measured like-for-like against v0.14.0 on
+an identical scored-document digest. Protection and reversibility improved —
+surviving PII bytes **25,179 → 22,491 (−10.68%)**, exact restoration **78.42% →
+96.53%**, and zero documents failed closed. **Latency got worse: clean p95
+195.86 ms → 251.36 ms (+28.3%)** on the shipped default arm.
+
+That is the cost of full input rescanning plus the extra configured-net and
+terminal model passes this release adds, and it is the number to size capacity
+against. If your deployment is p95-sensitive, measure before rolling out; the
+correctness changes are not individually opt-out.
+
+**22,491 labeled PII bytes still survive on that corpus.** A valid manifest
+alone does not prove detection completeness or a successful round trip. Full
+provenance is in
+[docs/reference/benchmarks/README.md](docs/reference/benchmarks/README.md).
 
 ---
 
