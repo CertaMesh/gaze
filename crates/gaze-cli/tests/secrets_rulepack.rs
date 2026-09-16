@@ -37,9 +37,16 @@ fn clean_text(args: &[&str]) -> String {
     json["clean_text"].as_str().expect("clean_text").to_string()
 }
 
-fn policy_with_bundled(bundled: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+/// `bundled = None` omits `[policy.rulepacks]`, which selects the default `core` bundle.
+/// The default rule tokenizes every class, so a credential recognizer that leaked into
+/// the default activation would be visible here. (A run without `--policy` is not a
+/// usable probe: the no-policy CLI preserves every custom class.)
+fn policy_with_bundled(bundled: Option<&str>) -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().unwrap();
     let path = dir.path().join("policy.toml");
+    let rulepacks = bundled
+        .map(|bundled| format!("[policy.rulepacks]\nbundled = [{bundled}]\n"))
+        .unwrap_or_default();
     fs::write(
         &path,
         format!(
@@ -48,9 +55,7 @@ fn policy_with_bundled(bundled: &str) -> (tempfile::TempDir, std::path::PathBuf)
 scope = "persistent"
 ttl_secs = 86400
 
-[policy.rulepacks]
-bundled = [{bundled}]
-
+{rulepacks}
 [[rule]]
 kind = "default"
 action = "tokenize"
@@ -79,21 +84,23 @@ fn assert_both_credentials_tokenized(clean: &str) {
 }
 
 #[test]
-fn default_no_policy_activation_emits_no_credential_tokens() {
-    assert_credentials_untouched(&clean_text(&[]));
+fn default_bundle_selection_emits_no_credential_tokens() {
+    let (_dir, policy) = policy_with_bundled(None);
+    let clean = clean_text(&["--policy", policy.to_str().unwrap()]);
+    assert_credentials_untouched(&clean);
 }
 
 #[test]
 fn explicit_core_bundle_emits_no_credential_tokens() {
     assert_credentials_untouched(&clean_text(&["--rulepack-bundled", "core"]));
-    let (_dir, policy) = policy_with_bundled(r#""core""#);
+    let (_dir, policy) = policy_with_bundled(Some(r#""core""#));
     assert_credentials_untouched(&clean_text(&["--policy", policy.to_str().unwrap()]));
 }
 
 #[test]
 fn secrets_bundle_opt_in_tokenizes_both_credentials() {
     assert_both_credentials_tokenized(&clean_text(&["--rulepack-bundled", "core,secrets"]));
-    let (_dir, policy) = policy_with_bundled(r#""core", "secrets""#);
+    let (_dir, policy) = policy_with_bundled(Some(r#""core", "secrets""#));
     assert_both_credentials_tokenized(&clean_text(&["--policy", policy.to_str().unwrap()]));
 }
 
