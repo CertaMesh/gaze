@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -192,6 +193,61 @@ class ExclusionScoringTests(unittest.TestCase):
         )
         self.assertEqual(score.subtract_intervals([(0, 5)], []), [(0, 5)])
         self.assertEqual(score.subtract_intervals([(3, 5)], [(0, 9)]), [])
+
+
+class RunnerWiringTests(unittest.TestCase):
+    """run() must score the contract it records, on the documents it measures."""
+
+    class Stop(Exception):
+        pass
+
+    def run_until_scorecard(self, *flags: str) -> tuple[list, dict]:
+        measured: list = []
+        recorded: dict = {}
+
+        def execute_measurements(**kwargs: object) -> tuple[list, list]:
+            measured.extend(kwargs["documents"])
+            return [], []
+
+        def assemble_scorecard(**kwargs: object) -> None:
+            recorded.update(kwargs)
+            raise self.Stop
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("dataset.parquet", "clean_for_bench", "probe"):
+                (root / name).write_bytes(b"")
+            args = runner.parse_args(
+                ["full", "--no-download", "--dataset", str(root / "dataset.parquet"),
+                 "--output-dir", str(root / "out"), *flags]
+            )
+            positive = [document(EMAIL, PASSWORD)]
+            with mock.patch.object(runner, "validate_required_models", return_value={}), \
+                    mock.patch.object(runner.dataiku, "verify_dataset"), \
+                    mock.patch.object(runner.dataiku, "load_documents", return_value=(positive, {})), \
+                    mock.patch.object(runner, "load_negative_documents", return_value=([], {})), \
+                    mock.patch.object(runner.dataiku, "build_binary", return_value=root / "clean_for_bench"), \
+                    mock.patch.object(score, "build_validator_probe", return_value=root / "probe"), \
+                    mock.patch.object(score, "collect_validator_measurements", return_value={}), \
+                    mock.patch.object(runner, "execute_measurements", side_effect=execute_measurements), \
+                    mock.patch.object(runner, "composite_dataset_report", return_value=({}, {})), \
+                    mock.patch.object(score, "validator_gold_census", return_value={}), \
+                    mock.patch.object(score, "assemble_scorecard", side_effect=assemble_scorecard):
+                with self.assertRaises(self.Stop):
+                    runner.run(args)
+        return measured, recorded["scored_label_contract"]
+
+    def test_v2_flag_scores_and_records_v2(self) -> None:
+        measured, contract = self.run_until_scorecard("--scored-labels", str(V2_PATH))
+        self.assertEqual([span.label for span in measured[0].spans], ["EMAIL"])
+        self.assertEqual(contract["id"], "scored-labels-v2")
+        self.assertEqual(contract["file_sha256"], v2().sha256)
+        self.assertEqual(contract["excluded_gold_utf8_bytes"], 8)
+
+    def test_no_flag_scores_and_records_v1(self) -> None:
+        measured, contract = self.run_until_scorecard()
+        self.assertEqual([span.label for span in measured[0].spans], ["EMAIL", "PASSWORD"])
+        self.assertEqual((contract["id"], contract["version"]), ("scored-labels-v1", 1))
 
 
 class ContractProvenanceTests(unittest.TestCase):
