@@ -338,6 +338,36 @@ class RendererContractTests(unittest.TestCase):
         self.assertIn("v0.16.0 · scored labels v2", render.render_history(history))
         self.assertIn("out of contract: PASSWORD", render.render_current_release(history))
 
+    def test_trend_line_never_joins_rows_from_different_contracts(self) -> None:
+        v2_block = {
+            "id": "scored-labels-v2",
+            "version": 2,
+            "file_sha256": "e" * 64,
+            "excluded_labels": ["PASSWORD"],
+        }
+        rows = [render_tests.entry(version) for version in ("v0.13.0", "v0.14.0", "v0.15.0")]
+        for row, surviving in zip(rows, (30000, 25000, 20000)):
+            row["arms"][render.SHIPPED_DEFAULT_ARM]["surviving_pii_utf8_bytes"] = surviving
+        rows[1]["scored_label_contract"] = dict(v2_block)
+        rows[2]["scored_label_contract"] = dict(v2_block)
+        history = {**render.empty_history(), "releases": rows}
+
+        charts = render.render_charts(history)
+        self.assertIn("line [25000, 20000]", charts)
+        self.assertIn("1 row(s) under another contract", charts)
+
+        # A different v2 file is a different contract too.
+        rows[1]["scored_label_contract"]["file_sha256"] = "d" * 64
+        charts = render.render_charts(history)
+        self.assertNotIn("line [", charts)
+        self.assertIn("2 row(s) under another contract", charts)
+
+        # History measured under one contract renders exactly as before.
+        for row in rows:
+            row.pop("scored_label_contract", None)
+        self.assertIn("line [30000, 25000, 20000]", render.render_charts(history))
+        self.assertNotIn("another contract", render.render_charts(history))
+
 
 if __name__ == "__main__":
     unittest.main()
