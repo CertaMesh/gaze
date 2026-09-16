@@ -539,7 +539,8 @@ span of the same label.
 
 The tokenizer reports character offsets; the decoder trims metaspace whitespace
 and converts them to UTF-8 byte offsets, with fixtures on umlauts, NFD combining
-marks, emoji, NBSP and NARROW NBSP.
+marks, emoji, NBSP, NARROW NBSP, CRLF line breaks and a span that ends the
+text.
 
 ### Every byte is scanned
 
@@ -593,7 +594,9 @@ load) and are not a latency claim.
 Every residual suspect a post-policy re-scan reports sits inside a Gaze token:
 the model reads token text such as `Custom:building_number` as a building
 number. A suspect inside a live token is never acted on, so bytes and restore
-are unaffected; masking token text before the net reads it is a follow-up.
+are unaffected, under every `Resolve` fallback including `strict`
+(`nym_suspect_inside_its_own_token_text_is_protected_under_every_resolve_fallback`).
+Masking token text before the net reads it is a follow-up (todo 3681).
 
 ### Known gaps and open review items
 

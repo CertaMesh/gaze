@@ -625,6 +625,16 @@ mod tests {
                 "12\u{202f}345",
                 NymLabel::BuildingNumber,
             ),
+            (
+                "Grüße\r\nKennung jdoe_1977\r\nEnde".into(),
+                "jdoe_1977",
+                NymLabel::Username,
+            ),
+            (
+                "Grüße 🚗 Kennzeichen HH-ÖZ 4711".into(),
+                "HH-ÖZ 4711",
+                NymLabel::LicensePlate,
+            ),
         ];
         for (text, target, label) in cases {
             // One piece per non-space run, with the separator kept on the NEXT piece's front

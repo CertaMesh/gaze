@@ -152,6 +152,29 @@ fn nym_flags_without_a_net_are_refused() {
     assert!(out.stdout.is_empty());
 }
 
+/// The default safety net is unchanged: a bundle location in the environment never activates Nym.
+/// The directory is empty, so loading the net would fail; a default run (with and without a
+/// policy) must not touch it.
+#[test]
+fn default_runs_never_load_nym_even_with_a_bundle_dir_set() {
+    let (_dir, policy) = policy("");
+    let empty_bundle = tempdir().unwrap();
+    for args in [vec!["--policy", path_str(&policy)], vec![]] {
+        let out = Command::cargo_bin("gaze")
+            .unwrap()
+            .arg("clean")
+            .args(&args)
+            .env("GAZE_NYM_MODEL_DIR", empty_bundle.path())
+            .write_stdin(PLATE_PROSE.as_bytes().to_vec())
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "{args:?}: {stderr}");
+        assert!(!out.stdout.is_empty(), "{args:?}");
+        assert!(!stderr.contains("nym"), "{args:?}: {stderr}");
+    }
+}
+
 #[test]
 #[ignore = "needs GAZE_NYM_MODEL_DIR pointing at the pinned bundle"]
 fn live_nym_net_tokenizes_a_plate_the_rules_miss() {
