@@ -75,11 +75,15 @@ def write_contract(directory: str, labels: list[dict]) -> Path:
 
 
 class CommittedContractTests(unittest.TestCase):
-    def test_v2_rules_on_every_corpus_label_and_excludes_only_password(self) -> None:
+    def test_v2_rules_on_every_corpus_label_and_excludes_only_credentials(self) -> None:
         contract = v2()
         self.assertEqual(contract.contract_id, "scored-labels-v2")
         self.assertEqual(contract.version, 2)
-        self.assertEqual(contract.excluded_labels, frozenset({"PASSWORD"}))
+        self.assertEqual(contract.excluded_labels, frozenset({"PASSWORD", "SECURITYTOKEN"}))
+        self.assertEqual(
+            contract.neutral_prediction_classes,
+            frozenset({"custom:password", "custom:security_token", "custom:secret"}),
+        )
         self.assertEqual(contract.scored_labels | contract.excluded_labels, CORPUS_LABELS)
         self.assertRegex(contract.sha256, r"^[0-9a-f]{64}$")
 
@@ -122,7 +126,7 @@ class ExclusionScoringTests(unittest.TestCase):
 
     def test_protecting_an_excluded_span_is_not_a_false_positive(self) -> None:
         (applied,) = score.apply_scored_label_contract([document(EMAIL, PASSWORD)], v2())
-        result = metrics(applied, EMAIL, score.Span(15, 23, "custom:password"))
+        result = metrics(applied, EMAIL, score.Span(15, 23, "name"))
         self.assertEqual(result["utf8_bytes"]["false_positive"], 0)
         self.assertEqual(result["utf8_bytes"]["predicted"], 6)
         self.assertEqual(result["prediction_spans"]["total"], 1)
@@ -130,7 +134,7 @@ class ExclusionScoringTests(unittest.TestCase):
 
     def test_bytes_beyond_the_excluded_span_stay_false_positive(self) -> None:
         (applied,) = score.apply_scored_label_contract([document(EMAIL, PASSWORD)], v2())
-        result = metrics(applied, EMAIL, score.Span(12, 23, "custom:password"))
+        result = metrics(applied, EMAIL, score.Span(12, 23, "name"))
         self.assertEqual(result["utf8_bytes"]["false_positive"], 3)
         self.assertEqual(result["prediction_spans"]["total"], 2)
         # The ignored bytes leave the non-PII denominator: 27 - 6 gold - 8 ignored.
@@ -144,6 +148,23 @@ class ExclusionScoringTests(unittest.TestCase):
         result = metrics(applied)
         self.assertEqual(result["utf8_bytes"]["pii"], 5)
         self.assertEqual(result["utf8_bytes"]["leaked"], 5)
+
+    def test_neutral_prediction_class_is_not_a_false_positive(self) -> None:
+        (applied,) = score.apply_scored_label_contract([document(EMAIL)], v2())
+        v1_result = metrics(document(EMAIL), EMAIL, score.Span(15, 23, "custom:security_token"))
+        self.assertEqual(v1_result["utf8_bytes"]["false_positive"], 8)
+        result = metrics(applied, EMAIL, score.Span(15, 23, "custom:security_token"))
+        self.assertEqual(result["utf8_bytes"]["false_positive"], 0)
+        self.assertEqual(result["prediction_spans"]["total"], 1)
+        # Any other class on the same bytes stays a false positive.
+        other = metrics(applied, EMAIL, score.Span(15, 23, "custom:url"))
+        self.assertEqual(other["utf8_bytes"]["false_positive"], 8)
+
+    def test_neutral_prediction_class_still_protects_scored_gold(self) -> None:
+        (applied,) = score.apply_scored_label_contract([document(EMAIL)], v2())
+        result = metrics(applied, score.Span(5, 11, "custom:password"))
+        self.assertEqual(result["utf8_bytes"]["leaked"], 0)
+        self.assertEqual(result["utf8_bytes"]["true_positive"], 6)
 
     def test_unruled_corpus_label_fails_closed(self) -> None:
         with self.assertRaisesRegex(score.ScoredLabelContractError, "NEWLABEL"):
@@ -189,7 +210,11 @@ class ContractProvenanceTests(unittest.TestCase):
             (v2_report["scored_gold_utf8_bytes"], v2_report["excluded_gold_utf8_bytes"]),
             (6, 8),
         )
-        self.assertEqual(v2_report["excluded_labels"], ["PASSWORD"])
+        self.assertEqual(v2_report["excluded_labels"], ["PASSWORD", "SECURITYTOKEN"])
+        self.assertEqual(
+            v2_report["neutral_prediction_classes"],
+            ["custom:password", "custom:secret", "custom:security_token"],
+        )
         self.assertEqual(v2_report["file_sha256"], v2().sha256)
 
         card = score.assemble_scorecard(

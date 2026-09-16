@@ -154,6 +154,9 @@ class Document:
     # are not gold, and the bytes only they cover are neither leaked nor false
     # positive. Empty under contract v1.
     excluded_spans: tuple[Span, ...] = ()
+    # Prediction classes the contract treats as neutral: they still protect
+    # scored gold, but their other bytes are not false positives.
+    neutral_prediction_classes: frozenset[str] = frozenset()
 
     @property
     def locale_chain(self) -> list[str]:
@@ -183,6 +186,7 @@ class ScoredLabelContract:
     sha256: str | None
     scored_labels: frozenset[str] | None
     excluded_labels: frozenset[str]
+    neutral_prediction_classes: frozenset[str] = frozenset()
 
     @property
     def is_implicit_v1(self) -> bool:
@@ -250,6 +254,17 @@ def load_scored_label_contract(
                 f"{context} ruling must be 'settled' or 'pending'"
             )
         (scored if entry["scored"] else excluded).add(label)
+    neutral: set[str] = set()
+    for index, entry in enumerate(value.get("neutral_prediction_classes", [])):
+        context = f"scored-label contract neutral_prediction_classes[{index}]"
+        if not isinstance(entry, dict) or not isinstance(entry.get("class"), str):
+            raise ScoredLabelContractError(f"{context} needs a class")
+        if entry["class"] in neutral:
+            raise ScoredLabelContractError(f"{context} duplicates {entry['class']}")
+        reason = entry.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ScoredLabelContractError(f"{context} needs a non-empty reason")
+        neutral.add(entry["class"])
     return ScoredLabelContract(
         contract_id=contract_id,
         version=version,
@@ -257,6 +272,7 @@ def load_scored_label_contract(
         sha256=hashlib.sha256(raw).hexdigest(),
         scored_labels=frozenset(scored),
         excluded_labels=frozenset(excluded),
+        neutral_prediction_classes=frozenset(neutral),
     )
 
 
@@ -279,7 +295,7 @@ def apply_scored_label_contract(
         excluded = tuple(
             span for span in document.spans if span.label in contract.excluded_labels
         )
-        if not excluded:
+        if not excluded and not contract.neutral_prediction_classes:
             applied.append(document)
             continue
         applied.append(
@@ -296,6 +312,7 @@ def apply_scored_label_contract(
                 ),
                 negative_category=document.negative_category,
                 excluded_spans=document.excluded_spans + excluded,
+                neutral_prediction_classes=contract.neutral_prediction_classes,
             )
         )
     return applied
@@ -332,6 +349,7 @@ def scored_label_contract_report(
         "file": contract.path,
         "file_sha256": contract.sha256,
         "excluded_labels": sorted(contract.excluded_labels),
+        "neutral_prediction_classes": sorted(contract.neutral_prediction_classes),
         "scored_gold_entities": sum(len(document.spans) for document in documents),
         "scored_gold_utf8_bytes": sum(
             span.end - span.start for document in documents for span in document.spans
@@ -1187,7 +1205,14 @@ class MetricAccumulator:
         # Bytes only an out-of-contract label covers are outside the score:
         # protecting them is neither a true nor a false positive.
         ignored = subtract_intervals(
-            merge_intervals((span.start, span.end) for span in document.excluded_spans),
+            merge_intervals(
+                [(span.start, span.end) for span in document.excluded_spans]
+                + [
+                    (span.start, span.end)
+                    for span in predictions
+                    if span.label in document.neutral_prediction_classes
+                ]
+            ),
             gold,
         )
         if ignored:
@@ -1971,6 +1996,7 @@ def run_config(
     excluded_label_coverage: defaultdict[str, RecallAccumulator] = defaultdict(
         RecallAccumulator
     )
+    neutral_prediction_bytes: Counter[str] = Counter()
     contract = ContractAccumulator()
     scored_document_ids: list[str] = []
     failed_closed_documents: list[dict[str, str]] = []
@@ -2083,6 +2109,15 @@ def run_config(
                     [span for span in document.spans if span.label == label],
                     predictions,
                 )
+            if document.neutral_prediction_classes:
+                gold = merge_intervals((span.start, span.end) for span in document.spans)
+                for label in document.neutral_prediction_classes:
+                    neutral = merge_intervals(
+                        (span.start, span.end) for span in predictions if span.label == label
+                    )
+                    neutral_prediction_bytes[label] += interval_length(
+                        subtract_intervals(neutral, gold)
+                    )
             for label in {span.label for span in document.excluded_spans}:
                 excluded_label_coverage[label].add(
                     [span for span in document.excluded_spans if span.label == label],
@@ -2152,6 +2187,15 @@ def run_config(
                 }
             }
             if any(document.excluded_spans for document in documents)
+            else {}
+        ),
+        **(
+            {
+                "neutral_prediction_utf8_bytes_outside_scored_gold": dict(
+                    sorted(neutral_prediction_bytes.items())
+                )
+            }
+            if any(document.neutral_prediction_classes for document in documents)
             else {}
         ),
         **(

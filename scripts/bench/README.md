@@ -60,12 +60,19 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
 
 [`scored-labels-v2.json`](../../docs/reference/benchmarks/scored-labels-v2.json)
 rules on every corpus label with a reason and a `settled`/`pending` ruling. v2
-puts `PASSWORD` out of contract: a password is an authentication secret, not
-personal data. An out-of-contract span is removed from gold, and the bytes only
-it covers are ignored, so they count as neither leaked nor false positive.
-Whether the pipeline still protected them is reported per run under
+puts the credential labels `PASSWORD` and `SECURITYTOKEN` out of contract:
+credentials authenticate a system, they are not personal data. An
+out-of-contract span is removed from gold, and the bytes only it covers are
+ignored, so they count as neither leaked nor false positive. Whether the
+pipeline still protected them is reported per run under
 `excluded_label_coverage`. A corpus label the contract does not list fails
 closed.
+
+v2 also lists `neutral_prediction_classes` (`custom:password`,
+`custom:security_token`, `custom:secret`). A prediction of one of those classes
+still counts as protection where it covers scored gold; its other bytes are
+ignored instead of counted as false positive, and are reported per run under
+`neutral_prediction_utf8_bytes_outside_scored_gold`.
 
 The scorecard records the contract under `scoring.scored_label_contract`: its
 id, version, file SHA-256, excluded labels, scored and excluded gold counts, and

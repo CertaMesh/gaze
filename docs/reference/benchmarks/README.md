@@ -81,10 +81,11 @@ has a measured fail-closed invalid-output rate.
 Which corpus labels count as gold PII is itself a versioned contract. Rows
 measured before contracts existed use **v1**, which scores every label.
 [`scored-labels-v2.json`](scored-labels-v2.json) rules on each of the 29 corpus
-labels with a reason; it puts `PASSWORD` out of contract (an authentication
-secret is not personal data) and marks `USERNAME`, `URL`, `COMPANYNAME`,
-`COUNTRY` and `STATE` as rulings still pending. Out-of-contract bytes are
-neither leaked nor false positive. Numbers from different contracts are never
+labels with a reason; it puts the credential labels `PASSWORD` and
+`SECURITYTOKEN` out of contract (credentials are not personal data), treats
+Gaze's own credential classes as neutral predictions, and marks `USERNAME`,
+`URL`, `COMPANYNAME`, `COUNTRY` and `STATE` as rulings still pending.
+Out-of-contract bytes are neither leaked nor false positive. Numbers from different contracts are never
 compared as a regression, and a row measured under anything other than v1
 names its contract. See
 [`scripts/bench/README.md`](../../../scripts/bench/README.md#scored-label-contracts).

@@ -8,7 +8,7 @@
     "file": "data/test-00000-of-00001.parquet",
     "negative_corpus": "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl"
   },
-  "semantics": "A label with scored=false is out of contract. Its gold spans are removed from every gold count, and the bytes they cover (where no scored gold span also covers them) are ignored: they are neither leaked, nor true positive, nor false positive, nor counted as non-PII text. Whether the pipeline still protected those bytes is reported separately under excluded_label_coverage. Every corpus label must be listed; an unlisted label fails closed.",
+  "semantics": "A label with scored=false is out of contract. Its gold spans are removed from every gold count, and the bytes they cover (where no scored gold span also covers them) are ignored: they are neither leaked, nor true positive, nor false positive, nor counted as non-PII text. A prediction whose class is listed in neutral_prediction_classes is out of contract too: its bytes still count as protection where they cover scored gold, and are otherwise ignored rather than counted as false positive. Whether the pipeline still protected excluded gold is reported under excluded_label_coverage. Every corpus label must be listed; an unlisted label fails closed.",
   "labels": [
     {
       "label": "AGE",
@@ -127,7 +127,7 @@
       "scored": false,
       "category": "credential",
       "ruling": "settled",
-      "reason": "Out of contract. A password is an authentication secret, not personal data. User ruling 2026-09-16: credentials are not PII and Gaze should not interfere with them."
+      "reason": "Out of contract: credential, not PII. A password is an authentication secret, not personal data. User ruling 2026-09-16: credentials are not PII and Gaze should not interfere with them."
     },
     {
       "label": "PHONENUMBER",
@@ -145,10 +145,10 @@
     },
     {
       "label": "SECURITYTOKEN",
-      "scored": true,
+      "scored": false,
       "category": "credential",
       "ruling": "settled",
-      "reason": "Kept in for v2: an API key or token reaching an LLM is a real incident and Gaze ships a recognizer for it. A separate credential-exposure score is proposed but not part of v2."
+      "reason": "Out of contract: credential, not PII. API keys, access tokens and session secrets authenticate a system, not a person. User ruling 2026-09-16: token detection does not belong in a PII detection library."
     },
     {
       "label": "SSN",
@@ -212,6 +212,20 @@
       "category": "address_constituent",
       "ruling": "settled",
       "reason": "Address constituent; scored per label until a composite ADDRESS entity exists."
+    }
+  ],
+  "neutral_prediction_classes": [
+    {
+      "class": "custom:password",
+      "reason": "Credential, not PII: emitted by the password.field recognizer."
+    },
+    {
+      "class": "custom:security_token",
+      "reason": "Credential, not PII: emitted by the security_token.anchored recognizer."
+    },
+    {
+      "class": "custom:secret",
+      "reason": "Credential, not PII: the OpenAI Privacy Filter secret label."
     }
   ]
 }
