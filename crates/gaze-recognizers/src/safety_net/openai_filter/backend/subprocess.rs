@@ -533,10 +533,6 @@ struct PrivateOpfSpan {
     end: usize,
     #[serde(default)]
     score: Option<f32>,
-    #[serde(default)]
-    _text: Option<PrivatePiiString>,
-    #[serde(default)]
-    _placeholder: Option<PrivatePiiString>,
 }
 
 impl std::fmt::Debug for PrivateOpfSpan {

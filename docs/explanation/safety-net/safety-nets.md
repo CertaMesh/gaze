@@ -400,9 +400,9 @@ adapter:
   span is dropped.
 - After `serde_json::from_str` returns, the adapter calls
   `PrivateOpfSpan::into_raw_span`, which produces a `RawSpan` containing
-  only `start`, `end`, `label`, and `score`. The `_text` and `_placeholder`
-  fields drop on the same statement, with their `Drop` impl scrubbing the
-  buffer.
+  only `start`, `end`, `label`, and `score`. The per-span `text` and
+  `placeholder` fields are never deserialized, so their contents are skipped
+  by the parser and never held in memory.
 - The top-level `text` echo is held in a `PrivatePiiString`, compared with
   the text the adapter sent, and scrubbed on drop. `redacted_text` is never
   deserialized.

@@ -954,6 +954,34 @@ printf '%s\n' '{{"text":"clean","detected_spans":[]}}'
     );
 }
 
+#[test]
+#[file_serial(gaze_subprocess)]
+fn a_text_file_in_the_configured_args_fails_closed() {
+    // `--text-file` appends in the pinned CLI: an adopter-configured file is analysed next to the
+    // piped text, so two results come back and neither may be applied.
+    let dir = tempfile::tempdir().unwrap();
+    let other = dir.path().join("other.txt");
+    fs::write(&other, "Contact John Smith today.").unwrap();
+    let backend = SubprocessOpenAiFilterBackend::new(
+        SubprocessOpenAiFilterConfig::new(emulated_needles("opf-whole-configured-text-file"))
+            .with_args([
+                "--format",
+                "json",
+                "--output-mode",
+                "typed",
+                "--text-file",
+                other.to_str().unwrap(),
+            ])
+            .with_timeout(test_subprocess_timeout()),
+    )
+    .unwrap();
+
+    assert!(matches!(
+        backend.infer("Email jane.doe@example.invalid please.").unwrap_err(),
+        SafetyNetError::InvalidOutput { ref message } if message == "opf stdout was not valid JSON"
+    ));
+}
+
 /// Runs the real pinned CLI. `GAZE_TEST_REAL_OPF=<opf path>` and a verified checkpoint at
 /// `GAZE_TEST_REAL_OPF_CHECKPOINT` are required; run with `--ignored`.
 #[test]
