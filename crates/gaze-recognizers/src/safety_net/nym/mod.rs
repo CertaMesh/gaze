@@ -116,6 +116,42 @@ impl SafetyNet for NymSafetyNet {
     }
 }
 
+/// Hooks for tests that replay captured model output through the production decoder.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub mod test_support {
+    use std::ops::Range;
+
+    pub use super::decode::PieceScore;
+    use super::*;
+
+    /// A decoded span: byte range, label, score.
+    pub type DecodedSpan = (Range<usize>, NymLabel, f32);
+
+    /// Runs the production decoder over captured tokenizer char offsets and piece scores.
+    pub fn decode_captured(
+        text: &str,
+        char_offsets: &[(usize, usize)],
+        scores: &[PieceScore],
+        operating_point: &NymOperatingPoint,
+    ) -> Result<Vec<DecodedSpan>, SafetyNetError> {
+        Ok(
+            decode::decode_pieces(text, char_offsets, scores, operating_point)?
+                .into_iter()
+                .map(|span| (span.start..span.end, span.label, span.score))
+                .collect(),
+        )
+    }
+
+    /// Tokenizes and scores `text` with the real model: `(char offsets, piece scores)`.
+    pub fn capture(
+        net: &NymSafetyNet,
+        text: &str,
+    ) -> Result<(Vec<(usize, usize)>, Vec<PieceScore>), SafetyNetError> {
+        net.backend()?.score_pieces(text)
+    }
+}
+
 /// Maps a decoded span to a suspect, or `None` when the manifest already covers it.
 fn span_to_suspect(
     span: NymSpan,

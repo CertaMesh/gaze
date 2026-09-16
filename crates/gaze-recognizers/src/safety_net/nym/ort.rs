@@ -12,7 +12,8 @@ use super::artifacts::{
     NYM_SMALL_INT8_BUNDLE_SHA256, NYM_SMALL_MODEL_FILE, NYM_SMALL_TOKENIZER_FILE,
 };
 use super::decode::{
-    check_char_coverage, decode_pieces, plan_windows, softmax_row, NymSpan, RowMerger, NUM_LABELS,
+    check_char_coverage, decode_pieces, plan_windows, softmax_row, NymSpan, PieceScore, RowMerger,
+    NUM_LABELS,
 };
 
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
@@ -172,6 +173,15 @@ impl NymOrtBackend {
     }
 
     pub(crate) fn infer(&self, clean: &str) -> Result<Vec<NymSpan>, SafetyNetError> {
+        let scores = self.score_pieces(clean)?;
+        decode_pieces(clean, &scores.0, &scores.1, &self.config.operating_point)
+    }
+
+    /// Tokenizes `clean` and scores every piece: `(char offsets, per-piece scores)`.
+    pub(crate) fn score_pieces(
+        &self,
+        clean: &str,
+    ) -> Result<(Vec<(usize, usize)>, Vec<PieceScore>), SafetyNetError> {
         if clean.len() > self.config.max_input_bytes {
             return Err(SafetyNetError::InputTooLarge {
                 limit: self.config.max_input_bytes,
@@ -185,20 +195,16 @@ impl NymOrtBackend {
                 message: format!("nym tokenizer failed: {}", sanitize_error(&err.to_string())),
             })?;
         let ids = encoding.get_ids();
-        let offsets = encoding.get_offsets();
+        let offsets = encoding.get_offsets().to_vec();
         let chars = clean.chars().collect::<Vec<_>>();
-        check_char_coverage(&chars, offsets)?;
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-
+        check_char_coverage(&chars, &offsets)?;
         let mut merger = RowMerger::new(ids.len());
         for window in plan_windows(ids.len()) {
             let probs = self.run_window(&ids[window.clone()])?;
             merger.add_window(window, &probs);
         }
-        let rows = merger.finish()?;
-        decode_pieces(clean, offsets, &rows, &self.config.operating_point)
+        let scores = merger.finish()?.iter().map(PieceScore::from_row).collect();
+        Ok((offsets, scores))
     }
 
     fn run_window(&self, ids: &[u32]) -> Result<Vec<[f32; NUM_LABELS]>, SafetyNetError> {

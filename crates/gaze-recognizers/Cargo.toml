@@ -80,6 +80,10 @@ name = "kiji_distilbert_subprocess"
 required-features = ["safety-net-kiji", "test-support"]
 
 [[test]]
+name = "nym_safety_net"
+required-features = ["safety-net-nym", "test-support"]
+
+[[test]]
 name = "locale_aware_registry"
 
 [[test]]

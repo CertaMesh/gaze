@@ -142,34 +142,60 @@ pub(crate) fn char_to_byte_table(text: &str) -> Vec<usize> {
         .collect()
 }
 
-/// A labelled-or-not piece after the per-piece rule, in byte offsets.
+/// The per-piece model verdict the decoder needs: the label with the largest entity mass, that
+/// mass, and whether `B-` outweighs `I-` for it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PieceScore {
+    pub label: NymLabel,
+    pub mass: f32,
+    pub is_begin: bool,
+}
+
+impl PieceScore {
+    /// Reads one probability row. The entity mass of a label is `P(B-label) + P(I-label)`; the
+    /// argmax runs over all 40 labels (first on a tie), so a piece that looks most like a disabled
+    /// label is never relabelled into an enabled one.
+    pub(crate) fn from_row(row: &[f32; NUM_LABELS]) -> Self {
+        let mut best = (0usize, f32::NEG_INFINITY);
+        for index in 0..NymLabel::ALL.len() {
+            let mass = row[2 * index + 1] + row[2 * index + 2];
+            if mass > best.1 {
+                best = (index, mass);
+            }
+        }
+        let (index, mass) = best;
+        Self {
+            label: NymLabel::ALL[index],
+            mass,
+            is_begin: row[2 * index + 1] >= row[2 * index + 2],
+        }
+    }
+}
+
+/// A scored piece in byte offsets.
 #[derive(Debug, Clone, Copy)]
 struct Piece {
     start: usize,
     end: usize,
-    label: NymLabel,
-    mass: f32,
-    is_begin: bool,
+    score: PieceScore,
 }
 
-/// Decodes merged probability rows into word-aligned suspect spans.
+/// Decodes per-piece scores into word-aligned suspect spans.
 ///
 /// * `char_offsets[k]` is piece `k`'s CHARACTER range in `text` (the tokenizer's char offsets);
 ///   they are trimmed of whitespace and converted to byte offsets here.
-/// * Per piece, the entity mass of a label is `P(B-label) + P(I-label)`. The piece's label is the
-///   argmax over all 40 labels, so a piece that looks most like a disabled label (`GIVEN_NAME`)
-///   is never relabelled into an enabled one. It counts only if that label is enabled and its
-///   mass reaches the label's threshold.
+/// * A piece counts only if its label ([`PieceScore::from_row`]) is enabled and its mass reaches
+///   the label's threshold.
 /// * Spans are assembled from whole words: any counted piece labels its word, the strongest
 ///   piece picks the label, the score is the minimum over the pieces carrying that label, and a
 ///   word whose first counted piece is `I-` extends an open entity of the same label.
 pub(crate) fn decode_pieces(
     text: &str,
     char_offsets: &[(usize, usize)],
-    rows: &[[f32; NUM_LABELS]],
+    scores: &[PieceScore],
     operating_point: &NymOperatingPoint,
 ) -> Result<Vec<NymSpan>, SafetyNetError> {
-    if char_offsets.len() != rows.len() {
+    if char_offsets.len() != scores.len() {
         return Err(SafetyNetError::InvalidOutput {
             message: "nym returned mismatched piece offsets".to_string(),
         });
@@ -177,8 +203,8 @@ pub(crate) fn decode_pieces(
     let chars = text.chars().collect::<Vec<_>>();
     let bytes = char_to_byte_table(text);
 
-    let mut pieces: Vec<Piece> = Vec::with_capacity(rows.len());
-    for (&(mut start, mut end), row) in char_offsets.iter().zip(rows) {
+    let mut pieces: Vec<Piece> = Vec::with_capacity(scores.len());
+    for (&(mut start, mut end), score) in char_offsets.iter().zip(scores) {
         if start > end || end > chars.len() {
             return Err(SafetyNetError::InvalidOutput {
                 message: "nym tokenizer returned out-of-bounds offsets".to_string(),
@@ -194,18 +220,15 @@ pub(crate) fn decode_pieces(
         if start >= end {
             continue;
         }
-        let (label, mass, is_begin) = strongest_label(row);
         let piece = Piece {
             start: bytes[start],
             end: bytes[end],
-            label,
-            mass,
-            is_begin,
+            score: *score,
         };
         // Byte-fallback pieces of one character share its offsets; keep the strongest.
         match pieces.last_mut() {
             Some(last) if last.start == piece.start && last.end == piece.end => {
-                if piece.mass > last.mass {
+                if piece.score.mass > last.score.mass {
                     *last = piece;
                 }
             }
@@ -218,66 +241,48 @@ pub(crate) fn decode_pieces(
         .map(|piece| (piece.start, piece.end))
         .collect::<Vec<_>>();
     let mut out = Vec::new();
-    let mut open: Option<(NymSpan, NymLabel)> = None;
+    let mut open: Option<NymSpan> = None;
     for word in group_word_pieces(text, &spans) {
         let counted = word
             .iter()
-            .map(|&index| pieces[index])
-            .filter(|piece| {
+            .map(|&index| pieces[index].score)
+            .filter(|score| {
                 operating_point
-                    .threshold(piece.label)
-                    .is_some_and(|threshold| piece.mass >= threshold)
+                    .threshold(score.label)
+                    .is_some_and(|threshold| score.mass >= threshold)
             })
             .collect::<Vec<_>>();
         let Some(first) = counted.first() else {
-            out.extend(open.take().map(|(span, _)| span));
+            out.extend(open.take());
             continue;
         };
-        let best = counted
-            .iter()
-            .fold(*first, |best, piece| if piece.mass > best.mass { *piece } else { best });
-        let score = counted
-            .iter()
-            .filter(|piece| piece.label == best.label)
-            .map(|piece| piece.mass)
-            .fold(f32::INFINITY, f32::min);
+        let best = counted.iter().fold(*first, |best, score| {
+            if score.mass > best.mass {
+                *score
+            } else {
+                best
+            }
+        });
         let current = NymSpan {
             start: pieces[word[0]].start,
             end: pieces[word[word.len() - 1]].end,
             label: best.label,
-            score,
+            score: counted
+                .iter()
+                .filter(|score| score.label == best.label)
+                .map(|score| score.mass)
+                .fold(f32::INFINITY, f32::min),
         };
-        let continues = !first.is_begin;
         match open.as_mut() {
-            Some((span, label)) if continues && *label == current.label => {
+            Some(span) if !first.is_begin && span.label == current.label => {
                 span.end = current.end;
                 span.score = span.score.min(current.score);
             }
-            _ => {
-                let label = current.label;
-                out.extend(open.replace((current, label)).map(|(span, _)| span));
-            }
+            _ => out.extend(open.replace(current)),
         }
     }
-    out.extend(open.map(|(span, _)| span));
+    out.extend(open);
     Ok(out)
-}
-
-/// `(label, mass, is_begin)` for the label with the largest entity mass (first on a tie).
-fn strongest_label(row: &[f32; NUM_LABELS]) -> (NymLabel, f32, bool) {
-    let mut best = (0usize, f32::NEG_INFINITY);
-    for index in 0..NymLabel::ALL.len() {
-        let mass = row[2 * index + 1] + row[2 * index + 2];
-        if mass > best.1 {
-            best = (index, mass);
-        }
-    }
-    let (index, mass) = best;
-    (
-        NymLabel::ALL[index],
-        mass,
-        row[2 * index + 1] >= row[2 * index + 2],
-    )
 }
 
 #[cfg(test)]
@@ -297,6 +302,10 @@ mod tests {
             None => out[0] = 1.0,
         }
         out
+    }
+
+    fn scores(rows: &[[f32; NUM_LABELS]]) -> Vec<PieceScore> {
+        rows.iter().map(PieceScore::from_row).collect()
     }
 
     fn o() -> [f32; NUM_LABELS] {
@@ -422,14 +431,14 @@ mod tests {
 
         // USERNAME mass 0.6 >= 0.5: a suspect.
         let rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::Username, 0.6);
-        let spans = decode_pieces(text, &offsets, &rows, &op).unwrap();
+        let spans = decode_pieces(text, &offsets, &scores(&rows), &op).unwrap();
         assert_eq!(texts(text, &spans), vec!["anna84"]);
         assert_eq!(spans[0].label, NymLabel::Username);
         assert!((spans[0].score - 0.6).abs() < 1e-6);
 
         // Below threshold: nothing.
         let rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::Username, 0.4);
-        assert!(decode_pieces(text, &offsets, &rows, &op).unwrap().is_empty());
+        assert!(decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty());
 
         // GIVEN_NAME outweighs USERNAME on the piece: disabled label wins the argmax, no suspect.
         let mut rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::Username, 0.3);
@@ -443,11 +452,11 @@ mod tests {
             .unwrap();
         rows[target][2 * index + 1] = 0.6;
         rows[target][0] = 0.1;
-        assert!(decode_pieces(text, &offsets, &rows, &op).unwrap().is_empty());
+        assert!(decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty());
 
         // DATE_OF_BIRTH needs 0.9 under op-B.
         let rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::DateOfBirth, 0.85);
-        assert!(decode_pieces(text, &offsets, &rows, &op).unwrap().is_empty());
+        assert!(decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty());
     }
 
     #[test]
@@ -458,7 +467,7 @@ mod tests {
         for label in [NymLabel::GivenName, NymLabel::Surname, NymLabel::City, NymLabel::ZipCode, NymLabel::TaxId] {
             let rows = labelled(&offsets, char_range(text, "Anna"), label, 0.99);
             assert!(
-                decode_pieces(text, &offsets, &rows, &op).unwrap().is_empty(),
+                decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty(),
                 "{label} fired under the default operating point"
             );
         }
@@ -472,7 +481,7 @@ mod tests {
         let offsets = vec![(0, 4), (4, s + 3), (s + 3, s + 8), (s + 8, s + 11), (s + 11, s + 16)];
         let mut rows = vec![o(); offsets.len()];
         rows[2] = row(Some(NymLabel::Username), 0.0, 0.95);
-        let spans = decode_pieces(text, &offsets, &rows, &NymOperatingPoint::op_b()).unwrap();
+        let spans = decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
         assert_eq!(texts(text, &spans), vec!["abc12345xyz"]);
     }
 
@@ -488,12 +497,12 @@ mod tests {
         rows[2] = row(Some(NymLabel::LicensePlate), 0.0, 0.9);
         rows[3] = row(Some(NymLabel::LicensePlate), 0.0, 0.8);
         rows[4] = row(Some(NymLabel::LicensePlate), 0.0, 0.7);
-        let spans = decode_pieces(text, &offsets, &rows, &NymOperatingPoint::op_b()).unwrap();
+        let spans = decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
         assert_eq!(texts(text, &spans), vec!["AB-CD 1234"]);
         assert!((spans[0].score - 0.7).abs() < 1e-6);
 
         rows[3] = row(Some(NymLabel::LicensePlate), 0.8, 0.0);
-        let spans = decode_pieces(text, &offsets, &rows, &NymOperatingPoint::op_b()).unwrap();
+        let spans = decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
         assert_eq!(texts(text, &spans), vec!["AB-", "CD 1234"]);
     }
 
@@ -537,7 +546,7 @@ mod tests {
                     }
                 })
                 .collect::<Vec<_>>();
-            let spans = decode_pieces(&text, &offsets, &rows, &NymOperatingPoint::op_b()).unwrap();
+            let spans = decode_pieces(&text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
             assert_eq!(texts(&text, &spans), vec![target.to_string()], "{text:?}");
             for span in &spans {
                 assert!(text.is_char_boundary(span.start) && text.is_char_boundary(span.end));
@@ -555,7 +564,7 @@ mod tests {
         let mut rows = vec![o(); 4];
         rows[1] = row(Some(NymLabel::Username), 0.2, 0.0);
         rows[2] = row(Some(NymLabel::Username), 0.7, 0.0);
-        let spans = decode_pieces(text, &offsets, &rows, &NymOperatingPoint::op_b()).unwrap();
+        let spans = decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
         assert_eq!(texts(text, &spans), vec!["🚗"]);
         assert!((spans[0].score - 0.7).abs() < 1e-6);
     }
@@ -564,7 +573,7 @@ mod tests {
     fn malformed_model_output_is_a_typed_error() {
         let op = NymOperatingPoint::op_b();
         assert!(decode_pieces("ab", &[(0, 2)], &[], &op).is_err());
-        assert!(decode_pieces("ab", &[(0, 3)], &[o()], &op).is_err());
+        assert!(decode_pieces("ab", &[(0, 3)], &scores(&[o()]), &op).is_err());
         assert!(softmax_row(&[0.0; 80]).is_err());
         let mut bad = [0.0; NUM_LABELS];
         bad[3] = f32::NAN;
