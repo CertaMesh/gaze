@@ -267,8 +267,9 @@ surface without making it part of the default public runtime.
 ## Explicit birth-date and credential fields
 
 The embedded `gaze-core` rulepack version **0.6.0** contains 39 recognizers.
-Two project-authored, globally active `safe_default` rules add narrow EN/DE
-field recognition through the existing assembly and `RegexDetector` machinery.
+Two project-authored `safe_default` rules with `locales = ["global"]` add narrow EN/DE
+field recognition through the existing assembly and `RegexDetector` machinery,
+once their bundle is loaded.
 `birth_date.cue` ships in `core`. `password.field` ships in the opt-in
 `secrets` bundle, because credentials are not PII; load it with
 `bundled = ["core", "secrets"]`. The former `username.field` rule was removed
