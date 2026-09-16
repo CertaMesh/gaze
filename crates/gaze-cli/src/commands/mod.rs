@@ -487,6 +487,8 @@ enum SafetyNetAuditCmd {
 pub(crate) enum SafetyNetKind {
     OpenaiFilter,
     KijiDistilbert,
+    /// Nym-small v3 int8, in process (opt-in).
+    Nym,
 }
 
 /// v0.8 forward-compatible backend selector.
@@ -498,6 +500,8 @@ pub(crate) enum SafetyNetKind {
 pub(crate) enum SafetyNetBackend {
     OpenaiFilter,
     KijiDistilbert,
+    /// Nym-small v3 int8, in process (opt-in).
+    Nym,
 }
 
 impl From<SafetyNetKind> for SafetyNetBackend {
@@ -505,6 +509,7 @@ impl From<SafetyNetKind> for SafetyNetBackend {
         match kind {
             SafetyNetKind::OpenaiFilter => Self::OpenaiFilter,
             SafetyNetKind::KijiDistilbert => Self::KijiDistilbert,
+            SafetyNetKind::Nym => Self::Nym,
         }
     }
 }
