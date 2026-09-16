@@ -6,13 +6,13 @@ Options:
       --policy <POLICY>
           Path to policy.toml
       --safety-net <SAFETY_NET>
-          Optional observer-only privacy safety net [possible values: openai-filter, kiji-distilbert]
+          Optional observer-only privacy safety net [possible values: openai-filter, kiji-distilbert, nym]
       --safety-net-backend <SAFETY_NET_BACKEND>
-          v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins [possible values: openai-filter, kiji-distilbert]
+          v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins [possible values: openai-filter, kiji-distilbert, nym]
       --safety-net-registry
           Enable locale-aware Pass-3 safety-net registry dispatch
       --safety-net-add <SAFETY_NET_ADD>
-          Add one backend to the locale-aware safety-net registry. Repeatable [possible values: openai-filter, kiji-distilbert]
+          Add one backend to the locale-aware safety-net registry. Repeatable [possible values: openai-filter, kiji-distilbert, nym]
       --idle-timeout <IDLE_TIMEOUT>
           Exit when stdin is idle for this many seconds [default: 1800]
       --session-idle-timeout <SESSION_IDLE_TIMEOUT>
@@ -57,6 +57,10 @@ Options:
           Path to the pinned Kiji DistilBERT model directory
       --kiji-distilbert-locales <KIJI_DISTILBERT_LOCALES>
           Locale list for the Kiji DistilBERT backend
+      --nym-model-dir <NYM_MODEL_DIR>
+          Path to the pinned Nym-small int8 bundle from `gaze setup --safety-net nym` (default: GAZE_NYM_MODEL_DIR)
+      --nym-intra-threads <NYM_INTRA_THREADS>
+          ONNX Runtime intra-op threads for the Nym backend (default: 1)
       --safety-net-timeout-ms <SAFETY_NET_TIMEOUT_MS>
           Safety-net subprocess timeout in milliseconds [default: 5000]
       --safety-net-input-limit-bytes <SAFETY_NET_INPUT_LIMIT_BYTES>

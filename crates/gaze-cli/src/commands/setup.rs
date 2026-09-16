@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use clap::ValueEnum;
 use gaze::{CleanDocument, RawDocument, Session};
 use gaze_model_setup::{
-    install_kiji_bundle, InstallOptions, InstallOutcome, KijiDistilbertPrecision, SetupError,
+    install_kiji_bundle, install_nym_bundle, InstallOptions, InstallOutcome,
+    KijiDistilbertPrecision, SetupError,
 };
 use sha2::{Digest, Sha256};
 
@@ -32,6 +33,8 @@ pub(crate) struct Args {
 pub(crate) enum SetupSafetyNet {
     Ner,
     Opf,
+    // Downloads and verifies the pinned Nym-small int8 bundle (opt-in net).
+    Nym,
 }
 
 pub(crate) fn run(args: Args) -> Result<(), CliError> {
@@ -54,6 +57,7 @@ struct SetupSummary {
     doctor_clean_text: String,
     opf_notice: Option<String>,
     opf_checkpoint: Option<PathBuf>,
+    nym_model_dir: Option<(PathBuf, ModelInstallStatus)>,
 }
 
 #[derive(Clone, Copy)]
@@ -72,6 +76,7 @@ struct OpfSetup<'a> {
 struct ResolvedSetupSafetyNet {
     opf_notice: Option<String>,
     opf_checkpoint: Option<PathBuf>,
+    nym_model_dir: Option<(PathBuf, ModelInstallStatus)>,
 }
 
 fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummary, CliError> {
@@ -90,6 +95,7 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
         doctor_clean_text,
         opf_notice: resolved_safety_net.opf_notice,
         opf_checkpoint: resolved_safety_net.opf_checkpoint,
+        nym_model_dir: resolved_safety_net.nym_model_dir,
     })
 }
 
@@ -130,9 +136,31 @@ fn resolve_safety_net(
         SetupSafetyNet::Ner => Ok(ResolvedSetupSafetyNet {
             opf_notice: None,
             opf_checkpoint: None,
+            nym_model_dir: None,
         }),
         SetupSafetyNet::Opf => resolve_opf_safety_net(opf_setup),
+        SetupSafetyNet::Nym => resolve_nym_safety_net(|| install_nym_bundle(None)),
     }
+}
+
+/// Installs (or re-verifies) the pinned Nym bundle. Any failure stops setup before a policy is
+/// written, so a half-installed net is never reported as ready.
+fn resolve_nym_safety_net(
+    install: impl FnOnce() -> Result<InstallOutcome, SetupError>,
+) -> Result<ResolvedSetupSafetyNet, CliError> {
+    let installed = match install().map_err(|err| {
+        setup_error(format!(
+            "Nym bundle setup failed: {err}. Remediation: check network access to huggingface.co, or remove the invalid model directory and re-run `gaze setup --safety-net nym`."
+        ))
+    })? {
+        InstallOutcome::AlreadyPresent { model_dir } => (model_dir, ModelInstallStatus::AlreadyPresent),
+        InstallOutcome::Installed { model_dir } => (model_dir, ModelInstallStatus::Downloaded),
+    };
+    Ok(ResolvedSetupSafetyNet {
+        opf_notice: None,
+        opf_checkpoint: None,
+        nym_model_dir: Some(installed),
+    })
 }
 
 #[cfg(feature = "safety-net-openai")]
@@ -167,6 +195,7 @@ fn resolve_opf_safety_net(opf_setup: OpfSetup<'_>) -> Result<ResolvedSetupSafety
         return Ok(ResolvedSetupSafetyNet {
             opf_notice: Some(OPF_UNPINNED_NOTICE.to_string()),
             opf_checkpoint: None,
+            nym_model_dir: None,
         });
     }
 
@@ -185,6 +214,7 @@ fn resolve_opf_safety_net(opf_setup: OpfSetup<'_>) -> Result<ResolvedSetupSafety
     Ok(ResolvedSetupSafetyNet {
         opf_notice: None,
         opf_checkpoint: Some(canonical_or_absolute(&checkpoint_dir)?),
+        nym_model_dir: None,
     })
 }
 
@@ -243,7 +273,7 @@ fn push_sha256sum_manifest_line(manifest: &mut String, artifact: &str, sha256: &
 
 fn prompt_safety_net() -> Result<SetupSafetyNet, CliError> {
     loop {
-        let input = prompt_line("Safety net [ner/opf] (default ner): ")?;
+        let input = prompt_line("Safety net [ner/opf/nym] (default ner): ")?;
         let trimmed = input.trim();
         if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("ner") {
             return Ok(SetupSafetyNet::Ner);
@@ -251,7 +281,10 @@ fn prompt_safety_net() -> Result<SetupSafetyNet, CliError> {
         if trimmed.eq_ignore_ascii_case("opf") {
             return Ok(SetupSafetyNet::Opf);
         }
-        println!("Enter `ner` or `opf`.");
+        if trimmed.eq_ignore_ascii_case("nym") {
+            return Ok(SetupSafetyNet::Nym);
+        }
+        println!("Enter `ner`, `opf` or `nym`.");
     }
 }
 
@@ -421,6 +454,13 @@ fn print_summary(summary: &SetupSummary) {
     if let Some(opf_checkpoint) = &summary.opf_checkpoint {
         println!("OPF checkpoint verified {}", opf_checkpoint.display());
     }
+    if let Some((nym_model_dir, status)) = &summary.nym_model_dir {
+        let verb = match status {
+            ModelInstallStatus::AlreadyPresent => "verified",
+            ModelInstallStatus::Downloaded => "installed",
+        };
+        println!("Nym bundle {verb} {}", nym_model_dir.display());
+    }
     match summary.model_status {
         ModelInstallStatus::AlreadyPresent => {
             println!("model unchanged {}", summary.model_dir.display());
@@ -447,6 +487,13 @@ fn print_summary(summary: &SetupSummary) {
             "For OPF safety net: gaze clean --policy {} --safety-net openai-filter --opf-command $(command -v opf) --opf-checkpoint {}",
             shell_quote_path(&summary.policy_path),
             shell_quote_path(opf_checkpoint)
+        );
+    }
+    if let Some((nym_model_dir, _)) = &summary.nym_model_dir {
+        println!(
+            "For the Nym safety net (opt-in): gaze clean --policy {} --safety-net nym --nym-model-dir {}",
+            shell_quote_path(&summary.policy_path),
+            shell_quote_path(nym_model_dir)
         );
     }
     println!("For gaze index: set GAZE_INDEX_KEY before ingest/search.");
@@ -613,6 +660,45 @@ mod tests {
         let clean_text = doctor_check(&policy_out).unwrap();
         assert!(clean_text.contains(":Name_"), "{clean_text}");
         assert!(clean_text.contains(":Email_"), "{clean_text}");
+    }
+
+    #[test]
+    fn nym_request_reports_the_installed_bundle() {
+        let dir = tempdir().unwrap();
+        let resolved = resolve_nym_safety_net(|| {
+            Ok(InstallOutcome::Installed {
+                model_dir: dir.path().to_path_buf(),
+            })
+        })
+        .unwrap();
+        assert_eq!(
+            resolved.nym_model_dir,
+            Some((dir.path().to_path_buf(), ModelInstallStatus::Downloaded))
+        );
+    }
+
+    #[test]
+    fn nym_request_fails_setup_when_the_bundle_does_not_verify() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        let policy_out = dir.path().join("policy.toml");
+
+        let err = resolve_nym_safety_net(|| {
+            Err(SetupError::Verify(
+                gaze_model_setup::SafetyNetError::ModelIntegrityMismatch {
+                    expected: "pinned".to_string(),
+                    actual: "other".to_string(),
+                },
+            ))
+        })
+        .unwrap_err();
+
+        assert!(
+            matches!(&err, CliError::SetupDetail(detail) if detail.contains("Nym bundle setup failed") && detail.contains("integrity mismatch")),
+            "{err:?}"
+        );
+        assert!(!model_dir.exists());
+        assert!(!policy_out.exists());
     }
 
     #[test]

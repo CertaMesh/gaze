@@ -28,7 +28,13 @@ carries the two credential recognizers, `security_token.anchored` and
 default activation: its rows below are inert until a caller loads it by name
 with `[policy.rulepacks] bundled = ["core", "secrets"]` or
 `--rulepack-bundled core,secrets`. The former `username.field` recognizer was
-removed in core 0.6.0 and nothing emits `custom:username`.
+removed in core 0.6.0; no rulepack emits `custom:username`. The opt-in Nym
+safety net emits `custom:username`, `custom:license_plate`,
+`custom:building_number`, `custom:tax_id`, `custom:postal_code` and
+`custom:date` suspects when enabled
+([mapping](../explanation/safety-net/safety-nets.md#which-labels-can-fire));
+those are safety-net classes, not recognizer rows, so they are not in the tables
+below.
 
 ## PII classes and resolver priority
 

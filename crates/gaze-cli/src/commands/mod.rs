@@ -81,7 +81,7 @@ enum Cmd {
     /// Requires the binary to be built with `--features setup`.
     #[cfg(feature = "setup")]
     Setup {
-        /// Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available.
+        /// Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available; nym downloads and verifies the pinned Nym-small int8 bundle.
         #[arg(long, value_enum)]
         safety_net: Option<setup::SetupSafetyNet>,
         /// Policy TOML output path. Defaults to ./gaze.toml.
@@ -487,6 +487,8 @@ enum SafetyNetAuditCmd {
 pub(crate) enum SafetyNetKind {
     OpenaiFilter,
     KijiDistilbert,
+    // Nym-small v3 int8, in process (opt-in).
+    Nym,
 }
 
 /// v0.8 forward-compatible backend selector.
@@ -498,6 +500,8 @@ pub(crate) enum SafetyNetKind {
 pub(crate) enum SafetyNetBackend {
     OpenaiFilter,
     KijiDistilbert,
+    // Nym-small v3 int8, in process (opt-in).
+    Nym,
 }
 
 impl From<SafetyNetKind> for SafetyNetBackend {
@@ -505,6 +509,7 @@ impl From<SafetyNetKind> for SafetyNetBackend {
         match kind {
             SafetyNetKind::OpenaiFilter => Self::OpenaiFilter,
             SafetyNetKind::KijiDistilbert => Self::KijiDistilbert,
+            SafetyNetKind::Nym => Self::Nym,
         }
     }
 }

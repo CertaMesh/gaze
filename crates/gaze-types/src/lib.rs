@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod inspection;
+pub mod nym;
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap};
@@ -1967,6 +1968,18 @@ impl OpenAiPrivateLabel {
     }
 }
 
+/// True when byte offset `at` in `text` sits between two alphanumeric characters, so a span
+/// edge there would cut a word.
+///
+/// This is the one word rule every safety-net stage shares: model decoders assemble spans from
+/// whole words with it, and the pipeline refuses to act on a word-like suspect whose edge it
+/// flags. Offsets that are out of range or not on a character boundary return false.
+pub fn is_inside_word(text: &str, at: usize) -> bool {
+    let before = text.get(..at).and_then(|head| head.chars().next_back());
+    let after = text.get(at..).and_then(|tail| tail.chars().next());
+    before.is_some_and(char::is_alphanumeric) && after.is_some_and(char::is_alphanumeric)
+}
+
 /// Closed safety-net PII vocabulary before mapping into `PiiClass`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
@@ -1987,6 +2000,16 @@ pub enum SafetyNetPiiClass {
     AccountNumber,
     /// Secret.
     Secret,
+    /// Building or house number.
+    BuildingNumber,
+    /// Vehicle licence plate.
+    LicensePlate,
+    /// Account username or handle.
+    Username,
+    /// Postal or ZIP code.
+    PostalCode,
+    /// Tax identification number.
+    TaxId,
 }
 
 impl SafetyNetPiiClass {
@@ -2001,6 +2024,13 @@ impl SafetyNetPiiClass {
             Self::Date => PiiClass::custom("date").expect("valid custom class"),
             Self::AccountNumber => PiiClass::custom("account_number").expect("valid custom class"),
             Self::Secret => PiiClass::custom("secret").expect("valid custom class"),
+            Self::BuildingNumber => {
+                PiiClass::custom("building_number").expect("valid custom class")
+            }
+            Self::LicensePlate => PiiClass::custom("license_plate").expect("valid custom class"),
+            Self::Username => PiiClass::custom("username").expect("valid custom class"),
+            Self::PostalCode => PiiClass::custom("postal_code").expect("valid custom class"),
+            Self::TaxId => PiiClass::custom("tax_id").expect("valid custom class"),
         }
     }
 }

@@ -109,6 +109,21 @@ pub(crate) struct KijiPrecisionArgs {
     pub(crate) kiji_distilbert_precision: KijiDistilbertPrecision,
 }
 
+/// Nym-small safety-net backend configuration.
+///
+/// Shared by `gaze clean` and `gaze daemon`. The allowlist and thresholds live in policy.toml
+/// (`[safety_net.nym]`, op-B when absent); these flags only say where the pinned bundle is and
+/// how many ONNX Runtime threads it may use.
+#[derive(Args, Debug)]
+pub(crate) struct NymArgs {
+    /// Path to the pinned Nym-small int8 bundle from `gaze setup --safety-net nym` (default: GAZE_NYM_MODEL_DIR)
+    #[arg(long)]
+    pub(crate) nym_model_dir: Option<PathBuf>,
+    /// ONNX Runtime intra-op threads for the Nym backend (default: 1)
+    #[arg(long)]
+    pub(crate) nym_intra_threads: Option<std::num::NonZeroUsize>,
+}
+
 /// policy.toml rulepack overrides.
 ///
 /// Shared by `gaze clean` and `gaze daemon`. Rulepacks decide which recognizers

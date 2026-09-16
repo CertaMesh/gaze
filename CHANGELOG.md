@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Opt-in Nym-small safety net** (`--safety-net nym`, feature
+  `safety-net-nym`, on in the default `gaze-cli` build). Runs
+  `Wismut/nym-pii-multilingual-small` v3 int8 in process through ONNX Runtime.
+  The default net is unchanged; nothing loads unless `nym` is selected.
+  - `gaze setup --safety-net nym` fetches the bundle at revision `4348999c`
+    and verifies it against `NYM_SMALL_INT8_BUNDLE_SHA256`; the backend
+    re-verifies digests, modes and the `id2label` table before loading, and
+    `gaze mcp doctor` reports the bundle.
+  - Only labels with a Gaze class can fire, each with an explicit threshold.
+    The default is op-B: `BUILDING_NUMBER`, `LICENSE_PLATE`, `USERNAME` at 0.5
+    and `DATE_OF_BIRTH` at 0.9, mapped to `custom:building_number`,
+    `custom:license_plate`, `custom:username` and `custom:date`. `TAX_ID` and
+    `ZIP_CODE` exist but are off. The other 34 labels, including
+    `GIVEN_NAME`, can never be enabled.
+  - New policy table `[safety_net.nym]` (`labels` plus `threshold`) configures
+    the allowlist and fails at load on an unknown or unmapped label, a missing
+    or stray threshold, or a threshold outside `(0, 1]`. It configures and
+    never activates: a policy declaring it while another net (or none) runs is
+    refused.
+  - Spans are whole words (the pipeline's sub-word rule, now one shared
+    `gaze_types::is_inside_word`), tokenizer character offsets become UTF-8
+    byte offsets, and input longer than 512 pieces is scanned in overlapping
+    windows; an unscored piece or uncovered character is a typed error.
+  - Audit rows carry `safety_net_id = "nym-small-int8"`, the score, and
+    `raw_label = "LABEL>=THRESHOLD"`. Nym is refused through
+    `--safety-net-registry`, which would drop the label and threshold.
+  - New benchmark arm `full-stack-nym-resolve`. On the 2,910-document
+    population it removes 6,154 leaked gold bytes under scored-label contract v2
+    (20,727 to 14,573) for 526 false-positive bytes, action precision 0.891,
+    one one-way deletion, 2,909 of 2,910 exact restores; timings provisional.
+  - Open before any default change: an address-context guard for room and seat
+    numbers, a quiet-host latency measurement, and a licence review of the
+    Wikipedia-derived (CC-BY-SA) training data.
+
 - **Postal-code coverage for Canada, the UK, and Ireland** (`postal.ca`,
   `postal.gb`, `postal.ie`). `custom:postal_code` was previously served only by
   `postal.de` (`de-DE`) and `postal.us` (`en-US`), both

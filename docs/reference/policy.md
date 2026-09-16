@@ -389,10 +389,36 @@ preserve formatting, unwrap the content before passing it to the Gaze pipeline
 and re-wrap the clean output afterward. RegionHint-style envelope markers for
 `CodeBlock` and `Url` are deferred to v0.7.
 
+### `[safety_net.nym]`
+
+Configures the opt-in Nym-small safety net
+([contract](../explanation/safety-net/safety-nets.md#nym-small-adapter-opt-in)).
+It does not activate the net: activation stays `gaze clean --safety-net nym`
+(or `--safety-net-backend nym`) plus `--nym-model-dir`.
+
+```toml
+[safety_net.nym]
+labels = ["BUILDING_NUMBER", "DATE_OF_BIRTH", "LICENSE_PLATE", "USERNAME"]
+threshold = { BUILDING_NUMBER = 0.5, DATE_OF_BIRTH = 0.9, LICENSE_PLATE = 0.5, USERNAME = 0.5 }
+```
+
+The example is op-B, the default when the table is absent.
+
+- `labels` is the allowlist. Only `BUILDING_NUMBER`, `DATE_OF_BIRTH`,
+  `LICENSE_PLATE`, `TAX_ID`, `USERNAME` and `ZIP_CODE` have a Gaze class. Any
+  other of the 40 Nym labels (for example `GIVEN_NAME`) fails at load, as does a
+  spelling that is not a Nym label, an empty list, or a repeated label.
+- `threshold` needs exactly one entry per listed label, each in `(0, 1]`. A
+  missing threshold or a threshold for an unlisted label fails at load.
+- Unknown keys in the table fail at load.
+- A policy with `[safety_net.nym]` refuses to run unless the Nym net is the
+  active net, so it cannot silently configure a net that is not running.
+
 ### v0.6 safety-net activation surface
 
 The v0.6 OpenAI Privacy Filter safety net is **not exposed through
-`policy.toml`**. Activation happens via `gaze clean --safety-net=<kind>`
+`policy.toml`** (the Nym backend's label table above configures, never
+activates). Activation happens via `gaze clean --safety-net=<kind>`
 plus the `--openai-filter-*` flags, or programmatically through
 `Pipeline::with_safety_net(...)` behind the `safety-net-openai` feature
 on `gaze-recognizers`.

@@ -238,6 +238,7 @@ def parse_args() -> argparse.Namespace:
             "pass2-ner",
             "full-stack-kiji-resolve",
             "full-stack-opf-resolve",
+            "full-stack-nym-resolve",
             "pass3-kiji",
             "pass3-opf",
             "pass3-locale-aware",
@@ -317,7 +318,12 @@ def main() -> int:
     configs = tuple(args.config) if args.config else DEFAULT_CONFIGS
     if any(
         config
-        in {"pass2-ner", "full-stack-kiji-resolve", "full-stack-opf-resolve"}
+        in {
+            "pass2-ner",
+            "full-stack-kiji-resolve",
+            "full-stack-opf-resolve",
+            "full-stack-nym-resolve",
+        }
         for config in configs
     ) and not args.model_dir.is_dir():
         raise FileNotFoundError(f"NER model directory does not exist: {args.model_dir}")

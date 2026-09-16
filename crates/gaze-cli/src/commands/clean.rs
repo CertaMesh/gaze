@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Args as ClapArgs;
 
 use super::shared_args::{
-    KijiPrecisionArgs, OpenAiFilterSubprocessArgs, OpfRegistryArgs, RulepackOverrideArgs,
+    KijiPrecisionArgs, NymArgs, OpenAiFilterSubprocessArgs, OpfRegistryArgs, RulepackOverrideArgs,
     SafetyNetLimitArgs, SafetyNetRegistryArgs,
 };
 use super::{KijiBackend, OpenAiFilterDevice, SafetyNetBackend, SafetyNetKind};
@@ -86,6 +86,8 @@ pub(crate) struct Args {
     #[arg(long, value_delimiter = ',')]
     pub(crate) kiji_distilbert_locales: Vec<String>,
     #[command(flatten)]
+    pub(crate) nym: NymArgs,
+    #[command(flatten)]
     pub(crate) safety_net_limits: SafetyNetLimitArgs,
 }
 
@@ -120,6 +122,8 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
         kiji_distilbert_command: args.kiji_distilbert_command.as_deref(),
         kiji_distilbert_model_dir: args.kiji_distilbert_model_dir.as_deref(),
         kiji_distilbert_locales: &args.kiji_distilbert_locales,
+        nym_model_dir: args.nym.nym_model_dir.as_deref(),
+        nym_intra_threads: args.nym.nym_intra_threads,
         safety_net_timeout_ms: args.safety_net_limits.safety_net_timeout_ms,
         safety_net_input_limit_bytes: args.safety_net_limits.safety_net_input_limit_bytes,
         safety_net_mode: args.safety_net_limits.safety_net_mode,
