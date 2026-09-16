@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-16
+
+### Security
+
+- **Both `gaze-proxy` residual checks failed open after a safety-net fallback
+  deletion, and raw PII reached the provider and the client.** This is a defect
+  present in shipped v0.14.0, disclosed here with its fix. `RequestResidualScan`
+  and `PipelineResponseResidualValidator` both called
+  `Pipeline::clean_with_safety_net_detect_context`, discarded the cleaned text
+  and the leak report, and decided purely on surviving manifest entries. A
+  fallback deletion writes an empty replacement and **no** manifest entry, so a
+  net-only span the fallback deleted returned `Ok` with an empty span list,
+  which both call sites read as "no PII found" while still holding the original
+  raw bytes. Resolve-*success* was already safe because it mints a token whose
+  raw span the checks can see; resolve-*failure* mints nothing, and that was the
+  whole delta. Executed proofs reproduced the leak on three surfaces before the
+  fix: an unsurfaced top-level request field forwarded verbatim (HTTP 200), a
+  buffered JSON response, and a per-`text_delta` SSE response. Each boundary now
+  states the invariant its own contract needs — the request scan requires the
+  cleaned text to be byte-identical with no manifest entry and no reported
+  suspect, and the response validator requires the manifest to account for every
+  change before comparing raw spans against authorized output ranges. Neither
+  adds an exemption; both only add rejections (#593).
+- The workspace lock updates `rustls` to 0.23.45 and `rustls-webpki` to 0.103.15
+  as part of the subprocess/runtime integration (#580).
+
 ### Added
 
 - **Postal-code coverage for Canada, the UK, and Ireland** (`postal.ca`,
@@ -15,106 +41,257 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `locale_basis = "document"`, so seven of the nine document locales in the
   EN/DE holdout had no postal recognizer at all and ZIP was the largest single
   leak bucket. Measured gold ZIP recall was 334 of 1,090 entities, which is the
-  locale-gated population to within 2 entities of incidental overlap.
+  locale-gated population to within 2 entities of incidental overlap: it was a
+  gate, not a detector.
 
-  The three new rules are `locale_basis = "format"` and `safety_tier =
-  "safe_default"`, matching the treatment `nhs.uk`, `nino.uk`, `ssn.us`,
-  `nir.fr`, `bsn.nl`, and `cpf.br` already receive: letter/digit interleaving is
-  itself the precision mechanism, so they need no document-locale gate and run
-  at every locale, including `--locale=global`. **Adopters who must not tokenize
-  Canadian, UK, or Irish postal codes cannot suppress them with a locale chain
-  and have to disable the recognizer.**
+  The three new rules are `locale_basis = "format"` and
+  `safety_tier = "safe_default"`, matching the treatment `nhs.uk`, `nino.uk`,
+  `ssn.us`, `nir.fr`, `bsn.nl`, and `cpf.br` already receive. Letter/digit
+  interleaving is itself the precision mechanism, so they need no
+  document-locale gate and run at every locale, including `--locale=global`.
+  **Adopters who must not tokenize Canadian, UK, or Irish postal codes cannot
+  suppress them with a locale chain and have to disable the recognizer.**
 
   Measured on the rule-floor arm over the 1,886-document holdout: gold ZIP byte
   recall rises from 30.8% to 59.7%, recovering **1,567 gold bytes**; per locale,
   `en-CA` 97.1%, `en-GB` 96.9%, `en-IE` 87.9%. Precision cost is one false
-  positive across all 1,886 documents (an uppercase `AA9 9AA` token in lowercase
-  prose, whose outward code is a real assigned UK district) and **zero across all
-  1,024 committed A4 negative documents**. The bundle tokenization drift snapshot
-  is unchanged: none of the three patterns match the drift corpus.
+  positive across all 1,886 documents — an uppercase UK-postcode-shaped token in
+  lowercase prose, whose outward code is a real assigned UK district — and
+  **zero across all 1,024 committed A4 negative documents**. The bundle
+  tokenization drift snapshot is unchanged. Review hardening (an Eircode
+  identifier must carry at least one letter; `postal.ca` and `postal.gb` do not
+  match after a leading hash, which had made uniform hex color literals
+  tokenize; all three accept NO-BREAK SPACE, NARROW NO-BREAK SPACE, and a
+  doubled space between the halves, the same failure class as the `ssn.us`
+  NBSP regression; `postal.gb` covers the Girobank pseudo-postcode and restricts
+  the inward code to the official Royal Mail alphabet; `postal.ie` covers the
+  one Dublin routing key that is not letter-plus-two-digits) cost zero of the
+  71 / 83 / 60 measured gold entities. The 4-digit locales (`de-AT`, `de-CH`,
+  `en-AU`, `en-NZ`) are deliberately not covered: an unanchored four-digit run
+  is 19% precise on the holdout and fires across 62.5% of the negative corpus,
+  so it requires a cue anchor and is tracked separately.
 
-  Review hardening, all costing **zero** of the 71 / 83 / 60 measured gold
-  entities and verified by a per-entity gold census over the full holdout:
-
-  * The Eircode identifier must now carry at least one letter. Allowing all four
-    characters to be digits made `postal.ie` tokenize the ordinary
-    `LETTER + 2 digits + 4 digits` business reference layout — `ORDER A12 3456`,
-    `TICKET D45 6789`, `JOB F90 1234` — as postal codes at every locale. The A4
-    negative corpus contains no token of that shape, so its 0/1024 score could
-    not see the class.
-  * `postal.ca` and `postal.gb` no longer match when the preceding character is
-    `#`. `\b` gave no protection there, so `#D3D3D3` (`lightgray`) and `#A9A9A9`
-    (`darkgray`) tokenized as postal codes; a measured 1.31% / 2.87% of uniform
-    `#RRGGBB` values matched. The corpus contains no `#RRGGBB` literal.
-  * All three accept NO-BREAK SPACE, NARROW NO-BREAK SPACE, and a doubled space
-    between the two halves. `[ ]?` matched U+0020 only, so a postcode pasted out
-    of a PDF or rendered HTML leaked in full — the same failure class as the
-    `ssn.us` NBSP regression.
-  * `postal.gb` covers the `GIR 0AA` Girobank pseudo-postcode and restricts the
-    inward code to the official Royal Mail alphabet (never `C I K M O V`), which
-    also drops matches overlapping a different gold label from 3 to 1. The AREA
-    letters stay wide: encoding the official `Q V X` / `I J Z` exclusions was
-    measured and LOST a gold entity on this holdout.
-  * `postal.ie` covers the `D6W` Dublin 6W routing key, the one assigned routing
-    key that is not `LETTER + 2 digits`. Every D6W address leaked in full before.
-
-  The 4-digit locales (`de-AT`, `de-CH`, `en-AU`, `en-NZ`) are deliberately not
-  covered. Unanchored `\d{4}` is 19% precise on the holdout (516 of 2,723 runs
-  are gold ZIP) and fires 1,717 times across 62.5% of the negative corpus, so it
-  requires a cue anchor and is tracked separately.
+  These numbers come from the `rule-floor-extended` arm of the release harness
+  (`scripts/bench/run_no_opf_benchmark.py full --seed 20260710`), run on the
+  built binary over the 1,886-document EN/DE holdout. The runner contract, the
+  seeded corpus, and the per-release hardware field are documented in
+  [How to reproduce](docs/reference/benchmarks/README.md#how-to-reproduce), and
+  the hardware for each release row is recorded in
+  [release-history.json](docs/reference/benchmarks/release-history.json). The
+  accepted holdout false-positive shape is pinned by a named test in
+  `crates/gaze-recognizers/tests/postal_international.rs` so any future
+  tightening is deliberate (#598).
+- **Three bounded EN/DE explicit-field recognizers** — `birth_date.cue`,
+  `password.field`, and `username.field` — recognize a complete declaration line
+  (cue, separator, value) rather than parsing JSON or a schema. Credential values
+  are bounded to 1–256 normalized grammar units. Whole-value protection stays
+  conditional on the existing conflict winner and caller policy; the supported
+  limits and the reproducible collision case are documented on the
+  `gaze-recognizers` README (#589).
+- `EmittedTokenSpan` gained `origin: EmittedTokenOrigin` (`Whole` |
+  `ResidualFragment`) so a consumer can tell a whole selection from a residual
+  fragment before it indexes, canonicalizes, or counts. `Whole` is the default
+  and is omitted on the wire, so existing whole-span JSON is byte-identical and
+  pre-v0.15 JSON reads back as `Whole`. `EmittedTokenSpan::new` keeps its
+  signature; `EmittedTokenSpan::residual_fragment` is the new constructor (#597).
+- Opted-in MCP tools can register `RequestMode::UntrustedInvocation` and receive
+  unchanged untrusted execution arguments through `dispatch_request` and
+  `ToolCtx::invocation_args()`. The envelope audits a constant metadata-only
+  omission record instead of the arguments, keeps mandatory response protection
+  and durable finish on the shared path, and rejects a descriptor written for
+  the other mode before authorization or audit. The default `dispatch` contract
+  is unchanged (#590).
+- `gaze_proxy::serve_with_listener` accepts an owned listener, validates its
+  address against configuration, and reports its actual bound port. Inspection
+  tests keep the listener reserved through server startup (#581).
+- Migration guidance for both source breaks, session capacity, full rescanning,
+  manifest-authorized complete-text restoration, and agent/operator response
+  boundaries. See [UPGRADE.md](UPGRADE.md) (#557, #559, #560).
 
 ### Changed
 
-- `cooperates_with` is now symmetric across all five `custom:postal_code`
-  recognizers, and the stale research-855 collision comment in `core.toml` —
-  which described a two-rule world — is replaced by a two-group policy note
-  explaining why the numeric rules stay locale-gated and the alphanumeric ones
-  do not.
-
-- [docs] Every `core.toml` line citation in the recognizer coverage matrix of
-  `docs/reference/redaction-classes.md` is regenerated. 35 of 37 rows pointed at
-  stale line ranges: the doc gate reads the first twelve columns and never
-  checks the thirteenth, so the column had drifted unnoticed across many
-  changes. Adding an assertion for it is tracked separately.
-
-- [bundle-tokenization-drift] The `core` snapshot records rulepack version0.5.3; detection entries, spans, classes, sources, token shapes and counts are unchanged.
-
-- **Residual coverage is on by default.** Every pipeline built through
-  `Pipeline::builder()` now protects raw bytes that admitted originals evidenced
-  but conflict resolution did not keep, instead of leaving them in the clear.
-  One recognized value can therefore contribute more than one replacement, so a
-  manifest span count is a count of *replacements*, not of distinct recognized
-  values. Restore is unaffected. Bytes that no original evidenced remain
-  uncovered. See
-  [Residual coverage](docs/reference/redaction-classes.md#residual-coverage).
-  The bundled `core` tokenization snapshot is unchanged.
-- `EmittedTokenSpan` gained `origin: EmittedTokenOrigin` (`Whole` |
-  `ResidualFragment`) so a consumer can tell a whole selection from a residual
-  fragment before it indexes, canonicalizes or counts. `Whole` is the default
-  and is omitted on the wire, so existing whole-span JSON is byte-identical and
-  pre-v0.15 JSON reads back as `Whole`. `EmittedTokenSpan::new` keeps its
-  signature; `EmittedTokenSpan::residual_fragment` is the new constructor.
-  **Unmigrated readers:** there is no `deny_unknown_fields`, so a consumer built
-  before v0.15 ignores the new key and counts a fragment as a whole span, and no
-  version field distinguishes the two. Rebuild entity-counting consumers against
-  v0.15.
-- `gaze-document` `BundleReport::pii_token_count`, `pii_tokens_by_class` and
-  `ClassCount::count` are documented as replacement counts, not entity counts.
-  `bundle_version` is unchanged.
+- **Breaking: `PiiClass::custom` is fallible.** It returns
+  `Result<PiiClass, EmptyCustomClassName>`, rejecting names when normalization
+  leaves no ASCII letters or digits. Policy loading and live/staged tokenization
+  reject invalid custom classes before changing session state, including classes
+  constructed directly through the enum. Valid session tokens continue to
+  round-trip through the token bridge's strict parser, which also normalizes
+  surrounding and repeated custom-entity whitespace consistently
+  (#507, #553, #577).
+- **Breaking: `SessionCfg` adds `max_sessions`.** Rust struct literals must set
+  it; configuration files that omit it default to 1,000. Zero is rejected.
+  Ephemeral stores reject new sessions at capacity. File stores persist an
+  inactive, exclusively owned session before eviction and reject admission if
+  persistence fails or strong/weak handles prevent exclusive ownership (#578).
+- **Residual coverage is on by default, and the token stream changes for every
+  adopter.** Every pipeline built through `Pipeline::builder()` now protects raw
+  bytes that admitted originals evidenced but conflict resolution did not keep,
+  instead of leaving them in the clear. One recognized value can therefore
+  contribute more than one replacement, so a manifest span count is a count of
+  *replacements*, not of distinct recognized values. Restore is unaffected and
+  the bundled `core` tokenization snapshot is unchanged. Bytes that no original
+  evidenced remain uncovered. A single authoritative occurrence ledger now
+  carries the emitted spans and the evidence behind them through the pipeline,
+  so a later question about which originals covered a byte is answered from the
+  record rather than re-derived from a hull. See
+  [Residual coverage](docs/reference/redaction-classes.md#residual-coverage)
+  (#595, #597).
 - `gaze-token-bridge` protects a residual fragment **by location**: a
   class-derived placeholder in the stored snippet, and no `CanonicalEntity`, no
-  `IndexEntity` and no posting. Fragment raw bytes no longer reach the
-  persistent index. Documented consequence: a residual fragment is **protected
-  but unsearchable**. Whole entities remain searchable exactly as before.
+  `IndexEntity`, and no posting. Fragment raw bytes no longer reach the
+  persistent index. The documented consequence is that a residual fragment is
+  **protected but unsearchable** — it cannot be retrieved by value or by
+  fingerprint and does not appear in `hit.entities`. Whole entities remain
+  searchable exactly as before, so nothing an adopter can do today gets
+  narrower. Making a fragment an entity is not an available alternative:
+  `translate` fails closed when any entity raw value survives into
+  agent-visible output, and a fragment raw value is frequently a single space or
+  quote, so indexing fragments would deny almost every translation (#597).
+- `gaze-document` `BundleReport::pii_token_count`, `pii_tokens_by_class`, and
+  `ClassCount::count` are documented as replacement counts, not entity counts.
+  `bundle_version` is unchanged (#597).
+- **Prefix reuse now always rescans the complete input.** Existing optimization
+  APIs remain source-compatible but retain and replay no prefixes. Each call
+  uses current field, locale, dictionaries, recognizers, and rules. This closes
+  stale-context PII leaks at the cost of full-scan latency on growing inputs;
+  audit consumers see actual rule/recognizer provenance (#579).
+- Subprocess diagnostics drain verbose stderr without aborting valid inference.
+  Opt-in diagnostics retain only a bounded, sanitized prefix; stdout limits,
+  invalid output, I/O failures, and deadlines still fail closed. Unix and
+  Windows cleanup cancels pipe workers and reaps the direct child (#580).
+- NER chunk planning borrows the existing tokenizer when truncation is already
+  disabled instead of cloning it and its WordPiece vocabulary on every call.
+  Configured truncation retains the original clone, clear, encode, and typed
+  error path (#587).
+<!-- RELEASE-PREP HOLD: #599 (hybrid terminal admission) is not merged at the
+     time of writing. If it merges before the tag, replace this comment with the
+     entry below and record its merge sha; if it does not, delete both. -->
+<!-- - **Safety-net terminal output is decided by what the fallback actually
+     did.** A Redact fallback deletion rewrites the whole input, so the terminal
+     scan is the first pass to read that text and routinely reports a 1–5 byte
+     sub-word span the three earlier passes accepted. Any such span previously
+     denied the document. The terminal report now gets one reversible round
+     (tokenize, never delete) and one bounded deletion of a shape the fallback
+     itself manufactured, then a typed admission: `FallbackIncomplete` and
+     `Unjudgeable` deny, `SeamManufactured` allows one bounded deletion and then
+     denies if it recurs, and `Admit` merges the finding into the returned leak
+     report so the document completes carrying it. Admission is strictly wider
+     than before, so no document that completed under v0.14 starts denying
+     (#599). -->
 
 ### Fixed
 
-- Custom class names that normalize to empty (for example `custom:!!!`) are now
-  a typed load-time error. `PiiClass::custom` returns `Result<PiiClass,
-  EmptyCustomClassName>`; callers must handle invalid names. Live and staged
-  sessions also reject empty custom classes constructed directly through the
-  enum before changing session state. Valid session tokens continue to
-  round-trip through the token bridge's strict parser (#507).
+- Resolve safety-net policy with a Redact fallback now scans the final text and
+  manifest before returning success. Remaining unprotected or malformed suspects
+  and net errors reject; verified live-token hits remain allowed. This adds one
+  inference after fallback, without another mutation or retry (#584).
+- Direct Anthropic and legacy proxy request surfaces now run configured-net
+  admission after primary pseudonymization and before provider I/O. Actual owned
+  token reflags remain allowed; raw residuals, malformed spans, registry
+  failures, and inference errors reject. Admission scans complete transformed
+  surfaces and codec validation views, adding denials and inference cost (#585).
+- Resolve plans every gap in a truthful `PartialBleed` report instead of
+  requiring the first named gap to be the only one. Raw text on both sides of an
+  owned token previously selected `OverlapConflict` and the configured fallback;
+  the disjoint gaps are now tokenized right-to-left against the original affine
+  manifest without changing existing token bytes, classes, or original ranges,
+  so more documents stay reversible (#588).
+- Resolve with a Redact fallback applies one additional complete reversible
+  batch when a successful first resolve — including a no-op — is followed by
+  actionable raw gaps. A fresh sweep checks that output, any remaining residual
+  is deleted using the latest coordinates, and the actual final output is then
+  enforced without further mutation, so one-way deletion runs only after
+  reversible coverage is exhausted (#591).
+- Terminal validation after a fallback deletion uses deletion-aware bounds and
+  preserves the stronger affine mapper before mutation, because deletion can
+  shift clean manifest coordinates while original raw coordinates stay put.
+  Supported primary `Redact` and `Generalize` replacements produce manifest
+  entries without live tokens, so requiring every retained entry to be owned had
+  falsely rejected otherwise valid output (#586).
+- Dashboard pairing waits for an explicit child-ready response before startup or
+  rotation returns success. A parent could previously finish pairing and send a
+  valid purge before the child completed its trailing-byte check, and the child
+  consumed the purge opcode as garbage and failed pairing (#592).
+- Strict protection resolves across the full locale chain and preserves mapped
+  protected-dictionary precedence. Empty safety registries skip consistently,
+  and collision metadata is registered only after recognizer construction
+  succeeds (#574, #561, #558).
+- Detection preserves byte-adjacent NER entities, valid name endpoints after
+  particle trimming, and hyphenated dictionary identifiers. Exclusions match
+  consistently across ASCII case (#564, #563, #568, #567).
+- Policy and rulepack loaders reject unsupported two-digit minor schema
+  versions. Inline comments no longer disable strict overlap lint, and CLI
+  path rulepacks tokenize without an explicit policy (#576, #562, #545).
+- Restoration recognizes family-namespace tokens in prose and known bare
+  session tokens after leading ASCII/Unicode word characters. Matching uses
+  original input and the longest known keys once, without recursively restoring
+  replacement text. Family fallbacks retain accumulated resolver provenance;
+  document path checks use the central restore scanner (#552, #581, #566, #571).
+- Document ingestion repairs fragmented email domain labels and counts
+  characters from the final Markdown artifact (#565, #556).
+- Proxy response checks guard carriers spanning content blocks, surface
+  structured OpenAI Responses text, and rebuild safe legacy response headers.
+  MCP calls with unchanged arguments avoid unnecessary transaction conflicts
+  (#544, #548, #549, #546).
+- Daemon pidfile cleanup follows locked ownership. Eviction audit failures
+  surface safely; ingress blocks record their deciding rule; terminal MCP calls
+  retain journal context; JSONL exports keep restore telemetry; index searches
+  consider allowed classes without hiding policy denials
+  (#572, #570, #554, #582, #555, #569).
+- Dashboard browser navigation headers are accepted, purge notifications use an
+  isolated channel, and the pairing timeout is cleared before idle control
+  (#547, #550, #551).
+- `cooperates_with` is now symmetric across all five `custom:postal_code`
+  recognizers, and the stale collision comment in `core.toml` — which described
+  a two-rule world — is replaced by a two-group policy note explaining why the
+  numeric rules stay locale-gated and the alphanumeric ones do not (#598).
+- [docs] Every `core.toml` line citation in the recognizer coverage matrix of
+  `docs/reference/redaction-classes.md` is regenerated. 35 of 37 rows pointed at
+  stale line ranges: the doc gate reads the first twelve columns and never
+  checked the thirteenth, so the column had drifted unnoticed. Adding an
+  assertion for it is tracked separately (#598).
+- [bench] The `scripts/bench/validator_recall_probe` lockfile is refreshed. The
+  harness builds that probe with a hard-coded `--locked`, and a target-gated
+  Windows dependency added in #580 is recorded in the lockfile on every host, so
+  the canonical benchmark had been aborting before scoring a single document
+  (#594).
+
+### Known limitations
+
+- Configured-net admission does not require a model globally. Missing nets,
+  locale-skipped custom nets, and detector misses remain coverage limits.
+  Primary Preserve/Redact policy and public legacy clean defaults are unchanged;
+  successful Redact fallback remains one-way. Direct proxy failures discard
+  staging before commit/send, but legacy mappings already published remain live
+  on denial. Snapshot admission does not provide whole-request rollback or
+  serialization (#584, #585).
+- A residual fragment is protected but unsearchable in `gaze-token-bridge`, and
+  a consumer built before v0.15 has no `deny_unknown_fields` and no version
+  field to distinguish a fragment from a whole span, so it silently counts a
+  fragment as a whole span. Rebuild entity-counting consumers against v0.15
+  (#597).
+- The alphanumeric postal recognizers are format-basis and run at every locale,
+  including `--locale=global`. An adopter who must not tokenize Canadian, UK, or
+  Irish postal codes has to disable the recognizer; narrowing the locale chain
+  does not suppress them. The residual precision cost is one holdout false
+  positive on an uppercase UK-postcode-shaped token in lowercase prose (#598).
+- `max_sessions` bounds cached sessions, not the per-ID file-lock registry,
+  which remains unbounded. Capacity can reject admission while handles remain.
+- Restore remains manifest-authorized. Trailing word boundaries and ambiguous
+  family-token hyphen suffixes stay guarded; separate family tokens from a
+  following hyphen with whitespace. No universal unknown-suffix guarantee is
+  introduced.
+- Diagnostic sanitization is heuristic and does not detect arbitrary PII.
+  Cleanup does not kill descendants and is not a hard real-time guarantee.
+  Subprocess adapters outside Unix and Windows fail before spawn.
+- Detection completeness and exact restoration must be judged from the release
+  benchmark in [docs/reference/benchmarks/README.md](docs/reference/benchmarks/README.md).
+  <!-- RELEASE-PREP HOLD: the v0.15.0 benchmark row and scorecard are produced by
+       the release benchmark lane on the release commit and are deliberately not
+       in this branch. -->
+  The previous v0.14.0 scorecard failed readiness with residual labeled PII and
+  one-way fallback; these fixes alone do not establish zero leakage or release
+  readiness.
 
 ## [0.14.0] - 2026-09-11
 
@@ -2249,7 +2426,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/CertaMesh/gaze/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/CertaMesh/gaze/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/CertaMesh/gaze/compare/v0.12.0...v0.13.0
 [0.6.4]: https://github.com/EmpireTwo/gaze/compare/v0.6.3...v0.6.4

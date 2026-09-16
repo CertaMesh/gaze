@@ -5,18 +5,6 @@ workspace (the published cargo name; the library is imported as `gaze`).
 Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
-## Pending security fix: prefix reuse disabled
-
-`enable_prefix_cache()` and `PipelineOptimizationConfig::with_prefix_cache(true)`
-remain source-compatible but no longer skip detection or retain raw prefixes.
-Every input is fully rescanned under its current field, locale, dictionaries,
-recognizers and rules. Both transactional prefix-cache modes use that same path.
-
-Adopters that enabled prefix reuse should budget for full-scan latency on growing
-inputs and update audit consumers to expect actual recognizer/rule rows instead
-of `prefix_cache` provenance. Token mappings and manifest restoration retain their
-normal behavior. See [the safety rationale](docs/explanation/pipeline/tier4-pipeline-gating.md).
-
 ## How this file is organized
 
 - One H2 section per `MAJOR.MINOR` release in **reverse-chronological** order.
@@ -42,6 +30,247 @@ minor unless this file explicitly says otherwise. (No such exception
 exists today.)
 
 [semver-pre1]: https://semver.org/spec/v2.0.0.html#spec-item-4
+
+---
+
+## v0.14.x → v0.15.0
+
+### TL;DR
+
+1. **Your token stream changes even if you change nothing.** Residual coverage
+   is on by default, and three new postal recognizers run at every locale.
+   Re-baseline any test or consumer that counts spans or asserts exact output.
+2. Handle the result of `PiiClass::custom` and add `max_sessions` to Rust
+   `SessionCfg` literals — the two source breaks.
+3. Budget full-input and configured-net scanning latency; handle session-capacity
+   errors and new safety-net and proxy denials.
+4. If you run `gaze-proxy`, upgrade for the fallback-deletion leak fix. See
+   [the CHANGELOG Security section](CHANGELOG.md).
+
+### Residual coverage is on by default (action required for counting consumers)
+
+Every pipeline built through `Pipeline::builder()` now protects raw bytes that
+admitted originals evidenced but conflict resolution did not keep. One
+recognized value can therefore contribute more than one replacement.
+
+- **A manifest span count is a count of replacements, not of distinct
+  recognized values.** The same applies to `gaze-document`
+  `BundleReport::pii_token_count`, `pii_tokens_by_class`, and
+  `ClassCount::count`. `bundle_version` is unchanged.
+- **Restore is unaffected.** Round-trip behavior is the same.
+- **Bytes that no original evidenced remain uncovered.** Residual coverage
+  widens protection over evidenced bytes; it is not a completeness claim.
+- `EmittedTokenSpan` gained `origin: EmittedTokenOrigin` (`Whole` |
+  `ResidualFragment`). `Whole` is the default and is omitted on the wire, so
+  existing whole-span JSON is byte-identical and pre-v0.15 JSON reads back as
+  `Whole`. `EmittedTokenSpan::new` keeps its signature.
+
+**Unmigrated readers are the real risk.** There is no `deny_unknown_fields` and
+no version field, so a consumer built before v0.15 silently ignores the new key
+and counts a residual fragment as a whole entity. Rebuild entity-counting
+consumers against v0.15.
+
+In `gaze-token-bridge`, a residual fragment is handled **by location, not by
+identity**: it gets a class-derived placeholder in the stored snippet and
+produces no `CanonicalEntity`, no `IndexEntity`, and no posting. Fragment raw
+bytes no longer reach the persistent index. The cost is stated plainly: a
+fragment is **protected but unsearchable** — not retrievable by value or
+fingerprint, and absent from `hit.entities`. Whole entities remain searchable
+exactly as before, so nothing you can do today gets narrower. See
+[Residual coverage](docs/reference/redaction-classes.md#residual-coverage).
+
+### New postal recognizers run at every locale (review your token stream)
+
+`postal.ca`, `postal.gb`, and `postal.ie` are new, and they are
+`locale_basis = "format"`. Format basis treats `locales` as provenance, not as a
+gate, so these rules run for every document locale **including
+`--locale=global`**. Narrowing the locale chain does not suppress them.
+
+If you must not tokenize Canadian, UK, or Irish postal codes, disable the
+recognizer outright. The measured precision cost on the 1,886-document holdout
+is one false positive — an uppercase UK-postcode-shaped token in lowercase
+prose — and zero across the 1,024 committed negative documents. The numeric
+`postal.de` and `postal.us` rules are unchanged and keep their document-locale
+gates.
+
+### Custom class construction (action required)
+
+`PiiClass::custom(name)` now returns `Result<PiiClass, EmptyCustomClassName>`.
+At least one ASCII letter or digit must survive normalization. Propagate or
+handle invalid runtime input in a fallible caller:
+
+```rust
+use gaze::{EmptyCustomClassName, PiiClass};
+
+fn make_class(name: &str) -> Result<PiiClass, EmptyCustomClassName> {
+    let class = PiiClass::custom(name)?;
+    Ok(class)
+}
+```
+
+An explicit `expect` is appropriate only for a known-valid literal. Constructing
+`PiiClass::Custom` directly does not bypass live/staged tokenization validation.
+The token bridge now treats surrounding and repeated custom-entity whitespace
+consistently across its normalization paths.
+
+### Bridge session capacity (action required for Rust configuration)
+
+Add `max_sessions: 1000` to `gaze_mcp_bridge::config::SessionCfg` literals, or
+choose a positive deployment-specific capacity. TOML omission defaults to 1,000:
+
+```toml
+[session]
+mode = "ephemeral"
+max_sessions = 1000
+```
+
+Zero is rejected by every construction boundary. Existing sessions remain
+accessible at capacity. Ephemeral mode rejects new sessions instead of evicting
+restoration mappings. In file mode, an inactive eviction candidate must be
+exclusively owned and persisted successfully before admission commits. Retained
+strong or weak handles, persistence errors, and cancellation preserve the
+canonical cached session and can prevent admission. Release handles promptly
+and handle `BridgeError::LimitExceeded` and persistence failures.
+
+**Limitation:** `max_sessions` bounds cached sessions only. The separate per-ID
+file-lock registry remains unbounded; it is not a total-memory limit.
+
+### Prefix reuse disabled (latency and audit action required)
+
+`enable_prefix_cache()` and `PipelineOptimizationConfig::with_prefix_cache(true)`
+remain source-compatible but no longer skip detection or retain raw prefixes.
+Every input is fully rescanned under its current field, locale, dictionaries,
+recognizers, and rules. Both transactional prefix-cache modes use that same path.
+
+Budget full-scan latency on growing inputs. Update audit consumers to expect
+actual recognizer/rule rows instead of `prefix_cache` provenance. Token mappings
+and manifest restoration retain their normal behavior. Correctness takes
+priority over the removed optimization. See the
+[safety rationale](docs/explanation/pipeline/tier4-pipeline-gating.md).
+
+### Proxy residual checks now fail closed (upgrade required if you run the proxy)
+
+Shipped v0.14.0 had a leak: after a safety-net **fallback deletion**, both
+`gaze-proxy` residual checks decided on surviving manifest entries alone. A
+fallback deletion emits no manifest entry, so a deleted net-only span looked
+like "no PII found" while the caller still held the original raw bytes, on the
+request path and on both response paths. Both boundaries now state the invariant
+their own contract needs, and both only add rejections.
+
+**What you have to do:** upgrade, and expect requests and responses that were
+previously forwarded to be rejected instead. That is the fix working. No
+configuration change is required.
+
+### Safety-net and resolve behavior (review integration assumptions)
+
+Resolve with a `Redact` fallback now scans the final text and manifest before
+returning success. Remaining unprotected or malformed suspects and net errors
+reject; verified live-token hits remain allowed. This adds one inference after
+fallback, without another mutation or retry. Successful fallback deletion
+remains one-way; a final scan does not certify exact restoration.
+
+Two changes make more documents stay **reversible** before any one-way deletion
+runs, which is a widening and needs no action: resolve now plans every gap in a
+truthful `PartialBleed` report instead of requiring the first named gap to be
+the only one, and it applies one additional complete reversible batch when a
+successful first resolve is followed by actionable raw gaps.
+
+Terminal validation after a fallback deletion uses deletion-aware bounds.
+Supported primary `Redact` and `Generalize` replacements produce manifest
+entries without live tokens, so output that was falsely rejected for lacking an
+owning token is accepted again.
+
+<!-- RELEASE-PREP HOLD: #599 (hybrid terminal admission) is not merged at the
+     time of writing. If it merges before the tag, state here that terminal
+     sub-word findings the fallback itself manufactured are admitted into the
+     returned leak report instead of denying the document, that admission is
+     strictly wider than v0.14 so nothing that completed starts denying, and
+     record its merge sha. If it does not merge, delete this comment. -->
+
+### Agent surfaces and audit (review consumers)
+
+**Handle new configured-net denials and inference cost.** Direct Anthropic and
+legacy proxy request surfaces run configured-net admission after primary
+pseudonymization and before provider I/O, including complete reconstructed
+surfaces and codec validation views. Nets use actual session token ownership and
+restore boundaries. Token-contained reflags, including class disagreements, are
+allowed; raw gaps, malformed suspects, registry failures, and net errors reject.
+Requests previously forwarded can now fail, including text preserved by primary
+policy. Budget the extra inference and handle errors without bypassing
+admission. Selected registry backends run across the locale chain; observer skip
+optimizations do not suppress admission.
+
+**Coverage and state limits remain.** No model is required globally; an absent
+net, a custom net skipped for locale coverage, or a detector miss still limits
+coverage. Existing strict protection retains its primary and locale
+requirements. Primary Preserve/Redact actions and public legacy clean defaults
+do not change. Direct failures abandon staged mappings before commit/send.
+Legacy mappings are already published and remain live on failure; admission uses
+an immutable snapshot, without a whole-request rollback or serialization
+guarantee. Core live session mappings can likewise remain after a failed
+fallback; caller-owned staging must be discarded rather than committed after
+failure. See the
+[proxy admission contract](crates/gaze-proxy/README.md#configured-safety-nets-at-request-admission).
+
+Proxy integrations must accept rebuilt safe response headers and guards across
+content blocks and structured Responses text. Agent responses remain separate
+from owner/operator restoration surfaces. Audit integrations should retain
+terminal MCP journal context, deciding ingress rules, and JSONL restore fields.
+The MCP journal preserves context, not durable duplicate protection after
+completion or restart.
+
+**Additive, no migration:** a tool may now register
+`RequestMode::UntrustedInvocation` and read unchanged untrusted execution
+arguments through `dispatch_request` and `ToolCtx::invocation_args()`; the
+envelope audits a constant metadata-only omission record instead of the
+arguments. The default `dispatch` contract is unchanged, and a descriptor
+written for the other mode is rejected before authorization or audit. Hosts must
+not log those arguments.
+
+`gaze_proxy::serve_with_listener` is additive. Embedders can hand off an owned
+listener; its address must match configuration, except that a configured port of
+zero resolves to the actual port. Existing `serve` remains available. Dashboard
+pairing now waits for an explicit child-ready response before startup or
+rotation returns success; no dashboard configuration migration is required.
+
+### Policy and restoration (review integration assumptions)
+
+Keep policy `schema_version = "0.1.0"`; the policy schema does not follow crate
+version 0.15.0. Unsupported two-digit minor schemas now fail closed instead of
+accidentally matching a prefix. Inline comments no longer suppress strict
+overlap validation. Production integrations still need an explicit policy even
+though CLI path-rulepack tokenization now works without one.
+
+Use complete-text restoration through the existing manifest/session APIs.
+Known bare session tokens can now restore after leading ASCII or Unicode word
+characters. Matching is single-pass over original input; inserted values are
+not scanned again as tokens. Family-namespace tokens restore in prose and keep
+resolver provenance. Trailing word boundaries and family-hyphen ambiguity remain
+guarded: separate a family token from a following hyphen with whitespace.
+Restoration guarantees only reconstruction authorized by the supplied manifest,
+not arbitrary suffix handling or universal unknown-suffix rejection.
+
+### Subprocess diagnostics and remaining limits
+
+Verbose stderr no longer fails otherwise valid inference. Diagnostics remain
+opt-in, retain at most a bounded sanitized prefix, and discard the rest.
+Stdout limits, invalid responses, I/O errors, and deadlines still fail closed.
+Diagnostic redaction is heuristic and cannot guarantee arbitrary logged PII is
+removed. Keep diagnostics off unless the operator accepts that limitation.
+
+Unix and Windows adapters cancel pipe workers and reap the direct child on
+failure. Descendant processes are not killed; cleanup is cooperative rather
+than a hard real-time guarantee. Other platforms return `ModelUnavailable`
+before spawning. See [subprocess behavior](docs/explanation/safety-net/safety-nets.md).
+
+NER chunk planning borrows the existing tokenizer when truncation is already
+disabled, instead of cloning it and its vocabulary on every call. This is a cost
+change only; configured truncation keeps its original path.
+
+Review this release's benchmark evidence in
+[docs/reference/benchmarks/README.md](docs/reference/benchmarks/README.md). A
+valid manifest alone does not prove detection completeness or a successful round
+trip, and these fixes by themselves do not establish release readiness.
 
 ---
 

@@ -320,6 +320,38 @@ class RowCountTest(unittest.TestCase):
                 for version in versions:
                     self.assertIn(version, rendered)
 
+    def test_mixed_history_keeps_candidate_labels_and_caveats_with_each_chart(self):
+        mixed = history("v0.14.0", "v0.15.0")
+        candidate = mixed["releases"][-1]
+        candidate["provisional"] = True
+        candidate["note"] = "Release readiness FAILED (exit 4); evidence, not release approval."
+        original = copy.deepcopy(mixed)
+        charts = render.render_charts(mixed)
+        bar, trend = charts.split("**Trend", 1)
+        for standalone in (bar, trend):
+            self.assertIn("v0.15.0 (provisional)", standalone)
+            self.assertIn(candidate["note"], standalone)
+            self.assertIn("not measured on the released tree", standalone)
+        self.assertIn('title "Surviving PII bytes per arm - v0.15.0 (provisional)"', bar)
+        self.assertIn('x-axis ["v0.14.0", "v0.15.0 (provisional)"]', trend)
+        self.assertIn("across releases and candidates", trend)
+        self.assertIn("line [91850, 91350]", trend)
+        self.assertNotIn("v0.14.0 (provisional)", charts)
+        self.assertEqual(mixed, original)
+
+        # A later release must not erase an older candidate's status in the trend.
+        mixed["releases"].append(entry("v0.16.0"))
+        bar, trend = render.render_charts(mixed).split("**Trend", 1)
+        self.assertNotIn("provisional", bar)
+        self.assertNotIn(candidate["note"], bar)
+        self.assertIn(candidate["note"], trend)
+        self.assertIn('"v0.14.0", "v0.15.0 (provisional)", "v0.16.0"', trend)
+
+        released = render.render_charts(history("v0.13.0", "v0.14.0"))
+        self.assertNotIn("provisional", released)
+        self.assertNotIn("FAILED", released)
+        self.assertIn("**Trend across releases", released)
+
     def test_prose_outside_the_markers_is_preserved(self):
         rendered = render.apply_blocks(DOC, history())
         self.assertIn("Prose that must survive untouched.", rendered)
