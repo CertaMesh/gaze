@@ -1,5 +1,7 @@
 # Gaze documentation
 
+**Start here:** [How Gaze works](explanation/how-gaze-works.md) follows one document from input to restore in plain English, with the modes, the limits, and a glossary.
+
 Gaze is a reliable, reversible PII pseudonymization runtime for agentic workflows. It
 replaces personal data with restorable tokens *before* text reaches an LLM, then restores
 the original values from the model's response. The goal is a hard one: no PII leaks
