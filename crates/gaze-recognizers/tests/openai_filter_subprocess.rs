@@ -165,6 +165,158 @@ printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97},{"lab
     assert_eq!(spans[0].model_name, "openai-privacy-filter");
 }
 
+// OPF reports offsets as Python `str` indices (Unicode scalar values). The fixture puts
+// multibyte text before, inside, and after the spans: umlauts and ß, an NFD combining acute
+// accent, an emoji, and an NBSP. Read as bytes, every one of these spans lands on the wrong text.
+const MULTIBYTE_CLEAN: &str =
+    "Grüße an Jürgen Müller: cafe\u{301} \u{1F600}\u{a0}bob@example.invalid, gezeichnet Zoë";
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn character_offsets_are_converted_to_clean_text_bytes() {
+    let opf = script(
+        "opf-char-offsets",
+        r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_person","start":9,"end":22},{"label":"private_email","start":32,"end":51},{"label":"private_person","start":64,"end":67}],"redacted_text":""}'
+"#,
+    )
+    .unwrap();
+
+    let spans = backend(opf).infer(MULTIBYTE_CLEAN).unwrap();
+
+    let texts = spans
+        .iter()
+        .map(|span| &MULTIBYTE_CLEAN[span.start..span.end])
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["Jürgen Müller", "bob@example.invalid", "Zoë"]);
+    assert_eq!(
+        spans
+            .iter()
+            .map(|span| (span.start, span.end))
+            .collect::<Vec<_>>(),
+        [(11, 26), (41, 60), (73, 77)]
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn character_offset_past_the_last_character_fails_closed() {
+    // 70 is inside the 77 UTF-8 bytes but past the 67 characters: only a byte reading accepts it.
+    let opf = script(
+        "opf-char-offsets-oob",
+        r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '[{"label":"private_person","start":64,"end":70}]'
+"#,
+    )
+    .unwrap();
+
+    let error = backend(opf).infer(MULTIBYTE_CLEAN).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SafetyNetError::InvalidOutput { ref message } if message == "opf returned out-of-bounds span"
+    ));
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn crlf_before_a_span_at_the_very_end_counts_one_character_per_byte() {
+    // OPF reads stdin without newline translation, so CR and LF are one character each. The
+    // NBSP before them still shifts the byte offsets; the last span ends exactly at the text end.
+    let clean = "Hallo\u{a0}Team,\r\nbitte an Jürgen\r\nGrüße Zoë";
+    let opf = script(
+        "opf-char-offsets-crlf",
+        r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '[{"label":"private_person","start":22,"end":28},{"label":"private_person","start":36,"end":39}]'
+"#,
+    )
+    .unwrap();
+
+    let spans = backend(opf).infer(clean).unwrap();
+
+    let texts = spans
+        .iter()
+        .map(|span| &clean[span.start..span.end])
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["Jürgen", "Zoë"]);
+    assert_eq!(spans[1].end, clean.len());
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn ascii_character_offsets_are_unchanged_bytes() {
+    let clean = "Dr. Schmidt uses alice@example.invalid";
+    let opf = script(
+        "opf-char-offsets-ascii",
+        r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '[{"label":"private_person","start":0,"end":11},{"label":"private_email","start":17,"end":38}]'
+"#,
+    )
+    .unwrap();
+
+    let spans = backend(opf).infer(clean).unwrap();
+
+    assert_eq!(
+        spans
+            .iter()
+            .map(|span| (span.start, span.end))
+            .collect::<Vec<_>>(),
+        [(0, 11), (17, 38)]
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn empty_clean_text_accepts_no_spans_and_rejects_any_span() {
+    let none = script(
+        "opf-char-offsets-empty-none",
+        "#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '[]'\n",
+    )
+    .unwrap();
+    assert!(backend(none).infer("").unwrap().is_empty());
+
+    let one = script(
+        "opf-char-offsets-empty-one",
+        "#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '[{\"label\":\"private_person\",\"start\":0,\"end\":1}]'\n",
+    )
+    .unwrap();
+    assert!(matches!(
+        backend(one).infer("").unwrap_err(),
+        SafetyNetError::InvalidOutput { ref message } if message == "opf returned out-of-bounds span"
+    ));
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn descending_or_zero_width_character_spans_fail_closed() {
+    for (name, start, end) in [
+        ("opf-char-offsets-descending", 14, 9),
+        ("opf-char-offsets-zero-width", 9, 9),
+    ] {
+        let opf = script(
+            name,
+            &format!(
+                "#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '[{{\"label\":\"private_person\",\"start\":{start},\"end\":{end}}}]'\n"
+            ),
+        )
+        .unwrap();
+
+        let error = backend(opf).infer(MULTIBYTE_CLEAN).unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                SafetyNetError::InvalidOutput { ref message } if message == "opf returned out-of-bounds span"
+            ),
+            "{name}: {error:?}"
+        );
+    }
+}
+
 #[test]
 #[file_serial(gaze_subprocess)]
 fn unknown_valid_label_fails_closed() {
