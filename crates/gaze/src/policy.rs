@@ -841,8 +841,8 @@ action = "tokenize"
 "#;
 
     fn nym_policy(table: &str) -> Result<Policy, PolicyError> {
-        let raw: RawPolicy =
-            toml::from_str(&format!("{NYM_POLICY_BASE}\n{table}")).map_err(PolicyError::TomlParse)?;
+        let raw: RawPolicy = toml::from_str(&format!("{NYM_POLICY_BASE}\n{table}"))
+            .map_err(PolicyError::TomlParse)?;
         Policy::try_from(raw)
     }
 

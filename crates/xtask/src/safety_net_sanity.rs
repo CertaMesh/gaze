@@ -150,7 +150,10 @@ fn run_live_nym_pass(suites: &[Suite]) -> Result<()> {
         "live_long_document_is_scanned_to_the_end",
         "live_capture_matches_the_committed_fixture",
     ] {
-        if !stdout.lines().any(|line| line == format!("test {required} ... ok")) {
+        if !stdout
+            .lines()
+            .any(|line| line == format!("test {required} ... ok"))
+        {
             bail!("safety_net_sanity: nym live test `{required}` did not run and pass");
         }
     }

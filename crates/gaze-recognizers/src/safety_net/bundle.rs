@@ -240,7 +240,11 @@ mod tests {
 
     fn bundle() -> (tempfile::TempDir, String) {
         let dir = tempfile::tempdir().unwrap();
-        let sha = write(dir.path(), "SHA256SUMS", &[("a.bin", b"a"), ("b.json", b"b")]);
+        let sha = write(
+            dir.path(),
+            "SHA256SUMS",
+            &[("a.bin", b"a"), ("b.json", b"b")],
+        );
         (dir, sha)
     }
 
@@ -254,7 +258,10 @@ mod tests {
     fn checksum_file_digest_mismatch_fails_closed() {
         let (dir, _) = bundle();
         let error = verify_bundle(dir.path(), SPEC, &"0".repeat(64)).unwrap_err();
-        assert!(matches!(error, SafetyNetError::ModelIntegrityMismatch { .. }));
+        assert!(matches!(
+            error,
+            SafetyNetError::ModelIntegrityMismatch { .. }
+        ));
     }
 
     #[test]
@@ -262,7 +269,10 @@ mod tests {
         let (dir, sha) = bundle();
         write_private(&dir.path().join("a.bin"), b"tampered");
         let error = verify_bundle(dir.path(), SPEC, &sha).unwrap_err();
-        assert!(matches!(error, SafetyNetError::ModelIntegrityMismatch { .. }));
+        assert!(matches!(
+            error,
+            SafetyNetError::ModelIntegrityMismatch { .. }
+        ));
     }
 
     #[test]

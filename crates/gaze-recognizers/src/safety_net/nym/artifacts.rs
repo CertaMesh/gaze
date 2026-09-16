@@ -90,7 +90,9 @@ pub(crate) fn verify_id2label(config_json: &[u8]) -> Result<(), SafetyNetError> 
         return Err(mismatch("<label count>"));
     }
     for (id, label) in expected.iter().enumerate() {
-        if id2label.get(&id.to_string()).and_then(serde_json::Value::as_str)
+        if id2label
+            .get(&id.to_string())
+            .and_then(serde_json::Value::as_str)
             != Some(label.as_str())
         {
             return Err(mismatch("<label order>"));

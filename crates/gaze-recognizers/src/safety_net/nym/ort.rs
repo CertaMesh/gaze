@@ -119,18 +119,18 @@ impl std::fmt::Debug for NymOrtBackend {
 impl NymOrtBackend {
     pub(crate) fn new(config: NymConfig) -> Result<Self, SafetyNetError> {
         verify_nym_bundle_with_digest(&config.model_dir, config.expected_bundle_sha256)?;
-        let config_json = std::fs::read(config.model_dir.join(NYM_SMALL_CONFIG_FILE)).map_err(
-            |_| SafetyNetError::WeightsMissing {
-                path: format!("<missing:{NYM_SMALL_CONFIG_FILE}>"),
-            },
-        )?;
+        let config_json =
+            std::fs::read(config.model_dir.join(NYM_SMALL_CONFIG_FILE)).map_err(|_| {
+                SafetyNetError::WeightsMissing {
+                    path: format!("<missing:{NYM_SMALL_CONFIG_FILE}>"),
+                }
+            })?;
         verify_id2label(&config_json)?;
 
-        let unavailable = |what: &str, err: &dyn std::fmt::Display| {
-            SafetyNetError::ModelUnavailable {
+        let unavailable =
+            |what: &str, err: &dyn std::fmt::Display| SafetyNetError::ModelUnavailable {
                 reason: format!("nym {what}: {}", sanitize_error(&err.to_string())),
-            }
-        };
+            };
         let mut tokenizer =
             tokenizers::Tokenizer::from_file(config.model_dir.join(NYM_SMALL_TOKENIZER_FILE))
                 .map_err(|err| unavailable("tokenizer failed to load", &err))?;

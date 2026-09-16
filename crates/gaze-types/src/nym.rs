@@ -346,10 +346,13 @@ mod tests {
     #[test]
     fn policy_spelling_validates_every_rule() {
         assert_eq!(
-            policy(&["LICENSE_PLATE", "ZIP_CODE"], &[("LICENSE_PLATE", 0.5), ("ZIP_CODE", 0.7)])
-                .unwrap()
-                .iter()
-                .collect::<Vec<_>>(),
+            policy(
+                &["LICENSE_PLATE", "ZIP_CODE"],
+                &[("LICENSE_PLATE", 0.5), ("ZIP_CODE", 0.7)]
+            )
+            .unwrap()
+            .iter()
+            .collect::<Vec<_>>(),
             vec![(NymLabel::LicensePlate, 0.5), (NymLabel::ZipCode, 0.7)]
         );
         assert!(matches!(

@@ -108,7 +108,9 @@ impl SafetyNet for NymSafetyNet {
         let spans = backend.infer(clean_text)?;
         let mut suspects = Vec::with_capacity(spans.len());
         for span in spans {
-            if let Some(suspect) = span_to_suspect(span, clean_text, backend.operating_point(), context)? {
+            if let Some(suspect) =
+                span_to_suspect(span, clean_text, backend.operating_point(), context)?
+            {
                 suspects.push(suspect);
             }
         }
@@ -201,7 +203,13 @@ mod tests {
     use super::*;
 
     fn context(manifest: &Manifest) -> SafetyNetContext<'_> {
-        SafetyNetContext::new(manifest, &[LocaleTag::Global], DocumentKind::Text, None, None)
+        SafetyNetContext::new(
+            manifest,
+            &[LocaleTag::Global],
+            DocumentKind::Text,
+            None,
+            None,
+        )
     }
 
     #[test]
@@ -236,7 +244,12 @@ mod tests {
             score: 0.99,
         };
         assert!(matches!(
-            span_to_suspect(span, "12345", &NymOperatingPoint::op_b(), context(&manifest)),
+            span_to_suspect(
+                span,
+                "12345",
+                &NymOperatingPoint::op_b(),
+                context(&manifest)
+            ),
             Err(SafetyNetError::InvalidOutput { .. })
         ));
         let span = NymSpan {
@@ -245,7 +258,9 @@ mod tests {
             label: NymLabel::Username,
             score: 0.99,
         };
-        assert!(span_to_suspect(span, "ü", &NymOperatingPoint::op_b(), context(&manifest)).is_err());
+        assert!(
+            span_to_suspect(span, "ü", &NymOperatingPoint::op_b(), context(&manifest)).is_err()
+        );
     }
 
     #[test]

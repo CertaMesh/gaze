@@ -256,13 +256,16 @@ pub(crate) fn decode_pieces(
             out.extend(open.take());
             continue;
         };
-        let best = counted.iter().fold(*first, |best, score| {
-            if score.mass > best.mass {
-                *score
-            } else {
-                best
-            }
-        });
+        let best = counted.iter().fold(
+            *first,
+            |best, score| {
+                if score.mass > best.mass {
+                    *score
+                } else {
+                    best
+                }
+            },
+        );
         let current = NymSpan {
             start: pieces[word[0]].start,
             end: pieces[word[word.len() - 1]].end,
@@ -430,35 +433,56 @@ mod tests {
         let op = NymOperatingPoint::op_b();
 
         // USERNAME mass 0.6 >= 0.5: a suspect.
-        let rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::Username, 0.6);
+        let rows = labelled(
+            &offsets,
+            char_range(text, "anna84"),
+            NymLabel::Username,
+            0.6,
+        );
         let spans = decode_pieces(text, &offsets, &scores(&rows), &op).unwrap();
         assert_eq!(texts(text, &spans), vec!["anna84"]);
         assert_eq!(spans[0].label, NymLabel::Username);
         assert!((spans[0].score - 0.6).abs() < 1e-6);
 
         // Below threshold: nothing.
-        let rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::Username, 0.4);
-        assert!(decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty());
+        let rows = labelled(
+            &offsets,
+            char_range(text, "anna84"),
+            NymLabel::Username,
+            0.4,
+        );
+        assert!(decode_pieces(text, &offsets, &scores(&rows), &op)
+            .unwrap()
+            .is_empty());
 
         // GIVEN_NAME outweighs USERNAME on the piece: disabled label wins the argmax, no suspect.
-        let mut rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::Username, 0.3);
-        let target = offsets
-            .iter()
-            .position(|&(s, e)| s < 13 && 7 < e)
-            .unwrap();
+        let mut rows = labelled(
+            &offsets,
+            char_range(text, "anna84"),
+            NymLabel::Username,
+            0.3,
+        );
+        let target = offsets.iter().position(|&(s, e)| s < 13 && 7 < e).unwrap();
         let index = NymLabel::ALL
             .iter()
             .position(|l| *l == NymLabel::GivenName)
             .unwrap();
         rows[target][2 * index + 1] = 0.6;
         rows[target][0] = 0.1;
-        assert!(decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty());
+        assert!(decode_pieces(text, &offsets, &scores(&rows), &op)
+            .unwrap()
+            .is_empty());
 
         // Same shape with USERNAME enabled at 0.3: its 0.35 clears the threshold, but GIVEN_NAME
         // (0.55) is the piece's label, so it still produces nothing. Picking the argmax among
         // enabled labels only would emit a USERNAME suspect here.
         let low = NymOperatingPoint::new([(NymLabel::Username, 0.3)]).unwrap();
-        let mut rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::Username, 0.35);
+        let mut rows = labelled(
+            &offsets,
+            char_range(text, "anna84"),
+            NymLabel::Username,
+            0.35,
+        );
         rows[target][2 * index + 1] = 0.55;
         rows[target][0] = 0.1;
         assert!(decode_pieces(text, &offsets, &scores(&rows), &low)
@@ -467,13 +491,23 @@ mod tests {
         rows[target][2 * index + 1] = 0.0;
         rows[target][0] = 0.65;
         assert_eq!(
-            texts(text, &decode_pieces(text, &offsets, &scores(&rows), &low).unwrap()),
+            texts(
+                text,
+                &decode_pieces(text, &offsets, &scores(&rows), &low).unwrap()
+            ),
             vec!["anna84"]
         );
 
         // DATE_OF_BIRTH needs 0.9 under op-B.
-        let rows = labelled(&offsets, char_range(text, "anna84"), NymLabel::DateOfBirth, 0.85);
-        assert!(decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty());
+        let rows = labelled(
+            &offsets,
+            char_range(text, "anna84"),
+            NymLabel::DateOfBirth,
+            0.85,
+        );
+        assert!(decode_pieces(text, &offsets, &scores(&rows), &op)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -481,10 +515,18 @@ mod tests {
         let text = "Hallo Anna Schmidt";
         let offsets = pieces(text);
         let op = NymOperatingPoint::default();
-        for label in [NymLabel::GivenName, NymLabel::Surname, NymLabel::City, NymLabel::ZipCode, NymLabel::TaxId] {
+        for label in [
+            NymLabel::GivenName,
+            NymLabel::Surname,
+            NymLabel::City,
+            NymLabel::ZipCode,
+            NymLabel::TaxId,
+        ] {
             let rows = labelled(&offsets, char_range(text, "Anna"), label, 0.99);
             assert!(
-                decode_pieces(text, &offsets, &scores(&rows), &op).unwrap().is_empty(),
+                decode_pieces(text, &offsets, &scores(&rows), &op)
+                    .unwrap()
+                    .is_empty(),
                 "{label} fired under the default operating point"
             );
         }
@@ -495,10 +537,17 @@ mod tests {
         let text = "Wert abc12345xyz Ende";
         // Word cut into three touching pieces; only the middle one fires.
         let (s, _) = char_range(text, "abc12345xyz");
-        let offsets = vec![(0, 4), (4, s + 3), (s + 3, s + 8), (s + 8, s + 11), (s + 11, s + 16)];
+        let offsets = vec![
+            (0, 4),
+            (4, s + 3),
+            (s + 3, s + 8),
+            (s + 8, s + 11),
+            (s + 11, s + 16),
+        ];
         let mut rows = vec![o(); offsets.len()];
         rows[2] = row(Some(NymLabel::Username), 0.0, 0.95);
-        let spans = decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
+        let spans =
+            decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
         assert_eq!(texts(text, &spans), vec!["abc12345xyz"]);
     }
 
@@ -508,18 +557,27 @@ mod tests {
         // I- continuations join them into one plate.
         let text = "Kennzeichen AB-CD 1234 ok";
         let (s, _) = char_range(text, "AB-CD 1234");
-        let offsets = vec![(0, 11), (11, s + 2), (s + 2, s + 3), (s + 3, s + 5), (s + 5, s + 10), (s + 10, s + 13)];
+        let offsets = vec![
+            (0, 11),
+            (11, s + 2),
+            (s + 2, s + 3),
+            (s + 3, s + 5),
+            (s + 5, s + 10),
+            (s + 10, s + 13),
+        ];
         let mut rows = vec![o(); offsets.len()];
         rows[1] = row(Some(NymLabel::LicensePlate), 0.9, 0.0);
         rows[2] = row(Some(NymLabel::LicensePlate), 0.0, 0.9);
         rows[3] = row(Some(NymLabel::LicensePlate), 0.0, 0.8);
         rows[4] = row(Some(NymLabel::LicensePlate), 0.0, 0.7);
-        let spans = decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
+        let spans =
+            decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
         assert_eq!(texts(text, &spans), vec!["AB-CD 1234"]);
         assert!((spans[0].score - 0.7).abs() < 1e-6);
 
         rows[3] = row(Some(NymLabel::LicensePlate), 0.8, 0.0);
-        let spans = decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
+        let spans =
+            decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
         assert_eq!(texts(text, &spans), vec!["AB-", "CD 1234"]);
     }
 
@@ -529,13 +587,41 @@ mod tests {
     fn char_offsets_become_byte_offsets_on_multibyte_text() {
         let nfd = "Ko\u{308}nigstraße A\u{308}rger";
         let cases: Vec<(String, &str, NymLabel)> = vec![
-            ("Grüße aus Überlingen, Kennung anna.schmidt84 läuft.".into(), "anna.schmidt84", NymLabel::Username),
-            (format!("{nfd} Kennung jdoe_1977 öffnet"), "jdoe_1977", NymLabel::Username),
-            ("Kennung mu\u{308}ller_x9 ende".into(), "mu\u{308}ller_x9", NymLabel::Username),
-            ("🙂👍🏽 Kennzeichen M-AB 1234 folgt".into(), "M-AB 1234", NymLabel::LicensePlate),
-            ("Tag 🙂 AB-CD 1234 🚗 ok".into(), "AB-CD 1234", NymLabel::LicensePlate),
-            ("Hausnummer\u{a0}12a Ort".into(), "12a", NymLabel::BuildingNumber),
-            ("Code 12\u{202f}345 Ende".into(), "12\u{202f}345", NymLabel::BuildingNumber),
+            (
+                "Grüße aus Überlingen, Kennung anna.schmidt84 läuft.".into(),
+                "anna.schmidt84",
+                NymLabel::Username,
+            ),
+            (
+                format!("{nfd} Kennung jdoe_1977 öffnet"),
+                "jdoe_1977",
+                NymLabel::Username,
+            ),
+            (
+                "Kennung mu\u{308}ller_x9 ende".into(),
+                "mu\u{308}ller_x9",
+                NymLabel::Username,
+            ),
+            (
+                "🙂👍🏽 Kennzeichen M-AB 1234 folgt".into(),
+                "M-AB 1234",
+                NymLabel::LicensePlate,
+            ),
+            (
+                "Tag 🙂 AB-CD 1234 🚗 ok".into(),
+                "AB-CD 1234",
+                NymLabel::LicensePlate,
+            ),
+            (
+                "Hausnummer\u{a0}12a Ort".into(),
+                "12a",
+                NymLabel::BuildingNumber,
+            ),
+            (
+                "Code 12\u{202f}345 Ende".into(),
+                "12\u{202f}345",
+                NymLabel::BuildingNumber,
+            ),
         ];
         for (text, target, label) in cases {
             // One piece per non-space run, with the separator kept on the NEXT piece's front
@@ -563,7 +649,8 @@ mod tests {
                     }
                 })
                 .collect::<Vec<_>>();
-            let spans = decode_pieces(&text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
+            let spans =
+                decode_pieces(&text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
             assert_eq!(texts(&text, &spans), vec![target.to_string()], "{text:?}");
             for span in &spans {
                 assert!(text.is_char_boundary(span.start) && text.is_char_boundary(span.end));
@@ -581,7 +668,8 @@ mod tests {
         let mut rows = vec![o(); 4];
         rows[1] = row(Some(NymLabel::Username), 0.2, 0.0);
         rows[2] = row(Some(NymLabel::Username), 0.7, 0.0);
-        let spans = decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
+        let spans =
+            decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
         assert_eq!(texts(text, &spans), vec!["🚗"]);
         assert!((spans[0].score - 0.7).abs() < 1e-6);
     }

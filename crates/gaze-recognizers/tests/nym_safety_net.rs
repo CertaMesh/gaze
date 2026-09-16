@@ -20,7 +20,8 @@ const FIXTURE_PATH: &str = "tests/fixtures/nym_pieces.json";
 
 /// The synthetic sentences the fixture was captured from, by case id.
 fn case_texts() -> Vec<(&'static str, String)> {
-    let filler = "Wir bestätigen den Eingang Ihrer Unterlagen und melden uns in den nächsten Tagen \
+    let filler =
+        "Wir bestätigen den Eingang Ihrer Unterlagen und melden uns in den nächsten Tagen \
                   mit einer Rückmeldung zum weiteren Vorgehen. ";
     vec![
         (
@@ -306,11 +307,7 @@ fn live_long_document_is_scanned_to_the_end() {
 fn live_capture_matches_the_committed_fixture() {
     let fresh = capture_all();
     if std::env::var_os("GAZE_NYM_WRITE_FIXTURE").is_some() {
-        std::fs::write(
-            FIXTURE_PATH,
-            serde_json::to_string(&fresh).unwrap() + "\n",
-        )
-        .unwrap();
+        std::fs::write(FIXTURE_PATH, serde_json::to_string(&fresh).unwrap() + "\n").unwrap();
         return;
     }
     let committed: Value = serde_json::from_str(FIXTURE).unwrap();

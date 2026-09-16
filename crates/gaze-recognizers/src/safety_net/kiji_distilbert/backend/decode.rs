@@ -1,6 +1,6 @@
 use super::RawSpan;
-use crate::safety_net::word_pieces::group_word_pieces;
 use crate::ner::decode::{softmax_confidence, split_bio};
+use crate::safety_net::word_pieces::group_word_pieces;
 use gaze_types::SafetyNetError;
 
 pub(crate) const ID2LABEL: [&str; 9] = [

@@ -7,11 +7,11 @@ use gaze_recognizers::safety_net::kiji_distilbert::{
     verify_kiji_bundle, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
     KIJI_DISTILBERT_SHA256SUMS,
 };
+pub use gaze_recognizers::safety_net::kiji_distilbert::{KijiDistilbertPrecision, SafetyNetError};
 use gaze_recognizers::safety_net::nym::{
     verify_nym_bundle, NYM_SMALL_CHECKSUM_FILE, NYM_SMALL_HF_COMMIT, NYM_SMALL_HF_REPO,
     NYM_SMALL_INT8_SHA256SUMS,
 };
-pub use gaze_recognizers::safety_net::kiji_distilbert::{KijiDistilbertPrecision, SafetyNetError};
 
 const DEFAULT_MODEL_DIR_NAME: &str = "kiji-distilbert";
 const DEFAULT_NYM_MODEL_DIR_NAME: &str = "nym-small-int8";
@@ -674,7 +674,10 @@ mod tests {
             err,
             SetupError::Verify(SafetyNetError::ModelIntegrityMismatch { .. })
         ));
-        assert!(!model_dir.exists(), "a failed install leaves nothing behind");
+        assert!(
+            !model_dir.exists(),
+            "a failed install leaves nothing behind"
+        );
         let urls = fetcher
             .calls()
             .into_iter()

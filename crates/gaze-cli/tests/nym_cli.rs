@@ -92,22 +92,34 @@ fn nym_policy_table_without_the_nym_net_fails_closed() {
         "\n[safety_net.nym]\nlabels = [\"LICENSE_PLATE\"]\nthreshold = { LICENSE_PLATE = 0.5 }\n",
     );
     let out = clean(&["--policy", path_str(&policy)], PLATE_PROSE);
-    assert_eq!(out.status.code(), Some(3), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(out.stdout.is_empty());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("[safety_net.nym] requires --safety-net nym"), "{stderr}");
+    assert!(
+        stderr.contains("[safety_net.nym] requires --safety-net nym"),
+        "{stderr}"
+    );
 }
 
 #[test]
 fn nym_policy_with_an_unmapped_label_fails_at_load() {
-    let (_dir, policy) = policy(
-        "\n[safety_net.nym]\nlabels = [\"GIVEN_NAME\"]\nthreshold = { GIVEN_NAME = 0.5 }\n",
-    );
+    let (_dir, policy) =
+        policy("\n[safety_net.nym]\nlabels = [\"GIVEN_NAME\"]\nthreshold = { GIVEN_NAME = 0.5 }\n");
     let out = clean(
         &["--policy", path_str(&policy), "--safety-net", "nym"],
         PLATE_PROSE,
     );
-    assert_eq!(out.status.code(), Some(2), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(out.stdout.is_empty());
     assert!(String::from_utf8_lossy(&out.stderr).contains("GIVEN_NAME"));
 }
@@ -150,7 +162,10 @@ fn live_nym_net_tokenizes_a_plate_the_rules_miss() {
     assert_eq!(baseline.status.code(), Some(0));
     let baseline: Value = serde_json::from_slice(&baseline.stdout).unwrap();
     assert!(
-        baseline["clean_text"].as_str().unwrap().contains("M-AB 1234"),
+        baseline["clean_text"]
+            .as_str()
+            .unwrap()
+            .contains("M-AB 1234"),
         "the rule floor alone must miss the plate for this test to mean anything"
     );
 
@@ -165,7 +180,12 @@ fn live_nym_net_tokenizes_a_plate_the_rules_miss() {
         ],
         PLATE_PROSE,
     );
-    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let json: Value = serde_json::from_slice(&out.stdout).unwrap();
     let clean_text = json["clean_text"].as_str().unwrap();
     assert!(!clean_text.contains("M-AB"), "{clean_text}");
