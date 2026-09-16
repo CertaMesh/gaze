@@ -480,6 +480,7 @@ loaded rulepack rather than a separate hand-maintained list.
 |--------|-------------|---------|-------|
 | `core` | `email.global`, `email.header.name`, `email.header.name.paren`, `name.*`, `phone.*`, `iban.structural`, `card.structural`, `ip.*`, `eth.address`, `postal.*` | `email`, `name`, `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:eth_address`, `custom:postal_code` | Default bundle when `[policy.rulepacks]` is omitted. Recognizers declare `safety_tier` and `locale_basis`; format-basis identifiers run independently of the document locale, while linguistic names and quarantined national shapes remain document-gated. |
 | `core-extended` | alias of `core` | same as `core` | Deprecated since v0.8.0; scheduled for removal in v0.10.0. The CLI alias emits a warning and auto-activates locale-gated recognizers for v0.8.x compatibility. |
+| `secrets` | `security_token.anchored`, `password.field` | `custom:security_token`, `custom:password` | Opt-in only. Credentials are not PII, so this bundle is never loaded by default, not even when `[policy.rulepacks]` is omitted. Load it next to `core`. |
 
 Use `core` with an explicit locale when you want document-basis,
 locale-shaped recognizers:
@@ -490,6 +491,15 @@ bundled = ["core"]
 
 [locale]
 active = ["en-US"]
+```
+
+Credentials (API keys, access tokens, JWTs, `password:` records) are not PII
+and are not detected by `core`. To tokenize them too, add the opt-in `secrets`
+bundle:
+
+```toml
+[policy.rulepacks]
+bundled = ["core", "secrets"]
 ```
 
 Or override the bundle list for one CLI run:
@@ -573,9 +583,10 @@ The bundled format-basis set is `aadhaar.in`, `bsn.nl`, `cnpj.br`, `cpf.br`,
 `ssn.us`, `steuer_id.de`, `vat.de`, and `vat.es`. Linguistic `name.*`
 recognizers, `phone.national.de`, `postal.de`, and `postal.us` remain
 document-basis, as do the bilingual cue-anchored `global` recognizers
-(`security_token.anchored`, `tax_number.cue_anchored`,
-`driver_license.cue_anchored`, `national_id.cue_anchored`), which are eligible
-under every chain because `global` matches every document locale.
+(`tax_number.cue_anchored`, `driver_license.cue_anchored`,
+`national_id.cue_anchored`, and the opt-in `secrets` bundle's
+`security_token.anchored`), which are eligible under every chain because
+`global` matches every document locale.
 
 This changes suppression behavior: `--locale=global` and narrow locale chains
 cannot suppress a format-basis recognizer. An adopter that needs the previous
@@ -863,7 +874,7 @@ names are listed under
 > span keeps the slot (`ConflictTier::StructuredContainment`), so with
 > `custom:url = preserve` and `email = tokenize` an email inside a URL is
 > preserved raw along with the URL. Keep container-capable classes
-> (`custom:url`, `custom:security_token`, broad tenant recognizers) on a
+> (`custom:url`, `custom:security_token` from the opt-in `secrets` bundle, broad tenant recognizers) on a
 > protective action, or accept that everything inside them passes through;
 > a load-time guard is tracked as solo todo #3064.
 

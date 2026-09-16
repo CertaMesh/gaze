@@ -65,6 +65,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING: credentials are no longer detected by default.** Credentials are
+  not PII, so the two credential recognizers leave the `core` rulepack (now
+  version 0.6.0) for a new opt-in bundled rulepack, `secrets`:
+  `security_token.anchored` (`custom:security_token`) and `password.field`
+  (`custom:password`) moved verbatim, with the same ids, classes, patterns,
+  scoring and sources. `secrets` is never part of a default activation, not even
+  when `[policy.rulepacks]` is omitted. To keep tokenizing API keys, access
+  tokens, JWTs and `password:` records, load it next to `core` with
+  `[policy.rulepacks] bundled = ["core", "secrets"]` or
+  `--rulepack-bundled core,secrets`. `username.field` (`custom:username`) is
+  removed outright: a line-start `username:` record rarely occurs in prose, and
+  its measured rule-floor byte recall was 0.9 % of 1,034 gold bytes. Nothing
+  emits `custom:username` any more. See UPGRADE.md.
+
+  Measured on the v0.15.0 release run (per-label report for `9a3a788`): the
+  rule-floor byte recall of these rules was `PASSWORD` 0.0 %, `USERNAME` 0.9 %
+  and `SECURITYTOKEN` 70.6 %. Under the v2 scored-label contract `PASSWORD` and
+  `SECURITYTOKEN` are unscored, so leaked PII bytes do not move; `USERNAME`
+  stays scored and loses at most about 9 bytes of rule coverage.
+
+- [bundle-tokenization-drift] The `core` snapshot records rulepack version 0.6.0 and the extended drift corpus hash; its detection entries are unchanged, which proves the new credential fixture lines stay inert under `core`.
+
+- [bundle-tokenization-drift] The new `secrets` snapshot pins exactly one `security_token.anchored` and one `password.field` detection on the credential fixture lines appended to the drift corpus.
+
 - `cooperates_with` is now symmetric across all five `custom:postal_code`
   recognizers, and the stale research-855 collision comment in `core.toml` —
   which described a two-rule world — is replaced by a two-group policy note

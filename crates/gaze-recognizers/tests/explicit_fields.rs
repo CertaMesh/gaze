@@ -1,20 +1,17 @@
 //! Independently authored synthetic field records, derived from the declared grammar.
 //! No evaluation rows, models, or copied production regexes are used here.
+//! `password.field` ships in the opt-in `secrets` bundle, so every pipeline here loads
+//! `core` plus `secrets` explicitly.
 
 use gaze::{DictionaryBundle, LocaleTag, SafetyNetPolicy, Scope, Session};
 use gaze_assembly::CorePipelineConfig;
 
 #[test]
 fn actual_core_captures_declared_values_and_restores_original_bytes() {
-    let core = CorePipelineConfig::new().build().unwrap();
+    let core = core_with_secrets().unwrap();
     for (raw, value, source) in [
         ("DOB: 1990-02-03", "1990-02-03", "birth_date.cue"),
         ("password: x", "x", "password.field"),
-        (
-            "Benutzername: \"Test Nutzer\"",
-            "Test Nutzer",
-            "username.field",
-        ),
     ] {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let (clean, spans, _, trace) = core
@@ -53,12 +50,24 @@ fn actual_core_captures_declared_values_and_restores_original_bytes() {
     }
 }
 
+fn core_with_secrets() -> Result<gaze_assembly::CorePipeline, gaze_assembly::BuildError> {
+    CorePipelineConfig::new()
+        .with_bundled_rulepack("secrets")
+        .build()
+}
+
 fn field_detector(id: &str) -> gaze_recognizers::RegexDetector {
-    let pack = gaze::Rulepack::load(gaze::RulepackSource::Embedded(
-        gaze_recognizers::embedded("core").unwrap(),
-    ))
-    .unwrap();
-    let spec = pack.recognizers.into_iter().find(|r| r.id == id).unwrap();
+    let spec = ["core", "secrets"]
+        .into_iter()
+        .flat_map(|bundle| {
+            gaze::Rulepack::load(gaze::RulepackSource::Embedded(
+                gaze_recognizers::embedded(bundle).unwrap(),
+            ))
+            .unwrap()
+            .recognizers
+        })
+        .find(|r| r.id == id)
+        .unwrap();
     let gaze::RawMatch::Regex {
         pattern: Some(pattern),
         capture_groups,
@@ -102,18 +111,6 @@ fn exact_cues_case_quotes_and_record_boundaries() {
             "password.field",
             &["password", "passphrase", "passwort", "kennwort"][..],
             "x!42,;",
-        ),
-        (
-            "username.field",
-            &[
-                "username",
-                "user name",
-                "login name",
-                "benutzername",
-                "nutzername",
-                "Anmeldename",
-            ][..],
-            "Üser.試験",
         ),
         (
             "birth_date.cue",
@@ -212,7 +209,6 @@ fn dates_require_complete_shapes_and_suffixes() {
 fn malformed_or_unrelated_records_add_no_field_candidate() {
     let detectors = [
         field_detector("password.field"),
-        field_detector("username.field"),
         field_detector("birth_date.cue"),
     ];
     for raw in [
@@ -261,7 +257,7 @@ fn malformed_or_unrelated_records_add_no_field_candidate() {
 
 #[test]
 fn grammar_units_bound_full_values_without_prefix_fallback() {
-    for id in ["password.field", "username.field"] {
+    for id in ["password.field"] {
         let detector = field_detector(id);
         let cue = id.split('.').next().unwrap();
         for units in [255, 256, 257] {
@@ -341,7 +337,7 @@ fn assert_source_capture(pipeline: &gaze::Pipeline, raw: &str, captured: &str, s
 
 #[test]
 fn actual_assembly_normalization_exposes_source_boundaries_and_raw_size_limitations() {
-    let core = CorePipelineConfig::new().build().unwrap();
+    let core = core_with_secrets().unwrap();
     for (raw, captured) in [
         ("password: \"\u{200d}a\"", "a"),
         ("password: \"a\u{200c}\"", "a"),
@@ -421,6 +417,13 @@ fn assembled(
         gaze_recognizers::embedded("core").unwrap(),
     ))
     .unwrap();
+    pack.recognizers.extend(
+        gaze::Rulepack::load(gaze::RulepackSource::Embedded(
+            gaze_recognizers::embedded("secrets").unwrap(),
+        ))
+        .unwrap()
+        .recognizers,
+    );
     // Competing synthetic candidates exercise real assembly/arbitration without a model.
     for (index, (pattern, class, priority)) in competitors.iter().enumerate() {
         let mut spec = pack
@@ -465,7 +468,7 @@ fn tokenize_rules() -> Vec<gaze::RuleSpec> {
 #[test]
 fn actual_assembly_nested_builtin_and_custom_fragments_keep_full_field_source() {
     use gaze::PiiClass;
-    let core = CorePipelineConfig::new().build().unwrap();
+    let core = core_with_secrets().unwrap();
     for value in [
         "prefix alice@example.invalid suffix",
         "prefix +49 1555 0112233 suffix",
@@ -509,12 +512,12 @@ fn actual_assembly_nested_builtin_and_custom_fragments_keep_full_field_source() 
 }
 
 #[test]
-fn same_span_email_winner_selects_email_policy_instead_of_username_policy() {
+fn same_span_email_winner_selects_email_policy_instead_of_password_policy() {
     use gaze::{Action, PiiClass, RuleSpec};
-    let raw = "username: alice@example.invalid";
+    let raw = "password: alice@example.invalid";
     let rules = vec![
         RuleSpec::Class {
-            class: PiiClass::custom("username").unwrap(),
+            class: PiiClass::custom("password").unwrap(),
             action: Action::Preserve,
         },
         RuleSpec::Class {
@@ -529,7 +532,7 @@ fn same_span_email_winner_selects_email_policy_instead_of_username_policy() {
     assert_source_capture(&pipeline, raw, "alice@example.invalid", "email.global");
     let reverse_rules = vec![
         RuleSpec::Class {
-            class: PiiClass::custom("username").unwrap(),
+            class: PiiClass::custom("password").unwrap(),
             action: Action::Tokenize,
         },
         RuleSpec::Class {
@@ -572,8 +575,7 @@ fn validator_veto_belongs_to_card_or_phone_not_declared_password() {
         ("+99999999", "phone"),
     ] {
         let logs = CapturedLogs(Default::default());
-        let core = CorePipelineConfig::new()
-            .build()
+        let core = core_with_secrets()
             .unwrap()
             .into_pipeline()
             .with_redaction_logger(logs.clone());
@@ -599,7 +601,7 @@ fn validator_veto_belongs_to_card_or_phone_not_declared_password() {
         );
     }
     for value in ["4111-1111-1111-1111", "+49 1555 0112233"] {
-        let core = CorePipelineConfig::new().build().unwrap();
+        let core = core_with_secrets().unwrap();
         assert_source_capture(
             core.pipeline(),
             &format!("password: \"prefix {value} suffix\""),
@@ -698,7 +700,7 @@ impl gaze::SafetyNet for FieldNet {
 
 #[test]
 fn repeated_fields_live_staged_trace_and_owned_replay_restore_exact_bytes() {
-    let pipeline = CorePipelineConfig::new().build().unwrap().into_pipeline();
+    let pipeline = core_with_secrets().unwrap().into_pipeline();
     for newline in ["\n", "\r\n"] {
         let raw =
             format!("password: synthetic{newline}password: synthetic{newline}DOB: 1990-02-03");
@@ -769,8 +771,7 @@ fn configured_fake_net_sees_final_fields_and_stage_errors_publish_nothing() {
         NetResponse::Error,
     ] {
         let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let pipeline = CorePipelineConfig::new()
-            .build()
+        let pipeline = core_with_secrets()
             .unwrap()
             .into_pipeline()
             .with_safety_net(FieldNet {
@@ -889,7 +890,7 @@ fn caller_actions_remain_authoritative_and_strict_does_not_promise_no_new_denial
 
 #[test]
 fn foreign_token_spelling_is_not_owned_field_protection() {
-    let pipeline = CorePipelineConfig::new().build().unwrap().into_pipeline();
+    let pipeline = core_with_secrets().unwrap().into_pipeline();
     let foreign = Session::new(Scope::Ephemeral).unwrap();
     let token = foreign
         .tokenize(&gaze::PiiClass::custom("password").unwrap(), "synthetic")
@@ -917,8 +918,7 @@ fn foreign_token_spelling_is_not_owned_field_protection() {
 #[test]
 fn staged_clean_net_error_requires_discard_and_never_publishes_mappings() {
     let seen = Default::default();
-    let pipeline = CorePipelineConfig::new()
-        .build()
+    let pipeline = core_with_secrets()
         .unwrap()
         .into_pipeline()
         .with_safety_net(FieldNet {
