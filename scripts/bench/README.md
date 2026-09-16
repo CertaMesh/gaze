@@ -46,6 +46,43 @@ Planning estimates on a modern laptop are roughly 2–10 minutes for the default
 Thermals, CPU runtime, and filesystem cache state can move those estimates
 substantially; A6 records the authoritative observed runtime.
 
+## Scored-label contracts
+
+A scored-label contract says which corpus labels count as gold PII. Without
+`--scored-labels` the runner uses contract **v1**, which scores every corpus
+label, so every row measured before contracts existed stays reproducible.
+
+```bash
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
+  full --seed 20260710 --no-download \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json
+```
+
+[`scored-labels-v2.json`](../../docs/reference/benchmarks/scored-labels-v2.json)
+rules on every corpus label with a reason and a `settled`/`pending` ruling. v2
+puts the credential labels `PASSWORD` and `SECURITYTOKEN` out of contract:
+credentials authenticate a system, they are not personal data (user ruling
+2026-09-16). An
+out-of-contract span is removed from gold, and the bytes only it covers are
+ignored, so they count as neither leaked nor false positive. Whether the
+pipeline still protected them is reported per run under
+`excluded_label_coverage`. A corpus label the contract does not list fails
+closed.
+
+v2 also lists `neutral_prediction_classes` (`custom:password`,
+`custom:security_token`, `custom:secret`). A prediction of one of those classes
+still counts as protection where it covers scored gold; its other bytes are
+ignored instead of counted as false positive, and are reported per run under
+`neutral_prediction_utf8_bytes_outside_scored_gold`.
+
+The scorecard records the contract under `scoring.scored_label_contract`: its
+id, version, file SHA-256, excluded labels, scored and excluded gold counts, and
+`scored_gold_digest` over every scored `(document, start, end, label)`. The
+comparator refuses to compare scorecards measured under different contracts,
+and the benchmark document labels every non-v1 row with its contract version.
+Its release trend line joins only rows measured under the latest row's
+contract (same version and file SHA-256) and says how many rows it left out.
+
 ## Required local models
 
 The runner validates both model bundles before it builds or starts a benchmark

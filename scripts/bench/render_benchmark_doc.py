@@ -325,6 +325,46 @@ def _dig(node: Any, path: Sequence[str], where: str) -> Any:
     return node
 
 
+def _scored_label_contract(scorecard: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The scorecard's scored-label contract, or None for implicit contract v1."""
+    scoring = scorecard.get("scoring")
+    block = scoring.get("scored_label_contract") if isinstance(scoring, Mapping) else None
+    if block is None:
+        return None
+    if not isinstance(block, Mapping):
+        raise RenderError("scorecard scoring.scored_label_contract must be an object")
+    if block.get("version") == 1:
+        return None
+    version = block.get("version")
+    if type(version) is not int or version < 2:
+        raise RenderError("scored-label contract version must be an integer >= 2")
+    excluded = block.get("excluded_labels")
+    if not isinstance(excluded, list) or not all(isinstance(x, str) for x in excluded):
+        raise RenderError("scored-label contract excluded_labels must be strings")
+    return {
+        "id": str(block.get("id")),
+        "version": version,
+        "file_sha256": _require_hex64(
+            block.get("file_sha256"), "scorecard scored_label_contract.file_sha256"
+        ),
+        "excluded_labels": list(excluded),
+    }
+
+
+def _contract_key(entry: Mapping[str, Any]) -> tuple[int, str | None]:
+    """(version, file sha256); rows without a contract are implicit v1."""
+    contract = entry.get("scored_label_contract")
+    if not isinstance(contract, Mapping):
+        return (1, None)
+    return (contract["version"], contract["file_sha256"])
+
+
+def contract_label(entry: Mapping[str, Any]) -> str:
+    contract = entry.get("scored_label_contract")
+    version = contract["version"] if isinstance(contract, Mapping) else 1
+    return f"scored labels v{version}"
+
+
 def history_entry_from_scorecard(
     scorecard: Mapping[str, Any],
     *,
@@ -400,6 +440,7 @@ def history_entry_from_scorecard(
     }
 
     model_bundles = _require_model_bundles(provenance, "scorecard runner_provenance")
+    contract = _scored_label_contract(scorecard)
 
     return {
         "version": version,
@@ -426,6 +467,9 @@ def history_entry_from_scorecard(
         },
         "provisional": bool(provisional),
         "note": note,
+        # Absent means contract v1 (every corpus label scored), which keeps
+        # the rows recorded before contracts existed byte-identical.
+        **({"scored_label_contract": contract} if contract is not None else {}),
         "arms": arms,
     }
 
@@ -453,6 +497,14 @@ def render_current_release(history: Mapping[str, Any]) -> str:
         claim = "— measured on the released tree."
     lines.append(f"**{entry['version']}** {claim}")
     lines.append("")
+    if entry.get("scored_label_contract"):
+        contract = entry["scored_label_contract"]
+        excluded = ", ".join(contract["excluded_labels"]) or "none"
+        lines.append(
+            f"Measured under **{contract_label(entry)}** "
+            f"(`{contract['id']}`; out of contract: {excluded})."
+        )
+        lines.append("")
     if entry.get("note"):
         lines.append(f"> {entry['note']}")
         lines.append("")
@@ -551,12 +603,26 @@ def render_charts(history: Mapping[str, Any]) -> str:
     ]
 
     default_arm = history.get("shipped_default_arm", SHIPPED_DEFAULT_ARM)
+    # One line across two contracts would show a change in what counts as gold
+    # as a change in leaks, so the trend keeps only the latest row's contract.
+    latest_contract = _contract_key(entry)
+    measured = [item for item in releases if default_arm in item["arms"]]
     trend = [
         (item["version"], item["arms"][default_arm]["surviving_pii_utf8_bytes"])
-        for item in releases
-        if default_arm in item["arms"]
+        for item in measured
+        if _contract_key(item) == latest_contract
     ]
     lines.extend(["", f"**Trend across releases — `{default_arm}`.**"])
+    if len(trend) < len(measured):
+        lines.extend(
+            [
+                "",
+                f"> Only rows measured under {contract_label(entry)} are on "
+                "this line; "
+                f"{len(measured) - len(trend)} row(s) under another contract are "
+                "in the history table.",
+            ]
+        )
     if len(trend) < 2:
         lines.extend(
             [
@@ -605,6 +671,8 @@ def render_history(history: Mapping[str, Any]) -> str:
         version = entry["version"]
         if entry.get("provisional"):
             version += " *(provisional)*"
+        if entry.get("scored_label_contract"):
+            version += f" · {contract_label(entry)}"
         lines.append(
             f"| {version} | {entry['date']} | `{entry['commit'][:7]}` | "
             f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "

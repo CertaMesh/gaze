@@ -150,11 +150,229 @@ class Document:
     source_dataset: str
     spans: tuple[Span, ...]
     negative_category: str | None = None
+    # Gold spans of labels the scored-label contract puts out of contract. They
+    # are not gold, and the bytes only they cover are neither leaked nor false
+    # positive. Empty under contract v1.
+    excluded_spans: tuple[Span, ...] = ()
+    # Prediction classes the contract treats as neutral: they still protect
+    # scored gold, but their other bytes are not false positives.
+    neutral_prediction_classes: frozenset[str] = frozenset()
 
     @property
     def locale_chain(self) -> list[str]:
         locale = f"{self.language}-{self.region}" if self.region else self.language
         return [locale, "global"]
+
+
+SCORED_LABEL_CONTRACT_V1_ID = "scored-labels-v1"
+
+
+class ScoredLabelContractError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class ScoredLabelContract:
+    """Which corpus labels count as gold PII.
+
+    v1 is implicit and scores every label, so rows measured before contracts
+    existed stay reproducible. Any other contract is a committed file that must
+    rule on every corpus label; an unlisted label fails closed.
+    """
+
+    contract_id: str
+    version: int
+    path: str | None
+    sha256: str | None
+    scored_labels: frozenset[str] | None
+    excluded_labels: frozenset[str]
+    neutral_prediction_classes: frozenset[str] = frozenset()
+
+    @property
+    def is_implicit_v1(self) -> bool:
+        return self.scored_labels is None
+
+
+SCORED_LABEL_CONTRACT_V1 = ScoredLabelContract(
+    contract_id=SCORED_LABEL_CONTRACT_V1_ID,
+    version=1,
+    path=None,
+    sha256=None,
+    scored_labels=None,
+    excluded_labels=frozenset(),
+)
+
+
+def load_scored_label_contract(
+    path: Path, *, display_path: str | None = None
+) -> ScoredLabelContract:
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise ScoredLabelContractError(
+            f"cannot read scored-label contract {path}: {error}"
+        ) from error
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ScoredLabelContractError(
+            f"scored-label contract {path} is not valid JSON: {error}"
+        ) from error
+    if not isinstance(value, dict) or value.get("schema_version") != 1:
+        raise ScoredLabelContractError(
+            f"scored-label contract {path} must be an object with schema_version 1"
+        )
+    contract_id = value.get("contract")
+    version = value.get("contract_version")
+    if not isinstance(contract_id, str) or not contract_id:
+        raise ScoredLabelContractError("scored-label contract needs a contract id")
+    if type(version) is not int or version < 2:
+        raise ScoredLabelContractError(
+            "scored-label contract_version must be an integer >= 2; v1 is implicit"
+        )
+    labels = value.get("labels")
+    if not isinstance(labels, list) or not labels:
+        raise ScoredLabelContractError("scored-label contract labels must be non-empty")
+    scored: set[str] = set()
+    excluded: set[str] = set()
+    for index, entry in enumerate(labels):
+        context = f"scored-label contract labels[{index}]"
+        if not isinstance(entry, dict):
+            raise ScoredLabelContractError(f"{context} must be an object")
+        label = entry.get("label")
+        if not isinstance(label, str) or not label:
+            raise ScoredLabelContractError(f"{context} needs a label")
+        if label in scored or label in excluded:
+            raise ScoredLabelContractError(f"{context} duplicates label {label}")
+        if type(entry.get("scored")) is not bool:
+            raise ScoredLabelContractError(f"{context} scored must be a boolean")
+        reason = entry.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ScoredLabelContractError(f"{context} needs a non-empty reason")
+        if entry.get("ruling") not in {"settled", "pending"}:
+            raise ScoredLabelContractError(
+                f"{context} ruling must be 'settled' or 'pending'"
+            )
+        (scored if entry["scored"] else excluded).add(label)
+    neutral: set[str] = set()
+    for index, entry in enumerate(value.get("neutral_prediction_classes", [])):
+        context = f"scored-label contract neutral_prediction_classes[{index}]"
+        if not isinstance(entry, dict) or not isinstance(entry.get("class"), str):
+            raise ScoredLabelContractError(f"{context} needs a class")
+        if entry["class"] in neutral:
+            raise ScoredLabelContractError(f"{context} duplicates {entry['class']}")
+        reason = entry.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ScoredLabelContractError(f"{context} needs a non-empty reason")
+        neutral.add(entry["class"])
+    return ScoredLabelContract(
+        contract_id=contract_id,
+        version=version,
+        path=display_path if display_path is not None else path.as_posix(),
+        sha256=hashlib.sha256(raw).hexdigest(),
+        scored_labels=frozenset(scored),
+        excluded_labels=frozenset(excluded),
+        neutral_prediction_classes=frozenset(neutral),
+    )
+
+
+def apply_scored_label_contract(
+    documents: Sequence[Document], contract: ScoredLabelContract
+) -> list[Document]:
+    if contract.is_implicit_v1:
+        return list(documents)
+    assert contract.scored_labels is not None
+    ruled = contract.scored_labels | contract.excluded_labels
+    unruled = sorted(
+        {span.label for document in documents for span in document.spans} - ruled
+    )
+    if unruled:
+        raise ScoredLabelContractError(
+            f"{contract.contract_id} does not rule on corpus labels {unruled}"
+        )
+    applied: list[Document] = []
+    for document in documents:
+        excluded = tuple(
+            span for span in document.spans if span.label in contract.excluded_labels
+        )
+        if not excluded and not contract.neutral_prediction_classes:
+            applied.append(document)
+            continue
+        applied.append(
+            Document(
+                uid=document.uid,
+                text=document.text,
+                language=document.language,
+                region=document.region,
+                source_dataset=document.source_dataset,
+                spans=tuple(
+                    span
+                    for span in document.spans
+                    if span.label not in contract.excluded_labels
+                ),
+                negative_category=document.negative_category,
+                excluded_spans=document.excluded_spans + excluded,
+                neutral_prediction_classes=contract.neutral_prediction_classes,
+            )
+        )
+    return applied
+
+
+def scored_gold_digest(documents: Sequence[Document]) -> dict[str, str]:
+    rows = sorted(
+        [document.uid, span.start, span.end, span.label]
+        for document in documents
+        for span in document.spans
+    )
+    payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return {"algorithm": "sha256", "value": hashlib.sha256(payload).hexdigest()}
+
+
+def scored_label_contract_report(
+    contract: ScoredLabelContract, documents: Sequence[Document]
+) -> dict[str, object]:
+    """Identity of the contract plus the gold population it leaves in scope.
+
+    `scored_gold_digest` covers (document, start, end, label) of every scored
+    gold span, so two scorecards with equal digests score the same gold.
+    """
+    excluded_bytes = sum(
+        span.end - span.start
+        for document in documents
+        for span in document.excluded_spans
+    )
+    return {
+        "id": contract.contract_id,
+        "version": contract.version,
+        "file": contract.path,
+        "file_sha256": contract.sha256,
+        "excluded_labels": sorted(contract.excluded_labels),
+        "neutral_prediction_classes": sorted(contract.neutral_prediction_classes),
+        "scored_gold_entities": sum(len(document.spans) for document in documents),
+        "scored_gold_utf8_bytes": sum(
+            span.end - span.start for document in documents for span in document.spans
+        ),
+        "excluded_gold_entities": sum(
+            len(document.excluded_spans) for document in documents
+        ),
+        "excluded_gold_utf8_bytes": excluded_bytes,
+        "scored_gold_digest": scored_gold_digest(documents),
+    }
+
+
+def scorecard_scored_label_contract_identity(
+    scorecard: Mapping[str, object],
+) -> tuple[str, int, str | None]:
+    """(id, version, file sha256); a scorecard without the block is contract v1."""
+    scoring = scorecard.get("scoring")
+    block = scoring.get("scored_label_contract") if isinstance(scoring, dict) else None
+    if block is None:
+        return (SCORED_LABEL_CONTRACT_V1_ID, 1, None)
+    if not isinstance(block, dict):
+        raise ValueError("scoring.scored_label_contract must be an object")
+    return (block.get("id"), block.get("version"), block.get("file_sha256"))
 
 
 def sha256_file(path: Path) -> str:
@@ -895,6 +1113,30 @@ def merge_intervals(intervals: Iterable[tuple[int, int]]) -> list[tuple[int, int
     return merged
 
 
+def subtract_intervals(
+    intervals: Sequence[tuple[int, int]], removed: Sequence[tuple[int, int]]
+) -> list[tuple[int, int]]:
+    """Merged `intervals` minus merged `removed`; both inputs must be merged."""
+    result: list[tuple[int, int]] = []
+    removed_index = 0
+    for start, end in intervals:
+        cursor = start
+        while removed_index < len(removed) and removed[removed_index][1] <= cursor:
+            removed_index += 1
+        index = removed_index
+        while index < len(removed) and removed[index][0] < end:
+            removed_start, removed_end = removed[index]
+            if removed_start > cursor:
+                result.append((cursor, removed_start))
+            cursor = max(cursor, removed_end)
+            if cursor >= end:
+                break
+            index += 1
+        if cursor < end:
+            result.append((cursor, end))
+    return result
+
+
 def interval_length(intervals: Sequence[tuple[int, int]]) -> int:
     return sum(end - start for start, end in intervals)
 
@@ -960,8 +1202,29 @@ class MetricAccumulator:
 
     def add(self, document: Document, predictions: Sequence[Span]) -> None:
         gold = merge_intervals((span.start, span.end) for span in document.spans)
-        predicted = merge_intervals((span.start, span.end) for span in predictions)
-        text_bytes = len(document.text.encode("utf-8"))
+        # Bytes only an out-of-contract label covers are outside the score:
+        # protecting them is neither a true nor a false positive.
+        ignored = subtract_intervals(
+            merge_intervals(
+                [(span.start, span.end) for span in document.excluded_spans]
+                + [
+                    (span.start, span.end)
+                    for span in predictions
+                    if span.label in document.neutral_prediction_classes
+                ]
+            ),
+            gold,
+        )
+        if ignored:
+            predictions = [
+                span
+                for span in predictions
+                if not interval_is_covered((span.start, span.end), ignored)
+            ]
+        predicted = subtract_intervals(
+            merge_intervals((span.start, span.end) for span in predictions), ignored
+        )
+        text_bytes = len(document.text.encode("utf-8")) - interval_length(ignored)
         gold_bytes = interval_length(gold)
         predicted_bytes = interval_length(predicted)
         true_positive_bytes = intersection_length(gold, predicted)
@@ -1730,6 +1993,10 @@ def run_config(
     )
     direct = RecallAccumulator()
     contextual = RecallAccumulator()
+    excluded_label_coverage: defaultdict[str, RecallAccumulator] = defaultdict(
+        RecallAccumulator
+    )
+    neutral_prediction_bytes: Counter[str] = Counter()
     contract = ContractAccumulator()
     scored_document_ids: list[str] = []
     failed_closed_documents: list[dict[str, str]] = []
@@ -1842,6 +2109,20 @@ def run_config(
                     [span for span in document.spans if span.label == label],
                     predictions,
                 )
+            if document.neutral_prediction_classes:
+                gold = merge_intervals((span.start, span.end) for span in document.spans)
+                for label in document.neutral_prediction_classes:
+                    neutral = merge_intervals(
+                        (span.start, span.end) for span in predictions if span.label == label
+                    )
+                    neutral_prediction_bytes[label] += interval_length(
+                        subtract_intervals(neutral, gold)
+                    )
+            for label in {span.label for span in document.excluded_spans}:
+                excluded_label_coverage[label].add(
+                    [span for span in document.excluded_spans if span.label == label],
+                    predictions,
+                )
             for key, value in response["timing"].items():
                 if value is not None:
                     success_timing[key].append(float(value))
@@ -1898,6 +2179,25 @@ def run_config(
         "per_label_recall": {
             key: value.result() for key, value in sorted(per_label.items())
         },
+        **(
+            {
+                "excluded_label_coverage": {
+                    key: value.result()
+                    for key, value in sorted(excluded_label_coverage.items())
+                }
+            }
+            if any(document.excluded_spans for document in documents)
+            else {}
+        ),
+        **(
+            {
+                "neutral_prediction_utf8_bytes_outside_scored_gold": dict(
+                    sorted(neutral_prediction_bytes.items())
+                )
+            }
+            if any(document.neutral_prediction_classes for document in documents)
+            else {}
+        ),
         **(
             {
                 "validator_recall_by_label": validator_recall_by_label(
@@ -2000,6 +2300,7 @@ def assemble_scorecard(
     sampling_report: Mapping[str, object],
     parameters: Mapping[str, object],
     runs: Sequence[Mapping[str, object]],
+    scored_label_contract: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     available_population = copy.deepcopy(sampling_report["available_population"])
     evaluated_population = copy.deepcopy(sampling_report["evaluated_population"])
@@ -2028,7 +2329,14 @@ def assemble_scorecard(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "gaze": git_metadata(repo_root),
         "dataset": dataset,
-        "scoring": copy.deepcopy(SCORING_METADATA),
+        "scoring": {
+            **copy.deepcopy(SCORING_METADATA),
+            **(
+                {"scored_label_contract": copy.deepcopy(dict(scored_label_contract))}
+                if scored_label_contract is not None
+                else {}
+            ),
+        },
         "parameters": copy.deepcopy(dict(parameters)),
         "runs": [copy.deepcopy(dict(run)) for run in runs],
     }
@@ -2780,11 +3088,32 @@ def compare_scorecards(
         }
         regression_failures.append(failure)
 
+    contracts_match = False
+    try:
+        candidate_contract = scorecard_scored_label_contract_identity(candidate)
+        baseline_contract = scorecard_scored_label_contract_identity(baseline)
+    except ValueError as error:
+        regression_failures.append(
+            {"gate": "scored_label_contract_match", "reason": str(error)}
+        )
+    else:
+        contracts_match = candidate_contract == baseline_contract
+        if not contracts_match:
+            regression_failures.append(
+                {
+                    "gate": "scored_label_contract_match",
+                    "reason": "candidate and baseline score different gold labels",
+                    "candidate": list(candidate_contract),
+                    "baseline": list(baseline_contract),
+                }
+            )
+
     prerequisites_match = (
         candidate_configs == expected_configs
         and baseline_configs == expected_configs
         and candidate_provenance is not None
         and candidate_provenance == baseline_provenance
+        and contracts_match
     )
     if prerequisites_match:
         expected_document_ids = candidate_provenance["evaluated_document_ids"]
