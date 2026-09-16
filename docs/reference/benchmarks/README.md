@@ -82,12 +82,14 @@ Which corpus labels count as gold PII is itself a versioned contract. Rows
 measured before contracts existed use **v1**, which scores every label.
 [`scored-labels-v2.json`](scored-labels-v2.json) rules on each of the 29 corpus
 labels with a reason; it puts the credential labels `PASSWORD` and
-`SECURITYTOKEN` out of contract (credentials are not personal data), treats
-Gaze's own credential classes as neutral predictions, and marks `USERNAME`,
-`URL`, `COMPANYNAME`, `COUNTRY` and `STATE` as rulings still pending.
-Out-of-contract bytes are neither leaked nor false positive. Numbers from different contracts are never
-compared as a regression, and a row measured under anything other than v1
-names its contract. See
+`SECURITYTOKEN` out of contract (user ruling 2026-09-16: credentials are not
+personal data), treats Gaze's own credential classes as neutral predictions, and
+marks `USERNAME`, `URL`, `COMPANYNAME`, `COUNTRY` and `STATE` as rulings still
+pending. v1 stays the default until v2 is ratified as the release contract.
+Out-of-contract bytes are neither leaked nor false positive. Numbers from
+different contracts are never compared as a regression, a row measured under
+anything other than v1 names its contract, and the release trend line only
+joins rows measured under the same contract. See
 [`scripts/bench/README.md`](../../../scripts/bench/README.md#scored-label-contracts).
 
 ### Zero-leak production goals

@@ -61,7 +61,8 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
 [`scored-labels-v2.json`](../../docs/reference/benchmarks/scored-labels-v2.json)
 rules on every corpus label with a reason and a `settled`/`pending` ruling. v2
 puts the credential labels `PASSWORD` and `SECURITYTOKEN` out of contract:
-credentials authenticate a system, they are not personal data. An
+credentials authenticate a system, they are not personal data (user ruling
+2026-09-16). An
 out-of-contract span is removed from gold, and the bytes only it covers are
 ignored, so they count as neither leaked nor false positive. Whether the
 pipeline still protected them is reported per run under
@@ -79,6 +80,8 @@ id, version, file SHA-256, excluded labels, scored and excluded gold counts, and
 `scored_gold_digest` over every scored `(document, start, end, label)`. The
 comparator refuses to compare scorecards measured under different contracts,
 and the benchmark document labels every non-v1 row with its contract version.
+Its release trend line joins only rows measured under the latest row's
+contract (same version and file SHA-256) and says how many rows it left out.
 
 ## Required local models
 
