@@ -75,7 +75,7 @@ Steps 1 to 4 are the deterministic floor: same input, same output, every placeho
 | Mode | What happens to a suspect | Reversible? | Who refuses |
 |---|---|---|---|
 | `resolve` **(default)** | Becomes a normal placeholder. If that is impossible, the fallback decides. | Yes | Only a `strict` fallback |
-| `redact` | Overwritten with a marker, and an audit row is written. | No, for that span | Nobody |
+| `redact` | The suspect bytes are deleted from the text (no marker yet), and an audit row is written. | No, for that span | Nobody |
 | `strict` | The whole document is refused (exit code 3, empty output). | Nothing was sent | Gaze |
 | `tolerant` | A warning only. **The suspect reaches the model.** Development use only. | Yes | Nobody, the leak ships |
 
@@ -349,7 +349,7 @@ A clean run produces a `leak_report` block alongside the usual JSON; `suspect_co
 }
 ```
 
-SafetyNet runs in **`resolve` mode by default** with a **`redact` fallback**. When the filter raises an `Uncovered` or `PartialBleed` suspect, Gaze first promotes the suspect into a synthetic custom-recognizer match and re-runs the resolver so the span can be tokenized into the manifest — preserving reversibility. If `resolve` cannot honor a suspect (validator-veto, missing anchor, or a residual suspect after the one-shot pass), the composable `--safety-net-fallback {strict|tolerant|redact}` flag (default `redact`) decides what happens next: by default the suspect span is overwritten with a sentinel string, the redaction is recorded in the audit trail, and the rest of the clean text continues to stdout. **The reversibility-first default is the production contract**: every suspect either becomes a fully restorable manifest token or is stripped before reaching the LLM, and every action emits a typed audit row.
+SafetyNet runs in **`resolve` mode by default** with a **`redact` fallback**. When the filter raises an `Uncovered` or `PartialBleed` suspect, Gaze first promotes the suspect into a synthetic custom-recognizer match and re-runs the resolver so the span can be tokenized into the manifest — preserving reversibility. If `resolve` cannot honor a suspect (validator-veto, missing anchor, or a residual suspect after the one-shot pass), the composable `--safety-net-fallback {strict|tolerant|redact}` flag (default `redact`) decides what happens next: by default the suspect span is deleted from the clean text, the redaction is recorded in the audit trail, and the rest of the clean text continues to stdout. **The reversibility-first default is the production contract**: every suspect either becomes a fully restorable manifest token or is stripped before reaching the LLM, and every action emits a typed audit row.
 
 Adopters who want the v0.7.x hard-fail posture can opt in with `--safety-net-mode strict` (any suspect exits `3`, stdout stays empty). Adopters who cannot afford the resolve pass can skip directly to strip-and-continue with `--safety-net-mode redact`. A `tolerant` mode exists for **local development only** — while debugging recognizer coverage or measuring SafetyNet recall, it downgrades suspects to a stderr warning instead of refusing the output. **Do not use `tolerant` in production traffic.** A tolerant-mode pipeline is one that has agreed to ship suspected leaks. Mode catalog, fallback composition matrix, and exit-code map: [`docs/explanation/safety-net/safety-net-modes.md`](docs/explanation/safety-net/safety-net-modes.md) and [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net).
 

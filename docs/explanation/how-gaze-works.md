@@ -71,7 +71,7 @@ Steps 1 to 4 are the deterministic floor: same input, same output, every placeho
 | Mode | What happens to a suspect | Reversible? | Who refuses |
 |---|---|---|---|
 | `resolve` **(default)** | Becomes a normal placeholder. If that is impossible, the fallback decides. | Yes | Only a `strict` fallback |
-| `redact` | Overwritten with a marker, and an audit row is written. | No, for that span | Nobody |
+| `redact` | The suspect bytes are deleted from the text (no marker yet), and an audit row is written. | No, for that span | Nobody |
 | `strict` | The whole document is refused (exit code 3, empty output). | Nothing was sent | Gaze |
 | `tolerant` | A warning only. **The suspect reaches the model.** Development use only. | Yes | Nobody, the leak ships |
 
@@ -262,7 +262,7 @@ Tenant-specific PII — order IDs, song titles, artist names — needs a diction
 - **NER.** Named-entity recognition: a model that spots names, places, and organizations in free text. In Gaze it is one candidate source among the rules, not the judge.
 - **Safety net.** A second, different model that rereads the already-swapped output and raises suspects the rules missed. It cannot edit the output or the manifest itself.
 - **Resolve.** The default safety-net mode: a suspect is fed back through conflict resolution so it becomes a normal, restorable placeholder.
-- **Fallback / redact.** What happens when resolve cannot turn a suspect into a placeholder. The default, `redact`, overwrites the suspect with a marker; those bytes cannot be restored.
+- **Fallback / redact.** What happens when resolve cannot turn a suspect into a placeholder. The default, `redact`, deletes the suspect bytes from the text (a visible marker is planned, not shipped); those bytes cannot be restored.
 - **Fail closed.** When something goes wrong (a model is missing, a rule is unknown, a suspect cannot be handled in `strict`), Gaze refuses instead of passing text through unchecked.
 - **Format vs document basis.** A `format` recognizer runs for every document because the shape itself is the evidence (for example a US phone format). A `document` recognizer runs only when the document's locale matches.
 - **Residual fragment.** The part of a suspect that is still uncovered after resolve, for example bytes next to an existing placeholder. The output check must still turn it into a placeholder, delete it, or refuse.
