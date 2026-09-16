@@ -152,6 +152,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The Kiji safety net no longer tokenizes or deletes parts of words.** Shipped
+  defect since at least v0.14.0: the shared Kiji decoder (ORT, tract, candle)
+  merged BIO labels per WordPiece, so the pinned English model's piece-level
+  firings on German text became suspects such as `G`/`em`/`ä` and the resolve
+  path emitted `<Name_14>wort` for `Passwort` and three adjacent name tokens for
+  `IBAN`. On the 80 explorer documents, 732 of 961 safety-net tokens were
+  mid-word on v0.14.0 and 749 of 977 on 9a3a788. Spans are now assembled from
+  whole words: any labelled piece labels its word, so byte coverage is a
+  superset of the old output. As defense in depth for every net, a name,
+  location or organization suspect that starts or ends inside a word is never
+  acted on by any `Resolve` or `Redact` stage; it stays in the report with a new
+  `LeakReportTelemetry::UnactionableSubword` row. Same 80 documents, same
+  binary flags: safety-net tokens 977 → 587, mid-word 749 → 0, leaked gold bytes
+  1,537 → 1,418 with no document rising, refusals 0 → 0, documents reaching the
+  one-way `Redact` fallback 13 → 7. **Behaviour change:** whole words the model
+  mislabels (`verpflichtet`, `Hauptniederlassung`) are now tokenized whole
+  instead of in pieces, and the fallback deletes whole mislabelled words
+  (80 bytes, none gold) instead of pieces (54 bytes). Model precision on German
+  is unchanged and tracked separately.
 - Custom class names that normalize to empty (for example `custom:!!!`) are now
   a typed load-time error. `PiiClass::custom` returns `Result<PiiClass,
   EmptyCustomClassName>`; callers must handle invalid names. Live and staged
