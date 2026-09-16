@@ -252,6 +252,26 @@ fn whole_words_still_resolve_next_to_an_unactionable_subword() {
 }
 
 #[test]
+fn strict_fallback_refuses_a_subword_residual_instead_of_shipping_it() {
+    // A net that does not decode whole words flags the name inside a genitive. It is not cut,
+    // but `Strict` promises to reject any residual suspect, so the document is refused.
+    let raw = "Das ist Meiers Auto";
+    let net = ScriptedNet::every_call(vec![probe(|t| find(t, "Meiers", 0..5))]);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let result = pipeline(net).clean_with_safety_net_policy_detect_context(
+        &session,
+        RawDocument::Text(raw.to_string()),
+        &[gaze::LocaleTag::Global],
+        &gaze::DictionaryBundle::default(),
+        SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Strict),
+    );
+    assert!(
+        matches!(result, Err(gaze::Error::SafetyNetFallback(_))),
+        "{result:?}"
+    );
+}
+
+#[test]
 fn identifier_classes_keep_resolving_inside_words() {
     let raw = "Kunde ID12345 in 8001 Zurich";
     let postcode = PiiClass::custom("postcode").expect("valid class");

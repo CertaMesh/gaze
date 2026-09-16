@@ -1559,6 +1559,18 @@ impl Pipeline {
                             document_kind,
                             field_path,
                         )?;
+                        // `Strict` promises to reject a document that still has a residual
+                        // suspect. A sub-word is never cut, but it is still a residual: refuse
+                        // rather than ship it raw under the fail-closed fallback.
+                        if reason.is_none() && matches!(on_residual, SafetyNetFallback::Strict) {
+                            reason = follow_up
+                                .suspects
+                                .iter()
+                                .find(|suspect| {
+                                    suspect_is_unactionable_subword(&clean.text, suspect)
+                                })
+                                .map(fallback_reason_for);
+                        }
                         // Only a successful first resolve (including a no-op) reaches here.
                         // Freeze a complete second batch before effects, then replace the residual
                         // source with a fresh report. Historical observations never drive deletion.
