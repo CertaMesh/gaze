@@ -36,8 +36,11 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
 ```
 
 Omit `--no-download` on the first run to fetch and SHA-256 verify the pinned
-Dataiku Parquet file. Both profiles use only `rule-floor-extended`, `pass2-ner`,
-and `full-stack-kiji-resolve`. The runner removes OPF environment variables and
+Dataiku Parquet file. Both profiles use only `rule-floor-extended` and
+`pass2-ner`; `pass2-ner` (rules plus Davlan NER, no safety net) is the production
+arm. The opt-in `full-stack-nym-resolve` and `full-stack-opf-resolve` arms run
+through `openpii_gaze_bench.py` or `dataiku_en_de_gaze_bench.py --config`, not
+this runner. The runner removes OPF environment variables and
 passes no OPF command, checkpoint, or daemon socket, even if the invoking shell
 defines them.
 
@@ -83,18 +86,23 @@ and the benchmark document labels every non-v1 row with its contract version.
 Its release trend line joins only rows measured under the latest row's
 contract (same version and file SHA-256) and says how many rows it left out.
 
+Each appended history row records its `shipped_default_arm`, since the default
+changes between releases. Rows committed before that field existed resolve
+through a version-keyed legacy map in `render_benchmark_doc.py` (`v0.14.0`
+shipped `full-stack-kiji-resolve`); an unmapped row without the field is
+refused rather than re-labelled with today's default.
+
 ## Required local models
 
-The runner validates both model bundles before it builds or starts a benchmark
+The runner validates the model bundle before it builds or starts a benchmark
 cell. Missing or mismatched bytes are typed, actionable failures; no cell is
 silently skipped.
 
 | Model | Default location | Pin source | Validation |
 | --- | --- | --- | --- |
 | Davlan multilingual BERT NER (production pass2 ONNX) | `~/.local/share/gaze/models/davlan-mbert-ner-hrl` | `[pass2_ner]` in `scripts/bench/no_opf_models.toml` | pinned `SHA256SUMS` digest, exact seven-artifact manifest and eight-file bundle surface, then every artifact digest |
-| Kiji DistilBERT | `~/.local/share/gaze/models/kiji-distilbert` | `kiji-distilbert.bundle_sha` in `crates/gaze-recognizers/benches/ner_models.toml` | pinned `SHA256SUMS` digest, then every listed artifact digest |
 
-Override locations with `--model-dir` and `--kiji-model-dir`. The runner rejects
+Override the location with `--model-dir`. The runner rejects
 symlinks in validated bundle material. Davlan's canonical bundle contains exactly
 `model.onnx`, `tokenizer.json`, `config.json`, `tokenizer_config.json`,
 `special_tokens_map.json`, `vocab.txt`, `labels.json`, and `SHA256SUMS`. Its
@@ -110,7 +118,7 @@ extras fail closed.
 This production ONNX pass2 pin is intentionally separate from
 `crates/gaze-recognizers/benches/ner_models.toml`. That file remains the research
 Transformers model matrix and is not the Davlan source of truth for the canonical
-no-OPF runner. Kiji continues to load from its existing `ner_models.toml` entry.
+no-OPF runner.
 
 At scorer initialization, stable provenance IDs are loaded from every committed
 `crates/gaze-recognizers/embedded/*.toml` recognizer and from the model IDs in

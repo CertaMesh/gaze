@@ -6,7 +6,10 @@ mutate the [`Manifest`](../../../crates/gaze-types/src/lib.rs), and never reach
 the restore path. They exist to surface leak suspects so the deterministic
 detectors and rulepacks can be improved.
 
-For step-by-step setup with Kiji DistilBERT, see [`docs/how-to/safety-net/set-up-kiji-safetynet.md`](../../how-to/safety-net/set-up-kiji-safetynet.md).
+No safety net runs by default. Two opt-in backends ship: the OpenAI Privacy
+Filter subprocess adapter (`--safety-net openai-filter`) and the in-process
+Nym-small adapter (`--safety-net nym`). CLI flags and setup:
+[`crates/gaze-cli/README.md`](../../../crates/gaze-cli/README.md#safety-net).
 
 Validator-backed self-validation is handled earlier by the deterministic
 [`validator-veto`](../detection/validator-veto.md) stage. Safety nets do not veto candidates
@@ -14,14 +17,13 @@ and do not participate in conflict resolution.
 
 ## Benchmark
 
-The v0.9 benchmark populates direct-detector and observer-residual cells for
-both shipped backends against the same 150-fixture coverage-loop corpus. Kiji
-DistilBERT fp32 stays at `0.125000` macro strict recall across locales; the
-opt-in int8 dynamic-quantized Kiji artifact also stays at `0.125000` macro
-strict recall across locales in direct-detector mode. Full numbers, pins, and
-caveats are in [`docs/reference/benchmarks/README.md`](../../reference/benchmarks/README.md#safety-net-matrix);
+The committed safety-net matrix populates direct-detector and observer-residual
+cells for the OpenAI Privacy Filter against the 150-fixture coverage-loop
+corpus. Full numbers, pins, and caveats are in
+[`docs/reference/benchmarks/README.md`](../../reference/benchmarks/README.md#safety-net-matrix);
 the original v0.9 report is archived at the `v0.13.0` tag as
 [v0.9 safety-net benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-safety-net-benchmark.md).
+The Nym-small measurements are in [Measured](#measured).
 
 This document describes the safety-net contract introduced in v0.6 through
 PR #91. The first shipped backend is the OpenAI Privacy Filter
@@ -54,24 +56,23 @@ can land without changing the trait shape or audit schema.
                                 │ (this is what restore will reverse)
                                 ▼
    ┌─────────────────────────────────────────────────────────────────┐
-   │ PASS 3 — SAFETYNET (observer-only, opt-in)                      │
-  │   Mode selector: --safety-net-backend or registry dispatch       │
+   │ PASS 3 — SAFETYNET (observer-only, opt-in, off by default)      │
+   │   Selector: --safety-net-backend or registry dispatch           │
    │                  ↓                  ↓                           │
-   │   ┌──────────────────────┐  ┌────────────────────────────┐     │
-   │   │  openai-filter       │  │  kiji-distilbert (v0.8+)   │     │
-   │   │  (OPF binary)        │  │  (Kiji ONNX model)         │     │
-   │   │                      │  │                            │     │
-   │   │  ─ heavier weights   │  │  ─ 8.8 MB DistilBERT       │     │
-   │   │  ─ OpenAI's PII set  │  │  ─ 26 PII classes (Kiji)   │     │
-   │   │  ─ requires `opf`    │  │  ─ subprocess or ORT       │     │
-   │   │    binary install    │  │  ─ tokenizers crate        │     │
-   │   └──────────┬───────────┘  └────────────┬───────────────┘     │
+   │   ┌──────────────────────┐  ┌────────────────────────────┐      │
+   │   │  openai-filter       │  │  nym (opt-in)              │      │
+   │   │  (OPF subprocess)    │  │  (in process, ORT)         │      │
+   │   │                      │  │                            │      │
+   │   │  ─ heavier weights   │  │  ─ Nym-small v3 int8       │      │
+   │   │  ─ OpenAI's PII set  │  │  ─ op-B label allowlist    │      │
+   │   │  ─ requires `opf`    │  │  ─ `gaze setup             │      │
+   │   │    binary install    │  │     --safety-net nym`      │      │
+   │   └──────────┬───────────┘  └────────────┬───────────────┘      │
    │              │                            │                     │
    │              └──────────────┬─────────────┘                     │
    │                             ▼                                   │
-   │   External subprocess contract:                                 │
-   │       stdin  ← clean_text (post-tokenization!)                  │
-   │       stdout → JSON span array [{start, end, label, score}, …]  │
+   │   Net output: span array [{start, end, label, score}, …]        │
+   │   over clean_text (post-tokenization!)                          │
    │                                                                 │
    │   Gaze compares the SafetyNet spans against the manifest:       │
    │     ─ Span overlaps an emitted token → covered (no leak)        │
@@ -84,18 +85,18 @@ can land without changing the trait shape or audit schema.
    └─────────────────────────────────────────────────────────────────┘
 ```
 
+## `gaze index`
+
+`gaze index ingest` detects prose names and organizations with the pinned Davlan
+NER bundle (`--ner-model-dir` or `GAZE_NER_MODEL_DIR`), not with a safety net.
+A net there is optional and checks ingest output under `--on-residual`.
+`gaze index search` always needs an output net: TokenBridge scans every snippet
+before it is shown and denies a search when no net ran, so the CLI refuses
+up front with a typed `SafetyNetConfig` error. Both remaining nets satisfy it:
+`--safety-net openai-filter` (with `--opf-command` and `--opf-checkpoint`) or
+`--safety-net nym` (with `--nym-model-dir`).
+
 ## Locale-Aware Registry Dispatch
-
-Kiji DistilBERT has two runtime backends under the same observer-only safety-net contract. `--kiji-backend=subprocess` remains the default for backwards compatibility and for adopters who already pin an external Kiji command; `--kiji-backend=ort` loads the same tokenizer and ONNX model in-process through ONNX Runtime, removing the Python/subprocess install path. Both backends must verify the pinned bundle first: fp32 uses `SHA256SUMS` and `KIJI_DISTILBERT_BUNDLE_SHA256`; int8 uses `SHA256SUMS.int8` and `KIJI_DISTILBERT_INT8_BUNDLE_SHA256`. Every listed artifact is re-hashed before model load, and any mismatch returns a typed `SafetyNetError` without silent fallback.
-
-The ORT backend also accepts `--kiji-distilbert-precision {fp32,int8}`. `fp32`
-is the default and remains the compatibility posture. `int8` loads
-`model.int8.onnx`, shares the same tokenizer and class map, and is allowed only
-with `--kiji-backend=ort`; requesting int8 without the quantized artifact fails
-closed at construction. The committed safety-net matrix enforces the precision
-trade-off: int8 macro recall must remain within `0.02` of fp32 for every
-locale and mode, otherwise the bench gate fails and the int8 path must not
-ship.
 
 `Pipeline::with_safety_net(single_backend)` remains the compatibility path. For deployments with language-specific safety nets, `Pipeline::with_safety_net_registry(LocaleAwareModelRegistry)` activates locale-aware Pass-3 dispatch instead. The registry resolves one backend per clean segment using the existing four-tier order: exact locale, parent language, `Global`, then fail-closed.
 
@@ -108,17 +109,13 @@ gaze clean \
   --policy quickstart-policy.toml \
   --locale de-DE \
   --safety-net-registry \
-  --safety-net-add kiji-distilbert \
-  --kiji-distilbert-command /opt/kiji/bin/kiji \
-  --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert \
-  --kiji-distilbert-locales en-US,en-GB \
   --safety-net-add openai-filter \
   --opf-command /opt/opf/bin/opf \
   --opf-checkpoint ~/.local/share/gaze/models/opf \
   --opf-locales de-DE,de-AT
 ```
 
-`--safety-net-registry` cannot be combined with `--safety-net-backend`; the registry is the backend selector in that mode.
+`--safety-net-registry` cannot be combined with `--safety-net-backend`; the registry is the backend selector in that mode. The only registry-capable backend is `openai-filter`; `nym` is deliberately not registry-capable (see [Audit](#audit)).
 
 ## North-star fit
 
@@ -278,20 +275,15 @@ unchanged.
 | Identifier classes are exempt | Their values legitimately sit inside longer strings (`ID12345`). |
 | `FallbackIncomplete` and a second seam finding still deny | A sub-word shape does not excuse a fallback that failed or a deletion outpacing itself. |
 
-The Kiji decoder assembles spans from whole words (any labelled piece labels
-its word), so this guard is defense in depth for other nets and registry models.
+A net that decodes whole words does not need this guard; for every other net
+and for registry models it is defense in depth.
 
-**Cost (axis 1).** A net that does not decode whole words (OPF, the Kiji
-subprocess backend, adopter nets) can flag a real name inside a longer word,
-for example `Meier` in `Meiers`. Under `Resolve` with the `Redact` fallback and
+**Cost (axis 1).** A net that does not decode whole words (OPF, adopter nets)
+can flag a real name inside a longer word, for example `Meier` in `Meiers`. Under `Resolve` with the `Redact` fallback and
 in `Redact` mode that suspect ships raw, with its `Preserve` audit row and
 `UnactionableSubword` row. Under the `Strict` fallback it counts as a residual
 and the document is refused. Earlier releases tokenized or deleted the flagged
 part of the word instead.
-
-**Known limitation.** The Kiji tokenizer truncates input at 512 word pieces and
-the Kiji path does not chunk, so text past that point is not checked by the net
-and no telemetry records it.
 
 ### Locale gating
 
@@ -433,7 +425,7 @@ which:
 4. Truncates sanitized output to the 256-byte cap, including a
    `[truncated]` marker when capture or display was shortened.
 
-The Kiji subprocess adapter uses the same diagnostic rules. Stdout still has
+Stdout still has
 a hard byte cap: overflow, I/O errors, invalid model output, and timeouts remain
 errors. Diagnostics stay disabled by default. The heuristic redactor does not
 provide general PII-detection completeness.

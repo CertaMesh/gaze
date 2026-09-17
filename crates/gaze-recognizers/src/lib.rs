@@ -15,6 +15,8 @@
 //! detected.
 
 mod anchored_match;
+// Pinned model bundle verification, shared by the primary NER bundle and the Nym safety net.
+mod bundle;
 mod dictionary;
 mod error;
 mod locale_aware;
@@ -37,8 +39,10 @@ pub use locale_aware::{
     ModelStage,
 };
 pub use ner::{
-    LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, NerRecognizer,
-    VerifiedArtifacts,
+    verify_davlan_ner_bundle, LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions,
+    NerRecognizer, VerifiedArtifacts, DAVLAN_NER_BUNDLE_SHA256, DAVLAN_NER_HF_COMMIT,
+    DAVLAN_NER_HF_REPO, DAVLAN_NER_LABELS_JSON, DAVLAN_NER_MODEL_DIR_NAME, DAVLAN_NER_SHA256SUMS,
+    DAVLAN_NER_UPSTREAM_FILES, REQUIRED_DAVLAN_NER_ARTIFACTS,
 };
 pub use regex::{NormalizerKind, RegexDetector};
 

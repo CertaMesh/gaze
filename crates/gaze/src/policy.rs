@@ -888,10 +888,15 @@ action = "tokenize"
             nym_policy("[safety_net.nym]\nlabels = []\nmodel = \"x\"\n"),
             Err(PolicyError::TomlParse(_))
         ));
-        assert!(matches!(
-            nym_policy("[safety_net.kiji]\n"),
-            Err(PolicyError::TomlParse(_))
-        ));
+    }
+
+    /// The Kiji DistilBERT net was removed: a policy that still configures it is refused at load
+    /// with a typed error naming the table, never silently ignored.
+    #[test]
+    fn removed_kiji_safety_net_table_is_rejected_at_load() {
+        let error = nym_policy("[safety_net.kiji]\nlocales = [\"de-DE\"]\n").unwrap_err();
+        assert!(matches!(error, PolicyError::TomlParse(_)), "{error:?}");
+        assert!(error.to_string().contains("kiji"), "{error}");
     }
 
     #[test]

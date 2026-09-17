@@ -328,17 +328,14 @@ class ModelValidationTests(unittest.TestCase):
 
     def test_production_davlan_pin_is_separate_and_onnx_specific(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
-        davlan, kiji = runner.load_model_pins(
-            repo_root,
-            Path("/synthetic/davlan"),
-            Path("/synthetic/kiji"),
-        )
+        pins = runner.load_model_pins(repo_root, Path("/synthetic/davlan"))
+        self.assertEqual(len(pins), 1)
+        (davlan,) = pins
         self.assertEqual(davlan.model_id, "davlan-mbert-ner-hrl-onnx")
         self.assertEqual(davlan.hf_repo, DAVLAN_HF_REPO)
         self.assertEqual(davlan.hf_commit, DAVLAN_HF_COMMIT)
         self.assertEqual(davlan.expected_sha256, DAVLAN_BUNDLE_SHA)
         self.assertEqual(davlan.runtime, "onnxruntime")
-        self.assertEqual(kiji.model_id, "kiji-distilbert")
 
     def test_missing_model_is_an_actionable_typed_error(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
@@ -347,7 +344,7 @@ class ModelValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 runner.ModelBundleError, "model directory does not exist"
             ):
-                runner.validate_required_models(repo_root, missing, missing)
+                runner.validate_required_models(repo_root, missing)
 
     def test_davlan_exact_surface_manifest_validates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -507,19 +504,19 @@ class ModelValidationTests(unittest.TestCase):
             ):
                 runner.validate_model_bundle(pin)
 
-    def test_kiji_manifest_validation_remains_unchanged(self) -> None:
+    def test_generic_checksum_manifest_validation_remains_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            bundle = Path(tmp) / "kiji"
+            bundle = Path(tmp) / "synthetic-model"
             bundle.mkdir()
             artifact = bundle / "model.onnx"
-            artifact.write_bytes(b"synthetic kiji model bytes")
+            artifact.write_bytes(b"synthetic model bytes")
             manifest = bundle / "SHA256SUMS"
             manifest.write_text(
                 f"{score.sha256_file(artifact)}  model.onnx\n",
                 encoding="utf-8",
             )
             pin = runner.ModelPin(
-                "kiji-distilbert",
+                "synthetic-generic-model",
                 bundle,
                 "SHA256SUMS",
                 score.sha256_file(manifest),
@@ -549,7 +546,7 @@ class ModelValidationTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     runner.ModelBundleError, "checksum manifest digest mismatch"
                 ):
-                    runner.validate_required_models(repo_root, bundle, bundle)
+                    runner.validate_required_models(repo_root, bundle)
 
     def test_present_model_with_mismatched_artifact_digest_fails_closed(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
@@ -570,7 +567,7 @@ class ModelValidationTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     runner.ModelBundleError, "artifact digest mismatch"
                 ):
-                    runner.validate_required_models(repo_root, bundle, bundle)
+                    runner.validate_required_models(repo_root, bundle)
 
 
 class ProfileIsolationTests(unittest.TestCase):
@@ -600,7 +597,6 @@ class ProfileIsolationTests(unittest.TestCase):
                 binary=Path("/synthetic/clean_for_bench"),
                 documents=[self.document()],
                 davlan_model=Path("/synthetic/davlan"),
-                kiji_model=Path("/synthetic/kiji"),
                 threshold=0.3,
                 diagnostics_dir=Path("/synthetic/diagnostics"),
                 warmup_count=1,
@@ -609,7 +605,7 @@ class ProfileIsolationTests(unittest.TestCase):
             )
         self.assertEqual(run_config.call_count, len(score.DEFAULT_CONFIGS))
         for call in run_config.call_args_list:
-            self.assertEqual(call.args[6:9], (None, None, None))
+            self.assertEqual(call.args[5:8], (None, None, None))
             passed_environment = call.kwargs["base_environment"]
             self.assertEqual(passed_environment, {"PATH": "/synthetic/bin"})
         serialized = json.loads(json.dumps(provenance))
@@ -663,7 +659,6 @@ class ProfileIsolationTests(unittest.TestCase):
                     binary=Path("/synthetic/clean_for_bench"),
                     documents=[self.document()],
                     davlan_model=Path("/synthetic/davlan"),
-                    kiji_model=Path("/synthetic/kiji"),
                     threshold=0.3,
                     diagnostics_dir=Path("/synthetic/diagnostics"),
                     warmup_count=0,

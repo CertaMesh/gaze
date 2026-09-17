@@ -101,7 +101,7 @@ fn clean(text: &str) -> String {
 
 /// Asserts the whole credential is gone and the surrounding prose survives.
 ///
-/// Whole-span coverage is the point. In the before-state the kiji cell overlapped 65 of 150
+/// Whole-span coverage is the point. In the before-state the v0.14 full-stack cell overlapped 65 of 150
 /// SECURITYTOKEN entities while fully covering only 2 — 63 overlapped-but-not-covered. A
 /// fragment of a credential is still a leaked credential.
 fn assert_token_removed(text: &str, token: &str, surviving_context: &[&str]) {

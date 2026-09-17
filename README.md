@@ -323,7 +323,7 @@ Schema details, threshold range, and `~/` expansion rules: [`docs/reference/poli
 
 The SafetyNet is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md).
 
-Two backends ship. `openai-filter` wraps the upstream OpenAI Privacy Filter and is the heavier option when that infrastructure is already approved. `kiji-distilbert` is the lighter alternative: an Apache-2.0 ONNX DistilBERT bundle, ~8.8 MB, 26-class upstream PII taxonomy, faster cold start. Pick on deployment constraints; both are observer-only and both run under the **`resolve` mode default with a `redact` fallback** — the reversibility-preserving production posture (see below).
+No safety net runs by default. Two opt-in nets ship: `openai-filter` wraps the upstream OpenAI Privacy Filter as a subprocess, and `nym` runs the Nym-small token classifier in process. Both are observer-only and both run under the **`resolve` mode default with a `redact` fallback**, the reversibility-preserving production posture (see below).
 
 #### OpenAI Privacy Filter
 
@@ -372,36 +372,9 @@ SafetyNet runs in **`resolve` mode by default** with a **`redact` fallback**. Wh
 
 Adopters who want the v0.7.x hard-fail posture can opt in with `--safety-net-mode strict` (any suspect exits `3`, stdout stays empty). Adopters who cannot afford the resolve pass can skip directly to strip-and-continue with `--safety-net-mode redact`. A `tolerant` mode exists for **local development only** — while debugging recognizer coverage or measuring SafetyNet recall, it downgrades suspects to a stderr warning instead of refusing the output. **Do not use `tolerant` in production traffic.** A tolerant-mode pipeline is one that has agreed to ship suspected leaks. Mode catalog, fallback composition matrix, and exit-code map: [`docs/explanation/safety-net/safety-net-modes.md`](docs/explanation/safety-net/safety-net-modes.md) and [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net).
 
-#### Kiji DistilBERT
-
-The Kiji backend is also feature-gated. Fetch the pinned model bundle once, then reinstall the CLI with the Kiji feature compiled in:
-
-```sh
-bash scripts/fetch/fetch-kiji-safetynet-model.sh
-cargo install --path crates/gaze-cli --features safety-net-kiji
-```
-
-The fetcher verifies the release-pinned `SHA256SUMS.kiji` file and installs the runtime bundle into `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/kiji-distilbert` by default. Gaze does not fetch or update the model during `gaze clean`.
-
-Activate Kiji on the same `gaze clean` invocation:
-
-```sh
-printf '%s' 'Contact alice@example.invalid for details.' \
-  | gaze clean \
-      --policy quickstart-policy.toml \
-      --safety-net kiji-distilbert \
-      --safety-net-backend kiji-distilbert \
-      --kiji-distilbert-command /opt/kiji/bin/kiji \
-      --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert
-```
-
-The output shape is the same `leak_report` block shown above; `suspect_count = 0` remains the contract for "no leaks". The Kiji model directory must contain `SHA256SUMS`, `labels.json`, `model.onnx`, and `tokenizer.json`. Missing artifacts fail closed before subprocess spawn with `{"error":"SafetyNetArtifactMissing","exit":2,...}`.
-
-Full Kiji setup, backend switching, and failure-mode notes: [`docs/how-to/safety-net/set-up-kiji-safetynet.md`](docs/how-to/safety-net/set-up-kiji-safetynet.md).
-
 #### Nym-small (opt-in)
 
-A third, opt-in net runs the multilingual Nym-small token classifier in process and flags only building numbers, licence plates, usernames and dates of birth by default: `gaze setup --safety-net nym`, then `gaze clean --safety-net nym --nym-model-dir <dir>`. The allowlist and thresholds are policy data (`[safety_net.nym]`). It does not change the default net. Contract, measurements and open items (latency, licence review): [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md#nym-small-adapter-opt-in).
+The second opt-in net runs the multilingual Nym-small token classifier in process and flags only building numbers, licence plates, usernames and dates of birth by default: `gaze setup --safety-net nym`, then `gaze clean --safety-net nym --nym-model-dir <dir>`. The allowlist and thresholds are policy data (`[safety_net.nym]`), which configures the net but never activates it. Contract, measurements and open items (latency, licence review): [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md#nym-small-adapter-opt-in).
 
 ## Audit and restore
 

@@ -3,37 +3,18 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gaze_recognizers::safety_net::kiji_distilbert::{
-    verify_kiji_bundle, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
-    KIJI_DISTILBERT_SHA256SUMS,
-};
-pub use gaze_recognizers::safety_net::kiji_distilbert::{KijiDistilbertPrecision, SafetyNetError};
 use gaze_recognizers::safety_net::nym::{
     verify_nym_bundle, NYM_SMALL_CHECKSUM_FILE, NYM_SMALL_HF_COMMIT, NYM_SMALL_HF_REPO,
     NYM_SMALL_INT8_SHA256SUMS,
 };
+pub use gaze_recognizers::safety_net::SafetyNetError;
+use gaze_recognizers::{
+    verify_davlan_ner_bundle, DAVLAN_NER_HF_COMMIT, DAVLAN_NER_HF_REPO, DAVLAN_NER_LABELS_JSON,
+    DAVLAN_NER_MODEL_DIR_NAME, DAVLAN_NER_SHA256SUMS,
+};
 
-const DEFAULT_MODEL_DIR_NAME: &str = "kiji-distilbert";
 const DEFAULT_NYM_MODEL_DIR_NAME: &str = "nym-small-int8";
 const MODEL_DOWNLOAD_MAX_REDIRECTS: u32 = 5;
-const KIJI_LABELS_JSON: &str = r#"{
-  "schema_version": 1,
-  "source": "onnx-community/distilbert-NER-ONNX",
-  "source_commit": "3a19fe9404a4469d91aa3d551558a97f68872f67",
-  "labels": [
-    {"id": "person", "upstream": ["B-PER", "I-PER"]},
-    {"id": "location", "upstream": ["B-LOC", "I-LOC"]},
-    {"id": "organization", "upstream": ["B-ORG", "I-ORG"]},
-    {"id": "miscellaneous", "upstream": ["B-MISC", "I-MISC"]}
-  ]
-}
-"#;
-
-#[derive(Debug, Clone)]
-pub struct InstallOptions {
-    pub model_dir: Option<PathBuf>,
-    pub precision: KijiDistilbertPrecision,
-}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum InstallOutcome {
@@ -106,9 +87,9 @@ struct ArtifactManifest {
     files: &'static [ArtifactFile],
 }
 
-const KIJI_FP32_FILES: &[ArtifactFile] = &[
+const DAVLAN_NER_FILES: &[ArtifactFile] = &[
     ArtifactFile {
-        source_path: Some("onnx/model.onnx"),
+        source_path: Some("onnx/model_int8.onnx"),
         file_name: "model.onnx",
         inline_contents: None,
     },
@@ -118,11 +99,39 @@ const KIJI_FP32_FILES: &[ArtifactFile] = &[
         inline_contents: None,
     },
     ArtifactFile {
+        source_path: Some("tokenizer_config.json"),
+        file_name: "tokenizer_config.json",
+        inline_contents: None,
+    },
+    ArtifactFile {
+        source_path: Some("config.json"),
+        file_name: "config.json",
+        inline_contents: None,
+    },
+    ArtifactFile {
+        source_path: Some("special_tokens_map.json"),
+        file_name: "special_tokens_map.json",
+        inline_contents: None,
+    },
+    ArtifactFile {
+        source_path: Some("vocab.txt"),
+        file_name: "vocab.txt",
+        inline_contents: None,
+    },
+    ArtifactFile {
         source_path: None,
         file_name: "labels.json",
-        inline_contents: Some(KIJI_LABELS_JSON),
+        inline_contents: Some(DAVLAN_NER_LABELS_JSON),
     },
 ];
+
+const DAVLAN_NER_MANIFEST: ArtifactManifest = ArtifactManifest {
+    hf_repo: DAVLAN_NER_HF_REPO,
+    hf_commit: DAVLAN_NER_HF_COMMIT,
+    checksum_file_name: "SHA256SUMS",
+    sha256sums: DAVLAN_NER_SHA256SUMS,
+    files: DAVLAN_NER_FILES,
+};
 
 const NYM_SMALL_INT8_FILES: &[ArtifactFile] = &[
     ArtifactFile {
@@ -150,21 +159,10 @@ const NYM_SMALL_INT8_MANIFEST: ArtifactManifest = ArtifactManifest {
     files: NYM_SMALL_INT8_FILES,
 };
 
-fn kiji_manifest(precision: KijiDistilbertPrecision) -> Option<ArtifactManifest> {
-    match precision {
-        KijiDistilbertPrecision::Fp32 => Some(ArtifactManifest {
-            hf_repo: KIJI_DISTILBERT_HF_REPO,
-            hf_commit: KIJI_DISTILBERT_HF_COMMIT,
-            checksum_file_name: "SHA256SUMS",
-            sha256sums: KIJI_DISTILBERT_SHA256SUMS,
-            files: KIJI_FP32_FILES,
-        }),
-        KijiDistilbertPrecision::Int8 => None,
-    }
-}
-
-pub fn default_kiji_model_dir() -> Result<PathBuf, SetupError> {
-    default_model_dir(DEFAULT_MODEL_DIR_NAME)
+/// Default install directory of the primary NER bundle:
+/// `$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl`, else `~/.local/share/gaze/models/davlan-mbert-ner-hrl`.
+pub fn default_ner_model_dir() -> Result<PathBuf, SetupError> {
+    default_model_dir(DAVLAN_NER_MODEL_DIR_NAME)
 }
 
 /// Default install directory of the Nym-small int8 bundle:
@@ -194,35 +192,30 @@ fn default_model_dir(name: &str) -> Result<PathBuf, SetupError> {
         .join(name))
 }
 
-pub fn install_kiji_bundle(opts: &InstallOptions) -> Result<InstallOutcome, SetupError> {
-    install_kiji_bundle_with_fetcher(opts, &UreqFetcher)
+/// Downloads the pinned Davlan mBERT NER bundle into `model_dir` (default
+/// [`default_ner_model_dir`]) and verifies it against `DAVLAN_NER_BUNDLE_SHA256`. An existing
+/// verified bundle is kept; an existing invalid non-empty directory is an error.
+pub fn install_ner_bundle(model_dir: Option<&Path>) -> Result<InstallOutcome, SetupError> {
+    install_ner_bundle_with_fetcher(model_dir, &UreqFetcher)
 }
 
-pub fn install_kiji_bundle_with_fetcher(
-    opts: &InstallOptions,
+pub fn install_ner_bundle_with_fetcher(
+    model_dir: Option<&Path>,
     fetcher: &dyn ArtifactFetcher,
 ) -> Result<InstallOutcome, SetupError> {
-    let model_dir = match &opts.model_dir {
+    let model_dir = match model_dir {
         Some(path) => absolute_path(path)?,
-        None => default_kiji_model_dir()?,
+        None => default_ner_model_dir()?,
     };
-    let precision = opts.precision;
-    let verify = |dir: &Path| verify_kiji_bundle(dir, precision);
-    if let Some(outcome) = reuse_existing_bundle(&model_dir, &verify)? {
+    if let Some(outcome) = reuse_existing_bundle(&model_dir, &verify_davlan_ner_bundle)? {
         return Ok(outcome);
     }
-
-    let Some(manifest) = kiji_manifest(opts.precision) else {
-        return Err(SetupError::Download {
-            url: format!("kiji-distilbert:{}", opts.precision.as_str()),
-            path: model_dir,
-            message:
-                "int8 setup requires a locally quantized model.int8.onnx and cannot be downloaded"
-                    .to_string(),
-        });
-    };
-
-    install_model_dir(&manifest, &model_dir, &verify, fetcher)?;
+    install_model_dir(
+        &DAVLAN_NER_MANIFEST,
+        &model_dir,
+        &verify_davlan_ner_bundle,
+        fetcher,
+    )?;
     Ok(InstallOutcome::Installed { model_dir })
 }
 
@@ -318,7 +311,7 @@ fn install_model_dir(
         model_dir
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or(DEFAULT_MODEL_DIR_NAME),
+            .unwrap_or("model"),
         unique_suffix()
     ));
     fs::create_dir(&tmp_dir).map_err(|err| io_error(&tmp_dir, err))?;
@@ -374,7 +367,7 @@ fn write_artifact_file(
     }
 
     let source_path = file.source_path.ok_or_else(|| SetupError::Download {
-        url: format!("kiji-distilbert:{}", file.file_name),
+        url: format!("{}:{}", manifest.hf_repo, file.file_name),
         path: destination.clone(),
         message: "artifact has no source path".to_string(),
     })?;
@@ -454,8 +447,8 @@ fn unique_suffix() -> String {
 fn is_mode_repairable_error(error: &SafetyNetError) -> bool {
     match error {
         SafetyNetError::ModelUnavailable { reason } => [
-            "kiji sensitive directory must be mode 0700",
-            "kiji sensitive file must not be group/world writable",
+            "davlan-ner sensitive directory must be mode 0700",
+            "davlan-ner sensitive file must not be group/world writable",
             "nym sensitive directory must be mode 0700",
             "nym sensitive file must not be group/world writable",
         ]
@@ -503,7 +496,7 @@ fn repair_current_euid_owned_tree(path: &Path) -> Result<(), SetupError> {
     if !is_current_euid_owned_tree(path)? {
         return Err(SetupError::NonEmptyInvalidDir {
             path: path.to_path_buf(),
-            reason: "kiji sensitive path owner mismatch".to_string(),
+            reason: "model sensitive path owner mismatch".to_string(),
         });
     }
     chmod_private_tree(path)
@@ -547,13 +540,13 @@ fn private_tree_entries(path: &Path) -> Result<Vec<PrivateTreeEntry>, SetupError
     if file_type.is_symlink() {
         return Err(SetupError::NonEmptyInvalidDir {
             path: path.to_path_buf(),
-            reason: "kiji sensitive path must not be a symlink".to_string(),
+            reason: "model sensitive path must not be a symlink".to_string(),
         });
     }
     if !(file_type.is_dir() || file_type.is_file()) {
         return Err(SetupError::NonEmptyInvalidDir {
             path: path.to_path_buf(),
-            reason: "kiji sensitive path must be a regular file or directory".to_string(),
+            reason: "model sensitive path must be a regular file or directory".to_string(),
         });
     }
 
@@ -637,27 +630,37 @@ mod tests {
     #[test]
     fn fake_fetcher_streams_temp_and_cleans_on_verify_failure() {
         let root = tempfile::tempdir().unwrap();
-        let model_dir = root.path().join("kiji-distilbert");
+        let model_dir = root.path().join("davlan-mbert-ner-hrl");
         let fetcher = SyntheticFetcher {
             calls: Mutex::new(Vec::new()),
         };
 
-        let err = install_kiji_bundle_with_fetcher(
-            &InstallOptions {
-                model_dir: Some(model_dir.clone()),
-                precision: KijiDistilbertPrecision::Fp32,
-            },
-            &fetcher,
-        )
-        .unwrap_err();
+        let err = install_ner_bundle_with_fetcher(Some(&model_dir), &fetcher).unwrap_err();
 
-        assert!(matches!(err, SetupError::Verify(_)));
+        assert!(matches!(
+            err,
+            SetupError::Verify(SafetyNetError::ModelIntegrityMismatch { .. })
+        ));
         assert!(!model_dir.exists());
         let calls = fetcher.calls();
-        assert_eq!(calls.len(), 2);
         assert!(calls
             .iter()
             .all(|(_, path)| path.extension().is_some_and(|ext| ext == "download")));
+        let urls = calls.into_iter().map(|(url, _)| url).collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            [
+                "onnx/model_int8.onnx",
+                "tokenizer.json",
+                "tokenizer_config.json",
+                "config.json",
+                "special_tokens_map.json",
+                "vocab.txt",
+            ]
+            .map(|path| format!(
+                "https://huggingface.co/onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX/resolve/cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8/{path}"
+            ))
+        );
     }
 
     #[test]
@@ -723,16 +726,9 @@ mod tests {
     #[test]
     fn fetch_to_write_failure_maps_to_io() {
         let root = tempfile::tempdir().unwrap();
-        let model_dir = root.path().join("kiji-distilbert");
+        let model_dir = root.path().join("davlan-mbert-ner-hrl");
 
-        let err = install_kiji_bundle_with_fetcher(
-            &InstallOptions {
-                model_dir: Some(model_dir.clone()),
-                precision: KijiDistilbertPrecision::Fp32,
-            },
-            &FailingFetcher,
-        )
-        .unwrap_err();
+        let err = install_ner_bundle_with_fetcher(Some(&model_dir), &FailingFetcher).unwrap_err();
 
         assert!(matches!(err, SetupError::Io { .. }));
         assert!(!model_dir.exists());
@@ -766,24 +762,17 @@ mod tests {
     #[test]
     fn loose_empty_dir_is_repaired_and_still_attempts_install() {
         let root = tempfile::tempdir().unwrap();
-        let model_dir = root.path().join("kiji-distilbert");
+        let model_dir = root.path().join("davlan-mbert-ner-hrl");
         std::fs::create_dir(&model_dir).unwrap();
         std::fs::set_permissions(&model_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
         let fetcher = SyntheticFetcher {
             calls: Mutex::new(Vec::new()),
         };
 
-        let err = install_kiji_bundle_with_fetcher(
-            &InstallOptions {
-                model_dir: Some(model_dir.clone()),
-                precision: KijiDistilbertPrecision::Fp32,
-            },
-            &fetcher,
-        )
-        .unwrap_err();
+        let err = install_ner_bundle_with_fetcher(Some(&model_dir), &fetcher).unwrap_err();
 
         assert!(matches!(err, SetupError::Verify(_)));
-        assert_eq!(fetcher.calls().len(), 2);
+        assert_eq!(fetcher.calls().len(), 6);
         assert!(model_dir.exists());
         assert_eq!(
             std::fs::symlink_metadata(&model_dir)
@@ -799,7 +788,7 @@ mod tests {
     #[test]
     fn repair_permissions_tightens_current_user_tree() {
         let root = tempfile::tempdir().unwrap();
-        let model_dir = root.path().join("kiji-distilbert");
+        let model_dir = root.path().join("davlan-mbert-ner-hrl");
         std::fs::create_dir(&model_dir).unwrap();
         std::fs::write(model_dir.join("model.onnx"), b"synthetic").unwrap();
         std::fs::set_permissions(&model_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -838,22 +827,14 @@ mod tests {
 
     #[test]
     #[ignore = "hits Hugging Face; run manually when validating the real network fetch path"]
-    fn downloads_and_verifies_pinned_kiji_bundle() {
+    fn downloads_and_verifies_pinned_ner_bundle() {
         let root = tempfile::tempdir().unwrap();
-        let model_dir = root.path().join("kiji-distilbert");
+        let model_dir = root.path().join("davlan-mbert-ner-hrl");
 
-        let outcome = install_kiji_bundle(&InstallOptions {
-            model_dir: Some(model_dir.clone()),
-            precision: KijiDistilbertPrecision::Fp32,
-        })
-        .unwrap();
+        let outcome = install_ner_bundle(Some(&model_dir)).unwrap();
 
         assert!(matches!(outcome, InstallOutcome::Installed { .. }));
-        gaze_recognizers::safety_net::kiji_distilbert::verify_kiji_bundle(
-            &model_dir,
-            KijiDistilbertPrecision::Fp32,
-        )
-        .unwrap();
+        verify_davlan_ner_bundle(&model_dir).unwrap();
     }
 
     #[cfg(unix)]
@@ -862,19 +843,15 @@ mod tests {
     fn loose_mode_current_user_dir_is_repaired_then_accepted() {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-        let model_dir = PathBuf::from(
-            std::env::var_os("GAZE_KIJI_LOOSE_MODEL_DIR")
-                .expect("set GAZE_KIJI_LOOSE_MODEL_DIR to a loose current-euid-owned bundle"),
-        );
+        let model_dir =
+            PathBuf::from(std::env::var_os("GAZE_MODEL_SETUP_LOOSE_MODEL_DIR").expect(
+                "set GAZE_MODEL_SETUP_LOOSE_MODEL_DIR to a loose current-euid-owned bundle",
+            ));
 
-        let outcome = install_kiji_bundle(&InstallOptions {
-            model_dir: Some(model_dir.clone()),
-            precision: KijiDistilbertPrecision::Fp32,
-        })
-        .unwrap();
+        let outcome = install_ner_bundle(Some(&model_dir)).unwrap();
 
         assert!(matches!(outcome, InstallOutcome::AlreadyPresent { .. }));
-        verify_kiji_bundle(&model_dir, KijiDistilbertPrecision::Fp32).unwrap();
+        verify_davlan_ner_bundle(&model_dir).unwrap();
         let uid = unsafe { libc::geteuid() };
         let mut pending = vec![model_dir];
         while let Some(path) = pending.pop() {
@@ -903,25 +880,21 @@ mod tests {
         use std::os::unix::fs::MetadataExt;
 
         let model_dir = PathBuf::from(
-            std::env::var_os("GAZE_KIJI_FOREIGN_MODEL_DIR")
-                .expect("set GAZE_KIJI_FOREIGN_MODEL_DIR to a readable foreign-owned bundle"),
+            std::env::var_os("GAZE_MODEL_SETUP_FOREIGN_MODEL_DIR").expect(
+                "set GAZE_MODEL_SETUP_FOREIGN_MODEL_DIR to a readable foreign-owned bundle",
+            ),
         );
         assert_ne!(fs::symlink_metadata(&model_dir).unwrap().uid(), unsafe {
             libc::geteuid()
         });
-        let verification_error =
-            verify_kiji_bundle(&model_dir, KijiDistilbertPrecision::Fp32).unwrap_err();
+        let verification_error = verify_davlan_ner_bundle(&model_dir).unwrap_err();
         assert!(matches!(
             &verification_error,
             SafetyNetError::ModelUnavailable { reason }
-                if reason == "kiji sensitive path owner mismatch"
+                if reason == "davlan-ner sensitive path owner mismatch"
         ));
         let expected_reason = verification_error.to_string();
-        let err = install_kiji_bundle(&InstallOptions {
-            model_dir: Some(model_dir),
-            precision: KijiDistilbertPrecision::Fp32,
-        })
-        .unwrap_err();
+        let err = install_ner_bundle(Some(&model_dir)).unwrap_err();
 
         assert!(matches!(
             err,

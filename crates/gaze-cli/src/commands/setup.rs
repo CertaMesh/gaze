@@ -5,10 +5,7 @@ use std::path::{Path, PathBuf};
 
 use clap::ValueEnum;
 use gaze::{CleanDocument, RawDocument, Session};
-use gaze_model_setup::{
-    install_kiji_bundle, install_nym_bundle, InstallOptions, InstallOutcome,
-    KijiDistilbertPrecision, SetupError,
-};
+use gaze_model_setup::{install_ner_bundle, install_nym_bundle, InstallOutcome, SetupError};
 use sha2::{Digest, Sha256};
 
 use crate::clean_overrides::CleanOverrides;
@@ -83,7 +80,7 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
     let resolved_safety_net = resolve_safety_net(args.safety_net, args.non_interactive, opf_setup)?;
     let policy_path = resolve_policy_path(args.policy_out, args.non_interactive)?;
 
-    let (model_dir, model_status) = install_kiji_model(args.model_dir)?;
+    let (model_dir, model_status) = install_ner_model(args.model_dir)?;
 
     write_policy(&policy_path, &model_dir, args.force)?;
     let doctor_clean_text = doctor_check(&policy_path)?;
@@ -99,14 +96,10 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
     })
 }
 
-fn install_kiji_model(
+fn install_ner_model(
     model_dir: Option<PathBuf>,
 ) -> Result<(PathBuf, ModelInstallStatus), CliError> {
-    let outcome = install_kiji_bundle(&InstallOptions {
-        model_dir,
-        precision: KijiDistilbertPrecision::Fp32,
-    })
-    .map_err(map_model_setup_error)?;
+    let outcome = install_ner_bundle(model_dir.as_deref()).map_err(map_model_setup_error)?;
     Ok(match outcome {
         InstallOutcome::AlreadyPresent { model_dir } => {
             (model_dir, ModelInstallStatus::AlreadyPresent)
@@ -117,7 +110,7 @@ fn install_kiji_model(
 
 fn map_model_setup_error(err: SetupError) -> CliError {
     setup_error(format!(
-        "Kiji model setup failed: {err}. Remediation: re-run `gaze setup` to repair a current-user loose-permission bundle, or move/chown/chmod/remove the model directory and retry with `--model-dir`."
+        "NER model setup failed: {err}. Remediation: re-run `gaze setup` to repair a current-user loose-permission bundle, or move/chown/chmod/remove the model directory and retry with `--model-dir`."
     ))
 }
 
@@ -479,7 +472,7 @@ fn print_summary(summary: &SetupSummary) {
         shell_quote_path(&summary.policy_path)
     );
     println!(
-        "For gaze index: export GAZE_KIJI_DISTILBERT_MODEL_DIR={}",
+        "For gaze index: export GAZE_NER_MODEL_DIR={}",
         shell_quote_path(&summary.model_dir)
     );
     if let Some(opf_checkpoint) = &summary.opf_checkpoint {
@@ -551,7 +544,7 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
-    fn write_synthetic_kiji_dir(model_dir: &Path) {
+    fn write_synthetic_ner_dir(model_dir: &Path) {
         let model_bytes = b"synthetic model bytes";
         let tokenizer_bytes = b"synthetic tokenizer bytes";
         let labels_bytes = b"{}";
@@ -573,7 +566,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
-        write_synthetic_kiji_dir(&model_dir);
+        write_synthetic_ner_dir(&model_dir);
 
         let err = run_with_opf_setup(
             Args {
@@ -588,7 +581,7 @@ mod tests {
         .unwrap_err();
 
         assert!(
-            matches!(err, CliError::SetupDetail(detail) if detail.contains("Kiji model setup failed")
+            matches!(err, CliError::SetupDetail(detail) if detail.contains("NER model setup failed")
                 && detail.contains("non-empty but invalid")
                 && detail.contains("Remediation"))
         );
@@ -601,7 +594,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
-        write_synthetic_kiji_dir(&model_dir);
+        write_synthetic_ner_dir(&model_dir);
         fs::set_permissions(&model_dir, fs::Permissions::from_mode(0o755)).unwrap();
         for file_name in ["labels.json", "model.onnx", "tokenizer.json", "SHA256SUMS"] {
             fs::set_permissions(model_dir.join(file_name), fs::Permissions::from_mode(0o644))
@@ -621,7 +614,7 @@ mod tests {
         .unwrap_err();
 
         assert!(
-            matches!(err, CliError::SetupDetail(detail) if detail.contains("Kiji model setup failed")
+            matches!(err, CliError::SetupDetail(detail) if detail.contains("NER model setup failed")
                 && detail.contains("non-empty but invalid"))
         );
         assert_eq!(
@@ -650,7 +643,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
-        write_synthetic_kiji_dir(&model_dir);
+        write_synthetic_ner_dir(&model_dir);
         write_policy(&policy_out, &model_dir, false).unwrap();
 
         let policy = fs::read_to_string(&policy_out).unwrap();
@@ -834,10 +827,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "hits Hugging Face; validates CLI setup with the real pinned Kiji bundle"]
+    #[ignore = "hits Hugging Face; validates CLI setup with the real pinned NER bundle"]
     fn non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes() {
         let dir = tempdir().unwrap();
-        let model_dir = dir.path().join("kiji-distilbert");
+        let model_dir = dir.path().join("davlan-mbert-ner-hrl");
         let first_policy = dir.path().join("first.toml");
         let second_policy = dir.path().join("second.toml");
 

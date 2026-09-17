@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Opt-in Nym-small safety net** (`--safety-net nym`, feature
   `safety-net-nym`, on in the default `gaze-cli` build). Runs
   `Wismut/nym-pii-multilingual-small` v3 int8 in process through ONNX Runtime.
-  The default net is unchanged; nothing loads unless `nym` is selected.
+  It is not a default: no safety net runs by default, and nothing loads
+  unless `nym` is selected.
   - `gaze setup --safety-net nym` fetches the bundle at revision `4348999c`
     and verifies it against `NYM_SMALL_INT8_BUNDLE_SHA256`; the backend
     re-verifies digests, modes and the `id2label` table before loading, and
@@ -99,6 +100,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING: `gaze setup` installs the benchmarked NER model.** The default
+  (`--safety-net ner`) used to install the Kiji distilbert-NER bundle as the
+  primary `[ner]` model in the written policy. It now downloads and verifies
+  the pinned Davlan mBERT bundle, the model the benchmark scores:
+  `onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
+  `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`, `SHA256SUMS` digest
+  `7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16`, into
+  `$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl` (else
+  `~/.local/share/gaze/models/davlan-mbert-ner-hrl`). **Adopters who ran
+  `gaze setup` before must re-run it** to get the benchmarked model. Setup now
+  prints `For gaze index: export GAZE_NER_MODEL_DIR=<dir>`. New API:
+  `gaze_model_setup::{install_ner_bundle, install_ner_bundle_with_fetcher,
+  default_ner_model_dir}`, `gaze_recognizers::verify_davlan_ner_bundle` and the
+  `DAVLAN_NER_*` constants, `NerRecognizer::load_pinned_davlan`, and
+  `NerLoadError::PinnedBundle`.
+- **BREAKING: `gaze index ingest` requires the pinned NER model.** The index
+  used the Kiji net as its only prose name and organization detector. Ingest
+  now requires `--ner-model-dir <dir>` or `GAZE_NER_MODEL_DIR`, and the
+  directory must verify against the pinned Davlan digests. An absent or
+  unpinned directory fails closed with the typed `IndexNerModelMissing` error
+  (exit 2) and nothing is written. A safety net is optional for ingest and
+  required for search (TokenBridge refuses a search without an output net, so
+  `gaze index search` without one fails closed with `SafetyNetConfig`):
+  `gaze index --safety-net {openai-filter|nym}` with `--opf-command` (or
+  `GAZE_OPENAI_FILTER_OPF`), `--opf-checkpoint` (or `OPF_CHECKPOINT`),
+  `--nym-model-dir` (or `GAZE_NYM_MODEL_DIR`) and `--safety-net-timeout-ms`.
+  When configured it checks ingest output and search snippets, and residual
+  suspects still redact or fail closed per `--on-residual {redact,strict}`.
 - **BREAKING: credentials are no longer detected by default.** Credentials are
   not PII, so the two credential recognizers leave the `core` rulepack (now
   version 0.6.0) for a new opt-in bundled rulepack, `secrets`:
@@ -207,6 +236,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IndexEntity` and no posting. Fragment raw bytes no longer reach the
   persistent index. Documented consequence: a residual fragment is **protected
   but unsearchable**. Whole entities remain searchable exactly as before.
+
+### Removed
+
+- **BREAKING: the Kiji DistilBERT safety net is removed.** On the
+  2,910-document benchmark (2026-09-16 safety-net leaderboard) it recovered
+  1,831 leaked gold bytes under scored-label contract v2 for +169,657
+  false-positive bytes, an action precision of 2.5%. No safety net runs by
+  default now; the shipped default is the bundled rules plus the pinned Davlan
+  mBERT NER model (benchmark arm `pass2-ner`). The `SafetyNet` trait, the
+  `resolve` / `redact` / `strict` modes and fallback ladder, terminal
+  admission, and the sub-word guard stay; the OpenAI Privacy Filter and
+  Nym-small nets use them. Removed surface:
+  - `gaze clean` / `gaze daemon` flags: `--safety-net kiji-distilbert`,
+    `--safety-net-backend kiji-distilbert`, `--safety-net-add kiji-distilbert`,
+    `--kiji-backend {subprocess,ort,tract,candle}`,
+    `--kiji-distilbert-precision {fp32,int8}`, `--kiji-distilbert-command`,
+    `--kiji-distilbert-model-dir`, `--kiji-distilbert-locales`.
+    `--safety-net-registry` stays; `openai-filter` is now its only
+    registry-capable backend.
+  - Cargo features `safety-net-kiji`, `runtime-tract` and `runtime-candle` on
+    `gaze-recognizers` and `gaze-cli`, and the `tract-onnx` / `candle`
+    dependencies. The musl-static deployment path through `tract` is gone.
+  - Rust API: the `gaze_recognizers::safety_net::kiji_distilbert` module
+    (`KijiDistilbertSafetyNet`, `KijiBackendKind`, `KijiDistilbertPrecision`,
+    `OrtKijiBackend`, `SubprocessKijiBackend`, `KIJI_DISTILBERT_BUNDLE_SHA256`,
+    the int8 bundle pin, `verify_kiji_bundle`). In `gaze-model-setup`:
+    `install_kiji_bundle*`, `InstallOptions`, `default_kiji_model_dir`, and the
+    `KijiDistilbertPrecision` re-export.
+  - Environment variables `GAZE_KIJI_DISTILBERT_COMMAND`,
+    `GAZE_KIJI_DISTILBERT_MODEL_DIR`, `GAZE_KIJI_DISTILBERT_PRECISION`.
+  - Scripts `scripts/fetch/fetch-kiji-safetynet-model.sh`,
+    `scripts/bench/kiji-runner.py`, `scripts/bench/kiji-bench-scorer.py`,
+    `scripts/bench/quantize-kiji-int8.py`.
+  - The NER loader no longer accepts the Kiji structured `labels.json`
+    manifest.
+  - Benchmark arms `full-stack-kiji-resolve`, `pass3-kiji` and
+    `pass3-locale-aware`. Committed release rows (v0.14.0) keep their Kiji
+    measurements; the opt-in `full-stack-opf-resolve` and
+    `full-stack-nym-resolve` arms stay.
+
+  **Migration.** For a second opinion after the deterministic passes, use
+  `--safety-net openai-filter` or `--safety-net nym` (install with
+  `gaze setup --safety-net nym`). **Re-run `gaze setup`:** it previously
+  installed the Kiji distilbert-NER bundle as the primary `[ner]` model in the
+  policy it wrote. `gaze index ingest` now requires `--ner-model-dir` or
+  `GAZE_NER_MODEL_DIR` (see Changed).
 
 ### Fixed
 

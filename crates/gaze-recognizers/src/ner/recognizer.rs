@@ -23,6 +23,19 @@ impl NerRecognizer {
             detector: NerDetector::load_with_options(model_dir, options)?,
         })
     }
+
+    /// Loads the pinned Davlan mBERT bundle. The directory must verify against the pinned
+    /// digests (not just its own `SHA256SUMS`) before any model file is read.
+    pub fn load_pinned_davlan(model_dir: &Path, options: NerOptions) -> Result<Self, NerLoadError> {
+        #[cfg(feature = "test-support")]
+        if let Some(recognizer) = load_test_support_recognizer(model_dir, &options) {
+            return Ok(recognizer);
+        }
+
+        super::pinned::verify_davlan_ner_bundle(model_dir)
+            .map_err(|err| NerLoadError::PinnedBundle(err.to_string()))?;
+        Self::load_with_options(model_dir, options)
+    }
 }
 
 impl Recognizer for NerRecognizer {

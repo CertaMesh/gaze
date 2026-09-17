@@ -14,7 +14,7 @@ import gaze_bench_score as bench
 
 def run(label_table, document_ids=("synthetic-a", "synthetic-b")):
     return {
-        "config": "full-stack-kiji-resolve",
+        "config": "pass2-ner",
         "scored_population": bench.identified_document_population(document_ids),
         "per_label_recall": label_table,
     }
@@ -46,7 +46,7 @@ class ClassCoverageGateTests(unittest.TestCase):
     ):
         baseline_table = BASE if baseline_table is None else baseline_table
         return bench._class_coverage_failures(
-            "full-stack-kiji-resolve",
+            "pass2-ner",
             run(candidate_table, candidate_ids),
             run(baseline_table, baseline_ids),
         )
@@ -120,17 +120,17 @@ class ClassCoverageGateTests(unittest.TestCase):
 
     def test_absent_on_both_sides_is_comparable_as_empty(self):
         found = bench._class_coverage_failures(
-            "full-stack-kiji-resolve",
-            {"config": "full-stack-kiji-resolve"},
-            {"config": "full-stack-kiji-resolve"},
+            "pass2-ner",
+            {"config": "pass2-ner"},
+            {"config": "pass2-ner"},
         )
         self.assertEqual(found, [])
 
     def test_asymmetric_telemetry_is_a_non_pass(self):
         # Dropping the block on one side must not be a way to silence the gate.
         found = bench._class_coverage_failures(
-            "full-stack-kiji-resolve",
-            {"config": "full-stack-kiji-resolve"},
+            "pass2-ner",
+            {"config": "pass2-ner"},
             run(copy.deepcopy(BASE)),
         )
         self.assertEqual(len(found), 1, found)
@@ -140,7 +140,7 @@ class ClassCoverageGateTests(unittest.TestCase):
     def test_malformed_block_fails_closed(self):
         with self.assertRaises(ValueError):
             bench._class_coverage_failures(
-                "full-stack-kiji-resolve",
+                "pass2-ner",
                 run({"SECURITYTOKEN": {"entities": "many"}}),
                 run(copy.deepcopy(BASE)),
             )

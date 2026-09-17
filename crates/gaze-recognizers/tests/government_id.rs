@@ -615,7 +615,7 @@ fn government_ids_restore_exactly() {
 // connector grammar. This is a grammar-only change: cue vocabulary and value shapes are byte-
 // identical to the previous rules, so nothing about which VALUE shapes are eligible changed.
 //
-// Measured (isolated, Kiji cell, base 8d87468): +1,744 newly covered leaked gold bytes
+// Measured (isolated, v0.14 full-stack cell, base 8d87468): +1,744 newly covered leaked gold bytes
 // (SSN +495, DRIVERLICENSENUM +581, NATIONALID +205, IDCARDNUM +384, TAXNUM +79), ZERO non-gold
 // matches on the EN/DE holdout and ZERO matches across all 1,024 A4 negatives, per recognizer.
 
@@ -795,7 +795,7 @@ fn widened_connector_does_not_bridge_an_unbounded_gap() {
 // with new cue vocabulary (Identitätskarte, Personalnummer, Staatsbürgerschaftsnummer, AHV, the
 // hyphenated `national-id` forms) and new shapes (Swiss AHV `756.dddd.dddd.dd`, longer alnum). Both
 // use the byte-identical shared connector, so they inherit its Unicode/unbounded whitespace.
-// Measured (Kiji cell, increment over merged G): PASSPORTID −1,791, NATIONALID −1,017,
+// Measured (v0.14 full-stack cell, increment over merged G): PASSPORTID −1,791, NATIONALID −1,017,
 // IDCARDNUM −577 at zero A4 movement; national_id extension is a strict superset of the prior rule
 // (0 previously-covered spans lost).
 

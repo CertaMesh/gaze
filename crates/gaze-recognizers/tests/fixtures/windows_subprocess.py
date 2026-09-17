@@ -12,8 +12,8 @@ from pathlib import Path
 
 # Even a deliberately blocked fixture cannot outlive this watchdog.
 threading.Thread(target=lambda: (time.sleep(12), os._exit(91)), daemon=True).start()
-mode, backend, marker = sys.argv[1:4]
-reply = b'[]' if backend == 'kiji' else b'{"detected_spans":[]}'
+mode, marker = sys.argv[1:3]
+reply = b'{"detected_spans":[]}'
 
 def publish(suffix, value='ready'):
     p = Path(marker + suffix)
@@ -73,7 +73,7 @@ if mode.startswith('hold'):
     if fd != 0:
         # Complete stdin before exiting, so this case isolates a held reader.
         sys.stdin.buffer.read()
-    subprocess.Popen([sys.executable, __file__, 'witness' + str(fd), backend, marker],
+    subprocess.Popen([sys.executable, __file__, 'witness' + str(fd), marker],
                      stdin=sys.stdin if fd == 0 else subprocess.DEVNULL,
                      stdout=sys.stdout if fd == 1 else subprocess.DEVNULL,
                      stderr=sys.stderr if fd == 2 else subprocess.DEVNULL)
@@ -105,9 +105,7 @@ if mode == 'invalid-json':
     os.write(1, b'not-json')
 elif mode == 'invalid-utf8':
     os.write(1, b'\xff')
-elif backend == 'opf':
+else:
     # The OPF adapter refuses output that does not echo the exact text it sent.
     os.write(1, json.dumps({'text': received.decode('utf-8'), 'detected_spans': []}).encode())
-else:
-    os.write(1, reply)
 os._exit(0)

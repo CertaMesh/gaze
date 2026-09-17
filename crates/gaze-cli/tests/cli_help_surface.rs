@@ -24,9 +24,7 @@
     feature = "index",
     feature = "mcp",
     feature = "proxy",
-    feature = "dashboard",
-    feature = "runtime-tract",
-    feature = "runtime-candle"
+    feature = "dashboard"
 ))]
 
 use std::path::Path;

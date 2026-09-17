@@ -17,7 +17,7 @@ use super::decode::{
 };
 
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
-/// One intra-op thread by default, matching the in-process Kiji backend: deterministic compute
+/// One intra-op thread by default: deterministic compute
 /// and no contention with the caller's own thread pool. Raise it with
 /// [`NymConfig::with_intra_threads`] when latency matters more.
 pub const DEFAULT_NYM_INTRA_THREADS: NonZeroUsize = NonZeroUsize::MIN;

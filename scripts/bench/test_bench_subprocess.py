@@ -170,7 +170,7 @@ def invoke(mode, root, *, late=False, post=False, owners=None):
                 if post:
                     stack.enter_context(mock.patch.object(score, "identified_document_population", side_effect=bad))
                 result = score.run_config(
-                    root, Path("synthetic"), "rule-floor-extended", [document], root, root,
+                    root, Path("synthetic"), "rule-floor-extended", [document], root,
                     None, None, None, 0.3, root / "diagnostics", warmup_count=1,
                 )
     return result, created

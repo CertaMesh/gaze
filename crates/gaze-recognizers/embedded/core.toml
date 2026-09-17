@@ -974,7 +974,7 @@ license = "Apache-2.0"
 # multiple words between cue and value ("license number, X", "Sozialversicherungsnummer, die
 # lautet X", "tax number as X"); the previous single-keyword connector missed them. Grammar-only:
 # every cue vocabulary and value shape is unchanged, so which VALUE shapes are eligible did not
-# move. Measured lift (Kiji cell, isolated): +1,744 leaked gold bytes (SSN +495, DRIVERLICENSENUM
+# move. Measured lift (v0.14 full-stack cell, isolated): +1,744 leaked gold bytes (SSN +495, DRIVERLICENSENUM
 # +581, NATIONALID +205, IDCARDNUM +384, TAXNUM +79) at ZERO A4 and zero non-gold holdout matches
 # per recognizer. The five copies are kept in lock-step by
 # `government_id.rs::shared_connector_grammar_is_byte_identical_across_the_family`.

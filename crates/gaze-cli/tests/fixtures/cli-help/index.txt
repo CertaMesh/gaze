@@ -10,6 +10,20 @@ Commands:
   help    Print this message or the help of the given subcommand(s)
 
 Options:
+      --safety-net <SAFETY_NET>
+          Safety net over ingest output (optional) and search snippets (required for search)
+          
+          [possible values: openai-filter, nym]
+
+      --opf-command <OPF_COMMAND>
+          OpenAI Privacy Filter `opf` command (default: GAZE_OPENAI_FILTER_OPF)
+
+      --opf-checkpoint <OPF_CHECKPOINT>
+          OpenAI Privacy Filter checkpoint directory (default: OPF_CHECKPOINT)
+
+      --nym-model-dir <NYM_MODEL_DIR>
+          Pinned Nym-small bundle from `gaze setup --safety-net nym` (default: GAZE_NYM_MODEL_DIR)
+
       --safety-net-timeout-ms <SAFETY_NET_TIMEOUT_MS>
           Safety-net subprocess timeout in milliseconds
           
