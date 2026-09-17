@@ -15,10 +15,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 
-use super::{
-    KijiDistilbertPrecision, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetFallback,
-    SafetyNetMode,
-};
+use super::{OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetFallback, SafetyNetMode};
 
 /// OpenAI Privacy Filter subprocess location and operating point.
 ///
@@ -96,17 +93,19 @@ pub(crate) struct OpfRegistryArgs {
     pub(crate) opf_checkpoint: Option<PathBuf>,
 }
 
-/// Kiji DistilBERT ONNX precision selection.
+/// Nym-small safety-net backend configuration.
 ///
-/// Shared by `gaze clean` and `gaze daemon`. Precision has no policy.toml
-/// equivalent either, so hardcoding it pinned the daemon to fp32 with no way to
-/// ask for the int8 build. One field, but owned here for the same reason as the
-/// groups above: a re-declaration on one verb only is how the two drift apart.
+/// Shared by `gaze clean` and `gaze daemon`. The allowlist and thresholds live in policy.toml
+/// (`[safety_net.nym]`, op-B when absent); these flags only say where the pinned bundle is and
+/// how many ONNX Runtime threads it may use.
 #[derive(Args, Debug)]
-pub(crate) struct KijiPrecisionArgs {
-    /// Kiji DistilBERT ONNX precision. Default: fp32.
-    #[arg(long, value_enum, default_value_t = KijiDistilbertPrecision::Fp32)]
-    pub(crate) kiji_distilbert_precision: KijiDistilbertPrecision,
+pub(crate) struct NymArgs {
+    /// Path to the pinned Nym-small int8 bundle from `gaze setup --safety-net nym` (default: GAZE_NYM_MODEL_DIR)
+    #[arg(long)]
+    pub(crate) nym_model_dir: Option<PathBuf>,
+    /// ONNX Runtime intra-op threads for the Nym backend (default: 1)
+    #[arg(long)]
+    pub(crate) nym_intra_threads: Option<std::num::NonZeroUsize>,
 }
 
 /// policy.toml rulepack overrides.

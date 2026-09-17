@@ -2180,3 +2180,129 @@ fn structured_walk_has_nested_parity_across_every_leaf_op() {
         "empty string leaves are skipped by both scanning ops"
     );
 }
+
+/// Re-reads Gaze's own token text the way the Nym net does: token class names spell the label
+/// (`Custom:building_number`), so the model flags the word inside the token. The net emits the
+/// suspect exactly as the Nym backend would (manifest diff, stable id, `LABEL>=THRESHOLD`).
+#[derive(Clone)]
+struct TokenTextNet {
+    locales: Vec<gaze::LocaleTag>,
+    class: PiiClass,
+    calls: Arc<AtomicUsize>,
+}
+
+impl SafetyNet for TokenTextNet {
+    fn id(&self) -> &str {
+        "nym-small-int8"
+    }
+
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &self.locales
+    }
+
+    fn check(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let Some(start) = clean_text.find("building_number") else {
+            return Ok(Vec::new());
+        };
+        let span = start..start + "building_number".len();
+        Ok(context
+            .manifest
+            .diff_against(&span, &self.class)
+            .map(|kind| {
+                LeakSuspect::new(
+                    span,
+                    self.class.clone(),
+                    "nym-small-int8",
+                    Some(0.97),
+                    kind,
+                    "BUILDING_NUMBER>=0.5",
+                    None,
+                )
+            })
+            .into_iter()
+            .collect())
+    }
+}
+
+/// PR 609 finding 3: a Nym suspect wholly inside a live token is already protected. Under every
+/// `Resolve` fallback, including `Strict`, it is an audited `Preserve` no-op: the document is not
+/// rejected, not altered, and restores exactly.
+#[test]
+fn nym_suspect_inside_its_own_token_text_is_protected_under_every_resolve_fallback() {
+    const RAW: &str = "Hausnummer 12a ok";
+    let building = PiiClass::custom("building_number").expect("class");
+    for class in [
+        building.clone(),
+        PiiClass::custom("license_plate").expect("class"),
+    ] {
+        for fallback in [
+            gaze::SafetyNetFallback::Strict,
+            gaze::SafetyNetFallback::Tolerant,
+            gaze::SafetyNetFallback::Redact,
+        ] {
+            let session = session();
+            let logger = MemoryLogger::new();
+            let calls = Arc::new(AtomicUsize::new(0));
+            let pipeline = Pipeline::builder()
+                .detector(FixedDetector {
+                    span: "Hausnummer ".len().."Hausnummer 12a".len(),
+                    class: building.clone(),
+                })
+                .rule(ClassRule::new(building.clone(), Action::Tokenize))
+                .rule(DefaultRule::new(Action::Preserve))
+                .register_safety_net(TokenTextNet {
+                    locales: vec![gaze::LocaleTag::Global],
+                    class: class.clone(),
+                    calls: Arc::clone(&calls),
+                })
+                .redaction_logger(logger.clone())
+                .build()
+                .expect("pipeline");
+
+            let (clean, _, _) = pipeline
+                .clean_with_safety_net_policy_detect_context(
+                    &session,
+                    RawDocument::Text(RAW.to_string()),
+                    &[gaze::LocaleTag::Global],
+                    &gaze::DictionaryBundle::default(),
+                    gaze::SafetyNetPolicy::new(gaze::SafetyNetMode::Resolve, fallback),
+                )
+                .unwrap_or_else(|err| panic!("{class:?}/{fallback:?}: {err:?}"));
+            let clean = text(clean);
+            let at = clean
+                .find("building_number")
+                .expect("token spells its class");
+            assert!(
+                clean[..at].contains('<') && !clean.contains("12a"),
+                "{class:?}/{fallback:?}: {clean}"
+            );
+            assert!(calls.load(Ordering::SeqCst) >= 1);
+            assert_eq!(
+                session.restore_strict_text(&clean).expect("restorable"),
+                RAW,
+                "{class:?}/{fallback:?}"
+            );
+            let entries = logger.entries();
+            assert!(
+                entries
+                    .iter()
+                    .all(|entry| entry.fallback_triggered.is_none()),
+                "{class:?}/{fallback:?}: no fallback may fire"
+            );
+            if class != building {
+                assert!(
+                    entries
+                        .iter()
+                        .any(|entry| entry.decided_by == ConflictTier::Resolve
+                            && entry.action == Action::Preserve),
+                    "{class:?}/{fallback:?}: the protected suspect keeps its Preserve row"
+                );
+            }
+        }
+    }
+}

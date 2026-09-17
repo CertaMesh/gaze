@@ -18,9 +18,9 @@ use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
 
 use crate::clean_overrides::CleanOverrides;
 use crate::commands::{
-    KijiBackend, KijiDistilbertPrecision, OpenAiFilterDevice, OpenAiFilterOperatingPoint,
-    SafetyNetBackend, SafetyNetFallback, SafetyNetKind, SafetyNetMode,
-    DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES, DEFAULT_SAFETY_NET_TIMEOUT_MS,
+    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetFallback,
+    SafetyNetKind, SafetyNetMode, DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES,
+    DEFAULT_SAFETY_NET_TIMEOUT_MS,
 };
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
@@ -52,14 +52,11 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) openai_filter_checkpoint: Option<&'a Path>,
     pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
     pub(crate) openai_filter_device: OpenAiFilterDevice,
-    pub(crate) kiji_backend: KijiBackend,
-    pub(crate) kiji_distilbert_precision: KijiDistilbertPrecision,
     pub(crate) opf_locales: &'a [String],
     pub(crate) opf_command: Option<&'a Path>,
     pub(crate) opf_checkpoint: Option<&'a Path>,
-    pub(crate) kiji_distilbert_command: Option<&'a Path>,
-    pub(crate) kiji_distilbert_model_dir: Option<&'a Path>,
-    pub(crate) kiji_distilbert_locales: &'a [String],
+    pub(crate) nym_model_dir: Option<&'a Path>,
+    pub(crate) nym_intra_threads: Option<std::num::NonZeroUsize>,
     pub(crate) safety_net_timeout_ms: u64,
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
@@ -108,7 +105,8 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let loaded_rulepacks = resolved.rulepacks;
     let locale_chain = resolved.locale_chain;
     let dictionaries = resolved.dictionaries;
-    let pipeline = maybe_register_safety_net(resolved.pipeline, &options)?;
+    let pipeline =
+        maybe_register_safety_net(resolved.pipeline, &options, effective_policy.as_ref())?;
     validate_safety_net_tolerant_gate(options.safety_net_mode, options.safety_net_fallback)?;
     // Lowered once, here. The library owns the (mode, fallback) -> decision mapping; the CLI
     // reads it rather than re-deriving which flag is consulted when.
@@ -200,7 +198,20 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
 pub(crate) fn maybe_register_safety_net(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
+    policy: Option<&gaze::Policy>,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
+    let nym_policy = policy.and_then(|policy| policy.safety_net.nym.as_ref());
+    // A policy that tunes the Nym net while a different net (or none) runs would read as
+    // protection that is not there; refuse instead of ignoring the table.
+    if nym_policy.is_some()
+        && (options.safety_net_registry
+            || effective_safety_net_backend(options) != Some(SafetyNetBackend::Nym))
+    {
+        return Err(CliError::SafetyNetConfigDetail(
+            "policy [safety_net.nym] requires --safety-net nym (or --safety-net-backend nym)"
+                .to_string(),
+        ));
+    }
     if options.safety_net_registry {
         if options.safety_net_backend.is_some() {
             return Err(CliError::SafetyNetConfigDetail(
@@ -212,6 +223,12 @@ pub(crate) fn maybe_register_safety_net(
                 "--safety-net-registry requires at least one --safety-net-add".to_string(),
             ));
         }
+        // Checked before the feature-gated registry path so every build names the real
+        // reason: registry dispatch reports a model span's class, not the label and
+        // threshold that fired, so a Nym suspect there would lose its audit trail.
+        if options.safety_net_add.contains(&SafetyNetBackend::Nym) {
+            return Err(nym_registry_refusal());
+        }
         return register_safety_net_registry(pipeline, options);
     }
     let Some(backend) = effective_safety_net_backend(options) else {
@@ -220,11 +237,72 @@ pub(crate) fn maybe_register_safety_net(
     };
     match backend {
         SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options),
-        SafetyNetBackend::KijiDistilbert => register_kiji_distilbert(pipeline, options),
+        SafetyNetBackend::Nym => register_nym(pipeline, options, nym_policy),
     }
 }
 
-#[cfg(any(feature = "safety-net-openai", feature = "safety-net-kiji"))]
+fn nym_registry_refusal() -> CliError {
+    CliError::SafetyNetConfigDetail(
+        "nym is not available through --safety-net-registry; use --safety-net nym".to_string(),
+    )
+}
+
+#[cfg(feature = "safety-net-nym")]
+fn register_nym(
+    pipeline: gaze::Pipeline,
+    options: &CleanOptions<'_>,
+    operating_point: Option<&gaze_types::nym::NymOperatingPoint>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    use gaze_recognizers::safety_net::nym::{
+        NymConfig, NymSafetyNet, REQUIRED_NYM_SMALL_ARTIFACTS,
+    };
+
+    let model_dir = options
+        .nym_model_dir
+        .map(Path::to_path_buf)
+        .or_else(|| std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from))
+        .ok_or_else(|| {
+            CliError::SafetyNetConfigDetail(
+                "--nym-model-dir (or GAZE_NYM_MODEL_DIR) is required for the nym safety net; install the bundle with `gaze setup --safety-net nym`"
+                    .to_string(),
+            )
+        })?;
+    // Missing files are a config error (exit 2) before the model loads; digest mismatches
+    // still fail closed inside the backend.
+    for required in REQUIRED_NYM_SMALL_ARTIFACTS {
+        let artifact = model_dir.join(required);
+        if !artifact.exists() {
+            return Err(CliError::SafetyNetArtifactMissing {
+                backend: "nym",
+                path: format!(
+                    "{} (install via gaze setup --safety-net nym)",
+                    artifact.display()
+                ),
+            });
+        }
+    }
+    let mut config = NymConfig::new(model_dir)
+        .with_max_input_bytes(options.safety_net_input_limit_bytes)
+        .with_operating_point(operating_point.cloned().unwrap_or_default());
+    if let Some(threads) = options.nym_intra_threads {
+        config = config.with_intra_threads(threads);
+    }
+    Ok(pipeline.with_safety_net(NymSafetyNet::new(config)))
+}
+
+#[cfg(not(feature = "safety-net-nym"))]
+fn register_nym(
+    _pipeline: gaze::Pipeline,
+    _options: &CleanOptions<'_>,
+    _operating_point: Option<&gaze_types::nym::NymOperatingPoint>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    Err(CliError::SafetyNetConfigDetail(
+        "nym backend requested but gaze-cli was not compiled with feature safety-net-nym"
+            .to_string(),
+    ))
+}
+
+#[cfg(feature = "safety-net-openai")]
 fn parse_backend_locales(
     raw: &[String],
     flag: &str,
@@ -248,7 +326,7 @@ fn openai_filter_checkpoint_option<'a>(options: &'a CleanOptions<'_>) -> Option<
     options.opf_checkpoint.or(options.openai_filter_checkpoint)
 }
 
-#[cfg(any(feature = "safety-net-openai", feature = "safety-net-kiji"))]
+#[cfg(feature = "safety-net-openai")]
 fn register_safety_net_registry(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
@@ -257,15 +335,13 @@ fn register_safety_net_registry(
     for backend in options.safety_net_add {
         match backend {
             SafetyNetBackend::OpenaiFilter => register_openai_filter_model(&mut registry, options)?,
-            SafetyNetBackend::KijiDistilbert => {
-                register_kiji_distilbert_model(&mut registry, options)?
-            }
+            SafetyNetBackend::Nym => return Err(nym_registry_refusal()),
         }
     }
     Ok(pipeline.with_safety_net_registry(registry))
 }
 
-#[cfg(not(any(feature = "safety-net-openai", feature = "safety-net-kiji")))]
+#[cfg(not(feature = "safety-net-openai"))]
 fn register_safety_net_registry(
     _pipeline: gaze::Pipeline,
     _options: &CleanOptions<'_>,
@@ -291,52 +367,6 @@ fn register_openai_filter_model(
     };
     registry.register(net);
     Ok(())
-}
-
-#[cfg(all(
-    not(feature = "safety-net-openai"),
-    any(feature = "safety-net-openai", feature = "safety-net-kiji")
-))]
-fn register_openai_filter_model(
-    _registry: &mut gaze_recognizers::LocaleAwareModelRegistry,
-    _options: &CleanOptions<'_>,
-) -> std::result::Result<(), CliError> {
-    Err(CliError::SafetyNetConfigDetail(
-        "openai-filter backend requested but gaze-cli was not compiled with feature safety-net-openai"
-            .to_string(),
-    ))
-}
-
-#[cfg(feature = "safety-net-kiji")]
-fn register_kiji_distilbert_model(
-    registry: &mut gaze_recognizers::LocaleAwareModelRegistry,
-    options: &CleanOptions<'_>,
-) -> std::result::Result<(), CliError> {
-    use gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertSafetyNet;
-    let config = kiji_distilbert_config(options, "--safety-net-add kiji-distilbert")?;
-    let locales =
-        parse_backend_locales(options.kiji_distilbert_locales, "--kiji-distilbert-locales")?;
-    let net = if locales.is_empty() {
-        KijiDistilbertSafetyNet::new(config)
-    } else {
-        KijiDistilbertSafetyNet::new(config).with_locales(locales)
-    };
-    registry.register(net);
-    Ok(())
-}
-
-#[cfg(all(
-    not(feature = "safety-net-kiji"),
-    any(feature = "safety-net-openai", feature = "safety-net-kiji")
-))]
-fn register_kiji_distilbert_model(
-    _registry: &mut gaze_recognizers::LocaleAwareModelRegistry,
-    _options: &CleanOptions<'_>,
-) -> std::result::Result<(), CliError> {
-    Err(CliError::SafetyNetConfigDetail(
-        "kiji-distilbert backend requested but gaze-cli was not compiled with feature safety-net-kiji"
-            .to_string(),
-    ))
 }
 
 #[cfg(feature = "safety-net-openai")]
@@ -402,160 +432,16 @@ fn register_openai_filter(
     ))
 }
 
-#[cfg(feature = "safety-net-kiji")]
-fn register_kiji_distilbert(
-    pipeline: gaze::Pipeline,
-    options: &CleanOptions<'_>,
-) -> std::result::Result<gaze::Pipeline, CliError> {
-    use gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertSafetyNet;
-
-    Ok(
-        pipeline.with_safety_net(KijiDistilbertSafetyNet::new(kiji_distilbert_config(
-            options,
-            "--safety-net-backend=kiji-distilbert",
-        )?)),
-    )
-}
-
-#[cfg(feature = "safety-net-kiji")]
-fn kiji_distilbert_config(
-    options: &CleanOptions<'_>,
-    activation: &str,
-) -> std::result::Result<
-    gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertConfig,
-    CliError,
-> {
-    use gaze_recognizers::safety_net::kiji_distilbert::{
-        KijiDistilbertConfig, KijiDistilbertPrecision as RecognizerKijiPrecision, OrtKijiConfig,
-        SubprocessKijiConfig,
-    };
-
-    let model_dir = options.kiji_distilbert_model_dir.ok_or_else(|| {
-        CliError::SafetyNetConfigDetail(format!(
-            "--kiji-distilbert-model-dir is required for {activation}"
-        ))
-    })?;
-
-    validate_kiji_artifacts(model_dir, options.kiji_distilbert_precision)?;
-
-    match options.kiji_backend {
-        KijiBackend::Subprocess => {
-            if options.kiji_distilbert_precision != KijiDistilbertPrecision::Fp32 {
-                return Err(CliError::SafetyNetConfigDetail(
-                    "--kiji-distilbert-precision=int8 requires --kiji-backend=ort".to_string(),
-                ));
-            }
-            let command = options.kiji_distilbert_command.ok_or_else(|| {
-                CliError::SafetyNetConfigDetail(format!(
-                    "--kiji-distilbert-command is required for {activation} with --kiji-backend=subprocess"
-                ))
-            })?;
-            let config = SubprocessKijiConfig::new(command)
-                .with_model_dir(model_dir)
-                .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
-                .with_max_input_bytes(options.safety_net_input_limit_bytes);
-            Ok(KijiDistilbertConfig::from(config))
-        }
-        KijiBackend::Ort => {
-            if options.kiji_distilbert_command.is_some() {
-                return Err(CliError::SafetyNetConfigDetail(
-                    "--kiji-distilbert-command is only valid with --kiji-backend=subprocess"
-                        .to_string(),
-                ));
-            }
-            let precision = match options.kiji_distilbert_precision {
-                KijiDistilbertPrecision::Fp32 => RecognizerKijiPrecision::Fp32,
-                KijiDistilbertPrecision::Int8 => RecognizerKijiPrecision::Int8,
-            };
-            let config = OrtKijiConfig::new(model_dir)
-                .with_precision(precision)
-                .with_max_input_bytes(options.safety_net_input_limit_bytes);
-            Ok(KijiDistilbertConfig::from(config))
-        }
-        #[cfg(feature = "runtime-tract")]
-        KijiBackend::Tract => {
-            if options.kiji_distilbert_command.is_some() {
-                return Err(CliError::SafetyNetConfigDetail(
-                    "--kiji-distilbert-command is only valid with --kiji-backend=subprocess"
-                        .to_string(),
-                ));
-            }
-            let config =
-                gaze_recognizers::safety_net::kiji_distilbert::TractKijiConfig::new(model_dir)
-                    .with_max_input_bytes(options.safety_net_input_limit_bytes);
-            Ok(KijiDistilbertConfig::from(config))
-        }
-        #[cfg(feature = "runtime-candle")]
-        KijiBackend::Candle => {
-            if options.kiji_distilbert_command.is_some() {
-                return Err(CliError::SafetyNetConfigDetail(
-                    "--kiji-distilbert-command is only valid with --kiji-backend=subprocess"
-                        .to_string(),
-                ));
-            }
-            let config =
-                gaze_recognizers::safety_net::kiji_distilbert::CandleKijiConfig::new(model_dir)
-                    .with_max_input_bytes(options.safety_net_input_limit_bytes);
-            Ok(KijiDistilbertConfig::from(config))
-        }
-    }
-}
-
-#[cfg(feature = "safety-net-kiji")]
-fn validate_kiji_artifacts(
-    model_dir: &Path,
-    precision: KijiDistilbertPrecision,
-) -> std::result::Result<(), CliError> {
-    use gaze_recognizers::safety_net::kiji_distilbert::{
-        REQUIRED_KIJI_ARTIFACTS, REQUIRED_KIJI_INT8_ARTIFACTS,
-    };
-
-    // Pinned-artifact contract (Axis 1): the runtime never silently disables
-    // the backend. Surface missing artifacts as a config-level error (exit 2)
-    // before backend construction; SHA mismatches still fail in the backend.
-    let required = match precision {
-        KijiDistilbertPrecision::Fp32 => REQUIRED_KIJI_ARTIFACTS,
-        KijiDistilbertPrecision::Int8 => REQUIRED_KIJI_INT8_ARTIFACTS,
-    };
-    for required in required {
-        let artifact = model_dir.join(required);
-        if !artifact.exists() {
-            return Err(CliError::SafetyNetArtifactMissing {
-                backend: "kiji-distilbert",
-                path: format!(
-                    "{} (install via scripts/fetch/fetch-kiji-safetynet-model.sh)",
-                    artifact.display()
-                ),
-            });
-        }
-    }
-    Ok(())
-}
-
-#[cfg(not(feature = "safety-net-kiji"))]
-fn register_kiji_distilbert(
-    _pipeline: gaze::Pipeline,
-    _options: &CleanOptions<'_>,
-) -> std::result::Result<gaze::Pipeline, CliError> {
-    Err(CliError::SafetyNetConfigDetail(
-        "kiji-distilbert backend requested but gaze-cli was not compiled with feature safety-net-kiji"
-            .to_string(),
-    ))
-}
-
 fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Result<(), CliError> {
     if options.openai_filter_command.is_some()
         || options.openai_filter_checkpoint.is_some()
         || options.openai_filter_operating_point.is_some()
         || options.openai_filter_device != OpenAiFilterDevice::Auto
-        || options.kiji_backend != KijiBackend::Subprocess
-        || options.kiji_distilbert_precision != KijiDistilbertPrecision::Fp32
         || options.opf_command.is_some()
         || options.opf_checkpoint.is_some()
         || !options.opf_locales.is_empty()
-        || options.kiji_distilbert_command.is_some()
-        || options.kiji_distilbert_model_dir.is_some()
-        || !options.kiji_distilbert_locales.is_empty()
+        || options.nym_model_dir.is_some()
+        || options.nym_intra_threads.is_some()
         || !options.safety_net_add.is_empty()
         || options.safety_net_timeout_ms != DEFAULT_SAFETY_NET_TIMEOUT_MS
         || options.safety_net_input_limit_bytes != DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES
@@ -887,6 +773,15 @@ enum LeakTelemetryResponse {
         #[serde(skip_serializing_if = "Option::is_none")]
         field_path: Option<String>,
     },
+    UnactionableSubword {
+        safety_net_id: String,
+        class: String,
+        start: usize,
+        end: usize,
+        document_kind: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        field_path: Option<String>,
+    },
 }
 
 impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
@@ -898,6 +793,20 @@ impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
                 field_path,
             } => Self::LocaleSkipped {
                 safety_net_id: safety_net_id.clone(),
+                document_kind: document_kind_label(*document_kind).to_string(),
+                field_path: field_path.clone(),
+            },
+            LeakReportTelemetry::UnactionableSubword {
+                safety_net_id,
+                class,
+                span,
+                document_kind,
+                field_path,
+            } => Self::UnactionableSubword {
+                safety_net_id: safety_net_id.clone(),
+                class: class.to_canonical_str(),
+                start: span.start,
+                end: span.end,
                 document_kind: document_kind_label(*document_kind).to_string(),
                 field_path: field_path.clone(),
             },

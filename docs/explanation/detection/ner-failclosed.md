@@ -63,9 +63,8 @@ An empty result stays representable only where it is genuinely correct: an
 empty token sequence, zero-width offsets, or a well-formed tensor whose spans
 all fall outside the document.
 
-This mirrors the Kiji DistilBERT safety-net decoder, which already rejects
-invalid classifier width, mismatched offsets, bad logit length, and non-finite
-values. The ORT NER path was the outlier, not the precedent.
+The Nym-small safety-net decoder applies the same rule: a wrong logit length or
+a non-finite value is an error, not an `O`.
 
 ## Long-Input Chunking Invariant
 

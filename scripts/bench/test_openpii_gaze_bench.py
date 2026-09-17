@@ -18,37 +18,18 @@ import gaze_bench_score as benchmark
 import openpii_gaze_bench as openpii_benchmark
 import dataiku_en_de_gaze_bench as dataiku_benchmark
 import opf_daemon
+import render_benchmark_doc
 
 
 EXPECTED_BUILTIN_SOURCE_IDS = frozenset(
     {
         "ner",
-        "kiji-distilbert",
-        "kiji-distilbert-ort",
-        "kiji-distilbert-tract",
-        "kiji-distilbert-candle",
-        "kiji-distilbert-subprocess",
         "openai-privacy-filter",
         "openai-privacy-filter-subprocess",
     }
 )
 BUILTIN_SOURCE_LITERAL_PATHS = {
     "ner": "crates/gaze-recognizers/src/ner/recognizer.rs",
-    "kiji-distilbert": (
-        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/mod.rs"
-    ),
-    "kiji-distilbert-ort": (
-        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/ort.rs"
-    ),
-    "kiji-distilbert-tract": (
-        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/tract.rs"
-    ),
-    "kiji-distilbert-candle": (
-        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/candle.rs"
-    ),
-    "kiji-distilbert-subprocess": (
-        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/subprocess.rs"
-    ),
     "openai-privacy-filter": (
         "crates/gaze-recognizers/src/safety_net/openai_filter/mod.rs"
     ),
@@ -344,7 +325,6 @@ class ContractTests(unittest.TestCase):
                     config="rule-floor-extended",
                     documents=[document],
                     model_dir=Path(temporary),
-                    kiji_model_dir=Path(temporary),
                     opf_command=None,
                     opf_checkpoint=None,
                     opf_daemon_socket=None,
@@ -592,7 +572,6 @@ class ResponseValidationTests(unittest.TestCase):
                     config="production-full-stack",
                     documents=[self.document(), second_document],
                     model_dir=Path(temporary),
-                    kiji_model_dir=Path(temporary),
                     opf_command=None,
                     opf_checkpoint=None,
                     opf_daemon_socket=None,
@@ -649,10 +628,9 @@ class ResponseValidationTests(unittest.TestCase):
                 result = benchmark.run_config(
                     repo_root=repo_root,
                     binary=Path(temporary) / "synthetic-runner",
-                    config="full-stack-kiji-resolve",
+                    config="full-stack-nym-resolve",
                     documents=[document],
                     model_dir=Path(temporary),
-                    kiji_model_dir=Path(temporary),
                     opf_command=None,
                     opf_checkpoint=None,
                     opf_daemon_socket=None,
@@ -811,7 +789,7 @@ class ResponseValidationTests(unittest.TestCase):
         item = response["final_protection_trace"][0]
         item["class"] = "custom:family:payment-card-or-iban"
         item["provenance"]["source_ids"] = [
-            "kiji",
+            "ner",
             "rule.iban",
         ]
         benchmark.validate_response(self.trace_document(), response)
@@ -1469,7 +1447,6 @@ class DataikuSelectionTests(unittest.TestCase):
                 dataset=temporary_path / "synthetic.parquet",
                 output=output_path,
                 model_dir=model_dir,
-                kiji_model_dir=temporary_path / "kiji-model",
                 threshold=0.3,
                 max_documents=1,
                 opf_command=None,
@@ -1615,7 +1592,7 @@ class ConfigTests(unittest.TestCase):
         self,
     ) -> None:
         repo_root = Path(__file__).resolve().parents[2]
-        source_id = "kiji-distilbert"
+        source_id = "openai-privacy-filter"
         relative_path = BUILTIN_SOURCE_LITERAL_PATHS[source_id]
         source_text = (repo_root / relative_path).read_text(encoding="utf-8")
         literal = f'"{source_id}"'
@@ -1671,9 +1648,11 @@ class ConfigTests(unittest.TestCase):
         expected = (
             "rule-floor-extended",
             "pass2-ner",
-            "full-stack-kiji-resolve",
         )
         self.assertEqual(benchmark.DEFAULT_CONFIGS, expected)
+        self.assertEqual(benchmark.PRODUCTION_CONFIG, "pass2-ner")
+        # The benchmark doc labels new rows with its own constant; keep them one.
+        self.assertEqual(render_benchmark_doc.SHIPPED_DEFAULT_ARM, benchmark.PRODUCTION_CONFIG)
         self.assertTrue(set(expected).issubset(dataiku_benchmark.CONFIG_CHOICES))
 
         argv = ["benchmark"]

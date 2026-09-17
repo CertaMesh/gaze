@@ -1,4 +1,5 @@
-//! Regression fixtures for the `security_token.*` core recognizers (solo todo #2318).
+//! Regression fixtures for the `security_token.*` recognizers (solo todo #2318). They live in
+//! the opt-in `secrets` bundle, so every pipeline here loads `core` plus `secrets` explicitly.
 //!
 //! EVERY positive fixture here encodes a structural shape that was MEASURED in the Dataiku EN/DE
 //! holdout, not a phrasing invented alongside the implementation. That discipline exists because
@@ -43,7 +44,8 @@ fn security_token_class() -> PiiClass {
     PiiClass::custom("security_token").expect("valid custom class")
 }
 
-/// Builds the core bundle under an explicit locale chain with locale-gated auto-activation OFF.
+/// Builds the core + secrets bundles under an explicit locale chain with locale-gated
+/// auto-activation OFF.
 ///
 /// `auto_activate_locale_gated = false` is the weakest configuration a default adopter can have.
 /// The `security_token.anchored` recognizer is declared `safety_tier = "safe_default"` with
@@ -53,10 +55,12 @@ fn security_token_class() -> PiiClass {
 /// got no credential protection at all. That is exactly the silent-inertness failure behind todo
 /// #2403, so the distinction is made to fail loudly here.
 fn pipeline_for(chain: &[LocaleTag]) -> Pipeline {
-    let rulepack = Rulepack::load(RulepackSource::Embedded(
-        embedded("core").expect("core rulepack"),
-    ))
-    .expect("core loads");
+    let rulepacks = ["core", "secrets"].map(|bundle| {
+        Rulepack::load(RulepackSource::Embedded(
+            embedded(bundle).expect("bundled rulepack"),
+        ))
+        .expect("bundled rulepack loads")
+    });
     let mut policy = gaze::Policy::default();
     policy.rules = vec![
         RuleSpec::Class {
@@ -67,10 +71,10 @@ fn pipeline_for(chain: &[LocaleTag]) -> Pipeline {
             action: Action::Preserve,
         },
     ];
-    policy.rulepacks.bundled = vec!["core".to_string()];
+    policy.rulepacks.bundled = vec!["core".to_string(), "secrets".to_string()];
     policy.rulepacks.auto_activate_locale_gated = false;
     let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(chain));
-    gaze_assembly::build_pipeline(&policy, &empty_context(), &[rulepack], &locale_chain, None)
+    gaze_assembly::build_pipeline(&policy, &empty_context(), &rulepacks, &locale_chain, None)
         .expect("pipeline")
 }
 
@@ -97,7 +101,7 @@ fn clean(text: &str) -> String {
 
 /// Asserts the whole credential is gone and the surrounding prose survives.
 ///
-/// Whole-span coverage is the point. In the before-state the kiji cell overlapped 65 of 150
+/// Whole-span coverage is the point. In the before-state the v0.14 full-stack cell overlapped 65 of 150
 /// SECURITYTOKEN entities while fully covering only 2 — 63 overlapped-but-not-covered. A
 /// fragment of a credential is still a leaked credential.
 fn assert_token_removed(text: &str, token: &str, surviving_context: &[&str]) {

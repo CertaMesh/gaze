@@ -37,8 +37,18 @@ DEFAULT_HISTORY = BENCH_DIR / "release-history.json"
 HISTORY_SCHEMA_VERSION = 1
 SCORECARD_SCHEMA_VERSION = 4
 
-#: The shipped default arm. Its row drives the release-over-release trend chart.
-SHIPPED_DEFAULT_ARM = "full-stack-kiji-resolve"
+#: The shipped default arm for rows appended now. Each appended row records it
+#: (`shipped_default_arm`), because the default changes between releases and a
+#: historical row must keep naming the arm that was actually shipped. Must equal
+#: `gaze_bench_score.PRODUCTION_CONFIG`; test_openpii_gaze_bench pins that.
+SHIPPED_DEFAULT_ARM = "pass2-ner"
+
+#: Rows appended before entries recorded their own shipped default. Keyed by
+#: version and never extended: a new row records its arm instead. v0.14.0 shipped
+#: the Kiji DistilBERT safety net, which was removed afterwards.
+LEGACY_SHIPPED_DEFAULT_ARMS: dict[str, str] = {
+    "v0.14.0": "full-stack-kiji-resolve",
+}
 
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -286,6 +296,31 @@ def validate_history(history: Mapping[str, Any]) -> None:
             (entry.get("dataset") or {}).get("integrity"), f"{version}: history"
         )
         _require_model_bundles(entry.get("provenance") or {}, f"{version}: history")
+        shipped_default_arm(entry)
+
+
+def shipped_default_arm(entry: Mapping[str, Any]) -> str:
+    """The arm a release row shipped as default: recorded, else legacy-mapped.
+
+    Falling back to today's `SHIPPED_DEFAULT_ARM` would silently re-label an old
+    release with a default it never shipped, so an unmapped row is refused.
+    """
+    version = entry.get("version")
+    recorded = entry.get("shipped_default_arm")
+    if recorded is None:
+        recorded = LEGACY_SHIPPED_DEFAULT_ARMS.get(version) if isinstance(version, str) else None
+    if not isinstance(recorded, str) or not recorded:
+        raise RenderError(
+            f"{version}: history entry does not record shipped_default_arm and "
+            "is not a known legacy release"
+        )
+    arms = entry.get("arms")
+    if not isinstance(arms, Mapping) or recorded not in arms:
+        raise RenderError(
+            f"{version}: shipped default arm {recorded!r} is not among the "
+            "row's measured arms"
+        )
+    return recorded
 
 
 def version_sort_key(version: str) -> tuple[Any, ...]:
@@ -323,6 +358,46 @@ def _dig(node: Any, path: Sequence[str], where: str) -> Any:
             raise RenderError(f"{where}: scorecard is missing {'.'.join(path)}")
         node = node[key]
     return node
+
+
+def _scored_label_contract(scorecard: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The scorecard's scored-label contract, or None for implicit contract v1."""
+    scoring = scorecard.get("scoring")
+    block = scoring.get("scored_label_contract") if isinstance(scoring, Mapping) else None
+    if block is None:
+        return None
+    if not isinstance(block, Mapping):
+        raise RenderError("scorecard scoring.scored_label_contract must be an object")
+    if block.get("version") == 1:
+        return None
+    version = block.get("version")
+    if type(version) is not int or version < 2:
+        raise RenderError("scored-label contract version must be an integer >= 2")
+    excluded = block.get("excluded_labels")
+    if not isinstance(excluded, list) or not all(isinstance(x, str) for x in excluded):
+        raise RenderError("scored-label contract excluded_labels must be strings")
+    return {
+        "id": str(block.get("id")),
+        "version": version,
+        "file_sha256": _require_hex64(
+            block.get("file_sha256"), "scorecard scored_label_contract.file_sha256"
+        ),
+        "excluded_labels": list(excluded),
+    }
+
+
+def _contract_key(entry: Mapping[str, Any]) -> tuple[int, str | None]:
+    """(version, file sha256); rows without a contract are implicit v1."""
+    contract = entry.get("scored_label_contract")
+    if not isinstance(contract, Mapping):
+        return (1, None)
+    return (contract["version"], contract["file_sha256"])
+
+
+def contract_label(entry: Mapping[str, Any]) -> str:
+    contract = entry.get("scored_label_contract")
+    version = contract["version"] if isinstance(contract, Mapping) else 1
+    return f"scored labels v{version}"
 
 
 def history_entry_from_scorecard(
@@ -400,6 +475,11 @@ def history_entry_from_scorecard(
     }
 
     model_bundles = _require_model_bundles(provenance, "scorecard runner_provenance")
+    if SHIPPED_DEFAULT_ARM not in arms:
+        raise RenderError(
+            f"scorecard has no run for the shipped default arm {SHIPPED_DEFAULT_ARM}"
+        )
+    contract = _scored_label_contract(scorecard)
 
     return {
         "version": version,
@@ -426,6 +506,10 @@ def history_entry_from_scorecard(
         },
         "provisional": bool(provisional),
         "note": note,
+        # Absent means contract v1 (every corpus label scored), which keeps
+        # the rows recorded before contracts existed byte-identical.
+        **({"scored_label_contract": contract} if contract is not None else {}),
+        "shipped_default_arm": SHIPPED_DEFAULT_ARM,
         "arms": arms,
     }
 
@@ -453,6 +537,14 @@ def render_current_release(history: Mapping[str, Any]) -> str:
         claim = "— measured on the released tree."
     lines.append(f"**{entry['version']}** {claim}")
     lines.append("")
+    if entry.get("scored_label_contract"):
+        contract = entry["scored_label_contract"]
+        excluded = ", ".join(contract["excluded_labels"]) or "none"
+        lines.append(
+            f"Measured under **{contract_label(entry)}** "
+            f"(`{contract['id']}`; out of contract: {excluded})."
+        )
+        lines.append("")
     if entry.get("note"):
         lines.append(f"> {entry['note']}")
         lines.append("")
@@ -520,7 +612,7 @@ def render_current_release(history: Mapping[str, Any]) -> str:
     for arm, block in entry["arms"].items():
         cells = [_fmt(kind, block[field]) for _, field, kind in ARM_COLUMNS]
         label = f"`{arm}`"
-        if arm == history.get("shipped_default_arm", SHIPPED_DEFAULT_ARM):
+        if arm == shipped_default_arm(entry):
             label += " **(shipped default)**"
         lines.append("| " + " | ".join([label] + cells) + " |")
     return "\n".join(lines)
@@ -550,13 +642,27 @@ def render_charts(history: Mapping[str, Any]) -> str:
         "```",
     ]
 
-    default_arm = history.get("shipped_default_arm", SHIPPED_DEFAULT_ARM)
+    default_arm = shipped_default_arm(entry)
+    # One line across two contracts would show a change in what counts as gold
+    # as a change in leaks, so the trend keeps only the latest row's contract.
+    latest_contract = _contract_key(entry)
+    measured = [item for item in releases if default_arm in item["arms"]]
     trend = [
         (item["version"], item["arms"][default_arm]["surviving_pii_utf8_bytes"])
-        for item in releases
-        if default_arm in item["arms"]
+        for item in measured
+        if _contract_key(item) == latest_contract
     ]
     lines.extend(["", f"**Trend across releases — `{default_arm}`.**"])
+    if len(trend) < len(measured):
+        lines.extend(
+            [
+                "",
+                f"> Only rows measured under {contract_label(entry)} are on "
+                "this line; "
+                f"{len(measured) - len(trend)} row(s) under another contract are "
+                "in the history table.",
+            ]
+        )
     if len(trend) < 2:
         lines.extend(
             [
@@ -591,20 +697,24 @@ def render_history(history: Mapping[str, Any]) -> str:
             "| --- | --- | --- | --- | --- | ---: |\n"
             "| *none yet* | — | — | — | — | — |"
         )
-    default_arm = history.get("shipped_default_arm", SHIPPED_DEFAULT_ARM)
+    latest_default_arm = shipped_default_arm(releases[-1])
     lines = [
         "| Release | Measured | Commit | Machine | Scorecard | "
         "Surviving PII bytes ↓ |",
         "| --- | --- | --- | --- | --- | ---: |",
     ]
     for entry in releases:
-        block = entry["arms"].get(default_arm)
-        surviving = (
-            _fmt("int", block["surviving_pii_utf8_bytes"]) if block else "n/a"
-        )
+        # Each row reports the arm it shipped; name it when that differs from
+        # the latest default so a changed default never reads as a leak change.
+        default_arm = shipped_default_arm(entry)
+        surviving = _fmt("int", entry["arms"][default_arm]["surviving_pii_utf8_bytes"])
+        if default_arm != latest_default_arm:
+            surviving += f" (`{default_arm}`)"
         version = entry["version"]
         if entry.get("provisional"):
             version += " *(provisional)*"
+        if entry.get("scored_label_contract"):
+            version += f" · {contract_label(entry)}"
         lines.append(
             f"| {version} | {entry['date']} | `{entry['commit'][:7]}` | "
             f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "

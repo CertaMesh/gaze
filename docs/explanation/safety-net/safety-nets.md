@@ -6,7 +6,10 @@ mutate the [`Manifest`](../../../crates/gaze-types/src/lib.rs), and never reach
 the restore path. They exist to surface leak suspects so the deterministic
 detectors and rulepacks can be improved.
 
-For step-by-step setup with Kiji DistilBERT, see [`docs/how-to/safety-net/set-up-kiji-safetynet.md`](../../how-to/safety-net/set-up-kiji-safetynet.md).
+No safety net runs by default. Two opt-in backends ship: the OpenAI Privacy
+Filter subprocess adapter (`--safety-net openai-filter`) and the in-process
+Nym-small adapter (`--safety-net nym`). CLI flags and setup:
+[`crates/gaze-cli/README.md`](../../../crates/gaze-cli/README.md#safety-net).
 
 Validator-backed self-validation is handled earlier by the deterministic
 [`validator-veto`](../detection/validator-veto.md) stage. Safety nets do not veto candidates
@@ -14,14 +17,13 @@ and do not participate in conflict resolution.
 
 ## Benchmark
 
-The v0.9 benchmark populates direct-detector and observer-residual cells for
-both shipped backends against the same 150-fixture coverage-loop corpus. Kiji
-DistilBERT fp32 stays at `0.125000` macro strict recall across locales; the
-opt-in int8 dynamic-quantized Kiji artifact also stays at `0.125000` macro
-strict recall across locales in direct-detector mode. Full numbers, pins, and
-caveats are in [`docs/reference/benchmarks/README.md`](../../reference/benchmarks/README.md#safety-net-matrix);
+The committed safety-net matrix populates direct-detector and observer-residual
+cells for the OpenAI Privacy Filter against the 150-fixture coverage-loop
+corpus. Full numbers, pins, and caveats are in
+[`docs/reference/benchmarks/README.md`](../../reference/benchmarks/README.md#safety-net-matrix);
 the original v0.9 report is archived at the `v0.13.0` tag as
 [v0.9 safety-net benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-safety-net-benchmark.md).
+The Nym-small measurements are in [Measured](#measured).
 
 This document describes the safety-net contract introduced in v0.6 through
 PR #91. The first shipped backend is the OpenAI Privacy Filter
@@ -54,24 +56,23 @@ can land without changing the trait shape or audit schema.
                                 │ (this is what restore will reverse)
                                 ▼
    ┌─────────────────────────────────────────────────────────────────┐
-   │ PASS 3 — SAFETYNET (observer-only, opt-in)                      │
-  │   Mode selector: --safety-net-backend or registry dispatch       │
+   │ PASS 3 — SAFETYNET (observer-only, opt-in, off by default)      │
+   │   Selector: --safety-net-backend or registry dispatch           │
    │                  ↓                  ↓                           │
-   │   ┌──────────────────────┐  ┌────────────────────────────┐     │
-   │   │  openai-filter       │  │  kiji-distilbert (v0.8+)   │     │
-   │   │  (OPF binary)        │  │  (Kiji ONNX model)         │     │
-   │   │                      │  │                            │     │
-   │   │  ─ heavier weights   │  │  ─ 8.8 MB DistilBERT       │     │
-   │   │  ─ OpenAI's PII set  │  │  ─ 26 PII classes (Kiji)   │     │
-   │   │  ─ requires `opf`    │  │  ─ subprocess or ORT       │     │
-   │   │    binary install    │  │  ─ tokenizers crate        │     │
-   │   └──────────┬───────────┘  └────────────┬───────────────┘     │
+   │   ┌──────────────────────┐  ┌────────────────────────────┐      │
+   │   │  openai-filter       │  │  nym (opt-in)              │      │
+   │   │  (OPF subprocess)    │  │  (in process, ORT)         │      │
+   │   │                      │  │                            │      │
+   │   │  ─ heavier weights   │  │  ─ Nym-small v3 int8       │      │
+   │   │  ─ OpenAI's PII set  │  │  ─ op-B label allowlist    │      │
+   │   │  ─ requires `opf`    │  │  ─ `gaze setup             │      │
+   │   │    binary install    │  │     --safety-net nym`      │      │
+   │   └──────────┬───────────┘  └────────────┬───────────────┘      │
    │              │                            │                     │
    │              └──────────────┬─────────────┘                     │
    │                             ▼                                   │
-   │   External subprocess contract:                                 │
-   │       stdin  ← clean_text (post-tokenization!)                  │
-   │       stdout → JSON span array [{start, end, label, score}, …]  │
+   │   Net output: span array [{start, end, label, score}, …]        │
+   │   over clean_text (post-tokenization!)                          │
    │                                                                 │
    │   Gaze compares the SafetyNet spans against the manifest:       │
    │     ─ Span overlaps an emitted token → covered (no leak)        │
@@ -84,18 +85,18 @@ can land without changing the trait shape or audit schema.
    └─────────────────────────────────────────────────────────────────┘
 ```
 
+## `gaze index`
+
+`gaze index ingest` detects prose names and organizations with the pinned Davlan
+NER bundle (`--ner-model-dir` or `GAZE_NER_MODEL_DIR`), not with a safety net.
+A net there is optional and checks ingest output under `--on-residual`.
+`gaze index search` always needs an output net: TokenBridge scans every snippet
+before it is shown and denies a search when no net ran, so the CLI refuses
+up front with a typed `SafetyNetConfig` error. Both remaining nets satisfy it:
+`--safety-net openai-filter` (with `--opf-command` and `--opf-checkpoint`) or
+`--safety-net nym` (with `--nym-model-dir`).
+
 ## Locale-Aware Registry Dispatch
-
-Kiji DistilBERT has two runtime backends under the same observer-only safety-net contract. `--kiji-backend=subprocess` remains the default for backwards compatibility and for adopters who already pin an external Kiji command; `--kiji-backend=ort` loads the same tokenizer and ONNX model in-process through ONNX Runtime, removing the Python/subprocess install path. Both backends must verify the pinned bundle first: fp32 uses `SHA256SUMS` and `KIJI_DISTILBERT_BUNDLE_SHA256`; int8 uses `SHA256SUMS.int8` and `KIJI_DISTILBERT_INT8_BUNDLE_SHA256`. Every listed artifact is re-hashed before model load, and any mismatch returns a typed `SafetyNetError` without silent fallback.
-
-The ORT backend also accepts `--kiji-distilbert-precision {fp32,int8}`. `fp32`
-is the default and remains the compatibility posture. `int8` loads
-`model.int8.onnx`, shares the same tokenizer and class map, and is allowed only
-with `--kiji-backend=ort`; requesting int8 without the quantized artifact fails
-closed at construction. The committed safety-net matrix enforces the precision
-trade-off: int8 macro recall must remain within `0.02` of fp32 for every
-locale and mode, otherwise the bench gate fails and the int8 path must not
-ship.
 
 `Pipeline::with_safety_net(single_backend)` remains the compatibility path. For deployments with language-specific safety nets, `Pipeline::with_safety_net_registry(LocaleAwareModelRegistry)` activates locale-aware Pass-3 dispatch instead. The registry resolves one backend per clean segment using the existing four-tier order: exact locale, parent language, `Global`, then fail-closed.
 
@@ -108,17 +109,13 @@ gaze clean \
   --policy quickstart-policy.toml \
   --locale de-DE \
   --safety-net-registry \
-  --safety-net-add kiji-distilbert \
-  --kiji-distilbert-command /opt/kiji/bin/kiji \
-  --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert \
-  --kiji-distilbert-locales en-US,en-GB \
   --safety-net-add openai-filter \
   --opf-command /opt/opf/bin/opf \
   --opf-checkpoint ~/.local/share/gaze/models/opf \
   --opf-locales de-DE,de-AT
 ```
 
-`--safety-net-registry` cannot be combined with `--safety-net-backend`; the registry is the backend selector in that mode.
+`--safety-net-registry` cannot be combined with `--safety-net-backend`; the registry is the backend selector in that mode. The only registry-capable backend is `openai-filter`; `nym` is deliberately not registry-capable (see [Audit](#audit)).
 
 ## North-star fit
 
@@ -256,6 +253,38 @@ which is what prevents a token standing for bytes on both sides of a seam.
 **Cost.** A fallback document whose terminal scan reports anything runs one
 extra model pass. Only documents that reach the `Redact` fallback can.
 
+### Sub-word suspects are never acted on
+
+A name, location or organization suspect whose action span starts or ends
+between two letters or digits is a model firing on part of a word (`Pass` in
+`Passwort`). Tokenizing or deleting it protects nothing whole and hands the
+agent a mangled word, so under `Resolve` and `Redact` no stage acts on it: not
+the first pass, the second batch, the terminal round, `Redact` mode or the
+`Redact` fallback. Its bytes stay, it gets the same `Preserve` audit row as a
+suspect inside a live token, it stays in the returned report, and a
+`LeakReportTelemetry::UnactionableSubword` row (CLI JSON kind
+`UnactionableSubword`) carries its net, class and offsets. `Observe` modes are
+unchanged.
+
+| Rule | Why |
+|------|-----|
+| Judged in the text the net reported on | The terminal round judges at scan time, so a whole word that its own seam deletion later glues to a neighbour is still resolved. |
+| A token's `<`/`>` is a word boundary | A gap starting right after a token is a whole word. |
+| A span touching a token shape is never a sub-word | Foreign-token handling (fallback, `Unjudgeable`) must still see it. |
+| No minimum length | A standalone letter is a whole word and often an initial (`J.`). |
+| Identifier classes are exempt | Their values legitimately sit inside longer strings (`ID12345`). |
+| `FallbackIncomplete` and a second seam finding still deny | A sub-word shape does not excuse a fallback that failed or a deletion outpacing itself. |
+
+A net that decodes whole words does not need this guard; for every other net
+and for registry models it is defense in depth.
+
+**Cost (axis 1).** A net that does not decode whole words (OPF, adopter nets)
+can flag a real name inside a longer word, for example `Meier` in `Meiers`. Under `Resolve` with the `Redact` fallback and
+in `Redact` mode that suspect ships raw, with its `Preserve` audit row and
+`UnactionableSubword` row. Under the `Strict` fallback it counts as a residual
+and the document is refused. Earlier releases tokenized or deleted the flagged
+part of the word instead.
+
 ### Locale gating
 
 Each `SafetyNet` declares `supported_locales`. When the session-level locale
@@ -305,6 +334,34 @@ fields, but it is not the v0.6 default.
 The adapter always invokes `opf --format json --output-mode typed`. Output
 mode `typed` is the only accepted shape; other modes are not parsed.
 
+### Whole-text input
+
+Piped stdin is not one input for the stock CLI: `opf` reads it line by line,
+skips blank lines, and prints one JSON result per line with offsets relative
+to that line. After the configured arguments (and `--checkpoint`), the adapter
+therefore always appends:
+
+```text
+--no-print-color-coded-text --text-file /dev/stdin
+```
+
+The text still travels over the stdin pipe and is never written to disk. The
+colour flag stops the ANSI section `opf` otherwise prints after the JSON.
+`opf` reads the file in Python text mode, so `\r\n` and a lone `\r` each become
+one `\n` character in the offsets it returns; the adapter maps those offsets
+back to UTF-8 byte offsets in the exact clean text it sent.
+
+The adapter accepts a result only if it is exactly one JSON object whose echoed
+`text` equals the text `opf` should have read. A second document, a missing
+`text`, or any other `text` (a line, a trimmed or rewritten input) is
+`InvalidOutput`, so offsets relative to some other text can never be applied.
+Empty clean text returns no spans without starting `opf`.
+
+A wrapper command configured instead of `opf` must accept these arguments and
+echo the analysed text. Windows has no `/dev/stdin`: there only the colour flag
+is appended, `opf` still splits lines, and the echo check refuses multi-line
+text rather than mis-mapping it.
+
 ### Subprocess configuration
 
 [`SubprocessOpenAiFilterConfig`](../../../crates/gaze-recognizers/src/safety_net/openai_filter/backend/subprocess.rs)
@@ -335,11 +392,12 @@ adapter:
   span is dropped.
 - After `serde_json::from_str` returns, the adapter calls
   `PrivateOpfSpan::into_raw_span`, which produces a `RawSpan` containing
-  only `start`, `end`, `label`, and `score`. The `_text` and `_placeholder`
-  fields drop on the same statement, with their `Drop` impl scrubbing the
-  buffer.
-- Top-level `_text` and `_redacted_text` on the redaction-output shape
-  follow the same pattern.
+  only `start`, `end`, `label`, and `score`. The per-span `text` and
+  `placeholder` fields are never deserialized, so their contents are skipped
+  by the parser and never held in memory.
+- The top-level `text` echo is held in a `PrivatePiiString`, compared with
+  the text the adapter sent, and scrubbed on drop. `redacted_text` is never
+  deserialized.
 
 After this projection, no part of Gaze that consumes safety-net output sees
 upstream raw bytes. The adversarial regression
@@ -367,7 +425,7 @@ which:
 4. Truncates sanitized output to the 256-byte cap, including a
    `[truncated]` marker when capture or display was shortened.
 
-The Kiji subprocess adapter uses the same diagnostic rules. Stdout still has
+Stdout still has
 a hard byte cap: overflow, I/O errors, invalid model output, and timeouts remain
 errors. Diagnostics stay disabled by default. The heuristic redactor does not
 provide general PII-detection completeness.
@@ -437,6 +495,148 @@ The `group_writable_checkpoint_file_fails_closed` test pins the perm rule.
 in [`class_map.rs`](../../../crates/gaze-recognizers/src/safety_net/openai_filter/class_map.rs);
 the `class-map-override-safety` xtask gate runs the
 `all_official_labels_map_exactly_to_gaze_classes` test on every PR.
+
+## Nym-small adapter (opt-in)
+
+`--safety-net nym` runs [`Wismut/nym-pii-multilingual-small`](https://huggingface.co/Wismut/nym-pii-multilingual-small)
+v3 (int8 ONNX, ModernBERT, 22 languages including German and English) in
+process through ONNX Runtime. It is **opt-in**: the default safety-net posture
+does not change, and nothing loads unless `nym` is selected. Source:
+[`crates/gaze-recognizers/src/safety_net/nym/`](../../../crates/gaze-recognizers/src/safety_net/nym/mod.rs),
+behind the `safety-net-nym` feature (on in the default `gaze-cli` build through
+`setup`).
+
+The net flags; the pipeline decides. Suspects go through the same resolve,
+fallback and audit path as every other net.
+
+### Pinned bundle
+
+`gaze setup --safety-net nym` downloads `int8/config.json`,
+`int8/model_int8.onnx` and `int8/tokenizer.json` at revision
+`4348999cd3c2e20c49615e9af7c6bbb45b64cd85` into
+`${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/nym-small-int8`, writes the
+canonical `SHA256SUMS`, and verifies it. At load the backend checks the SHA-256
+of `SHA256SUMS` against `NYM_SMALL_INT8_BUNDLE_SHA256`, every listed file
+against its digest, owner and modes (directory `0700`, no group/world write, no
+symlinks), and that `config.json` lists exactly the 81 BIO labels the decoder
+assumes. Any failure is a typed `SafetyNetError` before the model loads; there
+is no download at inference time. `gaze mcp doctor` reports the bundle: absent
+passes (the net is opt-in), present-but-invalid fails.
+
+### Which labels can fire
+
+The model labels 40 entity types. Six carry a Gaze class; the other 34 can
+never be enabled, and none is folded into a generic class such as `Name`.
+
+| Nym label | Gaze class | op-B default |
+|---|---|---|
+| `BUILDING_NUMBER` | `custom:building_number` | on, `>= 0.5` |
+| `LICENSE_PLATE` | `custom:license_plate` | on, `>= 0.5` |
+| `USERNAME` | `custom:username` | on, `>= 0.5` |
+| `DATE_OF_BIRTH` | `custom:date` | on, `>= 0.9` |
+| `TAX_ID` | `custom:tax_id` | off |
+| `ZIP_CODE` | `custom:postal_code` | off |
+
+The allowlist and thresholds are policy data (`[safety_net.nym]`, see
+[policy reference](../../reference/policy.md#safety_netnym)). Without the table
+the backend uses op-B, the operating point measured in the probe below. An
+unknown label, a label without a Gaze class, a label without a threshold, a
+threshold for a label that is not enabled, or a threshold outside `(0, 1]` fails
+at policy load. TAX_ID stays off because its precision was 0.23 to 0.26 at every
+threshold; ZIP_CODE stays off because it flagged the invalid-identifier decoys
+in the negative corpus (op-A precision 0.572 on the gate set).
+
+### Decoding
+
+Per piece, the entity mass of a label is `P(B-label) + P(I-label)`. The piece's
+label is the argmax over **all 40** labels, so a piece that looks most like
+`GIVEN_NAME` is never relabelled into an enabled label. It counts only when that
+label is enabled and its mass reaches the label's threshold. Spans are assembled
+from whole words with the same word rule as the pipeline's sub-word guard
+(`gaze_types::is_inside_word`, one definition): any counted piece labels its
+word, the strongest piece picks the label, the score is the minimum over the
+pieces carrying it, and a word whose first counted piece is `I-` extends an open
+span of the same label.
+
+The tokenizer reports character offsets; the decoder trims metaspace whitespace
+and converts them to UTF-8 byte offsets, with fixtures on umlauts, NFD combining
+marks, emoji, NBSP, NARROW NBSP, CRLF line breaks and a span that ends the
+text.
+
+### Every byte is scanned
+
+Input is tokenized without truncation and scored in windows of 512 pieces that
+overlap by 64; a piece seen twice keeps the row from the window where it sits
+furthest from an edge. A piece no window scored, or a non-whitespace character
+no piece covers, is `SafetyNetError::InvalidOutput`, never a silent gap. Input
+above `--safety-net-input-limit-bytes` is `InputTooLarge`.
+
+### Audit
+
+Every suspect carries `safety_net_id = "nym-small-int8"`, the score, and
+`raw_label = "LABEL>=THRESHOLD"` (for example `LICENSE_PLATE>=0.5`), so the row
+records which rule fired without a schema change. For that reason Nym is not
+available through `--safety-net-registry`: registry dispatch reports a model
+span's class, not its label and threshold, and the CLI refuses the combination.
+
+### Runtime
+
+ONNX Runtime on CPU with deterministic compute, one inter-op thread and one
+intra-op thread by default (`--nym-intra-threads`, `GAZE_NYM_INTRA_THREADS`).
+The model weights are embedding-int8 with fp16 body weights and fp32 compute,
+so there is no int8-kernel speedup.
+
+### Measured
+
+The 2,910-document probe (todo 3675) ran op-B through the full pipeline and
+measured: **6,017 leaked gold bytes bought** under scored-label contract v2,
+**+517 false-positive bytes**, action precision 0.890, 1 false flag across
+1,024 PII-free documents, 1 one-way deletion. See
+[the in-process reproduction](#reproduction-in-process) for the numbers of this
+backend on the canonical harness (`clean_for_bench --config
+full-stack-nym-resolve`).
+
+### Reproduction in process
+
+The same population through `clean_for_bench --config full-stack-nym-resolve`
+(this backend, one intra-op thread) against `pass2-ner` on the same commit:
+
+| Row | Leaked bytes v2 | Bought v2 | False-positive bytes added | Action precision | One-way deletions | Exact restore |
+|---|---:|---:|---:|---:|---:|---:|
+| rules + NER, no net | 20,727 | | | | | 2,910 / 2,910 |
+| `full-stack-nym-resolve` | 14,573 | 6,154 | +526 | 0.891 | 1 | 2,909 / 2,910 |
+
+The 137 bytes more than the probe come from class routing: the probe mapped
+building numbers to `location` and plates to `account_number`, so a span next
+to a rule token of that class resolved against it; with their own classes 42
+more spans tokenize. Timings from that run are provisional (shared host under
+load) and are not a latency claim.
+
+Every residual suspect a post-policy re-scan reports sits inside a Gaze token:
+the model reads token text such as `Custom:building_number` as a building
+number. A suspect inside a live token is never acted on, so bytes and restore
+are unaffected, under every `Resolve` fallback including `strict`
+(`nym_suspect_inside_its_own_token_text_is_protected_under_every_resolve_fallback`).
+Masking token text before the net reads it is a follow-up (todo 3681).
+
+### Known gaps and open review items
+
+- **Room, platform and seat numbers.** `BUILDING_NUMBER` fires on "Raum 204"
+  and "Gleis 9, Wagen 23, Platz 45": the 1,024-document negative corpus
+  contains none of these shapes, so its false-flag rate says nothing about them.
+  The fixture `room-number-known-gap` pins the current behaviour; an
+  address-context guard is a follow-up.
+- **Latency is not proven.** Measured p95 on a loaded shared host was 116 ms on
+  the 120-document pre-gate set but 390 ms on documents of 1 KB or more. A
+  quiet-host or in-process measurement decides whether this net can become a
+  default.
+- **Licence review (open, not resolved here).** The model card declares MIT
+  (inherited from `jhu-clsp/mmBERT-small`); the repository has no LICENSE file.
+  v3 training data includes 77.5k Wikipedia passages auto-labelled by
+  gemma-4-26b. Whether CC-BY-SA obligations reach weights trained on that text,
+  and whether the teacher model's terms add conditions, needs legal review
+  before Gaze redistributes or recommends the weights by default. Gaze does not
+  vendor the weights; `gaze setup` fetches them from the upstream repository.
 
 ## Structured-document per-field behavior
 
@@ -588,9 +788,11 @@ see the "Future work" section below.
 ## Activation surface
 
 v0.6 activates the safety net through the CLI or the programmatic builder
-on `Pipeline`. There is **no policy-TOML surface** in v0.6. Policy support
-is a deliberately deferred decision so the activation contract can be locked
-down before TOML adopters take a dependency on the shape.
+on `Pipeline`. Activation still has no policy-TOML surface. The one
+safety-net table policy.toml accepts is `[safety_net.nym]`, which
+**configures** the opt-in Nym backend (allowlist and thresholds) and does not
+activate it; a policy that declares it while a different net or no net runs is
+refused, so the table can never read as protection that is not there.
 
 The minimum CLI form is:
 

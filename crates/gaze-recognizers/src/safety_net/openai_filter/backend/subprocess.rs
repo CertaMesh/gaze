@@ -22,6 +22,18 @@ const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
 const DEFAULT_MAX_STDOUT_BYTES: usize = 4 * 1024 * 1024;
 const WAIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
+/// Appended after the configured args on every call. Piped stdin makes `opf` analyse each
+/// non-blank line as its own input, with offsets relative to that line, so the text must be read
+/// as one file. `/dev/stdin` keeps the pipe transport: no PII is written to disk. The ANSI
+/// colour section `opf` prints after the JSON by default would make every output unparseable.
+/// Windows has no `/dev/stdin`; there `opf` still splits lines, and the echo check in
+/// `ensure_whole_text_was_analysed` refuses any multi-line text instead of mis-mapping it.
+#[cfg(unix)]
+const WHOLE_TEXT_INPUT_ARGS: &[&str] =
+    &["--no-print-color-coded-text", "--text-file", "/dev/stdin"];
+#[cfg(not(unix))]
+const WHOLE_TEXT_INPUT_ARGS: &[&str] = &["--no-print-color-coded-text"];
+
 /// Upstream OPF source repository.
 pub const OPF_SOURCE_REPO: &str = "openai/privacy-filter";
 
@@ -30,7 +42,7 @@ pub const OPF_SOURCE_COMMIT: &str = "f7f00ca7fb869683eb732c010299d901457f19c3";
 
 /// SHA256 of the checkpoint bundle downloaded by `opf` at `OPF_SOURCE_COMMIT`.
 ///
-/// Computed as SHA256 over the Kiji-style line-per-file SHA256SUMS manifest for
+/// Computed as SHA256 over a `<sha256>  <file>` line-per-file SHA256SUMS manifest for
 /// `REQUIRED_OPF_ARTIFACTS` in declaration order. Verified 2026-05-15 from a
 /// clean `opf download` into `~/.opf/privacy_filter`.
 pub const OPF_CHECKPOINT_BUNDLE_SHA256: Option<&str> =
@@ -225,6 +237,7 @@ impl SubprocessOpenAiFilterBackend {
         if let Some(checkpoint_path) = &self.config.checkpoint_path {
             command.arg("--checkpoint").arg(checkpoint_path);
         }
+        command.args(WHOLE_TEXT_INPUT_ARGS);
         command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(
             if self.config.capture_stderr {
                 Stdio::piped()
@@ -407,49 +420,110 @@ impl OpenAiFilterBackend for SubprocessOpenAiFilterBackend {
     }
 
     fn infer(&self, clean: &str) -> Result<Vec<RawSpan>, SafetyNetError> {
+        // `opf` skips an empty input file and prints nothing; empty text holds no PII.
+        if clean.is_empty() {
+            return Ok(Vec::new());
+        }
         let stdout = self.run(clean)?;
         let output = parse_opf_output(&stdout)?;
-        let spans = output.into_raw_spans()?;
+        let opf_view = OpfTextView::new(clean);
+        ensure_whole_text_was_analysed(&output, &opf_view)?;
+        let spans = character_spans_to_byte_spans(output.into_raw_spans()?, &opf_view)?;
         normalize_raw_spans(spans, clean)
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum OpfOutput {
-    Redaction(OpfRedactionOutput),
-    Spans(Vec<PrivateOpfSpan>),
+/// The text as `opf` sees it after reading it as a file, and where each of its characters starts
+/// in `clean`. Python's text mode turns `\r\n` and a lone `\r` into `\n`, so OPF offsets count
+/// characters of `text`, not of `clean`.
+struct OpfTextView {
+    text: String,
+    /// UTF-8 byte offset in `clean` of each character of `text`, then `clean.len()`.
+    byte_offsets: Vec<usize>,
 }
 
-impl OpfOutput {
-    fn into_raw_spans(self) -> Result<Vec<RawSpan>, SafetyNetError> {
-        match self {
-            Self::Redaction(output) => output
-                .detected_spans
-                .into_iter()
-                .map(PrivateOpfSpan::into_raw_span)
-                .collect(),
-            Self::Spans(spans) => spans
-                .into_iter()
-                .map(PrivateOpfSpan::into_raw_span)
-                .collect(),
+impl OpfTextView {
+    fn new(clean: &str) -> Self {
+        let mut text = String::with_capacity(clean.len());
+        let mut byte_offsets = Vec::with_capacity(clean.len() + 1);
+        let mut characters = clean.char_indices().peekable();
+        while let Some((byte, character)) = characters.next() {
+            byte_offsets.push(byte);
+            if character == '\r' {
+                characters.next_if(|&(_, next)| next == '\n');
+                text.push('\n');
+            } else {
+                text.push(character);
+            }
         }
+        byte_offsets.push(clean.len());
+        Self { text, byte_offsets }
     }
 }
 
+/// `opf` echoes the text it analysed. Anything other than the whole text Gaze sent means the
+/// offsets are relative to some other text: piped stdin splits lines and skips blank ones, so
+/// `"\n\nJohn Smith"` comes back as one valid-looking output whose spans land two characters
+/// early. Refuse instead of protecting the wrong bytes.
+fn ensure_whole_text_was_analysed(
+    output: &OpfRedactionOutput,
+    opf_view: &OpfTextView,
+) -> Result<(), SafetyNetError> {
+    if output.text.0 == opf_view.text {
+        Ok(())
+    } else {
+        Err(SafetyNetError::InvalidOutput {
+            message: "opf analysed a different text than the one sent".to_string(),
+        })
+    }
+}
+
+/// OPF reports `start`/`end` as Python `str` indices (Unicode scalar values) into the text it
+/// read, while `RawSpan` and everything after it use UTF-8 byte offsets into `clean`. Convert
+/// here, once. Read as bytes instead, every span after a multibyte character shifts left: it
+/// either fails the char-boundary check or silently covers the wrong text. An end offset after a
+/// translated `\r\n` maps past both bytes. An offset past the last character fails closed.
+fn character_spans_to_byte_spans(
+    spans: Vec<RawSpan>,
+    opf_view: &OpfTextView,
+) -> Result<Vec<RawSpan>, SafetyNetError> {
+    let to_byte = |character: usize| {
+        opf_view
+            .byte_offsets
+            .get(character)
+            .copied()
+            .ok_or_else(|| SafetyNetError::InvalidOutput {
+                message: "opf returned out-of-bounds span".to_string(),
+            })
+    };
+
+    spans
+        .into_iter()
+        .map(|span| {
+            Ok(RawSpan {
+                start: to_byte(span.start)?,
+                end: to_byte(span.end)?,
+                ..span
+            })
+        })
+        .collect()
+}
+
+/// The official `opf --format json` object. A bare span array is not accepted: without the
+/// echoed `text` there is no proof the offsets belong to the text Gaze sent.
 #[derive(Debug, Deserialize)]
 struct OpfRedactionOutput {
     detected_spans: Vec<PrivateOpfSpan>,
-    #[serde(default)]
-    _schema_version: Option<u64>,
-    #[serde(default)]
-    _summary: Option<serde_json::Value>,
-    #[serde(default)]
-    _warning: Option<String>,
-    #[serde(default)]
-    _text: Option<PrivatePiiString>,
-    #[serde(default)]
-    _redacted_text: Option<PrivatePiiString>,
+    text: PrivatePiiString,
+}
+
+impl OpfRedactionOutput {
+    fn into_raw_spans(self) -> Result<Vec<RawSpan>, SafetyNetError> {
+        self.detected_spans
+            .into_iter()
+            .map(PrivateOpfSpan::into_raw_span)
+            .collect()
+    }
 }
 
 #[derive(Deserialize)]
@@ -459,10 +533,6 @@ struct PrivateOpfSpan {
     end: usize,
     #[serde(default)]
     score: Option<f32>,
-    #[serde(default)]
-    _text: Option<PrivatePiiString>,
-    #[serde(default)]
-    _placeholder: Option<PrivatePiiString>,
 }
 
 impl std::fmt::Debug for PrivateOpfSpan {
@@ -507,7 +577,9 @@ impl Drop for PrivatePiiString {
     }
 }
 
-fn parse_opf_output(stdout: &[u8]) -> Result<OpfOutput, SafetyNetError> {
+/// Exactly one JSON document: `serde_json::from_str` rejects trailing content, so the one output
+/// per line that piped stdin produces never parses as a single result.
+fn parse_opf_output(stdout: &[u8]) -> Result<OpfRedactionOutput, SafetyNetError> {
     let text = std::str::from_utf8(stdout).map_err(|_| SafetyNetError::InvalidOutput {
         message: "opf stdout was not valid UTF-8".to_string(),
     })?;

@@ -15,6 +15,8 @@
 //! detected.
 
 mod anchored_match;
+// Pinned model bundle verification, shared by the primary NER bundle and the Nym safety net.
+mod bundle;
 mod dictionary;
 mod error;
 mod locale_aware;
@@ -37,12 +39,16 @@ pub use locale_aware::{
     ModelStage,
 };
 pub use ner::{
-    LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, NerRecognizer,
-    VerifiedArtifacts,
+    verify_davlan_ner_bundle, LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions,
+    NerRecognizer, VerifiedArtifacts, DAVLAN_NER_BUNDLE_SHA256, DAVLAN_NER_HF_COMMIT,
+    DAVLAN_NER_HF_REPO, DAVLAN_NER_LABELS_JSON, DAVLAN_NER_MODEL_DIR_NAME, DAVLAN_NER_SHA256SUMS,
+    DAVLAN_NER_UPSTREAM_FILES, REQUIRED_DAVLAN_NER_ARTIFACTS,
 };
 pub use regex::{NormalizerKind, RegexDetector};
 
 // drift-ack: core snapshot version0.5.3 matches the field rulepack; all detection fields are unchanged.
+// drift-ack: core 0.6.0 moves security_token.anchored and password.field into the opt-in
+// `secrets` bundle and drops username.field; the new secrets snapshot pins the moved rules.
 pub fn embedded(name: &str) -> Option<&'static str> {
     match name {
         "core" | "core-extended" => Some(include_str!("../embedded/core.toml")),
@@ -53,6 +59,8 @@ pub fn embedded(name: &str) -> Option<&'static str> {
         "locale-in" => Some(include_str!("../embedded/locale-in.toml")),
         "locale-nl" => Some(include_str!("../embedded/locale-nl.toml")),
         "locale-uk" => Some(include_str!("../embedded/locale-uk.toml")),
+        // Credentials are not PII: opt-in only, never part of a default activation.
+        "secrets" => Some(include_str!("../embedded/secrets.toml")),
         _ => None,
     }
 }
@@ -67,7 +75,7 @@ mod tests {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 42);
+        assert_eq!(rulepack.recognizers.len(), 39);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
         assert_eq!(rulepack.recognizers[1].id, "email.header.name");
         assert_eq!(rulepack.recognizers[2].id, "email.header.name.paren");
@@ -102,7 +110,7 @@ mod tests {
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 42);
+        assert_eq!(rulepack.recognizers.len(), 39);
         assert!(rulepack
             .recognizers
             .iter()
@@ -119,6 +127,25 @@ mod tests {
             .recognizers
             .iter()
             .any(|recognizer| recognizer.id == "vat.es"));
+    }
+
+    #[test]
+    fn embedded_secrets_rulepack_carries_only_the_credential_recognizers() {
+        let secrets = embedded("secrets").expect("secrets rulepack");
+        let rulepack = Rulepack::parse_bundled(secrets).expect("valid secrets");
+
+        let ids = rulepack
+            .recognizers
+            .iter()
+            .map(|recognizer| recognizer.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, ["security_token.anchored", "password.field"]);
+        let core = Rulepack::load(RulepackSource::Embedded(embedded("core").expect("core")))
+            .expect("valid core");
+        assert!(core.recognizers.iter().all(|recognizer| !matches!(
+            recognizer.id.as_str(),
+            "security_token.anchored" | "password.field" | "username.field"
+        )));
     }
 
     #[test]

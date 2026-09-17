@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use assert_cmd::Command;
 use serial_test::file_serial;
@@ -29,7 +29,7 @@ fn index_ingest_then_search_returns_tokenized_hits_without_raw_values() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
-    let fake_kiji = write_fake_kiji(&temp);
+    let index_env = index_ner(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
     fs::write(
         corpus.join("alpha.md"),
@@ -54,7 +54,7 @@ Second support note for search isolation.
     )
     .expect("write beta");
 
-    let ingest = gaze_index_command(&fake_kiji)
+    let ingest = gaze_index_command(&index_env)
         .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
@@ -67,7 +67,7 @@ Second support note for search isolation.
         String::from_utf8_lossy(&ingest.stderr)
     );
 
-    let search = gaze_index_command(&fake_kiji)
+    let search = gaze_index_command(&index_env)
         .args(["search", "alice@example.invalid"])
         .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -103,11 +103,11 @@ Second support note for search isolation.
 
 #[test]
 #[file_serial(gaze_subprocess)]
-fn index_ingest_redacts_safety_net_only_prose_by_default_without_raw_persistence() {
+fn index_ingest_tokenizes_ner_only_prose_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
-    let fake_kiji = write_fake_kiji(&temp);
+    let index_env = index_ner(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
     fs::write(
         corpus.join("safety-net-only.md"),
@@ -117,7 +117,7 @@ Support summary mentions Dr. Schmidt after triage.
     )
     .expect("write safety-net-only");
 
-    let ingest = gaze_index_command(&fake_kiji)
+    let ingest = gaze_index_command(&index_env)
         .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
@@ -130,7 +130,7 @@ Support summary mentions Dr. Schmidt after triage.
         String::from_utf8_lossy(&ingest.stderr)
     );
 
-    let search = gaze_index_command(&fake_kiji)
+    let search = gaze_index_command(&index_env)
         .args(["search", "Dr. Schmidt"])
         .args(["--class", "name", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -164,7 +164,7 @@ fn index_ingest_redacts_residual_suspects_by_default_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
-    let fake_kiji = write_residual_fake_kiji(&temp);
+    let index_env = index_ner_with_residual_opf(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
     fs::write(
         corpus.join("residual.md"),
@@ -175,7 +175,7 @@ Support summary mentions Dr. Schmidt marker after triage.
     )
     .expect("write residual");
 
-    let ingest = gaze_index_command(&fake_kiji)
+    let ingest = gaze_index_command(&index_env)
         .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
@@ -188,7 +188,7 @@ Support summary mentions Dr. Schmidt marker after triage.
         String::from_utf8_lossy(&ingest.stderr)
     );
 
-    let search = gaze_index_command(&fake_kiji)
+    let search = gaze_index_command(&index_env)
         .args(["search", "alice@example.invalid"])
         .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -228,7 +228,7 @@ fn index_ingest_strict_residual_mode_fails_closed_with_reason() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
-    let fake_kiji = write_residual_fake_kiji(&temp);
+    let index_env = index_ner_with_residual_opf(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
     fs::write(
         corpus.join("strict.md"),
@@ -238,7 +238,7 @@ Support summary mentions Dr. Schmidt marker after triage.
     )
     .expect("write strict");
 
-    let ingest = gaze_index_command(&fake_kiji)
+    let ingest = gaze_index_command(&index_env)
         .arg("ingest")
         .arg(&corpus)
         .args([
@@ -278,11 +278,11 @@ fn index_search_wrong_key_surfaces_decrypt_reason() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
-    let fake_kiji = write_fake_kiji(&temp);
+    let index_env = index_ner(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
     fs::write(corpus.join("alpha.md"), "Email: alice@example.invalid\n").expect("write alpha");
 
-    let ingest = gaze_index_command(&fake_kiji)
+    let ingest = gaze_index_command(&index_env)
         .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
@@ -295,7 +295,7 @@ fn index_search_wrong_key_surfaces_decrypt_reason() {
         String::from_utf8_lossy(&ingest.stderr)
     );
 
-    let search = gaze_index_command_with_key(&fake_kiji, WRONG_INDEX_KEY)
+    let search = gaze_index_command_with_key(&index_env, WRONG_INDEX_KEY)
         .args(["search", "alice@example.invalid"])
         .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -325,7 +325,7 @@ fn realistic_prose_name_org_email_regression_never_returns_raw_values() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
-    let fake_kiji = write_fake_kiji(&temp);
+    let index_env = index_ner(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
     fs::write(
         corpus.join("prose.md"),
@@ -335,7 +335,7 @@ Support summary: Alice Mueller from Globex GmbH wrote from alice@example.invalid
     )
     .expect("write prose");
 
-    let ingest = gaze_index_command(&fake_kiji)
+    let ingest = gaze_index_command(&index_env)
         .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
@@ -353,7 +353,7 @@ Support summary: Alice Mueller from Globex GmbH wrote from alice@example.invalid
         "expected name + org + email entities, got: {ingest_stdout}"
     );
 
-    let search = gaze_index_command(&fake_kiji)
+    let search = gaze_index_command(&index_env)
         .args(["search", "alice@example.invalid"])
         .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -379,7 +379,7 @@ Support summary: Alice Mueller from Globex GmbH wrote from alice@example.invalid
 
 #[test]
 #[file_serial(gaze_subprocess)]
-fn index_ingest_fails_closed_without_kiji_model_or_command() {
+fn index_ingest_fails_closed_without_ner_model() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
@@ -388,8 +388,8 @@ fn index_ingest_fails_closed_without_kiji_model_or_command() {
 
     let ingest = Command::cargo_bin("gaze")
         .expect("gaze bin")
-        .env_remove("GAZE_KIJI_DISTILBERT_COMMAND")
-        .env_remove("GAZE_KIJI_DISTILBERT_MODEL_DIR")
+        .env_remove("GAZE_NER_MODEL_DIR")
+        .env("GAZE_INDEX_KEY", TEST_INDEX_KEY)
         .args(["index", "ingest"])
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
@@ -397,16 +397,82 @@ fn index_ingest_fails_closed_without_kiji_model_or_command() {
         .output()
         .expect("run index ingest");
 
-    assert!(
-        !ingest.status.success(),
-        "ingest unexpectedly succeeded without Kiji backend"
+    assert_eq!(
+        ingest.status.code(),
+        Some(2),
+        "ingest must fail closed without an NER model: stderr={}",
+        String::from_utf8_lossy(&ingest.stderr)
     );
     let stderr = String::from_utf8_lossy(&ingest.stderr);
-    assert!(stderr.contains("SafetyNetConfig"), "stderr={stderr}");
+    assert!(stderr.contains("IndexNerModelMissing"), "stderr={stderr}");
+    assert!(stderr.contains("GAZE_NER_MODEL_DIR"), "stderr={stderr}");
+    assert!(!index.exists(), "a refused ingest must not create an index");
+}
+
+/// A bundle that is internally consistent but is not the pinned Davlan bundle is refused before
+/// any model file loads.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn index_ingest_refuses_an_unpinned_ner_bundle() {
+    use sha2::{Digest, Sha256};
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    fs::create_dir_all(&corpus).expect("corpus dir");
+    fs::write(corpus.join("alpha.md"), "Email: alice@example.invalid\n").expect("write alpha");
+    let ner_dir = temp.path().join("davlan-mbert-ner-hrl");
+    fs::create_dir_all(&ner_dir).expect("ner dir");
+    fs::set_permissions(&ner_dir, fs::Permissions::from_mode(0o700)).expect("chmod ner dir");
+    let mut sums = String::new();
+    for name in [
+        "model.onnx",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "config.json",
+        "special_tokens_map.json",
+        "vocab.txt",
+        "labels.json",
+    ] {
+        let body = format!("not the pinned {name}");
+        fs::write(ner_dir.join(name), &body).expect("write artifact");
+        fs::set_permissions(ner_dir.join(name), fs::Permissions::from_mode(0o600))
+            .expect("chmod artifact");
+        sums.push_str(&format!("{:x}  {name}\n", Sha256::digest(body.as_bytes())));
+    }
+    fs::write(ner_dir.join("SHA256SUMS"), sums).expect("write sums");
+    fs::set_permissions(
+        ner_dir.join("SHA256SUMS"),
+        fs::Permissions::from_mode(0o600),
+    )
+    .expect("chmod sums");
+
+    let ingest = Command::cargo_bin("gaze")
+        .expect("gaze bin")
+        .env_remove("GAZE_NER_MODEL_DIR")
+        .env("GAZE_INDEX_KEY", TEST_INDEX_KEY)
+        .args(["index", "ingest"])
+        .arg(&corpus)
+        .arg("--ner-model-dir")
+        .arg(&ner_dir)
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index ingest");
+
+    assert_eq!(
+        ingest.status.code(),
+        Some(2),
+        "stderr={}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&ingest.stderr);
+    assert!(stderr.contains("IndexNerModelMissing"), "stderr={stderr}");
     assert!(
-        stderr.contains("GAZE_KIJI_DISTILBERT_MODEL_DIR"),
+        stderr.contains("pinned NER bundle verification failed"),
         "stderr={stderr}"
     );
+    assert!(!index.exists(), "a refused ingest must not create an index");
 }
 
 #[test]
@@ -415,7 +481,7 @@ fn index_search_without_class_finds_organization_and_custom_class_entities() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
-    let fake_kiji = write_fake_kiji(&temp);
+    let index_env = index_ner(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
     fs::write(
         corpus.join("data.md"),
@@ -423,7 +489,7 @@ fn index_search_without_class_finds_organization_and_custom_class_entities() {
     )
     .expect("write data");
 
-    let ingest = gaze_index_command(&fake_kiji)
+    let ingest = gaze_index_command(&index_env)
         .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
@@ -442,7 +508,7 @@ fn index_search_without_class_finds_organization_and_custom_class_entities() {
     );
 
     // Armed `--class` searches confirm both entities are actually indexed.
-    let org_armed = gaze_index_command(&fake_kiji)
+    let org_armed = gaze_index_command(&index_env)
         .args(["search", "Globex GmbH"])
         .args(["--class", "org", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -456,7 +522,7 @@ fn index_search_without_class_finds_organization_and_custom_class_entities() {
     );
     assert!(org_armed_stdout.contains(":Organization_"));
 
-    let custom_armed = gaze_index_command(&fake_kiji)
+    let custom_armed = gaze_index_command(&index_env)
         .args(["search", "90210"])
         .args([
             "--class",
@@ -477,7 +543,7 @@ fn index_search_without_class_finds_organization_and_custom_class_entities() {
     assert!(custom_armed_stdout.contains(":Custom:customer_id_"));
 
     // The bug: no `--class` must also reach both indexed classes.
-    let org_default = gaze_index_command(&fake_kiji)
+    let org_default = gaze_index_command(&index_env)
         .args(["search", "Globex GmbH"])
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -495,7 +561,7 @@ fn index_search_without_class_finds_organization_and_custom_class_entities() {
         "no --class search for indexed org must not say no hits: {org_default_stdout}"
     );
 
-    let custom_default = gaze_index_command(&fake_kiji)
+    let custom_default = gaze_index_command(&index_env)
         .args(["search", "90210"])
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -537,7 +603,7 @@ fn index_search_without_class_still_finds_name_email_and_reports_no_hits_when_ab
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
-    let fake_kiji = write_fake_kiji(&temp);
+    let index_env = index_ner(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
     fs::write(
         corpus.join("people.md"),
@@ -549,7 +615,7 @@ Organization: Globex GmbH
     )
     .expect("write people");
 
-    let ingest = gaze_index_command(&fake_kiji)
+    let ingest = gaze_index_command(&index_env)
         .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
@@ -563,7 +629,7 @@ Organization: Globex GmbH
     );
 
     // Name entity reachable without --class (regression guard for the old Name default).
-    let name_default = gaze_index_command(&fake_kiji)
+    let name_default = gaze_index_command(&index_env)
         .args(["search", "Dr. Schmidt"])
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -582,7 +648,7 @@ Organization: Globex GmbH
     );
 
     // Email entity reachable without --class (regression guard for the old Email heuristic).
-    let email_default = gaze_index_command(&fake_kiji)
+    let email_default = gaze_index_command(&index_env)
         .args(["search", "alice@example.invalid"])
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -604,7 +670,7 @@ Organization: Globex GmbH
     );
 
     // A value absent from the index under every class still reports `no hits`.
-    let miss_default = gaze_index_command(&fake_kiji)
+    let miss_default = gaze_index_command(&index_env)
         .args(["search", "nobody-nowhere-cafebabe"])
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -639,100 +705,133 @@ Organization: Globex GmbH
     }
 }
 
-fn gaze_index_command(fake_kiji: &Path) -> Command {
-    gaze_index_command_with_key(fake_kiji, TEST_INDEX_KEY)
+/// What `gaze index` runs against in a test: the test-support NER double (in place of the pinned
+/// Davlan bundle) and a fake OPF net (search always needs an output net).
+struct IndexEnv {
+    ner_dir: PathBuf,
+    opf: PathBuf,
+    checkpoint: PathBuf,
 }
 
-fn gaze_index_command_with_key(fake_kiji: &Path, index_key: &str) -> Command {
+fn gaze_index_command(env: &IndexEnv) -> Command {
+    gaze_index_command_with_key(env, TEST_INDEX_KEY)
+}
+
+fn gaze_index_command_with_key(env: &IndexEnv, index_key: &str) -> Command {
     let mut command = Command::cargo_bin("gaze").expect("gaze bin");
     command
-        .args([
-            "index",
-            &format!("--safety-net-timeout-ms={}", test_subprocess_timeout_ms()),
-        ])
-        .env("GAZE_KIJI_DISTILBERT_COMMAND", fake_kiji)
-        .env_remove("GAZE_KIJI_DISTILBERT_MODEL_DIR")
+        .args(["index", "--safety-net", "openai-filter", "--opf-command"])
+        .arg(&env.opf)
+        .arg("--opf-checkpoint")
+        .arg(&env.checkpoint)
+        .arg(format!(
+            "--safety-net-timeout-ms={}",
+            test_subprocess_timeout_ms()
+        ))
+        .env("GAZE_NER_MODEL_DIR", &env.ner_dir)
+        .env_remove("GAZE_NYM_MODEL_DIR")
+        .env_remove("GAZE_OPENAI_FILTER_OPF")
+        .env_remove("OPF_CHECKPOINT")
         .env("GAZE_INDEX_KEY", index_key);
     command
 }
 
-fn write_fake_kiji(temp: &tempfile::TempDir) -> PathBuf {
-    let script = temp.path().join("fake-kiji.py");
-    fs::write(
-        &script,
-        r#"#!/usr/bin/env python3
-import json
-import sys
-
-text = sys.stdin.read()
-targets = [
-    ("Dr. Schmidt", "PER"),
-    ("Prof. Weber", "PER"),
-    ("Alice Mueller", "PER"),
-    ("Globex GmbH", "ORG"),
-    ("Initech AG", "ORG"),
-]
-
-spans = []
-for value, label in targets:
-    cursor = 0
-    while True:
-        index = text.find(value, cursor)
-        if index < 0:
-            break
-        start = len(text[:index].encode("utf-8"))
-        end = start + len(value.encode("utf-8"))
-        spans.append({"label": label, "start": start, "end": end, "score": 0.99})
-        cursor = index + len(value)
-
-print(json.dumps(spans))
-"#,
+/// NER double plus a fake OPF net that reports nothing. The double recognizes this directory
+/// name and detects Dr. Schmidt, Prof. Weber, Alice Mueller, Globex GmbH and Initech AG.
+fn index_ner(temp: &tempfile::TempDir) -> IndexEnv {
+    index_env(
+        temp,
+        "print(json.dumps({\"text\": text, \"detected_spans\": []}))\n",
     )
-    .expect("write fake kiji");
-    let mut permissions = fs::metadata(&script)
-        .expect("fake kiji metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(&script, permissions).expect("chmod fake kiji");
-    script
 }
 
-fn write_residual_fake_kiji(temp: &tempfile::TempDir) -> PathBuf {
-    let script = temp.path().join("fake-kiji-residual.py");
-    fs::write(
-        &script,
-        r#"#!/usr/bin/env python3
-import json
-import sys
-
-text = sys.stdin.read()
-spans = []
-
-target = "Dr. Schmidt"
-index = text.find(target)
-if index >= 0:
-    start = len(text[:index].encode("utf-8"))
-    end = start + len(target.encode("utf-8"))
-    spans.append({"label": "PER", "start": start, "end": end, "score": 0.99})
-
-name_index = text.find(":Name_")
-token_index = text.rfind("<", 0, name_index)
-marker_index = text.find(" marker", name_index)
-if name_index >= 0 and token_index >= 0 and marker_index >= 0:
-    start = len(text[:token_index].encode("utf-8"))
-    end = len(text[:marker_index + len(" marker")].encode("utf-8"))
-    spans.append({"label": "PER", "start": start, "end": end, "score": 0.99})
-
-print(json.dumps(spans))
+/// NER double plus a two-pass fake OPF net. First pass: it flags the raw word `summary`, which
+/// the resolver tokenizes. Next pass: it flags a surviving token plus ` marker`, a residual the
+/// resolver may not act on again, so `--on-residual` decides.
+fn index_ner_with_residual_opf(temp: &tempfile::TempDir) -> IndexEnv {
+    index_env(
+        temp,
+        r#"spans = []
+first = text.find("summary")
+if first >= 0:
+    spans.append({"label": "private_person", "start": first, "end": first + len("summary"), "score": 0.99})
+else:
+    name_index = text.find(":Name_")
+    token_index = text.rfind("<", 0, name_index)
+    marker_index = text.find(" marker", name_index)
+    if name_index >= 0 and token_index >= 0 and marker_index >= 0:
+        # OPF reports character offsets.
+        spans.append({"label": "private_person", "start": token_index, "end": marker_index + len(" marker"), "score": 0.99})
+print(json.dumps({"text": text, "detected_spans": spans}))
 "#,
     )
-    .expect("write residual fake kiji");
-    let mut permissions = fs::metadata(&script)
-        .expect("residual fake kiji metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(&script, permissions).expect("chmod residual fake kiji");
-    script
+}
+
+fn index_env(temp: &tempfile::TempDir, body: &str) -> IndexEnv {
+    let ner_dir = temp.path().join("__gaze_test_index_ner");
+    fs::create_dir_all(&ner_dir).expect("ner dir");
+    let opf = temp.path().join("fake-opf.py");
+    fs::write(
+        &opf,
+        format!(
+            "#!/usr/bin/env python3\nimport json\nimport sys\n\ntext = sys.stdin.read()\n{body}"
+        ),
+    )
+    .expect("write fake opf");
+    fs::set_permissions(&opf, fs::Permissions::from_mode(0o755)).expect("chmod fake opf");
+    let checkpoint = temp.path().join("opf-checkpoint");
+    fs::create_dir_all(&checkpoint).expect("checkpoint dir");
+    fs::set_permissions(&checkpoint, fs::Permissions::from_mode(0o700)).expect("chmod checkpoint");
+    IndexEnv {
+        ner_dir,
+        opf,
+        checkpoint,
+    }
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn index_search_without_a_safety_net_fails_closed() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    let index_env = index_ner(&temp);
+    fs::create_dir_all(&corpus).expect("corpus dir");
+    fs::write(corpus.join("alpha.md"), "Email: alice@example.invalid\n").expect("write alpha");
+    let ingest = gaze_index_command(&index_env)
+        .arg("ingest")
+        .arg(&corpus)
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index ingest");
+    assert!(
+        ingest.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+
+    let search = Command::cargo_bin("gaze")
+        .expect("gaze bin")
+        .env("GAZE_INDEX_KEY", TEST_INDEX_KEY)
+        .args(["index", "search", "alice@example.invalid"])
+        .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index search");
+    assert_eq!(
+        search.status.code(),
+        Some(3),
+        "stderr={}",
+        String::from_utf8_lossy(&search.stderr)
+    );
+    assert!(
+        search.stdout.is_empty(),
+        "a refused search must not print hits"
+    );
+    let stderr = String::from_utf8_lossy(&search.stderr);
+    assert!(stderr.contains("SafetyNetConfig"), "stderr={stderr}");
+    assert!(stderr.contains("--safety-net"), "stderr={stderr}");
 }
 
 #[test]
@@ -745,7 +844,7 @@ fn index_search_explicit_disallowed_class_returns_policy_denial_not_no_hits() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
-    let fake_kiji = write_fake_kiji(&temp);
+    let index_env = index_ner(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
     // Built-in classes are always allowed; this corpus introduces no custom class.
     fs::write(
@@ -754,7 +853,7 @@ fn index_search_explicit_disallowed_class_returns_policy_denial_not_no_hits() {
     )
     .expect("write email-only");
 
-    let ingest = gaze_index_command(&fake_kiji)
+    let ingest = gaze_index_command(&index_env)
         .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
@@ -768,7 +867,7 @@ fn index_search_explicit_disallowed_class_returns_policy_denial_not_no_hits() {
     );
 
     // An unconfigured custom class must reach bridge authorization and be denied.
-    let search = gaze_index_command(&fake_kiji)
+    let search = gaze_index_command(&index_env)
         .args(["search", "alice@example.invalid"])
         .args([
             "--class",

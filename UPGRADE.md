@@ -5,6 +5,52 @@ workspace (the published cargo name; the library is imported as `gaze`).
 Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
+## Pending (unreleased): the Kiji DistilBERT safety net is removed
+
+**Action required if you ran `gaze setup`, use `gaze index`, or selected the
+Kiji net.** The Kiji DistilBERT safety net is gone. On the 2,910-document
+benchmark it recovered 1,831 leaked gold bytes (scored-label contract v2) for
++169,657 false-positive bytes, a 2.5% action precision. No safety net runs by
+default now. The full removed surface is in the
+[CHANGELOG](CHANGELOG.md#unreleased).
+
+1. **Re-run `gaze setup`.** Earlier `gaze setup` runs installed the Kiji
+   distilbert-NER bundle as the primary `[ner]` model in the policy they wrote.
+   `gaze setup` now installs the pinned Davlan mBERT bundle
+   (`onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at
+   `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`) into
+   `$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl` (else
+   `~/.local/share/gaze/models/davlan-mbert-ner-hrl`), the model the benchmark
+   scores. Re-run it, with `--force` if you want it to overwrite the old
+   policy file, or point `[ner].model_dir` at the new directory yourself.
+2. **Replace Kiji flags.** Drop `--safety-net kiji-distilbert`,
+   `--safety-net-backend kiji-distilbert`, `--safety-net-add kiji-distilbert`,
+   `--kiji-backend`, `--kiji-distilbert-precision`,
+   `--kiji-distilbert-command`, `--kiji-distilbert-model-dir`,
+   `--kiji-distilbert-locales`, and the `GAZE_KIJI_DISTILBERT_*` variables.
+   If you want a second opinion after the deterministic passes, use
+   `--safety-net openai-filter` (bring your own `opf` and checkpoint) or
+   `--safety-net nym` (install with `gaze setup --safety-net nym`). With
+   `--safety-net-registry`, `openai-filter` is the only registry-capable
+   backend.
+3. **Pass the NER model to `gaze index ingest`.** It now requires
+   `--ner-model-dir <dir>` or `GAZE_NER_MODEL_DIR` pointing at the pinned
+   Davlan bundle. Without it, or with an unpinned directory, ingest fails
+   closed with `IndexNerModelMissing` (exit 2) and writes nothing.
+   `gaze setup` prints the `export GAZE_NER_MODEL_DIR=<dir>` line. The net,
+   `gaze index --safety-net {openai-filter|nym}`, is optional for ingest and
+   required for `gaze index search`, which fails closed with `SafetyNetConfig`
+   without one.
+4. **Rebuild without removed features.** Remove `safety-net-kiji`,
+   `runtime-tract` and `runtime-candle` from Cargo feature lists. There is no
+   musl-static build path through `tract` any more. Rust callers of
+   `gaze_recognizers::safety_net::kiji_distilbert` or the `gaze-model-setup`
+   Kiji installers move to `OpenAiFilterSafetyNet`, `NymSafetyNet`, or
+   `gaze_model_setup::install_ner_bundle` for the NER model.
+
+Manifests written before this change still restore. Only which spans get
+detected differs.
+
 ## Pending security fix: prefix reuse disabled
 
 `enable_prefix_cache()` and `PipelineOptimizationConfig::with_prefix_cache(true)`
@@ -16,6 +62,35 @@ Adopters that enabled prefix reuse should budget for full-scan latency on growin
 inputs and update audit consumers to expect actual recognizer/rule rows instead
 of `prefix_cache` provenance. Token mappings and manifest restoration retain their
 normal behavior. See [the safety rationale](docs/explanation/pipeline/tier4-pipeline-gating.md).
+
+## Pending: credential recognizers move to the opt-in `secrets` rulepack
+
+**Action required if you rely on Gaze to tokenize credentials.** Credentials
+are not PII, so the `core` rulepack (0.6.0) no longer detects them:
+
+- `security_token.anchored` (`custom:security_token`: AWS access keys, JWTs,
+  cue-anchored API keys and tokens) and `password.field` (`custom:password`:
+  `password:` / `passwort:` records) moved unchanged into the bundled `secrets`
+  rulepack. It is opt-in and never loaded by default.
+- `username.field` (`custom:username`) is removed. No bundled recognizer emits
+  `custom:username` any more; keep a custom recognizer if you need it.
+
+To keep the previous credential protection, load `secrets` next to `core`:
+
+```toml
+[policy.rulepacks]
+bundled = ["core", "secrets"]
+```
+
+or, for one CLI run, `gaze clean --rulepack-bundled core,secrets`. Library
+callers using `CorePipelineConfig` add
+`.with_bundled_rulepack("secrets")`.
+
+Manifests written before this change still restore: token spellings and the
+restore contract are unchanged, only which spans get detected differs. Policy
+rules that name `custom:security_token`, `custom:password` or
+`custom:username` still parse; without `secrets` loaded the first two simply
+never match.
 
 ## How this file is organized
 
@@ -213,7 +288,7 @@ permissions on Unix. Missing artifacts fail closed with typed
 `CliError::SafetyNetArtifactMissing` (exit `2`) before the subprocess
 spawns.
 
-Setup walkthrough: [`docs/how-to/safety-net/set-up-kiji-safetynet.md`](docs/how-to/safety-net/set-up-kiji-safetynet.md).
+Setup walkthrough: removed together with the backend; see the [removal section](#pending-unreleased-the-kiji-distilbert-safety-net-is-removed).
 
 **Action required:** none. The backend is opt-in. If you do not select
 it, your current SafetyNet configuration (OpenAI Privacy Filter or

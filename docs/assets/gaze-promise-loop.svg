@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-labelledby="t d">
+  <title id="t">The Gaze promise in one picture</title>
+  <desc id="d">Your app sends a support ticket to Gaze on your server. Gaze swaps personal details for placeholders, for example Laura Meyer becomes Name_1 and her email becomes Email_1, and writes the pairs into a manifest that stays on your server. Only placeholders cross to the AI model provider. The model replies using the placeholders. Gaze restores the real details from the manifest, and your app receives the finished reply.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5B6B7C"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#0E7C7B"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16202C; }
+    .zone { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; }
+    .name { font-size: 17px; font-weight: 600; }
+    .sub { font-size: 13px; fill: #4A5866; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; fill: #16202C; }
+    .accent { fill: #0E7C7B; }
+    .box { fill: #FFFFFF; stroke: #5B6B7C; stroke-width: 1.5; }
+    .flow { fill: none; stroke: #5B6B7C; stroke-width: 1.8; }
+  </style>
+
+  <rect x="1" y="1" width="958" height="438" rx="16" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="2"/>
+
+  <!-- Zones -->
+  <rect x="24" y="24" width="580" height="372" rx="12" fill="#E8F4F3" stroke="#0E7C7B" stroke-width="1.5"/>
+  <text class="zone accent" x="44" y="50">YOUR SERVER</text>
+  <rect x="660" y="24" width="276" height="372" rx="12" fill="#F3F5F7" stroke="#5B6B7C" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text class="zone" x="680" y="50" style="fill:#4A5866">MODEL PROVIDER</text>
+
+  <!-- Boundary -->
+  <line x1="632" y1="30" x2="632" y2="390" stroke="#0E7C7B" stroke-width="2" stroke-dasharray="3 5"/>
+
+  <!-- Your app -->
+  <rect class="box" x="44" y="68" width="170" height="308" rx="10"/>
+  <text class="name" x="60" y="100">Your app</text>
+  <text class="sub" x="60" y="126">Sends the ticket:</text>
+  <text class="mono" x="60" y="148">Laura Meyer,</text>
+  <text class="mono" x="60" y="166">laura.meyer@…</text>
+  <text class="sub" x="60" y="300">Gets the reply:</text>
+  <text class="mono" x="60" y="322">Dear Laura</text>
+  <text class="mono" x="60" y="340">Meyer, …</text>
+
+  <!-- Gaze swap -->
+  <rect class="box" x="250" y="68" width="330" height="100" rx="10"/>
+  <text class="name" x="266" y="100">1. Gaze swaps</text>
+  <text class="mono" x="266" y="128">Laura Meyer  → &lt;Name_1&gt;</text>
+  <text class="mono" x="266" y="148">laura.meyer@… → &lt;Email_1&gt;</text>
+
+  <!-- Manifest -->
+  <rect x="250" y="188" width="330" height="72" rx="10" fill="#FFFFFF" stroke="#0E7C7B" stroke-width="2"/>
+  <text class="name accent" x="266" y="216">Manifest</text>
+  <text class="sub" x="346" y="216">the only key back to the real details</text>
+  <text class="sub" x="266" y="240">Written on swap, read on restore, never sent.</text>
+  <line x1="415" y1="168" x2="415" y2="186" stroke="#0E7C7B" stroke-width="1.8" marker-end="url(#arrow-accent)"/>
+  <line x1="415" y1="260" x2="415" y2="278" stroke="#0E7C7B" stroke-width="1.8" marker-end="url(#arrow-accent)"/>
+
+  <!-- Gaze restore -->
+  <rect class="box" x="250" y="280" width="330" height="96" rx="10"/>
+  <text class="name" x="266" y="312">3. Gaze restores</text>
+  <text class="mono" x="266" y="340">&lt;Name_1&gt; → Laura Meyer</text>
+  <text class="sub" x="266" y="362">Unknown placeholders are refused.</text>
+
+  <!-- AI model -->
+  <rect class="box" x="680" y="68" width="236" height="308" rx="10"/>
+  <text class="name" x="696" y="100">2. AI model</text>
+  <text class="sub" x="696" y="126">Reads:</text>
+  <text class="mono" x="696" y="148">Ticket from</text>
+  <text class="mono" x="696" y="166">&lt;Name_1&gt; &lt;Email_1&gt;</text>
+  <text class="sub" x="696" y="300">Writes:</text>
+  <text class="mono" x="696" y="322">Dear &lt;Name_1&gt;,</text>
+  <text class="mono" x="696" y="340">your refund …</text>
+
+  <!-- Flow arrows -->
+  <line class="flow" x1="214" y1="118" x2="246" y2="118" marker-end="url(#arrow)"/>
+  <line class="flow" x1="580" y1="118" x2="676" y2="118" marker-end="url(#arrow)"/>
+  <line class="flow" x1="680" y1="328" x2="584" y2="328" marker-end="url(#arrow)"/>
+  <line class="flow" x1="250" y1="328" x2="218" y2="328" marker-end="url(#arrow)"/>
+
+  <text class="sub" x="480" y="422" text-anchor="middle">Only placeholders cross the dotted line. The model never needs to know who Laura Meyer is to write the reply.</text>
+</svg>

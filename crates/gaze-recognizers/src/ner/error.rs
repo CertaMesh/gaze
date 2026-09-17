@@ -34,6 +34,8 @@ pub enum NerLoadError {
     Tokenizer(String),
     #[error("onnx runtime load error: {0}")]
     Runtime(String),
+    #[error("pinned NER bundle verification failed: {0}")]
+    PinnedBundle(String),
 }
 
 #[derive(Debug, Error)]

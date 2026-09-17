@@ -2,17 +2,6 @@
   "schema_version": 1,
   "benchmark": "safety-net-perf",
   "backends": {
-    "kiji_distilbert": {
-      "cold_start_ms": 1126.090875,
-      "per_fixture_median_ms": 175.31925,
-      "per_fixture_p95_ms": 184.206744,
-      "per_fixture_p99_ms": 187.083514,
-      "per_fixture_mean_ms": 182.649704,
-      "throughput_bytes_per_sec": 1563.247353,
-      "fixture_count": 150,
-      "device": "cpu",
-      "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
-    },
     "openai_privacy_filter": {
       "cold_start_ms": 18885.936917,
       "per_fixture_median_ms": 2427.397771,
@@ -20,17 +9,6 @@
       "per_fixture_p99_ms": 5113.84213,
       "per_fixture_mean_ms": 2615.378067,
       "throughput_bytes_per_sec": 109.172234,
-      "fixture_count": 150,
-      "device": "cpu",
-      "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
-    },
-    "kiji_distilbert_int8": {
-      "cold_start_ms": 271.909583,
-      "per_fixture_median_ms": 153.114417,
-      "per_fixture_p95_ms": 162.202154,
-      "per_fixture_p99_ms": 167.47846,
-      "per_fixture_mean_ms": 154.938147,
-      "throughput_bytes_per_sec": 1842.842914,
       "fixture_count": 150,
       "device": "cpu",
       "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"

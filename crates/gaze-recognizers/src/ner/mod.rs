@@ -5,11 +5,17 @@ pub(crate) mod decode;
 mod detector;
 mod error;
 mod loader;
+mod pinned;
 mod recognizer;
 mod types;
 
 pub use detector::NerDetector;
 pub use error::NerLoadError;
+pub use pinned::{
+    verify_davlan_ner_bundle, DAVLAN_NER_BUNDLE_SHA256, DAVLAN_NER_HF_COMMIT, DAVLAN_NER_HF_REPO,
+    DAVLAN_NER_LABELS_JSON, DAVLAN_NER_MODEL_DIR_NAME, DAVLAN_NER_SHA256SUMS,
+    DAVLAN_NER_UPSTREAM_FILES, REQUIRED_DAVLAN_NER_ARTIFACTS,
+};
 pub use recognizer::NerRecognizer;
 pub use types::{LabelMap, NerBackendKind, NerOptions, VerifiedArtifacts};
 
@@ -217,23 +223,14 @@ mod tests {
     }
 
     #[test]
-    fn verify_artifacts_accepts_pinned_kiji_label_manifest_without_config() {
+    fn verify_artifacts_rejects_a_structured_label_manifest() {
+        // A structured label manifest with no config.json is not a loadable NER bundle.
         let dir = tempdir().unwrap();
         let path = dir.path();
         let model_bytes = b"fake-onnx";
         let tokenizer_bytes = b"fake-tokenizer";
-        let labels = br#"{
-  "schema_version": 1,
-  "source": "onnx-community/distilbert-NER-ONNX",
-  "source_commit": "3a19fe9404a4469d91aa3d551558a97f68872f67",
-  "labels": [
-    {"id": "person", "upstream": ["B-PER", "I-PER"]},
-    {"id": "location", "upstream": ["B-LOC", "I-LOC"]},
-    {"id": "organization", "upstream": ["B-ORG", "I-ORG"]},
-    {"id": "miscellaneous", "upstream": ["B-MISC", "I-MISC"]}
-  ]
-}
-"#;
+        let labels =
+            br#"{"schema_version": 1, "labels": [{"id": "person", "upstream": ["B-PER"]}]}"#;
         write(&path.join(MODEL_FILE), model_bytes);
         write(&path.join(TOKENIZER_FILE), tokenizer_bytes);
         write(&path.join(LABELS_FILE), labels);
@@ -248,18 +245,10 @@ mod tests {
         );
         write(&path.join(CHECKSUMS_FILE), sums.as_bytes());
 
-        let verified = NerDetector::verify_artifacts(path).expect("verify kiji manifest");
-
-        assert_eq!(
-            verified.recognizer_model_id,
-            "onnx-community-distilbert-ner-onnx"
-        );
-        assert_eq!(
-            verified.recognizer_model_version,
-            "v3a19fe9404a4469d91aa3d551558a97f68872f67"
-        );
-        assert_eq!(verified.id2label[1], "B-PER");
-        assert!(verified.labels.get("B-ORG").is_some());
+        assert!(matches!(
+            NerDetector::verify_artifacts(path),
+            Err(NerLoadError::LabelsParse(_))
+        ));
     }
 
     #[test]

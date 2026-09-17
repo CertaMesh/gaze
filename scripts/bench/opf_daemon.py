@@ -78,6 +78,10 @@ def serve(
                     result = redactor.redact(text)
                     request_index += 1
                     if trace_offsets:
+                        # Diagnostic only. The spans are OPF's raw character offsets, exactly
+                        # as returned to the client; Gaze's openai_filter adapter converts them
+                        # to UTF-8 bytes. `characters != utf8_bytes` marks a request where
+                        # reading them as bytes would misplace spans.
                         print(
                             json.dumps(
                                 {

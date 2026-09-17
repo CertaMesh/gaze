@@ -177,7 +177,7 @@ pub enum ConflictTier {
 
 Emit one `RedactionEntry` per redacted suspect with:
 
-- `source` = `"safety_net.<backend>.v<N>"` (e.g. `"safety_net.kiji.v1"`, `"safety_net.openai_filter.v1"`).
+- `source` = `"safety_net.<backend>.v<N>"` (e.g. `"safety_net.openai_filter.v1"`).
 - `recognizer_id` = backend id from `SafetyNet::id()`.
 - `class` = `SafetyNetPiiClass::to_pii_class()` of the safety-net label (`crates/gaze-types/src/lib.rs:1309`, `:1330`).
 - `action` = `Action::Redact` (existing, `crates/gaze-types/src/lib.rs:1407`).
@@ -234,7 +234,7 @@ The CLI flag is `policy.toml`-overridable under `[policy.safety_net] resolve_thr
 
 ### 5.3 Class taxonomy mapping
 
-Reuses the existing per-backend `class_map.rs` modules (`crates/gaze-recognizers/src/safety_net/kiji_distilbert/class_map.rs`, `crates/gaze-recognizers/src/safety_net/openai_filter/class_map.rs`). No new mapping surface. New backends inherit this pattern.
+Reuses the existing per-backend `class_map.rs` modules (for example `crates/gaze-recognizers/src/safety_net/openai_filter/class_map.rs`). No new mapping surface. New backends inherit this pattern.
 
 ### 5.4 Per-suspect resolve failure modes
 

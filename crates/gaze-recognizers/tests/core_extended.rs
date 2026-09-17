@@ -226,7 +226,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 42);
+    assert_eq!(core.recognizers.len(), 39);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -234,9 +234,8 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
         "phone.national.de",
         "postal.de",
         "postal.us",
-        "security_token.anchored",
         // Bilingual cue-anchored government-ID recognizers with no national shape stay on
-        // document basis (`global`), like `security_token.anchored`.
+        // document basis (`global`).
         "tax_number.cue_anchored",
         "driver_license.cue_anchored",
         "national_id.cue_anchored",
