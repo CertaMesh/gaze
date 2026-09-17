@@ -381,6 +381,97 @@ mod tests {
         assert_eq!(document_calls.load(AtomicOrdering::SeqCst), 1);
     }
 
+    fn document_recognizer(
+        id: &'static str,
+        locale: LocaleTag,
+        span: std::ops::Range<usize>,
+    ) -> BasisRecognizer {
+        BasisRecognizer {
+            id,
+            class: PiiClass::Email,
+            locale,
+            locale_basis: LocaleBasis::Document,
+            span,
+            calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn pool_ids(registry: &RecognizerRegistry, chain: &[LocaleTag]) -> Vec<String> {
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(chain, &dictionaries);
+        let (pool, _) = registry
+            .detect_candidate_pool("abcdefghij", &ctx)
+            .expect("candidate pool");
+        pool.originals()
+            .iter()
+            .map(|candidate| candidate.recognizer_id.clone())
+            .collect()
+    }
+
+    // A match at an earlier chain locale must not switch off a later locale's rule of the
+    // same class elsewhere in the document; that shadowing shipped the second span raw.
+    #[test]
+    fn later_locale_candidate_outside_earlier_spans_is_kept() {
+        let registry = RecognizerRegistry::builder()
+            .register(document_recognizer("de-at", LocaleTag::DeAt, 0..5))
+            .register(document_recognizer("de-de", LocaleTag::DeDe, 5..10))
+            .build();
+
+        assert_eq!(
+            pool_ids(&registry, &[LocaleTag::DeAt, LocaleTag::DeDe]),
+            vec!["de-at", "de-de"]
+        );
+    }
+
+    // Mirror of the case above: a later candidate ending exactly where a claimed span
+    // starts touches it but does not overlap it.
+    #[test]
+    fn later_locale_candidate_ending_at_earlier_span_start_is_kept() {
+        let registry = RecognizerRegistry::builder()
+            .register(document_recognizer("de-at", LocaleTag::DeAt, 5..10))
+            .register(document_recognizer("de-de", LocaleTag::DeDe, 0..5))
+            .build();
+
+        assert_eq!(
+            pool_ids(&registry, &[LocaleTag::DeAt, LocaleTag::DeDe]),
+            vec!["de-at", "de-de"]
+        );
+    }
+
+    #[test]
+    fn later_locale_candidate_overlapping_earlier_span_is_dropped() {
+        let registry = RecognizerRegistry::builder()
+            .register(document_recognizer("de-de", LocaleTag::DeDe, 3..8))
+            .register(document_recognizer("de-at", LocaleTag::DeAt, 0..5))
+            .build();
+
+        assert_eq!(
+            pool_ids(&registry, &[LocaleTag::DeAt, LocaleTag::DeDe]),
+            vec!["de-at"]
+        );
+        assert_eq!(
+            pool_ids(&registry, &[LocaleTag::DeDe, LocaleTag::DeAt]),
+            vec!["de-de"]
+        );
+    }
+
+    // Global rules run at every chain step and repeat their spans; the repeats must not
+    // multiply candidates.
+    #[test]
+    fn global_recognizer_repeated_across_chain_yields_one_candidate() {
+        let registry = RecognizerRegistry::builder()
+            .register(document_recognizer("global", LocaleTag::Global, 0..5))
+            .build();
+
+        assert_eq!(
+            pool_ids(
+                &registry,
+                &[LocaleTag::DeDe, LocaleTag::EnUs, LocaleTag::Global]
+            ),
+            vec!["global"]
+        );
+    }
+
     #[test]
     fn empty_family_policy_never_applies() {
         assert_eq!(FamilyPolicyTable::EMPTY.compare("a", "b"), None);
@@ -580,6 +671,11 @@ impl RecognizerRegistry {
                 );
             }
 
+            // Earlier chain locales win per span, not per document: a later locale's candidate
+            // is admitted only where no earlier locale of this class matched. Spans are claimed
+            // before validator veto, so this never admits less than stopping at the first
+            // locale did. Global rules repeat their spans at every step and drop out here.
+            let mut claimed: Vec<std::ops::Range<usize>> = Vec::new();
             for locale in locale_chain.as_slice() {
                 let locale_ctx = DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
                 locale_ctx.degraded.set(ctx.degraded.get());
@@ -597,13 +693,21 @@ impl RecognizerRegistry {
                         recognizer
                             .detect(input, &locale_ctx)?
                             .into_iter()
-                            .filter(|candidate| candidate.score >= min_score(&class)),
+                            .filter(|candidate| candidate.score >= min_score(&class))
+                            .filter(|candidate| {
+                                !claimed.iter().any(|span| {
+                                    span.start < candidate.span.end
+                                        && candidate.span.start < span.end
+                                })
+                            }),
                     );
                 }
-                if !class_candidates.is_empty() {
-                    candidates.extend(class_candidates);
-                    break;
-                }
+                claimed.extend(
+                    class_candidates
+                        .iter()
+                        .map(|candidate| candidate.span.clone()),
+                );
+                candidates.extend(class_candidates);
             }
         }
 

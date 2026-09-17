@@ -23,6 +23,17 @@ Recognizer eligibility then depends on `locale_basis`:
   join the document-basis candidates before the normal conflict resolver runs.
   `enabled` and `safety_tier` still apply.
 
+Document-basis recognizers run class by class, one chain locale at a time, in
+chain order. An earlier locale wins per span, not per document: a later
+locale's candidate joins the pool only where it does not overlap a candidate
+of the same class from an earlier locale. Under `[de-AT, de-DE]`, a de-AT match
+on one number therefore does not switch `de-DE` rules off for a German postal
+code elsewhere in the same document. A `global` recognizer is eligible at every
+step and finds the same spans each time, so its repeats drop out. The overlap
+check uses candidates before validator veto, so an earlier-locale candidate
+that the veto later rejects still claims its span
+(`RecognizerRegistry::detect_candidate_pool` in `crates/gaze/src/registry.rs`).
+
 Bundled rulepacks declare the basis explicitly for every recognizer. External
 and adopter rulepacks retain the legacy `document` behavior unless they opt in
 to `locale_basis = "format"`.
