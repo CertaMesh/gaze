@@ -177,7 +177,7 @@ async fn finish_call_failure_returns_error_instead_of_tool_response() {
         .expect("tool call returns rmcp result");
 
     assert_eq!(result.is_error, Some(true));
-    let text = &result.content[0].raw.as_text().unwrap().text;
+    let text = &result.content[0].as_text().unwrap().text;
     assert_eq!(text, "manifest-persistence-failed");
     assert_ne!(text, "would-leak-if-returned");
     assert_eq!(host.manifest.begins.load(Ordering::SeqCst), 1);

@@ -9,9 +9,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use gaze_mcp_core::{ToolDescriptor, ToolError, ToolResponse, ToolTier};
-use rmcp::model::{
-    AnnotateAble, CallToolRequestParams, CallToolResult, Content, JsonObject, RawContent, Tool,
-};
+use rmcp::model::{CallToolRequestParams, CallToolResult, ContentBlock, JsonObject, Tool};
 use serde_json::Value;
 
 use crate::error::RmcpFrontendError;
@@ -113,18 +111,18 @@ pub fn rmcp_args_to_dispatch_args(
 /// Translate a successful `gaze_mcp_core::ToolResponse` into an rmcp
 /// `CallToolResult { is_error: false }`.
 ///
-/// String payloads are passed through as `Content::text` (the natural shape
+/// String payloads are passed through as `ContentBlock::text` (the natural shape
 /// for human-readable model output). All other JSON values are serialized
-/// to a single text-content frame via `RawContent::json`, matching rmcp's
+/// to a single text-content frame via `ContentBlock::json`, matching rmcp's
 /// convention for structured tool output.
 pub fn response_to_rmcp_call_tool_result(
     response: ToolResponse,
 ) -> Result<CallToolResult, RmcpFrontendError> {
     let content = match response.payload {
-        Value::String(text) => Content::text(text),
-        other => RawContent::json(other)
-            .map_err(|err| RmcpFrontendError::Internal(Box::new(err)))?
-            .no_annotation(),
+        Value::String(text) => ContentBlock::text(text),
+        other => {
+            ContentBlock::json(other).map_err(|err| RmcpFrontendError::Internal(Box::new(err)))?
+        }
     };
     Ok(CallToolResult::success(vec![content]))
 }
@@ -136,7 +134,7 @@ pub fn response_to_rmcp_call_tool_result(
 /// unredacted PII from tool bodies or backends, so they stay on the trusted
 /// side. Using `class()` for every variant also keeps future variants safe.
 pub fn error_to_rmcp_call_tool_result(err: ToolError) -> CallToolResult {
-    CallToolResult::error(vec![Content::text(err.class())])
+    CallToolResult::error(vec![ContentBlock::text(err.class())])
 }
 
 fn json_value_to_object(value: &Value) -> JsonObject {
@@ -272,7 +270,6 @@ mod tests {
         assert_eq!(out.is_error, Some(false));
         assert_eq!(out.content.len(), 1);
         let text = out.content[0]
-            .raw
             .as_text()
             .expect("string payload should serialize as text content")
             .text
@@ -285,9 +282,9 @@ mod tests {
         let resp = ToolResponse::json(json!({ "redacted": "[NAME_1]" }));
         let out = response_to_rmcp_call_tool_result(resp).unwrap();
         assert_eq!(out.is_error, Some(false));
-        // RawContent::json serializes the value into a text frame; assert
+        // ContentBlock::json serializes the value into a text frame; assert
         // the round-trip survives by parsing the embedded JSON back.
-        let text = &out.content[0].raw.as_text().unwrap().text;
+        let text = &out.content[0].as_text().unwrap().text;
         let parsed: Value = serde_json::from_str(text).expect("json round-trip");
         assert_eq!(parsed, json!({ "redacted": "[NAME_1]" }));
     }

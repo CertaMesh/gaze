@@ -106,6 +106,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING (`gaze-mcp-rmcp`): rmcp 2.x.** `gaze-mcp-rmcp`,
+  `gaze-mcp-bridge` and `gaze-document` move from rmcp 1.6 to rmcp 2.x, whose
+  `ContentBlock` replaces `Content` / `RawContent`. Adopters that name rmcp
+  types next to `gaze-mcp-rmcp` must upgrade rmcp with it. MSRV stays 1.89.
+  Because rmcp 2.x marks `ContentBlock`, `TextContent` and `Annotations`
+  `#[non_exhaustive]`, bridge ingress now refuses any non-text content variant
+  through a wildcard arm, and refuses a text block or its `annotations` object
+  when either serializes a field it does not redact
+  (`unsupported_content_field`), so a later rmcp release cannot widen what
+  reaches the agent unredacted.
+
 - **BREAKING: `gaze setup` installs the benchmarked NER model.** The default
   (`--safety-net ner`) used to install the Kiji distilbert-NER bundle as the
   primary `[ner]` model in the written policy. It now downloads and verifies

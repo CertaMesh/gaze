@@ -8,7 +8,7 @@ use gaze_mcp_core::{
     AuthHook, DenyAllAuthHook, DispatchError, DispatchHost, Principal, SessionIdError,
     SessionIdPolicy, ToolDescriptor, ToolResponse,
 };
-use rmcp::model::{CallToolResult, RawContent};
+use rmcp::model::{CallToolResult, ContentBlock};
 use ulid::Ulid;
 
 use crate::approval::{ApprovalDecision, ApprovalHook, ApprovalRequest, DenyApprovalHook};
@@ -469,6 +469,41 @@ impl IngressResult {
     }
 }
 
+/// Serialized keys of a text content block that ingress knows how to handle:
+/// the tag, the two redacted fields, and `annotations`.
+const TEXT_CONTENT_KEYS: &[&str] = &["type", "text", "_meta", "annotations"];
+
+/// Serialized keys of `annotations`: audience roles, a numeric priority and a
+/// timestamp, none of them free text. `Annotations` is `#[non_exhaustive]`, so
+/// it is checked separately rather than trusted as a whole.
+const ANNOTATIONS_KEYS: &[&str] = &["audience", "priority", "lastModified"];
+
+/// Where a serialized text block carries something ingress does not redact.
+#[derive(Debug, PartialEq, Eq)]
+enum UnknownTextContent {
+    /// The block itself is not an object or has an unknown top-level key.
+    Block,
+    /// `annotations` is not an object or has an unknown key.
+    Annotations,
+}
+
+fn unknown_text_content(value: &serde_json::Value) -> Option<UnknownTextContent> {
+    let has_only = |value: &serde_json::Value, known: &[&str]| {
+        value
+            .as_object()
+            .is_some_and(|fields| fields.keys().all(|key| known.contains(&key.as_str())))
+    };
+    if !has_only(value, TEXT_CONTENT_KEYS) {
+        return Some(UnknownTextContent::Block);
+    }
+    match value.get("annotations") {
+        Some(annotations) if !has_only(annotations, ANNOTATIONS_KEYS) => {
+            Some(UnknownTextContent::Annotations)
+        }
+        _ => None,
+    }
+}
+
 fn process_ingress(
     pipeline: &gaze::Pipeline,
     locale_chain: &[gaze::LocaleTag],
@@ -520,8 +555,8 @@ fn process_ingress(
     let mut result_paths = Vec::new();
     let mut content_values = Vec::with_capacity(result.content.len());
     for (idx, mut content) in result.content.into_iter().enumerate() {
-        match &mut content.raw {
-            RawContent::Text(text) => {
+        match &mut content {
+            ContentBlock::Text(text) => {
                 let text_path = ResultPath::root()
                     .child("content")?
                     .child(format!("[{idx}]"))?
@@ -548,10 +583,9 @@ fn process_ingress(
                     }
                 }
             }
-            RawContent::Image(_)
-            | RawContent::Audio(_)
-            | RawContent::Resource(_)
-            | RawContent::ResourceLink(_) => {
+            // `ContentBlock` is `#[non_exhaustive]`: a variant added by a later
+            // rmcp release lands here and is blocked, never passed through.
+            _ => {
                 return Ok(IngressResult::blocked(
                     "unsupported_content_block",
                     "ingress.kind.deny",
@@ -561,11 +595,27 @@ fn process_ingress(
                 ));
             }
         }
-        content_values.push(
-            serde_json::to_value(content).map_err(|err| {
-                BridgeError::Downstream(format!("serialize content failed: {err}"))
-            })?,
-        );
+        let content_value = serde_json::to_value(content)
+            .map_err(|err| BridgeError::Downstream(format!("serialize content failed: {err}")))?;
+        // `TextContent` and `Annotations` are `#[non_exhaustive]` too. Only
+        // `text` and `_meta` are redacted above, so a field a later rmcp release
+        // adds would otherwise reach the agent unredacted: refuse any key this
+        // bridge does not know, at either level.
+        if let Some(unknown) = unknown_text_content(&content_value) {
+            let block_path = ResultPath::root()
+                .child("content")?
+                .child(format!("[{idx}]"))?;
+            let path = match unknown {
+                UnknownTextContent::Block => block_path,
+                UnknownTextContent::Annotations => block_path.child("annotations")?,
+            };
+            return Ok(IngressResult::blocked(
+                "unsupported_content_field",
+                "ingress.kind.deny",
+                vec![path],
+            ));
+        }
+        content_values.push(content_value);
     }
 
     let structured_content = match result.structured_content {
@@ -799,4 +849,68 @@ fn approval_required_response(request: &ApprovalRequest) -> ToolResponse {
             "reason": request.reason,
         }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rmcp::model::{Annotations, Meta, Role, TextContent};
+
+    /// Pins the guard to what rmcp serializes today: a text block carrying every
+    /// optional field must pass, or ingress would block every annotated result.
+    /// If an rmcp upgrade adds a serialized field, this goes red and the new
+    /// field needs a redaction decision before it is allowed.
+    #[test]
+    fn a_fully_populated_text_block_has_only_known_keys() {
+        let mut meta = Meta::new();
+        meta.0.insert("k".to_string(), serde_json::json!("v"));
+        let mut text = TextContent::new("hello").with_meta(meta);
+        text.annotations = Some(
+            Annotations::default()
+                .with_audience(vec![Role::User])
+                .with_priority(0.5)
+                .with_timestamp_now(),
+        );
+        let value = serde_json::to_value(ContentBlock::Text(text)).expect("serialize");
+        assert_eq!(
+            value.as_object().expect("object").len(),
+            TEXT_CONTENT_KEYS.len()
+        );
+        assert_eq!(
+            value["annotations"].as_object().expect("annotations").len(),
+            ANNOTATIONS_KEYS.len()
+        );
+        assert_eq!(unknown_text_content(&value), None);
+    }
+
+    #[test]
+    fn an_unknown_text_block_key_is_refused() {
+        let value = serde_json::json!({"type": "text", "text": "[EMAIL_1]", "title": "raw"});
+        assert_eq!(
+            unknown_text_content(&value),
+            Some(UnknownTextContent::Block)
+        );
+        assert_eq!(
+            unknown_text_content(&serde_json::json!("text")),
+            Some(UnknownTextContent::Block)
+        );
+    }
+
+    #[test]
+    fn an_unknown_annotations_key_is_refused() {
+        let value = serde_json::json!({
+            "type": "text",
+            "text": "[EMAIL_1]",
+            "annotations": {"audience": ["user"], "note": "raw"},
+        });
+        assert_eq!(
+            unknown_text_content(&value),
+            Some(UnknownTextContent::Annotations)
+        );
+        let not_an_object = serde_json::json!({"type": "text", "text": "x", "annotations": "raw"});
+        assert_eq!(
+            unknown_text_content(&not_an_object),
+            Some(UnknownTextContent::Annotations)
+        );
+    }
 }
