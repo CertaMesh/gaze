@@ -8,14 +8,15 @@
 //! ```
 //! use gaze::{Candidate, ConflictTier, DetectContext, DetectError, PiiClass, Recognizer};
 //!
-//! /// Recognizes a tenant-specific order identifier such as `ORD-4471`.
-//! struct OrderIdRecognizer {
+//! /// Recognizes colon-separated MAC addresses such as `00:1a:2b:3c:4d:5e`: a
+//! /// hardware identifier defined by its structure alone, not by any tenant.
+//! struct MacAddressRecognizer {
 //!     class: PiiClass,
 //! }
 //!
-//! impl Recognizer for OrderIdRecognizer {
+//! impl Recognizer for MacAddressRecognizer {
 //!     fn id(&self) -> &str {
-//!         "custom.order_id"
+//!         "example.mac_address"
 //!     }
 //!
 //!     fn supported_class(&self) -> &PiiClass {
@@ -23,7 +24,7 @@
 //!     }
 //!
 //!     fn token_family(&self) -> &str {
-//!         "order_id"
+//!         "mac_address"
 //!     }
 //!
 //!     fn detect(
@@ -37,17 +38,24 @@
 //!             return Err(DetectError::backend(self.id(), "input exceeds scan limit"));
 //!         }
 //!
+//!         const LEN: usize = 17; // six hex pairs joined by five colons
+//!         let bytes = input.as_bytes();
 //!         let mut candidates = Vec::new();
-//!         for (start, _) in input.match_indices("ORD-") {
-//!             let digits = input[start + 4..]
-//!                 .chars()
-//!                 .take_while(char::is_ascii_digit)
-//!                 .count();
-//!             if digits == 0 {
+//!         let mut start = 0;
+//!         while start + LEN <= bytes.len() {
+//!             let is_mac = bytes[start..start + LEN].iter().enumerate().all(|(i, b)| {
+//!                 if i % 3 == 2 {
+//!                     *b == b':'
+//!                 } else {
+//!                     b.is_ascii_hexdigit()
+//!                 }
+//!             });
+//!             if !is_mac {
+//!                 start += 1;
 //!                 continue;
 //!             }
 //!             candidates.push(Candidate::new(
-//!                 start..start + 4 + digits,
+//!                 start..start + LEN,
 //!                 self.class.clone(),
 //!                 self.id(),
 //!                 0.9,
@@ -58,20 +66,23 @@
 //!                 ConflictTier::None,
 //!                 Vec::new(),
 //!             ));
+//!             start += LEN;
 //!         }
 //!         Ok(candidates)
 //!     }
 //! }
 //!
-//! let recognizer = OrderIdRecognizer {
-//!     class: PiiClass::Custom("OrderId".to_string()),
+//! let recognizer = MacAddressRecognizer {
+//!     class: PiiClass::Custom("mac_address".to_string()),
 //! };
 //! let dictionaries = gaze::DictionaryBundle::default();
 //! let ctx = DetectContext::new(&[], &dictionaries);
 //!
-//! let found = recognizer.detect("ship ORD-4471 today", &ctx).unwrap();
+//! let found = recognizer
+//!     .detect("device 00:1a:2b:3c:4d:5e joined", &ctx)
+//!     .unwrap();
 //! assert_eq!(found.len(), 1);
-//! assert_eq!(found[0].span, 5..13);
+//! assert_eq!(found[0].span, 7..24);
 //! ```
 
 use std::cmp::Ordering;
