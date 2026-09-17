@@ -104,9 +104,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gaze-mcp-bridge` and `gaze-document` move from rmcp 1.6 to rmcp 2.x, whose
   `ContentBlock` replaces `Content` / `RawContent`. Adopters that name rmcp
   types next to `gaze-mcp-rmcp` must upgrade rmcp with it. MSRV stays 1.89.
-  Because rmcp 2.x marks `ContentBlock` and `TextContent` `#[non_exhaustive]`,
-  bridge ingress now refuses any non-text content variant through a wildcard
-  arm and refuses a text block that serializes a field it does not redact
+  Because rmcp 2.x marks `ContentBlock`, `TextContent` and `Annotations`
+  `#[non_exhaustive]`, bridge ingress now refuses any non-text content variant
+  through a wildcard arm, and refuses a text block or its `annotations` object
+  when either serializes a field it does not redact
   (`unsupported_content_field`), so a later rmcp release cannot widen what
   reaches the agent unredacted.
 
