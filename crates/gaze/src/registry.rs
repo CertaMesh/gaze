@@ -423,6 +423,21 @@ mod tests {
         );
     }
 
+    // Mirror of the case above: a later candidate ending exactly where a claimed span
+    // starts touches it but does not overlap it.
+    #[test]
+    fn later_locale_candidate_ending_at_earlier_span_start_is_kept() {
+        let registry = RecognizerRegistry::builder()
+            .register(document_recognizer("de-at", LocaleTag::DeAt, 5..10))
+            .register(document_recognizer("de-de", LocaleTag::DeDe, 0..5))
+            .build();
+
+        assert_eq!(
+            pool_ids(&registry, &[LocaleTag::DeAt, LocaleTag::DeDe]),
+            vec!["de-at", "de-de"]
+        );
+    }
+
     #[test]
     fn later_locale_candidate_overlapping_earlier_span_is_dropped() {
         let registry = RecognizerRegistry::builder()
