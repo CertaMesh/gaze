@@ -1157,3 +1157,7 @@ class ValidatorRecallTableTest(unittest.TestCase):
         item["validator_recall"]["CREDITCARDNUMBER"]["gold_spans"] = "n/a"
         with self.assertRaises(render.RenderError):
             render.validate_history(history_of(item))
+
+    def test_valid_and_invalid_gold_columns_are_not_swapped(self):
+        rendered = render.render_current_release(history_of(self.split_entry()))
+        self.assertIn("| `CREDITCARDNUMBER` | luhn | 126 | 96 | 0.206300 | 0.746000 | 12 | 1,440 |", rendered)
