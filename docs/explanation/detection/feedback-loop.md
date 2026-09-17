@@ -44,13 +44,8 @@ All fixtures are synthetic. Current accepted origin:
 
 - `synthetic-rust-generator`
 
-Deferred origin:
-
-- `synthetic-vendored-kiji`
-
-Kiji snippets are intentionally out of this PR. Any future vendored snippet work
-must extend the origin enum, document provenance, and keep fixture bytes out of
-production `src/` paths.
+Any future vendored snippet work must extend the origin enum, document
+provenance, and keep fixture bytes out of production `src/` paths.
 
 ## Gate Mode
 

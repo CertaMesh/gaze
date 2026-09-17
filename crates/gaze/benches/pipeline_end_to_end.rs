@@ -3,13 +3,7 @@ use serde_json::Value;
 const SNAPSHOT: &str =
     include_str!("../../gaze-recognizers/benches/gaze_pipeline_bench_snapshot.json");
 
-const CONFIGS: [&str; 5] = [
-    "rule-floor-core",
-    "rule-floor-extended",
-    "pass3-kiji",
-    "pass3-opf",
-    "pass3-locale-aware",
-];
+const CONFIGS: [&str; 3] = ["rule-floor-core", "rule-floor-extended", "pass3-opf"];
 const LOCALES: [&str; 3] = ["Global", "EnUs", "DeDe"];
 const LABELS: [&str; 7] = [
     "Email",

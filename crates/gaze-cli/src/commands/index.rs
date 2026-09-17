@@ -10,9 +10,13 @@ use std::time::Duration;
 use clap::ValueEnum;
 use gaze::{
     Action, ClassRule, DefaultRule, Detection, Detector, LocaleTag, PiiClass, Pipeline,
-    SafetyNetFallback,
+    PipelineBuilder, SafetyNetFallback,
 };
-use gaze_recognizers::{LocaleAwareModelRegistry, RegexDetector};
+use gaze_recognizers::safety_net::nym::{verify_nym_bundle, NymConfig, NymSafetyNet};
+use gaze_recognizers::safety_net::openai_filter::{
+    OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
+};
+use gaze_recognizers::{NerOptions, NerRecognizer, RegexDetector};
 use gaze_token_bridge::adapter::CorpusIndexStore;
 use gaze_token_bridge::bridge::TokenBridge;
 use gaze_token_bridge::ingest::CorpusIngestor;
@@ -28,15 +32,34 @@ use gaze_token_bridge::{BridgeError, DenyReason, RedactionSession};
 
 use crate::error::CliError;
 
-const KIJI_COMMAND_ENV: &str = "GAZE_KIJI_DISTILBERT_COMMAND";
-const KIJI_MODEL_DIR_ENV: &str = "GAZE_KIJI_DISTILBERT_MODEL_DIR";
+const NER_MODEL_DIR_ENV: &str = "GAZE_NER_MODEL_DIR";
+const NYM_MODEL_DIR_ENV: &str = "GAZE_NYM_MODEL_DIR";
+const OPF_COMMAND_ENV: &str = "GAZE_OPENAI_FILTER_OPF";
+const OPF_CHECKPOINT_ENV: &str = "OPF_CHECKPOINT";
+
+/// Optional safety net for `gaze index`. The ingest detector is the pinned NER bundle; a net
+/// adds a residual check on ingest output and on search snippets.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum IndexSafetyNet {
+    OpenaiFilter,
+    Nym,
+}
+
+pub(crate) struct IndexSafetyNetArgs {
+    pub(crate) safety_net: Option<IndexSafetyNet>,
+    pub(crate) opf_command: Option<PathBuf>,
+    pub(crate) opf_checkpoint: Option<PathBuf>,
+    pub(crate) nym_model_dir: Option<PathBuf>,
+    pub(crate) safety_net_timeout_ms: u64,
+}
 
 pub(crate) struct IngestArgs {
     pub(crate) dir: PathBuf,
     pub(crate) domain: String,
     pub(crate) index_path: Option<PathBuf>,
     pub(crate) on_residual: OnResidual,
-    pub(crate) safety_net_timeout_ms: u64,
+    pub(crate) ner_model_dir: Option<PathBuf>,
+    pub(crate) net: IndexSafetyNetArgs,
 }
 
 pub(crate) struct SearchArgs {
@@ -44,7 +67,7 @@ pub(crate) struct SearchArgs {
     pub(crate) domain: String,
     pub(crate) class: Option<PiiClass>,
     pub(crate) index_path: Option<PathBuf>,
-    pub(crate) safety_net_timeout_ms: u64,
+    pub(crate) net: IndexSafetyNetArgs,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -81,7 +104,7 @@ pub(crate) fn ingest(args: IngestArgs) -> Result<(), CliError> {
     let index_path = resolve_index_path(args.index_path);
     let docs = collect_docs(&args.dir)?;
     let classes = classes_for_docs(&docs);
-    let pipeline = build_index_pipeline(&classes, args.safety_net_timeout_ms)?;
+    let pipeline = build_index_pipeline(&classes, args.ner_model_dir, &args.net)?;
 
     let mut store = FileCorpusIndexStore::load_or_create(&index_path, &args.domain, &classes)
         .map_err(map_bridge_error)?;
@@ -123,7 +146,14 @@ pub(crate) fn search(args: SearchArgs) -> Result<(), CliError> {
         .cloned()
         .ok_or_else(index_failed)?;
     let policy_json = store.policy_json().map_err(map_bridge_error)?;
-    let output_safety_net = build_index_output_safety_net_pipeline(args.safety_net_timeout_ms)?;
+    // TokenBridge denies every search that has no output safety net, so refuse up front with the
+    // flag the caller is missing instead of a generic denial.
+    if args.net.safety_net.is_none() {
+        return Err(CliError::SafetyNetConfigDetail(
+            "gaze index search requires --safety-net openai-filter|nym: results pass an output safety net before they are shown".to_string(),
+        ));
+    }
+    let output_safety_net = build_index_output_safety_net_pipeline(&args.net)?;
     let mut bridge = TokenBridge::from_policy_json_and_store(&policy_json, store)
         .map_err(map_bridge_error)?
         .with_output_safety_net(output_safety_net, vec![LocaleTag::Global]);
@@ -238,14 +268,16 @@ fn classes_for_docs(docs: &[SourceDoc]) -> Vec<PiiClass> {
 
 fn build_index_pipeline(
     classes: &[PiiClass],
-    safety_net_timeout_ms: u64,
+    ner_model_dir: Option<PathBuf>,
+    net: &IndexSafetyNetArgs,
 ) -> Result<Pipeline, CliError> {
     let mut builder = Pipeline::builder()
         .detector(RegexDetector::emails().map_err(|err| {
             CliError::PolicyConfigDetail(format!("index email detector failed: {err}"))
         })?)
-        .detector(FieldEntityDetector);
-    builder = builder.register_safety_net_registry(index_kiji_registry(safety_net_timeout_ms)?);
+        .detector(FieldEntityDetector)
+        .recognizer(index_ner_recognizer(ner_model_dir)?);
+    builder = register_index_safety_net(builder, net)?;
 
     let mut rule_classes =
         BTreeSet::from([PiiClass::Email, PiiClass::Name, PiiClass::Organization]);
@@ -260,56 +292,77 @@ fn build_index_pipeline(
         .map_err(|err| CliError::PolicyConfigDetail(format!("index pipeline build failed: {err}")))
 }
 
-fn build_index_output_safety_net_pipeline(
-    safety_net_timeout_ms: u64,
-) -> Result<Pipeline, CliError> {
-    Pipeline::builder()
-        .register_safety_net_registry(index_kiji_registry(safety_net_timeout_ms)?)
+fn build_index_output_safety_net_pipeline(net: &IndexSafetyNetArgs) -> Result<Pipeline, CliError> {
+    register_index_safety_net(Pipeline::builder(), net)?
         .build()
         .map_err(|err| {
             CliError::PolicyConfigDetail(format!("index output safety-net build failed: {err}"))
         })
 }
 
-fn index_kiji_registry(safety_net_timeout_ms: u64) -> Result<LocaleAwareModelRegistry, CliError> {
-    let mut registry = LocaleAwareModelRegistry::new();
-    registry.register(index_kiji_safety_net(safety_net_timeout_ms)?);
-    Ok(registry)
+/// Loads the ingest NER detector: `--ner-model-dir`, else `GAZE_NER_MODEL_DIR`. Without it the
+/// index has no prose name/organization detector, so ingest refuses to run.
+fn index_ner_recognizer(ner_model_dir: Option<PathBuf>) -> Result<NerRecognizer, CliError> {
+    let model_dir = ner_model_dir
+        .or_else(|| std::env::var_os(NER_MODEL_DIR_ENV).map(PathBuf::from))
+        .ok_or_else(|| {
+            CliError::IndexNerModelMissing(format!(
+                "gaze index ingest requires --ner-model-dir or {NER_MODEL_DIR_ENV}; install the pinned NER bundle with `gaze setup`"
+            ))
+        })?;
+    NerRecognizer::load_pinned_davlan(&model_dir, NerOptions::default()).map_err(|err| {
+        CliError::IndexNerModelMissing(format!("index NER bundle failed to load: {err}"))
+    })
 }
 
-#[cfg(feature = "safety-net-kiji")]
-fn index_kiji_safety_net(
-    safety_net_timeout_ms: u64,
-) -> Result<gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertSafetyNet, CliError> {
-    use gaze_recognizers::safety_net::kiji_distilbert::{
-        KijiDistilbertConfig, KijiDistilbertSafetyNet, OrtKijiConfig, SubprocessKijiConfig,
-    };
-
-    if let Some(model_dir) = std::env::var_os(KIJI_MODEL_DIR_ENV) {
-        return Ok(KijiDistilbertSafetyNet::new(KijiDistilbertConfig::from(
-            OrtKijiConfig::new(model_dir),
-        )));
+/// Adds the optional safety net. Absent `--safety-net`, no net runs; present, every setting it
+/// needs must resolve or the command fails closed.
+fn register_index_safety_net(
+    builder: PipelineBuilder,
+    net: &IndexSafetyNetArgs,
+) -> Result<PipelineBuilder, CliError> {
+    match net.safety_net {
+        None => Ok(builder),
+        Some(IndexSafetyNet::OpenaiFilter) => {
+            let command = net
+                .opf_command
+                .clone()
+                .or_else(|| std::env::var_os(OPF_COMMAND_ENV).map(PathBuf::from))
+                .ok_or_else(|| {
+                    CliError::SafetyNetConfigDetail(format!(
+                        "--safety-net openai-filter requires --opf-command or {OPF_COMMAND_ENV}"
+                    ))
+                })?;
+            let checkpoint = net
+                .opf_checkpoint
+                .clone()
+                .or_else(|| std::env::var_os(OPF_CHECKPOINT_ENV).map(PathBuf::from))
+                .ok_or_else(|| {
+                    CliError::SafetyNetConfigDetail(format!(
+                        "--safety-net openai-filter requires --opf-checkpoint or {OPF_CHECKPOINT_ENV}"
+                    ))
+                })?;
+            let config = SubprocessOpenAiFilterConfig::new(command)
+                .with_checkpoint_path(checkpoint)
+                .with_timeout(Duration::from_millis(net.safety_net_timeout_ms));
+            Ok(builder.register_safety_net(OpenAiFilterSafetyNet::new(config)))
+        }
+        Some(IndexSafetyNet::Nym) => {
+            let model_dir = net
+                .nym_model_dir
+                .clone()
+                .or_else(|| std::env::var_os(NYM_MODEL_DIR_ENV).map(PathBuf::from))
+                .ok_or_else(|| {
+                    CliError::SafetyNetConfigDetail(format!(
+                        "--safety-net nym requires --nym-model-dir or {NYM_MODEL_DIR_ENV}; install the bundle with `gaze setup --safety-net nym`"
+                    ))
+                })?;
+            verify_nym_bundle(&model_dir).map_err(|err| {
+                CliError::SafetyNetConfigDetail(format!("index nym bundle failed to verify: {err}"))
+            })?;
+            Ok(builder.register_safety_net(NymSafetyNet::new(NymConfig::new(model_dir))))
+        }
     }
-
-    if let Some(command) = std::env::var_os(KIJI_COMMAND_ENV) {
-        return Ok(KijiDistilbertSafetyNet::new(KijiDistilbertConfig::from(
-            SubprocessKijiConfig::new(command)
-                .with_timeout(Duration::from_millis(safety_net_timeout_ms)),
-        )));
-    }
-
-    Err(CliError::SafetyNetConfigDetail(format!(
-        "gaze index requires {KIJI_MODEL_DIR_ENV} or {KIJI_COMMAND_ENV}; install the pinned model with scripts/fetch/fetch-kiji-safetynet-model.sh"
-    )))
-}
-
-#[cfg(not(feature = "safety-net-kiji"))]
-fn index_kiji_safety_net(
-    _safety_net_timeout_ms: u64,
-) -> Result<impl gaze_recognizers::LocaleAwareModel, CliError> {
-    Err(CliError::SafetyNetConfigDetail(
-        "gaze index requires gaze-cli feature safety-net-kiji".to_string(),
-    ))
 }
 
 fn local_principal(domain: &gaze_token_bridge::model::IndexDomain) -> Principal {

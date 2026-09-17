@@ -1,10 +1,3 @@
-#[cfg(feature = "safety-net-kiji")]
-use gaze_recognizers::safety_net::kiji_distilbert::{
-    KijiDistilbertBackend, KijiDistilbertPrecision, OrtKijiBackend, OrtKijiConfig,
-    KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
-    KIJI_DISTILBERT_INT8_BUNDLE_SHA256, KIJI_DISTILBERT_INT8_SHA256SUMS,
-    KIJI_DISTILBERT_SHA256SUMS,
-};
 #[cfg(feature = "safety-net-openai")]
 use gaze_recognizers::safety_net::openai_filter::backend::subprocess::{
     OPF_CHECKPOINT_BUNDLE_SHA256, OPF_SOURCE_COMMIT, OPF_SOURCE_REPO, REQUIRED_OPF_ARTIFACTS,
@@ -14,21 +7,11 @@ use serde_json::Value;
 const SNAPSHOT: &str = include_str!("safety_net_matrix_snapshot.json");
 const PERF_SNAPSHOT: &str = include_str!("safety_net_perf_snapshot.json");
 
-const BACKENDS: [&str; 3] = [
-    "kiji_distilbert",
-    "kiji_distilbert_int8",
-    "openai_privacy_filter",
-];
+const BACKENDS: [&str; 1] = ["openai_privacy_filter"];
 const LOCALES: [&str; 3] = ["Global", "EnUs", "DeDe"];
 const MODES: [&str; 2] = ["direct_detector", "observer_residual"];
 
 fn main() {
-    #[cfg(feature = "safety-net-kiji")]
-    if std::env::var("GAZE_SAFETY_NET_MATRIX_KIJI_BACKEND").as_deref() == Ok("ort") {
-        run_live_ort_bench();
-        return;
-    }
-
     let snapshot: Value =
         serde_json::from_str(SNAPSHOT).expect("valid safety-net matrix benchmark snapshot");
 
@@ -37,155 +20,12 @@ fn main() {
         snapshot["benchmark"],
         Value::String("safety-net-multi-backend-matrix".to_string())
     );
-    assert_kiji_pins(&snapshot);
     assert_opf_pins(&snapshot);
     assert_strict_span_leak_rate_shape(&snapshot);
     assert_cells(&snapshot);
-    assert_kiji_int8_recall_gate(&snapshot);
     assert_perf_snapshot();
 
     println!("{SNAPSHOT}");
-}
-
-#[cfg(feature = "safety-net-kiji")]
-fn run_live_ort_bench() {
-    use std::time::Instant;
-
-    let model_dir = std::env::var_os("GAZE_KIJI_DISTILBERT_MODEL_DIR")
-        .expect("GAZE_KIJI_DISTILBERT_MODEL_DIR is required for live ORT bench");
-    let cold_start = Instant::now();
-    let precision = match std::env::var("GAZE_KIJI_DISTILBERT_PRECISION").as_deref() {
-        Ok("int8") => KijiDistilbertPrecision::Int8,
-        _ => KijiDistilbertPrecision::Fp32,
-    };
-    let backend = OrtKijiBackend::new(OrtKijiConfig::new(model_dir).with_precision(precision))
-        .expect("load Kiji ORT backend");
-    let cold_start_ms = cold_start.elapsed().as_secs_f64() * 1000.0;
-    let fixture = "Alice Smith visited Berlin before meeting Dr. Schmidt at Example Corp.";
-    backend.infer(fixture).expect("warmup inference");
-
-    let mut samples = Vec::new();
-    for _ in 0..100 {
-        let start = Instant::now();
-        backend.infer(fixture).expect("inference");
-        samples.push(start.elapsed().as_secs_f64() * 1000.0);
-    }
-    samples.sort_by(f64::total_cmp);
-    let p50_ms = samples[samples.len() / 2];
-    println!(
-        "{{\"backend\":\"kiji_distilbert_ort\",\"precision\":\"{}\",\"cold_start_ms\":{cold_start_ms:.3},\"warm_p50_ms\":{p50_ms:.3},\"iterations\":{}}}",
-        precision.as_str(),
-        samples.len()
-    );
-}
-
-#[cfg(feature = "safety-net-kiji")]
-fn assert_kiji_pins(snapshot: &Value) {
-    let pins = &snapshot["backends"]["kiji_distilbert"]["pins"];
-    assert_eq!(
-        pins["source_repo"],
-        Value::String(KIJI_DISTILBERT_HF_REPO.to_string())
-    );
-    assert_eq!(
-        pins["source_commit"],
-        Value::String(KIJI_DISTILBERT_HF_COMMIT.to_string())
-    );
-    assert_eq!(
-        pins["bundle_sha256"],
-        Value::String(KIJI_DISTILBERT_BUNDLE_SHA256.to_string())
-    );
-    assert_eq!(
-        pins["model_sha256"],
-        Value::String(checksum_for("model.onnx").to_string())
-    );
-    assert_eq!(
-        pins["tokenizer_sha256"],
-        Value::String(checksum_for("tokenizer.json").to_string())
-    );
-    assert_eq!(
-        pins["label_map_sha256"],
-        Value::String(checksum_for("labels.json").to_string())
-    );
-    let int8_pins = &snapshot["backends"]["kiji_distilbert_int8"]["pins"];
-    assert_eq!(
-        int8_pins["source_repo"],
-        Value::String(KIJI_DISTILBERT_HF_REPO.to_string())
-    );
-    assert_eq!(
-        int8_pins["source_commit"],
-        Value::String(KIJI_DISTILBERT_HF_COMMIT.to_string())
-    );
-    assert_eq!(
-        int8_pins["bundle_sha256"],
-        Value::String(KIJI_DISTILBERT_INT8_BUNDLE_SHA256.to_string())
-    );
-    assert_eq!(
-        int8_pins["model_sha256"],
-        Value::String(int8_checksum_for("model.int8.onnx").to_string())
-    );
-    assert_eq!(
-        int8_pins["tokenizer_sha256"],
-        Value::String(int8_checksum_for("tokenizer.json").to_string())
-    );
-    assert_eq!(
-        int8_pins["label_map_sha256"],
-        Value::String(int8_checksum_for("labels.json").to_string())
-    );
-}
-
-#[cfg(feature = "safety-net-kiji")]
-fn checksum_for(filename: &str) -> &str {
-    KIJI_DISTILBERT_SHA256SUMS
-        .lines()
-        .find_map(|line| {
-            let (sha256, path) = line.split_once("  ")?;
-            (path == filename).then_some(sha256)
-        })
-        .expect("checksum present in Kiji SHA256SUMS")
-}
-
-#[cfg(feature = "safety-net-kiji")]
-fn int8_checksum_for(filename: &str) -> &str {
-    KIJI_DISTILBERT_INT8_SHA256SUMS
-        .lines()
-        .find_map(|line| {
-            let (sha256, path) = line.split_once("  ")?;
-            (path == filename).then_some(sha256)
-        })
-        .expect("checksum present in Kiji int8 SHA256SUMS")
-}
-
-#[cfg(not(feature = "safety-net-kiji"))]
-fn assert_kiji_pins(snapshot: &Value) {
-    let pins = snapshot["backends"]["kiji_distilbert"]["pins"]
-        .as_object()
-        .expect("Kiji pins object");
-    for key in [
-        "source_repo",
-        "source_commit",
-        "bundle_sha256",
-        "model_sha256",
-        "tokenizer_sha256",
-        "label_map_sha256",
-    ] {
-        assert!(pins.contains_key(key), "missing Kiji pin key: {key}");
-    }
-    let int8_pins = snapshot["backends"]["kiji_distilbert_int8"]["pins"]
-        .as_object()
-        .expect("Kiji int8 pins object");
-    for key in [
-        "source_repo",
-        "source_commit",
-        "bundle_sha256",
-        "model_sha256",
-        "tokenizer_sha256",
-        "label_map_sha256",
-    ] {
-        assert!(
-            int8_pins.contains_key(key),
-            "missing Kiji int8 pin key: {key}"
-        );
-    }
 }
 
 #[cfg(feature = "safety-net-openai")]
@@ -276,31 +116,6 @@ fn assert_cells(snapshot: &Value) {
             }
         }
     }
-}
-
-fn assert_kiji_int8_recall_gate(snapshot: &Value) {
-    const MAX_RECALL_DELTA: f64 = 0.02;
-
-    for locale in LOCALES {
-        for mode in MODES {
-            let fp32 = recall_for(snapshot, "kiji_distilbert", locale, mode);
-            let int8 = recall_for(snapshot, "kiji_distilbert_int8", locale, mode);
-            assert!(
-                fp32 - int8 <= MAX_RECALL_DELTA,
-                "kiji int8 recall regression exceeds {MAX_RECALL_DELTA:.2} for {locale}.{mode}: fp32={fp32:.6}, int8={int8:.6}"
-            );
-        }
-    }
-}
-
-fn recall_for(snapshot: &Value, backend: &str, locale: &str, mode: &str) -> f64 {
-    snapshot["cells"]
-        .as_array()
-        .expect("cells array")
-        .iter()
-        .find(|cell| cell["backend"] == backend && cell["locale"] == locale && cell["mode"] == mode)
-        .and_then(|cell| cell["metrics"]["recall"].as_f64())
-        .unwrap_or_else(|| panic!("missing numeric recall for {backend}.{locale}.{mode}"))
 }
 
 fn assert_cell_schema(cell: &Value, mode: &str) {

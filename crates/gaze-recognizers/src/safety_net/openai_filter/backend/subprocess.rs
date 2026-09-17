@@ -42,7 +42,7 @@ pub const OPF_SOURCE_COMMIT: &str = "f7f00ca7fb869683eb732c010299d901457f19c3";
 
 /// SHA256 of the checkpoint bundle downloaded by `opf` at `OPF_SOURCE_COMMIT`.
 ///
-/// Computed as SHA256 over the Kiji-style line-per-file SHA256SUMS manifest for
+/// Computed as SHA256 over a `<sha256>  <file>` line-per-file SHA256SUMS manifest for
 /// `REQUIRED_OPF_ARTIFACTS` in declaration order. Verified 2026-05-15 from a
 /// clean `opf download` into `~/.opf/privacy_filter`.
 pub const OPF_CHECKPOINT_BUNDLE_SHA256: Option<&str> =

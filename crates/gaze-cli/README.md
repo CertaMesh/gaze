@@ -53,6 +53,7 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 | Subcommand | Purpose |
 |------------|---------|
 | `clean` | Reads raw UTF-8 text from stdin and emits `{"clean_text","session_blob","stats"}` JSON. |
+| `setup` | Installs and verifies the pinned NER model, writes a policy, and runs a doctor check. Included in the default build. |
 | `daemon` | Runs a long-lived JSONL stdio cleaner with one process-level pipeline and per-`session_id` manifests. |
 | `restore` | Reads `{"session_blob","text"}` JSON from stdin and emits restored `{"text"}` JSON, plus `restore_warning` when tolerant restore allows an unknown token. |
 | `audit query` | Prints filtered audit metadata rows from a `--audit-db` SQLite log, opened read-only. |
@@ -67,6 +68,25 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 
 Audit logging is captured on `clean` via `--audit-db <path>`; the
 `audit query` and `audit export` subcommands read the same database back.
+
+## `setup`
+
+`gaze setup` (default `--safety-net ner`) downloads and SHA-verifies the pinned
+Davlan mBERT NER bundle, the same model the benchmark scores:
+`onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
+`cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`, `SHA256SUMS` digest
+`7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16`. The default
+directory is `$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl`, else
+`~/.local/share/gaze/models/davlan-mbert-ner-hrl`. The written policy's `[ner]`
+section points at it, and setup prints `For gaze index: export
+GAZE_NER_MODEL_DIR=<dir>`.
+
+Releases up to v0.14.0 installed a different, unbenchmarked DistilBERT NER
+bundle as the `[ner]` model. Re-run `gaze setup` to get the benchmarked model.
+
+`--safety-net opf` additionally verifies an OpenAI Privacy Filter checkpoint,
+and `--safety-net nym` installs the pinned Nym-small bundle. Neither net runs
+unless `gaze clean` is given the matching `--safety-net` flag.
 
 ## Daemon mode
 
@@ -166,8 +186,38 @@ The `index` feature adds a local owner-side search index for `.txt` and `.md`
 corpora:
 
 ```console
+$ gaze setup
+$ export GAZE_NER_MODEL_DIR=~/.local/share/gaze/models/davlan-mbert-ner-hrl
 $ cargo run -p gaze-cli --features index -- index ingest ./notes
 $ cargo run -p gaze-cli --features index -- index search "alice@example.invalid" --class email
+```
+
+`index ingest` requires the pinned Davlan mBERT NER bundle that `gaze setup`
+installs, passed as `--ner-model-dir <dir>` or `GAZE_NER_MODEL_DIR`. It is the
+detector for prose names and organizations. The directory must verify against
+the pinned digests. A missing or unpinned directory fails closed with the typed
+`IndexNerModelMissing` error (exit `2`) and nothing is written. `gaze setup`
+prints the `export GAZE_NER_MODEL_DIR=<dir>` line to use.
+
+The safety net is optional for `ingest` and required for `search`: TokenBridge
+checks every search snippet with an output net and refuses a search that has
+none, so `index search` without `--safety-net` fails closed with a typed
+`SafetyNetConfig` error (exit `3`). Both remaining nets, `openai-filter` and
+`nym`, satisfy it. Pass the net on the `index` command, before the subcommand:
+
+| Flag | Meaning |
+| --- | --- |
+| `--safety-net <openai-filter\|nym>` | Checks ingest output (optional) and search snippets (required for `search`). |
+| `--opf-command <path>` | OPF `opf` command. Falls back to `GAZE_OPENAI_FILTER_OPF`. |
+| `--opf-checkpoint <path>` | OPF checkpoint directory. Falls back to `OPF_CHECKPOINT`. |
+| `--nym-model-dir <path>` | Pinned Nym-small bundle. Falls back to `GAZE_NYM_MODEL_DIR`. |
+| `--safety-net-timeout-ms <ms>` | Safety-net subprocess timeout. |
+
+With a net configured, residual suspects on ingest still redact or fail closed
+per `index ingest --on-residual {redact,strict}` (default `redact`):
+
+```console
+$ gaze index --safety-net nym --nym-model-dir <dir> ingest ./notes --on-residual strict
 ```
 
 By default the index is written under `./.gaze-index/`, or the directory from
@@ -212,18 +262,14 @@ Flags:
 | `--max-bytes <bytes>` | Stdin byte cap. Defaults to `10485760`. |
 | `--context-json <path>` | Typed context envelope with dictionaries, class map, and fields. |
 | `--audit-db <path>` | Optional SQLite redaction-log database path for metadata-only audit entries. |
-| `--safety-net <kind>` | Optional observer-only safety net. Accepts `openai-filter` (v0.6+), `kiji-distilbert` (v0.8+) or `nym` (opt-in). Activates the post-clean leak audit. |
-| `--safety-net-backend <backend>` | v0.8 single-backend selector: `openai-filter`, `kiji-distilbert` or `nym`. When set alongside `--safety-net=<kind>`, this flag wins and lets adopters swap the Pass-3 implementation without re-typing the legacy `--safety-net` value. Cannot be combined with `--safety-net-registry`. |
+| `--safety-net <kind>` | Optional observer-only safety net. Accepts `openai-filter` (v0.6+) or `nym` (opt-in). No safety net runs unless this flag or `--safety-net-backend` is set. Activates the post-clean leak audit. |
+| `--safety-net-backend <backend>` | v0.8 single-backend selector: `openai-filter` or `nym`. When set alongside `--safety-net=<kind>`, this flag wins and lets adopters swap the Pass-3 implementation without re-typing the legacy `--safety-net` value. Cannot be combined with `--safety-net-registry`. |
 | `--safety-net-registry` | Enables locale-aware Pass-3 dispatch through `LocaleAwareModelRegistry`. Requires one or more `--safety-net-add` flags. |
-| `--safety-net-add <backend>` | Adds one backend to the registry. Repeatable. First resolved backend wins for v1. |
+| `--safety-net-add <backend>` | Adds one backend to the registry. Repeatable. First resolved backend wins for v1. The only registry-capable backend is `openai-filter`. |
 | `--openai-filter-command <path>` | Path to the local OpenAI Privacy Filter `opf` command. Required with the `openai-filter` backend. |
 | `--openai-filter-checkpoint <path>` | Path to the OPF checkpoint or model directory. Required with the `openai-filter` backend. |
-| `--kiji-backend <backend>` | Kiji runtime backend: `subprocess` (default, compatibility path) or `ort` (in-process ONNX Runtime). |
 | `--opf-command <path>` / `--opf-checkpoint <path>` | Registry-example aliases for the OpenAI Privacy Filter command and checkpoint. |
 | `--opf-locales <tag[,tag...]>` | Native locales for the OpenAI Privacy Filter registry entry. Empty keeps the backend default. |
-| `--kiji-distilbert-command <path>` | Path to the local Kiji DistilBERT subprocess command. Required with the `kiji-distilbert` backend. |
-| `--kiji-distilbert-model-dir <path>` | Path to the pinned Kiji DistilBERT model directory (must contain `SHA256SUMS`, `labels.json`, `model.onnx`, `tokenizer.json`). Required with the `kiji-distilbert` backend. |
-| `--kiji-distilbert-locales <tag[,tag...]>` | Native locales for the Kiji DistilBERT registry entry. Empty keeps the backend default. |
 | `--nym-model-dir <path>` | Pinned Nym-small int8 bundle (`SHA256SUMS`, `config.json`, `model_int8.onnx`, `tokenizer.json`). Required with the `nym` backend unless `GAZE_NYM_MODEL_DIR` is set; install with `gaze setup --safety-net nym`. |
 | `--nym-intra-threads <n>` | ONNX Runtime intra-op threads for the `nym` backend. Defaults to `1`. |
 | `--safety-net-timeout-ms <ms>` | Subprocess deadline. Defaults to `5000`. |
@@ -246,7 +292,8 @@ text and cannot affect restore.
 
 #### Safety-net backends
 
-Two observer-only backends are available; pick one via
+No safety net runs by default. Two opt-in observer-only backends are
+available; pick one via
 `--safety-net-backend <backend>` (v0.8) or the legacy `--safety-net=<kind>`.
 Both share the strict/tolerant exit-code contract, the `LeakReport` shape,
 and the `safety_net_log` audit table.
@@ -258,17 +305,6 @@ mature upstream. Trade-offs: heavier model and slower per-clean latency;
 no first-party fetch path; runtime depends on a third-party Python install
 the operator pins.
 
-**`kiji-distilbert`** (v0.8+) wraps a pinned DistilBERT NER model. It
-supports `--kiji-backend=subprocess` for the existing external command path
-and `--kiji-backend=ort` for in-process ONNX Runtime inference without a
-Python install. Strengths: lightweight ONNX-served weights, straightforward
-fetch script, second NER opinion at the chokepoint that complements OPF's
-class set. Trade-offs: narrower closed label set
-(`person`, `location`, `organization`, `miscellaneous`) so financial-secret
-or account-number suspects are not surfaced; pinned-artifact contract
-requires `SHA256SUMS` present on disk (Axis-1 fail-closed — no silent
-disable). The default remains `subprocess` for backwards compatibility.
-
 **`nym`** (opt-in) runs the pinned Nym-small v3 int8 token classifier in
 process. Only building numbers, licence plates, usernames and dates of birth
 can fire by default (op-B); `[safety_net.nym]` in policy.toml changes the
@@ -278,13 +314,15 @@ allowlist and thresholds. It is not available through
 
 #### Setup
 
-The safety-net features are gated off by default. Build with one or both:
+The OpenAI Privacy Filter backend is gated off by default. Build with it:
 
 ```console
 $ cargo build -p gaze-cli --features safety-net-openai
-$ cargo build -p gaze-cli --features safety-net-kiji
-$ cargo build -p gaze-cli --features safety-net-openai,safety-net-kiji
 ```
+
+The `nym` backend is compiled into the default build through the `setup`
+feature (`safety-net-nym`). Install its pinned bundle with
+`gaze setup --safety-net nym`.
 
 The `opf` command must be installed from a pinned upstream Git revision or
 an official release of the
@@ -304,16 +342,6 @@ If the checkpoint is missing, the CLI fails closed with exit `3` and
 variant `WeightsMissing` before any subprocess spawn. Initialization
 failures are cached for the lifetime of the process so missing-checkpoint
 errors do not retry on every clean.
-
-The Kiji DistilBERT backend follows the same bring-your-own pattern. The
-model directory must contain `SHA256SUMS`, `labels.json`, `model.onnx`,
-and `tokenizer.json`; populate it via `scripts/fetch/fetch-kiji-safetynet-model.sh`.
-A missing artifact (including a missing `SHA256SUMS`) fails closed with the
-typed `SafetyNetArtifactMissing` envelope and exit code `2` *before* the
-subprocess is spawned — Axis-1 reliability never silent-disables a
-requested backend.
-
-See also: [Kiji DistilBERT SafetyNet setup](../../docs/how-to/safety-net/set-up-kiji-safetynet.md).
 
 #### Synthetic example — strict mode
 
@@ -380,24 +408,6 @@ flag table above and the
 same pair is `gaze::SafetyNetPolicy::default()`, so the library's policy-less
 `Pipeline::clean_with_safety_net*` entry points and the CLI share one
 documented default.
-
-#### Synthetic example — Kiji DistilBERT backend
-
-```console
-$ printf '%s' 'Alice Example mailed the package to Berlin' \
-  | gaze clean \
-      --policy=policy.toml \
-      --safety-net=kiji-distilbert \
-      --safety-net-backend=kiji-distilbert \
-      --kiji-distilbert-command=/opt/kiji/bin/kiji \
-      --kiji-distilbert-model-dir=~/.local/share/gaze/models/kiji-distilbert
-```
-
-The `--safety-net-backend` flag overrides any legacy `--safety-net=<kind>`
-value, so a deployment can keep its existing `--safety-net=openai-filter`
-invocation and flip to Kiji by adding one flag. Suspects emit the same
-`LeakReport` shape; the `safety_net_id` field switches to
-`kiji-distilbert`.
 
 #### Approved synthetic PII
 
@@ -532,7 +542,7 @@ Exit codes are defined by `CliError` in [`src/error.rs`](src/error.rs).
 |------|----------|
 | `0` | Success, help, version output, or tolerant-mode safety-net runs that produced only stderr warnings. |
 | `1` | `StdinParse`, `EmptyInput`, `InputTooLarge`, `InvalidEncoding`. |
-| `2` | `PolicyConfig`, including unsupported format, invalid policy, invalid locale, invalid NER threshold, unknown rulepack, unsupported CLI column rules, `SafetyNetConfig` (missing backend command/checkpoint or safety-net flags supplied without the matching feature), or `SafetyNetArtifactMissing` (Axis-1 fail-closed when a backend's pinned artifact is absent, including a missing `SHA256SUMS` for the Kiji DistilBERT backend). |
+| `2` | `PolicyConfig`, including unsupported format, invalid policy, invalid locale, invalid NER threshold, unknown rulepack, unsupported CLI column rules, `SafetyNetConfig` (missing backend command/checkpoint or safety-net flags supplied without the matching feature), or `SafetyNetArtifactMissing` (Axis-1 fail-closed when a backend's pinned artifact is absent, including a missing `SHA256SUMS`). |
 | `3` | `UnknownToken`, `InvalidSignature`, `InvalidBlobVersion`, `BlobExpired`, `Pipeline`, sanitized panic path, and `SafetyNetFailure` variants: `Unavailable`, `WeightsMissing`, `ModelUnavailable`, `InputTooLarge`, `Timeout`, `Runtime`, `InvalidOutput`, `SuspectedLeak` (strict mode only). |
 | `4` | `Io`, `PolicyOpen`. |
 

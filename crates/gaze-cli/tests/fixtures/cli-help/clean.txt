@@ -30,13 +30,13 @@ Options:
       --audit-db <AUDIT_DB>
           Optional SQLite redaction-log database path
       --safety-net <SAFETY_NET>
-          Optional observer-only privacy safety net [possible values: openai-filter, kiji-distilbert, nym]
+          Optional observer-only privacy safety net [possible values: openai-filter, nym]
       --safety-net-backend <SAFETY_NET_BACKEND>
-          v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins. Lets adopters swap the Pass-3 backend without re-typing the legacy `--safety-net` value [possible values: openai-filter, kiji-distilbert, nym]
+          v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins. Lets adopters swap the Pass-3 backend without re-typing the legacy `--safety-net` value [possible values: openai-filter, nym]
       --safety-net-registry
           Enable locale-aware Pass-3 safety-net registry dispatch
       --safety-net-add <SAFETY_NET_ADD>
-          Add one backend to the locale-aware safety-net registry. Repeatable [possible values: openai-filter, kiji-distilbert, nym]
+          Add one backend to the locale-aware safety-net registry. Repeatable [possible values: openai-filter, nym]
       --openai-filter-command <OPENAI_FILTER_COMMAND>
           Path to the local OpenAI Privacy Filter `opf` command
       --openai-filter-checkpoint <OPENAI_FILTER_CHECKPOINT>
@@ -45,22 +45,12 @@ Options:
           OpenAI Privacy Filter operating point, when supported by the command [possible values: high-recall, balanced, high-precision]
       --openai-filter-device <OPENAI_FILTER_DEVICE>
           Device selection for the OpenAI safety-net subprocess (auto|cpu|cuda|mps). Default: auto (let opf decide) [default: auto] [possible values: auto, cpu, cuda, mps]
-      --kiji-backend <KIJI_BACKEND>
-          Kiji DistilBERT runtime backend. Default: subprocess for compatibility [default: subprocess] [possible values: subprocess, ort, tract, candle]
-      --kiji-distilbert-precision <KIJI_DISTILBERT_PRECISION>
-          Kiji DistilBERT ONNX precision. Default: fp32 [default: fp32] [possible values: fp32, int8]
       --opf-locales <OPF_LOCALES>
           Locale list for the OpenAI Privacy Filter registry entry
       --opf-command <OPF_COMMAND>
           Alias for --openai-filter-command in registry examples
       --opf-checkpoint <OPF_CHECKPOINT>
           Alias for --openai-filter-checkpoint in registry examples
-      --kiji-distilbert-command <KIJI_DISTILBERT_COMMAND>
-          Path to the local Kiji DistilBERT subprocess command
-      --kiji-distilbert-model-dir <KIJI_DISTILBERT_MODEL_DIR>
-          Path to the pinned Kiji DistilBERT model directory (must contain SHA256SUMS, labels.json, model.onnx, tokenizer.json)
-      --kiji-distilbert-locales <KIJI_DISTILBERT_LOCALES>
-          Locale list for the Kiji DistilBERT registry entry
       --nym-model-dir <NYM_MODEL_DIR>
           Path to the pinned Nym-small int8 bundle from `gaze setup --safety-net nym` (default: GAZE_NYM_MODEL_DIR)
       --nym-intra-threads <NYM_INTRA_THREADS>

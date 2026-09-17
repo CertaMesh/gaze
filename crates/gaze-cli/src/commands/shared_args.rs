@@ -15,10 +15,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 
-use super::{
-    KijiDistilbertPrecision, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetFallback,
-    SafetyNetMode,
-};
+use super::{OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetFallback, SafetyNetMode};
 
 /// OpenAI Privacy Filter subprocess location and operating point.
 ///
@@ -94,19 +91,6 @@ pub(crate) struct OpfRegistryArgs {
     /// Alias for --openai-filter-checkpoint in registry examples.
     #[arg(long)]
     pub(crate) opf_checkpoint: Option<PathBuf>,
-}
-
-/// Kiji DistilBERT ONNX precision selection.
-///
-/// Shared by `gaze clean` and `gaze daemon`. Precision has no policy.toml
-/// equivalent either, so hardcoding it pinned the daemon to fp32 with no way to
-/// ask for the int8 build. One field, but owned here for the same reason as the
-/// groups above: a re-declaration on one verb only is how the two drift apart.
-#[derive(Args, Debug)]
-pub(crate) struct KijiPrecisionArgs {
-    /// Kiji DistilBERT ONNX precision. Default: fp32.
-    #[arg(long, value_enum, default_value_t = KijiDistilbertPrecision::Fp32)]
-    pub(crate) kiji_distilbert_precision: KijiDistilbertPrecision,
 }
 
 /// Nym-small safety-net backend configuration.

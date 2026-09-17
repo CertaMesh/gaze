@@ -10,12 +10,11 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use super::shared_args::{
-    KijiPrecisionArgs, NymArgs, OpenAiFilterSubprocessArgs, OpfRegistryArgs, RulepackOverrideArgs,
-    SafetyNetLimitArgs, SafetyNetRegistryArgs,
+    NymArgs, OpenAiFilterSubprocessArgs, OpfRegistryArgs, RulepackOverrideArgs, SafetyNetLimitArgs,
+    SafetyNetRegistryArgs,
 };
 use super::{
-    KijiBackend, OpenAiFilterDevice, SafetyNetBackend, SafetyNetFallback, SafetyNetKind,
-    SafetyNetMode,
+    OpenAiFilterDevice, SafetyNetBackend, SafetyNetFallback, SafetyNetKind, SafetyNetMode,
 };
 use crate::error::CliError;
 use crate::io::DEFAULT_MAX_BYTES;
@@ -85,22 +84,8 @@ pub(crate) struct Args {
     /// Device selection for the OpenAI safety-net subprocess.
     #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
     pub(crate) openai_filter_device: OpenAiFilterDevice,
-    /// Kiji DistilBERT runtime backend.
-    #[arg(long, value_enum, default_value_t = KijiBackend::Subprocess)]
-    pub(crate) kiji_backend: KijiBackend,
-    #[command(flatten)]
-    pub(crate) kiji_precision: KijiPrecisionArgs,
     #[command(flatten)]
     pub(crate) opf_registry: OpfRegistryArgs,
-    /// Path to the local Kiji DistilBERT subprocess command.
-    #[arg(long)]
-    pub(crate) kiji_distilbert_command: Option<PathBuf>,
-    /// Path to the pinned Kiji DistilBERT model directory.
-    #[arg(long)]
-    pub(crate) kiji_distilbert_model_dir: Option<PathBuf>,
-    /// Locale list for the Kiji DistilBERT backend.
-    #[arg(long, value_delimiter = ',')]
-    pub(crate) kiji_distilbert_locales: Vec<String>,
     #[command(flatten)]
     pub(crate) nym: NymArgs,
     #[command(flatten)]
@@ -432,14 +417,9 @@ fn clean_options(args: &Args) -> CleanOptions<'_> {
         openai_filter_checkpoint: args.openai_filter.openai_filter_checkpoint.as_deref(),
         openai_filter_operating_point: args.openai_filter.openai_filter_operating_point,
         openai_filter_device: args.openai_filter_device,
-        kiji_backend: args.kiji_backend,
-        kiji_distilbert_precision: args.kiji_precision.kiji_distilbert_precision,
         opf_locales: &args.opf_registry.opf_locales,
         opf_command: args.opf_registry.opf_command.as_deref(),
         opf_checkpoint: args.opf_registry.opf_checkpoint.as_deref(),
-        kiji_distilbert_command: args.kiji_distilbert_command.as_deref(),
-        kiji_distilbert_model_dir: args.kiji_distilbert_model_dir.as_deref(),
-        kiji_distilbert_locales: &args.kiji_distilbert_locales,
         nym_model_dir: args.nym.nym_model_dir.as_deref(),
         nym_intra_threads: args.nym.nym_intra_threads,
         safety_net_timeout_ms: args.safety_net_limits.safety_net_timeout_ms,

@@ -103,9 +103,8 @@ DIRECT_IDENTIFIER_LABELS = frozenset(
 DEFAULT_CONFIGS = (
     "rule-floor-extended",
     "pass2-ner",
-    "full-stack-kiji-resolve",
 )
-PRODUCTION_CONFIG = "full-stack-kiji-resolve"
+PRODUCTION_CONFIG = "pass2-ner"
 VALIDATOR_PROBE_PROTOCOL_SCHEMA_VERSION = 1
 VALIDATOR_PROBE_MANIFEST = Path("scripts/bench/validator_recall_probe/Cargo.toml")
 VALIDATOR_PROBE_TARGET = Path("target/validator-recall-probe")
@@ -1953,7 +1952,6 @@ def run_config(
     config: str,
     documents: Sequence[Document],
     model_dir: Path,
-    kiji_model_dir: Path,
     opf_command: Path | None,
     opf_checkpoint: Path | None,
     opf_daemon_socket: Path | None,
@@ -1975,7 +1973,6 @@ def run_config(
     )
     environment["GAZE_NER_MODEL_DIR"] = str(model_dir)
     environment["GAZE_NER_THRESHOLD"] = str(threshold)
-    environment["GAZE_KIJI_DISTILBERT_MODEL_DIR"] = str(kiji_model_dir)
     if opf_command is not None:
         environment["GAZE_OPENAI_FILTER_OPF"] = str(opf_command)
     if opf_checkpoint is not None:

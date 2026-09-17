@@ -20,10 +20,10 @@ jobs:
           rustc --version
           python -c "import sys; assert sys.version_info >= (3, 12); print(sys.version)"
       - name: Run synthetic Windows subprocess contracts
-        run: cargo test -p gaze-recognizers --no-default-features --features safety-net-openai,safety-net-kiji,test-support --locked -j4 --test windows_subprocess -- --test-threads=1 --nocapture
+        run: cargo test -p gaze-recognizers --no-default-features --features safety-net-openai,test-support --locked -j4 --test windows_subprocess -- --test-threads=1 --nocapture
       - name: Run cancellation interleaving contracts
         if: ${{ !cancelled() }}
-        run: cargo test -p gaze-recognizers --no-default-features --features safety-net-openai,safety-net-kiji,test-support --locked -j4 --lib subprocess_io::tests
+        run: cargo test -p gaze-recognizers --no-default-features --features safety-net-openai,test-support --locked -j4 --lib subprocess_io::tests
       - name: Lint Windows adapter
         if: ${{ !cancelled() }}
-        run: cargo clippy --no-deps -p gaze-recognizers --no-default-features --features safety-net-openai,safety-net-kiji,test-support --locked -j4 --lib --test windows_subprocess -- -D warnings
+        run: cargo clippy --no-deps -p gaze-recognizers --no-default-features --features safety-net-openai,test-support --locked -j4 --lib --test windows_subprocess -- -D warnings

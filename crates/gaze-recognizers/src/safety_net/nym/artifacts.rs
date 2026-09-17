@@ -5,7 +5,7 @@ use std::path::Path;
 use gaze_types::nym::NymLabel;
 use gaze_types::SafetyNetError;
 
-use crate::safety_net::bundle::{verify_bundle, BundleSpec};
+use crate::bundle::{verify_bundle, BundleSpec};
 
 /// Hugging Face repository of the Nym-small model.
 pub const NYM_SMALL_HF_REPO: &str = "Wismut/nym-pii-multilingual-small";
@@ -114,7 +114,7 @@ fn expected_id2label() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::safety_net::bundle::hex_sha256;
+    use crate::bundle::hex_sha256;
 
     #[test]
     fn pinned_bundle_digest_is_the_digest_of_the_pinned_checksum_file() {
@@ -131,7 +131,7 @@ mod tests {
     #[test]
     fn bundle_sha_mismatch_fails_closed() {
         let dir = tempfile::tempdir().unwrap();
-        crate::safety_net::bundle::test_bundle::write(
+        crate::bundle::test_bundle::write(
             dir.path(),
             NYM_SMALL_CHECKSUM_FILE,
             &[

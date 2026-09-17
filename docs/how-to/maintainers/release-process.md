@@ -43,7 +43,7 @@ release text and runs `scripts/gate/model-setup-ownership.sh` on hosted Linux;
 it does not build release assets, create a release, or publish crates.
 
 The ownership gate uses the shipped installer to fetch and strictly verify
-the source-pinned real Kiji FP32 bundle. It checks identical artifact hashes
+the source-pinned real Davlan mBERT NER bundle. It checks identical artifact hashes
 before testing a copy owned by a distinct user, uses a foreign-owned working
 directory, and explicitly runs the ignored cross-directory effective-user test.
 It also verifies loose-mode repair with an independent bundle check and

@@ -274,10 +274,10 @@ benchmark labels **0-covered and 0-overlapped** at the deterministic rule floor:
 - `STATE`
 - `COMPANYNAME`
 
-The tracked Kiji gap analysis independently classifies company and street
-extraction as safety-net/NER gaps and explains why first-name and surname labels
-are not checksum-validatable
-([v0.8 Kiji class-taxonomy gap, lines 32-58](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md#L32-L58),
+The archived v0.8 class-taxonomy gap analysis independently classifies company
+and street extraction as safety-net/NER gaps and explains why first-name and
+surname labels are not checksum-validatable
+([v0.8 class-taxonomy gap, lines 32-58](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md#L32-L58),
 archived at the `v0.13.0` tag).
 
 A broad deterministic rule for these free-text classes would be a
@@ -294,6 +294,11 @@ The following assumes shipped default features, including `phone-parser`, and
 no policy or explicit locale. It describes which recognizers are registered and
 eligible to match; whether a particular input produces a candidate still
 depends on its shape, cues, and validator outcome.
+
+No safety net runs by default. The opt-in OpenAI Privacy Filter
+(`--safety-net openai-filter`) and Nym-small (`--safety-net nym`) nets run only
+when selected, and `gaze setup` wires only the pinned Davlan mBERT NER model into
+the policy it writes.
 
 The plain `core` default locale chain is `global`
 (`crates/gaze-recognizers/embedded/core.toml:1-4`), so the document-basis

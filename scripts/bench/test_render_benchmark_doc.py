@@ -66,7 +66,7 @@ def _arm(seed: int) -> dict:
 def scorecard(revision: str = "a" * 40, dirty: bool = False) -> dict:
     runs = []
     for index, name in enumerate(
-        ("rule-floor-extended", "pass2-ner", "full-stack-kiji-resolve")
+        ("rule-floor-extended", "pass2-ner", "full-stack-nym-resolve")
     ):
         run = _arm(index)
         run["config"] = name
@@ -92,7 +92,7 @@ def scorecard(revision: str = "a" * 40, dirty: bool = False) -> dict:
         "runner_provenance": {
             "entry_point": "scripts/bench/run_no_opf_benchmark.py",
             "model_bundles": [
-                {"model_id": "kiji-distilbert", "expected_sha256": "c" * 64},
+                {"model_id": "nym-small-int8", "expected_sha256": "c" * 64},
                 {"model_id": "davlan-mbert-ner-hrl-onnx", "expected_sha256": "d" * 64},
             ],
         },
@@ -493,6 +493,85 @@ class CliTest(unittest.TestCase):
         )
 
 
+class ShippedDefaultArmTest(unittest.TestCase):
+    """The shipped default changes between releases; old rows keep theirs.
+
+    v0.14.0 shipped the Kiji DistilBERT safety net (`full-stack-kiji-resolve`),
+    which was removed afterwards. Its committed row predates the per-row
+    `shipped_default_arm` field, so it must keep resolving to Kiji rather than
+    being re-labelled with today's default.
+    """
+
+    KIJI = "full-stack-kiji-resolve"
+
+    def legacy_kiji_row(self) -> dict:
+        """A v0.14.0 row as committed: Kiji measured, no recorded default arm."""
+        row = entry("v0.14.0")
+        row.pop("shipped_default_arm")
+        row["arms"][self.KIJI] = copy.deepcopy(row["arms"]["pass2-ner"])
+        row["arms"][self.KIJI]["surviving_pii_utf8_bytes"] = 25179
+        row["arms"]["pass2-ner"]["surviving_pii_utf8_bytes"] = 28059
+        return row
+
+    def test_new_rows_record_todays_shipped_default(self):
+        self.assertEqual(render.SHIPPED_DEFAULT_ARM, "pass2-ner")
+        self.assertEqual(entry("v0.15.0")["shipped_default_arm"], "pass2-ner")
+
+    def test_historical_kiji_row_still_renders_kiji_as_its_default(self):
+        value = history_of(self.legacy_kiji_row())
+        render.validate_history(value)
+        self.assertEqual(render.shipped_default_arm(value["releases"][0]), self.KIJI)
+        rendered = render.apply_blocks(DOC, value)
+        self.assertIn(f"`{self.KIJI}` **(shipped default)**", rendered)
+        self.assertNotIn("`pass2-ner` **(shipped default)**", rendered)
+        self.assertIn(f"**Trend across releases — `{self.KIJI}`.**", rendered)
+        self.assertIn("| 25,179 |", rendered)
+
+    def test_mixed_history_keeps_each_rows_own_default(self):
+        value = history_of(self.legacy_kiji_row())
+        newer = entry("v0.15.0")
+        newer["arms"]["pass2-ner"]["surviving_pii_utf8_bytes"] = 20000
+        value["releases"].append(newer)
+        render.validate_history(value)
+        history_block = render.render_history(value)
+        # The old row reports the Kiji bytes it shipped, named because the arm
+        # differs from the latest default; the new row reports pass2-ner.
+        self.assertIn(f"25,179 (`{self.KIJI}`)", history_block)
+        self.assertIn("| 20,000 |", history_block)
+        current = render.render_current_release(value)
+        self.assertIn("`pass2-ner` **(shipped default)**", current)
+        self.assertNotIn(f"`{self.KIJI}` **(shipped default)**", current)
+
+    def test_committed_v0_14_0_row_resolves_to_kiji(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        rows = {row["version"]: row for row in committed["releases"]}
+        self.assertEqual(render.shipped_default_arm(rows["v0.14.0"]), self.KIJI)
+
+    def test_unmapped_row_without_a_recorded_default_is_refused(self):
+        row = entry("v0.15.0")
+        row.pop("shipped_default_arm")
+        with self.assertRaisesRegex(render.RenderError, "shipped_default_arm"):
+            render.validate_history(history_of(row))
+
+    def test_recorded_default_must_be_a_measured_arm(self):
+        row = entry("v0.15.0")
+        row["shipped_default_arm"] = self.KIJI
+        with self.assertRaisesRegex(render.RenderError, "not among"):
+            render.validate_history(history_of(row))
+
+    def test_scorecard_without_the_shipped_default_arm_is_refused(self):
+        card = scorecard()
+        card["runs"] = [run for run in card["runs"] if run["config"] != "pass2-ner"]
+        with self.assertRaisesRegex(render.RenderError, "shipped default arm"):
+            render.history_entry_from_scorecard(
+                card,
+                version="v0.15.0",
+                machine="m",
+                scorecard_filename="scorecard-v0.15.0.json",
+                scorecard_sha256="0" * 64,
+            )
+
+
 class CommittedDocumentTest(unittest.TestCase):
     """The document committed in this repo must already be in sync."""
 
@@ -817,7 +896,7 @@ class HistoryProvenanceValueGuardTest(unittest.TestCase):
             )
 
     def test_every_model_bundle_needs_a_non_empty_model_id(self):
-        for value in ("", None, 0, ["kiji"]):
+        for value in ("", None, 0, ["nym-small-int8"]):
             with self.subTest(value=value):
                 with self.assertRaises(render.RenderError):
                     render.validate_history(
@@ -828,7 +907,7 @@ class HistoryProvenanceValueGuardTest(unittest.TestCase):
 
     def test_a_model_bundle_entry_must_be_an_object(self):
         broken = copy.deepcopy(history())
-        broken["releases"][-1]["provenance"]["model_bundles"][0] = "kiji-distilbert"
+        broken["releases"][-1]["provenance"]["model_bundles"][0] = "nym-small-int8"
         with self.assertRaises(render.RenderError):
             render.validate_history(broken)
 

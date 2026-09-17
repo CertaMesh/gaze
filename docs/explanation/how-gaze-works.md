@@ -69,7 +69,7 @@ What this run gets wrong, stated plainly:
 
 The same boundary applies to tool-call arguments in agent frameworks: the JSON the model fills in carries placeholders, and Gaze restores them before your tool runs ([how it fits your stack](#how-it-fits-your-stack)).
 
-This is the real output of the current `main` branch, not a picked best case. On the v0.14.0 benchmark (2,910 documents), the shipped default still let **19.3 % of personal-data (PII) bytes** through; the goal is zero ([benchmark](../../docs/reference/benchmarks/README.md#current-release)). The exact policy and commands: [reproduce this example](#reproduce-this-example).
+This is the real output of the current `main` branch, not a picked best case. On the v0.14.0 benchmark (2,910 documents), the configuration that now ships by default (rules plus the NER model, no safety net) still let **20.7 % of personal-data (PII) bytes** through; the goal is zero ([benchmark](../../docs/reference/benchmarks/README.md#current-release)). The exact policy and commands: [reproduce this example](#reproduce-this-example).
 
 ## Seven steps
 
@@ -98,7 +98,7 @@ The fallback (`--safety-net-fallback`) can be `redact` (default), `strict`, or `
 
 ## Reproduce this example
 
-The example above is synthetic. It was produced with the bundled `core` rules, the Davlan NER model, and the Kiji safety net in the default `resolve` mode. Fetch both models once (`bash scripts/fetch/fetch-ner-model.sh` and `bash scripts/fetch/fetch-kiji-safetynet-model.sh`), build the CLI with `--features safety-net-kiji`, and save this policy as `example-policy.toml`:
+The example above is synthetic. It is shown as produced with the bundled `core` rules and the Davlan NER model, with no safety net. Install the NER model once with `gaze setup` (or `bash scripts/fetch/fetch-ner-model.sh`) and save this policy as `example-policy.toml`:
 
 ```toml
 schema_version = "0.1.0"
@@ -150,10 +150,7 @@ action = "tokenize"
 Save the ticket as `ticket.txt` and the model's draft (the reply shown above, with the placeholders exactly as `gaze clean` printed them, session prefix included) as `reply.txt`. Then:
 
 ```sh
-gaze clean --policy example-policy.toml \
-    --safety-net kiji-distilbert --kiji-backend ort \
-    --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert \
-  < ticket.txt > clean.json
+gaze clean --policy example-policy.toml < ticket.txt > clean.json
 jq -r .clean_text clean.json            # what the model receives
 
 jq --rawfile text reply.txt '{session_blob, text: $text}' clean.json \
@@ -183,7 +180,7 @@ Each feature, what you get, where the proof lives.
 - **Reversible by contract.** Tokens are session-scoped, counted per class (`Email_1`, `Email_2`), and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback. Manifests written by an older minor restore on a newer minor — see the reversibility statement at the bottom of [`UPGRADE.md`](../../UPGRADE.md).
 - **Every token is auditable.** Each emission carries a `recognizer_id` plus `recognizer_version_id` (suffixed `_vN`) into the optional SQLite audit log. Pre-v0.8 rows surface as `legacy_unversioned`. The export column set never includes raw PII payloads.
 - **10 validator-backed national IDs across 5 locale packs, 3 locale-gated regex IDs.** Aadhaar (Verhoeff), NIR (MOD-97 variant), Steuer-ID (MOD 11,10), BSN (MOD-11), CPF + CNPJ (MOD-11), NHS (MOD-11), US SSN, UK NINO, Indian PAN. Adopters in BR / FR / NL / IN / UK / US get coverage with one `--locale` flag. Full table in [Detection coverage](#detection-coverage).
-- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](../../docs/explanation/detection/ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. Two backends ship: the OpenAI Privacy Filter and the Apache-2.0 Kiji DistilBERT bundle (26 PII classes, ~8.8 MB). Contract: [`docs/explanation/safety-net/safety-nets.md`](../../docs/explanation/safety-net/safety-nets.md).
+- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](../../docs/explanation/detection/ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. No safety net runs by default. Two opt-in backends ship: the OpenAI Privacy Filter (subprocess) and Nym-small (in process). Contract: [`docs/explanation/safety-net/safety-nets.md`](../../docs/explanation/safety-net/safety-nets.md).
 - **Fail closed everywhere.** Ambiguous matches are tokenized, never silently passed. Unknown validators or normalizers fail at policy load — no degraded mode. Strict-mode SafetyNet exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty.
 - **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) all redact correctly. The MCP runtime in [`gaze-mcp-core`](../../crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
 - **Multi-provider HTTP proxy with a daemon.** `gaze proxy start` puts a PII chokepoint in front of **API-key-authenticated** traffic to OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` — i.e. when an SDK or agent authenticates with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`. Consumer subscription tiers (ChatGPT Plus, Claude.ai, Gemini Advanced) use browser sessions and web endpoints and are outside this public proxy contract. SSE streams and tool-call argument JSON are accumulated chunk-by-chunk before redaction. The strict Anthropic profile proves each full request and response; see its [public contract](../../docs/explanation/proxy/anthropic-messages-contract.md). Subcommands `serve`, `start`, `stop`, `status`, `logs`, `restart`, plus opt-in `install-launchd` / `install-systemd-user`. See [`crates/gaze-proxy/README.md`](../../crates/gaze-proxy/README.md).
@@ -276,8 +273,8 @@ Tenant-specific PII — order IDs, song titles, artist names — needs a diction
 - Detection floor is regex + validator + locale cue. Tenant-specific PII needs a custom recognizer.
 - Linux x86_64 binaries link against glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). Older distros: build from source.
 - No Intel macOS, no musl, no Windows binaries today. Build from source.
-- NER model leaderboard: [`docs/reference/benchmarks/README.md`](../../docs/reference/benchmarks/README.md#ner-model-leaderboard). Kiji DistilBERT (Apache-2.0) ships as default per the leaderboard's strategic read.
-- SafetyNet benchmark cells for Kiji DistilBERT and OpenAI Privacy Filter direct-detector mode are populated in the [safety-net matrix](../../docs/reference/benchmarks/README.md#safety-net-matrix); observer-residual mode remains deferred.
+- NER model leaderboard: [`docs/reference/benchmarks/README.md`](../../docs/reference/benchmarks/README.md#ner-model-leaderboard). The shipped default is the pinned Davlan mBERT NER model with no safety net.
+- SafetyNet benchmark cells for the OpenAI Privacy Filter are populated in the [safety-net matrix](../../docs/reference/benchmarks/README.md#safety-net-matrix). Nym-small measurements are in [safety nets](../../docs/explanation/safety-net/safety-nets.md#measured).
 - `gaze-proxy` ships OpenAI / Anthropic / Gemini adapters. Certificate management, PAC mode, Electron integration, transparent interception, browser sessions, and consumer subscription endpoints are outside its public contract.
 
 ## Glossary

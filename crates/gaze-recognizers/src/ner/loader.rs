@@ -54,16 +54,13 @@ impl NerDetector {
             }
         }
 
-        let parsed_labels = parse_labels(&model_dir.join(LABELS_FILE))?;
-        let config = if entries.iter().any(|(name, _)| name == CONFIG_FILE) {
-            parse_config(&model_dir.join(CONFIG_FILE))?
-        } else if let Some(kiji_config) = parsed_labels.kiji_config {
-            kiji_config
-        } else {
+        let labels = parse_labels(&model_dir.join(LABELS_FILE))?;
+        if !entries.iter().any(|(name, _)| name == CONFIG_FILE) {
             return Err(NerLoadError::MissingArtifact {
                 path: model_dir.join(CONFIG_FILE),
             });
-        };
+        }
+        let config = parse_config(&model_dir.join(CONFIG_FILE))?;
         let backend_kind = NerBackendKind::parse(config.backend.as_deref())?;
         let recognizer_model_id = config
             .recognizer_model_id()
@@ -82,7 +79,7 @@ impl NerDetector {
             backend_kind,
             recognizer_model_id,
             recognizer_model_version,
-            labels: parsed_labels.labels,
+            labels,
             id2label,
         })
     }
@@ -178,26 +175,14 @@ fn hash_file(path: &Path) -> Result<String, NerLoadError> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-struct ParsedLabels {
-    labels: LabelMap,
-    kiji_config: Option<ConfigFile>,
-}
-
-fn parse_labels(path: &Path) -> Result<ParsedLabels, NerLoadError> {
+fn parse_labels(path: &Path) -> Result<LabelMap, NerLoadError> {
     let bytes = fs::read(path).map_err(|source| NerLoadError::Io {
         path: path.to_path_buf(),
         source,
     })?;
-    if let Ok(raw) = serde_json::from_slice::<BTreeMap<String, String>>(&bytes) {
-        return parse_flat_labels(raw).map(|labels| ParsedLabels {
-            labels,
-            kiji_config: None,
-        });
-    }
-
-    let raw: KijiLabelsFile =
-        serde_json::from_slice(&bytes).map_err(|err| NerLoadError::LabelsParse(err.to_string()))?;
-    parse_kiji_labels(raw)
+    let raw = serde_json::from_slice::<BTreeMap<String, String>>(&bytes)
+        .map_err(|err| NerLoadError::LabelsParse(err.to_string()))?;
+    parse_flat_labels(raw)
 }
 
 fn parse_flat_labels(raw: BTreeMap<String, String>) -> Result<LabelMap, NerLoadError> {
@@ -221,83 +206,6 @@ fn parse_flat_labels(raw: BTreeMap<String, String>) -> Result<LabelMap, NerLoadE
         ));
     }
     Ok(LabelMap(map))
-}
-
-#[derive(Deserialize)]
-struct KijiLabelsFile {
-    schema_version: u64,
-    source: String,
-    source_commit: String,
-    labels: Vec<KijiLabelEntry>,
-}
-
-#[derive(Deserialize)]
-struct KijiLabelEntry {
-    id: String,
-    upstream: Vec<String>,
-}
-
-fn parse_kiji_labels(raw: KijiLabelsFile) -> Result<ParsedLabels, NerLoadError> {
-    if raw.schema_version != 1
-        || raw.source != "onnx-community/distilbert-NER-ONNX"
-        || raw.source_commit != "3a19fe9404a4469d91aa3d551558a97f68872f67"
-    {
-        return Err(NerLoadError::LabelsParse(
-            "unsupported Kiji labels.json manifest".to_string(),
-        ));
-    }
-
-    let mut labels = BTreeMap::new();
-    let mut id2label = vec!["O".to_string()];
-    for entry in raw.labels {
-        let class = match entry.id.as_str() {
-            "person" => PiiClass::Name,
-            "location" => PiiClass::Location,
-            "organization" => PiiClass::Organization,
-            "miscellaneous" => PiiClass::custom("miscellaneous").expect("valid custom class"),
-            other => {
-                return Err(NerLoadError::LabelsParse(format!(
-                    "unsupported Kiji label id `{other}`"
-                )));
-            }
-        };
-        labels.insert(entry.id, class.clone());
-        for upstream in entry.upstream {
-            if upstream.is_empty() || upstream.contains('/') || upstream.contains('\\') {
-                return Err(NerLoadError::LabelsParse(
-                    "invalid Kiji upstream label".to_string(),
-                ));
-            }
-            if !id2label.iter().any(|existing| existing == &upstream) {
-                id2label.push(upstream.clone());
-            }
-            labels.insert(upstream, class.clone());
-        }
-    }
-    if labels.is_empty() {
-        return Err(NerLoadError::LabelsParse(
-            "labels.json produced no usable mappings".into(),
-        ));
-    }
-
-    let id2label = id2label
-        .into_iter()
-        .enumerate()
-        .map(|(index, label)| (index.to_string(), label))
-        .collect();
-    Ok(ParsedLabels {
-        labels: LabelMap(labels),
-        kiji_config: Some(ConfigFile {
-            backend: Some("ort".to_string()),
-            model_id: Some(raw.source),
-            model_name: None,
-            model: None,
-            version: None,
-            model_version: Some(raw.source_commit),
-            recognizer_version: None,
-            id2label: Some(id2label),
-        }),
-    })
 }
 
 #[derive(Deserialize)]
