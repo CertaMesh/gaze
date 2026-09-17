@@ -708,11 +708,10 @@ priority = 86
 #     signal whatsoever and is indistinguishable from a year, an order number, or an amount. The
 #     DOCUMENT-locale gate is the only thing standing in for that missing structure, which is why
 #     these stay gated. `postal.at_ch` matches four digits only behind a cue or before a city-shaped
-#     token; see its own note. Document-basis rules of one class resolve FIRST-LOCALE-WINS: the
-#     first chain locale yielding any candidate stops the loop, so a chain such as
-#     [de-AT, de-DE] lets `postal.at_ch` shadow `postal.de` in a document holding both shapes
-#     (pinned in `postal_at_ch.rs`). Prefer a single active country locale, or split processing by
-#     locale_chain. The loader lint warns, and fails strict mode, on the co-firing five-digit pair.
+#     token; see its own note. Document-basis rules of one class resolve PER SPAN across the
+#     chain: an earlier locale wins only where its candidate overlaps a later locale's, so under
+#     [de-AT, de-DE] a de-AT match (true or false) does not switch `postal.de` off for a German
+#     code elsewhere in the document (pinned in `postal_at_ch.rs`). The loader lint warns, and fails strict mode, on the co-firing five-digit pair.
 #
 #   ALPHANUMERIC — format-basis, always-on: `postal.ca`, `postal.gb`, `postal.ie`
 #     These interleave letters and digits in positions that ordinary prose, source code, reference

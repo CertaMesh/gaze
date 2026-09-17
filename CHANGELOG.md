@@ -97,14 +97,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   protected a byte the candidate leaks, no change at all outside `de-AT` /
   `de-CH` chains, and every restore exact.
 
-  **Locale chains.** Document-basis rules of one class resolve
-  first-locale-wins. With a chain such as `de-AT, de-DE`, a document holding an
-  Austrian code stops at `de-AT` and `postal.de` never runs, so a German
-  five-digit code in the same document stays untokenized (pinned in
-  `postal_at_ch.rs`). Use one country locale per document, or split processing
-  by locale chain. The no-policy `core-extended` compatibility chain
-  (`global, en-US, de-DE, de-AT, de-CH`) now also reaches this rule for any
-  document in which `postal.us` and `postal.de` found nothing; forced onto the
+  **Locale chains.** Document-basis rules of one class resolve per span
+  across the chain, so under `de-AT, de-DE`, `de-CH, de-DE` or `de-AT, en-US`
+  a four-digit match does not switch off `postal.de` / `postal.us` for a
+  five-digit code elsewhere in the same document (pinned in
+  `postal_at_ch.rs`). The no-policy `core-extended` compatibility chain
+  (`global, en-US, de-DE, de-AT, de-CH`) therefore runs this rule on every
+  document and keeps each match no US or German candidate overlaps; forced onto the
   1,319 other holdout documents it produced 54 gold ZIP, 142 other-gold and 10
   no-gold tokens. Pass `--locale=global` or a narrower policy chain to avoid it.
 

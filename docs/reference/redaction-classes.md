@@ -339,7 +339,7 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1337`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1343`; `crates/gaze-assembly/src/defaults.rs:45-77` |
 | `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.at_ch, postal.ca, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
@@ -362,10 +362,11 @@ document-basis and locale-gated and appear only in the second row.
 `postal.at_ch` is in the same group: a four-digit string carries even less
 signal, so it matches only directly after a postal cue or directly before a
 city-shaped token, and only for `de-AT` and `de-CH` documents. Document-basis
-rules of one class resolve first-locale-wins, so a chain such as
-`de-AT, de-DE` lets `postal.at_ch` shadow `postal.de` in a document holding both
-shapes. In the second row's chain `en-US` and `de-DE` come first, so
-`postal.at_ch` runs only for documents in which neither found a postal code.
+rules of one class resolve per span across the chain
+([Locale Chain](../explanation/policy/locale-chain.md)), so under `de-AT, de-DE`
+both `postal.at_ch` and `postal.de` tokenize their own codes in one document. In
+the second row's chain `postal.at_ch` therefore runs on every document and keeps
+each match that no `postal.us` or `postal.de` candidate overlaps.
 Its measured false-positive class is a four-digit number followed by a
 capitalised German noun (`1500 Euro`); every such token restores losslessly.
 `postal.ca`, `postal.gb`, and `postal.ie` interleave letters and digits in

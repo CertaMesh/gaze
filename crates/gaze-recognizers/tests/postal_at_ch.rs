@@ -320,16 +320,57 @@ fn the_rule_is_gated_to_de_at_and_de_ch_documents() {
     }
 }
 
-/// `custom:postal_code` document-basis rules resolve FIRST-LOCALE-WINS per class
-/// (`RecognizerRegistry::detect_candidate_pool` breaks at the first chain locale yielding any
-/// candidate). `postal.at_ch` and `postal.de` therefore race rather than add. Pinned in all four
-/// orderings so a registry change that flips the outcome fails here instead of silently.
+/// `custom:postal_code` document-basis rules resolve per span across the locale chain
+/// (`RecognizerRegistry::detect_candidate_pool`): an earlier locale wins only where its candidates
+/// overlap a later locale's. A four-digit match at `de-AT` / `de-CH`, true or false, must not
+/// switch off `postal.de` / `postal.us` for the rest of the document. Each trigger is asserted
+/// tokenized first, so the later-locale assertion cannot pass vacuously.
 #[test]
-fn locale_chain_first_locale_wins_against_postal_de_is_pinned() {
+fn mixed_country_document_tokenizes_four_and_five_digit_codes_under_every_chain() {
+    let triggers = [
+        ("1500 Euro", "1500"),
+        ("4020 Musterstadt", "4020"),
+        ("CH-8001 Musterstadt", "CH-8001"),
+        ("PLZ 1010", "1010"),
+    ];
+    let german = [
+        ("10115 Musterberg", "10115"),
+        ("D-10115", "10115"),
+        ("PLZ 80331", "80331"),
+    ];
+    let us = [("Springfield, IL 90210", "90210")];
+    let chains: [(&[LocaleTag], &[(&str, &str)]); 3] = [
+        (&[LocaleTag::DeAt, LocaleTag::DeDe], &german),
+        (&[LocaleTag::DeCh, LocaleTag::DeDe], &german),
+        (&[LocaleTag::DeAt, LocaleTag::EnUs], &us),
+    ];
+    for (chain, later) in chains {
+        let names: Vec<&str> = chain.iter().map(LocaleTag::as_str).collect();
+        for (trigger, trigger_code) in triggers {
+            for (later_text, later_code) in later {
+                let doc = format!("Kosten laut Anlage: {trigger}. Lieferadresse: {later_text}.");
+                let cleaned = clean_in(chain, &doc);
+                assert!(
+                    !cleaned.contains(trigger_code),
+                    "{names:?} {doc:?}: four-digit trigger must be tokenized: {cleaned:?}"
+                );
+                assert!(
+                    !cleaned.contains(later_code),
+                    "{names:?} {doc:?}: later-locale code must still be tokenized: {cleaned:?}"
+                );
+            }
+        }
+    }
+}
+
+/// Single-locale chains keep each rule to its own shape, and the reversed chain behaves the same
+/// as the forward one.
+#[test]
+fn locale_chain_order_does_not_change_the_postal_token_set() {
     let mixed = "Wien: 4020 Musterstadt. Berlin: 10115 Musterberg.";
 
-    // de-AT only: the Austrian code is tokenized; the German five-digit code is not claimed by
-    // this rule and is never split into a four-digit fragment.
+    // de-AT only: the German five-digit code is not claimed by this rule and is never split
+    // into a four-digit fragment.
     let at = clean_in(&[LocaleTag::DeAt], mixed);
     assert!(!at.contains("4020"), "{at:?}");
     assert!(at.contains("10115"), "{at:?}");
@@ -339,23 +380,14 @@ fn locale_chain_first_locale_wins_against_postal_de_is_pinned() {
     assert!(de.contains("4020"), "{de:?}");
     assert!(!de.contains("10115"), "{de:?}");
 
-    // [de-AT, de-DE]: de-AT yields a candidate, so the loop stops there and `postal.de` never
-    // runs. The German code is SHADOWED. Same documented trade `postal.de` / `postal.us` already
-    // make; an adopter mixing countries should split processing by locale chain.
-    let at_de = clean_in(&[LocaleTag::DeAt, LocaleTag::DeDe], mixed);
-    assert!(!at_de.contains("4020"), "{at_de:?}");
-    assert!(at_de.contains("10115"), "{at_de:?}");
-
-    // [de-DE, de-AT]: the mirror image.
-    let de_at = clean_in(&[LocaleTag::DeDe, LocaleTag::DeAt], mixed);
-    assert!(de_at.contains("4020"), "{de_at:?}");
-    assert!(!de_at.contains("10115"), "{de_at:?}");
-
-    // Fallback still works: with no anchored four-digit code in the document, [de-AT, de-DE]
-    // falls through to de-DE and `postal.de` tokenizes the German code.
-    let only_german = "Berlin: 10115 Musterberg.";
-    let fallback = clean_in(&[LocaleTag::DeAt, LocaleTag::DeDe], only_german);
-    assert!(!fallback.contains("10115"), "{fallback:?}");
+    for chain in [
+        [LocaleTag::DeAt, LocaleTag::DeDe],
+        [LocaleTag::DeDe, LocaleTag::DeAt],
+    ] {
+        let both = clean_in(&chain, mixed);
+        assert!(!both.contains("4020"), "{chain:?} {both:?}");
+        assert!(!both.contains("10115"), "{chain:?} {both:?}");
+    }
 }
 
 // ======================================================= restore
