@@ -11,11 +11,6 @@ required_artifacts = ["model.onnx", "tokenizer.json", "config.json", "tokenizer_
 [builtin_source_ids]
 ids = [
     "ner",
-    "kiji-distilbert",
-    "kiji-distilbert-ort",
-    "kiji-distilbert-tract",
-    "kiji-distilbert-candle",
-    "kiji-distilbert-subprocess",
     "openai-privacy-filter",
     "openai-privacy-filter-subprocess",
 ]

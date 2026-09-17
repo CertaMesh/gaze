@@ -237,7 +237,7 @@ fn bridge_joiner_tokens(
 }
 
 fn is_entity_joiner_token(text: &str) -> bool {
-    // Mirrors Kiji `isEntityJoinerToken` in onnx_model_detector.go:410-421.
+    // Mirrors `isEntityJoinerToken` in the upstream Kiji Go detector (onnx_model_detector.go:410-421).
     let trimmed = text.trim();
     !trimmed.is_empty() && trimmed.chars().all(|ch| ".,@_-+:/#%&=".contains(ch))
 }

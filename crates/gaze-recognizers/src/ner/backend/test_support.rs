@@ -13,6 +13,10 @@ struct TestSupportBackend;
 
 struct ErrorBackend;
 
+/// Stands in for the pinned Davlan bundle in `gaze index` tests: fixed person and organization
+/// names, found wherever they occur.
+struct IndexFixtureBackend;
+
 impl NerBackend for TestSupportBackend {
     fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         Ok(input
@@ -32,6 +36,28 @@ impl NerBackend for TestSupportBackend {
     }
 }
 
+impl NerBackend for IndexFixtureBackend {
+    fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+        const TARGETS: &[(&str, PiiClass)] = &[
+            ("Dr. Schmidt", PiiClass::Name),
+            ("Prof. Weber", PiiClass::Name),
+            ("Alice Mueller", PiiClass::Name),
+            ("Globex GmbH", PiiClass::Organization),
+            ("Initech AG", PiiClass::Organization),
+        ];
+        let mut spans = Vec::new();
+        for (value, class) in TARGETS {
+            spans.extend(input.match_indices(value).map(|(start, _)| NerSpanResult {
+                span: start..start + value.len(),
+                class: class.clone(),
+                score: 0.99,
+            }));
+        }
+        spans.sort_by_key(|span| span.span.start);
+        Ok(spans)
+    }
+}
+
 impl NerBackend for ErrorBackend {
     fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         Err(NerRuntimeError::Inference(
@@ -47,6 +73,7 @@ pub(crate) fn load_test_support_recognizer(
     let backend: Arc<dyn NerBackend> = match model_dir.file_name().and_then(|name| name.to_str()) {
         Some("__gaze_test_fixed_ner") => Arc::new(TestSupportBackend),
         Some("__gaze_test_error_ner") => Arc::new(ErrorBackend),
+        Some("__gaze_test_index_ner") => Arc::new(IndexFixtureBackend),
         _ => return None,
     };
 

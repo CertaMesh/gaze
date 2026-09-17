@@ -1000,8 +1000,16 @@ fn daemon_request(policy: &Path, extra_args: &[String], text: &str) -> (Value, O
 /// text it is handed.
 fn write_blind_opf(dir: &Path) -> PathBuf {
     let path = dir.join("blind-opf");
-    write_executable(&path, "#!/bin/sh\ncat >/dev/null\nprintf '[]\\n'\n");
+    write_executable(&path, &echoing_opf_script("[]"));
     path
+}
+
+/// An `opf` stand-in reporting `spans`. The OPF adapter only accepts output that echoes the
+/// exact text it analysed.
+fn echoing_opf_script(spans: &str) -> String {
+    format!(
+        "#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps({{\"text\": open(\"/dev/stdin\", encoding=\"utf-8\").read(), \"detected_spans\": json.loads(sys.argv[1])}}))' '{spans}'\n"
+    )
 }
 
 fn opf_checkpoint(dir: &Path) -> PathBuf {
@@ -1013,69 +1021,6 @@ fn opf_checkpoint(dir: &Path) -> PathBuf {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
     }
     path
-}
-
-/// Both registry entries are live inside one daemon process, and the daemon
-/// dispatches between them by locale.
-///
-/// The en-US request reaches the OPF entry (which answers, so the request
-/// succeeds); the de-DE request reaches the Kiji entry (whose model is a
-/// placeholder, so it fails closed). One backend could not produce both
-/// outcomes, which is what makes this a multi-backend proof rather than a
-/// parsing one.
-#[cfg(all(feature = "safety-net-openai", feature = "safety-net-kiji"))]
-#[test]
-#[file_serial(gaze_subprocess)]
-fn daemon_safety_net_registry_dispatches_between_two_backends_by_locale() {
-    let dir = tempdir().unwrap();
-    let opf = write_blind_opf(dir.path());
-    let checkpoint = opf_checkpoint(dir.path());
-    let kiji = dir.path().join("kiji");
-    write_executable(&kiji, "#!/bin/sh\nexit 91\n");
-    let model_dir = dir.path().join("kiji-distilbert");
-    fs::create_dir(&model_dir).unwrap();
-    for artifact in ["SHA256SUMS", "labels.json", "model.onnx", "tokenizer.json"] {
-        fs::write(model_dir.join(artifact), b"placeholder").unwrap();
-    }
-    let (_policy_dir, policy) = write_preserve_default_policy();
-
-    let registry_args = |locale: &str| -> Vec<String> {
-        vec![
-            format!("--locale={locale}"),
-            "--safety-net-registry".to_string(),
-            "--safety-net-add=openai-filter".to_string(),
-            "--safety-net-add=kiji-distilbert".to_string(),
-            format!("--safety-net-timeout-ms={}", safety_net_timeout_ms()),
-            format!("--opf-command={}", opf.display()),
-            format!("--opf-checkpoint={}", checkpoint.display()),
-            "--opf-locales=en-US,en-GB".to_string(),
-            format!("--kiji-distilbert-command={}", kiji.display()),
-            format!("--kiji-distilbert-model-dir={}", model_dir.display()),
-            "--kiji-distilbert-locales=de-DE,de-AT".to_string(),
-        ]
-    };
-
-    let (english, output) = daemon_request(&policy, &registry_args("en-US"), "hello there");
-    assert_eq!(
-        english["clean_text"],
-        "hello there",
-        "en-US must route to the OPF entry and answer: response={english}, stderr={}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        english.get("error").is_none(),
-        "en-US must not fail closed: {english}"
-    );
-
-    let (german, _output) = daemon_request(&policy, &registry_args("de-DE"), "hallo zusammen");
-    assert_eq!(
-        german["error"], "ModelUnavailable",
-        "de-DE must route to the Kiji entry and fail closed on its placeholder model: {german}"
-    );
-    assert!(
-        german.get("clean_text").is_none(),
-        "a failed-closed request must not answer with text: {german}"
-    );
 }
 
 /// The axis-1 contrast: same daemon, same policy, same document, same `opf`
@@ -1153,10 +1098,9 @@ fn daemon_safety_net_registry_finding_is_enforced_not_merely_parsed() {
     let opf = dir.path().join("reporting-opf");
     write_executable(
         &opf,
-        &format!(
-            "#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' \
-             '[{{\"label\":\"private_person\",\"start\":{start},\"end\":{end},\"score\":0.99}}]'\n"
-        ),
+        &echoing_opf_script(&format!(
+            r#"[{{"label":"private_person","start":{start},"end":{end},"score":0.99}}]"#
+        )),
     );
     let (_policy_dir, policy) = write_preserve_default_policy();
 

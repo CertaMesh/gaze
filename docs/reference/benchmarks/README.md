@@ -61,20 +61,42 @@ mixed-metric tables, diagnostic partitions, and deltas whose favorable sign
 depends on the metric. Pin, evidence, command, rationale, and category tables
 stay plain because they are not optimization results.
 
-### The three arms
+### The arms
 
-Every release scorecard runs the same three configurations:
+Every release scorecard runs the same two configurations:
 
 | Arm | What it is |
 | --- | --- |
 | `rule-floor-extended` | the shipped deterministic recognizers alone |
-| `pass2-ner` | that floor plus the configured `NerRecognizer` (threshold `0.3` by default) |
-| `full-stack-kiji-resolve` | **the shipped default** — Pass 2 plus the in-process Kiji SafetyNet under the shipped `Resolve`/`Redact` policy, with exact-restore checks, manifest-integrity checks, and a post-policy SafetyNet scan |
+| `pass2-ner` | **the shipped default**: that floor plus the pinned Davlan mBERT `NerRecognizer` (threshold `0.3` by default), with no safety net |
 
-An optional `full-stack-opf-resolve` arm exercises the OpenAI Privacy Filter
-through the same contract. It is excluded from the default run because it needs
-a separately installed verified 2.6 GB checkpoint and a warmed daemon, and it
-has a measured fail-closed invalid-output rate.
+Two opt-in arms run a safety net under the shipped `Resolve`/`Redact` policy,
+with exact-restore checks, manifest-integrity checks, and a post-policy
+SafetyNet scan. `full-stack-opf-resolve` exercises the OpenAI Privacy Filter. It
+is excluded from the default run because it needs a separately installed
+verified 2.6 GB checkpoint and a warmed daemon, and it has a measured
+fail-closed invalid-output rate. `full-stack-nym-resolve` exercises the in-process
+Nym-small net and needs its pinned bundle.
+
+Release rows up to v0.14.0 predate the removal of the Kiji DistilBERT safety net
+and report `full-stack-kiji-resolve`, which was the shipped default then. Those rows
+are kept as measured.
+
+### Scored-label contracts
+
+Which corpus labels count as gold PII is itself a versioned contract. Rows
+measured before contracts existed use **v1**, which scores every label.
+[`scored-labels-v2.json`](scored-labels-v2.json) rules on each of the 29 corpus
+labels with a reason; it puts the credential labels `PASSWORD` and
+`SECURITYTOKEN` out of contract (user ruling 2026-09-16: credentials are not
+personal data), treats Gaze's own credential classes as neutral predictions, and
+marks `USERNAME`, `URL`, `COMPANYNAME`, `COUNTRY` and `STATE` as rulings still
+pending. v1 stays the default until v2 is ratified as the release contract.
+Out-of-contract bytes are neither leaked nor false positive. Numbers from
+different contracts are never compared as a regression, a row measured under
+anything other than v1 names its contract, and the release trend line only
+joins rows measured under the same contract. See
+[`scripts/bench/README.md`](../../../scripts/bench/README.md#scored-label-contracts).
 
 ### Zero-leak production goals
 
@@ -129,10 +151,8 @@ the full row count, validates every selected annotation boundary and annotated
 substring, and converts source character offsets to UTF-8 byte offsets before
 scoring.
 
-The word `kiji` in the dataset name does **not** mean this benchmark uses
-Gaze's Kiji SafetyNet model. Gaze's Kiji backend is the separately pinned
-`onnx-community/distilbert-NER-ONNX` bundle; the runner records both model
-directories independently.
+The word `kiji` in the dataset name does **not** refer to a Gaze model. The
+corpus is unrelated to the removed Kiji DistilBERT safety net.
 
 **Limits.** Every selected row contains annotated PII, so the split measures
 false-positive bytes only within positive documents and cannot replace a
@@ -305,14 +325,12 @@ the measured tree only in docs and version pins.
 
 The tracked benchmark snapshot lives at
 [`crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json`](../../../crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json).
-`cargo bench -p gaze-recognizers --features safety-net-kiji,safety-net-openai --bench safety_net_matrix`
+`cargo bench -p gaze-recognizers --features safety-net-openai --bench safety_net_matrix`
 validates that the snapshot pins match runtime constants and prints the JSON for
 CI logs.
 
-Current status: `opf_kiji_direct_run_v1_observer_residual_deferred` —
-direct-detector cells are populated for Kiji DistilBERT and OpenAI Privacy
-Filter; observer-residual cells remain deferred pending the cleaned-output
-harness.
+Current status: `observer_residual_and_direct_run_v1`. Direct-detector and
+observer-residual cells are populated for the OpenAI Privacy Filter.
 
 ### Matrix shape
 
@@ -320,11 +338,11 @@ The snapshot schema is version 2, keyed by backend, locale, and mode:
 
 | Dimension | Values |
 | --- | --- |
-| Backends | `kiji_distilbert`, `openai_privacy_filter` |
+| Backends | `openai_privacy_filter` |
 | Locales | `Global`, `EnUs`, `DeDe` |
 | Modes | `direct_detector`, `observer_residual` |
 
-That is 12 cells. Each `direct_detector` cell carries nullable precision,
+That is 6 cells. Each `direct_detector` cell carries nullable precision,
 recall, F1, and per-class metrics. Each `observer_residual` cell also carries
 nullable `observer_residual_recall`, `agreement_with_rule_floor`,
 `expansion_fraction`, `contradiction_fraction`, and `novel_tp_over_rule_floor`.
@@ -333,24 +351,13 @@ The top-level `strict_span_leak_rate` block is mode-independent and records one
 nullable headline field per backend-locale pair. It measures end-to-end
 fail-closed behavior rather than detector precision/recall.
 
-Kiji and OPF direct-detector fields are populated from pinned local backend
-runs. **Observer-residual cells remain `null`** until their separate
-cleaned-output harness runs are captured. Publishing observer-residual claims
-without those pins would violate the axis-4 trust contract.
+Cells are populated from pinned local backend runs. Publishing claims without
+those pins would violate the axis-4 trust contract.
+
+The Kiji DistilBERT rows were removed with the backend. See
+[Kiji DistilBERT removal](#kiji-distilbert-removal).
 
 ### Backend integrity pins
-
-Kiji DistilBERT:
-
-| Pin | Value |
-| --- | --- |
-| Source repo | `onnx-community/distilbert-NER-ONNX` |
-| Source commit | `3a19fe9404a4469d91aa3d551558a97f68872f67` |
-| Bundle SHA256 (fp32) | `c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f` |
-| Bundle SHA256 (int8) | `6e7f238f38c5ee7977052ec391f6a8c68bbef038091f2ecff4747cc2268210cb` |
-| Model SHA256 | `b5f77096d0d9f425d34a2e263f8a2dfb845cdc757dc00c7a1e69e9cbb93115d5` |
-| Tokenizer SHA256 | `cb26b43c98e8266ae3e99c2a583cf8315d73b33a17e6b20b4df7ff1f22392d34` |
-| Label-map SHA256 | `d3753ce580a9d43b113d779c712494bd61341285317beec49cc1e848b86f9a97` |
 
 OpenAI Privacy Filter:
 
@@ -366,17 +373,15 @@ checkpoint into `~/.opf/privacy_filter` by default, or into the directory
 selected by `OPF_CHECKPOINT` / `--checkpoint`. It does not publish a GitHub
 release binary, so Gaze does not pin a binary checksum — the source commit and
 checkpoint bundle are the trust anchors. The bundle hash was captured from a
-clean local `opf download` on 2026-05-15 and is SHA256 over the Kiji-style
+clean local `opf download` on 2026-05-15 and is SHA256 over a
 line-per-file `SHA256SUMS` manifest for the required artifact list in
 declaration order.
 
 ### Runnable paths
 
 ```bash
-python3 scripts/bench/kiji-bench-scorer.py --repo-root . --mode all --measure-latency --precision int8 --model-dir "$HOME/.cache/gaze/<kiji-int8-bundle>" --python python3
 python3 scripts/bench/opf-bench-scorer.py --repo-root . --mode all --measure-latency --python python3
 cargo bench -p gaze-recognizers --bench safety_net_matrix
-GAZE_KIJI_DISTILBERT_MODEL_DIR="$HOME/.cache/gaze/<kiji-bundle>" GAZE_SAFETY_NET_MATRIX_KIJI_BACKEND=ort cargo bench -p gaze-recognizers --features safety-net-kiji --bench safety_net_matrix
 ```
 
 | Evidence | Path |
@@ -384,18 +389,6 @@ GAZE_KIJI_DISTILBERT_MODEL_DIR="$HOME/.cache/gaze/<kiji-bundle>" GAZE_SAFETY_NET
 | Matrix snapshot | [`crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json`](../../../crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json) |
 | Perf snapshot | [`crates/gaze-recognizers/benches/safety_net_perf_snapshot.json`](../../../crates/gaze-recognizers/benches/safety_net_perf_snapshot.json) |
 | Bench source | [`crates/gaze-recognizers/benches/safety_net_matrix.rs`](../../../crates/gaze-recognizers/benches/safety_net_matrix.rs) |
-
-Claims currently supported by this surface:
-
-| Claim | Evidence |
-| --- | --- |
-| Kiji int8 observer-residual macro recall `0.666667` | `safety_net_matrix_snapshot.json`, `kiji_distilbert_int8` observer-residual locale cells |
-| Kiji int8 F1 delta `0.000` versus fp32 Kiji | same snapshot, matching fp32/int8 direct and observer cells across locales |
-| Kiji int8 one-shot cold start `271.909583ms` | `safety_net_perf_snapshot.json` |
-
-Earlier rc-cycle fp32 warm-p50 and int8 cold-start headlines are **not** present
-in the committed final snapshots. Do not cite them unless a runnable snapshot is
-added.
 
 ---
 
@@ -408,18 +401,15 @@ evidence is written to
 [`crates/gaze-recognizers/benches/ner_models_snapshot.json`](../../../crates/gaze-recognizers/benches/ner_models_snapshot.json).
 
 Measured 2026-05-15 on macOS 26.5 arm64, Apple M5 Max. The scorer used Python
-3.10.20 for the Tiny/Mobile/Mini candidates; Kiji warm ORT rows used the Rust
-ORT backend. Corpus: 150 fixtures, `target/coverage-report.json` SHA256
+3.10.20 for the Tiny/Mobile/Mini candidates. Corpus: 150 fixtures, `target/coverage-report.json` SHA256
 `760f96163a68ce5f7dbc0409aa5109aa1a3ed190001536647e1881ba9d40a49c`.
 
 Macro averages are across the committed `Global`, `EnUs`, and `DeDe` locale
 cells. Warm p50 keeps the model/session loaded over the same 150 direct fixture
-texts, except Kiji ORT warm rows, which use the live ORT bench fixture.
+texts.
 
 | Model info | HF repo @ commit info | License info | Params info | Bundle size ↓ (goal lower) | Direct recall ↑ (goal 1.000) | Observer recall ↑ (goal 1.000) | Warm p50 ↓ (goal no regression) |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| **Kiji DistilBERT int8 ORT** (shipped default) | same source, local int8 artifact | Apache-2.0 | 66M | 63MB model | 0.125 | 0.667 | 1.849ms |
-| Kiji DistilBERT fp32 ORT | `onnx-community/distilbert-NER-ONNX@3a19fe9` | Apache-2.0 | 66M | 249MB model | 0.125 | 0.667 | 2.562ms |
 | openobscure TinyBERT4L PII NER int8 | `openobscure/tinybert4l-pii-ner-int8@f8399a9` | Apache-2.0 | 14M | 13.95MB | 0.070 | 0.271 | 1.087ms |
 | mrm8488 MobileBERT NER | `mrm8488/mobilebert-finetuned-ner@3f9a1f3` | MIT | 25M | 94.29MB | 0.124 | 0.661 | 16.494ms |
 | osiria MiniLM-L6-H384 Italian NER | `osiria/minilm-l6-h384-italian-cased-ner@125c646` | MIT | 22.6M | 174.30MB | 0.124 | 0.667 | 4.703ms |
@@ -435,23 +425,7 @@ latency:
 | 3 | osiria MiniLM-L6-H384 Italian NER | MIT | Yes, locale caveat | 0.117 / 0.124 / 0.105 | 0.206 / 0.667 / 0.264 | 1566.991 |
 | 4 | mrm8488 MobileBERT NER | MIT | Yes | 0.232 / 0.124 / 0.141 | 0.362 / 0.661 / 0.369 | 1760.778 |
 | 5 | dslim/bert-base-NER (English) | MIT | Yes | 0.300 / 0.124 / 0.152 | 0.290 / 0.655 / 0.323 | 1737.297 |
-| 6 | Kiji DistilBERT | Apache-2.0 | Yes | 0.247 / 0.125 / 0.140 | 0.246 / 0.667 / 0.287 | 163.161 |
-| 7 | openobscure TinyBERT4L PII NER int8 | Apache-2.0 | Yes, recall caveat | 0.424 / 0.070 / 0.113 | 0.478 / 0.271 / 0.296 | 76.548 |
-
-### Which backend to pick
-
-| Need | Use | Reason |
-| --- | --- | --- |
-| `<50MB` total model bundle | openobscure TinyBERT4L PII NER int8 | Only measured candidate below 50MB and the fastest warm p50. **Not** a Kiji replacement where observer-residual recall matters. |
-| `<100ms` warm p50 with recall preserved | Kiji DistilBERT int8 ORT | Warm p50 `1.849ms`, recall matches fp32 Kiji under the existing int8 gate. |
-| Highest recall among permissive tiny candidates | osiria MiniLM-L6-H384 Italian NER | Ties Kiji observer recall here, but it is Italian-native and its 174MB bundle misses the low-spec storage target. |
-
-Low-spec reference read:
-
-| Reference profile target | Pass? | Recommendation |
-| --- | ---: | --- |
-| 1vCPU / 1GB RAM, `<50MB` bundle | Partial | TinyBERT is the only measured `<50MB` bundle and should fit the storage envelope, but observer recall drops to 0.271. Not a safe default. |
-| 1vCPU / 1GB RAM, `<100ms` warm p50 with recall preserved | Yes by host-proxy latency; not cgroup-proven | Kiji int8 ORT: `1.849ms` warm p50 on this host, identical scorer recall to fp32. A true 1vCPU/1GB cgroup or VM run remains the final deployment proof. |
+| 6 | openobscure TinyBERT4L PII NER int8 | Apache-2.0 | Yes, recall caveat | 0.424 / 0.070 / 0.113 | 0.478 / 0.271 / 0.296 | 76.548 |
 
 **Screening notes.** `onnx-community/TinyBERT-finetuned-NER-ONNX` and
 `adel-cybral/TinyBERT-finetuned-NER` did not publish a clean permissive license
@@ -461,17 +435,21 @@ strict CoNLL clone. `SKNahin/NER_MobileBert` was skipped for missing license
 metadata. No permissive English or multilingual general MiniLM NER head with the
 desired PER/LOC/ORG/MISC fit was found.
 
-**Interpretation.** The tiny-candidate tier did not produce a default flip.
-TinyBERT wins size and warm latency but loses too much residual recall for the
-reliability axis. MobileBERT nearly preserves Kiji recall but is slower in the
-subprocess scorer and larger than the low-spec storage target. Kiji DistilBERT
-int8 ORT remains the shipped default; use TinyBERT only where a `<50MB` bundle
-is a hard constraint and the recall drop is explicitly accepted.
+### Kiji DistilBERT removal
+
+The Kiji DistilBERT safety net, which earlier leaderboard rounds validated as
+the int8 in-process default, was removed after the 2026-09-16 safety-net
+leaderboard. On the 2,910-document benchmark it recovered 1,831 leaked gold
+bytes (scored-label contract v2) for +169,657 false-positive bytes, a 2.5%
+action precision. No safety net runs by default now; the shipped default is
+`pass2-ner`. The Kiji leaderboard rows and the Kiji int8, ORT, tract, and
+candle runtime measurements are readable at the
+[`v0.14.0` tag](https://github.com/CertaMesh/gaze/blob/v0.14.0/docs/reference/benchmarks/README.md#ner-model-leaderboard).
 
 ### Runnable paths
 
 ```bash
-python3 scripts/bench/ner-bench-scorer.py --repo-root . --python python3 --mode all --model kiji-distilbert --model openobscure-tinybert4l-pii-ner-int8 --model mrm8488-mobilebert-ner --model osiria-minilm-italian-ner
+python3 scripts/bench/ner-bench-scorer.py --repo-root . --python python3 --mode all --model openobscure-tinybert4l-pii-ner-int8 --model mrm8488-mobilebert-ner --model osiria-minilm-italian-ner
 python3 scripts/bench/ner-warm-latency.py --repo-root .
 ```
 
@@ -604,16 +582,13 @@ Do not publish absolute home paths. Use `$HOME/...`, `~/...`, or
 | [scripts/bench/dataiku_en_de_gaze_bench.py](../../../scripts/bench/dataiku_en_de_gaze_bench.py) | Dataiku EN/DE whole-pipeline producer |
 | [scripts/bench/openpii_gaze_bench.py](../../../scripts/bench/openpii_gaze_bench.py) | Secondary OpenPII producer and scorer |
 | [scripts/bench/gaze-pipeline-bench.py](../../../scripts/bench/gaze-pipeline-bench.py) | Coverage-loop pipeline snapshot generator |
-| [scripts/bench/kiji-bench-scorer.py](../../../scripts/bench/kiji-bench-scorer.py) | Kiji direct and observer-residual scorer |
 | [scripts/bench/opf-bench-scorer.py](../../../scripts/bench/opf-bench-scorer.py) | OPF direct and observer-residual scorer |
 | [scripts/bench/ner-bench-scorer.py](../../../scripts/bench/ner-bench-scorer.py) | NER model-matrix scorer |
 | [scripts/bench/ner-warm-latency.py](../../../scripts/bench/ner-warm-latency.py) | Warm NER latency runner |
-| [scripts/bench/kiji-runner.py](../../../scripts/bench/kiji-runner.py) | Kiji subprocess adapter |
 | [scripts/bench/onnx-token-classification-runner.py](../../../scripts/bench/onnx-token-classification-runner.py) | Generic ONNX token-classification adapter |
 | [scripts/bench/transformers-runner.py](../../../scripts/bench/transformers-runner.py) | Transformers token-classification adapter |
 | [scripts/bench/opf_daemon.py](../../../scripts/bench/opf_daemon.py) | Warm OPF diagnostic daemon and client bridge |
 | [scripts/bench/safety_net_bench_lib.py](../../../scripts/bench/safety_net_bench_lib.py) | Shared fixture loading and strict scoring support |
-| [scripts/bench/quantize-kiji-int8.py](../../../scripts/bench/quantize-kiji-int8.py) | Pinned Kiji int8 artifact preparation helper |
 
 ### Rust benchmarks and committed snapshots
 
@@ -621,7 +596,6 @@ Do not publish absolute home paths. Use `$HOME/...`, `~/...`, or
 | --- | --- |
 | [clean_for_bench.rs](../../../crates/gaze-recognizers/examples/clean_for_bench.rs) | Long-lived pipeline producer for coverage-loop benchmarking |
 | [safety_net_matrix.rs](../../../crates/gaze-recognizers/benches/safety_net_matrix.rs) | SafetyNet matrix and in-process warm benchmark source |
-| [runtime_comparison.rs](../../../crates/gaze-recognizers/benches/runtime_comparison.rs) | ORT/tract/Candle comparison source |
 | [pipeline_end_to_end.rs](../../../crates/gaze/benches/pipeline_end_to_end.rs) | End-to-end pipeline snapshot assertion source |
 | [tier4_pipeline_gating.rs](../../../crates/gaze/benches/tier4_pipeline_gating.rs) | Tier 4 gating benchmark source |
 | [ner_models.toml](../../../crates/gaze-recognizers/benches/ner_models.toml) | NER model-matrix configuration |
@@ -629,13 +603,6 @@ Do not publish absolute home paths. Use `$HOME/...`, `~/...`, or
 | [safety_net_matrix_snapshot.json](../../../crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json) | Committed SafetyNet quality matrix |
 | [safety_net_perf_snapshot.json](../../../crates/gaze-recognizers/benches/safety_net_perf_snapshot.json) | Committed one-shot SafetyNet performance snapshot |
 | [gaze_pipeline_bench_snapshot.json](../../../crates/gaze-recognizers/benches/gaze_pipeline_bench_snapshot.json) | Committed end-to-end pipeline snapshot |
-
-Runtime comparison (ORT vs tract vs candle; asserts non-ORT runtimes produce the
-same span set as the ORT baseline):
-
-```bash
-GAZE_KIJI_DISTILBERT_MODEL_DIR="$HOME/.cache/gaze/<kiji-bundle>" cargo bench -p gaze-recognizers --features safety-net-kiji,runtime-tract,runtime-candle --bench runtime_comparison
-```
 
 End-to-end pipeline (`pass1_ms` is matching rule-floor wall clock; `pass3_ms` is
 full-pipeline minus the rule-floor delta for Pass-3 configs):

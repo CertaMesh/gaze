@@ -32,8 +32,8 @@ CONFIG_CHOICES = (
     "rule-floor-core",
     "rule-floor-extended",
     "pass2-ner",
-    "full-stack-kiji-resolve",
     "full-stack-opf-resolve",
+    "full-stack-nym-resolve",
 )
 
 COUNTRY_REGIONS = {
@@ -184,8 +184,6 @@ def build_binary(repo_root: Path, configs: tuple[str, ...]) -> Path:
         "clean_for_bench",
     ]
     features = []
-    if any("kiji" in config for config in configs):
-        features.append("safety-net-kiji")
     if any("opf" in config for config in configs):
         features.append("safety-net-openai")
     if features:
@@ -216,16 +214,6 @@ def parse_args() -> argparse.Namespace:
             os.environ.get(
                 "GAZE_NER_MODEL_DIR",
                 "~/.local/share/gaze/models/davlan-mbert-ner-hrl",
-            )
-        ).expanduser(),
-    )
-    parser.add_argument(
-        "--kiji-model-dir",
-        type=Path,
-        default=Path(
-            os.environ.get(
-                "GAZE_KIJI_DISTILBERT_MODEL_DIR",
-                "~/.local/share/gaze/models/kiji-distilbert",
             )
         ).expanduser(),
     )
@@ -286,10 +274,6 @@ def main() -> int:
     configs = tuple(args.config) if args.config else score.DEFAULT_CONFIGS
     if not args.model_dir.is_dir():
         raise FileNotFoundError(f"NER model directory does not exist: {args.model_dir}")
-    if any("kiji" in config for config in configs) and not args.kiji_model_dir.is_dir():
-        raise FileNotFoundError(
-            f"Kiji model directory does not exist: {args.kiji_model_dir}"
-        )
     if any("opf" in config for config in configs):
         if args.opf_command is None or not args.opf_command.is_file():
             raise FileNotFoundError("OPF command does not exist; pass --opf-command")
@@ -313,7 +297,6 @@ def main() -> int:
                 config,
                 documents,
                 args.model_dir,
-                args.kiji_model_dir,
                 args.opf_command,
                 args.opf_checkpoint,
                 args.opf_daemon_socket,
@@ -339,7 +322,6 @@ def main() -> int:
         parameters={
             "configs": list(configs),
             "ner_model_dir": str(args.model_dir),
-            "kiji_model_dir": str(args.kiji_model_dir),
             "opf_command": str(args.opf_command) if args.opf_command else None,
             "opf_checkpoint": str(args.opf_checkpoint) if args.opf_checkpoint else None,
             "opf_daemon_socket": (

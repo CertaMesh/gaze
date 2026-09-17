@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Opt-in Nym-small safety net** (`--safety-net nym`, feature
+  `safety-net-nym`, on in the default `gaze-cli` build). Runs
+  `Wismut/nym-pii-multilingual-small` v3 int8 in process through ONNX Runtime.
+  It is not a default: no safety net runs by default, and nothing loads
+  unless `nym` is selected.
+  - `gaze setup --safety-net nym` fetches the bundle at revision `4348999c`
+    and verifies it against `NYM_SMALL_INT8_BUNDLE_SHA256`; the backend
+    re-verifies digests, modes and the `id2label` table before loading, and
+    `gaze mcp doctor` reports the bundle.
+  - Only labels with a Gaze class can fire, each with an explicit threshold.
+    The default is op-B: `BUILDING_NUMBER`, `LICENSE_PLATE`, `USERNAME` at 0.5
+    and `DATE_OF_BIRTH` at 0.9, mapped to `custom:building_number`,
+    `custom:license_plate`, `custom:username` and `custom:date`. `TAX_ID` and
+    `ZIP_CODE` exist but are off. The other 34 labels, including
+    `GIVEN_NAME`, can never be enabled.
+  - New policy table `[safety_net.nym]` (`labels` plus `threshold`) configures
+    the allowlist and fails at load on an unknown or unmapped label, a missing
+    or stray threshold, or a threshold outside `(0, 1]`. It configures and
+    never activates: a policy declaring it while another net (or none) runs is
+    refused.
+  - Spans are whole words (the pipeline's sub-word rule, now one shared
+    `gaze_types::is_inside_word`), tokenizer character offsets become UTF-8
+    byte offsets, and input longer than 512 pieces is scanned in overlapping
+    windows; an unscored piece or uncovered character is a typed error.
+  - Audit rows carry `safety_net_id = "nym-small-int8"`, the score, and
+    `raw_label = "LABEL>=THRESHOLD"`. Nym is refused through
+    `--safety-net-registry`, which would drop the label and threshold.
+  - New benchmark arm `full-stack-nym-resolve`. On the 2,910-document
+    population it removes 6,154 leaked gold bytes under scored-label contract v2
+    (20,727 to 14,573) for 526 false-positive bytes, action precision 0.891,
+    one one-way deletion, 2,909 of 2,910 exact restores; timings provisional.
+  - Open before any default change: an address-context guard for room and seat
+    numbers, a quiet-host latency measurement, and a licence review of the
+    Wikipedia-derived (CC-BY-SA) training data.
+
 - **Postal-code coverage for Canada, the UK, and Ireland** (`postal.ca`,
   `postal.gb`, `postal.ie`). `custom:postal_code` was previously served only by
   `postal.de` (`de-DE`) and `postal.us` (`en-US`), both
@@ -65,6 +100,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING: `gaze setup` installs the benchmarked NER model.** The default
+  (`--safety-net ner`) used to install the Kiji distilbert-NER bundle as the
+  primary `[ner]` model in the written policy. It now downloads and verifies
+  the pinned Davlan mBERT bundle, the model the benchmark scores:
+  `onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
+  `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`, `SHA256SUMS` digest
+  `7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16`, into
+  `$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl` (else
+  `~/.local/share/gaze/models/davlan-mbert-ner-hrl`). **Adopters who ran
+  `gaze setup` before must re-run it** to get the benchmarked model. Setup now
+  prints `For gaze index: export GAZE_NER_MODEL_DIR=<dir>`. New API:
+  `gaze_model_setup::{install_ner_bundle, install_ner_bundle_with_fetcher,
+  default_ner_model_dir}`, `gaze_recognizers::verify_davlan_ner_bundle` and the
+  `DAVLAN_NER_*` constants, `NerRecognizer::load_pinned_davlan`, and
+  `NerLoadError::PinnedBundle`.
+- **BREAKING: `gaze index ingest` requires the pinned NER model.** The index
+  used the Kiji net as its only prose name and organization detector. Ingest
+  now requires `--ner-model-dir <dir>` or `GAZE_NER_MODEL_DIR`, and the
+  directory must verify against the pinned Davlan digests. An absent or
+  unpinned directory fails closed with the typed `IndexNerModelMissing` error
+  (exit 2) and nothing is written. A safety net is optional for ingest and
+  required for search (TokenBridge refuses a search without an output net, so
+  `gaze index search` without one fails closed with `SafetyNetConfig`):
+  `gaze index --safety-net {openai-filter|nym}` with `--opf-command` (or
+  `GAZE_OPENAI_FILTER_OPF`), `--opf-checkpoint` (or `OPF_CHECKPOINT`),
+  `--nym-model-dir` (or `GAZE_NYM_MODEL_DIR`) and `--safety-net-timeout-ms`.
+  When configured it checks ingest output and search snippets, and residual
+  suspects still redact or fail closed per `--on-residual {redact,strict}`.
+- **BREAKING: credentials are no longer detected by default.** Credentials are
+  not PII, so the two credential recognizers leave the `core` rulepack (now
+  version 0.6.0) for a new opt-in bundled rulepack, `secrets`:
+  `security_token.anchored` (`custom:security_token`) and `password.field`
+  (`custom:password`) moved verbatim, with the same ids, classes, patterns,
+  scoring and sources. `secrets` is never part of a default activation, not even
+  when `[policy.rulepacks]` is omitted. To keep tokenizing API keys, access
+  tokens, JWTs and `password:` records, load it next to `core` with
+  `[policy.rulepacks] bundled = ["core", "secrets"]` or
+  `--rulepack-bundled core,secrets`. `username.field` (`custom:username`) is
+  removed outright: a line-start `username:` record rarely occurs in prose, and
+  its measured rule-floor byte recall was 0.9 % of 1,034 gold bytes. Nothing
+  emits `custom:username` any more. See UPGRADE.md.
+
+  Measured on the v0.15.0 release run (per-label report for `9a3a788`): the
+  rule-floor byte recall of these rules was `PASSWORD` 0.0 %, `USERNAME` 0.9 %
+  and `SECURITYTOKEN` 70.6 %. Under the v2 scored-label contract `PASSWORD` and
+  `SECURITYTOKEN` are unscored, so leaked PII bytes do not move; `USERNAME`
+  stays scored and loses at most about 9 bytes of rule coverage.
+
+- [bundle-tokenization-drift] The `core` snapshot records rulepack version 0.6.0 and the extended drift corpus hash; its detection entries are unchanged, which proves the new credential fixture lines stay inert under `core`.
+
+- [bundle-tokenization-drift] The new `secrets` snapshot pins exactly one `security_token.anchored` and one `password.field` detection on the credential fixture lines appended to the drift corpus.
+
 - `cooperates_with` is now symmetric across all five `custom:postal_code`
   recognizers, and the stale research-855 collision comment in `core.toml` —
   which described a two-rule world — is replaced by a two-group policy note
@@ -79,7 +166,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a clock that would drift again on the next `core.toml` edit, so the column is
   gone rather than re-verified. The gate keeps checking every remaining column
   against the loaded rulepack. Recognizer definitions are found by searching
-  `core.toml` / `core-extended.toml` for the `id = "..."` line.
+  `core.toml` (loaded as both `core` and `core-extended`) or `secrets.toml` for
+  the `id = "..."` line.
 
 - [bundle-tokenization-drift] The `core` snapshot records rulepack version0.5.3; detection entries, spans, classes, sources, token shapes and counts are unchanged.
 
@@ -154,8 +242,135 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   persistent index. Documented consequence: a residual fragment is **protected
   but unsearchable**. Whole entities remain searchable exactly as before.
 
+### Removed
+
+- **BREAKING: the Kiji DistilBERT safety net is removed.** On the
+  2,910-document benchmark (2026-09-16 safety-net leaderboard) it recovered
+  1,831 leaked gold bytes under scored-label contract v2 for +169,657
+  false-positive bytes, an action precision of 2.5%. No safety net runs by
+  default now; the shipped default is the bundled rules plus the pinned Davlan
+  mBERT NER model (benchmark arm `pass2-ner`). The `SafetyNet` trait, the
+  `resolve` / `redact` / `strict` modes and fallback ladder, terminal
+  admission, and the sub-word guard stay; the OpenAI Privacy Filter and
+  Nym-small nets use them. Removed surface:
+  - `gaze clean` / `gaze daemon` flags: `--safety-net kiji-distilbert`,
+    `--safety-net-backend kiji-distilbert`, `--safety-net-add kiji-distilbert`,
+    `--kiji-backend {subprocess,ort,tract,candle}`,
+    `--kiji-distilbert-precision {fp32,int8}`, `--kiji-distilbert-command`,
+    `--kiji-distilbert-model-dir`, `--kiji-distilbert-locales`.
+    `--safety-net-registry` stays; `openai-filter` is now its only
+    registry-capable backend.
+  - Cargo features `safety-net-kiji`, `runtime-tract` and `runtime-candle` on
+    `gaze-recognizers` and `gaze-cli`, and the `tract-onnx` / `candle`
+    dependencies. The musl-static deployment path through `tract` is gone.
+  - Rust API: the `gaze_recognizers::safety_net::kiji_distilbert` module
+    (`KijiDistilbertSafetyNet`, `KijiBackendKind`, `KijiDistilbertPrecision`,
+    `OrtKijiBackend`, `SubprocessKijiBackend`, `KIJI_DISTILBERT_BUNDLE_SHA256`,
+    the int8 bundle pin, `verify_kiji_bundle`). In `gaze-model-setup`:
+    `install_kiji_bundle*`, `InstallOptions`, `default_kiji_model_dir`, and the
+    `KijiDistilbertPrecision` re-export.
+  - Environment variables `GAZE_KIJI_DISTILBERT_COMMAND`,
+    `GAZE_KIJI_DISTILBERT_MODEL_DIR`, `GAZE_KIJI_DISTILBERT_PRECISION`.
+  - Scripts `scripts/fetch/fetch-kiji-safetynet-model.sh`,
+    `scripts/bench/kiji-runner.py`, `scripts/bench/kiji-bench-scorer.py`,
+    `scripts/bench/quantize-kiji-int8.py`.
+  - The NER loader no longer accepts the Kiji structured `labels.json`
+    manifest.
+  - Benchmark arms `full-stack-kiji-resolve`, `pass3-kiji` and
+    `pass3-locale-aware`. Committed release rows (v0.14.0) keep their Kiji
+    measurements; the opt-in `full-stack-opf-resolve` and
+    `full-stack-nym-resolve` arms stay.
+
+  **Migration.** For a second opinion after the deterministic passes, use
+  `--safety-net openai-filter` or `--safety-net nym` (install with
+  `gaze setup --safety-net nym`). **Re-run `gaze setup`:** it previously
+  installed the Kiji distilbert-NER bundle as the primary `[ner]` model in the
+  policy it wrote. `gaze index ingest` now requires `--ner-model-dir` or
+  `GAZE_NER_MODEL_DIR` (see Changed).
+
 ### Fixed
 
+- **The OpenAI Privacy Filter safety net now reads OPF span offsets as
+  characters, not bytes.** Shipped defect since the `openai_filter` backend
+  landed in v0.6.0: OPF reports `start`/`end` as Python string indices (Unicode
+  characters), and the subprocess adapter used them as UTF-8 byte offsets into
+  the clean text. Any multibyte character before a span (an umlaut, `ß`, `€`, an
+  en dash, an NBSP) shifted it left. The shifted span then either failed closed
+  (`opf returned out-of-bounds span`, or a clean-to-raw mapping failure when it
+  landed inside a Gaze token) or, **when it happened to land on valid
+  boundaries, silently checked and protected the wrong bytes**. On the
+  full EN/DE population 624 of 655 OPF-arm refusals were on documents with
+  non-ASCII text. The adapter now converts character offsets to byte offsets
+  once, against the exact text sent to OPF; an offset past the last character
+  still fails closed as `InvalidOutput`. The Python OPF bench scorer
+  (`scripts/bench/safety_net_bench_lib.py`) had the same defect and is fixed.
+
+  Measured on the fixed 300-document EN/DE subset (`mode-opf-resolve-redact`,
+  contract v2): refusals fall from **75 to 5**, completed documents from 225
+  to 295. On the 225 documents that completed both before and after, leaked
+  bytes fall from 373 to 350 and false-positive bytes from 2,669 to 2,628,
+  which is the wrong-bytes effect going away. The 70 newly completed documents
+  leak 128 of 4,289 gold bytes. No document went from completed to refused.
+  The 5 remaining refusals include pure-ASCII documents and have a separate
+  cause. The line-by-line stdin limitation noted in review is fixed in the next
+  entry.
+
+- **The OpenAI Privacy Filter safety net now has the stock `opf` CLI analyse the
+  whole clean text as one input.** Shipped defect since v0.6.0, verified against
+  the pinned CLI (`privacy-filter` @ `f7f00ca7`): piped stdin is read one line
+  at a time, blank and whitespace-only lines are skipped, and every line gets
+  its own JSON result with offsets relative to that line. Clean text with two
+  non-blank lines failed closed as `opf stdout was not valid JSON`. **Clean text
+  whose only non-blank line followed blank lines came back as one valid result
+  whose spans landed too early, so the wrong bytes were checked and protected
+  with no refusal.** The CLI also prints an ANSI colour section after the JSON
+  unless `--no-print-color-coded-text` is passed, so with Gaze's default
+  arguments every call to the stock CLI failed closed; the silent case needed
+  that flag in the configured arguments. The benchmark daemon bridge sends the
+  whole text and was unaffected.
+
+  The adapter now appends `--no-print-color-coded-text --text-file /dev/stdin`
+  after the configured arguments, so the text still travels over the pipe and
+  never touches disk. `opf` reads that file in Python text mode, which turns
+  `\r\n` and a lone `\r` into `\n`; the adapter maps OPF's offsets back through
+  that translation to UTF-8 bytes. It also refuses, as `InvalidOutput`, any
+  result whose echoed `text` differs from the text it sent (`opf analysed a
+  different text than the one sent`), more than one JSON document, and output
+  without the echoed `text` (a bare span array is no longer accepted). Empty
+  clean text returns no spans without starting `opf`, which prints nothing for
+  an empty file. **Adopters wrapping `opf` in their own command must accept
+  `--no-print-color-coded-text --text-file <path>` and echo the analysed text.**
+  On Windows there is no `/dev/stdin`; multi-line text is refused there instead
+  of mis-mapped. The Python OPF bench scorer uses the same whole-text input and
+  fails loudly instead of scoring only the first line of a multi-line fixture.
+
+- **The Kiji safety net no longer tokenizes or deletes parts of words.** Shipped
+  defect since at least v0.14.0: the shared Kiji decoder (ORT, tract, candle)
+  merged BIO labels per WordPiece, so the pinned English model's piece-level
+  firings on German text became suspects such as `G`/`em`/`ä` and the resolve
+  path emitted `<Name_14>wort` for `Passwort` and three adjacent name tokens for
+  `IBAN`. On the 80 explorer documents, 732 of 961 safety-net tokens were
+  mid-word on v0.14.0 and 749 of 977 on 9a3a788. Spans are now assembled from
+  whole words: any labelled piece labels its word, so byte coverage is a
+  superset of the old output. As defense in depth for every net, a name,
+  location or organization suspect that starts or ends inside a word is never
+  acted on by any `Resolve` or `Redact` stage; it stays in the report with a new
+  `LeakReportTelemetry::UnactionableSubword` row. Same 80 documents, same
+  binary flags: safety-net tokens 977 → 587, mid-word 749 → 0, leaked gold bytes
+  1,537 → 1,418 with no document rising, refusals 0 → 0, documents reaching the
+  one-way `Redact` fallback 13 → 7. **Behaviour change:** whole words the model
+  mislabels (`verpflichtet`, `Hauptniederlassung`) are now tokenized whole
+  instead of in pieces, and the fallback deletes whole mislabelled words
+  (80 bytes, none gold) instead of pieces (54 bytes). Model precision on German
+  is unchanged and tracked separately. **Known limitations:** a net that does
+  not decode whole words (OPF, the Kiji subprocess backend, adopter nets) can
+  still report a sub-word name, location or organization suspect; under
+  `Resolve` with the `Redact` fallback and in `Redact` mode it now ships raw
+  with a `Preserve` audit row and an `UnactionableSubword` row where earlier
+  releases tokenized or deleted part of the word, and under the `Strict`
+  fallback the document is refused. The Kiji tokenizer truncates input at 512
+  word pieces and the net does not chunk, so text past that point is not
+  checked by the net and no telemetry says so.
 - Custom class names that normalize to empty (for example `custom:!!!`) are now
   a typed load-time error. `PiiClass::custom` returns `Result<PiiClass,
   EmptyCustomClassName>`; callers must handle invalid names. Live and staged

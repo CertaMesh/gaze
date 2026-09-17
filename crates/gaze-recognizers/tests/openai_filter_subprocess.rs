@@ -16,6 +16,7 @@ use gaze_types::{
     DocumentKind, LeakKind, LocaleTag, Manifest, PiiClass, SafetyNet, SafetyNetContext,
     SafetyNetError,
 };
+use serde_json::{json, Value};
 use serial_test::file_serial;
 
 fn test_subprocess_timeout() -> Duration {
@@ -135,7 +136,7 @@ fn openai_filter_infer_round_trips_spans_through_locale_aware_trait() {
         "opf-locale-aware",
         r#"#!/bin/sh
 cat >/dev/null
-printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97},{"label":"private_email","start":17,"end":38,"score":0.96}]'
+printf '%s\n' '{"text":"Dr. Schmidt uses alice@example.invalid","detected_spans":[{"label":"private_person","start":0,"end":11,"score":0.97},{"label":"private_email","start":17,"end":38,"score":0.96}]}'
 "#,
     )
     .unwrap();
@@ -163,6 +164,139 @@ printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97},{"lab
     assert_eq!(spans[0].class, PiiClass::Name);
     assert_eq!(spans[0].confidence, Some(0.97));
     assert_eq!(spans[0].model_name, "openai-privacy-filter");
+}
+
+// OPF reports offsets as Python `str` indices (Unicode scalar values). The fixture puts
+// multibyte text before, inside, and after the spans: umlauts and ß, an NFD combining acute
+// accent, an emoji, and an NBSP. Read as bytes, every one of these spans lands on the wrong text.
+const MULTIBYTE_CLEAN: &str =
+    "Grüße an Jürgen Müller: cafe\u{301} \u{1F600}\u{a0}bob@example.invalid, gezeichnet Zoë";
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn character_offsets_are_converted_to_clean_text_bytes() {
+    let opf = emulated_opf(
+        "opf-char-offsets",
+        json!({"spans": [["private_person", 9, 22], ["private_email", 32, 51], ["private_person", 64, 67]]}),
+    )
+    .unwrap();
+
+    let spans = backend(opf).infer(MULTIBYTE_CLEAN).unwrap();
+
+    let texts = spans
+        .iter()
+        .map(|span| &MULTIBYTE_CLEAN[span.start..span.end])
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["Jürgen Müller", "bob@example.invalid", "Zoë"]);
+    assert_eq!(
+        spans
+            .iter()
+            .map(|span| (span.start, span.end))
+            .collect::<Vec<_>>(),
+        [(11, 26), (41, 60), (73, 77)]
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn character_offset_past_the_last_character_fails_closed() {
+    // 70 is inside the 77 UTF-8 bytes but past the 67 characters: only a byte reading accepts it.
+    let opf = emulated_opf(
+        "opf-char-offsets-oob",
+        json!({"spans": [["private_person", 64, 70]]}),
+    )
+    .unwrap();
+
+    let error = backend(opf).infer(MULTIBYTE_CLEAN).unwrap_err();
+
+    assert!(matches!(
+        error,
+        SafetyNetError::InvalidOutput { ref message } if message == "opf returned out-of-bounds span"
+    ));
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn crlf_before_a_span_at_the_very_end_maps_back_to_clean_text_bytes() {
+    // OPF reads the text as a file in Python text mode, so each CRLF is one `\n` character in
+    // the offsets it returns: 21..27 and 34..37 here. The NBSP still shifts the byte offsets; the
+    // last span ends exactly at the text end.
+    let clean = "Hallo\u{a0}Team,\r\nbitte an Jürgen\r\nGrüße Zoë";
+    let opf = emulated_opf(
+        "opf-char-offsets-crlf",
+        json!({"spans": [["private_person", 21, 27], ["private_person", 34, 37]]}),
+    )
+    .unwrap();
+
+    let spans = backend(opf).infer(clean).unwrap();
+
+    let texts = spans
+        .iter()
+        .map(|span| &clean[span.start..span.end])
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["Jürgen", "Zoë"]);
+    assert_eq!(spans[1].end, clean.len());
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn ascii_character_offsets_are_unchanged_bytes() {
+    let clean = "Dr. Schmidt uses alice@example.invalid";
+    let opf = emulated_opf(
+        "opf-char-offsets-ascii",
+        json!({"spans": [["private_person", 0, 11], ["private_email", 17, 38]]}),
+    )
+    .unwrap();
+
+    let spans = backend(opf).infer(clean).unwrap();
+
+    assert_eq!(
+        spans
+            .iter()
+            .map(|span| (span.start, span.end))
+            .collect::<Vec<_>>(),
+        [(0, 11), (17, 38)]
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn empty_clean_text_returns_no_spans_without_spawning() {
+    // `opf` skips an empty input file and prints nothing, which would fail as invalid JSON.
+    let dir = tempfile::tempdir().unwrap();
+    let marker = dir.path().join("spawned");
+    let opf = script(
+        "opf-empty",
+        &format!(
+            "#!/bin/sh\ntouch '{}'\ncat >/dev/null\nprintf '%s\\n' '{{\"text\":\"\",\"detected_spans\":[{{\"label\":\"private_person\",\"start\":0,\"end\":1}}]}}'\n",
+            marker.display()
+        ),
+    )
+    .unwrap();
+
+    assert!(backend(opf).infer("").unwrap().is_empty());
+    assert!(!marker.exists());
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn descending_or_zero_width_character_spans_fail_closed() {
+    for (name, start, end) in [
+        ("opf-char-offsets-descending", 14, 9),
+        ("opf-char-offsets-zero-width", 9, 9),
+    ] {
+        let opf = emulated_opf(name, json!({"spans": [["private_person", start, end]]})).unwrap();
+
+        let error = backend(opf).infer(MULTIBYTE_CLEAN).unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                SafetyNetError::InvalidOutput { ref message } if message == "opf returned out-of-bounds span"
+            ),
+            "{name}: {error:?}"
+        );
+    }
 }
 
 #[test]
@@ -400,6 +534,26 @@ fn script(name: &str, body: &str) -> io::Result<PathBuf> {
     Ok(path)
 }
 
+/// A fake `opf` that follows the pinned CLI's input selection and output framing (see
+/// `fixtures/opf_cli_emulator.py`), so a fixture fails exactly where the real CLI would.
+fn emulated_opf(name: &str, config: Value) -> io::Result<PathBuf> {
+    emulated_opf_with_prelude(name, config, "")
+}
+
+fn emulated_opf_with_prelude(name: &str, config: Value, prelude: &str) -> io::Result<PathBuf> {
+    let command = script(
+        name,
+        &format!("#!/bin/sh\n{prelude}\nexec python3 \"$(dirname \"$0\")/emulator.py\" \"$@\"\n"),
+    )?;
+    let dir = command.parent().expect("script has a directory");
+    fs::write(
+        dir.join("emulator.py"),
+        include_str!("fixtures/opf_cli_emulator.py"),
+    )?;
+    fs::write(dir.join("emulator.json"), config.to_string())?;
+    Ok(command)
+}
+
 fn wait_for_pidfile(path: &Path, deadline: Duration) -> io::Result<u32> {
     let started = Instant::now();
     while started.elapsed() < deadline {
@@ -446,14 +600,12 @@ fn assert_private_payload_absent(value: &str) {
 #[file_serial(gaze_subprocess)]
 fn verbose_stderr_preserves_successful_spans() {
     for bytes in [257, 300, 2 * 1024 * 1024] {
-        let body = format!(
-            r#"#!/bin/sh
-cat >/dev/null
-head -c {bytes} /dev/zero | tr '\000' w >&2
-printf '%s\n' '[{{"label":"private_person","start":0,"end":11,"score":0.97}}]'
-"#
-        );
-        let command = script("opf-diagnostics", &body).unwrap();
+        let command = emulated_opf_with_prelude(
+            "opf-diagnostics",
+            json!({"spans": [["private_person", 0, 11]]}),
+            &format!("head -c {bytes} /dev/zero | tr '\\000' w >&2"),
+        )
+        .unwrap();
         let config = SubprocessOpenAiFilterConfig::new(command);
         let quiet = SubprocessOpenAiFilterBackend::new(
             config.clone().with_timeout(test_subprocess_timeout()),
@@ -611,4 +763,273 @@ printf '%s\n' 'alice@example.invalid'
     .unwrap_err();
     assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
     assert!(!error.to_string().contains("alice@example.invalid"));
+}
+
+// Whole-text input contract (todo 3677). Piped stdin makes the pinned `opf` analyse every
+// non-blank line as its own input. These fixtures pass `--no-print-color-coded-text` in the
+// configured args, as an adopter or the bench would, so the colour section cannot mask the
+// silent case: without the fix, leading blank lines come back as ONE valid output whose offsets
+// are relative to the first non-blank line.
+
+const PERSON_AND_EMAIL: &[(&str, &str)] = &[
+    ("private_person", "John Smith"),
+    ("private_person", "Zoë Müller"),
+    ("private_person", "Jürgen Müller"),
+    ("private_email", "jane.doe@example.invalid"),
+];
+
+fn colour_off_backend(command: PathBuf) -> SubprocessOpenAiFilterBackend {
+    SubprocessOpenAiFilterBackend::new(
+        SubprocessOpenAiFilterConfig::new(command)
+            .with_args([
+                "--format",
+                "json",
+                "--output-mode",
+                "typed",
+                "--no-print-color-coded-text",
+            ])
+            .with_timeout(test_subprocess_timeout()),
+    )
+    .unwrap()
+}
+
+fn emulated_needles(name: &str) -> PathBuf {
+    let needles = PERSON_AND_EMAIL
+        .iter()
+        .map(|(label, needle)| json!([label, needle]))
+        .collect::<Vec<_>>();
+    emulated_opf(name, json!({ "needles": needles })).unwrap()
+}
+
+fn span_texts(clean: &str, name: &str) -> Vec<String> {
+    colour_off_backend(emulated_needles(name))
+        .infer(clean)
+        .unwrap_or_else(|error| panic!("{name}: {error:?}"))
+        .iter()
+        .map(|span| clean[span.start..span.end].to_string())
+        .collect()
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn two_non_blank_lines_are_analysed_as_one_input() {
+    let clean = "Contact John Smith today.\nEmail jane.doe@example.invalid please.";
+    assert_eq!(
+        span_texts(clean, "opf-whole-two-lines"),
+        ["John Smith", "jane.doe@example.invalid"]
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn leading_blank_lines_do_not_shift_offsets() {
+    let clean = "\n\nJohn Smith called.";
+    assert_eq!(span_texts(clean, "opf-whole-leading-blank"), ["John Smith"]);
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn whitespace_only_first_line_does_not_shift_offsets() {
+    let clean = "   \nGrüße an Jürgen Müller, jane.doe@example.invalid";
+    assert_eq!(
+        span_texts(clean, "opf-whole-whitespace-line"),
+        ["Jürgen Müller", "jane.doe@example.invalid"]
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn crlf_and_lone_cr_map_back_to_clean_text_bytes() {
+    let clean = "Hi team,\r\nplease call John Smith.\rThanks, Zoë Müller\r\n";
+    assert_eq!(
+        span_texts(clean, "opf-whole-crlf"),
+        ["John Smith", "Zoë Müller"]
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn trailing_newline_keeps_the_span_at_the_end() {
+    let clean = "Signed John Smith\n";
+    assert_eq!(
+        span_texts(clean, "opf-whole-trailing-newline"),
+        ["John Smith"]
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn default_args_parse_the_real_cli_output_framing() {
+    // No configured colour flag: the adapter must suppress the ANSI section itself.
+    let clean = "Contact John Smith today.";
+    let spans = backend(emulated_needles("opf-whole-default-args"))
+        .infer(clean)
+        .unwrap();
+    assert_eq!(spans.len(), 1);
+    assert_eq!(&clean[spans[0].start..spans[0].end], "John Smith");
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn more_than_one_json_document_fails_closed() {
+    let clean = "John Smith";
+    let document =
+        r#"{"text":"John Smith","detected_spans":[{"label":"private_person","start":0,"end":10}]}"#;
+    let opf = script(
+        "opf-whole-two-documents",
+        &format!("#!/bin/sh\ncat >/dev/null\nprintf '%s\\n%s\\n' '{document}' '{document}'\n"),
+    )
+    .unwrap();
+
+    assert!(matches!(
+        backend(opf).infer(clean).unwrap_err(),
+        SafetyNetError::InvalidOutput { ref message } if message == "opf stdout was not valid JSON"
+    ));
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn echoed_text_other_than_the_sent_text_fails_closed() {
+    // Exactly what piped stdin returns for "\n\nJohn Smith": one output for the third line.
+    let opf = script(
+        "opf-whole-echo-mismatch",
+        r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '{"text":"John Smith","detected_spans":[{"label":"private_person","start":0,"end":10}]}'
+"#,
+    )
+    .unwrap();
+
+    let error = backend(opf).infer("\n\nJohn Smith").unwrap_err();
+
+    assert!(matches!(
+        error,
+        SafetyNetError::InvalidOutput { ref message }
+            if message == "opf analysed a different text than the one sent"
+    ));
+    assert!(!error.to_string().contains("John Smith"));
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn output_without_the_echoed_text_fails_closed() {
+    let opf = script(
+        "opf-whole-bare-array",
+        r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '[{"label":"private_person","start":0,"end":10}]'
+"#,
+    )
+    .unwrap();
+
+    assert!(matches!(
+        backend(opf).infer("John Smith").unwrap_err(),
+        SafetyNetError::InvalidOutput { ref message } if message == "opf stdout was not valid JSON"
+    ));
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn whole_text_input_arguments_follow_the_configured_args() {
+    let dir = tempfile::tempdir().unwrap();
+    let arg_log = dir.path().join("argv");
+    let opf = script(
+        "opf-whole-argv",
+        &format!(
+            r#"#!/bin/sh
+printf '%s\n' "$@" > '{}'
+cat >/dev/null
+printf '%s\n' '{{"text":"clean","detected_spans":[]}}'
+"#,
+            arg_log.display()
+        ),
+    )
+    .unwrap();
+
+    backend(opf).infer("clean").unwrap();
+
+    assert_eq!(
+        fs::read_to_string(arg_log).unwrap(),
+        "--format\njson\n--output-mode\ntyped\n--no-print-color-coded-text\n--text-file\n/dev/stdin\n"
+    );
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn a_text_file_in_the_configured_args_fails_closed() {
+    // `--text-file` appends in the pinned CLI: an adopter-configured file is analysed next to the
+    // piped text, so two results come back and neither may be applied.
+    let dir = tempfile::tempdir().unwrap();
+    let other = dir.path().join("other.txt");
+    fs::write(&other, "Contact John Smith today.").unwrap();
+    let backend = SubprocessOpenAiFilterBackend::new(
+        SubprocessOpenAiFilterConfig::new(emulated_needles("opf-whole-configured-text-file"))
+            .with_args([
+                "--format",
+                "json",
+                "--output-mode",
+                "typed",
+                "--text-file",
+                other.to_str().unwrap(),
+            ])
+            .with_timeout(test_subprocess_timeout()),
+    )
+    .unwrap();
+
+    assert!(matches!(
+        backend.infer("Email jane.doe@example.invalid please.").unwrap_err(),
+        SafetyNetError::InvalidOutput { ref message } if message == "opf stdout was not valid JSON"
+    ));
+}
+
+/// Runs the real pinned CLI. `GAZE_TEST_REAL_OPF=<opf path>` and a verified checkpoint at
+/// `GAZE_TEST_REAL_OPF_CHECKPOINT` are required; run with `--ignored`.
+#[test]
+#[ignore = "needs the real opf runtime: GAZE_TEST_REAL_OPF and GAZE_TEST_REAL_OPF_CHECKPOINT"]
+#[file_serial(gaze_subprocess)]
+fn real_opf_analyses_multi_line_text_as_one_input() {
+    let command = std::env::var_os("GAZE_TEST_REAL_OPF").expect("GAZE_TEST_REAL_OPF");
+    let checkpoint =
+        std::env::var_os("GAZE_TEST_REAL_OPF_CHECKPOINT").expect("GAZE_TEST_REAL_OPF_CHECKPOINT");
+    let backend = SubprocessOpenAiFilterBackend::new(
+        SubprocessOpenAiFilterConfig::new(PathBuf::from(command))
+            .with_args([
+                "--format",
+                "json",
+                "--output-mode",
+                "typed",
+                "--device",
+                "cpu",
+            ])
+            .with_checkpoint_path(PathBuf::from(checkpoint))
+            .with_checkpoint_bundle_sha256_verification(true)
+            .with_timeout(Duration::from_secs(120)),
+    )
+    .unwrap();
+
+    for (clean, expected) in [
+        (
+            "Contact John Smith today.\nEmail jane.doe@example.com please.\n",
+            "John Smith",
+        ),
+        ("\n\nPlease call John Smith tomorrow.", "John Smith"),
+        (
+            "Hi team,\r\nplease call John Smith.\rThanks, Zoë Müller\r\n",
+            "Zoë Müller",
+        ),
+        (
+            "   \nGrüße an Jürgen Müller, jane.doe@example.com",
+            "Jürgen Müller",
+        ),
+    ] {
+        let spans = backend
+            .infer(clean)
+            .unwrap_or_else(|error| panic!("{clean:?}: {error:?}"));
+        let texts = spans
+            .iter()
+            .map(|span| &clean[span.start..span.end])
+            .collect::<Vec<_>>();
+        eprintln!("{clean:?} -> {texts:?}");
+        assert!(texts.contains(&expected), "{clean:?}: {texts:?}");
+    }
 }

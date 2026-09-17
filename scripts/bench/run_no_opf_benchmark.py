@@ -24,10 +24,8 @@ DEFAULT_MEASURED_REPETITIONS = 1
 DEFAULT_PERFORMANCE_TOLERANCE_PERCENT = 20.0
 BASELINE_CONFIRMATION = "I_HAVE_REVIEWED_FULL_RESULTS"
 NEGATIVE_CORPUS = Path("crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl")
-MODEL_CONFIG = Path("crates/gaze-recognizers/benches/ner_models.toml")
 NO_OPF_MODEL_CONFIG = Path("scripts/bench/no_opf_models.toml")
 DEFAULT_DAVLAN_MODEL = Path("~/.local/share/gaze/models/davlan-mbert-ner-hrl")
-DEFAULT_KIJI_MODEL = Path("~/.local/share/gaze/models/kiji-distilbert")
 DAVLAN_RUNTIME_ARTIFACTS = frozenset(
     {
         "config.json",
@@ -89,6 +87,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--negative-corpus", type=Path, default=NEGATIVE_CORPUS)
     parser.add_argument(
+        "--scored-labels",
+        type=Path,
+        help=(
+            "scored-label contract file (e.g. "
+            "docs/reference/benchmarks/scored-labels-v2.json); omitted means "
+            "contract v1, which scores every corpus label"
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("target/bench-data/no-opf"),
@@ -98,13 +105,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=Path(
             os.environ.get("GAZE_NER_MODEL_DIR", str(DEFAULT_DAVLAN_MODEL))
-        ).expanduser(),
-    )
-    parser.add_argument(
-        "--kiji-model-dir",
-        type=Path,
-        default=Path(
-            os.environ.get("GAZE_KIJI_DISTILBERT_MODEL_DIR", str(DEFAULT_KIJI_MODEL))
         ).expanduser(),
     )
     parser.add_argument("--threshold", type=float, default=0.3)
@@ -132,12 +132,7 @@ def repo_path(repo_root: Path, path: Path) -> Path:
     return path if path.is_absolute() else repo_root / path
 
 
-def load_model_pins(
-    repo_root: Path, davlan_path: Path, kiji_path: Path
-) -> tuple[ModelPin, ModelPin]:
-    config_path = repo_root / MODEL_CONFIG
-    raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
-    models = {item["id"]: item for item in raw.get("model", [])}
+def load_model_pins(repo_root: Path, davlan_path: Path) -> tuple[ModelPin]:
     no_opf_config_path = repo_root / NO_OPF_MODEL_CONFIG
     no_opf_raw = tomllib.loads(no_opf_config_path.read_text(encoding="utf-8"))
     try:
@@ -152,11 +147,10 @@ def load_model_pins(
         davlan_artifacts = frozenset(
             str(item) for item in pass2_ner["required_artifacts"]
         )
-        kiji_sha = str(models["kiji-distilbert"]["bundle_sha"])
     except (KeyError, TypeError) as error:
         raise ModelBundleError(
             "required model pin is missing or invalid in "
-            f"{no_opf_config_path} or {config_path}: {error}"
+            f"{no_opf_config_path}: {error}"
         ) from error
     if (
         davlan_id != "davlan-mbert-ner-hrl-onnx"
@@ -178,7 +172,6 @@ def load_model_pins(
             hf_commit=davlan_commit,
             runtime=davlan_runtime,
         ),
-        ModelPin("kiji-distilbert", kiji_path, "SHA256SUMS", kiji_sha),
     )
 
 
@@ -341,11 +334,10 @@ def validate_model_bundle(pin: ModelPin) -> dict[str, object]:
 
 
 def validate_required_models(
-    repo_root: Path, davlan_path: Path, kiji_path: Path
+    repo_root: Path, davlan_path: Path
 ) -> list[dict[str, object]]:
     return [
-        validate_model_bundle(pin)
-        for pin in load_model_pins(repo_root, davlan_path, kiji_path)
+        validate_model_bundle(pin) for pin in load_model_pins(repo_root, davlan_path)
     ]
 
 
@@ -441,6 +433,22 @@ def composite_dataset_report(
     return metadata, report
 
 
+def load_scored_label_contract(
+    repo_root: Path, path: Path | None
+) -> score.ScoredLabelContract:
+    if path is None:
+        return score.SCORED_LABEL_CONTRACT_V1
+    resolved = repo_path(repo_root, path)
+    try:
+        display = resolved.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        display = resolved.as_posix()
+    try:
+        return score.load_scored_label_contract(resolved, display_path=display)
+    except score.ScoredLabelContractError as error:
+        raise CandidateError(str(error)) from error
+
+
 def build_no_opf_environment(source: Mapping[str, str]) -> dict[str, str]:
     def is_opf_key(key: str) -> bool:
         upper = key.upper()
@@ -459,7 +467,6 @@ def execute_measurements(
     binary: Path,
     documents: Sequence[score.Document],
     davlan_model: Path,
-    kiji_model: Path,
     threshold: float,
     diagnostics_dir: Path,
     warmup_count: int,
@@ -486,7 +493,6 @@ def execute_measurements(
                 config,
                 documents,
                 davlan_model,
-                kiji_model,
                 None,
                 None,
                 None,
@@ -595,6 +601,14 @@ def diagnostics(scorecard: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def _contract_label(scorecard: Mapping[str, object]) -> str:
+    contract_id, version, _ = score.scorecard_scored_label_contract_identity(scorecard)
+    block = scorecard.get("scoring", {}).get("scored_label_contract")
+    excluded = block.get("excluded_labels", []) if isinstance(block, dict) else []
+    suffix = f" (excludes {', '.join(excluded)})" if excluded else ""
+    return f"{contract_id} v{version}{suffix}"
+
+
 def markdown_summary(
     scorecard: Mapping[str, object],
     regression: Mapping[str, object],
@@ -604,6 +618,7 @@ def markdown_summary(
     lines = [
         "# Gaze canonical no-OPF benchmark",
         "",
+        f"- Scored-label contract: **{_contract_label(scorecard)}**",
         f"- Regression: **{regression['status']}**",
         f"- Release readiness: **{readiness['status']}**",
         f"- Performance: **{performance['disposition']} / {performance['status']}**",
@@ -751,9 +766,9 @@ def run(args: argparse.Namespace) -> int:
     dataset_path = repo_path(repo_root, args.dataset)
     negative_path = repo_path(repo_root, args.negative_corpus)
     davlan_model = args.model_dir.expanduser().resolve()
-    kiji_model = args.kiji_model_dir.expanduser().resolve()
+    scored_label_contract = load_scored_label_contract(repo_root, args.scored_labels)
 
-    model_provenance = validate_required_models(repo_root, davlan_model, kiji_model)
+    model_provenance = validate_required_models(repo_root, davlan_model)
     if dataset_path.is_file():
         dataiku.verify_dataset(dataset_path)
     elif args.no_download:
@@ -771,6 +786,15 @@ def run(args: argparse.Namespace) -> int:
     )
     if args.profile == "full" and len(documents) != len(available_documents):
         raise CandidateError("full profile did not select the complete corpus")
+    # Applied after sampling: the sample is keyed by document identity only, so
+    # a contract changes which gold is scored, never which documents run.
+    try:
+        available_documents = score.apply_scored_label_contract(
+            available_documents, scored_label_contract
+        )
+        documents = score.apply_scored_label_contract(documents, scored_label_contract)
+    except score.ScoredLabelContractError as error:
+        raise CandidateError(str(error)) from error
 
     binary = (
         repo_root / "target/debug/examples/clean_for_bench"
@@ -796,7 +820,6 @@ def run(args: argparse.Namespace) -> int:
         binary=binary,
         documents=documents,
         davlan_model=davlan_model,
-        kiji_model=kiji_model,
         threshold=args.threshold,
         diagnostics_dir=output_dir / "logs",
         warmup_count=args.warmups,
@@ -823,6 +846,9 @@ def run(args: argparse.Namespace) -> int:
             "opf": False,
         },
         runs=runs,
+        scored_label_contract=score.scored_label_contract_report(
+            scored_label_contract, documents
+        ),
     )
     candidate["runner_provenance"] = {
         "entry_point": "scripts/bench/run_no_opf_benchmark.py",

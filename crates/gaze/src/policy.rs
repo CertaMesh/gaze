@@ -53,6 +53,9 @@ pub struct Policy {
     pub ner: Option<NerPolicy>,
     pub rulepacks: RulepackPolicy,
     pub locale: Option<Vec<LocaleTag>>,
+    /// Safety-net backend settings from `[safety_net.*]`. Declaring a backend here configures it;
+    /// it does not activate it.
+    pub safety_net: SafetyNetBackendsPolicy,
     /// Declared policy schema version (e.g. `"0.1.0"`).
     ///
     /// Populated from policy.toml's top-level `schema_version` field. Loader
@@ -73,9 +76,19 @@ impl Default for Policy {
             ner: None,
             rulepacks: RulepackPolicy::default(),
             locale: None,
+            safety_net: SafetyNetBackendsPolicy::default(),
             schema_version: DEFAULT_POLICY_SCHEMA_VERSION.to_string(),
         }
     }
+}
+
+/// `[safety_net.*]` tables.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
+pub struct SafetyNetBackendsPolicy {
+    /// `[safety_net.nym]`: the Nym-small allowlist and per-label thresholds, validated at load.
+    /// `None` when the table is absent (the backend then uses its op-B default).
+    pub nym: Option<gaze_types::nym::NymOperatingPoint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -250,6 +263,8 @@ pub enum PolicyError {
     InvalidCollisionMetadata { name: String, reason: String },
     #[error("{0}")]
     UnsupportedRuleKind(String),
+    #[error("invalid [safety_net.nym]: {0}")]
+    SafetyNetNym(#[source] gaze_types::nym::NymConfigError),
     #[error("unsupported policy schema_version {found}; supported {supported}")]
     PolicySchemaUnsupported {
         found: String,
@@ -295,6 +310,23 @@ struct RawPolicy {
     locale: Option<RawLocalePolicy>,
     #[serde(default)]
     policy: Option<RawPolicyTables>,
+    #[serde(default)]
+    safety_net: Option<RawSafetyNetTables>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawSafetyNetTables {
+    #[serde(default)]
+    nym: Option<RawNymPolicy>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawNymPolicy {
+    labels: Vec<String>,
+    #[serde(default)]
+    threshold: std::collections::BTreeMap<String, f32>,
 }
 
 fn default_raw_schema_version() -> String {
@@ -432,6 +464,19 @@ impl TryFrom<RawPolicy> for Policy {
         }
 
         let locale = raw.locale.map(parse_locale_policy).transpose()?.flatten();
+        let safety_net = SafetyNetBackendsPolicy {
+            nym: raw
+                .safety_net
+                .and_then(|tables| tables.nym)
+                .map(|nym| {
+                    gaze_types::nym::NymOperatingPoint::from_labels_and_thresholds(
+                        &nym.labels,
+                        &nym.threshold,
+                    )
+                    .map_err(PolicyError::SafetyNetNym)
+                })
+                .transpose()?,
+        };
 
         Ok(Self {
             session,
@@ -441,6 +486,7 @@ impl TryFrom<RawPolicy> for Policy {
             ner,
             rulepacks,
             locale,
+            safety_net,
             schema_version,
         })
     }
@@ -783,6 +829,74 @@ mod tests {
                 policy_name
             );
         }
+    }
+
+    const NYM_POLICY_BASE: &str = r#"
+[session]
+scope = "ephemeral"
+
+[[rule]]
+kind = "default"
+action = "tokenize"
+"#;
+
+    fn nym_policy(table: &str) -> Result<Policy, PolicyError> {
+        let raw: RawPolicy = toml::from_str(&format!("{NYM_POLICY_BASE}\n{table}"))
+            .map_err(PolicyError::TomlParse)?;
+        Policy::try_from(raw)
+    }
+
+    #[test]
+    fn safety_net_nym_table_is_optional_and_validated_at_load() {
+        assert_eq!(nym_policy("").unwrap().safety_net.nym, None);
+
+        let policy = nym_policy(
+            "[safety_net.nym]\nlabels = [\"LICENSE_PLATE\", \"ZIP_CODE\"]\nthreshold = { LICENSE_PLATE = 0.5, ZIP_CODE = 0.8 }\n",
+        )
+        .unwrap();
+        let op = policy.safety_net.nym.expect("nym table");
+        assert_eq!(
+            op.iter().collect::<Vec<_>>(),
+            vec![
+                (gaze_types::nym::NymLabel::LicensePlate, 0.5),
+                (gaze_types::nym::NymLabel::ZipCode, 0.8)
+            ]
+        );
+
+        for (table, expected) in [
+            (
+                "[safety_net.nym]\nlabels = [\"PLATE\"]\nthreshold = { PLATE = 0.5 }\n",
+                "unknown nym label `PLATE`",
+            ),
+            (
+                "[safety_net.nym]\nlabels = [\"GIVEN_NAME\"]\nthreshold = { GIVEN_NAME = 0.5 }\n",
+                "nym label `GIVEN_NAME` has no gaze class",
+            ),
+            (
+                "[safety_net.nym]\nlabels = [\"USERNAME\"]\n",
+                "nym label `USERNAME` is enabled without a threshold",
+            ),
+            (
+                "[safety_net.nym]\nlabels = [\"USERNAME\"]\nthreshold = { USERNAME = 1.5 }\n",
+                "must be in (0, 1]",
+            ),
+        ] {
+            let error = nym_policy(table).unwrap_err().to_string();
+            assert!(error.contains(expected), "{error}");
+        }
+        assert!(matches!(
+            nym_policy("[safety_net.nym]\nlabels = []\nmodel = \"x\"\n"),
+            Err(PolicyError::TomlParse(_))
+        ));
+    }
+
+    /// The Kiji DistilBERT net was removed: a policy that still configures it is refused at load
+    /// with a typed error naming the table, never silently ignored.
+    #[test]
+    fn removed_kiji_safety_net_table_is_rejected_at_load() {
+        let error = nym_policy("[safety_net.kiji]\nlocales = [\"de-DE\"]\n").unwrap_err();
+        assert!(matches!(error, PolicyError::TomlParse(_)), "{error:?}");
+        assert!(error.to_string().contains("kiji"), "{error}");
     }
 
     #[test]

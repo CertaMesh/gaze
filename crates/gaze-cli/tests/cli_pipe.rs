@@ -4450,143 +4450,89 @@ action = "preserve"
 }
 
 // ------------------------------------------------------------------
-// Kiji DistilBERT safety-net backend activation predicate (v0.8 T2.5)
+// Removed Kiji DistilBERT surface stays removed
 // ------------------------------------------------------------------
 
-/// Activating `--safety-net-backend=kiji-distilbert` with a missing model
-/// artifact must fail closed with the typed `SafetyNetArtifactMissing` envelope
-/// and CLI exit code 2 (config-level, Axis-1 reliability — never silent-
-/// disable).
-#[cfg(feature = "safety-net-kiji")]
+/// The Kiji DistilBERT net was deleted, not stubbed: every value and flag that
+/// selected or configured it is a usage error, so no command line can reach a
+/// dormant path.
 #[test]
-fn t_kiji_distilbert_backend_without_artifact_emits_typed_envelope() {
-    let dir = tempdir().unwrap();
-    let kiji = dir.path().join("kiji");
-    fs::write(&kiji, b"#!/bin/sh\ncat >/dev/null\nprintf '[]\\n'\n").unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&kiji, fs::Permissions::from_mode(0o700)).unwrap();
-    }
-    let model_dir = dir.path().join("kiji-distilbert");
-    fs::create_dir(&model_dir).unwrap();
-    // No SHA256SUMS, no model.onnx, no tokenizer.json, no labels.json.
-
-    let out = clean_raw_with_args(
+fn t_removed_kiji_distilbert_surface_is_rejected() {
+    for args in [
+        &["--safety-net=kiji-distilbert"][..],
         &[
-            "--safety-net=kiji-distilbert",
+            "--safety-net=openai-filter",
             "--safety-net-backend=kiji-distilbert",
-            &format!("--kiji-distilbert-command={}", kiji.display()),
-            &format!("--kiji-distilbert-model-dir={}", model_dir.display()),
-        ],
-        "hello",
-    );
-    assert_eq!(
-        out.status.code(),
-        Some(2),
-        "stderr={}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stderr_line = String::from_utf8_lossy(&out.stderr)
-        .lines()
-        .next()
-        .unwrap_or_default()
-        .to_string();
-    let value: Value =
-        serde_json::from_str(&stderr_line).expect("stderr is line-delimited JSON envelope");
-    assert_eq!(value["error"], "SafetyNetArtifactMissing");
-    assert_eq!(value["exit"], 2);
-    assert_eq!(value["backend"], "kiji-distilbert");
-    let path = value["path"].as_str().expect("path field");
-    // First missing artifact surfaced is SHA256SUMS — the pinned-artifact
-    // contract enforces this order: SHA256SUMS, labels.json, model.onnx,
-    // tokenizer.json.
-    assert!(
-        path.contains("SHA256SUMS"),
-        "expected SHA256SUMS in artifact path, got {path}"
-    );
-    assert!(
-        path.contains("fetch-kiji-safetynet-model.sh"),
-        "expected install hint, got {path}"
-    );
+        ][..],
+        &["--safety-net-registry", "--safety-net-add=kiji-distilbert"][..],
+        &["--kiji-backend=ort"][..],
+        &["--kiji-distilbert-precision=int8"][..],
+        &["--kiji-distilbert-command=/bin/true"][..],
+        &["--kiji-distilbert-model-dir=/tmp"][..],
+        &["--kiji-distilbert-locales=de-DE"][..],
+    ] {
+        let out = clean_raw_with_args(args, "hello");
+        assert_eq!(
+            out.status.code(),
+            Some(2),
+            "{args:?} must be a usage error: stderr={}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(out.stdout.is_empty(), "{args:?} must not produce output");
+    }
 }
 
-#[cfg(all(feature = "safety-net-openai", feature = "safety-net-kiji"))]
+/// With one registry-capable backend, dispatch is still locale-keyed: the entry
+/// answers for the locales it covers and the registry refuses every other one.
+#[cfg(feature = "safety-net-openai")]
 #[test]
 #[file_serial(gaze_subprocess)]
 fn t_safety_net_registry_selects_locale_backend() {
     let dir = tempdir().unwrap();
     let opf = dir.path().join("opf");
-    let kiji = dir.path().join("kiji");
-    fs::write(&opf, b"#!/bin/sh\ncat >/dev/null\nprintf '[]\\n'\n").unwrap();
-    fs::write(&kiji, b"#!/bin/sh\nexit 91\n").unwrap();
+    fs::write(&opf, b"#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps({\"text\": open(\"/dev/stdin\", encoding=\"utf-8\").read(), \"detected_spans\": json.loads(sys.argv[1])}))' '[]'\n").unwrap();
+    let checkpoint = dir.path().join("opf-checkpoint");
+    fs::create_dir(&checkpoint).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&opf, fs::Permissions::from_mode(0o700)).unwrap();
-        fs::set_permissions(&kiji, fs::Permissions::from_mode(0o700)).unwrap();
-    }
-    let checkpoint = dir.path().join("opf-checkpoint");
-    fs::create_dir(&checkpoint).unwrap();
-    let model_dir = dir.path().join("kiji-distilbert");
-    fs::create_dir(&model_dir).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&checkpoint, fs::Permissions::from_mode(0o700)).unwrap();
-        fs::set_permissions(&model_dir, fs::Permissions::from_mode(0o700)).unwrap();
     }
-    for artifact in ["SHA256SUMS", "labels.json", "model.onnx", "tokenizer.json"] {
-        fs::write(model_dir.join(artifact), b"placeholder").unwrap();
-    }
+    let registry_args = |locale: &str| {
+        vec![
+            format!("--locale={locale}"),
+            "--safety-net-registry".to_string(),
+            "--safety-net-add=openai-filter".to_string(),
+            format!("--safety-net-timeout-ms={}", test_subprocess_timeout_ms()),
+            format!("--opf-command={}", opf.display()),
+            format!("--opf-checkpoint={}", checkpoint.display()),
+            "--opf-locales=en-US,en-GB".to_string(),
+        ]
+    };
 
-    let out = clean_raw_with_args(
-        &[
-            "--locale=en-US",
-            "--safety-net-registry",
-            "--safety-net-add=openai-filter",
-            "--safety-net-add=kiji-distilbert",
-            &format!("--safety-net-timeout-ms={}", test_subprocess_timeout_ms()),
-            &format!("--opf-command={}", opf.display()),
-            &format!("--opf-checkpoint={}", checkpoint.display()),
-            "--opf-locales=en-US,en-GB",
-            &format!("--kiji-distilbert-command={}", kiji.display()),
-            &format!("--kiji-distilbert-model-dir={}", model_dir.display()),
-            "--kiji-distilbert-locales=de-DE,de-AT",
-        ],
-        "hello",
-    );
+    let args = registry_args("en-US");
+    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+    let out = clean_raw_with_args(&args, "hello");
     assert_eq!(
         out.status.code(),
         Some(0),
-        "registry should select OPF for en-US and not invoke Kiji: stderr={}",
+        "registry should select OPF for en-US: stderr={}",
         String::from_utf8_lossy(&out.stderr)
     );
     let value: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
     assert_eq!(value["leak_report"]["stats"]["suspect_count"], 0);
 
-    let out = clean_raw_with_args(
-        &[
-            "--locale=de-DE",
-            "--safety-net-registry",
-            "--safety-net-add=openai-filter",
-            "--safety-net-add=kiji-distilbert",
-            &format!("--safety-net-timeout-ms={}", test_subprocess_timeout_ms()),
-            &format!("--opf-command={}", opf.display()),
-            &format!("--opf-checkpoint={}", checkpoint.display()),
-            "--opf-locales=en-US,en-GB",
-            &format!("--kiji-distilbert-command={}", kiji.display()),
-            &format!("--kiji-distilbert-model-dir={}", model_dir.display()),
-            "--kiji-distilbert-locales=de-DE,de-AT",
-        ],
-        "hello",
-    );
+    let args = registry_args("de-DE");
+    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+    let out = clean_raw_with_args(&args, "hello");
     assert_eq!(
         out.status.code(),
         Some(3),
-        "registry should select Kiji for de-DE and fail on the fake model: stderr={}",
+        "registry must refuse a locale no entry covers: stderr={}",
         String::from_utf8_lossy(&out.stderr)
     );
+    assert!(out.stdout.is_empty(), "a refused clean must not answer");
     let stderr_line = String::from_utf8_lossy(&out.stderr)
         .lines()
         .next()
@@ -4594,7 +4540,7 @@ fn t_safety_net_registry_selects_locale_backend() {
         .to_string();
     let value: Value =
         serde_json::from_str(&stderr_line).expect("stderr is line-delimited JSON envelope");
-    assert_eq!(value["variant"], "ModelUnavailable");
+    assert_eq!(value["variant"], "Unavailable");
 }
 
 #[test]
