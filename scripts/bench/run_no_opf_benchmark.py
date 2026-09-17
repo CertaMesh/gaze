@@ -644,9 +644,14 @@ def markdown_summary(
             "",
             "## Validator-backed versus shape-only recall",
             "",
+            "Gold that fails its own validator stays scored. The last two columns "
+            "split the headline leaked bytes of this arm by that verdict; they "
+            "add up to the label's leaked bytes and never replace them.",
+            "",
             "| Config | Label | Applicable validator(s) | Gold pass | Gold fail "
-            "| Validator-backed full-coverage recall | Shape-only full-coverage recall |",
-            "| --- | --- | --- | ---: | ---: | ---: | ---: |",
+            "| Validator-backed full-coverage recall | Shape-only full-coverage recall "
+            "| Leaked bytes, validator-passed gold | Leaked bytes, validator-failed gold |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for run in scorecard["runs"]:
@@ -661,15 +666,21 @@ def markdown_summary(
                 shape_recall = (
                     f"{block['shape_only_recall']['full_coverage_recall']:.6f}"
                 )
+                split = block["production_recall_by_gold_validity"]
+                passed_leak = str(split["validator_passed_gold"]["leaked_utf8_bytes"])
+                failed_leak = str(split["validator_failed_gold"]["leaked_utf8_bytes"])
             else:
                 validators = block["applicability"]
                 passed = "n/a"
                 failed = "n/a"
                 validator_recall = "n/a"
                 shape_recall = "n/a"
+                passed_leak = "n/a"
+                failed_leak = "n/a"
             lines.append(
                 f"| {run['config']} | {label} | {validators} | {passed} | "
-                f"{failed} | {validator_recall} | {shape_recall} |"
+                f"{failed} | {validator_recall} | {shape_recall} | "
+                f"{passed_leak} | {failed_leak} |"
             )
     return "\n".join(lines) + "\n"
 

@@ -600,7 +600,7 @@ capture_groups = [1]
 
 | Value | Meaning |
 |-------|---------|
-| `"document"` | `locales` gates eligibility against the resolved document locale chain. This is the legacy default when an external/adopter rulepack omits the field. |
+| `"document"` | `locales` gates eligibility against the resolved document locale chain. The registry walks the chain per class; an earlier locale wins per span, and a later locale's candidates are kept wherever they do not overlap an earlier locale's candidates of the same class ([Locale Chain](../explanation/policy/locale-chain.md)). This is the legacy default when an external/adopter rulepack omits the field. |
 | `"format"` | `locales` records format provenance only. Assembly registers the recognizer regardless of document locale, and the registry runs it once outside locale fallback before ordinary conflict resolution. |
 
 Bundled rulepacks must state `locale_basis` explicitly for every recognizer.

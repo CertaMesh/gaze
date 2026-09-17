@@ -587,7 +587,7 @@ async fn plain_string_carrier_is_decoded_without_json_reparse() {
         outcome(Some(&r)) == "COMPLETED" && r.content.len() == 1,
         "plain-carrier"
     );
-    let observed = &r.content[0].raw.as_text().expect("text-frame").text;
+    let observed = &r.content[0].as_text().expect("text-frame").text;
     assert!(
         occurrence(&h.session, observed, EMAIL, false) == Verdict::Protected,
         "plain-string-oracle"

@@ -81,6 +81,6 @@ The adapter removes `_session_id` before dispatching tool args and passes it as 
 
 ## rmcp Version Policy
 
-This crate builds on `rmcp 1.x`. There is **no SemVer guarantee** on rmcp re-exports or transport internals; major rmcp bumps may force breaking releases of `gaze-mcp-rmcp` even within otherwise stable Gaze cycles.
+This crate builds on `rmcp 2.x`. There is **no SemVer guarantee** on rmcp re-exports or transport internals; major rmcp bumps may force breaking releases of `gaze-mcp-rmcp` even within otherwise stable Gaze cycles.
 
 [`gaze-mcp-core`]: https://crates.io/crates/gaze-mcp-core

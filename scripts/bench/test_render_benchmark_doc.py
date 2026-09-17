@@ -1061,3 +1061,103 @@ class CheckDoorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _validator_block(failed_leak: int = 1440) -> dict:
+    return {
+        "applicability": "applicable",
+        "validator_kinds": ["luhn"],
+        "gold_spans": 126,
+        "validator_passed_gold_spans": 30,
+        "validator_failed_gold_spans": 96,
+        "validator_backed_recall": {"full_coverage_recall": 0.2063},
+        "shape_only_recall": {"full_coverage_recall": 0.7460},
+        "production_recall_by_gold_validity": {
+            "validator_passed_gold": {"leaked_utf8_bytes": 12},
+            "validator_failed_gold": {"leaked_utf8_bytes": failed_leak},
+        },
+    }
+
+
+def split_scorecard() -> dict:
+    value = scorecard()
+    for run in value["runs"]:
+        run["validator_recall_by_label"] = {
+            "CREDITCARDNUMBER": _validator_block(),
+            "SURNAME": {"applicability": "not_applicable"},
+        }
+    return value
+
+
+class ValidatorRecallTableTest(unittest.TestCase):
+    """The shape-recall table: every column wired, and old rows untouched."""
+
+    def split_entry(self, card: dict | None = None) -> dict:
+        value = split_scorecard()
+        if card is not None:
+            for run in value["runs"]:
+                run["validator_recall_by_label"]["CREDITCARDNUMBER"] = card
+        return render.history_entry_from_scorecard(
+            value,
+            version="v0.15.0",
+            machine="Test host, 1 core, 1 GB",
+            scorecard_filename="scorecard-v0.15.0.json",
+            scorecard_sha256="0" * 64,
+        )
+
+    def test_pre_split_scorecard_records_and_renders_no_table(self):
+        item = entry()
+        self.assertNotIn("validator_recall", item)
+        self.assertNotIn("Shape recall", render.render_current_release(history_of(item)))
+
+    def test_only_applicable_labels_become_rows(self):
+        self.assertEqual(list(self.split_entry()["validator_recall"]), ["CREDITCARDNUMBER"])
+
+    def test_every_column_moves_the_document(self):
+        item = self.split_entry()
+        baseline = render.render_current_release(history_of(item))
+        self.assertIn("Shape recall", baseline)
+        for _, field, _ in render.VALIDATOR_COLUMNS:
+            with self.subTest(field=field):
+                changed = copy.deepcopy(item)
+                row = changed["validator_recall"]["CREDITCARDNUMBER"]
+                row[field] = _mutate(row[field])
+                self.assertNotEqual(
+                    render.render_current_release(history_of(changed)), baseline
+                )
+
+    def test_every_source_path_moves_the_extracted_row(self):
+        paths = [
+            ("gold_spans",),
+            ("validator_failed_gold_spans",),
+            ("validator_backed_recall", "full_coverage_recall"),
+            ("shape_only_recall", "full_coverage_recall"),
+            ("production_recall_by_gold_validity", "validator_passed_gold", "leaked_utf8_bytes"),
+            ("production_recall_by_gold_validity", "validator_failed_gold", "leaked_utf8_bytes"),
+        ]
+        self.assertEqual(len(paths), len(render.VALIDATOR_COLUMNS))
+        baseline = self.split_entry()["validator_recall"]
+        for path in paths:
+            with self.subTest(path=_label(path)):
+                card = _validator_block()
+                node = card
+                for key in path[:-1]:
+                    node = node[key]
+                node[path[-1]] = _mutate(node[path[-1]])
+                self.assertNotEqual(self.split_entry(card)["validator_recall"], baseline)
+
+    def test_missing_split_field_on_an_applicable_label_is_refused(self):
+        card = _validator_block()
+        del card["production_recall_by_gold_validity"]["validator_failed_gold"]
+        with self.assertRaises(render.RenderError):
+            self.split_entry(card)
+
+    def test_history_with_a_malformed_row_is_refused(self):
+        item = self.split_entry()
+        item["validator_recall"]["CREDITCARDNUMBER"]["gold_spans"] = "n/a"
+        with self.assertRaises(render.RenderError):
+            render.validate_history(history_of(item))
+
+    def test_valid_and_invalid_gold_columns_are_not_swapped(self):
+        rendered = render.render_current_release(history_of(self.split_entry()))
+        self.assertIn("| `CREDITCARDNUMBER` | luhn | 126 | 96 | 0.206300 | 0.746000 | 12 | 1,440 |", rendered)

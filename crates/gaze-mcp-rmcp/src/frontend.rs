@@ -15,8 +15,8 @@ use gaze_mcp_core::{
 };
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, Content, ErrorData, Implementation, ListToolsResult,
-    PaginatedRequestParams, ServerCapabilities, ServerInfo,
+    CallToolRequestParams, CallToolResult, ContentBlock, ErrorData, Implementation,
+    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use tokio_util::sync::CancellationToken;
@@ -332,24 +332,26 @@ fn tier_for_principal(principal: &Principal) -> ToolTier {
 fn dispatch_error_to_tool_result(err: DispatchError) -> CallToolResult {
     match err {
         DispatchError::ToolError(err) => error_to_rmcp_call_tool_result(err),
-        DispatchError::UnknownTool(_) => CallToolResult::error(vec![Content::text("not-found")]),
-        DispatchError::SessionId(_) => {
-            CallToolResult::error(vec![Content::text("invalid-session-id")])
+        DispatchError::UnknownTool(_) => {
+            CallToolResult::error(vec![ContentBlock::text("not-found")])
         }
-        DispatchError::Auth(_) => CallToolResult::error(vec![Content::text("auth-denied")]),
+        DispatchError::SessionId(_) => {
+            CallToolResult::error(vec![ContentBlock::text("invalid-session-id")])
+        }
+        DispatchError::Auth(_) => CallToolResult::error(vec![ContentBlock::text("auth-denied")]),
         DispatchError::Manifest(_) => {
-            CallToolResult::error(vec![Content::text("manifest-persistence-failed")])
+            CallToolResult::error(vec![ContentBlock::text("manifest-persistence-failed")])
         }
         DispatchError::Protection(_)
         | DispatchError::Carrier(_)
         | DispatchError::Transaction(_)
         | DispatchError::Redaction(_) => {
-            CallToolResult::error(vec![Content::text("redaction-failed")])
+            CallToolResult::error(vec![ContentBlock::text("redaction-failed")])
         }
         DispatchError::ResponseSerialization(_) => {
-            CallToolResult::error(vec![Content::text("response-serialization-failed")])
+            CallToolResult::error(vec![ContentBlock::text("response-serialization-failed")])
         }
-        _ => CallToolResult::error(vec![Content::text("internal")]),
+        _ => CallToolResult::error(vec![ContentBlock::text("internal")]),
     }
 }
 
@@ -387,7 +389,7 @@ mod tests {
         ));
         let result = dispatch_error_to_tool_result(err);
         assert_eq!(result.is_error, Some(true));
-        let text = &result.content[0].raw.as_text().unwrap().text;
+        let text = &result.content[0].as_text().unwrap().text;
         assert_eq!(text, "manifest-persistence-failed");
     }
 }

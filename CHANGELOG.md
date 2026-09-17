@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Benchmark shape-recall column.** Each scorecard run now splits every
+  validator-backed label's surviving bytes into gold that passes its validator
+  and gold that fails it (`production_recall_by_gold_validity`), next to the
+  existing validator-backed and shape-only recall. The headline leaked bytes
+  are unchanged; the benchmark document renders the table for the shipped
+  default arm from the next measured release on.
 - **Opt-in Nym-small safety net** (`--safety-net nym`, feature
   `safety-net-nym`, on in the default `gaze-cli` build). Runs
   `Wismut/nym-pii-multilingual-small` v3 int8 in process through ONNX Runtime.
@@ -162,6 +168,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING (`gaze-mcp-rmcp`): rmcp 2.x.** `gaze-mcp-rmcp`,
+  `gaze-mcp-bridge` and `gaze-document` move from rmcp 1.6 to rmcp 2.x, whose
+  `ContentBlock` replaces `Content` / `RawContent`. Adopters that name rmcp
+  types next to `gaze-mcp-rmcp` must upgrade rmcp with it. MSRV stays 1.89.
+  Because rmcp 2.x marks `ContentBlock`, `TextContent` and `Annotations`
+  `#[non_exhaustive]`, bridge ingress now refuses any non-text content variant
+  through a wildcard arm, and refuses a text block or its `annotations` object
+  when either serializes a field it does not redact
+  (`unsupported_content_field`), so a later rmcp release cannot widen what
+  reaches the agent unredacted.
+
 - **BREAKING: `gaze setup` installs the benchmarked NER model.** The default
   (`--safety-net ner`) used to install the Kiji distilbert-NER bundle as the
   primary `[ner]` model in the written policy. It now downloads and verifies
@@ -220,11 +237,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explaining why the numeric rules stay locale-gated and the alphanumeric ones
   do not.
 
-- [docs] Every `core.toml` line citation in the recognizer coverage matrix of
-  `docs/reference/redaction-classes.md` is regenerated. 35 of 37 rows pointed at
-  stale line ranges: the doc gate reads the first twelve columns and never
-  checks the thirteenth, so the column had drifted unnoticed across many
-  changes. Adding an assertion for it is tracked separately.
+- [docs] The `core.toml` line-citation column is **removed** from the recognizer
+  coverage matrix in `docs/reference/redaction-classes.md`, and the doc gate now
+  expects twelve columns. The column was documentation cosmetics that no code
+  depended on and no gate verified: 35 of 37 rows had drifted, some by more than
+  150 lines. Regenerating it (as an earlier entry in this cycle did) only reset
+  a clock that would drift again on the next `core.toml` edit, so the column is
+  gone rather than re-verified. The gate keeps checking every remaining column
+  against the loaded rulepack. Recognizer definitions are found by searching
+  `core.toml` (loaded as both `core` and `core-extended`) or `secrets.toml` for
+  the `id = "..."` line.
 
 - [bundle-tokenization-drift] The `core` snapshot records rulepack version0.5.3; detection entries, spans, classes, sources, token shapes and counts are unchanged.
 
