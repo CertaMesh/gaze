@@ -354,22 +354,38 @@ impl Ledger {
         Ok(())
     }
     pub(super) fn validate(&self) -> Result<()> {
+        // The public fragment discriminator is derived from the internal origin,
+        // so a record where they disagree is forged or drifted state. Consumers
+        // decide whether to index a replacement as an entity on the strength of
+        // it, so this fails closed rather than trusting either.
+        //
+        // This reads no segment and so belongs outside the segment loop: nested
+        // it ran once per segment (quadratic on the protect path, where
+        // `existing_owned` pushes a segment per carried token) and, worse, was
+        // skipped entirely on a ledger with records and no segments — a
+        // fail-closed check must not be gated on an unrelated collection being
+        // non-empty.
+        //
+        // `Origin::Unknown` is skipped because it means "not recorded", not "not
+        // a fragment". Records imported through `From<Vec<EmittedTokenSpan>>`
+        // all carry it, so comparing against it would reject a legitimately
+        // emitted fragment on round-trip. Every origin that is actually known is
+        // still checked.
+        for record in &self.records {
+            if matches!(record.origin, Origin::Unknown) {
+                continue;
+            }
+            if record.emitted.origin.is_residual_fragment()
+                != matches!(record.origin, Origin::Residual { .. })
+            {
+                return Err(manifest_integrity_error(
+                    "emitted span origin disagrees with occurrence origin",
+                ));
+            }
+        }
         for segment in &self.segments {
             if segment.originals.len() != segment.original_raw.len() {
                 return Err(manifest_integrity_error("evidence length mismatch"));
-            }
-            // The public fragment discriminator is derived from the internal
-            // origin, so a record where they disagree is forged or drifted state.
-            // Consumers decide whether to index a replacement as an entity on the
-            // strength of it, so this fails closed rather than trusting either.
-            for record in &self.records {
-                if record.emitted.origin.is_residual_fragment()
-                    != matches!(record.origin, Origin::Residual { .. })
-                {
-                    return Err(manifest_integrity_error(
-                        "emitted span origin disagrees with occurrence origin",
-                    ));
-                }
             }
             super::residual::validate(segment)?;
             use crate::resolver::{PairOutcome, ResolutionEvent};
@@ -1433,5 +1449,58 @@ mod tests {
             .iter()
             .all(|r| !r.emitted.clean_span.is_empty()));
         clean.manifest.validate().unwrap();
+    }
+
+    /// The origin-agreement check is fail-closed, so it must not be gated on an
+    /// unrelated collection being non-empty. Nested inside the segment loop it
+    /// never ran on a ledger holding records and no segments.
+    ///
+    /// The assertion is on the message, not merely on `is_err`: every known
+    /// origin also fails a later check that looks the segment up, so a
+    /// segment-gated guard still returns *an* error here. Only the hoisted one
+    /// returns *this* error, and only the hoisted one runs first.
+    #[test]
+    fn the_origin_agreement_guard_runs_on_a_ledger_with_records_and_no_segments() {
+        let mut ledger = Ledger::default();
+        ledger.insert(Occurrence::new(
+            EmittedTokenSpan::residual_fragment(0..5, 0..7, PiiClass::Email),
+            Action::Tokenize,
+            true,
+            Origin::ExistingOwnedUnknown { segment: 0 },
+        ));
+        assert!(ledger.segments.is_empty());
+
+        let error = ledger
+            .validate()
+            .expect_err("a record whose two origins disagree must not validate");
+        assert!(
+            error
+                .to_string()
+                .contains("emitted span origin disagrees with occurrence origin"),
+            "the origin guard must be what rejects this, not a later segment lookup: {error}"
+        );
+    }
+
+    /// `Origin::Unknown` means "not recorded", not "not a fragment". Every
+    /// record built through `From<Vec<EmittedTokenSpan>>` carries it, so
+    /// comparing the public discriminator against it would reject a
+    /// legitimately emitted fragment on re-import — a mechanical hoist of the
+    /// guard would have been a new rejection rather than a strengthening.
+    #[test]
+    fn a_fragment_reimported_through_the_span_constructor_still_validates() {
+        let ledger: Ledger = vec![
+            EmittedTokenSpan::new(0..5, 0..7, PiiClass::Email),
+            EmittedTokenSpan::residual_fragment(6..9, 8..14, PiiClass::Email),
+        ]
+        .into();
+
+        assert!(ledger.records[1].emitted.origin.is_residual_fragment());
+        assert!(ledger
+            .records
+            .iter()
+            .all(|record| matches!(record.origin, Origin::Unknown)));
+        ledger
+            .validate()
+            .expect("a re-imported fragment is unrecorded, not a disagreement");
     }
 }
