@@ -69,7 +69,7 @@ What this run gets wrong, stated plainly:
 
 The same boundary applies to tool-call arguments in agent frameworks: the JSON the model fills in carries placeholders, and Gaze restores them before your tool runs ([how it fits your stack](#how-it-fits-your-stack)).
 
-This is the real output of the current `main` branch, not a picked best case. On the v0.14.0 benchmark (2,910 documents), the shipped default still let **19.3 % of personal-data (PII) bytes** through; the goal is zero ([benchmark](../../docs/reference/benchmarks/README.md#current-release)). The exact policy and commands: [reproduce this example](#reproduce-this-example).
+This is the real output of the current `main` branch, not a picked best case. On the v0.14.0 benchmark (2,910 documents), the configuration that now ships by default (rules plus the NER model, no safety net) still let **20.7 % of personal-data (PII) bytes** through; the goal is zero ([benchmark](../../docs/reference/benchmarks/README.md#current-release)). The exact policy and commands: [reproduce this example](#reproduce-this-example).
 
 ## Seven steps
 
