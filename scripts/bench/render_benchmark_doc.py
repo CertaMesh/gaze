@@ -85,6 +85,18 @@ ARM_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("clean p95 ms ↓", "clean_ms_p95", "ms"),
 )
 
+# Validator-backed label table for the shipped default arm: (header, history
+# field, formatter key). Scorecard source per field lives in
+# `_validator_row_from_scorecard`; a row exists only for an applicable label.
+VALIDATOR_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("Gold", "gold_spans", "int"),
+    ("Gold failing its validator", "validator_failed_gold_spans", "int"),
+    ("Validator-backed recall", "validator_backed_full_coverage_recall", "rate"),
+    ("Shape recall", "shape_only_full_coverage_recall", "rate"),
+    ("Leaked bytes, valid gold", "leaked_utf8_bytes_validator_passed_gold", "int"),
+    ("Leaked bytes, invalid gold", "leaked_utf8_bytes_validator_failed_gold", "int"),
+)
+
 BLOCK_NAMES = ("current-release", "charts", "history")
 
 
@@ -296,7 +308,28 @@ def validate_history(history: Mapping[str, Any]) -> None:
             (entry.get("dataset") or {}).get("integrity"), f"{version}: history"
         )
         _require_model_bundles(entry.get("provenance") or {}, f"{version}: history")
+        _validate_validator_recall(entry.get("validator_recall"), version)
         shipped_default_arm(entry)
+
+
+def _validate_validator_recall(value: Any, version: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, Mapping) or not value:
+        raise RenderError(f"{version}: validator_recall must be a non-empty object")
+    for label, row in value.items():
+        if not isinstance(row, Mapping):
+            raise RenderError(f"{version}: validator_recall.{label} must be an object")
+        for _, field, kind in VALIDATOR_COLUMNS:
+            cell = row.get(field)
+            if kind == "int":
+                _require_nonneg_int(cell, f"{version}: validator_recall.{label}.{field}")
+            elif cell is not None and (
+                isinstance(cell, bool) or not isinstance(cell, (int, float))
+            ):
+                raise RenderError(
+                    f"{version}: validator_recall.{label}.{field} must be a number"
+                )
 
 
 def shipped_default_arm(entry: Mapping[str, Any]) -> str:
@@ -400,6 +433,53 @@ def contract_label(entry: Mapping[str, Any]) -> str:
     return f"scored labels v{version}"
 
 
+def _validator_row_from_scorecard(block: Mapping[str, Any], where: str) -> dict[str, Any]:
+    split = _dig(block, ("production_recall_by_gold_validity",), where)
+    return {
+        "validator_kinds": list(_dig(block, ("validator_kinds",), where)),
+        "gold_spans": _dig(block, ("gold_spans",), where),
+        "validator_failed_gold_spans": _dig(
+            block, ("validator_failed_gold_spans",), where
+        ),
+        "validator_backed_full_coverage_recall": _dig(
+            block, ("validator_backed_recall", "full_coverage_recall"), where
+        ),
+        "shape_only_full_coverage_recall": _dig(
+            block, ("shape_only_recall", "full_coverage_recall"), where
+        ),
+        "leaked_utf8_bytes_validator_passed_gold": _dig(
+            split, ("validator_passed_gold", "leaked_utf8_bytes"), where
+        ),
+        "leaked_utf8_bytes_validator_failed_gold": _dig(
+            split, ("validator_failed_gold", "leaked_utf8_bytes"), where
+        ),
+    }
+
+
+def validator_recall_from_run(run: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Applicable validator labels of one run, or None for pre-split scorecards.
+
+    Scorecards measured before the gold-validity split carry no
+    `production_recall_by_gold_validity`; their rows render exactly as before.
+    """
+    labels = run.get("validator_recall_by_label")
+    if not isinstance(labels, Mapping):
+        return None
+    applicable = {
+        label: block
+        for label, block in labels.items()
+        if isinstance(block, Mapping) and block.get("applicability") == "applicable"
+    }
+    if not any("production_recall_by_gold_validity" in b for b in applicable.values()):
+        return None
+    return {
+        label: _validator_row_from_scorecard(
+            block, f"run {run.get('config')} validator_recall_by_label.{label}"
+        )
+        for label, block in sorted(applicable.items())
+    }
+
+
 def history_entry_from_scorecard(
     scorecard: Mapping[str, Any],
     *,
@@ -480,6 +560,8 @@ def history_entry_from_scorecard(
             f"scorecard has no run for the shipped default arm {SHIPPED_DEFAULT_ARM}"
         )
     contract = _scored_label_contract(scorecard)
+    default_run = next(run for run in runs if run["config"] == SHIPPED_DEFAULT_ARM)
+    validator_recall = validator_recall_from_run(default_run)
 
     return {
         "version": version,
@@ -511,6 +593,13 @@ def history_entry_from_scorecard(
         **({"scored_label_contract": contract} if contract is not None else {}),
         "shipped_default_arm": SHIPPED_DEFAULT_ARM,
         "arms": arms,
+        # Absent on rows measured before the gold-validity split, so those rows
+        # and the document they render stay byte-identical.
+        **(
+            {"validator_recall": validator_recall}
+            if validator_recall is not None
+            else {}
+        ),
     }
 
 
@@ -615,7 +704,27 @@ def render_current_release(history: Mapping[str, Any]) -> str:
         if arm == shipped_default_arm(entry):
             label += " **(shipped default)**"
         lines.append("| " + " | ".join([label] + cells) + " |")
+    if entry.get("validator_recall"):
+        lines.extend(render_validator_recall(entry))
     return "\n".join(lines)
+
+
+def render_validator_recall(entry: Mapping[str, Any]) -> list[str]:
+    lines = [
+        "",
+        f"Validator-backed labels on `{shipped_default_arm(entry)}`. Gold that "
+        "fails its own checksum stays scored gold: the two leaked-bytes columns "
+        "split the surviving bytes above, they do not replace them. Shape recall "
+        "is what a shape-only match (validator ignored) would cover.",
+        "",
+        "| Label | Validator | " + " | ".join(c[0] for c in VALIDATOR_COLUMNS) + " |",
+        "| --- | --- | " + " | ".join(["---:"] * len(VALIDATOR_COLUMNS)) + " |",
+    ]
+    for label, row in entry["validator_recall"].items():
+        cells = [_fmt(kind, row[field]) for _, field, kind in VALIDATOR_COLUMNS]
+        kinds = ", ".join(row["validator_kinds"])
+        lines.append("| " + " | ".join([f"`{label}`", kinds] + cells) + " |")
+    return lines
 
 
 def render_charts(history: Mapping[str, Any]) -> str:

@@ -738,3 +738,37 @@ class BaselineGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarkdownSummaryTests(unittest.TestCase):
+    def test_leak_split_columns_follow_their_headers(self) -> None:
+        value = scorecard()
+        block = {
+            "IBAN": {
+                "applicability": "applicable",
+                "validator_kinds": ["iban_mod97"],
+                "validator_passed_gold_spans": 140,
+                "validator_failed_gold_spans": 67,
+                "validator_backed_recall": {"full_coverage_recall": 0.5},
+                "shape_only_recall": {"full_coverage_recall": 0.75},
+                "production_recall_by_gold_validity": {
+                    "validator_passed_gold": {"leaked_utf8_bytes": 11},
+                    "validator_failed_gold": {"leaked_utf8_bytes": 1595},
+                },
+            }
+        }
+        for run in value["runs"]:
+            run.setdefault("latency_ms", {})
+            run["validator_recall_by_label"] = copy.deepcopy(block)
+        with mock.patch.object(runner, "_contract_label", return_value="v2"):
+            summary = runner.markdown_summary(
+                value,
+                {"status": "passed"},
+                {"status": "passed"},
+                {"disposition": "informational", "status": "passed"},
+            )
+        header = next(line for line in summary.splitlines() if "Gold pass" in line)
+        row = next(line for line in summary.splitlines() if "| IBAN |" in line)
+        cells = dict(zip(header.split("|"), row.split("|")))
+        self.assertEqual(cells[" Leaked bytes, validator-passed gold "].strip(), "11")
+        self.assertEqual(cells[" Leaked bytes, validator-failed gold "].strip(), "1595")

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Benchmark shape-recall column.** Each scorecard run now splits every
+  validator-backed label's surviving bytes into gold that passes its validator
+  and gold that fails it (`production_recall_by_gold_validity`), next to the
+  existing validator-backed and shape-only recall. The headline leaked bytes
+  are unchanged; the benchmark document renders the table for the shipped
+  default arm from the next measured release on.
 - **Opt-in Nym-small safety net** (`--safety-net nym`, feature
   `safety-net-nym`, on in the default `gaze-cli` build). Runs
   `Wismut/nym-pii-multilingual-small` v3 int8 in process through ONNX Runtime.
