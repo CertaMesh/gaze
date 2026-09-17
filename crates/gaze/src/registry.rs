@@ -687,7 +687,11 @@ impl RecognizerRegistry {
                             }),
                     );
                 }
-                claimed.extend(class_candidates.iter().map(|candidate| candidate.span.clone()));
+                claimed.extend(
+                    class_candidates
+                        .iter()
+                        .map(|candidate| candidate.span.clone()),
+                );
                 candidates.extend(class_candidates);
             }
         }
