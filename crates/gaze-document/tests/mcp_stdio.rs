@@ -147,7 +147,7 @@ fn synthetic_image_path() -> std::path::PathBuf {
 
 fn parse_success_payload(result: rmcp::model::CallToolResult) -> Value {
     assert_eq!(result.is_error, Some(false));
-    let text = &result.content[0].raw.as_text().unwrap().text;
+    let text = &result.content[0].as_text().unwrap().text;
     serde_json::from_str(text).expect("tool response json")
 }
 
@@ -243,7 +243,7 @@ async fn stdio_document_tools_return_clean_payloads() {
         .await
         .expect("file tool call returns");
     if file_result.is_error == Some(true) {
-        let text = &file_result.content[0].raw.as_text().unwrap().text;
+        let text = &file_result.content[0].as_text().unwrap().text;
         if text.starts_with("backend-unavailable:") {
             eprintln!("SKIP: {text}");
             client.cancel().await.expect("client cancels");

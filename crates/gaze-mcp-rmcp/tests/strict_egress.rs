@@ -140,7 +140,7 @@ async fn actual_transport_protects_fresh_response_and_hides_carrier_errors() {
         .unwrap();
     assert_eq!(rejected.is_error, Some(true));
     assert_eq!(
-        rejected.content[0].raw.as_text().unwrap().text,
+        rejected.content[0].as_text().unwrap().text,
         "redaction-failed"
     );
     assert_eq!(

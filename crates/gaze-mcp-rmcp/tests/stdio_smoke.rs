@@ -83,10 +83,7 @@ async fn stdio_dispatch_lists_and_calls_tools() {
         .expect("tool call succeeds");
 
     assert_eq!(result.is_error, Some(false));
-    assert_eq!(
-        result.content[0].raw.as_text().unwrap().text,
-        "redacted: hello"
-    );
+    assert_eq!(result.content[0].as_text().unwrap().text, "redacted: hello");
     assert_eq!(host.calls.load(Ordering::SeqCst), 1);
 
     client.cancel().await.expect("client cancels");

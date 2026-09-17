@@ -335,7 +335,7 @@ pub(crate) async fn call(h: Arc<Host>, args: Value, timeout: bool) -> Option<Cal
     response
 }
 pub(crate) fn no_payload_surfaces(r: &CallToolResult) -> bool {
-    let Some(t) = r.content.first().and_then(|c| c.raw.as_text()) else {
+    let Some(t) = r.content.first().and_then(|c| c.as_text()) else {
         return false;
     };
     // Equality closes every serialized data-bearing surface, including future fields.
@@ -350,7 +350,6 @@ pub(crate) fn outcome(r: Option<&CallToolResult>) -> &'static str {
             if no_payload_surfaces(r)
                 && r.content.len() == 1
                 && r.content[0]
-                    .raw
                     .as_text()
                     .is_some_and(|t| CONTROL_REFUSAL_CODES.contains(&t.text.as_str())) =>
         {
@@ -365,7 +364,7 @@ pub(crate) fn decode(r: &CallToolResult) -> Value {
         "completed-single-carrier"
     );
     must(serde_json::from_str(
-        &r.content[0].raw.as_text().expect("text-frame").text,
+        &r.content[0].as_text().expect("text-frame").text,
     ))
 }
 #[derive(PartialEq, Eq)]

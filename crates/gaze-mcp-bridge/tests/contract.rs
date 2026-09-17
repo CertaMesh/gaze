@@ -18,7 +18,7 @@ use gaze_mcp_core::{
     AuthError, AuthHook, DispatchError, DispatchHost, Principal, ToolDescriptor, ToolError,
 };
 use proptest::prop_assert;
-use rmcp::model::{CallToolResult, Content, RawResource};
+use rmcp::model::{CallToolResult, ContentBlock, Resource};
 use serde_json::{json, Value};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
@@ -139,7 +139,7 @@ impl DownstreamClient for FakeClient {
 }
 
 fn result_text(text: &str) -> CallToolResult {
-    CallToolResult::success(vec![Content::text(text.to_string())])
+    CallToolResult::success(vec![ContentBlock::text(text.to_string())])
 }
 
 async fn host_with_fake(
@@ -550,7 +550,8 @@ async fn audit_must_succeed_before_forward() {
 
 #[tokio::test]
 async fn is_error_text_structured_and_meta_are_redacted() {
-    let mut result = CallToolResult::error(vec![Content::text(format!("missing {RAW_EMAIL}"))]);
+    let mut result =
+        CallToolResult::error(vec![ContentBlock::text(format!("missing {RAW_EMAIL}"))]);
     result.structured_content = Some(json!({"owner": RAW_EMAIL}));
     result.meta = Some(rmcp::model::Meta({
         let mut map = rmcp::model::JsonObject::new();
@@ -576,20 +577,14 @@ async fn is_error_text_structured_and_meta_are_redacted() {
 }
 
 #[tokio::test]
-async fn embedded_resource_resource_link_and_image_are_denied() {
+async fn embedded_resource_resource_link_audio_and_image_are_denied() {
     for content in [
-        Content::embedded_text("file:///secret", RAW_EMAIL),
-        Content::resource_link(RawResource {
-            uri: "file:///secret".to_string(),
-            name: "secret".to_string(),
-            title: Some(RAW_EMAIL.to_string()),
-            description: None,
-            mime_type: None,
-            size: None,
-            icons: None,
-            meta: None,
-        }),
-        Content::image("AAAA", "image/png"),
+        ContentBlock::embedded_text("file:///secret", RAW_EMAIL),
+        ContentBlock::resource_link(
+            Resource::new("file:///secret", "secret").with_title(RAW_EMAIL),
+        ),
+        ContentBlock::audio("AAAA", "audio/wav"),
+        ContentBlock::image("AAAA", "image/png"),
     ] {
         let client = FakeClient::new(FakeResponse::Result(CallToolResult::success(vec![content])));
         let (host, store) = host_with_fake(
@@ -671,7 +666,7 @@ async fn response_byte_and_block_limits_block_before_return() {
 
     let many = CallToolResult::success(
         (0..65)
-            .map(|idx| Content::text(format!("block {idx}")))
+            .map(|idx| ContentBlock::text(format!("block {idx}")))
             .collect::<Vec<_>>(),
     );
     let client = FakeClient::new(FakeResponse::Result(many));
@@ -775,7 +770,7 @@ async fn ingress_byte_limit_block_is_audited_as_blocked() {
 async fn ingress_block_count_limit_is_audited_as_blocked() {
     let many = CallToolResult::success(
         (0..65)
-            .map(|idx| Content::text(format!("block {idx}")))
+            .map(|idx| ContentBlock::text(format!("block {idx}")))
             .collect::<Vec<_>>(),
     );
     let client = FakeClient::new(FakeResponse::Result(many));
@@ -801,7 +796,7 @@ async fn ingress_block_count_limit_is_audited_as_blocked() {
 
 #[tokio::test]
 async fn ingress_kind_deny_block_is_audited_as_blocked() {
-    let content = Content::image("AAAA", "image/png");
+    let content = ContentBlock::image("AAAA", "image/png");
     let client = FakeClient::new(FakeResponse::Result(CallToolResult::success(vec![content])));
     let audit = Arc::new(MemoryAudit::default());
     let (host, store) = host_with_fake(client, allow_to_policy(), audit.clone()).await;
