@@ -800,8 +800,8 @@ priority = 70
 #     measured false positive.
 # `locales = ["de-AT", "de-CH"]` only. Both tags are in the bundled locale-gated activation set,
 # so the rule also runs under the no-policy `core-extended` compatibility chain
-# `global, en-US, de-DE, de-AT, de-CH` for any document in which the earlier locales found no
-# postal code; pass `--locale=global` or a narrower policy chain to avoid that.
+# `global, en-US, de-DE, de-AT, de-CH` on every document, keeping each match that no `postal.us` or
+# `postal.de` candidate overlaps; pass `--locale=global` or a narrower policy chain to avoid that.
 [[recognizers]]
 id = "postal.at_ch"
 safety_tier = "locale_gated"
