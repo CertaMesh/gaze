@@ -701,15 +701,17 @@ priority = 86
 # Postal collision policy (supersedes the research-855 two-rule note, which described a world with
 # only `postal.de` and `postal.us` in it).
 #
-# `custom:postal_code` is served by five recognizers in two groups that cannot overlap:
+# `custom:postal_code` is served by six recognizers in two groups that cannot overlap:
 #
-#   NUMERIC — document-basis, locale-gated: `postal.de`, `postal.us`
-#     Both accept naked five-digit strings, a shape that carries no structural signal whatsoever and
-#     is indistinguishable from a year, an order number, or an amount. The DOCUMENT-locale gate is
-#     the only thing standing in for that missing structure, which is why these two stay gated.
-#     Both projections accept the same bare shape, so a chain activating both (e.g.
-#     [global, en-US, de-DE]) lets them co-fire: prefer a single active country locale, or split
-#     processing by locale_chain. The loader lint warns, and fails strict mode, on that class.
+#   NUMERIC — document-basis, locale-gated: `postal.de`, `postal.us`, `postal.at_ch`
+#     `postal.de` / `postal.us` accept naked five-digit strings, a shape that carries no structural
+#     signal whatsoever and is indistinguishable from a year, an order number, or an amount. The
+#     DOCUMENT-locale gate is the only thing standing in for that missing structure, which is why
+#     these stay gated. `postal.at_ch` matches four digits only behind a cue or before a city-shaped
+#     token; see its own note. Document-basis rules of one class resolve PER SPAN across the
+#     chain: an earlier locale wins only where its candidate overlaps a later locale's, so under
+#     [de-AT, de-DE] a de-AT match (true or false) does not switch `postal.de` off for a German
+#     code elsewhere in the document (pinned in `postal_at_ch.rs`). The loader lint warns, and fails strict mode, on the co-firing five-digit pair.
 #
 #   ALPHANUMERIC — format-basis, always-on: `postal.ca`, `postal.gb`, `postal.ie`
 #     These interleave letters and digits in positions that ordinary prose, source code, reference
@@ -726,7 +728,7 @@ priority = 86
 id = "postal.de"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.us", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.us", "postal.at_ch", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-DE"]
 locale_basis = "document"
@@ -745,7 +747,7 @@ priority = 70
 id = "postal.us"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.at_ch", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-US"]
 locale_basis = "document"
@@ -759,6 +761,70 @@ base = 0.70
 priority = 70
 
 [recognizers.token]
+
+# Austrian and Swiss postal code: four digits, anchored. 366 gold ZIP entities in the Dataiku EN/DE
+# holdout (de-AT 184 / 736 B, de-CH 182 / 734 B), shape `9{4}` except 2 de-CH `CH-9999`.
+#
+# A bare four-digit string carries NO structural signal: unanchored `\b\d{4}\b` is 19% precise on
+# the holdout and fires 1,717 times across 62.5% of the A4 negative corpus. All precision here comes
+# from one of two anchors, baked into the regex with `capture_groups = [1, 2]` because
+# `anchored_match` is hard-wired to person names and cannot match a numeric span:
+#   1. a postal cue directly before the code (`PLZ`, `Postleitzahl`, `Postcode`, `ZIP`, `Zip code`),
+#      optionally followed by `:`, `#` or `.`;
+#   2. a city-shaped token directly after it: an uppercase letter and two more letters or hyphens,
+#      or `St.` / `St` directly before a capitalised name (`St. Pölten`, `St.Gallen`, `St Gallen`;
+#      a bare `St.` is refused because `1500 St.` is the German "pieces" abbreviation on
+#      invoices), after an optional comma and one to three spaces,
+#      NO-BREAK SPACEs or NARROW NO-BREAK SPACEs. German-language addresses in both countries write
+#      the code before the town, which is why this anchor reaches 86% of the gold here and why it
+#      does NOT transfer to en-AU / en-NZ, whose postcode follows the locality.
+# An optional `A-`, `CH-` or `FL-` country prefix is part of the reported span. The city branch
+# refuses a code preceded by `#` (`(?:\A|[^#])`, the `postal.ca` idiom): `#4711 Fehler beheben` is an
+# issue reference followed by a capitalised noun, common in commit messages and tickets. The guard
+# cost 0 gold entities and 0 measured false positives on the holdout; out-of-corpus enumeration
+# found the class.
+#
+# Measured on the 567 de-AT / de-CH holdout documents: 314 of 366 gold entities, 1,262 gold bytes;
+# 28 matches overlapping no gold span, 3 overlapping a different gold label; 0 matches on the 1,024
+# A4 negative documents both as committed and with every document forced to de-AT.
+#
+# Deliberate choices, all measured:
+#   * Codes 1900-2099 are NOT excluded. They are assigned ranges in both countries and excluding
+#     them removes exactly ONE holdout false positive.
+#   * No guard against a digit group before the code. It removes no measured false positive and
+#     would leak `Musterweg 12 4020 Musterstadt`, a common single-line address.
+#   * The city token accepts any uppercase start, so `1500 Euro` and `3000 Mitarbeiter` match:
+#     German capitalises every noun, and the `regex` crate has no negative lookahead to express a
+#     stop-list. That is the known false-positive class, pinned in `postal_at_ch.rs`. Requiring a
+#     lowercase second letter would stop `1500 CHF` but lost an all-caps gold town and removed no
+#     measured false positive.
+# `locales = ["de-AT", "de-CH"]` only. Both tags are in the bundled locale-gated activation set,
+# so the rule also runs under the no-policy `core-extended` compatibility chain
+# `global, en-US, de-DE, de-AT, de-CH` on every document, keeping each match that no `postal.us` or
+# `postal.de` candidate overlaps; pass `--locale=global` or a narrower policy chain to avoid that.
+[[recognizers]]
+id = "postal.at_ch"
+safety_tier = "locale_gated"
+class = "custom:postal_code"
+cooperates_with = ["postal.de", "postal.us", "postal.ca", "postal.gb", "postal.ie"]
+enabled = true
+locales = ["de-AT", "de-CH"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?:(?i:\b(?:plz|postleitzahl|post[ \t]?code|postal[ \t]code|zip(?:[ \t]?code)?))[ \t]*[:#.]?[ \u{00A0}\u{202F}]*((?:(?:A|CH|FL)-)?\d{4})\b|(?:\A|[^#])\b((?:(?:A|CH|FL)-)?\d{4}),?[ \u{00A0}\u{202F}]{1,3}(?:\p{Lu}[\p{L}\-]{2,}|St(?:\.[ \u{00A0}\u{202F}]?|[ \u{00A0}\u{202F}])\p{Lu}))'''
+capture_groups = [1, 2]
+
+[recognizers.scoring]
+base = 0.70
+priority = 70
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
 
 # Canadian postal code: `A9A 9A9`, optionally hyphenated or written compactly. 71 of the 74 en-CA
 # gold ZIP entities in the Dataiku EN/DE holdout carry exactly this shape (497 of 512 gold bytes);
@@ -786,7 +852,7 @@ priority = 70
 id = "postal.ca"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-CA"]
 locale_basis = "format"
@@ -842,7 +908,7 @@ license = "Apache-2.0"
 id = "postal.gb"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.ca", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.ca", "postal.ie"]
 enabled = true
 locales = ["en-GB"]
 locale_basis = "format"
@@ -894,7 +960,7 @@ license = "Apache-2.0"
 id = "postal.ie"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.ca", "postal.gb"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.ca", "postal.gb"]
 enabled = true
 locales = ["en-IE"]
 locale_basis = "format"

@@ -116,6 +116,7 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `pan.in` | `regex` | Cue-anchored Indian Permanent Account Numbers in the ten-character PAN shape | `custom:pan` | `en-IN, hi-IN` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `postal.de` | `regex` | Bare five-digit German postal-code shapes | `custom:postal_code` | `de-DE` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
 | `core, core-extended` | `postal.us` | `regex` | US five-digit ZIP or ZIP+4 shapes | `custom:postal_code` | `en-US` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
+| `core, core-extended` | `postal.at_ch` | `regex` | Austrian and Swiss four-digit postal codes, optionally `A-`/`CH-`/`FL-` prefixed, only directly after a postal cue (`PLZ`, `Postleitzahl`, `Postcode`, `ZIP`) or directly before a city-shaped token (uppercase start, or `St.` / `St` before a capitalised name) across a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; a city-anchored code is not matched when preceded by `#` | `custom:postal_code` | `de-AT, de-CH` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
 | `core, core-extended` | `postal.ca` | `regex` | Canadian `A9A 9A9` postal codes, hyphenated, compact, or separated by a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; not matched when preceded by `#` | `custom:postal_code` | `en-CA` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.gb` | `regex` | UK postcodes across all six Royal Mail outward forms plus `GIR 0AA`, followed by a `9AA` inward code over the official inward alphabet; space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE separator; not matched when preceded by `#` | `custom:postal_code` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.ie` | `regex` | Irish Eircodes: routing key including `D6W`, plus a four-character identifier over the restricted Eircode alphabet that must carry at least one letter | `custom:postal_code` | `en-IE` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
@@ -338,12 +339,12 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1225`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.ca, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1343`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.at_ch, postal.ca, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate
-`phone.national.de`, `postal.us`, and `postal.de` with
+`phone.national.de`, `postal.us`, `postal.de`, and `postal.at_ch` with
 `--rulepack-bundled core-extended` and no policy. The complete second row is
 authoritative: the widened US/German compatibility locale chain also makes the
 listed document-basis cue-anchored and locale-specific recognizers eligible.
@@ -358,6 +359,16 @@ has to disable that recognizer.
 The two postal groups differ on purpose. `postal.de` and `postal.us` match bare
 five-digit strings, a shape carrying no structural signal, so they stay
 document-basis and locale-gated and appear only in the second row.
+`postal.at_ch` is in the same group: a four-digit string carries even less
+signal, so it matches only directly after a postal cue or directly before a
+city-shaped token, and only for `de-AT` and `de-CH` documents. Document-basis
+rules of one class resolve per span across the chain
+([Locale Chain](../explanation/policy/locale-chain.md)), so under `de-AT, de-DE`
+both `postal.at_ch` and `postal.de` tokenize their own codes in one document. In
+the second row's chain `postal.at_ch` therefore runs on every document and keeps
+each match that no `postal.us` or `postal.de` candidate overlaps.
+Its measured false-positive class is a four-digit number followed by a
+capitalised German noun (`1500 Euro`); every such token restores losslessly.
 `postal.ca`, `postal.gb`, and `postal.ie` interleave letters and digits in
 positions ordinary prose and identifiers do not produce, so they are
 format-basis and run at every locale including `--locale=global`. An adopter

@@ -50,6 +50,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     numbers, a quiet-host latency measurement, and a licence review of the
     Wikipedia-derived (CC-BY-SA) training data.
 
+- **Anchored four-digit postal codes for Austria and Switzerland**
+  (`postal.at_ch`). Four-digit codes in `de-AT` and `de-CH` documents had no
+  recognizer: 366 gold ZIP entities (1,470 bytes) in the EN/DE holdout leaked in
+  full. A bare four-digit string carries no structural signal (unanchored
+  `\d{4}` is 19% precise on the holdout and fires across 62.5% of the negative
+  corpus), so the rule matches only in two positions:
+
+  * directly after a postal cue: `PLZ`, `Postleitzahl`, `Postcode`, `ZIP`,
+    `Zip code`, optionally followed by `:`, `#` or `.`;
+  * directly before a city-shaped token: an uppercase letter and at least two
+    more letters or hyphens, or `St.` / `St` followed by a capitalised name,
+    after an optional comma and one to three spaces, NO-BREAK SPACEs or NARROW
+    NO-BREAK SPACEs.
+
+  An `A-`, `CH-` or `FL-` country prefix is part of the token. The rule is
+  `locale_basis = "document"`, `locales = ["de-AT", "de-CH"]`,
+  `safety_tier = "locale_gated"`: German (`de-DE`) documents gain no four-digit
+  tokens.
+
+  Measured on the full 2,910-document population, both scored-label contracts,
+  base `9f1cd524`: ZIP entities fully covered rise from 548 to 862 (+314), ZIP
+  byte recall on the rule floor from 59.7% to 83.0%, and total leaked bytes fall
+  by **1,270** (contract v2 rule floor 87,647 to 86,377; `pass2-ner` 20,727 to
+  19,457). No document failed closed; every restore stayed exact.
+
+  **Known cost, disclosed on purpose.** 28 tokens on the 567 `de-AT` / `de-CH`
+  holdout documents overlap no gold span (+112 false-positive bytes, 28 more
+  documents with a false positive). 16 of them follow a postal cue and are most
+  likely unannotated codes; 12 follow a capitalised word. German capitalises
+  every noun, so `1500 Euro` or `3000 Mitarbeiter` looks like `1500 Musterstadt`
+  to this anchor, and the `regex` crate has no negative lookahead to hold a
+  stop-list. Every such token restores losslessly. 3 more tokens cover the year
+  of a date of birth. Zero matches on the 1,024 A4 negative documents, both as
+  committed and with every document forced to `de-AT` or `de-CH`.
+
+  Choices measured rather than assumed: codes 1900 to 2099 are kept (they are
+  assigned in both countries; excluding them removes one false positive); no
+  guard against a digit group before the code (it removes no false positive and
+  would leak `Musterweg 12 4020 Musterstadt`). Two narrowings found by
+  out-of-corpus enumeration, each costing zero gold: a bare `St.` is refused
+  because `1500 St.` means "1500 pieces", and a city-anchored code preceded by
+  `#` is refused because `#4711 Fehler beheben` is an issue reference. A
+  302,400-input differential enumeration against base (codes, cues, prefixes,
+  separators, followers, seven locale chains) found no input where base
+  protected a byte the candidate leaks, no change at all outside `de-AT` /
+  `de-CH` chains, and every restore exact.
+
+  **Locale chains.** Document-basis rules of one class resolve per span
+  across the chain, so under `de-AT, de-DE`, `de-CH, de-DE` or `de-AT, en-US`
+  a four-digit match does not switch off `postal.de` / `postal.us` for a
+  five-digit code elsewhere in the same document (pinned in
+  `postal_at_ch.rs`). The no-policy `core-extended` compatibility chain
+  (`global, en-US, de-DE, de-AT, de-CH`) therefore runs this rule on every
+  document and keeps each match no US or German candidate overlaps; forced onto the
+  1,319 other holdout documents it produced 54 gold ZIP, 142 other-gold and 10
+  no-gold tokens. Pass `--locale=global` or a narrower policy chain to avoid it.
+
+  `en-AU` and `en-NZ` stay uncovered: their postcode follows the locality, so
+  this anchor reaches only about a third of them and needs its own design.
+
 - **Postal-code coverage for Canada, the UK, and Ireland** (`postal.ca`,
   `postal.gb`, `postal.ie`). `custom:postal_code` was previously served only by
   `postal.de` (`de-DE`) and `postal.us` (`en-US`), both
@@ -99,10 +159,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   * `postal.ie` covers the `D6W` Dublin 6W routing key, the one assigned routing
     key that is not `LETTER + 2 digits`. Every D6W address leaked in full before.
 
-  The 4-digit locales (`de-AT`, `de-CH`, `en-AU`, `en-NZ`) are deliberately not
-  covered. Unanchored `\d{4}` is 19% precise on the holdout (516 of 2,723 runs
-  are gold ZIP) and fires 1,717 times across 62.5% of the negative corpus, so it
-  requires a cue anchor and is tracked separately.
+  The 4-digit locales (`de-AT`, `de-CH`, `en-AU`, `en-NZ`) were deliberately not
+  covered by this change. Unanchored `\d{4}` is 19% precise on the holdout (516
+  of 2,723 runs are gold ZIP) and fires 1,717 times across 62.5% of the negative
+  corpus, so it requires an anchor; `de-AT` / `de-CH` now have one
+  (`postal.at_ch`, above).
 
 ### Changed
 
