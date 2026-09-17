@@ -389,10 +389,36 @@ preserve formatting, unwrap the content before passing it to the Gaze pipeline
 and re-wrap the clean output afterward. RegionHint-style envelope markers for
 `CodeBlock` and `Url` are deferred to v0.7.
 
+### `[safety_net.nym]`
+
+Configures the opt-in Nym-small safety net
+([contract](../explanation/safety-net/safety-nets.md#nym-small-adapter-opt-in)).
+It does not activate the net: activation stays `gaze clean --safety-net nym`
+(or `--safety-net-backend nym`) plus `--nym-model-dir`.
+
+```toml
+[safety_net.nym]
+labels = ["BUILDING_NUMBER", "DATE_OF_BIRTH", "LICENSE_PLATE", "USERNAME"]
+threshold = { BUILDING_NUMBER = 0.5, DATE_OF_BIRTH = 0.9, LICENSE_PLATE = 0.5, USERNAME = 0.5 }
+```
+
+The example is op-B, the default when the table is absent.
+
+- `labels` is the allowlist. Only `BUILDING_NUMBER`, `DATE_OF_BIRTH`,
+  `LICENSE_PLATE`, `TAX_ID`, `USERNAME` and `ZIP_CODE` have a Gaze class. Any
+  other of the 40 Nym labels (for example `GIVEN_NAME`) fails at load, as does a
+  spelling that is not a Nym label, an empty list, or a repeated label.
+- `threshold` needs exactly one entry per listed label, each in `(0, 1]`. A
+  missing threshold or a threshold for an unlisted label fails at load.
+- Unknown keys in the table fail at load.
+- A policy with `[safety_net.nym]` refuses to run unless the Nym net is the
+  active net, so it cannot silently configure a net that is not running.
+
 ### v0.6 safety-net activation surface
 
 The v0.6 OpenAI Privacy Filter safety net is **not exposed through
-`policy.toml`**. Activation happens via `gaze clean --safety-net=<kind>`
+`policy.toml`** (the Nym backend's label table above configures, never
+activates). Activation happens via `gaze clean --safety-net=<kind>`
 plus the `--openai-filter-*` flags, or programmatically through
 `Pipeline::with_safety_net(...)` behind the `safety-net-openai` feature
 on `gaze-recognizers`.
@@ -480,6 +506,7 @@ loaded rulepack rather than a separate hand-maintained list.
 |--------|-------------|---------|-------|
 | `core` | `email.global`, `email.header.name`, `email.header.name.paren`, `name.*`, `phone.*`, `iban.structural`, `card.structural`, `ip.*`, `eth.address`, `postal.*` | `email`, `name`, `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:eth_address`, `custom:postal_code` | Default bundle when `[policy.rulepacks]` is omitted. Recognizers declare `safety_tier` and `locale_basis`; format-basis identifiers run independently of the document locale, while linguistic names and quarantined national shapes remain document-gated. |
 | `core-extended` | alias of `core` | same as `core` | Deprecated since v0.8.0; scheduled for removal in v0.10.0. The CLI alias emits a warning and auto-activates locale-gated recognizers for v0.8.x compatibility. |
+| `secrets` | `security_token.anchored`, `password.field` | `custom:security_token`, `custom:password` | Opt-in only. Credentials are not PII, so this bundle is never loaded by default, not even when `[policy.rulepacks]` is omitted. Load it next to `core`. |
 
 Use `core` with an explicit locale when you want document-basis,
 locale-shaped recognizers:
@@ -490,6 +517,15 @@ bundled = ["core"]
 
 [locale]
 active = ["en-US"]
+```
+
+Credentials (API keys, access tokens, JWTs, `password:` records) are not PII
+and are not detected by `core`. To tokenize them too, add the opt-in `secrets`
+bundle:
+
+```toml
+[policy.rulepacks]
+bundled = ["core", "secrets"]
 ```
 
 Or override the bundle list for one CLI run:
@@ -573,9 +609,10 @@ The bundled format-basis set is `aadhaar.in`, `bsn.nl`, `cnpj.br`, `cpf.br`,
 `ssn.us`, `steuer_id.de`, `vat.de`, and `vat.es`. Linguistic `name.*`
 recognizers, `phone.national.de`, `postal.de`, and `postal.us` remain
 document-basis, as do the bilingual cue-anchored `global` recognizers
-(`security_token.anchored`, `tax_number.cue_anchored`,
-`driver_license.cue_anchored`, `national_id.cue_anchored`), which are eligible
-under every chain because `global` matches every document locale.
+(`tax_number.cue_anchored`, `driver_license.cue_anchored`,
+`national_id.cue_anchored`, and the opt-in `secrets` bundle's
+`security_token.anchored`), which are eligible under every chain because
+`global` matches every document locale.
 
 This changes suppression behavior: `--locale=global` and narrow locale chains
 cannot suppress a format-basis recognizer. An adopter that needs the previous
@@ -863,7 +900,7 @@ names are listed under
 > span keeps the slot (`ConflictTier::StructuredContainment`), so with
 > `custom:url = preserve` and `email = tokenize` an email inside a URL is
 > preserved raw along with the URL. Keep container-capable classes
-> (`custom:url`, `custom:security_token`, broad tenant recognizers) on a
+> (`custom:url`, `custom:security_token` from the opt-in `secrets` bundle, broad tenant recognizers) on a
 > protective action, or accept that everything inside them passes through;
 > a load-time guard is tracked as solo todo #3064.
 

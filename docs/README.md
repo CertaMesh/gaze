@@ -1,5 +1,7 @@
 # Gaze documentation
 
+**Start here:** [How Gaze works](explanation/how-gaze-works.md) follows one document from input to restore in plain English, with the modes, the limits, and a glossary.
+
 Gaze is a reliable, reversible PII pseudonymization runtime for agentic workflows. It
 replaces personal data with restorable tokens *before* text reaches an LLM, then restores
 the original values from the model's response. The goal is a hard one: no PII leaks
@@ -29,7 +31,7 @@ everything in full.
 | Core redaction & restore | [Getting Started](tutorials/getting-started.md) | — | [CLI](reference/cli.md) · [Metrics](reference/metrics.md) | [Restore boundary](explanation/core/restore-boundary.md) · [Session contract](explanation/core/session-contract.md) |
 | CLI (`gaze clean` / `restore`) | [Getting Started](tutorials/getting-started.md) | — | [CLI reference](reference/cli.md) | — |
 | Policy & recognizers | — | [Custom recognizers](how-to/policy/custom-recognizers.md) | [Policy schema](reference/policy.md) | [Locale chain](explanation/policy/locale-chain.md) · [detection contracts](explanation/README.md#detection--conflict-resolution) |
-| Safety nets / NER / Kiji | — | [Set up the Kiji safety net](how-to/safety-net/set-up-kiji-safetynet.md) | [Benchmarks](reference/benchmarks/README.md) | [Safety nets](explanation/safety-net/safety-nets.md) · [Modes](explanation/safety-net/safety-net-modes.md) |
+| Safety nets / NER | — | [Safety net setup in the CLI README](../crates/gaze-cli/README.md#safety-net) | [Benchmarks](reference/benchmarks/README.md) | [Safety nets](explanation/safety-net/safety-nets.md) · [Modes](explanation/safety-net/safety-net-modes.md) |
 | Proxy (OpenAI / Anthropic / Gemini) | — | [Set up the proxy](how-to/proxy/set-up-proxy.md) | — | [Proxy runtime](explanation/proxy/proxy-runtime.md) · [Strict Anthropic Messages contract](explanation/proxy/anthropic-messages-contract.md) |
 | Inspection dashboard (opt-in) | — | [Run the local dashboard](how-to/dashboard/run-local-dashboard.md) | [Accessibility & visual verification](reference/dashboard/accessibility-and-visual-verification.md) · [Browser security](reference/dashboard/browser-security.md) | [Dashboard trust boundary](explanation/dashboard/trust-boundary.md) |
 | MCP adapter & runtime | — | [Set up the MCP adapter](how-to/mcp/set-up-mcp-adapter.md) | — | [MCP runtime](explanation/mcp/mcp-runtime.md) |

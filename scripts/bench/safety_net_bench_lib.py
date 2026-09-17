@@ -27,24 +27,6 @@ OBSERVER_KEYS = [
     "contradiction_fraction",
     "novel_tp_over_rule_floor",
 ]
-KIJI_TO_GAZE = {
-    "person": "Name",
-    "PER": "Name",
-    "B-PER": "Name",
-    "I-PER": "Name",
-    "location": "Location",
-    "LOC": "Location",
-    "B-LOC": "Location",
-    "I-LOC": "Location",
-    "organization": "Name",
-    "ORG": "Name",
-    "B-ORG": "Name",
-    "I-ORG": "Name",
-    "miscellaneous": "Name",
-    "MISC": "Name",
-    "B-MISC": "Name",
-    "I-MISC": "Name",
-}
 OPF_TO_GAZE = {
     "private_person": "Name",
     "private_address": "Location",
@@ -123,7 +105,7 @@ class LatencyRecorder:
         }
 
 
-def add_common_args(parser: argparse.ArgumentParser, backend: Literal["kiji", "opf"]) -> None:
+def add_common_args(parser: argparse.ArgumentParser, backend: Literal["opf"]) -> None:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument(
         "--mode",
@@ -152,21 +134,9 @@ def add_common_args(parser: argparse.ArgumentParser, backend: Literal["kiji", "o
         default=Path("crates/gaze-recognizers/testdata/coverage-loop/corpus"),
     )
     parser.add_argument("--no-update", action="store_true")
-    if backend == "kiji":
-        parser.add_argument("--precision", choices=["fp32", "int8"], default="fp32")
-        parser.add_argument(
-            "--model-dir",
-            type=Path,
-            default=Path(
-                "~/.cache/gaze/"
-                "kiji-distilbert-3a19fe9404a4469d91aa3d551558a97f68872f67"
-            ),
-        )
-        parser.add_argument("--python", type=Path, default=Path(sys.executable))
-    else:
-        parser.add_argument("--opf", type=Path, default=Path(".opf-bench-venv/bin/opf"))
-        parser.add_argument("--checkpoint", type=Path, default=Path.home() / ".opf/privacy_filter")
-        parser.add_argument("--device", default="cpu")
+    parser.add_argument("--opf", type=Path, default=Path(".opf-bench-venv/bin/opf"))
+    parser.add_argument("--checkpoint", type=Path, default=Path.home() / ".opf/privacy_filter")
+    parser.add_argument("--device", default="cpu")
 
 
 def repo_path(root: Path, path: Path) -> Path:
@@ -205,54 +175,9 @@ def load_fixtures(corpus_dir: Path) -> list[Fixture]:
     return fixtures
 
 
-def parse_first_json_object(stdout: str) -> Any:
-    decoder = json.JSONDecoder()
-    stripped = stdout.lstrip()
-    try:
-        value, _ = decoder.raw_decode(stripped)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("invalid JSON from backend") from exc
-    return value
-
-
-def run_kiji(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]:
-    runner = args.repo_root / "scripts/bench/kiji-runner.py"
-    proc = subprocess.run(
-        [
-            str(args.python),
-            str(runner),
-            "--format",
-            "json",
-            "--output-mode",
-            "typed",
-            "--model-dir",
-            str(args.model_dir),
-            "--precision",
-            args.precision,
-        ],
-        input=text,
-        text=True,
-        encoding="utf-8",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"{fixture_id}: kiji-runner failed with {proc.returncode}: {proc.stderr.strip()}"
-        )
-    raw_spans = json.loads(proc.stdout)
-    spans: list[Span] = []
-    for raw in raw_spans:
-        label = str(raw["label"])
-        pii_class = KIJI_TO_GAZE.get(label)
-        if pii_class is None:
-            raise RuntimeError(f"{fixture_id}: unsupported Kiji label {label!r}")
-        spans.append(Span(int(raw["start"]), int(raw["end"]), pii_class))
-    return spans
-
-
 def run_opf(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]:
+    if not text:
+        return []
     proc = subprocess.run(
         [
             str(args.opf),
@@ -266,37 +191,76 @@ def run_opf(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]:
             args.device,
             "--checkpoint",
             str(args.checkpoint),
+            # Piped stdin is analysed line by line with per-line offsets; read it as one file.
+            "--text-file",
+            "/dev/stdin",
         ],
-        input=text,
-        text=True,
-        encoding="utf-8",
+        input=text.encode("utf-8"),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"{fixture_id}: opf failed with {proc.returncode}: {proc.stderr.strip()}")
-    raw_output = parse_first_json_object(proc.stdout)
-    raw_spans = raw_output["detected_spans"] if isinstance(raw_output, dict) else raw_output
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"{fixture_id}: opf failed with {proc.returncode}: {stderr}")
+    return opf_output_to_spans(fixture_id, text, proc.stdout.decode("utf-8"))
+
+
+def opf_view_byte_offsets(text: str) -> tuple[str, list[int]]:
+    """Return the text as OPF reads it from a file, and each character's UTF-8 byte offset in
+    `text` (plus the total length). Python text mode turns CRLF and a lone CR into LF."""
+    view: list[str] = []
+    offsets: list[int] = []
+    byte = 0
+    index = 0
+    while index < len(text):
+        offsets.append(byte)
+        if text[index] == "\r" and text[index + 1 : index + 2] == "\n":
+            view.append("\n")
+            byte += 2
+            index += 2
+            continue
+        view.append("\n" if text[index] == "\r" else text[index])
+        byte += len(text[index].encode("utf-8"))
+        index += 1
+    offsets.append(byte)
+    return "".join(view), offsets
+
+
+def opf_output_to_spans(fixture_id: str, text: str, stdout: str) -> list[Span]:
+    """Parse exactly one `opf` JSON result and map its character offsets to UTF-8 bytes.
+
+    Fails loudly instead of scoring part of the fixture: more than one JSON document (line
+    splitting), a missing or different echoed `text`, or an offset past the text."""
+    try:
+        raw_output = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{fixture_id}: opf output was not exactly one JSON document") from exc
+    view, offsets = opf_view_byte_offsets(text)
+    if not isinstance(raw_output, dict) or raw_output.get("text") != view:
+        raise RuntimeError(f"{fixture_id}: opf analysed a different text than the one sent")
     spans: list[Span] = []
-    for raw in raw_spans:
+    for raw in raw_output["detected_spans"]:
         label = str(raw["label"])
         pii_class = OPF_TO_GAZE.get(label)
         if pii_class is None:
             raise RuntimeError(f"{fixture_id}: unsupported OPF label {label!r}")
-        spans.append(Span(int(raw["start"]), int(raw["end"]), pii_class))
+        start, end = int(raw["start"]), int(raw["end"])
+        if not 0 <= start < end < len(offsets):
+            raise RuntimeError(f"{fixture_id}: opf returned out-of-bounds span")
+        spans.append(Span(offsets[start], offsets[end], pii_class))
     return spans
 
 
 def run_backend(
     args: argparse.Namespace,
-    backend: Literal["kiji", "opf"],
+    backend: Literal["opf"],
     fixture_id: str,
     text: str,
     latency: LatencyRecorder,
 ) -> list[Span]:
     start = time.perf_counter()
-    spans = run_kiji(args, fixture_id, text) if backend == "kiji" else run_opf(args, fixture_id, text)
+    spans = run_opf(args, fixture_id, text)
     latency.record((time.perf_counter() - start) * 1000.0, len(text.encode("utf-8")))
     return spans
 
@@ -585,7 +549,7 @@ def cpu_name() -> str:
     return platform.processor() or "unknown"
 
 
-def validate_inputs(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> tuple[Path, Path, Path, str | None]:
+def validate_inputs(args: argparse.Namespace, backend: Literal["opf"]) -> tuple[Path, Path, Path, str | None]:
     root = args.repo_root.resolve()
     args.repo_root = root
     args.coverage_report = repo_path(root, args.coverage_report)
@@ -595,30 +559,20 @@ def validate_inputs(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -
     build_manifest = args.corpus_dir.parent / "build-manifest.json"
     if not args.coverage_report.is_file():
         raise FileNotFoundError(f"missing coverage report: {args.coverage_report}")
-    if backend == "kiji":
-        if not args.model_dir.is_dir():
-            raise FileNotFoundError(f"missing Kiji model dir: {args.model_dir}")
-        if not (root / "scripts/bench/kiji-runner.py").is_file():
-            raise FileNotFoundError(
-                f"missing Kiji runner: {root / 'scripts/bench/kiji-runner.py'}"
-            )
-    else:
-        args.opf = repo_path(root, args.opf)
-        args.checkpoint = args.checkpoint.expanduser()
-        if not args.opf.is_file():
-            raise FileNotFoundError(f"missing OPF command: {args.opf}")
-        if not args.checkpoint.is_dir():
-            raise FileNotFoundError(f"missing OPF checkpoint dir: {args.checkpoint}")
+    args.opf = repo_path(root, args.opf)
+    args.checkpoint = args.checkpoint.expanduser()
+    if not args.opf.is_file():
+        raise FileNotFoundError(f"missing OPF command: {args.opf}")
+    if not args.checkpoint.is_dir():
+        raise FileNotFoundError(f"missing OPF checkpoint dir: {args.checkpoint}")
     corpus_sha256 = None
     if build_manifest.is_file():
         corpus_sha256 = str(json.loads(build_manifest.read_text(encoding="utf-8"))["corpus_sha256"])
     return root, args.coverage_report, args.corpus_dir, corpus_sha256
 
 
-def scorer_main(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> int:
-    backend_name = "kiji_distilbert" if backend == "kiji" else "openai_privacy_filter"
-    if backend == "kiji" and args.precision == "int8":
-        backend_name = "kiji_distilbert_int8"
+def scorer_main(args: argparse.Namespace, backend: Literal["opf"]) -> int:
+    backend_name = "openai_privacy_filter"
     root, coverage_report, corpus_dir, corpus_sha256 = validate_inputs(args, backend)
     coverage_sha256 = sha256_file(coverage_report)
     fixtures = load_fixtures(corpus_dir)
@@ -667,7 +621,6 @@ def scorer_main(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> in
                 corpus_sha256,
                 len(fixtures),
                 run_environment(args, backend),
-                kiji_int8_pins(args) if backend_name == "kiji_distilbert_int8" else None,
             )
 
     if not args.no_update:
@@ -694,26 +647,11 @@ def scorer_main(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> in
     return 0
 
 
-def kiji_int8_pins(args: argparse.Namespace) -> dict[str, Any]:
-    fp32_pins = json.loads(args.snapshot.read_text(encoding="utf-8"))["backends"][
-        "kiji_distilbert"
-    ]["pins"]
-    return {
-        **fp32_pins,
-        "bundle_sha256": sha256_file(args.model_dir / "SHA256SUMS.int8"),
-        "model_sha256": sha256_file(args.model_dir / "model.int8.onnx"),
-    }
-
-
-def run_environment(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> dict[str, Any]:
+def run_environment(args: argparse.Namespace, backend: Literal["opf"]) -> dict[str, Any]:
     env = {
         "os": platform.platform(),
         "machine": platform.machine(),
         "python": platform.python_version(),
     }
-    if backend == "kiji":
-        env["onnxruntime_threads"] = "default"
-        env["precision"] = args.precision
-    else:
-        env["opf_device"] = args.device
+    env["opf_device"] = args.device
     return env

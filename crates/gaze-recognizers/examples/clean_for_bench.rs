@@ -25,11 +25,9 @@ enum BenchConfig {
     RuleFloorCore,
     RuleFloorExtended,
     Pass2Ner,
-    FullStackKijiResolve,
     FullStackOpfResolve,
-    Pass3Kiji,
+    FullStackNymResolve,
     Pass3Opf,
-    Pass3LocaleAware,
 }
 
 impl BenchConfig {
@@ -38,18 +36,16 @@ impl BenchConfig {
             Self::RuleFloorCore => "rule-floor-core",
             Self::RuleFloorExtended => "rule-floor-extended",
             Self::Pass2Ner => "pass2-ner",
-            Self::FullStackKijiResolve => "full-stack-kiji-resolve",
             Self::FullStackOpfResolve => "full-stack-opf-resolve",
-            Self::Pass3Kiji => "pass3-kiji",
+            Self::FullStackNymResolve => "full-stack-nym-resolve",
             Self::Pass3Opf => "pass3-opf",
-            Self::Pass3LocaleAware => "pass3-locale-aware",
         }
     }
 
     fn uses_ner(self) -> bool {
         matches!(
             self,
-            Self::Pass2Ner | Self::FullStackKijiResolve | Self::FullStackOpfResolve
+            Self::Pass2Ner | Self::FullStackOpfResolve | Self::FullStackNymResolve
         )
     }
 
@@ -269,7 +265,7 @@ fn handle_request(
 
     let (post_policy_safety_net_stats, post_policy_scan_ms) = if matches!(
         config,
-        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+        BenchConfig::FullStackOpfResolve | BenchConfig::FullStackNymResolve
     ) {
         let post_policy_scan_start = Instant::now();
         let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
@@ -559,9 +555,7 @@ fn safety_net_failure_reason(error: &SafetyNetError) -> Option<PipelineFailureRe
 fn runtime_failure_reason(message: &str) -> PipelineFailureReason {
     if message.ends_with("subprocess timed out and was killed") {
         PipelineFailureReason::SafetyNetRuntimeSubprocessTimeout
-    } else if message.starts_with("kiji subprocess exited with status ")
-        || message.starts_with("opf subprocess exited with status ")
-    {
+    } else if message.starts_with("opf subprocess exited with status ") {
         PipelineFailureReason::SafetyNetRuntimeSubprocessNonZeroExit
     } else {
         PipelineFailureReason::SafetyNetRuntimeOther
@@ -570,10 +564,7 @@ fn runtime_failure_reason(message: &str) -> PipelineFailureReason {
 
 fn invalid_output_failure_reason(message: &str) -> PipelineFailureReason {
     match message {
-        "kiji returned invalid label"
-        | "kiji returned unsupported label"
-        | "opf returned invalid label"
-        | "opf returned unsupported label" => {
+        "opf returned invalid label" | "opf returned unsupported label" => {
             PipelineFailureReason::SafetyNetInvalidOutputLabelDecodeMismatch
         }
         "clean-to-raw start mapping failed"
@@ -584,20 +575,14 @@ fn invalid_output_failure_reason(message: &str) -> PipelineFailureReason {
         "overlapping protection trace" | "trace-manifest mismatch" | "manifest-trace mismatch" => {
             PipelineFailureReason::SafetyNetInvalidOutputTraceManifestMismatch
         }
-        "kiji stdout was not valid UTF-8"
-        | "kiji stdout was not valid JSON"
-        | "kiji returned non-finite score"
-        | "kiji returned out-of-bounds span"
-        | "kiji returned overlapping spans"
-        | "kiji candle returned no outputs"
-        | "kiji candle returned invalid logits shape"
-        | "kiji ort returned invalid logits shape"
-        | "kiji tract returned invalid logits shape"
+        "nym returned out-of-bounds span"
+        | "nym ort returned invalid logits shape"
         | "opf stdout was not valid UTF-8"
         | "opf stdout was not valid JSON"
         | "opf returned non-finite score"
         | "opf returned out-of-bounds span"
-        | "opf returned overlapping spans" => {
+        | "opf returned overlapping spans"
+        | "opf analysed a different text than the one sent" => {
             PipelineFailureReason::SafetyNetInvalidOutputMalformedBackendOutput
         }
         _ => PipelineFailureReason::SafetyNetInvalidOutputOther,
@@ -615,10 +600,10 @@ fn invalid_output_reason(error: &gaze::Error) -> Option<&'static str> {
         return None;
     };
     Some(match message.as_str() {
-        "kiji ort returned invalid logits shape" => "logits_shape",
-        "kiji returned out-of-bounds span" | "kiji returned overlapping spans" => {
-            "raw_span_normalization"
-        }
+        "nym ort returned invalid logits shape" => "logits_shape",
+        "nym returned out-of-bounds span"
+        | "opf returned out-of-bounds span"
+        | "opf returned overlapping spans" => "raw_span_normalization",
         "clean-to-raw start mapping failed"
         | "clean-to-raw end mapping failed"
         | "empty clean-to-raw mapping" => "clean_to_raw_mapping",
@@ -639,11 +624,9 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
                 "rule-floor-core" => BenchConfig::RuleFloorCore,
                 "rule-floor-extended" => BenchConfig::RuleFloorExtended,
                 "pass2-ner" => BenchConfig::Pass2Ner,
-                "full-stack-kiji-resolve" => BenchConfig::FullStackKijiResolve,
                 "full-stack-opf-resolve" => BenchConfig::FullStackOpfResolve,
-                "pass3-kiji" => BenchConfig::Pass3Kiji,
+                "full-stack-nym-resolve" => BenchConfig::FullStackNymResolve,
                 "pass3-opf" => BenchConfig::Pass3Opf,
-                "pass3-locale-aware" => BenchConfig::Pass3LocaleAware,
                 _ => return Err(format!("unknown --config {value}").into()),
             };
         }
@@ -660,14 +643,6 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
     let mut pipeline = assemble_rule_floor(config, ner)?;
     match config {
         BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended | BenchConfig::Pass2Ner => {}
-        BenchConfig::FullStackKijiResolve => {
-            pipeline = register_kiji_ort(pipeline).map_err(|source| {
-                BenchmarkBuildError::SafetyNetRegistration {
-                    cell: config.name(),
-                    source,
-                }
-            })?;
-        }
         BenchConfig::FullStackOpfResolve => {
             pipeline = register_opf(pipeline).map_err(|source| {
                 BenchmarkBuildError::SafetyNetRegistration {
@@ -676,8 +651,8 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
                 }
             })?;
         }
-        BenchConfig::Pass3Kiji => {
-            pipeline = register_kiji(pipeline).map_err(|source| {
+        BenchConfig::FullStackNymResolve => {
+            pipeline = register_nym(pipeline).map_err(|source| {
                 BenchmarkBuildError::SafetyNetRegistration {
                     cell: config.name(),
                     source,
@@ -686,14 +661,6 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
         }
         BenchConfig::Pass3Opf => {
             pipeline = register_opf(pipeline).map_err(|source| {
-                BenchmarkBuildError::SafetyNetRegistration {
-                    cell: config.name(),
-                    source,
-                }
-            })?;
-        }
-        BenchConfig::Pass3LocaleAware => {
-            pipeline = register_locale_aware(pipeline).map_err(|source| {
                 BenchmarkBuildError::SafetyNetRegistration {
                     cell: config.name(),
                     source,
@@ -832,31 +799,20 @@ fn empty_context() -> Context {
     }
 }
 
-#[cfg(feature = "safety-net-kiji")]
-fn register_kiji(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    use gaze_recognizers::safety_net::kiji_distilbert::{
-        KijiDistilbertSafetyNet, SubprocessKijiConfig,
-    };
+/// Nym-small at op-B from `GAZE_NYM_MODEL_DIR` (`GAZE_NYM_INTRA_THREADS` optional).
+#[cfg(feature = "safety-net-nym")]
+fn register_nym(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
+    use gaze_recognizers::safety_net::nym::NymSafetyNet;
 
-    let config = SubprocessKijiConfig::from_env()?.with_timeout(benchmark_subprocess_timeout()?);
-    Ok(pipeline.with_safety_net(KijiDistilbertSafetyNet::new(config)))
+    let net = NymSafetyNet::from_env()?;
+    // Load before the first document so a bad bundle fails the cell, not one record.
+    net.preload()?;
+    Ok(pipeline.with_safety_net(net))
 }
 
-#[cfg(feature = "safety-net-kiji")]
-fn register_kiji_ort(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    use gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertSafetyNet;
-
-    Ok(pipeline.with_safety_net(KijiDistilbertSafetyNet::from_env_ort()?))
-}
-
-#[cfg(not(feature = "safety-net-kiji"))]
-fn register_kiji_ort(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    Err("compile with gaze-recognizers feature safety-net-kiji".into())
-}
-
-#[cfg(not(feature = "safety-net-kiji"))]
-fn register_kiji(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    Err("compile with gaze-recognizers feature safety-net-kiji".into())
+#[cfg(not(feature = "safety-net-nym"))]
+fn register_nym(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
+    Err("compile with gaze-recognizers feature safety-net-nym".into())
 }
 
 #[cfg(feature = "safety-net-openai")]
@@ -889,52 +845,6 @@ fn register_opf(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Err
     Err("compile with gaze-recognizers feature safety-net-openai".into())
 }
 
-#[cfg(all(feature = "safety-net-kiji", feature = "safety-net-openai"))]
-fn register_locale_aware(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    use gaze_recognizers::safety_net::kiji_distilbert::{
-        KijiDistilbertSafetyNet, SubprocessKijiConfig,
-    };
-    use gaze_recognizers::safety_net::openai_filter::{
-        OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
-    };
-
-    let kiji_command = std::env::var_os("GAZE_KIJI_DISTILBERT_COMMAND")
-        .ok_or("GAZE_KIJI_DISTILBERT_COMMAND is not set")?;
-    let kiji_model_dir = std::env::var_os("GAZE_KIJI_DISTILBERT_MODEL_DIR")
-        .ok_or("GAZE_KIJI_DISTILBERT_MODEL_DIR is not set")?;
-    let opf_command =
-        std::env::var_os("GAZE_OPENAI_FILTER_OPF").ok_or("GAZE_OPENAI_FILTER_OPF is not set")?;
-    let opf_checkpoint = std::env::var_os("OPF_CHECKPOINT").ok_or("OPF_CHECKPOINT is not set")?;
-    let subprocess_timeout = benchmark_subprocess_timeout()?;
-
-    Ok(pipeline
-        .with_safety_net(
-            OpenAiFilterSafetyNet::new(
-                SubprocessOpenAiFilterConfig::new(opf_command)
-                    .with_checkpoint_path(opf_checkpoint)
-                    .with_timeout(subprocess_timeout)
-                    .with_args([
-                        "--format",
-                        "json",
-                        "--output-mode",
-                        "typed",
-                        "--no-print-color-coded-text",
-                        "--device",
-                        "cpu",
-                    ]),
-            )
-            .with_locales(vec![LocaleTag::Global, LocaleTag::EnUs]),
-        )
-        .with_safety_net(
-            KijiDistilbertSafetyNet::new(
-                SubprocessKijiConfig::new(kiji_command)
-                    .with_model_dir(kiji_model_dir)
-                    .with_timeout(subprocess_timeout),
-            )
-            .with_locales(vec![LocaleTag::DeDe]),
-        ))
-}
-
 fn benchmark_subprocess_timeout() -> Result<std::time::Duration, Box<dyn std::error::Error>> {
     let seconds = match std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS") {
         Ok(value) => value.parse::<u64>()?,
@@ -945,11 +855,6 @@ fn benchmark_subprocess_timeout() -> Result<std::time::Duration, Box<dyn std::er
         return Err("benchmark subprocess timeout must be positive".into());
     }
     Ok(std::time::Duration::from_secs(seconds))
-}
-
-#[cfg(not(all(feature = "safety-net-kiji", feature = "safety-net-openai")))]
-fn register_locale_aware(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    Err("compile with gaze-recognizers features safety-net-kiji,safety-net-openai".into())
 }
 
 fn leak_kind_name(kind: &LeakKind) -> &'static str {
@@ -964,7 +869,7 @@ fn leak_kind_name(kind: &LeakKind) -> &'static str {
 fn safety_net_policy(config: BenchConfig) -> SafetyNetPolicy {
     if matches!(
         config,
-        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+        BenchConfig::FullStackOpfResolve | BenchConfig::FullStackNymResolve
     ) {
         SafetyNetPolicy::default()
     } else {
@@ -1442,13 +1347,13 @@ mod tests {
         let cases = [
             (
                 gaze::Error::SafetyNet(SafetyNetError::InvalidOutput {
-                    message: "kiji stdout was not valid JSON".to_string(),
+                    message: "opf stdout was not valid JSON".to_string(),
                 }),
                 "safety_net_invalid_output_malformed_backend_output",
             ),
             (
                 gaze::Error::SafetyNet(SafetyNetError::InvalidOutput {
-                    message: "kiji returned unsupported label".to_string(),
+                    message: "opf returned unsupported label".to_string(),
                 }),
                 "safety_net_invalid_output_label_decode_mismatch",
             ),
@@ -1461,13 +1366,13 @@ mod tests {
             ),
             (
                 gaze::Error::SafetyNet(SafetyNetError::Runtime {
-                    message: "kiji subprocess timed out and was killed".to_string(),
+                    message: "opf subprocess timed out and was killed".to_string(),
                 }),
                 "safety_net_runtime_subprocess_timeout",
             ),
             (
                 gaze::Error::SafetyNet(SafetyNetError::Runtime {
-                    message: "kiji subprocess exited with status exit status: 2".to_string(),
+                    message: "opf subprocess exited with status exit status: 2".to_string(),
                 }),
                 "safety_net_runtime_subprocess_non_zero_exit",
             ),
@@ -1495,8 +1400,8 @@ mod tests {
     #[test]
     fn invalid_output_diagnostics_are_non_pii_branch_labels() {
         let cases = [
-            ("kiji ort returned invalid logits shape", "logits_shape"),
-            ("kiji returned overlapping spans", "raw_span_normalization"),
+            ("nym ort returned invalid logits shape", "logits_shape"),
+            ("opf returned overlapping spans", "raw_span_normalization"),
             ("clean-to-raw start mapping failed", "clean_to_raw_mapping"),
             ("trace-manifest mismatch", "trace_manifest"),
             ("synthetic unknown branch", "other_invalid_output"),
@@ -1557,10 +1462,9 @@ mod tests {
         assert_eq!(output, format!("{serialized}\n").as_bytes());
     }
 
-    #[cfg(feature = "safety-net-kiji")]
     #[test]
-    #[ignore = "requires pinned NER and Kiji bundles; verifies fresh-process full-stack producer determinism"]
-    fn full_stack_kiji_producer_is_deterministic_across_fresh_processes() {
+    #[ignore = "requires the pinned NER bundle; verifies fresh-process production producer determinism"]
+    fn production_producer_is_deterministic_across_fresh_processes() {
         if std::env::var_os(PRODUCER_DETERMINISM_CHILD).is_some() {
             run_producer_determinism_child();
             return;
@@ -1570,18 +1474,10 @@ mod tests {
         let ner_model_dir = std::env::var_os("GAZE_NER_MODEL_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join(".local/share/gaze/models/davlan-mbert-ner-hrl"));
-        let kiji_model_dir = std::env::var_os("GAZE_KIJI_DISTILBERT_MODEL_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join(".local/share/gaze/models/kiji-distilbert"));
         assert!(
             ner_model_dir.is_dir(),
             "pinned NER bundle is missing at {}",
             ner_model_dir.display()
-        );
-        assert!(
-            kiji_model_dir.is_dir(),
-            "pinned Kiji bundle is missing at {}",
-            kiji_model_dir.display()
         );
 
         let current_exe = std::env::current_exe().expect("resolve example test executable");
@@ -1589,13 +1485,12 @@ mod tests {
         for run in 1..=3 {
             let output = std::process::Command::new(&current_exe)
                 .arg("--exact")
-                .arg("tests::full_stack_kiji_producer_is_deterministic_across_fresh_processes")
+                .arg("tests::production_producer_is_deterministic_across_fresh_processes")
                 .arg("--ignored")
                 .arg("--nocapture")
                 .env(PRODUCER_DETERMINISM_CHILD, "1")
                 .env("GAZE_NER_MODEL_DIR", &ner_model_dir)
                 .env("GAZE_NER_THRESHOLD", "0.3")
-                .env("GAZE_KIJI_DISTILBERT_MODEL_DIR", &kiji_model_dir)
                 .env("RUST_TEST_THREADS", "1")
                 .output()
                 .unwrap_or_else(|error| panic!("spawn producer child {run}: {error}"));
@@ -1608,35 +1503,34 @@ mod tests {
             if let Some(expected) = &baseline {
                 assert_eq!(
                     canonical, *expected,
-                    "full-stack producer diverged in fresh child process {run}"
+                    "production producer diverged in fresh child process {run}"
                 );
             } else {
                 baseline = Some(canonical);
             }
         }
 
-        println!("full-stack Kiji producer determinism verified across 3 fresh processes");
+        println!("production producer determinism verified across 3 fresh processes");
     }
 
-    #[cfg(feature = "safety-net-kiji")]
     fn run_producer_determinism_child() {
-        let config = BenchConfig::FullStackKijiResolve;
-        let full = build_pipeline(config).expect("build full-stack Kiji pipeline");
+        let config = BenchConfig::Pass2Ner;
+        let full = build_pipeline(config).expect("build production pipeline");
         println!("{PRODUCER_DETERMINISM_BEGIN}");
         for request in [
             Request {
                 fixture_id: "producer-determinism-en-1".to_string(),
                 locale_chain: vec!["en-US".to_string()],
-                text: "Dr. Schmidt from Example Labs reviews GAZE-1001 in Berlin. Contact alice@example.invalid or +1-555-0101. This synthetic paragraph repeats Example Labs, Dr. Schmidt, Berlin, and GAZE-1001 so the full producer exercises deterministic recognition, Pass 2 NER, Kiji resolution, manifest restoration, and post-policy scanning across a document longer than three hundred bytes.".to_string(),
+                text: "Dr. Schmidt from Example Labs reviews GAZE-1001 in Berlin. Contact alice@example.invalid or +1-555-0101. This synthetic paragraph repeats Example Labs, Dr. Schmidt, Berlin, and GAZE-1001 so the full producer exercises deterministic recognition, Pass 2 NER and manifest restoration across a document longer than three hundred bytes.".to_string(),
             },
             Request {
                 fixture_id: "producer-determinism-de-2".to_string(),
                 locale_chain: vec!["de-DE".to_string()],
-                text: "Dr. Schmidt prueft fuer Example Labs den synthetischen Vorgang GAZE-1002 in Berlin. Der Testkontakt lautet alice@example.invalid und die Testnummer +49 1555 0112233. Dieser erfundene Absatz wiederholt Example Labs, Dr. Schmidt, Berlin und GAZE-1002, damit der vollstaendige Produzent Erkennung, Pass 2 NER, Kiji-Aufloesung, Manifest-Wiederherstellung und die abschliessende Pruefung ueber mehr als dreihundert Bytes ausfuehrt.".to_string(),
+                text: "Dr. Schmidt prueft fuer Example Labs den synthetischen Vorgang GAZE-1002 in Berlin. Der Testkontakt lautet alice@example.invalid und die Testnummer +49 1555 0112233. Dieser erfundene Absatz wiederholt Example Labs, Dr. Schmidt, Berlin und GAZE-1002, damit der vollstaendige Produzent Erkennung, Pass 2 NER und Manifest-Wiederherstellung ueber mehr als dreihundert Bytes ausfuehrt.".to_string(),
             },
         ] {
             let outcome =
-                handle_request(config, &full, request).expect("handle synthetic Kiji request");
+                handle_request(config, &full, request).expect("handle synthetic production request");
             let canonical = match outcome {
                 Outcome::Success(response) => {
                     let mut value =
@@ -1666,7 +1560,6 @@ mod tests {
         println!("{PRODUCER_DETERMINISM_END}");
     }
 
-    #[cfg(feature = "safety-net-kiji")]
     fn extract_producer_determinism_output(stdout: &[u8]) -> Vec<u8> {
         let stdout = String::from_utf8(stdout.to_vec()).expect("producer stdout must be UTF-8");
         let (_, after_begin) = stdout
@@ -1676,57 +1569,5 @@ mod tests {
             .split_once(&format!("{PRODUCER_DETERMINISM_END}\n"))
             .expect("producer child output must include end sentinel");
         canonical.as_bytes().to_vec()
-    }
-
-    #[cfg(feature = "safety-net-kiji")]
-    #[test]
-    #[ignore = "requires NER and Kiji model environment; records known baseline debt"]
-    fn kiji_response_contract_records_restore_and_manifest_debt() {
-        let config = BenchConfig::FullStackKijiResolve;
-        let full = build_pipeline(config).expect("full Kiji pipeline should build from model env");
-        let request = Request {
-            fixture_id: "de-kiji-debt-1".to_string(),
-            locale_chain: vec!["de".to_string()],
-            text: "Bitte an dr.schmidt@example.invalid schreiben, Tel. +49 1555 0112233."
-                .to_string(),
-        };
-        let response =
-            match handle_request(config, &full, request).expect("Kiji request should be handled") {
-                Outcome::Success(response) => response,
-                outcome => panic!("expected a Kiji response, got {outcome:?}"),
-            };
-        assert_success_timing_contract(&response, true);
-        assert!(response.pre_safety_text_len.is_none());
-        assert!(response.pre_safety_manifest_spans.is_none());
-
-        // Recorded baseline debt (~69.46% exact restore, ~36.85% valid manifest): false
-        // restore.exact and non-zero integrity violations are debt signals, not expected-good.
-        let value = serde_json::to_value(&response).expect("Kiji response should serialize");
-        assert!(value["restore"]["exact"].is_boolean());
-        for field in [
-            "invalid_clean_bounds",
-            "invalid_raw_bounds",
-            "overlapping_clean_spans",
-            "non_monotonic_raw_spans",
-            "token_restore_failures",
-            "raw_value_mismatches",
-        ] {
-            assert!(
-                value["manifest_integrity"][field].is_u64(),
-                "Kiji response should record integrity debt field {field}"
-            );
-        }
-
-        let integrity = &response.manifest_integrity;
-        let violation_count = integrity.invalid_clean_bounds
-            + integrity.invalid_raw_bounds
-            + integrity.overlapping_clean_spans
-            + integrity.non_monotonic_raw_spans
-            + integrity.token_restore_failures
-            + integrity.raw_value_mismatches;
-        eprintln!(
-            "Kiji baseline debt signals: restore_exact={}, manifest_violations={violation_count}",
-            response.restore.exact
-        );
     }
 }

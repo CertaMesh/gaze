@@ -32,11 +32,6 @@ schemas, see the [reference](../reference/README.md).
 - **[Ingest documents](document/ingest-documents.md)** — turn PNG/JPG/PDF input into a
   redacted `SafeBundle` (clean Markdown + manifest + report) via OCR.
 
-## Safety net
-
-- **[Set up the Kiji safety net](safety-net/set-up-kiji-safetynet.md)** — install and pin
-  the Kiji DistilBERT bundle and turn on the observer-only safety net.
-
 ## Policy
 
 - **[Write custom recognizers](policy/custom-recognizers.md)** — add tenant-specific PII

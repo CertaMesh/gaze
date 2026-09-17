@@ -81,13 +81,13 @@ enum Cmd {
     /// Requires the binary to be built with `--features setup`.
     #[cfg(feature = "setup")]
     Setup {
-        /// Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available.
+        /// Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available; nym downloads and verifies the pinned Nym-small int8 bundle.
         #[arg(long, value_enum)]
         safety_net: Option<setup::SetupSafetyNet>,
         /// Policy TOML output path. Defaults to ./gaze.toml.
         #[arg(long)]
         policy_out: Option<PathBuf>,
-        /// Model install directory. Defaults to $XDG_DATA_HOME/gaze/models/kiji-distilbert.
+        /// NER model install directory. Defaults to $XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl.
         #[arg(long)]
         model_dir: Option<PathBuf>,
         /// Use defaults without prompts.
@@ -110,6 +110,18 @@ enum Cmd {
     /// Requires the binary to be built with `--features index`.
     #[cfg(feature = "index")]
     Index {
+        /// Safety net over ingest output (optional) and search snippets (required for search).
+        #[arg(long, value_enum)]
+        safety_net: Option<index::IndexSafetyNet>,
+        /// OpenAI Privacy Filter `opf` command (default: GAZE_OPENAI_FILTER_OPF).
+        #[arg(long)]
+        opf_command: Option<PathBuf>,
+        /// OpenAI Privacy Filter checkpoint directory (default: OPF_CHECKPOINT).
+        #[arg(long)]
+        opf_checkpoint: Option<PathBuf>,
+        /// Pinned Nym-small bundle from `gaze setup --safety-net nym` (default: GAZE_NYM_MODEL_DIR).
+        #[arg(long)]
+        nym_model_dir: Option<PathBuf>,
         /// Safety-net subprocess timeout in milliseconds.
         #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
         safety_net_timeout_ms: u64,
@@ -174,6 +186,9 @@ enum IndexCmd {
         /// Safety-net fallback for residual suspects after resolver pass.
         #[arg(long, value_enum, default_value_t = index::OnResidual::Redact)]
         on_residual: index::OnResidual,
+        /// Pinned NER bundle from `gaze setup` (default: GAZE_NER_MODEL_DIR). Required.
+        #[arg(long)]
+        ner_model_dir: Option<PathBuf>,
     },
     /// Search the local owner-side index by one entity.
     Search {
@@ -486,7 +501,8 @@ enum SafetyNetAuditCmd {
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SafetyNetKind {
     OpenaiFilter,
-    KijiDistilbert,
+    // Nym-small v3 int8, in process (opt-in).
+    Nym,
 }
 
 /// v0.8 forward-compatible backend selector.
@@ -497,14 +513,15 @@ pub(crate) enum SafetyNetKind {
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SafetyNetBackend {
     OpenaiFilter,
-    KijiDistilbert,
+    // Nym-small v3 int8, in process (opt-in).
+    Nym,
 }
 
 impl From<SafetyNetKind> for SafetyNetBackend {
     fn from(kind: SafetyNetKind) -> Self {
         match kind {
             SafetyNetKind::OpenaiFilter => Self::OpenaiFilter,
-            SafetyNetKind::KijiDistilbert => Self::KijiDistilbert,
+            SafetyNetKind::Nym => Self::Nym,
         }
     }
 }
@@ -545,22 +562,6 @@ impl OpenAiFilterDevice {
             Self::Mps => Some("mps"),
         }
     }
-}
-
-#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum KijiBackend {
-    Subprocess,
-    Ort,
-    #[cfg(feature = "runtime-tract")]
-    Tract,
-    #[cfg(feature = "runtime-candle")]
-    Candle,
-}
-
-#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum KijiDistilbertPrecision {
-    Fp32,
-    Int8,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
@@ -720,34 +721,49 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
         },
         #[cfg(feature = "index")]
         Cmd::Index {
+            safety_net,
+            opf_command,
+            opf_checkpoint,
+            nym_model_dir,
             safety_net_timeout_ms,
             command,
-        } => match command {
-            IndexCmd::Ingest {
-                dir,
-                domain,
-                index_path,
-                on_residual,
-            } => index::ingest(index::IngestArgs {
-                dir,
-                domain,
-                index_path,
-                on_residual,
+        } => {
+            let net = index::IndexSafetyNetArgs {
+                safety_net,
+                opf_command,
+                opf_checkpoint,
+                nym_model_dir,
                 safety_net_timeout_ms,
-            }),
-            IndexCmd::Search {
-                entity,
-                domain,
-                class,
-                index_path,
-            } => index::search(index::SearchArgs {
-                entity,
-                domain,
-                class,
-                index_path,
-                safety_net_timeout_ms,
-            }),
-        },
+            };
+            match command {
+                IndexCmd::Ingest {
+                    dir,
+                    domain,
+                    index_path,
+                    on_residual,
+                    ner_model_dir,
+                } => index::ingest(index::IngestArgs {
+                    dir,
+                    domain,
+                    index_path,
+                    on_residual,
+                    ner_model_dir,
+                    net,
+                }),
+                IndexCmd::Search {
+                    entity,
+                    domain,
+                    class,
+                    index_path,
+                } => index::search(index::SearchArgs {
+                    entity,
+                    domain,
+                    class,
+                    index_path,
+                    net,
+                }),
+            }
+        }
         #[cfg(feature = "mcp")]
         Cmd::Mcp { command } => match command {
             McpCmd::Install {
@@ -878,8 +894,8 @@ mod tests {
     use clap::{Args as ClapArgsTrait, Command, CommandFactory};
 
     use super::shared_args::{
-        KijiPrecisionArgs, OpenAiFilterSubprocessArgs, OpfRegistryArgs, RulepackOverrideArgs,
-        SafetyNetLimitArgs, SafetyNetRegistryArgs,
+        OpenAiFilterSubprocessArgs, OpfRegistryArgs, RulepackOverrideArgs, SafetyNetLimitArgs,
+        SafetyNetRegistryArgs,
     };
     use super::*;
 
@@ -981,7 +997,6 @@ mod tests {
             long_flags_of::<SafetyNetLimitArgs>(),
             long_flags_of::<SafetyNetRegistryArgs>(),
             long_flags_of::<OpfRegistryArgs>(),
-            long_flags_of::<KijiPrecisionArgs>(),
             long_flags_of::<RulepackOverrideArgs>(),
         ] {
             assert!(!group.is_empty(), "a shared group contributed no flags");
@@ -998,7 +1013,7 @@ mod tests {
     /// one of these gaps has to update this list deliberately.
     ///
     /// The safety-net half of this list was closed by solo todo #3004: `daemon`
-    /// now opts into the locale-aware registry, selects Kiji precision, and takes
+    /// now opts into the locale-aware registry and takes
     /// rulepack overrides, because none of those have a policy.toml equivalent
     /// and `daemon` could otherwise only ever run a single safety-net backend.
     ///

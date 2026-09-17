@@ -44,6 +44,9 @@ pub(crate) enum CliError {
     Pipeline,
     Io,
     PolicyOpen,
+    /// `gaze index ingest` has no pinned NER bundle to detect prose names and organizations.
+    #[cfg(feature = "index")]
+    IndexNerModelMissing(String),
     #[cfg(feature = "document")]
     DocumentDetail(String),
     #[cfg(feature = "mcp")]
@@ -62,6 +65,8 @@ impl CliError {
             | Self::AuditPurgeIso8601 { .. }
             | Self::SetupDetail(_)
             | Self::SafetyNetArtifactMissing { .. } => 2,
+            #[cfg(feature = "index")]
+            Self::IndexNerModelMissing(_) => 2,
             Self::SafetyNetConfigDetail(_) | Self::SafetyNetFailure { .. } => 3,
             Self::UnknownToken { .. }
             | Self::UnsupportedSessionScope { .. }
@@ -91,6 +96,8 @@ impl CliError {
             Self::SafetyNetFailure { .. } => "SafetyNet",
             Self::SetupDetail(_) => "Setup",
             Self::SafetyNetArtifactMissing { .. } => "SafetyNetArtifactMissing",
+            #[cfg(feature = "index")]
+            Self::IndexNerModelMissing(_) => "IndexNerModelMissing",
             Self::AuditPurgeIso8601 { .. } => "AuditPurgeIso8601",
             Self::UnknownToken { .. } => "UnknownToken",
             Self::UnsupportedSessionScope { .. } => "UnsupportedSessionScope",
@@ -125,6 +132,17 @@ impl CliError {
                 )
             }
             Self::PolicyConfigDetail(detail) | Self::SafetyNetConfigDetail(detail) => {
+                let detail = serde_json::to_string(detail)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"detail":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    detail
+                )
+            }
+            #[cfg(feature = "index")]
+            Self::IndexNerModelMissing(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
                 eprintln!(

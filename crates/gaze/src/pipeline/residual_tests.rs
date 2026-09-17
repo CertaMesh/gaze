@@ -697,9 +697,11 @@ impl SafetyNet for ScriptNet {
             match *step {
                 0 => {
                     assert_eq!(context.manifest.spans.len(), 2);
+                    // Identifier class: `er` and `ma` cut `marker`, and the sub-word guard
+                    // exempts only identifier classes.
                     vec![LeakSuspect::new(
                         output.len() - 2..output.len(),
-                        PiiClass::Name,
+                        field(),
                         self.id(),
                         Some(0.99),
                         LeakKind::Uncovered,
@@ -711,7 +713,7 @@ impl SafetyNet for ScriptNet {
                     let start = output.find("ma").unwrap();
                     vec![LeakSuspect::new(
                         start..start + 2,
-                        PiiClass::Name,
+                        field(),
                         self.id(),
                         Some(0.99),
                         LeakKind::Uncovered,

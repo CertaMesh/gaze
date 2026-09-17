@@ -1,7 +1,7 @@
 # Windows subprocess pipe ownership
 
-OPF and Kiji retain inference with diagnostics enabled or disabled. Both use the
-same existing deadline, bounded stdout, finite-memory stderr drain, and joined
+OPF, the only subprocess safety net, retains inference with diagnostics enabled
+or disabled. It uses the same existing deadline, bounded stdout, finite-memory stderr drain, and joined
 worker lifecycle as Unix. No parser, detector, or registry behavior changes.
 
 ## Adapter and ownership

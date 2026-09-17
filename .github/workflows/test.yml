@@ -28,10 +28,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.89.0
         with:
           toolchain: 1.89.0
-      - name: Install Tesseract + English language pack (gaze-document) + protoc (candle-onnx build dep)
+      - name: Install Tesseract + English language pack (gaze-document)
         run: |
           sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng protobuf-compiler
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
       - name: Install pdfium dynamic library (gaze-document PDF input)
         run: |
           set -eu
@@ -59,8 +59,7 @@ jobs:
       - name: cargo check workspace (MSRV)
         env:
           RUSTUP_TOOLCHAIN: 1.89.0
-        # Opt-in runtime-tract needs rust >= 1.91 (tract 0.23.0-dev rust-version),
-        # all-features MSRV is intentionally not gated.
+        # All-features MSRV is intentionally not gated.
         run: cargo check --workspace --all-targets --locked
 
   test:
@@ -81,10 +80,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
         with:
           toolchain: 1.96.0
-      - name: Install Tesseract + English language pack (gaze-document) + protoc (candle-onnx build dep)
+      - name: Install Tesseract + English language pack (gaze-document)
         run: |
           sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng protobuf-compiler
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
       - name: Install pdfium dynamic library (gaze-document PDF input)
         run: |
           set -eu
@@ -190,10 +189,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
         with:
           toolchain: 1.96.0
-      - name: Install Tesseract + English language pack (gaze-document) + protoc (candle-onnx build dep)
+      - name: Install Tesseract + English language pack (gaze-document)
         run: |
           sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng protobuf-compiler
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
       - name: Install pdfium dynamic library (gaze-document PDF input)
         run: |
           set -eu

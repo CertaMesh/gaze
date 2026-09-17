@@ -39,7 +39,7 @@ null `session_id` and continues reading. Errors never echo the input line.
 ## Runtime Shape
 
 The daemon constructs one `Pipeline` at launch from `--policy`. Optional
-Pass-3 safety nets, including the in-process Kiji ORT backend, are initialized
+Pass-3 safety nets, including the in-process Nym-small backend, are initialized
 through the same CLI build path as `gaze clean`, so pinned bundle SHA checks
 still run during daemon startup/backend initialization.
 

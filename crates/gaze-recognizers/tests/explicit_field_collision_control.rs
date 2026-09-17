@@ -22,7 +22,16 @@ fn partial_builtin_overlap_resolves_identically_before_and_after_field_floor() {
         gaze_recognizers::embedded("core").unwrap(),
     ))
     .unwrap();
-    let has_field = core.recognizers.iter().any(|r| r.id == "password.field");
+    // `password.field` moved to the opt-in `secrets` bundle; load it explicitly so the
+    // field original this control depends on is still present.
+    let secrets = Rulepack::load(RulepackSource::Embedded(
+        gaze_recognizers::embedded("secrets").unwrap(),
+    ))
+    .unwrap();
+    let has_field = [&core, &secrets]
+        .iter()
+        .flat_map(|pack| pack.recognizers.iter())
+        .any(|r| r.id == "password.field");
     let competitor = Rulepack::parse(
         r#"
 schema_version = "0.1.0"
@@ -54,7 +63,7 @@ priority = 0
     let pipeline = gaze_assembly::build_pipeline(
         &policy,
         &context,
-        &[core, competitor],
+        &[core, secrets, competitor],
         &LocaleChain::from(&[LocaleTag::Global][..]),
         None,
     )

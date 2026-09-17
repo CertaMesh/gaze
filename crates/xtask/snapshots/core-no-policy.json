@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "bundle": "core",
-  "rulepack_version": "0.5.3",
-  "fixtures_sha256": "7720e1730e5e23f4af5fc78615e702f050e85dca7a786aa2134ce64596ea754a",
+  "rulepack_version": "0.6.0",
+  "fixtures_sha256": "74068a37f97a3764fd1e6bf8cbbb8898b0c0b8ef36fb622f74090608dfa0913d",
   "entries": [
     {
       "recognizer_id": "card.structural",

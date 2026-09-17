@@ -179,7 +179,7 @@ fn multiple_gap_refused_mixed_batches_never_publish_or_audit_a_partial_plan() {
         let primary = parent(&clean);
         let mut extra = match case {
             0 => primary.clone(),                    // duplicate, no dedup admission
-            1 => suspect(0..1, LeakKind::Uncovered), // overlapping raw gap
+            1 => suspect(0..2, LeakKind::Uncovered), // overlapping raw gap (word-aligned)
             2 => suspect(clean.text.len()..clean.text.len() + 1, LeakKind::Uncovered),
             3 => suspect(0..clean.manifest[0].clean_span.end, LeakKind::Uncovered),
             4 => suspect(

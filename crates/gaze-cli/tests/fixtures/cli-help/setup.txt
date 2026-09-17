@@ -6,15 +6,15 @@ Usage: gaze setup [OPTIONS]
 
 Options:
       --safety-net <SAFETY_NET>
-          Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available
+          Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available; nym downloads and verifies the pinned Nym-small int8 bundle
           
-          [possible values: ner, opf]
+          [possible values: ner, opf, nym]
 
       --policy-out <POLICY_OUT>
           Policy TOML output path. Defaults to ./gaze.toml
 
       --model-dir <MODEL_DIR>
-          Model install directory. Defaults to $XDG_DATA_HOME/gaze/models/kiji-distilbert
+          NER model install directory. Defaults to $XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl
 
       --non-interactive
           Use defaults without prompts
