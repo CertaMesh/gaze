@@ -220,7 +220,7 @@ fn expected_recognizer_rows() -> BTreeSet<RecognizerRow> {
 }
 
 fn documented_recognizer_rows(document: &str) -> BTreeSet<RecognizerRow> {
-    table_rows(document, "recognizers", 13)
+    table_rows(document, "recognizers", 12)
         .into_iter()
         .map(|cells| {
             assert!(

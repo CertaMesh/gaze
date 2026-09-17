@@ -158,11 +158,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explaining why the numeric rules stay locale-gated and the alphanumeric ones
   do not.
 
-- [docs] Every `core.toml` line citation in the recognizer coverage matrix of
-  `docs/reference/redaction-classes.md` is regenerated. 35 of 37 rows pointed at
-  stale line ranges: the doc gate reads the first twelve columns and never
-  checks the thirteenth, so the column had drifted unnoticed across many
-  changes. Adding an assertion for it is tracked separately.
+- [docs] The `core.toml` line-citation column is **removed** from the recognizer
+  coverage matrix in `docs/reference/redaction-classes.md`, and the doc gate now
+  expects twelve columns. The column was documentation cosmetics that no code
+  depended on and no gate verified: 35 of 37 rows had drifted, some by more than
+  150 lines. Regenerating it (as an earlier entry in this cycle did) only reset
+  a clock that would drift again on the next `core.toml` edit, so the column is
+  gone rather than re-verified. The gate keeps checking every remaining column
+  against the loaded rulepack. Recognizer definitions are found by searching
+  `core.toml` (loaded as both `core` and `core-extended`) or `secrets.toml` for
+  the `id = "..."` line.
 
 - [bundle-tokenization-drift] The `core` snapshot records rulepack version0.5.3; detection entries, spans, classes, sources, token shapes and counts are unchanged.
 
