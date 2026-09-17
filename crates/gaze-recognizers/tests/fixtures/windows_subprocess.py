@@ -1,5 +1,6 @@
 """Synthetic subprocess protocol and bounded descendant ownership witnesses."""
 import ctypes
+import json
 from ctypes import wintypes
 import msvcrt
 import os
@@ -104,6 +105,9 @@ if mode == 'invalid-json':
     os.write(1, b'not-json')
 elif mode == 'invalid-utf8':
     os.write(1, b'\xff')
+elif backend == 'opf':
+    # The OPF adapter refuses output that does not echo the exact text it sent.
+    os.write(1, json.dumps({'text': received.decode('utf-8'), 'detected_spans': []}).encode())
 else:
     os.write(1, reply)
 os._exit(0)

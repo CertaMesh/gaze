@@ -1000,8 +1000,16 @@ fn daemon_request(policy: &Path, extra_args: &[String], text: &str) -> (Value, O
 /// text it is handed.
 fn write_blind_opf(dir: &Path) -> PathBuf {
     let path = dir.join("blind-opf");
-    write_executable(&path, "#!/bin/sh\ncat >/dev/null\nprintf '[]\\n'\n");
+    write_executable(&path, &echoing_opf_script("[]"));
     path
+}
+
+/// An `opf` stand-in reporting `spans`. The OPF adapter only accepts output that echoes the
+/// exact text it analysed.
+fn echoing_opf_script(spans: &str) -> String {
+    format!(
+        "#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps({{\"text\": open(\"/dev/stdin\", encoding=\"utf-8\").read(), \"detected_spans\": json.loads(sys.argv[1])}}))' '{spans}'\n"
+    )
 }
 
 fn opf_checkpoint(dir: &Path) -> PathBuf {
@@ -1153,10 +1161,9 @@ fn daemon_safety_net_registry_finding_is_enforced_not_merely_parsed() {
     let opf = dir.path().join("reporting-opf");
     write_executable(
         &opf,
-        &format!(
-            "#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' \
-             '[{{\"label\":\"private_person\",\"start\":{start},\"end\":{end},\"score\":0.99}}]'\n"
-        ),
+        &echoing_opf_script(&format!(
+            r#"[{{"label":"private_person","start":{start},"end":{end},"score":0.99}}]"#
+        )),
     );
     let (_policy_dir, policy) = write_preserve_default_policy();
 
