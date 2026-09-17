@@ -20,7 +20,7 @@
 //!
 //! ## Stability
 //!
-//! This crate re-exports types from `rmcp 1.x`. There is **no SemVer guarantee** on rmcp
+//! This crate re-exports types from `rmcp 2.x`. There is **no SemVer guarantee** on rmcp
 //! re-exports — major rmcp bumps may force breaking releases of `gaze-mcp-rmcp`.
 //!
 //! [`gaze-mcp-core`]: https://crates.io/crates/gaze-mcp-core
