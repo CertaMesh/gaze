@@ -223,6 +223,12 @@ pub(crate) fn maybe_register_safety_net(
                 "--safety-net-registry requires at least one --safety-net-add".to_string(),
             ));
         }
+        // Checked before the feature-gated registry path so every build names the real
+        // reason: registry dispatch reports a model span's class, not the label and
+        // threshold that fired, so a Nym suspect there would lose its audit trail.
+        if options.safety_net_add.contains(&SafetyNetBackend::Nym) {
+            return Err(nym_registry_refusal());
+        }
         return register_safety_net_registry(pipeline, options);
     }
     let Some(backend) = effective_safety_net_backend(options) else {
@@ -233,6 +239,12 @@ pub(crate) fn maybe_register_safety_net(
         SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options),
         SafetyNetBackend::Nym => register_nym(pipeline, options, nym_policy),
     }
+}
+
+fn nym_registry_refusal() -> CliError {
+    CliError::SafetyNetConfigDetail(
+        "nym is not available through --safety-net-registry; use --safety-net nym".to_string(),
+    )
 }
 
 #[cfg(feature = "safety-net-nym")]
@@ -323,14 +335,7 @@ fn register_safety_net_registry(
     for backend in options.safety_net_add {
         match backend {
             SafetyNetBackend::OpenaiFilter => register_openai_filter_model(&mut registry, options)?,
-            // Registry dispatch reports a model span's class, not the label and threshold that
-            // fired, so a Nym suspect there would lose its audit trail.
-            SafetyNetBackend::Nym => {
-                return Err(CliError::SafetyNetConfigDetail(
-                    "nym is not available through --safety-net-registry; use --safety-net nym"
-                        .to_string(),
-                ))
-            }
+            SafetyNetBackend::Nym => return Err(nym_registry_refusal()),
         }
     }
     Ok(pipeline.with_safety_net_registry(registry))
