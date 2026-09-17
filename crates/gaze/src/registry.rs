@@ -1,3 +1,90 @@
+//! Recognizer registry: the single chokepoint every detector passes through.
+//!
+//! Every type an out-of-crate recognizer needs is re-exported at the crate root, including
+//! [`DetectError`] — the error half of [`Recognizer::detect`]'s return type. Adopters who do
+//! not depend on `gaze-types` directly can therefore write the full signature with `gaze::`
+//! paths alone.
+//!
+//! ```
+//! use gaze::{Candidate, ConflictTier, DetectContext, DetectError, PiiClass, Recognizer};
+//!
+//! /// Recognizes colon-separated MAC addresses such as `00:1a:2b:3c:4d:5e`: a
+//! /// hardware identifier defined by its structure alone, not by any tenant.
+//! struct MacAddressRecognizer {
+//!     class: PiiClass,
+//! }
+//!
+//! impl Recognizer for MacAddressRecognizer {
+//!     fn id(&self) -> &str {
+//!         "example.mac_address"
+//!     }
+//!
+//!     fn supported_class(&self) -> &PiiClass {
+//!         &self.class
+//!     }
+//!
+//!     fn token_family(&self) -> &str {
+//!         "mac_address"
+//!     }
+//!
+//!     fn detect(
+//!         &self,
+//!         input: &str,
+//!         _ctx: &DetectContext<'_>,
+//!     ) -> Result<Vec<Candidate>, DetectError> {
+//!         // Fail closed: a backend that cannot scan reports an error instead of
+//!         // returning "nothing found", which would read as a clean document.
+//!         if input.len() > 1_000_000 {
+//!             return Err(DetectError::backend(self.id(), "input exceeds scan limit"));
+//!         }
+//!
+//!         const LEN: usize = 17; // six hex pairs joined by five colons
+//!         let bytes = input.as_bytes();
+//!         let mut candidates = Vec::new();
+//!         let mut start = 0;
+//!         while start + LEN <= bytes.len() {
+//!             let is_mac = bytes[start..start + LEN].iter().enumerate().all(|(i, b)| {
+//!                 if i % 3 == 2 {
+//!                     *b == b':'
+//!                 } else {
+//!                     b.is_ascii_hexdigit()
+//!                 }
+//!             });
+//!             if !is_mac {
+//!                 start += 1;
+//!                 continue;
+//!             }
+//!             candidates.push(Candidate::new(
+//!                 start..start + LEN,
+//!                 self.class.clone(),
+//!                 self.id(),
+//!                 0.9,
+//!                 100,
+//!                 None,
+//!                 self.token_family(),
+//!                 self.id(),
+//!                 ConflictTier::None,
+//!                 Vec::new(),
+//!             ));
+//!             start += LEN;
+//!         }
+//!         Ok(candidates)
+//!     }
+//! }
+//!
+//! let recognizer = MacAddressRecognizer {
+//!     class: PiiClass::Custom("mac_address".to_string()),
+//! };
+//! let dictionaries = gaze::DictionaryBundle::default();
+//! let ctx = DetectContext::new(&[], &dictionaries);
+//!
+//! let found = recognizer
+//!     .detect("device 00:1a:2b:3c:4d:5e joined", &ctx)
+//!     .unwrap();
+//! assert_eq!(found.len(), 1);
+//! assert_eq!(found[0].span, 7..24);
+//! ```
+
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
