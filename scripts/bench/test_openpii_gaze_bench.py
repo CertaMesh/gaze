@@ -209,6 +209,128 @@ class ValidatorRecallTests(unittest.TestCase):
         )
         self.assertEqual(card["shape_only_recall"]["full_coverage_recall"], 1.0)
 
+    def test_production_leak_is_split_by_gold_validity_without_moving_headline(
+        self,
+    ) -> None:
+        # One Luhn-valid and one Luhn-invalid card, both left raw by the
+        # producer: the invalid one must land in the failed-gold column, and
+        # the two columns must add up to the unchanged headline.
+        text = "Card 4111111111111111 and 4111111111111112 for Schmidt"
+        document = benchmark.Document(
+            uid="validity-split",
+            text=text,
+            language="en",
+            region="US",
+            source_dataset="synthetic",
+            spans=(
+                benchmark.Span(5, 21, "CREDITCARDNUMBER"),
+                benchmark.Span(26, 42, "CREDITCARDNUMBER"),
+                benchmark.Span(47, 54, "SURNAME"),
+            ),
+        )
+        measurements = self.measurements()
+        measurements["documents"] = {
+            document.uid: {
+                "fixture_id": document.uid,
+                "gold_validation": [
+                    {
+                        "start": 5,
+                        "end": 21,
+                        "label": "CREDITCARDNUMBER",
+                        "applicable": True,
+                        "validator_passed": True,
+                    },
+                    {
+                        "start": 26,
+                        "end": 42,
+                        "label": "CREDITCARDNUMBER",
+                        "applicable": True,
+                        "validator_passed": False,
+                    },
+                    {
+                        "start": 47,
+                        "end": 54,
+                        "label": "SURNAME",
+                        "applicable": False,
+                        "validator_passed": None,
+                    },
+                ],
+                "predictions": {"validator_backed": [], "shape_only": []},
+            }
+        }
+        response = ResponseValidationTests().success_response()
+        response["fixture_id"] = document.uid
+        response["clean_text"] = text
+        process = mock.Mock()
+        process.__enter__ = mock.Mock(return_value=process)
+        process.__exit__ = mock.Mock(return_value=False)
+        process.message_deadline = 0
+        process.exchange.side_effect = [response]
+        repo_root = Path(benchmark.__file__).resolve().parents[2]
+
+        with tempfile.TemporaryDirectory(dir=repo_root) as temporary:
+            with mock.patch.object(benchmark, "BenchSubprocess", return_value=process):
+                result = benchmark.run_config(
+                    repo_root=repo_root,
+                    binary=Path(temporary) / "synthetic-runner",
+                    config="pass2-ner",
+                    documents=[document],
+                    model_dir=Path(temporary),
+                    opf_command=None,
+                    opf_checkpoint=None,
+                    opf_daemon_socket=None,
+                    threshold=0.3,
+                    diagnostics_dir=Path(temporary),
+                    validator_measurements=measurements,
+                )
+
+        card = result["validator_recall_by_label"]["CREDITCARDNUMBER"]
+        split = card["production_recall_by_gold_validity"]
+        self.assertEqual(split["validator_passed_gold"]["entities"], 1)
+        self.assertEqual(split["validator_passed_gold"]["leaked_utf8_bytes"], 16)
+        self.assertEqual(split["validator_failed_gold"]["entities"], 1)
+        self.assertEqual(split["validator_failed_gold"]["leaked_utf8_bytes"], 16)
+        self.assertEqual(
+            split["validator_passed_gold"]["leaked_utf8_bytes"]
+            + split["validator_failed_gold"]["leaked_utf8_bytes"],
+            result["per_label_recall"]["CREDITCARDNUMBER"]["leaked_utf8_bytes"],
+        )
+        self.assertEqual(result["metrics"]["utf8_bytes"]["leaked"], 39)
+        self.assertIsNone(
+            result["validator_recall_by_label"]["SURNAME"][
+                "production_recall_by_gold_validity"
+            ]
+        )
+
+    def test_gold_validity_bucket_keeps_failed_and_not_applicable_apart(
+        self,
+    ) -> None:
+        self.assertEqual(
+            benchmark.gold_validity_bucket(
+                {"applicable": True, "validator_passed": True}
+            ),
+            "validator_passed_gold",
+        )
+        self.assertEqual(
+            benchmark.gold_validity_bucket(
+                {"applicable": True, "validator_passed": False}
+            ),
+            "validator_failed_gold",
+        )
+        self.assertIsNone(
+            benchmark.gold_validity_bucket(
+                {"applicable": False, "validator_passed": None}
+            )
+        )
+
+    def test_split_is_absent_when_no_production_run_supplies_it(self) -> None:
+        result = benchmark.validator_recall_by_label(
+            [self.document()], ["validator-synthetic"], self.measurements()
+        )
+        self.assertNotIn(
+            "production_recall_by_gold_validity", result["CREDITCARDNUMBER"]
+        )
+
     def test_not_applicable_is_never_rendered_as_zero(self) -> None:
         result = benchmark.validator_recall_by_label(
             [self.document()],

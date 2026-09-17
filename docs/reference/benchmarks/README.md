@@ -213,6 +213,16 @@ Two consequences worth stating plainly:
 2. **False-positive bytes are a ratchet, not a free variable.** They are
    reported beside recall precisely so precision cannot be traded away silently
    to make a leak counter fall.
+3. **Gold that fails its own checksum stays scored.** The synthetic corpus
+   generates many tax-ID, card and IBAN values that fail their Steuer-ID, Luhn
+   or mod-97 check, and Gaze's validator-backed rules refuse them by design.
+   Those bytes still count as surviving PII in the headline. From the first
+   release measured with the split, the current-release section adds a table
+   for the shipped default arm: gold spans per validator-backed label, how many
+   fail their validator, validator-backed versus shape-only recall, and the
+   surviving bytes split into valid and invalid gold. The two split columns add
+   up to that label's surviving bytes; they never replace them, and no
+   validator is loosened to move them.
 
 ---
 

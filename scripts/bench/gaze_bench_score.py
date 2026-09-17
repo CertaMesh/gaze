@@ -1856,10 +1856,30 @@ def validator_gold_census(
     return census
 
 
+GOLD_VALIDITY_BUCKETS = ("validator_passed_gold", "validator_failed_gold")
+
+
+def gold_validity_bucket(validation: Mapping[str, object]) -> str | None:
+    """Which side of the checksum split a gold span falls on, or None.
+
+    Gold that fails its own validator is still scored gold: this only
+    partitions it so a leak on checksum-invalid gold stays explainable next to
+    the headline, which is never recomputed from the split.
+    """
+    if validation["applicable"] is not True:
+        return None
+    if validation["validator_passed"] is True:
+        return "validator_passed_gold"
+    return "validator_failed_gold"
+
+
 def validator_recall_by_label(
     documents: Sequence[Document],
     scored_document_ids: Iterable[str],
     validator_measurements: Mapping[str, object],
+    production_by_gold_validity: (
+        Mapping[str, Mapping[str, RecallAccumulator]] | None
+    ) = None,
 ) -> dict[str, dict[str, object]]:
     scored_ids = frozenset(scored_document_ids)
     responses = validator_measurements["documents"]
@@ -1942,6 +1962,15 @@ def validator_recall_by_label(
             "validator_backed_recall": validator_backed_recall,
             "shape_only_recall": shape_only_recall,
         }
+        if production_by_gold_validity is not None:
+            if status == "applicable":
+                buckets = production_by_gold_validity.get(label, {})
+                result[label]["production_recall_by_gold_validity"] = {
+                    bucket: buckets.get(bucket, RecallAccumulator()).result()
+                    for bucket in GOLD_VALIDITY_BUCKETS
+                }
+            else:
+                result[label]["production_recall_by_gold_validity"] = None
     return result
 
 
@@ -1994,6 +2023,9 @@ def run_config(
         RecallAccumulator
     )
     neutral_prediction_bytes: Counter[str] = Counter()
+    production_by_gold_validity: defaultdict[
+        str, defaultdict[str, RecallAccumulator]
+    ] = defaultdict(lambda: defaultdict(RecallAccumulator))
     contract = ContractAccumulator()
     scored_document_ids: list[str] = []
     failed_closed_documents: list[dict[str, str]] = []
@@ -2106,6 +2138,18 @@ def run_config(
                     [span for span in document.spans if span.label == label],
                     predictions,
                 )
+            if validator_measurements is not None:
+                validator_documents = validator_measurements["documents"]
+                assert isinstance(validator_documents, dict)
+                validations = validator_documents[document.uid]["gold_validation"]
+                # The probe response was already checked span-for-span against
+                # this document's gold, so zip pairs each span with its verdict.
+                for span, validation in zip(document.spans, validations, strict=True):
+                    bucket = gold_validity_bucket(validation)
+                    if bucket is not None:
+                        production_by_gold_validity[span.label][bucket].add(
+                            [span], predictions
+                        )
             if document.neutral_prediction_classes:
                 gold = merge_intervals((span.start, span.end) for span in document.spans)
                 for label in document.neutral_prediction_classes:
@@ -2201,6 +2245,7 @@ def run_config(
                     documents,
                     scored_document_ids,
                     validator_measurements,
+                    production_by_gold_validity,
                 )
             }
             if validator_measurements is not None
