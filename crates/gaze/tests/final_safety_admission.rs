@@ -173,9 +173,22 @@ fn run(
             );
             // One token per emitted span on success; on failure, only the `seed` token the
             // first resolve minted before the document was refused.
+            // One token per TOKENIZING span. A redaction is a manifest span too now, but a
+            // one-way marker mints no token — asked through the shared predicate rather than by
+            // re-spelling the marker shape here.
             assert_eq!(
                 transaction.tokens().len(),
-                result.as_ref().map_or(1, |(_, spans, _)| spans.len())
+                result.as_ref().map_or(1, |(doc, spans, _)| {
+                    let CleanDocument::Text(text) = doc else {
+                        panic!("text");
+                    };
+                    spans
+                        .iter()
+                        .filter(|span| {
+                            !gaze::is_redaction_marker(&text[span.clean_span.clone()])
+                        })
+                        .count()
+                })
             );
             if let Ok((CleanDocument::Text(text), spans, _)) = &result {
                 assert_eq!(
@@ -210,9 +223,12 @@ fn a_new_raw_residual_after_fallback_is_resolved_on_every_route() {
             !text.contains("residual"),
             "{route:?} shipped the terminal finding raw"
         );
+        // 5..13 is the fallback redaction. It used to leave no span at all, because the redactor
+        // cut the bytes out; it now stands for its own ORIGINAL bytes like every other one-way
+        // replacement, which is the same property this assertion always demanded of the residual.
         assert_eq!(
             spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-            [0..4, 13..21],
+            [0..4, 5..13, 13..21],
             "{route:?} must name the residual's ORIGINAL bytes, not post-deletion ones"
         );
         assert!(
@@ -229,7 +245,7 @@ fn a_new_raw_residual_after_fallback_is_resolved_on_every_route() {
         );
         if matches!(route, Route::Trace) {
             // Pinned here rather than in `run`, because only a completing document has one.
-            assert_eq!(spans[1].raw_span, 13..21);
+            assert_eq!(spans[2].raw_span, 13..21);
         }
     }
 }
@@ -243,9 +259,16 @@ fn final_admission_allows_live_token_reflags_without_destructive_fallback() {
         let CleanDocument::Text(text) = doc else {
             panic!("text");
         };
-        assert_eq!(spans.len(), 1);
+        // Two spans now: the seed token and the fallback redaction, which records the bytes it
+        // replaced instead of removing them without trace.
+        assert_eq!(spans.len(), 2);
         assert_eq!(spans[0].raw_span, 0..4);
-        assert!(text.ends_with(" residual é"));
+        assert_eq!(spans[1].raw_span, 5..13);
+        // The marker replaced "barrier " including its trailing space, so it abuts "residual".
+        assert!(text.ends_with(&format!(
+            "{}residual é",
+            gaze::redaction_marker(&gaze::PiiClass::Name)
+        )));
         if !matches!(route, Route::Staged) {
             assert_eq!(
                 session.restore(&text[spans[0].clean_span.clone()]).unwrap(),
@@ -279,10 +302,13 @@ fn final_admission_rejects_terminal_errors_and_malformed_or_mismatched_spans() {
                     result,
                     Err(Error::SafetyNetFallback(FallbackReason::OverlapConflict))
                 )),
-                _ => assert!(matches!(
-                    result,
-                    Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
-                )),
+                _ => assert!(
+                    matches!(
+                        result,
+                        Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
+                    ),
+                    "{terminal:?}/{route:?}: {result:?}"
+                ),
             }
             assert_eq!(seen.lock().unwrap().len(), 3);
         }
@@ -299,8 +325,14 @@ fn final_admission_clear_output_retains_default_one_way_fallback_and_trace() {
         let CleanDocument::Text(text) = doc else {
             panic!("text");
         };
-        assert_eq!(spans.len(), 1);
-        assert!(text.ends_with(" residual é"));
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[1].raw_span, 5..13);
+        // The marker replaced "barrier " including its trailing space, so it abuts "residual".
+        assert!(text.ends_with(&format!(
+            "{}residual é",
+            gaze::redaction_marker(&gaze::PiiClass::Name)
+        )));
+        // The flagged bytes are gone from the output; a marker stands where they were.
         assert!(!text.contains("barrier"));
         assert_eq!(report.stats.suspect_count, 2);
         assert_eq!(seen.lock().unwrap().len(), 3);

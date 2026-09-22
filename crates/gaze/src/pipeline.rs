@@ -3563,43 +3563,43 @@ fn actionable_suspect_reason(
 ///
 /// Two ways that happens. The suspect may lie inside a live token, which the primary pass or an
 /// earlier resolve minted; acting on it would tokenize a token and break restore. Or it may
-/// overlap a one-way `[REDACTED:<class>]` marker, which is gaze's own output standing where
+/// lie inside a one-way `[REDACTED:<class>]` marker, which is gaze's own output standing where
 /// flagged bytes used to be. A net re-flagging a marker is re-flagging the redaction, not the
 /// document: `REDACTED` reads as an organization to a NER model, and `name` reads as a name.
-///
-/// Overlap is the right test for a marker, not containment. Half a marker is still gaze's bytes,
-/// and redacting them again would nest markers and move the very spans this change promises to
-/// leave alone.
 fn suspect_is_already_protected(
     target: &ProtectionTarget<'_, '_>,
     clean: &CleanText,
     suspect: &LeakSuspect,
 ) -> bool {
     suspect_is_inside_live_token(target, clean, suspect)
-        || suspect_overlaps_redaction_marker(clean, suspect)
+        || suspect_is_inside_redaction_marker(clean, suspect)
 }
 
-/// True when the suspect shares any byte with a redaction marker this pipeline wrote.
+/// True when the suspect lies wholly inside one redaction marker this pipeline wrote.
+///
+/// Containment, not overlap, and the difference is a fail-closed one. An overlap test would
+/// excuse a suspect that is merely MALFORMED -- out of bounds, reversed, splitting a character --
+/// whenever it happened to touch a marker, and those must stay unjudgeable and deny the document.
+/// It would also excuse a suspect straddling a marker and real text, where the real half may
+/// still need acting on. Both fall through to the ordinary rules instead, exactly as they do for
+/// the live-token sibling above.
 ///
 /// Authority comes from the manifest, not from the text: a document whose own content happens to
 /// contain the literal `[REDACTED:name]` must not gain protection from having typed it. The
 /// manifest entry is checked against the bytes actually standing there, so only a marker gaze
-/// recorded counts.
-fn suspect_overlaps_redaction_marker(clean: &CleanText, suspect: &LeakSuspect) -> bool {
+/// itself recorded counts.
+fn suspect_is_inside_redaction_marker(clean: &CleanText, suspect: &LeakSuspect) -> bool {
     let span = &suspect.span;
-    if span.start >= span.end {
+    if span.start >= span.end || !is_char_boundary_range(&clean.text, span) {
         return false;
     }
-    clean
-        .manifest
-        .records()
-        .iter()
-        .filter(|record| {
-            matches!(record.origin, Origin::SafetyNetRedaction { .. })
-                && clean.text.get(record.emitted.clean_span.clone())
-                    == Some(redaction_marker(&record.emitted.class).as_str())
-        })
-        .any(|record| ranges_overlap(&record.emitted.clean_span, span))
+    clean.manifest.records().iter().any(|record| {
+        matches!(record.origin, Origin::SafetyNetRedaction { .. })
+            && record.emitted.clean_span.start <= span.start
+            && span.end <= record.emitted.clean_span.end
+            && clean.text.get(record.emitted.clean_span.clone())
+                == Some(redaction_marker(&record.emitted.class).as_str())
+    })
 }
 
 /// True when the suspect span lies wholly inside exactly one live token.
@@ -5184,6 +5184,95 @@ mod tests {
                 None,
             )])
         }
+    }
+
+    /// Flags a literal on the first pass, then flags `REDACTED` on every later pass.
+    ///
+    /// The second behaviour is not contrived: `REDACTED` is a capitalised word in an otherwise
+    /// ordinary sentence, which is precisely the shape a NER model reads as an organization.
+    struct MarkerThenRedactedNet {
+        first: &'static str,
+    }
+
+    impl SafetyNet for MarkerThenRedactedNet {
+        fn id(&self) -> &str {
+            "marker-then-redacted.fixture"
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            clean_text: &str,
+            context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            let (needle, class) = match clean_text.find(self.first) {
+                Some(_) => (self.first, PiiClass::Name),
+                None => ("REDACTED", PiiClass::Organization),
+            };
+            let Some(start) = clean_text.find(needle) else {
+                return Ok(Vec::new());
+            };
+            let span = start..start + needle.len();
+            let Some(kind) = context.manifest.diff_against(&span, &class) else {
+                return Ok(Vec::new());
+            };
+            Ok(vec![LeakSuspect::new(
+                span,
+                class.clone(),
+                self.id(),
+                Some(1.0),
+                kind,
+                class.to_canonical_str(),
+                None,
+            )])
+        }
+    }
+
+    /// A marker is gaze's own output, so a net that re-flags it is re-flagging the redaction, not
+    /// the document. Acting on that would nest markers, move spans this change promises to leave
+    /// alone, and grow the output on every pass.
+    ///
+    /// The mutation this must catch: drop the marker arm from `suspect_is_already_protected` and
+    /// the second pass redacts `REDACTED` into `[REDACTED:organization]`, leaving a nested marker.
+    #[test]
+    fn a_redaction_marker_is_never_redacted_again() {
+        let text = "alice@example.invalid met Dr. Schmidt";
+        let pipeline = traced_email_pipeline(MarkerThenRedactedNet {
+            first: "Dr. Schmidt",
+        });
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (output, manifest, _, _) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Redact, SafetyNetFallback::Redact),
+            )
+            .expect("the second pass must be a no-op, not a failure");
+
+        let CleanDocument::Text(output) = output else {
+            panic!("a text document cleans to text");
+        };
+        let marker = gaze_types::redaction_marker::redaction_marker(&PiiClass::Name);
+        assert_eq!(output.matches(&marker).count(), 1);
+        assert!(
+            !output.contains(&gaze_types::redaction_marker::redaction_marker(
+                &PiiClass::Organization
+            )),
+            "the marker was redacted a second time: {output}"
+        );
+        assert_eq!(
+            manifest
+                .iter()
+                .filter(|span| span.class == PiiClass::Organization)
+                .count(),
+            0,
+            "re-flagging a marker must not mint a manifest entry"
+        );
     }
 
     struct ManifestMismatchSafetyNet;

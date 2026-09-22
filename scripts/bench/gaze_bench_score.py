@@ -1095,7 +1095,11 @@ def _validate_final_protection_trace(
         previous_raw_end = raw_end
         protected_raw_values.append(original_text[raw_start:raw_end].decode("utf-8"))
         predictions.append(Span(raw_start, raw_end, pii_class))
-        if action == "tokenize":
+        # Redactions are manifest entries too: the safety net writes a one-way
+        # `[REDACTED:<class>]` marker and records it like any other replacement.
+        # Counting only tokenizations here would read every redaction as a
+        # manifest entry nothing in the trace explains, and reject the document.
+        if action in ("tokenize", "redact"):
             tokenize_items[(raw_start, raw_end, pii_class)] += 1
 
     manifest_items: Counter[tuple[int, int, str]] = Counter()
@@ -1106,7 +1110,7 @@ def _validate_final_protection_trace(
         ] += 1
     if tokenize_items != manifest_items:
         raise ResponseValidationError(
-            "final_protection_trace: tokenize items must agree 1:1 with the final manifest"
+            "final_protection_trace: replacing items must agree 1:1 with the final manifest"
         )
     for source_id, context in source_identifiers:
         if source_id not in COMMITTED_SOURCE_ID_VOCABULARY and any(
