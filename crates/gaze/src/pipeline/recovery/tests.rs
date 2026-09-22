@@ -518,3 +518,51 @@ fn evidence_retains_original_ids_and_recovered_geometry_without_relabeling_membe
     assert_eq!(primary.raw, 16..29);
     assert_eq!(primary.members, vec![2]);
 }
+
+/// Todo #3709 through the whole-plan path and the differential oracle: a
+/// family settled by collision policy (IBAN over the card variant) must not
+/// reopen the anchor check when a later, unrelated, lower-priority overlap is
+/// decided on the base ladder. Both resolvers once keyed the fallback on the
+/// last `decided_by` stamp and turned the IBAN into the family token.
+#[test]
+fn collision_settled_family_survives_later_foreign_overlap_in_both_resolvers() {
+    let registry = RecognizerRegistry::builder()
+        .register_collision(
+            "iban.structural",
+            crate::CollisionMembership::new(
+                "payment-card-or-iban",
+                "iban",
+                10,
+                Some("iban".to_string()),
+            ),
+        )
+        .register_collision(
+            "card.structural",
+            crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
+        )
+        .build();
+    let with_priority = |span, class: &str, id: &str, priority| {
+        let mut c = candidate(span, PiiClass::custom(class).unwrap(), id);
+        c.priority = priority;
+        c
+    };
+    let input = vec![
+        with_priority(0..24, "iban", "iban.structural", 10),
+        with_priority(5..24, "credit_card", "card.structural", 10),
+        with_priority(20..37, "postal_code", "postal.at_ch", 5),
+    ];
+    let raw = "AT61 1904 3002 3457 3201 Kontoinhaber";
+
+    let expected = legacy::resolve_candidates_with_policy_and_anchors(
+        input.clone(),
+        registry.family_policy(),
+        &crate::anchor_resolver::AnchorResolver::default(),
+        raw,
+        &[LocaleTag::Global],
+    );
+    assert_eq!(expected.len(), 1, "{expected:?}");
+    assert_eq!(expected[0].class, PiiClass::custom("iban").unwrap());
+
+    let result = run(input, &registry, raw);
+    assert_eq!(result.primary, expected);
+}

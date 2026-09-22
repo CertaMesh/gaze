@@ -63,6 +63,22 @@ pub(crate) struct WholeCandidate {
     pub(crate) candidate: Candidate,
     pub(crate) members: Vec<usize>,
     pub(crate) node: usize,
+    pub(crate) settlement: Settlement,
+}
+
+/// Whether collision policy has already decided this span's family.
+///
+/// Kept apart from `Candidate::decided_by`, which is the audit label of the
+/// last rung that touched the span: a later, unrelated overlap decided on the
+/// base ladder rewrites that label, and the missing-anchor fallback must not
+/// reopen a family the policy already settled because of it (todo #3709).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Settlement {
+    /// No collision-policy verdict yet; the anchor rung still applies.
+    #[default]
+    Open,
+    /// Won a collision-policy comparison or is a precedence-tie family token.
+    CollisionPolicy,
 }
 
 // A compact private decision graph. Node ids below originals.len() are evidence;
@@ -156,6 +172,7 @@ impl CandidatePool {
                 candidate: self.originals[id].clone(),
                 members: vec![id],
                 node: id,
+                settlement: Settlement::Open,
             };
             self.insert(&mut resolved, candidate, policy, anchor_ctx);
         }
@@ -163,7 +180,8 @@ impl CandidatePool {
             resolved = resolved
                 .into_iter()
                 .map(|mut node| {
-                    node.candidate = apply_missing_anchor_fallback(node.candidate, policy, ctx);
+                    node.candidate =
+                        apply_missing_anchor_fallback(node.candidate, node.settlement, policy, ctx);
                     node
                 })
                 .collect();
@@ -209,12 +227,16 @@ impl CandidatePool {
                 Arbitration::Family(tie) => {
                     resolved[index].members.extend(candidate.members);
                     resolved[index].candidate = tie;
+                    resolved[index].settlement = Settlement::CollisionPolicy;
                     removal = Some(ConflictTier::CollisionPolicy);
                     PairOutcome::Family
                 }
                 Arbitration::CandidateWins(tier) => {
                     let mut candidate = candidate;
                     candidate.candidate.decided_by = tier;
+                    if tier == ConflictTier::CollisionPolicy {
+                        candidate.settlement = Settlement::CollisionPolicy;
+                    }
                     candidate
                         .candidate
                         .merged_sources
@@ -225,7 +247,11 @@ impl CandidatePool {
                     PairOutcome::Incoming(tier)
                 }
                 Arbitration::ExistingWins(tier) => {
+                    // Relabel for audit only: a settled family stays settled.
                     resolved[index].candidate.decided_by = tier;
+                    if tier == ConflictTier::CollisionPolicy {
+                        resolved[index].settlement = Settlement::CollisionPolicy;
+                    }
                     resolved[index]
                         .candidate
                         .merged_sources
@@ -511,10 +537,11 @@ fn family_tie_candidate(
 
 fn apply_missing_anchor_fallback(
     candidate: Candidate,
+    settlement: Settlement,
     policy: &FamilyPolicyTable,
     anchor_ctx: AnchorContext<'_>,
 ) -> Candidate {
-    match missing_anchor_family(&candidate, policy, anchor_ctx) {
+    match missing_anchor_family(&candidate, settlement, policy, anchor_ctx) {
         Some(family) => family_fallback_candidate(candidate, family, ConflictTier::AnchoredContext),
         None => candidate,
     }
@@ -522,10 +549,11 @@ fn apply_missing_anchor_fallback(
 
 fn missing_anchor_family(
     candidate: &Candidate,
+    settlement: Settlement,
     policy: &FamilyPolicyTable,
     anchor_ctx: AnchorContext<'_>,
 ) -> Option<String> {
-    if candidate.decided_by == ConflictTier::CollisionPolicy {
+    if settlement == Settlement::CollisionPolicy {
         return None;
     }
     match anchor_ctx
@@ -544,8 +572,11 @@ pub(crate) fn effective_view(
     input: &str,
     locale_chain: &[LocaleTag],
 ) -> (PiiClass, String) {
+    // Detector originals have not been through arbitration, so no collision
+    // policy has settled their family yet.
     match missing_anchor_family(
         candidate,
+        Settlement::Open,
         policy,
         AnchorContext {
             resolver,
@@ -631,6 +662,8 @@ fn remove_overlaps(
                 .candidate
                 .merged_sources
                 .push(loser.candidate.source);
+            // Audit relabel only; `settlement` belongs to the winner and is
+            // already correct for the pair it just won.
             resolved[target].candidate.decided_by = tier;
             continue;
         }
@@ -1416,6 +1449,148 @@ mod tests {
         assert_eq!(resolved[0].class, PiiClass::Location);
         assert_eq!(resolved[0].decided_by, ConflictTier::ClassPriority);
     }
+
+    /// The shipped IBAN / card rivalry: IBAN outranks the card variant and
+    /// requires the `iban` anchor, the card variant has none.
+    fn payment_family_registry() -> crate::RecognizerRegistry {
+        crate::RecognizerRegistry::builder()
+            .register_collision(
+                "iban.structural",
+                crate::CollisionMembership::new(
+                    "payment-card-or-iban",
+                    "iban",
+                    10,
+                    Some("iban".to_string()),
+                ),
+            )
+            .register_collision(
+                "card.structural",
+                crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
+            )
+            .build()
+    }
+
+    const SETTLED_IBAN_INPUT: &str = "AT61 1904 3002 3457 3201 Kontoinhaber";
+
+    fn iban_at(span: Range<usize>) -> Candidate {
+        prioritized(
+            candidate(
+                span,
+                PiiClass::custom("iban").expect("valid custom class"),
+                0.90,
+                "iban.structural",
+            ),
+            10,
+        )
+    }
+
+    fn card_at(span: Range<usize>) -> Candidate {
+        prioritized(
+            candidate(
+                span,
+                PiiClass::custom("credit_card").expect("valid custom class"),
+                0.90,
+                "card.structural",
+            ),
+            10,
+        )
+    }
+
+    /// A lower-priority rival outside the family: the shape postal.at_ch
+    /// produces on an IBAN's last group plus the following capitalised word.
+    fn foreign_postal_at(span: Range<usize>) -> Candidate {
+        prioritized(
+            candidate(
+                span,
+                PiiClass::custom("postal_code").expect("valid custom class"),
+                0.90,
+                "postal.at_ch",
+            ),
+            5,
+        )
+    }
+
+    /// Todo #3709: once collision policy has settled the family (IBAN beat
+    /// the card variant), a later unrelated overlap decided on the base ladder
+    /// must not reopen the anchor check. Before the fix the ladder rung
+    /// overwrote `decided_by`, the fallback keyed on it, and the settled IBAN
+    /// became the family token (raw under a tokenize-iban + preserve policy).
+    #[test]
+    fn collision_settled_family_survives_later_foreign_overlap() {
+        let registry = payment_family_registry();
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![iban_at(0..24), card_at(5..24), foreign_postal_at(20..37)],
+            registry.family_policy(),
+            &AnchorResolver::default(),
+            SETTLED_IBAN_INPUT,
+            &[LocaleTag::DeAt],
+        );
+
+        assert_eq!(resolved.len(), 1, "{resolved:?}");
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(resolved[0].class, PiiClass::Custom("iban".to_string()));
+        // `decided_by` stays the audit label of the last rung that touched
+        // the span; the settled state lives beside it, not in it.
+        assert_eq!(resolved[0].decided_by, ConflictTier::RulePriority);
+        assert!(resolved[0]
+            .merged_sources
+            .iter()
+            .any(|source| source == "postal.at_ch"));
+    }
+
+    /// Order independence: the verdict for the settled IBAN is the same with
+    /// or without the unrelated overlap.
+    #[test]
+    fn collision_settled_verdict_does_not_depend_on_unrelated_overlaps() {
+        let registry = payment_family_registry();
+        let resolve = |candidates| {
+            resolve_candidates_with_policy_and_anchors(
+                candidates,
+                registry.family_policy(),
+                &AnchorResolver::default(),
+                SETTLED_IBAN_INPUT,
+                &[LocaleTag::DeAt],
+            )
+        };
+        let without = resolve(vec![iban_at(0..24), card_at(5..24)]);
+        let with = resolve(vec![
+            iban_at(0..24),
+            card_at(5..24),
+            foreign_postal_at(20..37),
+        ]);
+
+        assert_eq!(without[0].decided_by, ConflictTier::CollisionPolicy);
+        assert_eq!(with[0].class, without[0].class);
+        assert_eq!(with[0].recognizer_id, without[0].recognizer_id);
+        assert_eq!(with[0].token_family, without[0].token_family);
+    }
+
+    /// Negative control: an IBAN whose family was never settled (no card
+    /// rival) still takes the missing-anchor fallback, with or without the
+    /// unrelated overlap. The fix must not widen the skip.
+    #[test]
+    fn unsettled_iban_without_anchor_still_takes_family_fallback() {
+        let registry = payment_family_registry();
+        for candidates in [
+            vec![iban_at(0..24)],
+            vec![iban_at(0..24), foreign_postal_at(20..37)],
+        ] {
+            let resolved = resolve_candidates_with_policy_and_anchors(
+                candidates,
+                registry.family_policy(),
+                &AnchorResolver::default(),
+                SETTLED_IBAN_INPUT,
+                &[LocaleTag::DeAt],
+            );
+            assert_eq!(resolved.len(), 1, "{resolved:?}");
+            assert_eq!(
+                resolved[0].class,
+                PiiClass::family("payment-card-or-iban"),
+                "{resolved:?}"
+            );
+            assert_eq!(resolved[0].decided_by, ConflictTier::AnchoredContext);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1447,12 +1622,14 @@ mod recovery_event_tests {
                 candidate: pool.originals[id].clone(),
                 members: vec![id],
                 node: id,
+                settlement: Settlement::Open,
             })
             .collect::<Vec<_>>();
         let incoming = WholeCandidate {
             candidate: pool.originals[2].clone(),
             members: vec![2],
             node: 2,
+            settlement: Settlement::Open,
         };
         pool.insert(&mut nodes, incoming, &FamilyPolicyTable::EMPTY, None);
         assert_eq!(nodes.len(), 1);

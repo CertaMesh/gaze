@@ -4829,3 +4829,66 @@ fn strict_incomplete_prefixed_wrapper_fails() {
     assert!(stdout.is_empty());
     assert_eq!(parse_stderr_variant(&stderr)["error"], "UnknownToken");
 }
+
+/// Todo #3709: IBAN beats the card variant by collision policy, then an
+/// unrelated lower-priority recognizer overlaps the IBAN's last group plus the
+/// next capitalised word (the shape postal.at_ch produces). The resolver used
+/// to read the family as unsettled after that overlap, send the IBAN through
+/// the missing-anchor fallback, and ship it raw under this tokenize-iban +
+/// preserve-default policy. The verdict must match the run without the
+/// unrelated recognizer.
+#[test]
+fn collision_settled_iban_is_not_reopened_by_an_unrelated_overlap() {
+    let input = "Zahlung an AT61 1904 3002 3457 3201 Kontoinhaber Max\n";
+    for foreign in [
+        "",
+        r#"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "trailing_group_word"
+pattern = '\b\d{4} [A-Z][a-z]+'
+class = "custom:group_word"
+"#,
+    ] {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("policy.toml");
+        fs::write(
+            &path,
+            format!(
+                r#"
+schema_version = "0.1.0"
+
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["core", "locale-de"]
+
+[locale]
+active = ["de-AT"]
+{foreign}
+[[rule]]
+kind = "class"
+class = "custom:iban"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:credit_card"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#
+            ),
+        )
+        .unwrap();
+        let out = clean_json_with_args(&[&format!("--policy={}", path.display())], input);
+        let clean = out["clean_text"].as_str().unwrap();
+        assert!(clean.contains(":Custom:iban_1>"), "{clean}");
+        assert!(!clean.contains("AT61"), "IBAN leaked raw: {clean}");
+        assert!(!clean.contains("3457"), "IBAN leaked raw: {clean}");
+    }
+}
