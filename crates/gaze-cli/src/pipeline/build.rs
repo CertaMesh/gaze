@@ -2,19 +2,18 @@ use std::path::Path;
 use std::sync::Arc;
 
 use gaze::{
-    dictionary_bundle_from_context, Action, ClassRule, DefaultRule, DictionaryBundle, LocaleChain,
-    LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawMatch, RedactionEntry,
-    RedactionLogError, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackDict,
-    RulepackSource, SessionPolicy, SessionScope, TypedContext, DEFAULT_NER_THRESHOLD,
+    dictionary_bundle_from_context, Action, DictionaryBundle, LocaleChain, LocaleTag, Pipeline,
+    Policy, PolicyError, RawMatch, RedactionEntry, RedactionLogError, RedactionLogger,
+    Result as GazeResult, RuleSpec, Rulepack, RulepackDict, RulepackSource, SessionPolicy,
+    SessionScope, TypedContext, DEFAULT_NER_THRESHOLD,
 };
-use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
 use crate::clean_overrides::CleanOverrides;
 use crate::error::CliError;
 
 pub(crate) struct ResolvedPipeline {
     pub(crate) pipeline: Pipeline,
-    pub(crate) policy: Option<Policy>,
+    pub(crate) policy: Policy,
     pub(crate) rulepacks: Vec<Rulepack>,
     pub(crate) locale_chain: LocaleChain,
     pub(crate) dictionaries: DictionaryBundle,
@@ -33,23 +32,11 @@ pub(crate) fn resolve_pipeline(
     context: Option<TypedContext>,
     logger: Option<Arc<dyn RedactionLogger>>,
 ) -> std::result::Result<ResolvedPipeline, CliError> {
-    let loaded_policy = policy_path
-        .map(Policy::load_for_cli)
-        .transpose()
-        .map_err(map_policy_error)?
-        .map(|policy| overrides.apply_to(&policy));
-    let cli_rulepack_policy = if loaded_policy.is_none() && has_rulepack_overrides(overrides) {
-        Some(policy_for_rulepack_overrides(overrides)?)
-    } else {
-        None
+    let policy = match policy_path {
+        Some(path) => overrides.apply_to(&Policy::load_for_cli(path).map_err(map_policy_error)?),
+        None => policy_less_policy(overrides)?,
     };
-    let policy = loaded_policy.or(cli_rulepack_policy);
-    let rulepacks = policy
-        .as_ref()
-        .map(load_rulepacks)
-        .transpose()
-        .map_err(map_pipeline_error)?
-        .unwrap_or_default();
+    let rulepacks = load_rulepacks(&policy).map_err(map_pipeline_error)?;
 
     let context_bundle = context
         .as_ref()
@@ -57,21 +44,13 @@ pub(crate) fn resolve_pipeline(
         .unwrap_or_default();
     let rulepack_dictionaries =
         dictionary_terms_from_rulepacks(&rulepacks).map_err(map_pipeline_error)?;
-    let policy_bundle = policy
-        .as_ref()
-        .map(|policy| {
-            let mut dictionaries = policy.dictionaries.clone();
-            dictionaries.extend(rulepack_dictionaries);
-            DictionaryBundle::from_rulepack_terms(&dictionaries)
-        })
-        .unwrap_or_default();
+    let mut policy_dictionaries = policy.dictionaries.clone();
+    policy_dictionaries.extend(rulepack_dictionaries);
+    let policy_bundle = DictionaryBundle::from_rulepack_terms(&policy_dictionaries);
     let dictionaries = DictionaryBundle::merge(policy_bundle, context_bundle);
 
     let mut rulepack_default_locales = merged_rulepack_default_locales(&rulepacks);
-    if policy
-        .as_ref()
-        .is_some_and(|policy| policy.rulepacks.auto_activate_locale_gated)
-    {
+    if policy.rulepacks.auto_activate_locale_gated {
         for locale in gaze_assembly::locale_gated_activation_locales(&rulepacks) {
             if !rulepack_default_locales.contains(&locale) {
                 rulepack_default_locales.push(locale);
@@ -81,31 +60,18 @@ pub(crate) fn resolve_pipeline(
     let cli_locales = parse_cli_locales(cli_locales)?;
     let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(
         cli_locales.as_deref(),
-        policy.as_ref().and_then(|policy| policy.locale.as_deref()),
+        policy.locale.as_deref(),
         Some(&rulepack_default_locales),
     );
-    let ner_threshold = resolve_ner_threshold(cli_ner_threshold, policy.as_ref());
+    let ner_threshold = resolve_ner_threshold(cli_ner_threshold, Some(&policy));
 
-    let pipeline = match policy.as_ref() {
-        Some(policy) => build_pipeline_from_policy(
-            policy,
-            &rulepacks,
-            context.as_ref(),
-            &locale_chain,
-            ner_threshold,
-        )?,
-        None if context.is_some() => {
-            build_context_pipeline(context.as_ref().expect("checked context")).map_err(|err| {
-                CliError::PolicyConfigDetail(format!("context pipeline build: {err}"))
-            })?
-        }
-        None => {
-            tracing::warn!("gaze clean running with stub pipeline because --policy was omitted");
-            build_stub_pipeline().map_err(|err| {
-                CliError::PolicyConfigDetail(format!("stub pipeline build: {err}"))
-            })?
-        }
-    };
+    let pipeline = build_pipeline_from_policy(
+        &policy,
+        &rulepacks,
+        context.as_ref(),
+        &locale_chain,
+        ner_threshold,
+    )?;
     let pipeline = match logger {
         Some(logger) => pipeline.with_redaction_logger(ArcLogger(logger)),
         None => pipeline,
@@ -120,43 +86,54 @@ pub(crate) fn resolve_pipeline(
     })
 }
 
-fn has_rulepack_overrides(overrides: &CleanOverrides) -> bool {
-    overrides.rulepack_bundled.is_some() || !overrides.rulepack_paths.is_empty()
-}
+/// Bundled selection for a run without `--policy` or rulepack flags. It is the
+/// same `["core"]` a loaded policy gets when `[policy.rulepacks]` is omitted
+/// (`Policy::try_from`), so omitting the policy file never drops the floor.
+const POLICY_LESS_DEFAULT_BUNDLED: &str = "core";
 
-fn policy_for_rulepack_overrides(
-    overrides: &CleanOverrides,
-) -> std::result::Result<Policy, CliError> {
-    let mut rules = class_rules_for_rulepack_overrides(overrides)?;
-    rules.push(RuleSpec::Default {
-        action: Action::Preserve,
-    });
+/// Synthesizes the policy for a run without `--policy`.
+///
+/// Rulepack flags replace the default selection exactly as they would a policy
+/// value; with neither flag the run gets [`POLICY_LESS_DEFAULT_BUNDLED`]. Every
+/// activated class tokenizes and the default rule tokenizes too, so spans with
+/// no class rule (context dictionaries, NER) fail closed instead of passing
+/// through raw. This matches `gaze_assembly::CorePipelineConfig`, which backs
+/// `gaze mcp serve` and policy-less `gaze proxy`.
+fn policy_less_policy(overrides: &CleanOverrides) -> std::result::Result<Policy, CliError> {
     let mut session = SessionPolicy::default();
     session.scope = SessionScope::Persistent;
     session.ttl_secs = Some(86_400);
 
     let mut base = Policy::default();
     base.session = session;
-    base.rules = rules;
-    Ok(overrides.apply_to(&base))
+    if overrides.rulepack_paths.is_empty() {
+        base.rulepacks.bundled = vec![POLICY_LESS_DEFAULT_BUNDLED.to_string()];
+    }
+    let mut policy = overrides.apply_to(&base);
+
+    let mut rules = class_rules_for_rulepacks(&policy.rulepacks.bundled, &policy.rulepacks.paths)?;
+    rules.push(RuleSpec::Default {
+        action: Action::Tokenize,
+    });
+    policy.rules = rules;
+    Ok(policy)
 }
 
-fn class_rules_for_rulepack_overrides(
-    overrides: &CleanOverrides,
+fn class_rules_for_rulepacks(
+    bundled: &[String],
+    paths: &[std::path::PathBuf],
 ) -> std::result::Result<Vec<RuleSpec>, CliError> {
     let mut classes = std::collections::BTreeSet::new();
-    if let Some(bundled) = &overrides.rulepack_bundled {
-        for bundle in bundled {
-            let contents = gaze_recognizers::embedded(bundle).ok_or_else(|| {
-                CliError::PolicyConfigDetail(format!("unknown bundled rulepack: {bundle}"))
-            })?;
-            let rulepack = Rulepack::load(RulepackSource::Embedded(contents)).map_err(|err| {
-                CliError::PolicyConfigDetail(format!("embedded rulepack '{bundle}': {err}"))
-            })?;
-            classes.extend(rulepack.activated_classes());
-        }
+    for bundle in bundled {
+        let contents = gaze_recognizers::embedded(bundle).ok_or_else(|| {
+            CliError::PolicyConfigDetail(format!("unknown bundled rulepack: {bundle}"))
+        })?;
+        let rulepack = Rulepack::load(RulepackSource::Embedded(contents)).map_err(|err| {
+            CliError::PolicyConfigDetail(format!("embedded rulepack '{bundle}': {err}"))
+        })?;
+        classes.extend(rulepack.activated_classes());
     }
-    for path in &overrides.rulepack_paths {
+    for path in paths {
         let rulepack = Rulepack::load(RulepackSource::Path(path.clone()))
             .map_err(|err| map_pipeline_error(gaze::Error::Rulepack(err)))?;
         classes.extend(rulepack.activated_classes());
@@ -365,54 +342,6 @@ pub(crate) fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<Loc
         }
     }
     locales
-}
-
-/// Stub pipeline used until the policy.toml loader (issue #3) lands.
-/// Ships only a regex email detector + tokenize rule so the CLI contract can
-/// be exercised end-to-end; richer detectors arrive with the loader.
-fn build_stub_pipeline() -> GazeResult<Pipeline> {
-    Pipeline::builder()
-        .detector(RegexDetector::emails().map_err(map_recognizer_error)?)
-        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
-        .rule(DefaultRule::new(Action::Preserve))
-        .build()
-}
-
-fn map_recognizer_error(err: gaze_recognizers::RecognizerError) -> gaze::Error {
-    match err {
-        gaze_recognizers::RecognizerError::InvalidRegex(err) => gaze::Error::InvalidRegex(err),
-        gaze_recognizers::RecognizerError::UnsupportedValidator { kind } => {
-            gaze::Error::Rulepack(gaze::RulepackError::UnsupportedValidator { kind })
-        }
-        gaze_recognizers::RecognizerError::UnsupportedNormalizer { kind } => {
-            gaze::Error::Rulepack(gaze::RulepackError::UnsupportedNormalizer { kind })
-        }
-        _ => gaze::Error::Rulepack(gaze::RulepackError::UnsupportedMatcher(
-            "unsupported recognizer error variant".to_string(),
-        )),
-    }
-}
-
-fn build_context_pipeline(context: &TypedContext) -> GazeResult<Pipeline> {
-    let mut builder = Pipeline::builder();
-    for name in context.dictionaries.keys() {
-        let class = context
-            .class_map
-            .get(name)
-            .cloned()
-            .map(Ok)
-            .unwrap_or_else(|| PiiClass::custom(name))?;
-        builder = builder
-            .recognizer(DictionaryRecognizer::new(
-                format!("context/{name}"),
-                class.clone(),
-                name,
-                context.dictionaries[name].case_sensitive,
-                "counter",
-            ))
-            .rule(ClassRule::new(class, Action::Tokenize));
-    }
-    builder.rule(DefaultRule::new(Action::Preserve)).build()
 }
 
 /// Adapter that lets `PipelineBuilder::redaction_logger` (which takes ownership

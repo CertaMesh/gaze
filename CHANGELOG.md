@@ -318,6 +318,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Security: `gaze clean` without `--policy` now runs the `core` rulepack.**
+  Shipped defect in every release from v0.3.0 through v0.14.0: with neither
+  `--policy` nor `--rulepack-bundled`/`--rulepack-path`, `gaze clean` ran a
+  stub pipeline that tokenized only email addresses. Credit card numbers,
+  IBANs, IP addresses, phone numbers, national IDs and every other `core`
+  class went out raw, while the run reported success. The documented default
+  (`["core"]` when `[policy.rulepacks]` is omitted) held only for policy files.
+  A policy-less run now resolves the same policy as `--rulepack-bundled core`,
+  with a tokenize default rule, which also keeps `--context-json` dictionary
+  terms tokenized. **Adopters calling `gaze clean` without a policy now get
+  tokens for values that used to pass through; this is intended.** Workaround
+  on older releases: pass `--rulepack-bundled core`. `gaze daemon` always
+  required a policy; `gaze mcp serve` and policy-less `gaze proxy` already ran
+  `core`. The now unreachable `UnsupportedSessionScope` CLI error variant is
+  removed (solo todo #3706).
 - **The OpenAI Privacy Filter safety net now reads OPF span offsets as
   characters, not bytes.** Shipped defect since the `openai_filter` backend
   landed in v0.6.0: OPF reports `start`/`end` as Python string indices (Unicode

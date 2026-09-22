@@ -412,7 +412,7 @@ fn doctor_check(policy_path: &Path) -> Result<String, CliError> {
         None,
         None,
     )?;
-    let policy = resolved.policy.expect("doctor requires a policy path");
+    let policy = resolved.policy;
     let pipeline = resolved.pipeline;
     let locale_chain = resolved.locale_chain;
     let dictionaries = resolved.dictionaries;
