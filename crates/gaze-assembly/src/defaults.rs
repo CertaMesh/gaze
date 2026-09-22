@@ -215,4 +215,36 @@ mod tests {
         assert_eq!(default_action, Action::Tokenize);
         assert_ne!(default_action, Action::Preserve);
     }
+
+    /// `gaze mcp serve` and policy-less `gaze proxy` build their pipeline from
+    /// `CorePipelineConfig::new()`; pin that it carries the `core` floor (#3706).
+    #[test]
+    fn core_pipeline_config_tokenizes_the_core_floor() {
+        let core = CorePipelineConfig::new().build().expect("core pipeline");
+        let session = Session::new(gaze::Scope::Ephemeral).expect("session");
+        let input = "Card 4111 1111 1111 1111 ok, IBAN AT61 1904 3002 3457 3201 bitte, \
+                     ip 10.1.2.3, mail jane.roe@example.com";
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, input).expect("clean")
+        else {
+            panic!("text in, text out");
+        };
+
+        assert_eq!(core.locale_chain().as_slice(), &[LocaleTag::Global]);
+        for raw in [
+            "4111 1111 1111 1111",
+            "AT61 1904 3002 3457 3201",
+            "10.1.2.3",
+            "jane.roe@example.com",
+        ] {
+            assert!(!clean.contains(raw), "raw {raw:?} leaked: {clean}");
+        }
+        for token in [
+            ":Custom:credit_card_1>",
+            ":Custom:iban_1>",
+            ":Custom:ip_address_1>",
+            ":Email_1>",
+        ] {
+            assert!(clean.contains(token), "missing {token}: {clean}");
+        }
+    }
 }

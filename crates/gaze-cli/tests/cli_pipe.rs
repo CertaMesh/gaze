@@ -3420,6 +3420,97 @@ fn context_json_standalone_dictionary_detects_without_policy_entry() {
     );
 }
 
+// Synthetic values only: a Luhn-valid test card, the mod-97-valid example IBAN,
+// a private IPv4 and a reserved-domain email.
+const POLICY_LESS_CORE_INPUT: &str = "Card 4111 1111 1111 1111 ok, IBAN AT61 1904 3002 3457 3201 \
+     bitte, ip 10.1.2.3, mail jane.roe@example.com";
+const POLICY_LESS_CORE_RAW: [&str; 4] = [
+    "4111 1111 1111 1111",
+    "AT61 1904 3002 3457 3201",
+    "10.1.2.3",
+    "jane.roe@example.com",
+];
+const POLICY_LESS_CORE_TOKENS: [&str; 4] = [
+    ":Custom:credit_card_1>",
+    ":Custom:iban_1>",
+    ":Custom:ip_address_1>",
+    ":Email_1>",
+];
+
+/// Todo #3706: `gaze clean` with neither `--policy` nor `--rulepack-bundled`
+/// used to run an email-only stub, so cards, IBANs and IPs shipped raw while
+/// the run looked healthy. The policy-less default is the bundled `core` pack.
+#[test]
+fn policy_less_clean_loads_the_core_rulepack() {
+    let v = clean_json_with_args(&[], POLICY_LESS_CORE_INPUT);
+    let clean = v["clean_text"].as_str().unwrap();
+
+    for raw in POLICY_LESS_CORE_RAW {
+        assert!(!clean.contains(raw), "raw {raw:?} leaked: {clean}");
+    }
+    for token in POLICY_LESS_CORE_TOKENS {
+        assert!(clean.contains(token), "missing {token}: {clean}");
+    }
+    assert_eq!(v["stats"]["detections"], 4);
+    assert_eq!(v["stats"]["locale_chain"], json!(["global"]));
+}
+
+/// The policy-less default and an explicit `--rulepack-bundled core` are one
+/// detection surface: same classes, same count, same locale chain.
+#[test]
+fn policy_less_clean_matches_explicit_core_bundle() {
+    let token_classes = |clean: &str| -> Vec<String> {
+        let re = Regex::new(r"<[0-9a-f]+:([^>]+)>").unwrap();
+        re.captures_iter(clean).map(|c| c[1].to_string()).collect()
+    };
+    let default = clean_json_with_args(&[], POLICY_LESS_CORE_INPUT);
+    let explicit = clean_json_with_args(&["--rulepack-bundled=core"], POLICY_LESS_CORE_INPUT);
+
+    assert_eq!(
+        token_classes(default["clean_text"].as_str().unwrap()),
+        token_classes(explicit["clean_text"].as_str().unwrap())
+    );
+    assert_eq!(default["stats"], explicit["stats"]);
+}
+
+/// A policy-less run with `--context-json` keeps the core floor and still
+/// tokenizes context dictionary terms, mapped or not.
+#[test]
+fn policy_less_context_json_keeps_core_and_tokenizes_context_terms() {
+    let dir = tempdir().unwrap();
+    let context_path = dir.path().join("context.json");
+    fs::write(
+        &context_path,
+        r#"{
+          "dictionaries": {
+            "songs": { "terms": ["context-song-123"], "case_sensitive": true },
+            "venues": { "terms": ["context-venue-456"], "case_sensitive": true }
+          },
+          "class_map": { "songs": "custom:song" },
+          "fields": {}
+        }"#,
+    )
+    .unwrap();
+
+    let v = clean_json_with_args(
+        &[&format!("--context-json={}", context_path.display())],
+        "track context-song-123 at context-venue-456, IBAN AT61 1904 3002 3457 3201",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    for raw in [
+        "context-song-123",
+        "context-venue-456",
+        "AT61 1904 3002 3457 3201",
+    ] {
+        assert!(!clean.contains(raw), "raw {raw:?} leaked: {clean}");
+    }
+    assert!(clean.contains(":Custom:song_1>"), "{clean}");
+    assert!(clean.contains(":Custom:venues_1>"), "{clean}");
+    assert!(clean.contains(":Custom:iban_1>"), "{clean}");
+    assert_eq!(v["stats"]["detections"], 3);
+}
+
 #[test]
 fn rulepack_rejects_unknown_validator_kind() {
     let rulepack = de_email_rulepack("\"global\"").replace(
