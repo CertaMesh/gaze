@@ -15,8 +15,10 @@ IBAN ships raw -- or, when the digits happen to be Luhn-valid, `card.structural`
 claims them as `custom:credit_card`. The fix replaces the open-ended shape with
 one alternation branch per ISO 13616 registry length.
 
-Document set: every one of the 89 registry countries x PER_COUNTRY valid mod-97
-IBANs x spaced/compact x 3 prefixes x TRAILERS trailing contexts. The trailers
+Document set: every one of the 89 registry countries x 2 BBAN alphabets x
+PER_COUNTRY valid mod-97 IBANs x spaced/compact x 3 prefixes x TRAILERS trailing
+contexts. Divergences are reported split by OUTCOME CLASS, because the defect
+had two of them and which one an adopter got depended on the BBAN alphabet. The trailers
 are the invoice/footer shapes that trigger the defect (` BIC`, ` BIC:`, ` SWIFT`,
 ` EUR`, ` OK`) plus controls that never did (lower-case words, punctuation,
 newline, end of text).
@@ -31,15 +33,16 @@ Usage:
     python3 scripts/bench/iban_trailing_word_enumeration.py BASE_BIN FIX_BIN OUT.json
 
 Exit status is 1 when any IBAN byte is lost (protected by base, raw in fix), when
-any document ends with the IBAN span only PARTIALLY protected in fix (part of the
-value tokenized and the rest raw, the shape this defect produced), or when any
-daemon response is missing. Documents where neither arm detects the IBAN are
+any document leaves IBAN bytes untokenized in the fix arm (the clean text is read
+directly: tokens are blanked and what remains must be exactly the prefix and the
+trailer), or when any daemon response is missing. Documents where neither arm detects the IBAN are
 counted and reported, not failed: that is the mandatory-anchor contract, not this
 defect.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
@@ -51,6 +54,15 @@ from pathlib import Path
 
 SEED = 20260922
 PER_COUNTRY = 4
+# Both shipped outcome classes depend on the BBAN alphabet, so both are enumerated:
+# an all-digit BBAN can be Luhn-valid, in which case `card.structural` claims the
+# digits and the leading `CC99 ` leaks beside a `custom:credit_card` token; anything
+# else leaves the whole IBAN raw with no detection at all. Scoring only one alphabet
+# would leave half the defect class unmeasured.
+ALPHABETS = {
+    "digits": "0123456789",
+    "alnum": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+}
 # ISO 13616 IBAN Registry lengths, mirroring `gaze_types::iban_registry_length`.
 # A country missing here would go unexercised, so the count is asserted below.
 LENGTHS = {
@@ -128,8 +140,8 @@ POLICIES = {
 }
 
 
-def alnum(r: random.Random, n: int) -> str:
-    return "".join(r.choice("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ") for _ in range(n))
+def bban(r: random.Random, n: int, alphabet: str) -> str:
+    return "".join(r.choice(alphabet) for _ in range(n))
 
 
 def iban(country: str, bban: str) -> str:
@@ -144,22 +156,39 @@ def spaced_form(compact: str) -> str:
 
 
 def sample_ibans(r: random.Random) -> list[str]:
-    """PER_COUNTRY valid IBANs for every registry country.
+    """PER_COUNTRY valid IBANs per registry country per BBAN alphabet.
 
-    The BBAN is alphanumeric everywhere. That is wider than several national
-    formats allow, but the recognizer's character class is `[A-Z0-9]` for every
-    country, so an alphanumeric BBAN exercises exactly the shape the pattern
-    accepts and keeps the sample independent of national BBAN sub-structure.
+    An alphanumeric BBAN is wider than several national formats allow, but the
+    recognizer's character class is `[A-Z0-9]` for every country, so it exercises
+    exactly the shape the pattern accepts and keeps the sample independent of
+    national BBAN sub-structure.
     """
     assert len(LENGTHS) == EXPECTED_COUNTRIES, (
         f"registry table has {len(LENGTHS)} countries, expected {EXPECTED_COUNTRIES}; "
         "sync with gaze_types::iban_registry_length"
     )
     return [
-        iban(country, alnum(r, length - 4))
+        iban(country, bban(r, length - 4, alphabet))
         for country, length in sorted(LENGTHS.items())
+        for alphabet in ALPHABETS.values()
         for _ in range(PER_COUNTRY)
     ]
+
+
+def outcome(cls: str, protected: int, span: int) -> str:
+    """The shipped defect's outcome classes, as an adopter sees them.
+
+    `whole-raw` is the silent one: no detection, empty leak report, success exit.
+    `prefix-leak` is the `card.structural` one: the Luhn-valid digits are tokenized
+    as `custom:credit_card` and the leading `CC99 ` stays raw beside the token.
+    """
+    if protected == 0:
+        return "whole-raw"
+    if protected == span and cls == "iban":
+        return "iban-whole"
+    if cls == "credit_card":
+        return f"prefix-leak/{cls}"
+    return f"partial/{cls}"
 
 
 def documents() -> list[dict]:
@@ -174,6 +203,7 @@ def documents() -> list[dict]:
                         {
                             "country": compact[:2],
                             "text": text,
+                            "prefix": prefix,
                             "spaced": shape != compact,
                             "trailer": trailer,
                             "absorbable": absorbable,
@@ -205,6 +235,25 @@ def run(binary: str, policy: Path, docs: list[dict]) -> list[dict]:
     return [by_id.get(f"doc-{i}") for i in range(len(docs))]
 
 
+TOKEN = re.compile(r"<[0-9a-f]{8}:[^>]+>")
+
+
+def raw_residue(response: dict, doc: dict) -> str | None:
+    """What survives untokenized where the IBAN was, or None if fully covered.
+
+    This is the direct axis-1 oracle and it beats manifest-span arithmetic: it
+    reads the bytes that actually leave the process. Tokens are blanked, runs of
+    blanks collapsed (a fragmented span emits several adjacent tokens), and what
+    is left must be exactly the prefix and the trailer.
+    """
+    clean = response.get("clean_text")
+    if clean is None:
+        return "<no clean_text>"
+    blanked = re.sub(r"\x00+", "\x00", TOKEN.sub("\x00", clean))
+    expected = doc["prefix"] + "\x00" + doc["trailer"]
+    return None if blanked == expected else blanked
+
+
 def iban_view(response: dict, span: tuple[int, int]) -> tuple[str, int]:
     """Class covering the IBAN span (or "raw") and protected IBAN bytes."""
     start, end = span
@@ -220,21 +269,46 @@ def iban_view(response: dict, span: tuple[int, int]) -> tuple[str, int]:
     return ("+".join(sorted(set(classes))) or "raw", len(protected))
 
 
+def binary_identity(path: str) -> dict:
+    """SHA-256 and mtime of a binary under test.
+
+    Recorded because `cargo test -p <lib>` rebuilds the library but does NOT
+    relink `target/debug/gaze`, so a CLI binary left over from an earlier build
+    (a mutation probe, say) will happily be scored as the fix arm. Identical
+    aggregate counts in both arms is the symptom; the recorded digests are the
+    proof of which build produced a given report.
+    """
+    digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    return {"path": path, "sha256": digest, "mtime": Path(path).stat().st_mtime}
+
+
 def main() -> int:
     base_bin, fix_bin, out_path = sys.argv[1:4]
+    if binary_identity(base_bin)["sha256"] == binary_identity(fix_bin)["sha256"]:
+        print("base and fix binaries are identical; nothing to compare", file=sys.stderr)
+        return 1
     docs = documents()
     report = {
         "documents": len(docs),
         "countries": len(LENGTHS),
         "per_country": PER_COUNTRY,
         "seed": SEED,
+        "binaries": {"base": binary_identity(base_bin), "fix": binary_identity(fix_bin)},
         "policies": {},
     }
     failed = False
     with tempfile.TemporaryDirectory() as tmp:
         for name, (bundled, locale) in POLICIES.items():
             text = POLICY_HEAD.format(bundled=bundled, locale=locale)
-            for cls in ("custom:iban", "custom:credit_card"):
+            # `custom:phone` is tokenized deliberately. `phone.national.de` wins a
+            # sub-run of some all-digit IBANs in conflict resolution, and a class
+            # whose action is `preserve` that wins a conflict leaves those bytes
+            # RAW -- a tokenized class losing to a preserved one unprotects bytes.
+            # Scoring that as a defect of this change would be wrong (it happens
+            # in both arms and is a property of the rule set, not the pattern), so
+            # the policies here tokenize every class that can claim IBAN bytes.
+            # The behaviour itself is disclosed in the PR as a separate finding.
+            for cls in ("custom:iban", "custom:credit_card", "custom:phone"):
                 text += RULE.format(cls=cls)
             text += DEFAULT
             policy = Path(tmp) / f"{name}.toml"
@@ -244,6 +318,8 @@ def main() -> int:
 
             stats = Counter()
             transitions = Counter()
+            outcome_transitions = Counter()
+            by_class_and_country = defaultdict(Counter)
             gained_by_trailer = defaultdict(int)
             lost_examples = []
             partial_examples = []
@@ -269,37 +345,45 @@ def main() -> int:
                 # NOT counted here -- under a no-cue prefix the mandatory anchor makes
                 # that the intended outcome in both arms, and any base/fix difference
                 # is already caught by lost_bytes.
-                if 0 < f_bytes < span_len:
-                    stats["fix_partial"] += 1
+                residue = raw_residue(f, doc)
+                if residue is not None:
+                    stats["fix_raw_residue"] += 1
                     if len(partial_examples) < 5:
                         partial_examples.append(
-                            {
-                                "text": doc["text"],
-                                "fix": f_cls,
-                                "protected": f_bytes,
-                                "span": span_len,
-                            }
+                            {"text": doc["text"], "fix": f_cls, "residue": residue}
                         )
+                if raw_residue(b, doc) is not None:
+                    stats["base_raw_residue"] += 1
                 if f_bytes == 0:
                     stats["fix_undetected"] += 1
                 if b_bytes == 0:
                     stats["base_undetected"] += 1
+                b_outcome = outcome(b_cls, b_bytes, span_len)
+                f_outcome = outcome(f_cls, f_bytes, span_len)
+                if b_outcome != f_outcome:
+                    outcome_transitions[f"{b_outcome} -> {f_outcome}"] += 1
+                    by_class_and_country[b_outcome][doc["country"]] += 1
                 if b_cls != f_cls:
                     transitions[f"{b_cls} -> {f_cls}"] += 1
 
-            if stats["lost_bytes"] or stats["fix_partial"] or stats["missing_response"]:
+            if stats["lost_bytes"] or stats["fix_raw_residue"] or stats["missing_response"]:
                 failed = True
             report["policies"][name] = {
                 "lost_bytes": stats["lost_bytes"],
                 "gained_bytes": stats["gained_bytes"],
-                "fix_partial": stats["fix_partial"],
+                "fix_raw_residue": stats["fix_raw_residue"],
+                "base_raw_residue": stats["base_raw_residue"],
                 "base_undetected": stats["base_undetected"],
                 "fix_undetected": stats["fix_undetected"],
                 "missing_responses": stats["missing_response"],
                 "transitions": dict(transitions),
+                "outcome_transitions": dict(outcome_transitions),
+                "recovered_countries_by_base_outcome": {
+                    name: dict(counter) for name, counter in by_class_and_country.items()
+                },
                 "gained_bytes_by_trailer": dict(gained_by_trailer),
                 "lost_examples": lost_examples,
-                "fix_partial_examples": partial_examples,
+                "fix_raw_residue_examples": partial_examples,
             }
             print(name, json.dumps(report["policies"][name]), flush=True)
     Path(out_path).write_text(json.dumps(report, indent=2) + "\n")

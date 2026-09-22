@@ -235,6 +235,73 @@ fn every_registry_country() -> Vec<String> {
 
 // ============================================================================ the defect
 
+/// Both shipped outcome classes, per affected country, as MEASURED on main `e9c266cc`.
+///
+/// The defect had two distinct outcomes and which one an adopter got depended on whether the
+/// IBAN's BBAN happened to be Luhn-valid as a card number, so a fixture set that covered only one
+/// of them would leave half the class unpinned:
+///
+/// * WHOLE-IBAN-RAW — the over-long candidate is vetoed and nothing else claims the span, so the
+///   entire IBAN ships raw with `detections: 0`, an empty leak report and a success exit. This is
+///   the only outcome available to BE, whose 12-digit BBAN is below `card.structural`'s 13-digit
+///   floor, and it is what every alphanumeric BBAN produced.
+/// * COUNTRY-CODE-AND-CHECK-DIGIT PREFIX LEAK — the digits are Luhn-valid, so `card.structural`
+///   claims them as `custom:credit_card` and the leading `CC99 ` is left raw beside the token.
+///   The leaked prefix is 5 bytes for a 20-character IBAN and grows with length, because the card
+///   run starts at the first group boundary after the check digits.
+///
+/// The `base` column is the literal `clean_text` from
+/// `gaze clean --rulepack-bundled core,locale-de --locale de-DE` at main `e9c266cc`:
+///
+/// | country | length | base outcome                    | raw bytes |
+/// |---------|-------:|---------------------------------|----------:|
+/// | `BE`    |     16 | whole-IBAN-raw                  |        16 |
+/// | `AT`    |     20 | prefix leak + `credit_card`     |         5 |
+/// | `EE`    |     20 | prefix leak + `credit_card`     |         5 |
+/// | `LT`    |     20 | prefix leak + `credit_card`     |         5 |
+/// | `LU`    |     20 | prefix leak + `credit_card`     |         5 |
+/// | `CZ`    |     24 | prefix leak + `credit_card`     |        10 |
+/// | `PL`    |     28 | prefix leak + `credit_card`     |        15 |
+/// | `HU`    |     28 | prefix leak + `credit_card`     |        15 |
+/// | `LC`    |     32 | prefix leak + `credit_card`     |        20 |
+///
+/// Every value below is synthetic: the BBAN is seeded and the check digits are computed, so each
+/// is checksum-valid but addresses no real account.
+#[test]
+fn both_shipped_outcome_classes_are_fixed_for_every_affected_country() {
+    // Luhn-valid digit BBANs: these produced the `credit_card` prefix leak on base.
+    for iban in [
+        "AT75 9174 0029 7550 4736",
+        "EE84 9174 0029 7550 4736",
+        "LT73 9174 0029 7550 4736",
+        "LU70 9174 0029 7550 4736",
+        "CZ97 9174 0029 7550 4736 8813",
+        "PL23 9174 0029 7550 4736 8813 9849",
+        "HU68 9174 0029 7550 4736 8813 9849",
+        "LC87 9174 0029 7550 4736 8813 9849 1651",
+    ] {
+        assert_iban_tokenized("IBAN ", iban, " BIC: BKAUATWW");
+    }
+    // Digit BBANs that are NOT Luhn-valid, and alphanumeric BBANs: these shipped the whole IBAN
+    // raw on base, with no detection and no error.
+    for iban in [
+        "BE48 6604 8764 7593",
+        "BE90 OQ2G WVPJ UMDW",
+        "AT45 6604 8764 7593 8242",
+        "AT56 OQ2G WVPJ UMDW 8I86",
+        "EE54 6604 8764 7593 8242",
+        "LT43 6604 8764 7593 8242",
+        "LU40 6604 8764 7593 8242",
+        "CZ09 6604 8764 7593 8242 1948",
+        "PL30 6604 8764 7593 8242 1948 9241",
+        "HU75 6604 8764 7593 8242 1948 9241",
+        "LC84 6604 8764 7593 8242 1948 9241 1578",
+        "LC89 OQ2G WVPJ UMDW 8I86 GY9J 64LU Z6MR",
+    ] {
+        assert_iban_tokenized("IBAN ", iban, " BIC: BKAUATWW");
+    }
+}
+
 /// The exact shipped repro from todo #3708, as an AT IBAN is written on an invoice.
 #[test]
 fn published_at_iban_before_a_bic_label_tokenizes_whole() {

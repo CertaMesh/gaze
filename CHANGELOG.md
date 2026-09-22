@@ -397,7 +397,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Security: an IBAN followed by an upper-case word is no longer left raw.**
+- **Security: an IBAN followed by an upper-case word could match nothing at
+  all.** Whichever of two outcomes an adopter got depended only on whether the
+  IBAN's digits happened to be Luhn-valid: for BE, and for any IBAN whose BBAN
+  is not a Luhn-valid card run, the WHOLE IBAN shipped raw with `detections: 0`,
+  an empty leak report and a success exit; for AT, EE, LT, LU, CZ, PL, HU and LC
+  shapes whose digits are Luhn-valid, `card.structural` claimed the digits and
+  the country code and check digits leaked raw beside a `custom:credit_card`
+  token (5 raw bytes at length 20, 10 at 24, 15 at 28, 20 at 32).
   Shipped defect in every release from v0.4.3-rc.1 (#48) through v0.14.0.
   `iban.structural` matched
   `\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b`. Both the repeated
@@ -406,11 +413,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was absorbed into the candidate — ` SWIF` as a whole group plus `T` as the
   tail, or ` BIC` as the tail alone. The over-long candidate then failed
   `iban_mod97`, which gates on the country's registry length, so validator veto
-  dropped it and the IBAN shipped RAW with `detections: 0`, an empty leak report
-  and a success exit. Where the digits happened to be Luhn-valid,
-  `card.structural` claimed them instead and the IBAN was tokenized as
-  `custom:credit_card` with its country code and check digits still raw in
-  front of the token. `IBAN … BIC: …` is the standard European invoice and
+  dropped it. `IBAN … BIC: …` is the standard European invoice and
   e-mail footer layout, so this fired on ordinary documents:
   `IBAN AT61 1904 3002 3457 3201 BIC: BKAUATWW` cleaned to
   `IBAN AT61 <…:Custom:credit_card_1> BIC: BKAUATWW`, and
@@ -420,8 +423,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   length. This is a strict narrowing that costs no recall: every candidate the
   new pattern declines to match was already rejected by the validator's length
   gate, so it could never have produced a token. Measured base vs fix over
-  27,768 documents (89 registry countries × 4 seeded valid IBANs ×
-  spaced/compact × 3 prefixes × 13 trailing contexts,
+  55,536 documents (89 registry countries × 2 BBAN alphabets × 4 seeded valid
+  IBANs × spaced/compact × 3 prefixes × 13 trailing contexts,
   `scripts/bench/iban_trailing_word_enumeration.py`): zero IBAN bytes lost in
   any policy. Fixtures in `crates/gaze-recognizers/tests/iban_trailing_group.rs`
   cover every registry country, and
