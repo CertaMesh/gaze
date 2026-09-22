@@ -563,6 +563,26 @@ and converts them to UTF-8 byte offsets, with fixtures on umlauts, NFD combining
 marks, emoji, NBSP, NARROW NBSP, CRLF line breaks and a span that ends the
 text.
 
+A decoded span is then trimmed of structural punctuation at both edges: JSON
+double quotes, colons, commas, square brackets, braces and whitespace. A piece
+can carry the quote or brace next to a value (`"Anna`), so without the trim a
+suspect over tool-call JSON reaches into the syntax around the value. Trimming
+only narrows a span and never widens it; the new edges border a structural
+character, so they never cut a word, and a span that is syntax alone is
+dropped. Inner punctuation stays: `M-AB 1234` keeps its hyphen and space.
+
+### Gaze tokens are masked before the model reads them
+
+Before inference, every live token (each span of the manifest the pipeline
+passes in) is replaced with spaces of the same byte length. Token text is Gaze
+syntax, not source text: the class name in `<…:Custom:building_number_1>` spells
+a Nym label, and unmasked the model flags it. Whitespace is never a tokenizer
+piece, so no suspect can start or end inside a masked token, and byte offsets
+outside the tokens are unchanged, so suspects map back to the clean text
+exactly. A manifest span that does not index the clean text on character
+boundaries is left unmasked: scanning more text never hides PII. The model
+loses the token text as context; it keeps the words around it.
+
 ### Every byte is scanned
 
 Input is tokenized without truncation and scored in windows of 512 pieces that
