@@ -252,10 +252,12 @@ fn map_build_error(err: gaze_assembly::BuildError) -> CliError {
     }
 }
 
-/// Emit a stderr warning for each collision-family fallback class that the
-/// policy leaves to a non-protective default action (see
-/// [`gaze_assembly::uncovered_collision_family_classes`]). Surfaces the silent
-/// PII leak described in issue #360 at clean time.
+/// Emit a stderr notice for each collision-family fallback class the policy
+/// shows intent about without naming reachably (see
+/// [`gaze_assembly::uncovered_collision_family_classes`]). The span does not
+/// leak: the family token takes the strictest action among its member classes'
+/// rules and the default. The notice tells the adopter which class the token
+/// will carry and how to set its action explicitly.
 pub(crate) fn warn_uncovered_collision_families(
     policy: &Policy,
     rulepacks: &[Rulepack],
@@ -265,9 +267,11 @@ pub(crate) fn warn_uncovered_collision_families(
         gaze_assembly::uncovered_collision_family_classes(policy, rulepacks, locale_chain)
     {
         eprintln!(
-            "warning: detection class '{family_class}' has no matching policy rule and the \
-             default action preserves it; ambiguous spans will be left unredacted (potential \
-             leak). Add BEFORE your default rule: [[rule]] kind = \"class\" class = \
+            "warning: policy names a member class of '{family_class}' but no reachable rule \
+             names the family class itself; a span the family cannot settle (no anchor cue, \
+             or a precedence tie) is emitted as '{family_class}' and takes the strictest \
+             action among its member classes' rules and the default rule. To set it \
+             directly, add BEFORE your default rule: [[rule]] kind = \"class\" class = \
              \"{family_class}\" action = \"tokenize\""
         );
     }

@@ -302,7 +302,9 @@ fn unknown_order_wrappers_nonmatches_and_clone_preserve_runtime_calls() {
             _ => None,
         };
         assert_eq!(
-            preview(&rules, &PiiClass::Name, &RuleContext::default()),
+            preview(&rules, &PiiClass::Name, &RuleContext::default(), |_| {
+                Vec::new()
+            }),
             expected
         );
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
@@ -351,7 +353,7 @@ fn builtin_preview_matches_runtime_for_actual_class_and_field_context() {
                     RuleEntry::new(DefaultRule::new(Action::Tokenize)),
                 ];
                 assert_eq!(
-                    preview(&rules, &class, &context),
+                    preview(&rules, &class, &context, |_| Vec::new()),
                     Some(
                         rules
                             .iter()
@@ -363,7 +365,8 @@ fn builtin_preview_matches_runtime_for_actual_class_and_field_context() {
         }
     }
     assert_eq!(
-        preview(&[], &PiiClass::Name, &RuleContext::default()),
+        preview(&[], &PiiClass::Name, &RuleContext::default(), |_| Vec::new(
+        )),
         Some(Action::Preserve)
     );
 }
@@ -1102,7 +1105,9 @@ fn generic_production_registration_keeps_builtins_previewable_and_covering() {
     ] {
         for field_name in [None, Some("password"), Some("other")] {
             assert_eq!(
-                preview(&p.rules, &class, &build_context(field_name)),
+                preview(&p.rules, &class, &build_context(field_name), |family| {
+                    p.registry.family_member_classes(family)
+                }),
                 Some(Action::Tokenize),
                 "{class:?} with field {field_name:?} lost static recognizability \
                  across the generic production registration hop"

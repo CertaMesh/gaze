@@ -875,30 +875,88 @@ the `locale-en` / `locale-de` rulepacks, **not** in `core`. So:
 > fallback chain. The anchor cues live in a rulepack, so the pack must appear in
 > `[policy.rulepacks].bundled`.
 
-This is fail-closed at *detection* but can be fail-**open** at *policy*: a policy
-that tokenizes `custom:iban` (or `custom:credit_card`) with a `preserve` default
-matches **no rule** for `custom:family:payment-card-or-iban`, so the span falls
-through to `preserve` and the IBAN **leaks**. To stay closed, add a rule for the
-family class (recommended even when you also load the locale pack):
+#### How a family-level token picks its action
 
-```toml
-[[rule]]
-kind = "class"
-class = "custom:family:payment-card-or-iban"
-action = "tokenize"
-```
+Rules are first-match-wins for every class, the family class included. A rule
+that names `custom:family:payment-card-or-iban` before your `default` rule sets
+the token's action directly and is always honoured verbatim, `preserve`
+included.
 
-> **Place this rule *before* your `default` rule.** Rules are first-match-wins
-> and a `default` rule matches unconditionally, so any rule declared after it
-> is unreachable — a covering rule pasted at the end of the file silences
-> nothing and the leak continues.
+When no reachable rule names the family class, the token does **not** simply
+take the `default` rule. It takes the **strictest** action among
 
-Since v0.11.x, `gaze clean` prints a `warning:` to stderr at load time for every
-collision-family class an active recognizer can emit that your policy leaves to a
-non-protective default, naming the exact rule to add. Rust adopters get the same
-list from `gaze_assembly::uncovered_collision_family_classes`. The bundled family
-names are listed under
+- each member class's resolved action (`custom:iban`, `custom:credit_card`,
+  each looked up through the same first-match walk), and
+- the action the family class would have taken on its own (the `default` rule,
+  or `preserve` when there is none).
+
+So a policy that tokenizes `custom:iban` and `custom:credit_card` with a
+`preserve` default tokenizes the family token too: naming a member is enough to
+stay fail-closed on the ambiguous span. The derivation is monotone; it never
+lands below the default the family would have taken, so an all-`preserve`
+member set under a `tokenize` default is still tokenized.
+
+The strictness order over the closed `Action` set, from strictest to laxest,
+with the measured number of original bytes each lets through on a family-token
+span (`protective_actions_execute_on_family_tokens_and_leak_no_original_byte`
+in `crates/gaze-assembly/src/tests.rs`):
+
+| Rank | Action | Original bytes in output | Restorable |
+|------|--------|--------------------------|------------|
+| 4 | `redact` | none | no |
+| 3 | `tokenize` | none | yes |
+| 2 | `generalize` | none (class label only) | no |
+| 1 | `format_preserve` | none (class-shaped fake) | yes |
+| 0 | `preserve` | all | - |
+
+Between two actions that leak nothing, the non-restorable one ranks higher: an
+adopter who redacts one member does not want that value restored downstream,
+and redacting the other member only costs restorability, never a leak. With
+`custom:iban = tokenize` and `custom:credit_card = redact`, an ambiguous span is
+redacted. Every protective action is executable on a family class, so the
+derived action is applied as-is.
+
+> **To preserve family tokens you must say so.** Because the derivation is
+> strictest-wins, the only way to leave an ambiguous span raw while a member
+> class or the default is protective is an explicit rule for the family class
+> declared **before** your `default` rule:
+>
+> ```toml
+> [[rule]]
+> kind = "class"
+> class = "custom:family:payment-card-or-iban"
+> action = "preserve"
+> ```
+>
+> A rule declared after the `default` rule is unreachable: `default` matches
+> unconditionally, so the family token derives its action as if the rule did
+> not exist.
+
+The audit row of a family token records how its action was chosen. Its
+`ambiguity_record` JSON carries `derived_action = { action, member_class }`
+whenever the action was derived; `member_class` names the member whose rule set
+it (the lowest class in `PiiClass` order on a tie), or is `null` when the
+family's own default applied. The field is absent when an explicit family rule
+matched, and on rows written before it existed.
+
+`gaze clean` prints a `warning:` to stderr at load time for every
+collision-family class with a mandatory anchor that an active recognizer can
+emit when your policy names one of its member classes, or names the family class
+only after the `default` rule, but has no reachable rule for the family class
+itself. The notice is informational: the span is protected by derivation, and
+the notice tells you the token class you will see is the family class, not the
+member class you named, and how to set its action explicitly. Rust adopters get
+the same list from `gaze_assembly::uncovered_collision_family_classes`. The
+bundled family names are listed under
 [Custom-recognizer collision metadata](#custom-recognizer-collision-metadata).
+
+> **Upgrading from v0.14 and earlier.** Family tokens used to take the `default`
+> rule when no rule named the family class, so a member-only policy with a
+> `preserve` default shipped ambiguous IBAN/card spans raw (a documented footgun
+> since v0.7.1, warned about since v0.11). They are now protected by
+> derivation. If you relied on family tokens falling to a `preserve` default,
+> add the explicit family `preserve` rule above; nothing else changes for
+> policies with a protective default or an explicit family rule.
 
 > **A `preserve` rule on a container class fails open for the PII inside it.**
 > Overlap resolution runs before the action lookup, and a custom-class span that

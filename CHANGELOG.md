@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`Action::strictness_rank` and `Action::strictest`** in `gaze-types`: the
+  fail-closed order over the closed action set (`redact` > `tokenize` >
+  `generalize` > `format_preserve` > `preserve`), and `Action` now serializes
+  with its canonical audit spelling.
+- **`AmbiguityRecord::derived_action`** (`DerivedFamilyAction { action,
+  member_class }`): a family-level token's audit row records which member
+  rule set its action when no rule named the family class. Serialized only
+  when present, so existing rows and fixtures are unchanged.
+
 - **Benchmark gold-gap diagnostic (scored-label contract v3).**
   `docs/reference/benchmarks/scored-labels-v3.json` keeps v2's labels and adds
   a `gold_gap` rule: a predicted span that repeats a scored gold value
@@ -191,6 +200,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING (behaviour): a collision-family token no longer falls to the
+  `default` rule.** When no reachable rule names `custom:family:<name>`, the
+  token takes the strictest action among its member classes' resolved actions
+  and its own default (`Action::strictness_rank`); an explicit family rule
+  before the default still wins verbatim. Member-only policies
+  (`tokenize custom:iban`, `default preserve`) now protect no-cue IBANs and
+  card-run collisions instead of shipping them raw. Adopters who relied on a
+  family token falling to a `preserve` default must add an explicit
+  `custom:family:<name> = preserve` rule before their default rule; see
+  [How a family-level token picks its action](docs/reference/policy.md#how-a-family-level-token-picks-its-action).
+  The `gaze clean` load-time notice and
+  `gaze_assembly::uncovered_collision_family_classes` now fire when a policy
+  names a member class (or a dead post-default family rule) without a reachable
+  family rule, whatever the default, and no longer claim a leak.
 - **Nym suspects no longer carry JSON syntax at their edges.** Quotes,
   colons, commas, brackets, braces and whitespace are trimmed from both ends
   of a decoded span, and a span of syntax alone is dropped. Trimming only
@@ -397,6 +420,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Security: a custom policy naming only member classes shipped no-cue IBANs
+  raw.** The mandatory-anchor fallback and precedence-tie family token
+  (`custom:family:payment-card-or-iban`, emitted since v0.7.1 whenever no IBAN
+  cue is in range or a Luhn-valid card run collides with the IBAN) resolved its
+  action by its own class, which member-only policies never name, so it fell to
+  a `preserve` default and the whole IBAN left the process with a success exit
+  (`Überweisung DE89 3704 0044 0532 0130 00`; `Bitte überweisen auf FO14 5878
+  0013 4155 73 1234`). Documented as a footgun with a stderr warning since
+  v0.11; the north star does not let protection depend on reading a warning.
+  The action is now derived from the member rules (see Changed), through the
+  one resolver every surface shares (`gaze clean`, `gaze daemon`, proxy, MCP,
+  index). Solo todo #3746.
 - **Security: an IBAN followed by an upper-case word could match nothing at
   all.** Whichever of two outcomes an adopter got depended only on whether the
   IBAN's digits happened to be Luhn-valid: for BE, and for any IBAN whose BBAN

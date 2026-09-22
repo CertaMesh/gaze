@@ -65,7 +65,9 @@ pub(super) fn plan(
             {
                 work.preview_queries += 1;
             }
-            crate::rule::preview(&pipeline.rules, class, context)
+            crate::rule::preview(&pipeline.rules, class, context, |family| {
+                pipeline.registry.family_member_classes(family)
+            })
         }) == Some(Action::Tokenize)
     };
     // Require the original policy as well as its real standalone fallback policy.

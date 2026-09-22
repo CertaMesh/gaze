@@ -465,6 +465,50 @@ impl LosingCandidate {
     }
 }
 
+/// Where a family-level token's policy action came from when no rule named
+/// the family class: the strictest action among the family's member classes'
+/// rules and the family's own default, see [`Action::strictness_rank`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct DerivedFamilyAction {
+    /// The action applied to the family token.
+    pub action: Action,
+    /// The class whose resolved rule set the action. `None` when every member
+    /// resolved laxer than the family's own default rule, which then applied.
+    /// Ties between members go to the lowest class in `PiiClass` order.
+    #[serde(with = "optional_pii_class_audit_serde", default)]
+    pub member_class: Option<PiiClass>,
+}
+
+impl DerivedFamilyAction {
+    /// Records a family action derived from `member_class` (or the default).
+    pub fn new(action: Action, member_class: Option<PiiClass>) -> Self {
+        Self {
+            action,
+            member_class,
+        }
+    }
+}
+
+mod optional_pii_class_audit_serde {
+    use super::{PiiClass, PiiClassAudit};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S>(class: &Option<PiiClass>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        class.clone().map(PiiClassAudit::new).serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<PiiClass>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Option::<PiiClassAudit>::deserialize(deserializer)?.map(PiiClassAudit::into_inner))
+    }
+}
+
 /// Structured metadata describing an ambiguity outcome.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -478,6 +522,11 @@ pub struct AmbiguityRecord {
     pub losing_candidates: Vec<LosingCandidate>,
     /// Why disambiguation failed.
     pub reason: AmbiguityReason,
+    /// How the family token's action was chosen when the policy named no rule
+    /// for the family class. Absent when an explicit family rule applied, and
+    /// on rows written before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived_action: Option<DerivedFamilyAction>,
 }
 
 impl AmbiguityRecord {
@@ -491,7 +540,14 @@ impl AmbiguityRecord {
             ambiguity_class,
             losing_candidates,
             reason,
+            derived_action: None,
         }
+    }
+
+    /// Records how the family token's action was derived.
+    pub fn with_derived_action(mut self, derived: DerivedFamilyAction) -> Self {
+        self.derived_action = Some(derived);
+        self
     }
 }
 
@@ -2115,8 +2171,13 @@ pub enum SafetyNetError {
 /// `Action` is `#[non_exhaustive]`. Use a wildcard arm in exhaustive matches.
 /// When restore is required, use `Tokenize` or `FormatPreserve` -- `Redact` and
 /// `Generalize` are irreversible.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Serialized with the canonical audit-row spelling (`tokenize`, `redact`,
+/// `format_preserve`, `generalize`, `preserve`), the same strings as
+/// [`Action::as_str`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
+#[serde(rename_all = "snake_case")]
 pub enum Action {
     /// Replace PII with a reversible token.
     Tokenize,
@@ -2151,6 +2212,45 @@ impl Action {
             "generalize" => Some(Self::Generalize),
             "preserve" => Some(Self::Preserve),
             _ => None,
+        }
+    }
+
+    /// Position in the fail-closed strictness order, higher is stricter:
+    ///
+    /// | Rank | Action | Original bytes in output | Restorable |
+    /// |------|--------|--------------------------|------------|
+    /// | 4 | `Redact` | none | no |
+    /// | 3 | `Tokenize` | none | yes |
+    /// | 2 | `Generalize` | none (class label only) | no |
+    /// | 1 | `FormatPreserve` | none (class-shaped fake) | yes |
+    /// | 0 | `Preserve` | all | - |
+    ///
+    /// The order is used when a collision-family token
+    /// (`custom:family:<name>`) has no explicit policy rule and takes the
+    /// strictest action among its member classes' rules and its own default.
+    /// Between two actions that leak no original byte, the non-restorable one
+    /// ranks higher: an adopter who redacts one member does not want that value
+    /// restored downstream, and redacting the other member only costs
+    /// restorability (axis 2), never a leak (axis 1). `Generalize` ranks above
+    /// `FormatPreserve` on the same tie-break. An explicit family rule overrides
+    /// the derivation.
+    pub const fn strictness_rank(self) -> u8 {
+        match self {
+            Self::Redact => 4,
+            Self::Tokenize => 3,
+            Self::Generalize => 2,
+            Self::FormatPreserve => 1,
+            Self::Preserve => 0,
+        }
+    }
+
+    /// The stricter of two actions under [`Action::strictness_rank`]; `self`
+    /// wins a tie.
+    pub fn strictest(self, other: Self) -> Self {
+        if other.strictness_rank() > self.strictness_rank() {
+            other
+        } else {
+            self
         }
     }
 }

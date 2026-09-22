@@ -47,6 +47,16 @@ token and the manifest keeps one restore mapping. Audit receives the redaction
 entry plus the ambiguity sidecar so adopters can tune cues without weakening
 restore semantics.
 
+The family-level token's policy action is resolved by the same first-match walk
+as every other class, with one difference: when no reachable rule names the
+family class, the token takes the strictest action among its member classes'
+resolved actions and its own default (`gaze::rule::resolve`, order in
+`gaze_types::Action::strictness_rank`). A policy that names only `custom:iban`
+therefore protects the fallback token; an explicit family rule before the
+default still overrides. The audit row records the derivation in
+`AmbiguityRecord::derived_action`. See
+[How a family-level token picks its action](../../reference/policy.md#how-a-family-level-token-picks-its-action).
+
 The bundled coherence gate:
 
 ```bash

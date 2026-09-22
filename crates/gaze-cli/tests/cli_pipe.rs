@@ -4705,9 +4705,10 @@ action = "preserve"
 }
 
 #[test]
-fn clean_warns_when_collision_family_class_would_leak() {
+fn clean_notes_the_family_class_when_only_the_member_class_is_named() {
     let (_dir, policy) = write_iban_preserve_default_policy();
-    // Synthetic mod-97-valid IBAN.
+    // Synthetic mod-97-valid IBAN. `core` alone carries no anchor cue bundle,
+    // so even with the `IBAN` cue the span is emitted as the family class.
     let out = clean_raw_with_args(
         &[&format!("--policy={}", policy.display())],
         "IBAN DE89370400440532013000",
@@ -4717,16 +4718,22 @@ fn clean_warns_when_collision_family_class_would_leak() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("warning:") && stderr.contains("custom:family:payment-card-or-iban"),
-        "expected a fail-open coverage warning naming the family class, got: {stderr}"
+        "expected a notice naming the family class, got: {stderr}"
     );
-    // The warning surfaces a real leak: the IBAN is preserved under the family class.
-    let stdout: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
     assert!(
-        stdout["clean_text"]
-            .as_str()
-            .unwrap()
-            .contains("DE89370400440532013000"),
-        "IBAN leaks under the preserve default the warning is flagging"
+        !stderr.to_ascii_lowercase().contains("leak"),
+        "the notice is informational and must not claim a leak: {stderr}"
+    );
+    // The family token derives `tokenize` from the `custom:iban` rule.
+    let stdout: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
+    let clean = stdout["clean_text"].as_str().unwrap();
+    assert!(
+        !clean.contains("DE89370400440532013000"),
+        "the family token must take the member rule's action"
+    );
+    assert!(
+        clean.contains(":Custom:family:payment-card-or-iban_"),
+        "expected the family class on the token, got: {clean}"
     );
 }
 
@@ -4783,10 +4790,11 @@ action = "preserve"
 
 #[test]
 fn clean_still_warns_when_family_rule_is_shadowed_by_default() {
-    // The covering rule pasted AFTER the default rule (the natural end-of-file
-    // edit) is unreachable at runtime — rules are first-match-wins and a
-    // default rule matches unconditionally. The IBAN keeps leaking, so the
-    // warning must keep firing.
+    // The family rule pasted AFTER the default rule (the natural end-of-file
+    // edit) is unreachable at runtime: rules are first-match-wins and a
+    // default rule matches unconditionally. No member class is named either,
+    // so the derived action is the preserve default and the IBAN stays raw;
+    // the notice must keep firing so the adopter learns the rule is dead.
     let dir = tempdir().unwrap();
     let path = dir.path().join("policy.toml");
     fs::write(
@@ -4827,12 +4835,12 @@ action = "tokenize"
             .as_str()
             .unwrap()
             .contains("DE89370400440532013000"),
-        "shadowed family rule is dead code: the IBAN leaks under the default"
+        "shadowed family rule is dead code: the IBAN stays raw under the default"
     );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("warning:") && stderr.contains("custom:family:payment-card-or-iban"),
-        "warning must keep firing while the leak is live, got: {stderr}"
+        "notice must keep firing while the family rule is dead, got: {stderr}"
     );
 }
 
@@ -5079,7 +5087,10 @@ action = "preserve"
 // IBAN raw because `custom:family:payment-card-or-iban` matched no rule.
 // ---------------------------------------------------------------------------
 
-fn write_member_only_payment_policy(rules: &str, default: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+fn write_member_only_payment_policy(
+    rules: &str,
+    default: &str,
+) -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().unwrap();
     let path = dir.path().join("policy.toml");
     fs::write(
@@ -5124,10 +5135,14 @@ class = "custom:phone"
 action = "tokenize"
 "#;
 
-/// Every space-separated group of the value after `prefix` must be gone from
-/// `clean`. Failure messages carry only the group index, never the bytes.
-fn assert_no_group_survives(clean: &str, input: &str, prefix: &str) {
-    let value = input.strip_prefix(prefix).expect("fixture prefix");
+/// Every space-separated group of the IBAN between `prefix` and `suffix` must
+/// be gone from `clean`. Failure messages carry only the group index, never
+/// the bytes.
+fn assert_no_group_survives(clean: &str, input: &str, prefix: &str, suffix: &str) {
+    let value = input
+        .strip_prefix(prefix)
+        .and_then(|rest| rest.strip_suffix(suffix))
+        .expect("fixture prefix and suffix");
     for (index, group) in value.split(' ').enumerate() {
         assert!(
             !clean.contains(group),
@@ -5161,7 +5176,7 @@ fn clean_member_only_policy_tokenizes_a_no_cue_iban_family_token() {
         clean.contains(":Custom:family:payment-card-or-iban_"),
         "expected a family-level token, got: {clean}"
     );
-    assert_no_group_survives(&clean, input, "Überweisung ");
+    assert_no_group_survives(&clean, input, "Überweisung ", "");
     // The load-time notice is informational now: it names the family class the
     // adopter will see instead of `custom:iban`, and no longer claims a leak.
     assert!(
@@ -5190,7 +5205,7 @@ fn clean_member_only_policy_tokenizes_trailing_number_family_tokens() {
             clean.contains(":Custom:family:payment-card-or-iban_"),
             "fixture {index}: expected a family-level token, got: {clean}"
         );
-        assert_no_group_survives(&clean, input, "Bitte überweisen auf ");
+        assert_no_group_survives(&clean, input, "Bitte überweisen auf ", " 1234");
     }
 }
 

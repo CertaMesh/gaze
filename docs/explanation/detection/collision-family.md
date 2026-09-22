@@ -27,6 +27,13 @@ class-priority chain.
   family-level token using `PiiClass::Custom("family:<name>")`, attaches an
   `AmbiguityRecord` with `AmbiguityReason::PrecedenceTie`, and writes
   `collision_family = <name>` with `collision_variant = NULL`.
+- A family-level token (precedence tie or missing mandatory anchor) resolves
+  its policy action by the shared first-match walk. When no reachable rule
+  names the family class, it takes the strictest action among its member
+  classes' resolved actions and its own default
+  (`gaze_types::Action::strictness_rank`); an explicit family rule overrides.
+  The audit row records the derivation in `AmbiguityRecord::derived_action`.
+  See [How a family-level token picks its action](../../reference/policy.md#how-a-family-level-token-picks-its-action).
 - Normal class-priority, rule-priority, score, span-length, and recognizer-id
   ordering stays unchanged for recognizers without collision declarations.
 
