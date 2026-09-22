@@ -33,6 +33,15 @@ one family-level token with class `PiiClass::Custom("family:<family>")`, marks
 the decision as `ConflictTier::AnchoredContext`, and attaches an
 `AmbiguityRecord` with `AmbiguityReason::NoAnchor`.
 
+The fallback does not apply to a span whose family collision policy already
+settled: when a variant with lower precedence and a mandatory anchor (the
+IBAN) beats another variant of its family (the card) on the same bytes, the
+policy verdict stands even without a cue. Settlement is tracked separately
+from `decided_by`, so a later overlap with an unrelated recognizer, which can
+relabel `decided_by` to the rung that decided that pair, does not send the
+settled span back through the anchor check. A span that never met a family
+rival is anchor-checked as described above.
+
 This is HYBRID output, not multiple redactions. The cleaned text receives one
 token and the manifest keeps one restore mapping. Audit receives the redaction
 entry plus the ambiguity sidecar so adopters can tune cues without weakening

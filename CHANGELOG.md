@@ -351,6 +351,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   required a policy; `gaze mcp serve` and policy-less `gaze proxy` already ran
   `core`. The now unreachable `UnsupportedSessionScope` CLI error variant is
   removed (solo todo #3706).
+
+- **A family settled by collision policy stays settled when a later,
+  unrelated overlap is decided.** Shipped defect in v0.14.0 (since the
+  resolver began relabelling the incumbent with the deciding rung,
+  3878c5f9): when `iban.structural` beat `card.structural` by collision policy
+  and a lower-priority recognizer outside the family then overlapped the
+  IBAN (for example a four-digit group plus the next capitalised word), the
+  base-ladder rung overwrote `decided_by`. The missing-anchor fallback keyed
+  on that label, so the settled IBAN was anchor-checked again and, with no
+  cue in range, became the `family:payment-card-or-iban` token.
+  - Axis 1: under a policy that tokenizes `custom:iban` and
+    `custom:credit_card` with a preserve default and no family rule,
+    `Zahlung an AT61 1904 3002 3457 3201 Kontoinhaber Max` shipped the IBAN
+    raw (reproduced on main with a custom recognizer as the unrelated overlap,
+    and with `postal.at_ch` from #613).
+  - Axis 4: the IBAN's class depended on whether an unrelated overlap existed.
+  The resolver now records collision-policy settlement as its own internal
+  state, set on a collision-policy win or a precedence-tie family token and
+  kept across later ladder wins, merges and collateral removals, and the
+  fallback keys on it. `decided_by` keeps its audit meaning (the last rung that
+  touched the span), so a settled IBAN that later beat an unrelated rival on
+  rule priority is audited as `RulePriority`. An IBAN whose family was never
+  settled by policy still takes the missing-anchor fallback. Enumeration
+  script: `scripts/bench/collision_settled_enumeration.py`.
+
 - **The OpenAI Privacy Filter safety net now reads OPF span offsets as
   characters, not bytes.** Shipped defect since the `openai_filter` backend
   landed in v0.6.0: OPF reports `start`/`end` as Python string indices (Unicode
