@@ -32,10 +32,25 @@ per trailer so the recovered leak is quantified rather than asserted.
 Usage:
     python3 scripts/bench/iban_trailing_word_enumeration.py BASE_BIN FIX_BIN OUT.json
 
-Exit status is 1 when any IBAN byte is lost (protected by base, raw in fix), when
-any document leaves IBAN bytes untokenized in the fix arm (the clean text is read
-directly: tokens are blanked and what remains must be exactly the prefix and the
-trailer), or when any daemon response is missing. Documents where neither arm detects the IBAN are
+Lost bytes are split. A loss is a TRAILER ARTIFACT when base protects no more of
+the same IBAN with no trailing word than the fix does here: base's extra coverage
+came from the word it swallowed (its over-long candidate was vetoed, which let a
+lone card candidate win), not from handling the IBAN better. Every other loss is
+UNEXPLAINED. The fix is also checked for trailer independence: an IBAN's
+protected bytes must not change with the word that follows it.
+
+Exit status is 1 when any UNEXPLAINED IBAN byte is lost, when the fix's coverage
+depends on the trailer, when
+any document leaves IBAN bytes untokenized in the fix arm that base DID protect,
+or when any daemon response is missing. The clean text is read directly: tokens
+are blanked and what remains must be exactly the prefix and the trailer. Residue
+present in BOTH arms is not a failure -- one prefix in three carries no IBAN cue
+and `mandatory_anchor = "iban"` declines to detect those by design -- so both
+arms' residue counts and the recovered count are reported instead.
+
+IMPORTANT: nothing may rebuild the workspace while this runs. The recorded
+SHA-256 is taken once at start-up, so it catches a STALE binary but not one that
+is relinked underneath a run in progress. Documents where neither arm detects the IBAN are
 counted and reported, not failed: that is the mandatory-anchor contract, not this
 defect.
 """
@@ -204,6 +219,7 @@ def documents() -> list[dict]:
                             "country": compact[:2],
                             "text": text,
                             "prefix": prefix,
+                            "shape": shape,
                             "spaced": shape != compact,
                             "trailer": trailer,
                             "absorbable": absorbable,
@@ -323,6 +339,17 @@ def main() -> int:
             gained_by_trailer = defaultdict(int)
             lost_examples = []
             partial_examples = []
+            # Coverage of the SAME IBAN and prefix with no trailing word, per arm.
+            # The fix's invariant is trailer independence: what follows an IBAN
+            # must not change how much of it is protected.
+            no_trailer = {}
+            for doc, b, f in zip(docs, base, fix):
+                if doc["trailer"] == "" and b is not None and f is not None:
+                    key = (doc["prefix"], doc["shape"])
+                    no_trailer[key] = (
+                        iban_view(b, doc["iban_span"])[1],
+                        iban_view(f, doc["iban_span"])[1],
+                    )
             for doc, b, f in zip(docs, base, fix):
                 if b is None or f is None:
                     stats["missing_response"] += 1
@@ -334,6 +361,19 @@ def main() -> int:
                 lost = max(0, b_bytes - f_bytes)
                 gained = max(0, f_bytes - b_bytes)
                 stats["lost_bytes"] += lost
+                base_bare, fix_bare = no_trailer[(doc["prefix"], doc["shape"])]
+                if f_bytes != fix_bare:
+                    stats["fix_trailer_dependent"] += 1
+                if lost:
+                    # A loss is EXPLAINED when base's extra coverage came from the
+                    # trailing word: on the same IBAN with no trailer, base protects
+                    # no more than the fix does here. That is base being accidentally
+                    # better because its over-long candidate was vetoed, not the fix
+                    # being worse on the IBAN itself.
+                    if base_bare <= f_bytes:
+                        stats["lost_bytes_trailer_artifact"] += lost
+                    else:
+                        stats["lost_bytes_unexplained"] += lost
                 stats["gained_bytes"] += gained
                 gained_by_trailer[doc["trailer"]] += gained
                 if lost and len(lost_examples) < 5:
@@ -345,15 +385,23 @@ def main() -> int:
                 # NOT counted here -- under a no-cue prefix the mandatory anchor makes
                 # that the intended outcome in both arms, and any base/fix difference
                 # is already caught by lost_bytes.
-                residue = raw_residue(f, doc)
-                if residue is not None:
-                    stats["fix_raw_residue"] += 1
+                fix_residue = raw_residue(f, doc)
+                base_residue = raw_residue(b, doc)
+                stats["fix_raw_residue"] += fix_residue is not None
+                stats["base_raw_residue"] += base_residue is not None
+                if base_residue is not None and fix_residue is None:
+                    stats["recovered"] += 1
+                # The only failure is a REGRESSION: bytes left raw by the fix
+                # that base protected. A document with residue in BOTH arms is
+                # not this change's doing -- one prefix in three carries no IBAN
+                # cue, and `mandatory_anchor = "iban"` deliberately declines to
+                # detect those, so residue there is the anchor contract.
+                if fix_residue is not None and base_residue is None:
+                    stats["regressed"] += 1
                     if len(partial_examples) < 5:
                         partial_examples.append(
-                            {"text": doc["text"], "fix": f_cls, "residue": residue}
+                            {"text": doc["text"], "fix": f_cls, "residue": fix_residue}
                         )
-                if raw_residue(b, doc) is not None:
-                    stats["base_raw_residue"] += 1
                 if f_bytes == 0:
                     stats["fix_undetected"] += 1
                 if b_bytes == 0:
@@ -366,11 +414,21 @@ def main() -> int:
                 if b_cls != f_cls:
                     transitions[f"{b_cls} -> {f_cls}"] += 1
 
-            if stats["lost_bytes"] or stats["fix_raw_residue"] or stats["missing_response"]:
+            if (
+                stats["lost_bytes_unexplained"]
+                or stats["fix_trailer_dependent"]
+                or stats["regressed"]
+                or stats["missing_response"]
+            ):
                 failed = True
             report["policies"][name] = {
                 "lost_bytes": stats["lost_bytes"],
+                "lost_bytes_trailer_artifact": stats["lost_bytes_trailer_artifact"],
+                "lost_bytes_unexplained": stats["lost_bytes_unexplained"],
+                "fix_trailer_dependent": stats["fix_trailer_dependent"],
                 "gained_bytes": stats["gained_bytes"],
+                "regressed": stats["regressed"],
+                "recovered": stats["recovered"],
                 "fix_raw_residue": stats["fix_raw_residue"],
                 "base_raw_residue": stats["base_raw_residue"],
                 "base_undetected": stats["base_undetected"],
@@ -383,7 +441,7 @@ def main() -> int:
                 },
                 "gained_bytes_by_trailer": dict(gained_by_trailer),
                 "lost_examples": lost_examples,
-                "fix_raw_residue_examples": partial_examples,
+                "regression_examples": partial_examples,
             }
             print(name, json.dumps(report["policies"][name]), flush=True)
     Path(out_path).write_text(json.dumps(report, indent=2) + "\n")
