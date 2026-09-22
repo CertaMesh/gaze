@@ -17,7 +17,7 @@ pub use gaze_types::nym::{
     nym_label_to_pii_class, nym_label_to_safety_net_class, NymConfigError, NymLabel,
     NymOperatingPoint, NYM_SAFETY_NET_ID,
 };
-use gaze_types::{LeakSuspect, LocaleTag, SafetyNet, SafetyNetContext, SafetyNetError};
+use gaze_types::{LeakSuspect, LocaleTag, Manifest, SafetyNet, SafetyNetContext, SafetyNetError};
 
 pub mod artifacts;
 pub(crate) mod decode;
@@ -105,17 +105,27 @@ impl SafetyNet for NymSafetyNet {
         context: SafetyNetContext<'_>,
     ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
         let backend = self.backend()?;
-        let spans = backend.infer(clean_text)?;
-        let mut suspects = Vec::with_capacity(spans.len());
-        for span in spans {
-            if let Some(suspect) =
-                span_to_suspect(span, clean_text, backend.operating_point(), context)?
-            {
-                suspects.push(suspect);
-            }
-        }
-        Ok(suspects)
+        check_with(clean_text, context, backend.operating_point(), |text| {
+            backend.infer(text)
+        })
     }
+}
+
+/// The check around one model call: mask live tokens, infer, map spans to suspects.
+fn check_with(
+    clean_text: &str,
+    context: SafetyNetContext<'_>,
+    operating_point: &NymOperatingPoint,
+    infer: impl FnOnce(&str) -> Result<Vec<NymSpan>, SafetyNetError>,
+) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+    let spans = infer(&mask_live_tokens(clean_text, context.manifest)?)?;
+    let mut suspects = Vec::with_capacity(spans.len());
+    for span in spans {
+        if let Some(suspect) = span_to_suspect(span, clean_text, operating_point, context)? {
+            suspects.push(suspect);
+        }
+    }
+    Ok(suspects)
 }
 
 /// Hooks for tests that replay captured model output through the production decoder.
@@ -149,6 +159,25 @@ pub mod test_support {
     pub fn capture(net: &NymSafetyNet, text: &str) -> Result<ScoredPieces, SafetyNetError> {
         net.backend()?.score_pieces(text)
     }
+}
+
+/// Replaces every live token (each manifest clean span) with spaces of the same byte length.
+///
+/// Token text is Gaze syntax, not source text: a class name like `building_number` inside
+/// `<…:Custom:building_number_1>` spells a Nym label, so the model flags Gaze's own token.
+/// Whitespace is never a tokenizer piece, so no suspect can start or end inside a masked token,
+/// and byte offsets outside the tokens are unchanged. A manifest span that does not index
+/// `clean_text` on character boundaries is left unmasked: scanning more text never hides PII.
+fn mask_live_tokens(clean_text: &str, manifest: &Manifest) -> Result<String, SafetyNetError> {
+    let mut bytes = clean_text.as_bytes().to_vec();
+    for span in &manifest.spans {
+        if clean_text.get(span.clean_span.clone()).is_some() {
+            bytes[span.clean_span.clone()].fill(b' ');
+        }
+    }
+    String::from_utf8(bytes).map_err(|_| SafetyNetError::InvalidOutput {
+        message: "nym token mask produced invalid UTF-8".to_string(),
+    })
 }
 
 /// Maps a decoded span to a suspect, or `None` when the manifest already covers it.
@@ -258,6 +287,69 @@ mod tests {
         assert!(
             span_to_suspect(span, "ü", &NymOperatingPoint::op_b(), context(&manifest)).is_err()
         );
+    }
+
+    /// A stand-in model that flags every occurrence of a label word in the text it is given, the
+    /// way the real model flags the class name inside `<…:Custom:building_number_N>` (todo 3681).
+    fn flag_every(word: &'static str) -> impl Fn(&str) -> Result<Vec<NymSpan>, SafetyNetError> {
+        move |text| {
+            Ok(text
+                .match_indices(word)
+                .map(|(start, _)| NymSpan {
+                    start,
+                    end: start + word.len(),
+                    label: NymLabel::BuildingNumber,
+                    score: 0.9,
+                })
+                .collect())
+        }
+    }
+
+    /// Todo 3681: a suspect can no longer originate inside a live token. The class name inside the
+    /// token is masked before inference; the same word in plain text is still scanned.
+    #[test]
+    fn no_suspect_originates_inside_a_live_token() {
+        let token = "<Custom:building_number_1>";
+        let text = format!("Hausnummer {token} ok, building_number steht im Text");
+        let start = text.find(token).unwrap();
+        let class = PiiClass::custom("building_number").unwrap();
+        let manifest = Manifest::from_spans(vec![gaze_types::EmittedTokenSpan::new(
+            start..start + token.len(),
+            11..14,
+            class,
+        )]);
+        let suspects = check_with(
+            &text,
+            context(&manifest),
+            &NymOperatingPoint::op_b(),
+            flag_every("building_number"),
+        )
+        .unwrap();
+        let plain = text.rfind("building_number").unwrap();
+        assert_eq!(
+            suspects.iter().map(|s| s.span.clone()).collect::<Vec<_>>(),
+            vec![plain..plain + "building_number".len()],
+        );
+        assert!(suspects
+            .iter()
+            .all(|s| s.span.end <= start || s.span.start >= start + token.len()));
+    }
+
+    #[test]
+    fn mask_keeps_offsets_and_skips_spans_that_do_not_index_the_text() {
+        let text = "ä <Name_1> ü";
+        let start = text.find('<').unwrap();
+        let end = text.find('>').unwrap() + 1;
+        let token = |span| gaze_types::EmittedTokenSpan::new(span, 0..1, PiiClass::Name);
+        let manifest = Manifest::from_spans(vec![token(start..end)]);
+        let masked = mask_live_tokens(text, &manifest).unwrap();
+        assert_eq!(masked.len(), text.len());
+        assert_eq!(&masked[start..end], " ".repeat(end - start));
+        assert_eq!(&masked[..start], &text[..start]);
+        assert_eq!(&masked[end..], &text[end..]);
+        // Mid-character or past-the-end spans are left unmasked, never widened.
+        let manifest = Manifest::from_spans(vec![token(1..3), token(end..text.len() + 4)]);
+        assert_eq!(mask_live_tokens(text, &manifest).unwrap(), text);
     }
 
     #[test]

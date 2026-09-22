@@ -288,7 +288,32 @@ pub(crate) fn decode_pieces(
         }
     }
     out.extend(open);
-    Ok(out)
+    Ok(out
+        .into_iter()
+        .filter_map(|span| trim_structural_edges(text, span))
+        .collect())
+}
+
+/// Characters that are never part of a value at a span edge: JSON quotes, colons, commas,
+/// brackets and braces, and whitespace.
+fn is_structural_edge(ch: char) -> bool {
+    matches!(ch, '"' | ':' | ',' | '[' | ']' | '{' | '}') || ch.is_whitespace()
+}
+
+/// Strips structural punctuation from both ends of a span; `None` when nothing is left.
+///
+/// A piece can carry the quote or brace it sits next to (`"Anna`), so a raw span over tool-call
+/// JSON reaches into the syntax around the value. Trimming only ever narrows the span, and the
+/// new edges border a structural character, so they never cut a word. A span that does not
+/// index `text` is returned unchanged for the suspect check to reject.
+fn trim_structural_edges(text: &str, mut span: NymSpan) -> Option<NymSpan> {
+    let Some(value) = text.get(span.start..span.end) else {
+        return Some(span);
+    };
+    let trimmed = value.trim_start_matches(is_structural_edge);
+    span.start += value.len() - trimmed.len();
+    span.end = span.start + trimmed.trim_end_matches(is_structural_edge).len();
+    (span.start < span.end).then_some(span)
 }
 
 #[cfg(test)]
@@ -685,6 +710,73 @@ mod tests {
             decode_pieces(text, &offsets, &scores(&rows), &NymOperatingPoint::op_b()).unwrap();
         assert_eq!(texts(text, &spans), vec!["🚗"]);
         assert!((spans[0].score - 0.7).abs() < 1e-6);
+    }
+
+    /// Tool-call JSON: a piece that carries the quote, colon, comma or brace next to a value must
+    /// not drag that syntax into the suspect. The label is irrelevant to trimming; `Username` is
+    /// used because op-B enables no name label.
+    #[test]
+    fn structural_punctuation_is_trimmed_from_span_edges() {
+        let op = NymOperatingPoint::op_b();
+        let text = r#"{"name": "Anna Müller", "ok": 1}"#;
+        let offsets = pieces(text);
+        let rows = labelled(
+            &offsets,
+            char_range(text, "Anna Müller"),
+            NymLabel::Username,
+            0.9,
+        );
+        let spans = decode_pieces(text, &offsets, &scores(&rows), &op).unwrap();
+        assert_eq!(texts(text, &spans), vec!["Anna Müller"]);
+
+        // Punctuation split into its own pieces, labelled on both sides of the value.
+        let text = r#"{"customer":"Jonas Weber"}"#;
+        let (s, _) = char_range(text, "Jonas");
+        let offsets = vec![
+            (0, 2),
+            (2, 10),
+            (10, s),
+            (s, s + 5),
+            (s + 5, s + 11),
+            (s + 11, s + 13),
+        ];
+        let mut rows = vec![o(); offsets.len()];
+        rows[2] = row(Some(NymLabel::Username), 0.9, 0.0);
+        for slot in &mut rows[3..6] {
+            *slot = row(Some(NymLabel::Username), 0.0, 0.9);
+        }
+        let spans = decode_pieces(text, &offsets, &scores(&rows), &op).unwrap();
+        assert_eq!(texts(text, &spans), vec!["Jonas Weber"]);
+        for span in &spans {
+            assert!(!gaze_types::is_inside_word(text, span.start));
+            assert!(!gaze_types::is_inside_word(text, span.end));
+        }
+
+        // A span of syntax alone is dropped, not emitted empty.
+        let mut rows = vec![o(); offsets.len()];
+        rows[2] = row(Some(NymLabel::Username), 0.9, 0.0);
+        assert!(decode_pieces(text, &offsets, &scores(&rows), &op)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn trimming_only_narrows_and_keeps_inner_punctuation() {
+        let span = |start, end| NymSpan {
+            start,
+            end,
+            label: NymLabel::Username,
+            score: 0.9,
+        };
+        let text = r#" "[a, b]": "#;
+        let trimmed = trim_structural_edges(text, span(0, text.len())).unwrap();
+        assert_eq!(&text[trimmed.start..trimmed.end], "a, b");
+        let text = "M-AB 1234";
+        assert_eq!(
+            trim_structural_edges(text, span(0, text.len())),
+            Some(span(0, text.len()))
+        );
+        assert_eq!(trim_structural_edges(r#"",{"#, span(0, 3)), None);
     }
 
     #[test]
