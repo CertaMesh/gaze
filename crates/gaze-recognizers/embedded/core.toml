@@ -298,7 +298,38 @@ locale_basis = "document"
 [recognizers.match]
 kind = "regex"
 # Allows internal whitespace; iban_canonical normalizer strips before mod-97 validation.
-pattern = '''\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b'''
+# One branch per ISO 13616 registry length, so the candidate span stops at the
+# country's exact IBAN length instead of borrowing the following word. The old
+# open-ended form (`{2,7}` groups plus a mandatory 1-4 char tail) forced every
+# length-multiple-of-4 IBAN (AT, BE, LU, PL, HU, ...) to swallow the next short
+# uppercase token -- `IBAN AT61 ... BIC: ...` -- which failed mod-97, lost the
+# candidate to validator veto, and leaked the country code and check digits raw
+# while `card.structural` mis-claimed the digits (solo todo #3708).
+# The country -> length map here is pinned to `gaze_types::iban_country_length`
+# by `embedded_core_iban_pattern_lengths_match_the_validator_registry`; nothing
+# this pattern drops could ever have passed the validator, so recall is unchanged.
+pattern = '''
+(?x)\b(?:
+  (?:NO)\d{2}(?:\x20?[A-Z0-9]{4}){2}\x20?[A-Z0-9]{3}
+| (?:BE)\d{2}(?:\x20?[A-Z0-9]{4}){3}
+| (?:DK|FI|FK|FO|GL|NL|SD)\d{2}(?:\x20?[A-Z0-9]{4}){3}\x20?[A-Z0-9]{2}
+| (?:MK|SI)\d{2}(?:\x20?[A-Z0-9]{4}){3}\x20?[A-Z0-9]{3}
+| (?:AT|BA|EE|KZ|LT|LU|MN|XK)\d{2}(?:\x20?[A-Z0-9]{4}){4}
+| (?:CH|HR|LI|LV)\d{2}(?:\x20?[A-Z0-9]{4}){4}\x20?[A-Z0-9]{1}
+| (?:BG|BH|CR|DE|GB|GE|IE|ME|RS|VA)\d{2}(?:\x20?[A-Z0-9]{4}){4}\x20?[A-Z0-9]{2}
+| (?:AE|GI|IL|IQ|OM|SO|TL)\d{2}(?:\x20?[A-Z0-9]{4}){4}\x20?[A-Z0-9]{3}
+| (?:AD|CZ|ES|MD|PK|RO|SA|SE|SK|TN|VG)\d{2}(?:\x20?[A-Z0-9]{4}){5}
+| (?:LY|PT|ST)\d{2}(?:\x20?[A-Z0-9]{4}){5}\x20?[A-Z0-9]{1}
+| (?:IS|TR)\d{2}(?:\x20?[A-Z0-9]{4}){5}\x20?[A-Z0-9]{2}
+| (?:BI|DJ|FR|GR|IT|MC|MR|SM)\d{2}(?:\x20?[A-Z0-9]{4}){5}\x20?[A-Z0-9]{3}
+| (?:AL|AZ|BY|CY|DO|GT|HN|HU|LB|NI|PL|SV)\d{2}(?:\x20?[A-Z0-9]{4}){6}
+| (?:BR|EG|PS|QA|UA)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{1}
+| (?:JO|KW|MU|YE)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{2}
+| (?:MT|SC)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{3}
+| (?:LC)\d{2}(?:\x20?[A-Z0-9]{4}){7}
+| (?:RU)\d{2}(?:\x20?[A-Z0-9]{4}){7}\x20?[A-Z0-9]{1}
+)\b
+'''
 
 [recognizers.validator]
 kind = "iban_mod97"

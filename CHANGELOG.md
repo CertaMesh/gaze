@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   saved `pass2-ner` predictions it credits 1,683 ranges (11,188 bytes) and
   moves no leaked byte. It stays diagnostic until the committed 200-candidate
   human audit (`gold-gap-sample-v3.json`) passes.
+- **`gaze_types::iban_registry_length`.** The ISO 13616 IBAN Registry length
+  for a country code, previously private to the `iban_mod97` validator. It is
+  now the workspace's one source of truth for IBAN length: the validator gates
+  on it and the `iban.structural` pattern's length branches are pinned to it by
+  a drift test in `gaze-recognizers`.
 - **Nym warm-latency script.** `scripts/bench/nym-warm-latency.py` times the
   production pipeline (`clean_for_bench`) warm, per document, for `pass2-ner`
   and `full-stack-nym-resolve` over the coverage-loop corpus plus 512- and
@@ -391,6 +396,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GAZE_NER_MODEL_DIR` (see Changed).
 
 ### Fixed
+
+- **Security: an IBAN followed by an upper-case word is no longer left raw.**
+  Shipped defect in every release from v0.4.3-rc.1 (#48) through v0.14.0.
+  `iban.structural` matched
+  `\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b`. Both the repeated
+  four-character group and the mandatory one-to-four character tail accept an
+  optional LEADING space, so an upper-case or digit word written after the IBAN
+  was absorbed into the candidate — ` SWIF` as a whole group plus `T` as the
+  tail, or ` BIC` as the tail alone. The over-long candidate then failed
+  `iban_mod97`, which gates on the country's registry length, so validator veto
+  dropped it and the IBAN shipped RAW with `detections: 0`, an empty leak report
+  and a success exit. Where the digits happened to be Luhn-valid,
+  `card.structural` claimed them instead and the IBAN was tokenized as
+  `custom:credit_card` with its country code and check digits still raw in
+  front of the token. `IBAN … BIC: …` is the standard European invoice and
+  e-mail footer layout, so this fired on ordinary documents:
+  `IBAN AT61 1904 3002 3457 3201 BIC: BKAUATWW` cleaned to
+  `IBAN AT61 <…:Custom:credit_card_1> BIC: BKAUATWW`, and
+  `IBAN BE62 6589 3795 9627 SWIFT GEBABEBB` cleaned to itself. The pattern now
+  carries one alternation branch per ISO 13616 registry length, with exact
+  repetition counts only, so the candidate stops at the country's real IBAN
+  length. This is a strict narrowing that costs no recall: every candidate the
+  new pattern declines to match was already rejected by the validator's length
+  gate, so it could never have produced a token. Measured base vs fix over
+  27,768 documents (89 registry countries × 4 seeded valid IBANs ×
+  spaced/compact × 3 prefixes × 13 trailing contexts,
+  `scripts/bench/iban_trailing_word_enumeration.py`): zero IBAN bytes lost in
+  any policy. Fixtures in `crates/gaze-recognizers/tests/iban_trailing_group.rs`
+  cover every registry country, and
+  `iban_pattern_branch_lengths_match_the_validator_registry` pins the pattern's
+  length branches to `gaze_types::iban_registry_length` so the two tables
+  cannot drift apart.
 
 - **Security: `gaze index ingest` now runs the `core` rulepack, so
   `gaze index search` no longer prints identifiers raw.** Shipped defect in
