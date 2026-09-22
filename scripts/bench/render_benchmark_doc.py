@@ -97,6 +97,15 @@ VALIDATOR_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("Leaked bytes, invalid gold", "leaked_utf8_bytes_validator_failed_gold", "int"),
 )
 
+# Contract v3 gold-gap diagnostic: (header, arm gold_gap field, formatter
+# key). Scorecard source is `metrics.gold_gap`; rendered beside, never in place
+# of, the v2 columns above.
+GOLD_GAP_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("Gold-gap protected bytes", "gold_gap_protected_bytes", "int"),
+    ("False-positive bytes after gold-gap", "false_positive_bytes_after_gold_gap", "int"),
+    ("Adjusted byte precision", "adjusted_precision", "rate"),
+)
+
 BLOCK_NAMES = ("current-release", "charts", "history")
 
 
@@ -291,6 +300,12 @@ def validate_history(history: Mapping[str, Any]) -> None:
             missing = [field for field in ARM_FIELD_SOURCES if field not in block]
             if missing:
                 raise RenderError(f"{version}/{arm}: missing fields {missing}")
+            gold_gap = block.get("gold_gap")
+            if gold_gap is not None and (
+                not isinstance(gold_gap, Mapping)
+                or any(field not in gold_gap for _, field, _ in GOLD_GAP_COLUMNS)
+            ):
+                raise RenderError(f"{version}/{arm}: malformed gold_gap diagnostic")
         # `--check` renders from this file alone, so the provenance guard has
         # to sit here as well as at extraction or the CI path stays ungated --
         # and it has to check the *values*. A key that is present but holds
@@ -433,6 +448,58 @@ def contract_label(entry: Mapping[str, Any]) -> str:
     return f"scored labels v{version}"
 
 
+def _gold_gap_from_run(run: Mapping[str, Any], config: str) -> dict[str, Any] | None:
+    """The contract v3 diagnostic for one arm, or None when the run has none."""
+    metrics = run.get("metrics")
+    block = metrics.get("gold_gap") if isinstance(metrics, Mapping) else None
+    if block is None:
+        return None
+    where = f"run {config} metrics.gold_gap"
+    if not isinstance(block, Mapping) or block.get("status") != "diagnostic":
+        raise RenderError(f"{where} must be an object with status 'diagnostic'")
+    by_label = block.get("gold_gap_protected_bytes_by_label")
+    if not isinstance(by_label, Mapping):
+        raise RenderError(f"{where}.gold_gap_protected_bytes_by_label must be an object")
+    row = {
+        "gold_gap_protected_bytes": _require_nonneg_int(
+            block.get("gold_gap_protected_bytes"), f"{where}.gold_gap_protected_bytes"
+        ),
+        "false_positive_bytes_after_gold_gap": _require_nonneg_int(
+            block.get("false_positive_bytes_after_gold_gap"),
+            f"{where}.false_positive_bytes_after_gold_gap",
+        ),
+        "adjusted_precision": _dig(block, ("adjusted_precision",), where),
+        "gold_gap_protected_bytes_by_label": {
+            str(label): _require_nonneg_int(value, f"{where}.{label}")
+            for label, value in sorted(by_label.items())
+        },
+    }
+    if sum(row["gold_gap_protected_bytes_by_label"].values()) != row[
+        "gold_gap_protected_bytes"
+    ]:
+        raise RenderError(f"{where}: per-label bytes do not sum to the total")
+    return row
+
+
+def render_gold_gap(entry: Mapping[str, Any]) -> list[str]:
+    arms = {arm: block["gold_gap"] for arm, block in entry["arms"].items() if "gold_gap" in block}
+    if not arms:
+        return []
+    lines = [
+        "",
+        "Gold-gap protection (contract v3, **diagnostic; v2 headline unchanged**): "
+        "false-positive bytes that are an unlabelled, byte-identical repeat of a "
+        "gold value in the same document. The columns above are the headline.",
+        "",
+        "| Arm | " + " | ".join(column[0] for column in GOLD_GAP_COLUMNS) + " |",
+        "| --- | " + " | ".join(["---:"] * len(GOLD_GAP_COLUMNS)) + " |",
+    ]
+    for arm, block in arms.items():
+        cells = [_fmt(kind, block[field]) for _, field, kind in GOLD_GAP_COLUMNS]
+        lines.append("| " + " | ".join([f"`{arm}`"] + cells) + " |")
+    return lines
+
+
 def _validator_row_from_scorecard(block: Mapping[str, Any], where: str) -> dict[str, Any]:
     split = _dig(block, ("production_recall_by_gold_validity",), where)
     return {
@@ -532,6 +599,9 @@ def history_entry_from_scorecard(
             field: _dig(run, path, f"run {config}")
             for field, path in ARM_FIELD_SOURCES.items()
         }
+        gold_gap = _gold_gap_from_run(run, config)
+        if gold_gap is not None:
+            arms[config]["gold_gap"] = gold_gap
 
     integrity = dataset.get("integrity")
     if not isinstance(integrity, Mapping):
@@ -560,6 +630,11 @@ def history_entry_from_scorecard(
             f"scorecard has no run for the shipped default arm {SHIPPED_DEFAULT_ARM}"
         )
     contract = _scored_label_contract(scorecard)
+    has_gold_gap = any("gold_gap" in block for block in arms.values())
+    if has_gold_gap != (contract is not None and contract["version"] >= 3):
+        raise RenderError(
+            "a gold_gap diagnostic belongs to scored-label contract v3 and only there"
+        )
     default_run = next(run for run in runs if run["config"] == SHIPPED_DEFAULT_ARM)
     validator_recall = validator_recall_from_run(default_run)
 
@@ -704,6 +779,7 @@ def render_current_release(history: Mapping[str, Any]) -> str:
         if arm == shipped_default_arm(entry):
             label += " **(shipped default)**"
         lines.append("| " + " | ".join([label] + cells) + " |")
+    lines.extend(render_gold_gap(entry))
     if entry.get("validator_recall"):
         lines.extend(render_validator_recall(entry))
     return "\n".join(lines)
