@@ -180,7 +180,8 @@ class GoldGapRule:
     A predicted span is credited when it overlaps no scored gold and no ignored
     byte, its ASCII-whitespace-trimmed bytes equal the value of a scored gold
     span in the same document, its class is compatible with that gold label,
-    and neither trimmed edge touches a letter, digit or combining mark. Only
+    and neither trimmed edge touches a word character (a superset of Rust's
+    `char::is_alphanumeric`, see `_is_word_character`). Only
     the trimmed bytes are credited. The credit is a diagnostic beside the v2
     numbers, never a change to them.
     """
@@ -1353,10 +1354,18 @@ def contract_scoring_view(
 
 def _is_word_character(character: str) -> bool:
     # A superset of Rust's `char::is_alphanumeric`, which Gaze's
-    # `is_inside_word` uses: letters and digits, plus combining marks, which
-    # belong to the letter before them (NFD `e` + U+0301). Wider only ever
-    # means fewer credits.
-    return unicodedata.category(character)[0] in "LNM"
+    # `is_inside_word` uses, so wider only ever means fewer credits:
+    # letters, digits and combining marks (NFD `e` + U+0301 belongs to the
+    # `e`); `So` letters Rust counts as alphabetic (circled `Ⓐ`); and
+    # unassigned `Cn`, since Rust may run a newer Unicode than this Python.
+    # test_word_character_covers_every_rust_alphanumeric pins the superset
+    # against a table the pinned rustc generated.
+    category = unicodedata.category(character)
+    return (
+        category[0] in "LNM"
+        or category == "Cn"
+        or (category == "So" and "LETTER" in unicodedata.name(character, ""))
+    )
 
 
 def _is_char_boundary(text: bytes, offset: int) -> bool:
@@ -1364,7 +1373,7 @@ def _is_char_boundary(text: bytes, offset: int) -> bool:
 
 
 def gold_gap_on_word_boundary(text: bytes, start: int, end: int) -> bool:
-    """Neither neighbour of text[start:end] is a letter, digit or mark.
+    """Neither neighbour of text[start:end] is a word character.
 
     So `Berliner`, `Meiers` and `Annas` never credit `Berlin`, `Meier` or
     `Anna`, while a hyphen, apostrophe or underscore is a boundary. An edge
@@ -1379,18 +1388,33 @@ def gold_gap_on_word_boundary(text: bytes, start: int, end: int) -> bool:
     )
 
 
+@dataclass(frozen=True)
+class GoldGapCredit:
+    """A credited range, the gold label it counts for, the prediction class
+    that earned it and the gold span it repeats."""
+
+    start: int
+    end: int
+    label: str
+    predicted_class: str
+    attributed_start: int
+    attributed_end: int
+
+
 def gold_gap_credits(
     document: Document,
     predictions: Sequence[Span],
     gold: Sequence[tuple[int, int]],
     ignored: Sequence[tuple[int, int]],
-) -> list[tuple[int, int, str]]:
-    """Disjoint (start, end, gold label) byte ranges contract v3 credits.
+) -> list[GoldGapCredit]:
+    """Disjoint byte ranges contract v3 credits, with who earned each one.
 
     `gold` and `ignored` are the merged intervals the v2 accounting already
     built for this document. Attribution goes to the first compatible gold
     span in document order; where eligible predictions overlap, each byte is
-    credited once, to the earliest candidate.
+    credited once, to the earliest candidate, whose predicted class and gold
+    span the credit carries. This is the only place that decides them: the
+    audit sample reads them from here.
     """
     rule = document.gold_gap
     assert rule is not None
@@ -1399,7 +1423,7 @@ def gold_gap_credits(
     for span in sorted(document.spans, key=lambda item: (item.start, item.end, item.label)):
         gold_by_value[text[span.start : span.end]].append(span)
     blocked = merge_intervals([*gold, *ignored])
-    candidates: list[tuple[int, int, int, int, str]] = []
+    candidates: list[tuple[int, int, int, int, str, str]] = []
     for span in predictions:
         if interval_overlaps((span.start, span.end), blocked):
             continue
@@ -1421,13 +1445,15 @@ def gold_gap_credits(
         if attributed is None or not gold_gap_on_word_boundary(text, start, end):
             continue
         candidates.append(
-            (start, end, attributed.start, attributed.end, attributed.label)
+            (start, end, attributed.start, attributed.end, attributed.label, span.label)
         )
-    credits: list[tuple[int, int, str]] = []
+    credits: list[GoldGapCredit] = []
     claimed: list[tuple[int, int]] = []
-    for start, end, _, _, label in sorted(set(candidates)):
+    for start, end, gold_start, gold_end, label, predicted in sorted(set(candidates)):
         for fresh_start, fresh_end in subtract_intervals([(start, end)], claimed):
-            credits.append((fresh_start, fresh_end, label))
+            credits.append(
+                GoldGapCredit(fresh_start, fresh_end, label, predicted, gold_start, gold_end)
+            )
         claimed = merge_intervals([*claimed, (start, end)])
     return credits
 
@@ -1506,7 +1532,7 @@ class MetricAccumulator:
         false_positive_bytes: int,
     ) -> None:
         credits = gold_gap_credits(document, predictions, gold, ignored)
-        credited = merge_intervals((start, end) for start, end, _ in credits)
+        credited = merge_intervals((credit.start, credit.end) for credit in credits)
         credited_bytes = interval_length(credited)
         # Conservation: credited bytes are a subset of this document's v2
         # false-positive bytes, so predicted = TP + FP(v3) + gold-gap holds.
@@ -1516,10 +1542,10 @@ class MetricAccumulator:
             raise RuntimeError(f"{document.uid}: gold-gap credit outside FP bytes")
         self.gold_gap_active = True
         self.gold_gap_bytes += credited_bytes
-        for start, end, label in credits:
-            self.gold_gap_bytes_by_label[label] += end - start
+        for credit in credits:
+            self.gold_gap_bytes_by_label[credit.label] += credit.end - credit.start
             self.gold_gap_ranges += 1
-            self.gold_gap_ranges_by_label[label] += 1
+            self.gold_gap_ranges_by_label[credit.label] += 1
 
     def result(self) -> dict[str, object]:
         precision = safe_ratio(self.true_positive_bytes, self.predicted_bytes)

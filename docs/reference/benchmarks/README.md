@@ -123,9 +123,12 @@ four false-positive bytes under v2.
 adds a `gold_gap` rule: a predicted span that overlaps no scored gold and no
 ignored byte, whose ASCII-whitespace-trimmed bytes equal a scored gold value in
 the same document, whose class is listed against that label in the contract's
-own `compatible_labels` table, and whose trimmed edges touch no letter, digit
-or combining mark, is reported as `gold_gap_protected_bytes` (per label,
-attributed to the first compatible gold span in document order, each byte once).
+own `compatible_labels` table, and whose trimmed edges touch no word character
+(a letter, digit or combining mark, a symbol Unicode names as a letter, or an
+unassigned code point: a superset of Rust's `char::is_alphanumeric`, pinned by
+a test against a table the repo's rustc generates), is reported as
+`gold_gap_protected_bytes` (per label, attributed to the first compatible gold
+span in document order, each byte once).
 Only trimmed bytes are credited; padding stays false positive.
 
 **This is a diagnostic column; the v2 headline is unchanged.** Leaked,
@@ -140,9 +143,12 @@ Byte equality is not identity: a same-document homonym ("May" the name and
 "May" the month) passes all four conditions. The column means nothing until a
 human audit of [`gold-gap-sample-v3.json`](gold-gap-sample-v3.json) passes: 200
 seeded (20260922) candidates from the final eligibility set, every rule-class
-candidate plus at least 40 each of `FIRSTNAME`, `SURNAME` and `CITY`, ambiguous
-shapes oversampled with recorded design weights, IDs and byte offsets only (no
-document text). Acceptance, declared before any verdict: the one-sided 95 %
+candidate, at least one draw from every non-empty stratum, at least 40 each of
+`FIRSTNAME`, `SURNAME` and `CITY`, ambiguous shapes (English dictionary words,
+values used unlabelled in another document, a committed German noun/surname
+seed list) drawn at twice the plain rate with recorded design weights that sum
+to the eligibility population, IDs and byte offsets only (no document text).
+Acceptance, declared before any verdict: the one-sided 95 %
 Clopper-Pearson upper bound on the candidate false-credit rate is at most 5 %,
 which is **at most 4** "no" or "uncertain" of 200 (bound 4.52 %; 5 would give
 5.18 %), with document-clustered counts reported. Scoring and sampling:

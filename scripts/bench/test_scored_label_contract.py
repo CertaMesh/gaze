@@ -580,12 +580,36 @@ class GoldGapScoringTests(unittest.TestCase):
             "digit": ("Name: Anna. Anna2 ist ein Login.", "Anna", "FIRSTNAME", "name"),
             "leading letter": ("Name: Anna. MaryAnna kam.", "Anna", "FIRSTNAME", "name"),
             "NFD mark": ("Herr Meier. Meieŕ kam.", "Meier", "SURNAME", "name"),
+            # Rust calls these alphanumeric, so is_inside_word would too.
+            "circled letter": ("Name: Anna. x AnnaⒶ y", "Anna", "FIRSTNAME", "name"),
+            "newer Unicode letter": (
+                "Name: Anna. x Anna\U000323b0 y", "Anna", "FIRSTNAME", "name"
+            ),
         }
         for name, (text, value, label, predicted_class) in cases.items():
             with self.subTest(name):
                 doc = gap_document(text, at(text, value, label))
                 repeat = at(text, value, predicted_class, occurrence=1)
                 self.assert_not_credited(doc, [repeat])
+
+    def test_word_character_covers_every_rust_alphanumeric(self) -> None:
+        # The boundary must reject every edge Gaze's `is_inside_word` would:
+        # each code point Rust's `char::is_alphanumeric` accepts under the
+        # pinned toolchain is a word character here too.
+        table = json.loads(
+            (Path(__file__).resolve().parent / "fixtures/rust-char-is-alphanumeric.json")
+            .read_text(encoding="utf-8")
+        )
+        missing = [
+            code_point
+            for first, last in table["ranges"]
+            for code_point in range(first, last + 1)
+            if not score._is_word_character(chr(code_point))
+        ]
+        self.assertEqual(
+            sum(last - first + 1 for first, last in table["ranges"]), table["code_points"]
+        )
+        self.assertEqual(missing, [])
 
     def test_punctuation_neighbours_are_boundaries(self) -> None:
         cases = {

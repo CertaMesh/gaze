@@ -43,8 +43,9 @@ SAMPLE_PATH = "docs/reference/benchmarks/gold-gap-sample-v3.json"
 SAMPLE_SEED = 20260922
 SAMPLE_SIZE = 200
 SAMPLE_FLOORS = {"FIRSTNAME": 40, "SURNAME": 40, "CITY": 40}
-# Ambiguous candidates are drawn at this multiple of their stratum share; the
-# per-entry design weight undoes it when estimating a population rate.
+# Ambiguous candidates are drawn at this multiple of the plain candidates'
+# rate within a label; the per-entry design weight undoes it when estimating a
+# population rate.
 AMBIGUOUS_OVERSAMPLE = 2
 # The declared bound is a one-sided 95 % upper limit of at most 5 % on the
 # false-credit rate. Exactly (Clopper-Pearson) that allows 4 failures of 200:
@@ -53,6 +54,19 @@ MAX_FAILURES = 4
 MAX_UPPER_BOUND = 0.05
 CONTEXT_BYTES = 60
 LEARNED_CLASSES = frozenset({"name", "location", "organization"})
+# Sampling-design heuristic only, never a scoring input: German common nouns
+# that are also surnames or places, plus three English months, so a
+# same-document repeat may be the other sense (`Wohnort: Essen. Das Essen ist
+# fertig.`). A hit only moves the candidate into the oversampled ambiguous
+# sub-stratum.
+GERMAN_NOUN_SURNAME_SEEDS = frozenset(
+    {
+        "Adler", "Bauer", "Berg", "Braun", "Essen", "Fuchs", "Hahn", "Halle",
+        "Jung", "Klein", "Koch", "Kraus", "Lang", "Schwarz", "Sommer", "Stein",
+        "Vogel", "Weiss", "Winter", "Wolf",
+        "June", "March", "May",
+    }
+)
 
 PERSON_LABELS = frozenset({"FIRSTNAME", "SURNAME"})
 PLACE_LABELS = frozenset({"BUILDINGNUM", "CITY", "COUNTRY", "REGION", "STATE", "STREET"})
@@ -147,8 +161,9 @@ def replay(trace_path: Path) -> dict[str, object]:
 def eligible(trace: Sequence[TraceDocument]) -> list[dict[str, object]]:
     """The final eligibility set: exactly the ranges the v3 scorer credits.
 
-    Each credited range keeps the predicted class and the attributed gold span
-    of the candidate that won it, so the audit question can name both.
+    Each entry carries the predicted class and attributed gold span the
+    scorer itself recorded for that credit, so the sample cannot disagree
+    with the score about who earned a range.
     """
     rule = contract(V3_PATH)
     documents = score.apply_scored_label_contract([item.document for item in trace], rule)
@@ -157,33 +172,53 @@ def eligible(trace: Sequence[TraceDocument]) -> list[dict[str, object]]:
         if item.error is not None or item.negative_category is not None:
             continue
         gold, ignored, predictions = score.contract_scoring_view(document, item.predictions)
-        text = document.text.encode("utf-8")
-        for start, end, label in score.gold_gap_credits(document, predictions, gold, ignored):
-            winner = min(
-                (
-                    span
-                    for span in predictions
-                    if span.start <= start and end <= span.end
-                    and rule.gold_gap.is_compatible(span.label, label)
-                ),
-                key=lambda span: (span.start, span.end, span.label),
-            )
-            attributed = next(
-                span
-                for span in document.spans
-                if span.label == label and text[span.start : span.end] == text[start:end]
-            )
+        for credit in score.gold_gap_credits(document, predictions, gold, ignored):
             population.append(
                 {
                     "document_id": item.uid,
-                    "byte_start": start,
-                    "byte_end": end,
-                    "gold_label": label,
-                    "predicted_class": winner.label,
-                    "attributed_gold_span": [attributed.start, attributed.end],
+                    "byte_start": credit.start,
+                    "byte_end": credit.end,
+                    "gold_label": credit.label,
+                    "predicted_class": credit.predicted_class,
+                    "attributed_gold_span": [credit.attributed_start, credit.attributed_end],
                 }
             )
     return population
+
+
+def unlabelled_use_elsewhere(
+    trace: Sequence[TraceDocument], values: Iterable[bytes]
+) -> set[bytes]:
+    """Capitalised values used unlabelled in a holdout document that never
+    labels them: the corpus's own evidence that the word is not only a name."""
+    documents = []
+    for item in trace:
+        if item.negative_category is not None:
+            continue
+        text = item.document.text.encode("utf-8")
+        spans = item.document.spans
+        gold_values = {text[span.start : span.end] for span in spans}
+        gold = score.merge_intervals((span.start, span.end) for span in spans)
+        documents.append((text, gold_values, gold))
+    found: set[bytes] = set()
+    for value in values:
+        if not value[:1].decode("utf-8", errors="ignore").isupper():
+            continue
+        for text, gold_values, gold in documents:
+            if value in gold_values:
+                continue
+            at = text.find(value)
+            while at != -1:
+                end = at + len(value)
+                if not score.interval_overlaps((at, end), gold) and (
+                    score.gold_gap_on_word_boundary(text, at, end)
+                ):
+                    found.add(value)
+                    break
+                at = text.find(value, at + 1)
+            if value in found:
+                break
+    return found
 
 
 def ambiguity_signals(
@@ -211,15 +246,27 @@ def ambiguity_signals(
             if token.isalpha() and token.islower():
                 lowercase_words.add(token)
     texts = {item.uid: item.document.text.encode("utf-8") for item in trace}
+    unlabelled_elsewhere = unlabelled_use_elsewhere(
+        trace,
+        {
+            texts[entry["document_id"]][entry["byte_start"] : entry["byte_end"]]
+            for entry in population
+        },
+    )
     signals: dict[tuple[str, int, int], list[str]] = {}
     for entry in population:
         key = (entry["document_id"], entry["byte_start"], entry["byte_end"])
-        value = texts[entry["document_id"]][entry["byte_start"] : entry["byte_end"]].decode("utf-8")
+        raw = texts[entry["document_id"]][entry["byte_start"] : entry["byte_end"]]
+        value = raw.decode("utf-8")
         reasons = []
         if value.lower() in english:
             reasons.append("english_dictionary_word")
         if value[:1].isupper() and value.lower() in lowercase_words:
             reasons.append("lowercase_use_in_corpus")
+        if raw in unlabelled_elsewhere:
+            reasons.append("unlabelled_use_elsewhere")
+        if value in GERMAN_NOUN_SURNAME_SEEDS:
+            reasons.append("german_noun_surname_seed")
         signals[key] = reasons
     basis = {
         "english_wordlist": str(wordlist),
@@ -227,9 +274,14 @@ def ambiguity_signals(
         "english_wordlist_rule": "lowercase-only entries; the value lowercased is one of them",
         "lowercase_use_rule": (
             "a capitalised value whose lowercase form is a letters-only whitespace token "
-            "outside gold somewhere in the holdout text (catches German verbs and nouns "
-            "such as essen/Essen)"
+            "outside gold somewhere in the holdout text"
         ),
+        "unlabelled_use_elsewhere_rule": (
+            "a capitalised value that occurs on word boundaries outside gold in another "
+            "holdout document where that value is never gold (German nouns are always "
+            "capitalised, so Essen the meal never shows up lowercase)"
+        ),
+        "german_noun_surname_seeds": sorted(GERMAN_NOUN_SURNAME_SEEDS),
     }
     return signals, basis
 
@@ -254,6 +306,64 @@ def largest_remainder(total: int, weights: dict[str, int], caps: dict[str, int])
             granted = 1
         remaining -= granted
     return allocation
+
+
+def allocate(
+    total: int, groups: dict[str, tuple[int, int]]
+) -> tuple[dict[str, int], dict[str, tuple[int, int]]]:
+    """Per-label sample sizes, and each label's (ambiguous, plain) split.
+
+    `groups` maps a gold label to its (ambiguous, plain) sub-stratum sizes.
+    Every non-empty sub-stratum gets one draw first, so no candidate has a
+    zero inclusion probability; the label floors apply on top, and the rest
+    goes proportionally to label size (largest remainder).
+    """
+    sizes = {label: ambiguous + plain for label, (ambiguous, plain) in groups.items()}
+    floors = {
+        label: max(
+            min(SAMPLE_FLOORS.get(label, 0), sizes[label]),
+            sum(1 for size in groups[label] if size),
+        )
+        for label in groups
+    }
+    extra = largest_remainder(
+        total - sum(floors.values()),
+        sizes,
+        {label: sizes[label] - floors[label] for label in sizes},
+    )
+    allocation = {label: floors[label] + extra[label] for label in sizes}
+    split = {}
+    for label, (ambiguous, plain) in groups.items():
+        n = allocation[label]
+        n_ambiguous = 0
+        if ambiguous:
+            # Ambiguous members are drawn at AMBIGUOUS_OVERSAMPLE times the
+            # plain members' rate, which stays a real split even when most of
+            # a label is flagged; one draw stays reserved for each side.
+            boosted = AMBIGUOUS_OVERSAMPLE * ambiguous
+            target = round(n * boosted / (boosted + plain))
+            n_ambiguous = min(ambiguous, max(1, target), n - (1 if plain else 0))
+        n_plain = min(plain, n - n_ambiguous)
+        n_ambiguous = min(ambiguous, n - n_plain)
+        split[label] = (n_ambiguous, n_plain)
+    return allocation, split
+
+
+def check_design_weights(
+    entries: Sequence[dict[str, object]], strata: Sequence[dict[str, object]], population: int
+) -> None:
+    """Every candidate can be drawn, so the weights add up to the population."""
+    unsampled = [
+        f"{stratum['gold_label']}/{stratum['sub_stratum']}"
+        for stratum in strata
+        if stratum["population"] and not stratum["sampled"]
+    ]
+    total = math.fsum(entry["design_weight"] for entry in entries)
+    if unsampled or not math.isclose(total, population, rel_tol=0, abs_tol=1e-6):
+        raise SystemExit(
+            f"design weights sum to {total}, not the eligibility population {population}; "
+            f"unsampled strata: {unsampled}"
+        )
 
 
 def question(label: str) -> str:
@@ -295,13 +405,21 @@ def draw_sample(trace_path: Path, wordlist: Path) -> dict[str, object]:
         if entry["predicted_class"] in LEARNED_CLASSES:
             by_label[entry["gold_label"]].append(entry)
     sizes = {label: len(entries) for label, entries in by_label.items()}
-    floors = {label: min(SAMPLE_FLOORS.get(label, 0), size) for label, size in sizes.items()}
-    extra = largest_remainder(
-        SAMPLE_SIZE - len(certain) - sum(floors.values()),
-        sizes,
-        {label: sizes[label] - floors[label] for label in sizes},
+
+    def is_ambiguous(entry: dict[str, object]) -> bool:
+        return bool(signals[(entry["document_id"], entry["byte_start"], entry["byte_end"])])
+
+    groups = {
+        label: (
+            [e for e in members if is_ambiguous(e)],
+            [e for e in members if not is_ambiguous(e)],
+        )
+        for label, members in by_label.items()
+    }
+    allocation, split = allocate(
+        SAMPLE_SIZE - len(certain),
+        {label: (len(ambiguous), len(plain)) for label, (ambiguous, plain) in groups.items()},
     )
-    allocation = {label: floors[label] + extra[label] for label in sizes}
     rng = random.Random(SAMPLE_SEED)
     entries: list[dict[str, object]] = []
     strata = []
@@ -326,19 +444,12 @@ def draw_sample(trace_path: Path, wordlist: Path) -> dict[str, object]:
             )
 
     take("*", "rule_class_census", certain, len(certain))
-    for label in sorted(by_label):
-        members = by_label[label]
-        ambiguous = [e for e in members if signals[(e["document_id"], e["byte_start"], e["byte_end"])]]
-        plain = [e for e in members if not signals[(e["document_id"], e["byte_start"], e["byte_end"])]]
-        n = allocation[label]
-        n_ambiguous = 0
-        if ambiguous and n:
-            target = math.ceil(AMBIGUOUS_OVERSAMPLE * n * len(ambiguous) / len(members))
-            n_ambiguous = min(len(ambiguous), max(1, target), n)
-        n_plain = min(len(plain), n - n_ambiguous)
-        n_ambiguous = min(len(ambiguous), n - n_plain)
+    for label in sorted(groups):
+        ambiguous, plain = groups[label]
+        n_ambiguous, n_plain = split[label]
         take(label, "ambiguous", ambiguous, n_ambiguous)
         take(label, "plain", plain, n_plain)
+    check_design_weights(entries, strata, len(population))
     entries.sort(key=lambda e: (e["gold_label"], e["document_id"], e["byte_start"]))
     for index, entry in enumerate(entries, 1):
         entry["id"] = f"gg-{index:03d}"
@@ -373,8 +484,9 @@ def draw_sample(trace_path: Path, wordlist: Path) -> dict[str, object]:
             "floors": SAMPLE_FLOORS,
             "rule_class_census": len(certain),
             "allocation": (
-                "every rule-class candidate first (census), then the floors, then the "
-                "rest proportional to learned-class label population (largest remainder)"
+                "every rule-class candidate first (census), then one draw per non-empty "
+                "sub-stratum and the label floors, then the rest proportional to "
+                "learned-class label population (largest remainder)"
             ),
             "allocation_by_label": dict(sorted(allocation.items())),
             "ambiguous_oversample_factor": AMBIGUOUS_OVERSAMPLE,
