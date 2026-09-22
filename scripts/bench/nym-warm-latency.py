@@ -217,7 +217,13 @@ def main(argv: list[str] | None = None) -> int:
     }
     documents = load_documents(root, args.corpus_dir)
     info = host_info(root)
-    result: dict[str, object] = {"hardware": hardware_line(info), "host": info, "arms": {}}
+    # Latency on a loaded host is not a latency claim; record the load next to it.
+    result: dict[str, object] = {
+        "hardware": hardware_line(info),
+        "host": info,
+        "load_average_1_5_15_at_start": [round(value, 2) for value in os.getloadavg()],
+        "arms": {},
+    }
     for arm in ARMS:
         samples = measure_arm(root / BINARY, arm, documents, args.repetitions, env)
         synthetic = {fixture_id: latency_summary(samples.pop(fixture_id)) for fixture_id in SYNTHETIC_DOCUMENTS}
