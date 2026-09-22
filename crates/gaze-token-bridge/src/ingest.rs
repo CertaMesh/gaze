@@ -151,7 +151,16 @@ fn build_index_hit(
 
     for span in spans {
         let raw_value = slice(raw_text, span.raw_span.clone(), "raw")?;
-        slice(&snippet, span.clean_span.clone(), "clean")?;
+        let replacement = slice(&snippet, span.clean_span.clone(), "clean")?;
+
+        // A safety-net redaction is a manifest entry standing for original bytes, like a token,
+        // but it is ONE-WAY. Canonicalizing it would store the redacted bytes as an entity raw
+        // value, give them a fingerprint and a posting, and hand an agent a domain alias the
+        // bridge translates back: a reversible, searchable token in all but name. It stays in the
+        // snippet exactly as the pipeline wrote it and never becomes an entity.
+        if gaze::is_redaction_marker(replacement) {
+            continue;
+        }
 
         if span.origin.is_residual_fragment() {
             // A residual fragment is a protected byte range, not an entity. It can
@@ -383,6 +392,65 @@ mod tests {
         assert!(!crate::util::contains_domain_alias(&placeholder));
         assert!(!placeholder.contains(RAW_EMAIL));
         assert!(!placeholder.contains("about"));
+    }
+
+    /// A safety-net redaction marker is a one-way replacement, and the index must keep it one-way.
+    ///
+    /// The fallback used to delete flagged bytes and emit no manifest entry, so a redaction never
+    /// reached `build_index_hit` at all. It now writes `[REDACTED:<class>]` and records it as an
+    /// entry standing for the original bytes. Canonicalizing that entry would store the redacted
+    /// bytes as an entity's `raw_value`, give them a fingerprint and a posting, and hand an agent
+    /// a domain alias the bridge can translate back -- turning a redaction into a reversible,
+    /// searchable token. That is the exact thing "one-way" rules out.
+    ///
+    /// Asked through the shared `gaze::is_redaction_marker` rather than a local spelling.
+    ///
+    /// Mutation: drop the marker skip in `build_index_hit` and the redacted bytes become an entity.
+    #[test]
+    fn a_redaction_marker_is_never_indexed_as_an_entity() {
+        let raw = "Email alice@example.invalid and Schmidt about the case.";
+        let marker = gaze::redaction_marker(&PiiClass::Name);
+        let clean = format!("Email <tok> and {marker} about the case.");
+        let marker_at = clean.find(&marker).expect("fixture");
+        let redacted = raw.find("Schmidt").expect("fixture");
+        let spans = vec![
+            EmittedTokenSpan::new(6..11, 6..27, PiiClass::Email),
+            EmittedTokenSpan::new(
+                marker_at..marker_at + marker.len(),
+                redacted..redacted + "Schmidt".len(),
+                PiiClass::Name,
+            ),
+        ];
+        let projector = RecordingProjector::default();
+        let domain = domain();
+
+        let hit = build_index_hit(
+            "doc-1".to_string(),
+            raw,
+            clean.clone(),
+            &spans,
+            &domain,
+            &projector,
+        )
+        .unwrap();
+
+        assert_eq!(
+            projector.canonical_values.borrow().as_slice(),
+            ["email:alice@example.invalid"],
+            "the redacted bytes must never be canonicalized"
+        );
+        assert_eq!(hit.entities.len(), 1, "a marker must not become an entity");
+        assert!(
+            hit.entities
+                .iter()
+                .all(|entity| entity.raw_value != "Schmidt"),
+            "the redacted bytes must not be stored as an entity raw value"
+        );
+        // The marker stays in the snippet exactly as the pipeline wrote it: no alias for the
+        // translator to resolve, and no raw bytes.
+        assert!(hit.snippet.contains(&marker), "{:?}", hit.snippet);
+        assert!(!hit.snippet.contains("Schmidt"), "{:?}", hit.snippet);
+        assert!(!crate::util::contains_domain_alias(&marker));
     }
 
     #[test]

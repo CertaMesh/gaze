@@ -55,12 +55,13 @@ pub fn is_redaction_marker(text: &str) -> bool {
         })
 }
 
-/// Byte spans of every redaction marker in `text`, ascending and disjoint.
+/// Byte spans of every well-formed redaction marker in `text`, ascending and disjoint.
 ///
-/// Used by the consumers that have to reason about a whole document rather than one span: the
-/// suspect guard (a net finding that overlaps a marker is already protected), the strict restore
-/// scan, and the benchmark scorer, which must not count marker bytes as raw, leaked or
-/// false-positive — they are gaze's own output, not the document's.
+/// For consumers that hold only text, with no manifest: an adopter inspecting clean output, or a
+/// log reader counting redactions. It answers "what LOOKS like a marker", which is a weaker claim
+/// than "what did gaze redact". Anything that decides protection must use the manifest instead --
+/// the runtime's own suspect guard does -- because a document can contain the literal
+/// `[REDACTED:name]` without gaze having written it, and text alone cannot tell the two apart.
 pub fn redaction_marker_spans(text: &str) -> Vec<Range<usize>> {
     let mut spans = Vec::new();
     let mut cursor = 0usize;
@@ -83,7 +84,12 @@ pub fn redaction_marker_spans(text: &str) -> Vec<Range<usize>> {
     spans
 }
 
-/// Total marker bytes in `text`. The scorer subtracts this from every byte count it reports.
+/// Total bytes of well-formed markers in `text`, with the same text-only caveat as
+/// [`redaction_marker_spans`].
+///
+/// Useful when comparing clean output against its input by length: a redaction makes the output
+/// LONGER for the marker's width, where deleting made it shorter. The benchmark scorer does not
+/// need it -- it scores in original-request coordinates, where marker bytes never appear.
 pub fn redaction_marker_byte_len(text: &str) -> usize {
     redaction_marker_spans(text)
         .iter()

@@ -62,3 +62,37 @@ impl RedactionSession {
         Ok((class, raw))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A safety-net redaction marker must never resolve to anything owner-side.
+    ///
+    /// The bridge resolves an agent-supplied token to its raw value. A marker stands in the clean
+    /// text exactly where a token would, so an agent can hand one back; if the bridge ever
+    /// resolved it, the redaction would be reversible through the bridge even though restore
+    /// itself refuses it. It is refused as malformed -- it is not in the token grammar at all --
+    /// before the session is consulted.
+    #[test]
+    fn a_redaction_marker_never_resolves_owner_side() {
+        let session = RedactionSession::ephemeral_for("principal-1").expect("session");
+        // Mint a real token so the session is not trivially empty: a marker must be refused
+        // on its shape, not merely because nothing had been tokenized.
+        session
+            .tokenize(&PiiClass::Name, "Schmidt")
+            .expect("tokenize");
+        for class in [
+            PiiClass::Name,
+            PiiClass::Email,
+            PiiClass::custom("address_2").expect("valid custom class"),
+        ] {
+            let marker = gaze::redaction_marker(&class);
+            assert_eq!(
+                session.resolve_token(&marker),
+                Err(DenyReason::MalformedToken),
+                "{marker} must never resolve"
+            );
+        }
+    }
+}

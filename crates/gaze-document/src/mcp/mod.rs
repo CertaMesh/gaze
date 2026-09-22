@@ -426,6 +426,33 @@ mod tests {
         }
     }
 
+    /// A path carrying a safety-net redaction marker passes the restore gates as ordinary text.
+    ///
+    /// The marker is one-way output, not a token: restore must neither substitute it (that would
+    /// make the redaction reversible through the document tools) nor reject it as an unknown or
+    /// malformed token (that would refuse a legitimate protected path). It comes back verbatim,
+    /// alongside an owned token that DOES restore, so the pass-through is not an artefact of the
+    /// session holding nothing.
+    #[test]
+    fn restore_path_passes_a_redaction_marker_through_verbatim() {
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let token = session
+            .tokenize(&gaze::PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        for class in [
+            gaze::PiiClass::Name,
+            gaze::PiiClass::custom("address_2").unwrap(),
+        ] {
+            let marker = gaze::redaction_marker(&class);
+            let path = format!("directory/{marker}/{token}/input.png");
+            assert_eq!(
+                super::restore_path(&session, &path).unwrap(),
+                format!("directory/{marker}/alice@example.invalid/input.png"),
+                "{marker} must pass through untouched while the owned token restores"
+            );
+        }
+    }
+
     #[test]
     fn r1_restore_path_retains_malformed_family_rejection() {
         let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
