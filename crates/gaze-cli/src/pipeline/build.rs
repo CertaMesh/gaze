@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use gaze::{
     dictionary_bundle_from_context, Action, DictionaryBundle, LocaleChain, LocaleTag, Pipeline,
-    Policy, PolicyError, RawMatch, RedactionEntry, RedactionLogError, RedactionLogger,
-    Result as GazeResult, RuleSpec, Rulepack, RulepackDict, RulepackSource, SessionPolicy,
-    SessionScope, TypedContext, DEFAULT_NER_THRESHOLD,
+    PipelineBuilder, Policy, PolicyError, RawMatch, RedactionEntry, RedactionLogError,
+    RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackDict, RulepackSource,
+    SessionPolicy, SessionScope, TypedContext, DEFAULT_NER_THRESHOLD,
 };
 
 use crate::clean_overrides::CleanOverrides;
@@ -13,6 +13,15 @@ use crate::error::CliError;
 
 pub(crate) struct ResolvedPipeline {
     pub(crate) pipeline: Pipeline,
+    pub(crate) policy: Policy,
+    pub(crate) rulepacks: Vec<Rulepack>,
+    pub(crate) locale_chain: LocaleChain,
+    pub(crate) dictionaries: DictionaryBundle,
+}
+
+/// [`ResolvedPipeline`] before `build()`, for a verb that layers recognizers on top.
+pub(crate) struct ResolvedPipelineBuilder {
+    pub(crate) builder: PipelineBuilder,
     pub(crate) policy: Policy,
     pub(crate) rulepacks: Vec<Rulepack>,
     pub(crate) locale_chain: LocaleChain,
@@ -32,6 +41,36 @@ pub(crate) fn resolve_pipeline(
     context: Option<TypedContext>,
     logger: Option<Arc<dyn RedactionLogger>>,
 ) -> std::result::Result<ResolvedPipeline, CliError> {
+    let resolved = resolve_pipeline_builder(
+        policy_path,
+        overrides,
+        cli_locales,
+        cli_ner_threshold,
+        context.as_ref(),
+    )?;
+    let pipeline = resolved.builder.build().map_err(map_pipeline_error)?;
+    let pipeline = match logger {
+        Some(logger) => pipeline.with_redaction_logger(ArcLogger(logger)),
+        None => pipeline,
+    };
+
+    Ok(ResolvedPipeline {
+        pipeline,
+        policy: resolved.policy,
+        rulepacks: resolved.rulepacks,
+        locale_chain: resolved.locale_chain,
+        dictionaries: resolved.dictionaries,
+    })
+}
+
+/// [`resolve_pipeline`] up to, not including, `build()`.
+pub(crate) fn resolve_pipeline_builder(
+    policy_path: Option<&Path>,
+    overrides: &CleanOverrides,
+    cli_locales: &[String],
+    cli_ner_threshold: Option<f32>,
+    context: Option<&TypedContext>,
+) -> std::result::Result<ResolvedPipelineBuilder, CliError> {
     let policy = match policy_path {
         Some(path) => overrides.apply_to(&Policy::load_for_cli(path).map_err(map_policy_error)?),
         None => policy_less_policy(overrides)?,
@@ -39,7 +78,6 @@ pub(crate) fn resolve_pipeline(
     let rulepacks = load_rulepacks(&policy).map_err(map_pipeline_error)?;
 
     let context_bundle = context
-        .as_ref()
         .map(dictionary_bundle_from_context)
         .unwrap_or_default();
     let rulepack_dictionaries =
@@ -65,20 +103,11 @@ pub(crate) fn resolve_pipeline(
     );
     let ner_threshold = resolve_ner_threshold(cli_ner_threshold, Some(&policy));
 
-    let pipeline = build_pipeline_from_policy(
-        &policy,
-        &rulepacks,
-        context.as_ref(),
-        &locale_chain,
-        ner_threshold,
-    )?;
-    let pipeline = match logger {
-        Some(logger) => pipeline.with_redaction_logger(ArcLogger(logger)),
-        None => pipeline,
-    };
+    let builder =
+        pipeline_builder_from_policy(&policy, &rulepacks, context, &locale_chain, ner_threshold)?;
 
-    Ok(ResolvedPipeline {
-        pipeline,
+    Ok(ResolvedPipelineBuilder {
+        builder,
         policy,
         rulepacks,
         locale_chain,
@@ -186,26 +215,30 @@ pub(crate) fn map_pipeline_error(err: gaze::Error) -> CliError {
     }
 }
 
-pub(crate) fn build_pipeline_from_policy(
+fn pipeline_builder_from_policy(
     policy: &Policy,
     rulepacks: &[Rulepack],
     context: Option<&TypedContext>,
     locale_chain: &LocaleChain,
     ner_threshold: f32,
-) -> std::result::Result<Pipeline, CliError> {
+) -> std::result::Result<PipelineBuilder, CliError> {
     let empty_context = TypedContext {
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
     };
-    gaze_assembly::build_pipeline(
+    gaze_assembly::build_pipeline_builder(
         policy,
         context.unwrap_or(&empty_context),
         rulepacks,
         locale_chain,
         Some(ner_threshold),
     )
-    .map_err(|err| match err {
+    .map_err(map_build_error)
+}
+
+fn map_build_error(err: gaze_assembly::BuildError) -> CliError {
+    match err {
         gaze_assembly::BuildError::NoRecognizers => map_policy_error(PolicyError::NoDetectors),
         gaze_assembly::BuildError::Policy(err) => map_policy_error(err),
         gaze_assembly::BuildError::Rulepack(err) => map_pipeline_error(gaze::Error::Rulepack(err)),
@@ -216,7 +249,7 @@ pub(crate) fn build_pipeline_from_policy(
         gaze_assembly::BuildError::Recognizer(err) => {
             CliError::PolicyConfigDetail(format!("recognizer error: {err}"))
         }
-    })
+    }
 }
 
 /// Emit a stderr warning for each collision-family fallback class that the

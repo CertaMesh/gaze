@@ -318,6 +318,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Security: `gaze index ingest` now runs the `core` rulepack, so
+  `gaze index search` no longer prints identifiers raw.** Shipped defect in
+  every release from v0.11.0 through v0.14.0: ingest built its own pipeline
+  (email regex, `Label: value` fields, NER, default rule preserve) without
+  `core`. Credit card numbers, IBANs, IP addresses, phone numbers and every
+  other `core` class stayed raw inside the stored snippet, and
+  `gaze index search` printed them to the agent-facing output under the
+  footer "raw PII never shown", with the required output net in place (the
+  Nym net does not flag these shapes). The encrypted store never held them in
+  plaintext at rest. Ingest now resolves the same policy as a policy-less
+  `gaze clean` (bundled `core`, tokenize default rule) and adds the pinned NER
+  bundle, the field detector and the optional net on top, so the two verbs
+  share one deterministic floor. **Re-run `gaze index ingest` on every
+  existing index**: stored snippets keep the raw values until then. No
+  workaround exists on older releases; do not pass their search output to an
+  agent for documents with structured identifiers. `gaze-assembly` gains
+  `build_pipeline_builder` and `CorpusIngestor` gains `with_dictionaries`
+  (solo todo #3711).
 - **Security: `gaze clean` without `--policy` now runs the `core` rulepack.**
   Shipped defect in every release from v0.3.0 through v0.14.0: with neither
   `--policy` nor `--rulepack-bundled`/`--rulepack-path`, `gaze clean` ran a

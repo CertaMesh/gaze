@@ -26,6 +26,7 @@ pub struct CorpusIngestor<'a> {
     domain: &'a IndexDomain,
     projector: &'a dyn DomainProjector,
     locale_chain: Vec<LocaleTag>,
+    dictionaries: DictionaryBundle,
     safety_net_policy: SafetyNetPolicy,
     reject_safety_net_suspects: bool,
 }
@@ -50,12 +51,20 @@ impl<'a> CorpusIngestor<'a> {
             domain,
             projector,
             locale_chain,
+            dictionaries: DictionaryBundle::default(),
             safety_net_policy: SafetyNetPolicy::new(
                 SafetyNetMode::Strict,
                 SafetyNetFallback::Redact,
             ),
             reject_safety_net_suspects: true,
         }
+    }
+
+    /// Dictionaries the pipeline's dictionary recognizers match against, resolved from the
+    /// same policy that built the pipeline. Default: none.
+    pub fn with_dictionaries(mut self, dictionaries: DictionaryBundle) -> Self {
+        self.dictionaries = dictionaries;
+        self
     }
 
     pub fn with_safety_net_resolution(self) -> Self {
@@ -88,7 +97,7 @@ impl<'a> CorpusIngestor<'a> {
                 &session,
                 RawDocument::Text(raw_text.to_string()),
                 locale_chain,
-                &DictionaryBundle::default(),
+                &self.dictionaries,
                 self.safety_net_policy,
             )
             .map_err(|err| BridgeError::Session(format!("failed to clean corpus text: {err}")))?;

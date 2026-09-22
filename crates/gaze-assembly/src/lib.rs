@@ -34,8 +34,8 @@
 use std::collections::BTreeSet;
 
 use gaze::{
-    Action, ClassRule, ColumnRule, Context, DefaultRule, LocaleChain, PiiClass, Pipeline, RuleSpec,
-    Rulepack,
+    Action, ClassRule, ColumnRule, Context, DefaultRule, LocaleChain, PiiClass, Pipeline,
+    PipelineBuilder, RuleSpec, Rulepack,
 };
 
 mod class_map;
@@ -77,6 +77,25 @@ pub fn build_pipeline(
     active_locales: &LocaleChain,
     ner_threshold: Option<f32>,
 ) -> Result<Pipeline, BuildError> {
+    Ok(
+        build_pipeline_builder(policy, context, rulepacks, active_locales, ner_threshold)?
+            .build()?,
+    )
+}
+
+/// [`build_pipeline`] without the final `build()`, for a caller that layers its own
+/// recognizers or safety net on the exact policy assembly (`gaze index ingest` adds its
+/// NER bundle and field detector on top of the `gaze clean` floor).
+///
+/// The policy rules are already registered. Rule order is first match, so an added
+/// recognizer's class falls through to the policy's default rule.
+pub fn build_pipeline_builder(
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+    ner_threshold: Option<f32>,
+) -> Result<PipelineBuilder, BuildError> {
     let mut builder = registration::AssemblyBuilder::default();
     let mut registered_dictionaries = BTreeSet::<String>::new();
     let locale_vocab = merged_locale_vocab(rulepacks, active_locales);
@@ -124,7 +143,7 @@ pub fn build_pipeline(
         }
     }
 
-    Ok(builder.into_inner().build()?)
+    Ok(builder.into_inner())
 }
 
 /// Collision-family fallback classes that loaded recognizers can emit but the
