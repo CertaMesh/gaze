@@ -72,6 +72,22 @@ pipeline still protected them is reported per run under
 `excluded_label_coverage`. A corpus label the contract does not list fails
 closed.
 
+[`scored-labels-v3.json`](../../docs/reference/benchmarks/scored-labels-v3.json)
+keeps v2's labels and adds a `gold_gap` block, a diagnostic that reports
+unlabelled byte-identical repeats of a gold value in the same document as
+`metrics.gold_gap.gold_gap_protected_bytes` beside the unchanged v2 numbers.
+Every `gold_gap` setting has one supported value and every scored label must be
+ruled on once (in `compatible_labels` or `not_creditable`); anything else fails
+closed, and v1/v2 never run the step. To compare contracts on the same saved
+predictions without re-running a model, and to draw or render the human audit
+sample:
+
+```bash
+python scripts/bench/gold_gap_evidence.py replay --trace <trace.jsonl>
+python scripts/bench/gold_gap_evidence.py sample --trace <trace.jsonl>
+python scripts/bench/gold_gap_evidence.py sheet  --trace <trace.jsonl>  # local only
+```
+
 v2 also lists `neutral_prediction_classes` (`custom:password`,
 `custom:security_token`, `custom:secret`). A prediction of one of those classes
 still counts as protection where it covers scored gold; its other bytes are

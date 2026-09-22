@@ -1,0 +1,4101 @@
+{
+  "schema_version": 1,
+  "contract": "scored-labels-v3",
+  "purpose": "Human audit of the contract v3 gold-gap rule. The column stays a diagnostic beside the v2 headline until this audit passes.",
+  "status": "awaiting_verdicts",
+  "source": {
+    "trace": "trace-pass2-ner.jsonl",
+    "trace_sha256": "e715a7e92eb8ccd98ed6628528eb86b66c6fea5b0e837f87ac58c50af722dc09",
+    "contract_file": "docs/reference/benchmarks/scored-labels-v3.json",
+    "contract_sha256": "5ab8f2f28bc8fd060d74779001c96e928a3ecf6868f06865eabe997e9740f9a1",
+    "generator": "scripts/bench/gold_gap_evidence.py sample"
+  },
+  "no_document_text": "Entries carry document IDs and byte offsets only. Render values and context locally with `gold_gap_evidence.py sheet`.",
+  "eligibility_population": 1683,
+  "eligibility_population_by_label": {
+    "CITY": 381,
+    "COMPANYNAME": 29,
+    "COUNTRY": 19,
+    "FIRSTNAME": 574,
+    "STATE": 40,
+    "STREET": 78,
+    "SURNAME": 549
+  },
+  "selection": {
+    "seed": 20260922,
+    "size": 200,
+    "floors": {
+      "FIRSTNAME": 40,
+      "SURNAME": 40,
+      "CITY": 40
+    },
+    "rule_class_census": 13,
+    "allocation": "every rule-class candidate first (census), then the floors, then the rest proportional to learned-class label population (largest remainder)",
+    "allocation_by_label": {
+      "CITY": 55,
+      "COMPANYNAME": 1,
+      "COUNTRY": 0,
+      "FIRSTNAME": 65,
+      "STATE": 1,
+      "STREET": 3,
+      "SURNAME": 62
+    },
+    "ambiguous_oversample_factor": 2,
+    "within_stratum": "rule-class census first; then labels sorted, per label the ambiguous sub-stratum then the plain one; random.Random(seed).sample over members sorted by (document_id, byte_start)",
+    "ambiguity_basis": {
+      "english_wordlist": "/usr/share/dict/words",
+      "english_wordlist_sha256": "be41ad97963bf8dabedd5871d5d691596175269d540956b0f9965a885c2bbab9",
+      "english_wordlist_rule": "lowercase-only entries; the value lowercased is one of them",
+      "lowercase_use_rule": "a capitalised value whose lowercase form is a letters-only whitespace token outside gold somewhere in the holdout text (catches German verbs and nouns such as essen/Essen)"
+    },
+    "strata": [
+      {
+        "gold_label": "*",
+        "sub_stratum": "rule_class_census",
+        "population": 13,
+        "sampled": 13
+      },
+      {
+        "gold_label": "CITY",
+        "sub_stratum": "ambiguous",
+        "population": 54,
+        "sampled": 16
+      },
+      {
+        "gold_label": "CITY",
+        "sub_stratum": "plain",
+        "population": 327,
+        "sampled": 39
+      },
+      {
+        "gold_label": "COMPANYNAME",
+        "sub_stratum": "ambiguous",
+        "population": 0,
+        "sampled": 0
+      },
+      {
+        "gold_label": "COMPANYNAME",
+        "sub_stratum": "plain",
+        "population": 29,
+        "sampled": 1
+      },
+      {
+        "gold_label": "COUNTRY",
+        "sub_stratum": "ambiguous",
+        "population": 1,
+        "sampled": 0
+      },
+      {
+        "gold_label": "COUNTRY",
+        "sub_stratum": "plain",
+        "population": 18,
+        "sampled": 0
+      },
+      {
+        "gold_label": "FIRSTNAME",
+        "sub_stratum": "ambiguous",
+        "population": 97,
+        "sampled": 22
+      },
+      {
+        "gold_label": "FIRSTNAME",
+        "sub_stratum": "plain",
+        "population": 477,
+        "sampled": 43
+      },
+      {
+        "gold_label": "STATE",
+        "sub_stratum": "ambiguous",
+        "population": 1,
+        "sampled": 1
+      },
+      {
+        "gold_label": "STATE",
+        "sub_stratum": "plain",
+        "population": 39,
+        "sampled": 0
+      },
+      {
+        "gold_label": "STREET",
+        "sub_stratum": "ambiguous",
+        "population": 0,
+        "sampled": 0
+      },
+      {
+        "gold_label": "STREET",
+        "sub_stratum": "plain",
+        "population": 78,
+        "sampled": 3
+      },
+      {
+        "gold_label": "SURNAME",
+        "sub_stratum": "ambiguous",
+        "population": 131,
+        "sampled": 30
+      },
+      {
+        "gold_label": "SURNAME",
+        "sub_stratum": "plain",
+        "population": 418,
+        "sampled": 32
+      }
+    ],
+    "design_weight": "sub-stratum population / sub-stratum sample size"
+  },
+  "answers": [
+    "yes",
+    "no",
+    "uncertain"
+  ],
+  "acceptance": {
+    "rule": "at most 4 of 200 answered 'no' or 'uncertain' (uncertain after second adjudication counts as no)",
+    "max_failures": 4,
+    "one_sided_95_upper_bound_at_max_failures": 0.0452,
+    "bound": "Clopper-Pearson one-sided 95 % upper bound on the candidate-level false-credit rate must be at most 5 %",
+    "one_sided_95_upper_bound_at_one_more_failure": 0.0518,
+    "clustering": "report failures per document as well; if document clustering widens the bound past 5 %, the audit fails",
+    "design_note": "ambiguous shapes are oversampled, so the unweighted failure count is conservative for the population rate; the weighted and byte-weighted rates are reported with the design weights",
+    "declared_before_looking": true
+  },
+  "entries": [
+    {
+      "document_id": "dataiku-test-1117",
+      "byte_start": 112,
+      "byte_end": 119,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        42,
+        49
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-001"
+    },
+    {
+      "document_id": "dataiku-test-1129",
+      "byte_start": 161,
+      "byte_end": 165,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        88,
+        92
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-002"
+    },
+    {
+      "document_id": "dataiku-test-1129",
+      "byte_start": 515,
+      "byte_end": 519,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        221,
+        225
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-003"
+    },
+    {
+      "document_id": "dataiku-test-1431",
+      "byte_start": 559,
+      "byte_end": 563,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        290,
+        294
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-004"
+    },
+    {
+      "document_id": "dataiku-test-150",
+      "byte_start": 351,
+      "byte_end": 359,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        162,
+        170
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-005"
+    },
+    {
+      "document_id": "dataiku-test-150",
+      "byte_start": 629,
+      "byte_end": 637,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        162,
+        170
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-006"
+    },
+    {
+      "document_id": "dataiku-test-1521",
+      "byte_start": 177,
+      "byte_end": 186,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        85,
+        94
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-007"
+    },
+    {
+      "document_id": "dataiku-test-1670",
+      "byte_start": 487,
+      "byte_end": 491,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        56,
+        60
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-008"
+    },
+    {
+      "document_id": "dataiku-test-1748",
+      "byte_start": 347,
+      "byte_end": 351,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        63,
+        67
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-009"
+    },
+    {
+      "document_id": "dataiku-test-1825",
+      "byte_start": 488,
+      "byte_end": 492,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        453,
+        457
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-010"
+    },
+    {
+      "document_id": "dataiku-test-1843",
+      "byte_start": 428,
+      "byte_end": 432,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        59,
+        63
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-011"
+    },
+    {
+      "document_id": "dataiku-test-196",
+      "byte_start": 442,
+      "byte_end": 450,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        106,
+        114
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-012"
+    },
+    {
+      "document_id": "dataiku-test-1990",
+      "byte_start": 146,
+      "byte_end": 154,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        3,
+        11
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-013"
+    },
+    {
+      "document_id": "dataiku-test-204",
+      "byte_start": 274,
+      "byte_end": 284,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        69,
+        79
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-014"
+    },
+    {
+      "document_id": "dataiku-test-2079",
+      "byte_start": 484,
+      "byte_end": 488,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        37,
+        41
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-015"
+    },
+    {
+      "document_id": "dataiku-test-2082",
+      "byte_start": 374,
+      "byte_end": 384,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        209,
+        219
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-016"
+    },
+    {
+      "document_id": "dataiku-test-2159",
+      "byte_start": 88,
+      "byte_end": 94,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        52,
+        58
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-017"
+    },
+    {
+      "document_id": "dataiku-test-2189",
+      "byte_start": 323,
+      "byte_end": 330,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        82,
+        89
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-018"
+    },
+    {
+      "document_id": "dataiku-test-2194",
+      "byte_start": 93,
+      "byte_end": 97,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        42,
+        46
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-019"
+    },
+    {
+      "document_id": "dataiku-test-2313",
+      "byte_start": 392,
+      "byte_end": 396,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        39,
+        43
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-020"
+    },
+    {
+      "document_id": "dataiku-test-2323",
+      "byte_start": 577,
+      "byte_end": 584,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        142,
+        149
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-021"
+    },
+    {
+      "document_id": "dataiku-test-2335",
+      "byte_start": 476,
+      "byte_end": 482,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        3,
+        9
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-022"
+    },
+    {
+      "document_id": "dataiku-test-2418",
+      "byte_start": 328,
+      "byte_end": 338,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        35,
+        45
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-023"
+    },
+    {
+      "document_id": "dataiku-test-2445",
+      "byte_start": 225,
+      "byte_end": 231,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        67,
+        73
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-024"
+    },
+    {
+      "document_id": "dataiku-test-2561",
+      "byte_start": 193,
+      "byte_end": 197,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        169,
+        173
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-025"
+    },
+    {
+      "document_id": "dataiku-test-2561",
+      "byte_start": 434,
+      "byte_end": 438,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        169,
+        173
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-026"
+    },
+    {
+      "document_id": "dataiku-test-2584",
+      "byte_start": 560,
+      "byte_end": 572,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        109,
+        121
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-027"
+    },
+    {
+      "document_id": "dataiku-test-2671",
+      "byte_start": 101,
+      "byte_end": 108,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        46,
+        53
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-028"
+    },
+    {
+      "document_id": "dataiku-test-2747",
+      "byte_start": 271,
+      "byte_end": 279,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        71,
+        79
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-029"
+    },
+    {
+      "document_id": "dataiku-test-292",
+      "byte_start": 409,
+      "byte_end": 415,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        85,
+        91
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-030"
+    },
+    {
+      "document_id": "dataiku-test-2985",
+      "byte_start": 378,
+      "byte_end": 386,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        76,
+        84
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-031"
+    },
+    {
+      "document_id": "dataiku-test-3078",
+      "byte_start": 466,
+      "byte_end": 471,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        13,
+        18
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-032"
+    },
+    {
+      "document_id": "dataiku-test-3269",
+      "byte_start": 169,
+      "byte_end": 176,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        69,
+        76
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-033"
+    },
+    {
+      "document_id": "dataiku-test-3274",
+      "byte_start": 302,
+      "byte_end": 309,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        105,
+        112
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-034"
+    },
+    {
+      "document_id": "dataiku-test-3537",
+      "byte_start": 484,
+      "byte_end": 491,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        81,
+        88
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-035"
+    },
+    {
+      "document_id": "dataiku-test-3614",
+      "byte_start": 512,
+      "byte_end": 517,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        88,
+        93
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-036"
+    },
+    {
+      "document_id": "dataiku-test-3684",
+      "byte_start": 189,
+      "byte_end": 199,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        72,
+        82
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-037"
+    },
+    {
+      "document_id": "dataiku-test-3684",
+      "byte_start": 436,
+      "byte_end": 446,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        72,
+        82
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-038"
+    },
+    {
+      "document_id": "dataiku-test-3728",
+      "byte_start": 429,
+      "byte_end": 436,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        3,
+        10
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-039"
+    },
+    {
+      "document_id": "dataiku-test-3836",
+      "byte_start": 436,
+      "byte_end": 443,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        111,
+        118
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-040"
+    },
+    {
+      "document_id": "dataiku-test-3980",
+      "byte_start": 432,
+      "byte_end": 439,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        86,
+        93
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-041"
+    },
+    {
+      "document_id": "dataiku-test-4032",
+      "byte_start": 591,
+      "byte_end": 597,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        68,
+        74
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-042"
+    },
+    {
+      "document_id": "dataiku-test-4535",
+      "byte_start": 259,
+      "byte_end": 267,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        87,
+        95
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-043"
+    },
+    {
+      "document_id": "dataiku-test-4689",
+      "byte_start": 409,
+      "byte_end": 416,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        102,
+        109
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-044"
+    },
+    {
+      "document_id": "dataiku-test-4796",
+      "byte_start": 543,
+      "byte_end": 550,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        160,
+        167
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-045"
+    },
+    {
+      "document_id": "dataiku-test-4813",
+      "byte_start": 449,
+      "byte_end": 459,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        35,
+        45
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-046"
+    },
+    {
+      "document_id": "dataiku-test-4865",
+      "byte_start": 293,
+      "byte_end": 302,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        149,
+        158
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-047"
+    },
+    {
+      "document_id": "dataiku-test-4934",
+      "byte_start": 481,
+      "byte_end": 487,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        87,
+        93
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-048"
+    },
+    {
+      "document_id": "dataiku-test-5054",
+      "byte_start": 205,
+      "byte_end": 209,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        49,
+        53
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-049"
+    },
+    {
+      "document_id": "dataiku-test-551",
+      "byte_start": 426,
+      "byte_end": 433,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        120,
+        127
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-050"
+    },
+    {
+      "document_id": "dataiku-test-560",
+      "byte_start": 419,
+      "byte_end": 427,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        69,
+        77
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 3.375,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-051"
+    },
+    {
+      "document_id": "dataiku-test-727",
+      "byte_start": 214,
+      "byte_end": 221,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        155,
+        162
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-052"
+    },
+    {
+      "document_id": "dataiku-test-804",
+      "byte_start": 120,
+      "byte_end": 127,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        31,
+        38
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-053"
+    },
+    {
+      "document_id": "dataiku-test-884",
+      "byte_start": 217,
+      "byte_end": 224,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        112,
+        119
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-054"
+    },
+    {
+      "document_id": "dataiku-test-995",
+      "byte_start": 317,
+      "byte_end": 324,
+      "gold_label": "CITY",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        45,
+        52
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 8.384615384615385,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-055"
+    },
+    {
+      "document_id": "dataiku-test-2858",
+      "byte_start": 336,
+      "byte_end": 347,
+      "gold_label": "COMPANYNAME",
+      "predicted_class": "organization",
+      "attributed_gold_span": [
+        174,
+        185
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 29.0,
+      "question": "Is the highlighted repeat the same organisation as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-056"
+    },
+    {
+      "document_id": "dataiku-test-2890",
+      "byte_start": 156,
+      "byte_end": 166,
+      "gold_label": "DATEOFBIRTH",
+      "predicted_class": "custom:birth_date",
+      "attributed_gold_span": [
+        12,
+        22
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-057"
+    },
+    {
+      "document_id": "dataiku-test-1775",
+      "byte_start": 628,
+      "byte_end": 654,
+      "gold_label": "EMAIL",
+      "predicted_class": "email",
+      "attributed_gold_span": [
+        79,
+        105
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-058"
+    },
+    {
+      "document_id": "dataiku-test-3680",
+      "byte_start": 528,
+      "byte_end": 553,
+      "gold_label": "EMAIL",
+      "predicted_class": "email",
+      "attributed_gold_span": [
+        98,
+        123
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-059"
+    },
+    {
+      "document_id": "dataiku-test-4865",
+      "byte_start": 548,
+      "byte_end": 572,
+      "gold_label": "EMAIL",
+      "predicted_class": "email",
+      "attributed_gold_span": [
+        73,
+        97
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-060"
+    },
+    {
+      "document_id": "dataiku-test-1032",
+      "byte_start": 125,
+      "byte_end": 130,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        10,
+        15
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-061"
+    },
+    {
+      "document_id": "dataiku-test-1074",
+      "byte_start": 208,
+      "byte_end": 212,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        53,
+        57
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-062"
+    },
+    {
+      "document_id": "dataiku-test-1173",
+      "byte_start": 199,
+      "byte_end": 203,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        8,
+        12
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-063"
+    },
+    {
+      "document_id": "dataiku-test-118",
+      "byte_start": 342,
+      "byte_end": 347,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        5,
+        10
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-064"
+    },
+    {
+      "document_id": "dataiku-test-1189",
+      "byte_start": 416,
+      "byte_end": 422,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        13,
+        19
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-065"
+    },
+    {
+      "document_id": "dataiku-test-1259",
+      "byte_start": 296,
+      "byte_end": 302,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        5,
+        11
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-066"
+    },
+    {
+      "document_id": "dataiku-test-1299",
+      "byte_start": 199,
+      "byte_end": 204,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        8,
+        13
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-067"
+    },
+    {
+      "document_id": "dataiku-test-142",
+      "byte_start": 307,
+      "byte_end": 314,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        15,
+        22
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-068"
+    },
+    {
+      "document_id": "dataiku-test-1440",
+      "byte_start": 356,
+      "byte_end": 362,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        157,
+        163
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-069"
+    },
+    {
+      "document_id": "dataiku-test-1525",
+      "byte_start": 202,
+      "byte_end": 209,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        8,
+        15
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-070"
+    },
+    {
+      "document_id": "dataiku-test-1555",
+      "byte_start": 265,
+      "byte_end": 269,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        10,
+        14
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-071"
+    },
+    {
+      "document_id": "dataiku-test-1576",
+      "byte_start": 268,
+      "byte_end": 273,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        24,
+        29
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-072"
+    },
+    {
+      "document_id": "dataiku-test-1621",
+      "byte_start": 221,
+      "byte_end": 225,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        91,
+        95
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-073"
+    },
+    {
+      "document_id": "dataiku-test-1622",
+      "byte_start": 245,
+      "byte_end": 250,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        14,
+        19
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-074"
+    },
+    {
+      "document_id": "dataiku-test-1647",
+      "byte_start": 557,
+      "byte_end": 563,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        259,
+        265
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-075"
+    },
+    {
+      "document_id": "dataiku-test-165",
+      "byte_start": 328,
+      "byte_end": 333,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        8,
+        13
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-076"
+    },
+    {
+      "document_id": "dataiku-test-169",
+      "byte_start": 264,
+      "byte_end": 268,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        14,
+        18
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-077"
+    },
+    {
+      "document_id": "dataiku-test-1720",
+      "byte_start": 294,
+      "byte_end": 299,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        0,
+        5
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-078"
+    },
+    {
+      "document_id": "dataiku-test-1845",
+      "byte_start": 190,
+      "byte_end": 195,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        18,
+        23
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-079"
+    },
+    {
+      "document_id": "dataiku-test-216",
+      "byte_start": 298,
+      "byte_end": 301,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        129,
+        132
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-080"
+    },
+    {
+      "document_id": "dataiku-test-216",
+      "byte_start": 445,
+      "byte_end": 448,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        129,
+        132
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-081"
+    },
+    {
+      "document_id": "dataiku-test-2245",
+      "byte_start": 329,
+      "byte_end": 335,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        8,
+        14
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-082"
+    },
+    {
+      "document_id": "dataiku-test-226",
+      "byte_start": 54,
+      "byte_end": 59,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        14,
+        19
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-083"
+    },
+    {
+      "document_id": "dataiku-test-2521",
+      "byte_start": 455,
+      "byte_end": 460,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        90,
+        95
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-084"
+    },
+    {
+      "document_id": "dataiku-test-2529",
+      "byte_start": 324,
+      "byte_end": 328,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        21,
+        25
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-085"
+    },
+    {
+      "document_id": "dataiku-test-2592",
+      "byte_start": 137,
+      "byte_end": 145,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        18,
+        26
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-086"
+    },
+    {
+      "document_id": "dataiku-test-2625",
+      "byte_start": 230,
+      "byte_end": 235,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        14,
+        19
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-087"
+    },
+    {
+      "document_id": "dataiku-test-2657",
+      "byte_start": 478,
+      "byte_end": 484,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        33,
+        39
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-088"
+    },
+    {
+      "document_id": "dataiku-test-2916",
+      "byte_start": 179,
+      "byte_end": 183,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        8,
+        12
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-089"
+    },
+    {
+      "document_id": "dataiku-test-2988",
+      "byte_start": 347,
+      "byte_end": 351,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        118,
+        122
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-090"
+    },
+    {
+      "document_id": "dataiku-test-2997",
+      "byte_start": 217,
+      "byte_end": 221,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        14,
+        18
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-091"
+    },
+    {
+      "document_id": "dataiku-test-3036",
+      "byte_start": 417,
+      "byte_end": 421,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        32,
+        36
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-092"
+    },
+    {
+      "document_id": "dataiku-test-3120",
+      "byte_start": 339,
+      "byte_end": 344,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        27,
+        32
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-093"
+    },
+    {
+      "document_id": "dataiku-test-3151",
+      "byte_start": 245,
+      "byte_end": 249,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        82,
+        86
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-094"
+    },
+    {
+      "document_id": "dataiku-test-3209",
+      "byte_start": 310,
+      "byte_end": 316,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        0,
+        6
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-095"
+    },
+    {
+      "document_id": "dataiku-test-3450",
+      "byte_start": 268,
+      "byte_end": 272,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        5,
+        9
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-096"
+    },
+    {
+      "document_id": "dataiku-test-3570",
+      "byte_start": 354,
+      "byte_end": 361,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        22,
+        29
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-097"
+    },
+    {
+      "document_id": "dataiku-test-3582",
+      "byte_start": 314,
+      "byte_end": 319,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        40,
+        45
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-098"
+    },
+    {
+      "document_id": "dataiku-test-3728",
+      "byte_start": 357,
+      "byte_end": 362,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        47,
+        52
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-099"
+    },
+    {
+      "document_id": "dataiku-test-3742",
+      "byte_start": 221,
+      "byte_end": 226,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        85,
+        90
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-100"
+    },
+    {
+      "document_id": "dataiku-test-387",
+      "byte_start": 512,
+      "byte_end": 521,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        99,
+        108
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-101"
+    },
+    {
+      "document_id": "dataiku-test-397",
+      "byte_start": 235,
+      "byte_end": 240,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        58,
+        63
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-102"
+    },
+    {
+      "document_id": "dataiku-test-3987",
+      "byte_start": 121,
+      "byte_end": 128,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        13,
+        20
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-103"
+    },
+    {
+      "document_id": "dataiku-test-4099",
+      "byte_start": 147,
+      "byte_end": 151,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        8,
+        12
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-104"
+    },
+    {
+      "document_id": "dataiku-test-4216",
+      "byte_start": 313,
+      "byte_end": 318,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        71,
+        76
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-105"
+    },
+    {
+      "document_id": "dataiku-test-4232",
+      "byte_start": 315,
+      "byte_end": 320,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        9,
+        14
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-106"
+    },
+    {
+      "document_id": "dataiku-test-4323",
+      "byte_start": 441,
+      "byte_end": 447,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        35,
+        41
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-107"
+    },
+    {
+      "document_id": "dataiku-test-4335",
+      "byte_start": 258,
+      "byte_end": 266,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        28,
+        36
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-108"
+    },
+    {
+      "document_id": "dataiku-test-4377",
+      "byte_start": 356,
+      "byte_end": 361,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        41,
+        46
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-109"
+    },
+    {
+      "document_id": "dataiku-test-4400",
+      "byte_start": 149,
+      "byte_end": 153,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        16,
+        20
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-110"
+    },
+    {
+      "document_id": "dataiku-test-451",
+      "byte_start": 203,
+      "byte_end": 208,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        31,
+        36
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-111"
+    },
+    {
+      "document_id": "dataiku-test-4645",
+      "byte_start": 226,
+      "byte_end": 232,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        18,
+        24
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-112"
+    },
+    {
+      "document_id": "dataiku-test-4650",
+      "byte_start": 428,
+      "byte_end": 433,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        35,
+        40
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-113"
+    },
+    {
+      "document_id": "dataiku-test-4662",
+      "byte_start": 197,
+      "byte_end": 202,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        17,
+        22
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-114"
+    },
+    {
+      "document_id": "dataiku-test-4728",
+      "byte_start": 309,
+      "byte_end": 313,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        14,
+        18
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-115"
+    },
+    {
+      "document_id": "dataiku-test-4851",
+      "byte_start": 407,
+      "byte_end": 411,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        11,
+        15
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-116"
+    },
+    {
+      "document_id": "dataiku-test-4851",
+      "byte_start": 571,
+      "byte_end": 575,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        11,
+        15
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-117"
+    },
+    {
+      "document_id": "dataiku-test-4946",
+      "byte_start": 245,
+      "byte_end": 248,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        22,
+        25
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-118"
+    },
+    {
+      "document_id": "dataiku-test-4963",
+      "byte_start": 283,
+      "byte_end": 289,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        69,
+        75
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-119"
+    },
+    {
+      "document_id": "dataiku-test-5006",
+      "byte_start": 306,
+      "byte_end": 310,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        20,
+        24
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-120"
+    },
+    {
+      "document_id": "dataiku-test-5066",
+      "byte_start": 498,
+      "byte_end": 502,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        47,
+        51
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 11.093023255813954,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-121"
+    },
+    {
+      "document_id": "dataiku-test-515",
+      "byte_start": 292,
+      "byte_end": 296,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        11,
+        15
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-122"
+    },
+    {
+      "document_id": "dataiku-test-794",
+      "byte_start": 322,
+      "byte_end": 326,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        11,
+        15
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-123"
+    },
+    {
+      "document_id": "dataiku-test-842",
+      "byte_start": 395,
+      "byte_end": 399,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        26,
+        30
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-124"
+    },
+    {
+      "document_id": "dataiku-test-898",
+      "byte_start": 467,
+      "byte_end": 471,
+      "gold_label": "FIRSTNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        11,
+        15
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.409090909090909,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-125"
+    },
+    {
+      "document_id": "dataiku-test-1698",
+      "byte_start": 460,
+      "byte_end": 472,
+      "gold_label": "NATIONALID",
+      "predicted_class": "custom:national_id",
+      "attributed_gold_span": [
+        256,
+        268
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-126"
+    },
+    {
+      "document_id": "dataiku-test-12",
+      "byte_start": 358,
+      "byte_end": 373,
+      "gold_label": "PHONENUMBER",
+      "predicted_class": "custom:phone",
+      "attributed_gold_span": [
+        135,
+        150
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-127"
+    },
+    {
+      "document_id": "dataiku-test-2007",
+      "byte_start": 488,
+      "byte_end": 496,
+      "gold_label": "STATE",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        92,
+        100
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-128"
+    },
+    {
+      "document_id": "dataiku-test-1843",
+      "byte_start": 132,
+      "byte_end": 144,
+      "gold_label": "STREET",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        43,
+        55
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 26.0,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-129"
+    },
+    {
+      "document_id": "dataiku-test-1938",
+      "byte_start": 410,
+      "byte_end": 425,
+      "gold_label": "STREET",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        94,
+        109
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 26.0,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-130"
+    },
+    {
+      "document_id": "dataiku-test-390",
+      "byte_start": 589,
+      "byte_end": 603,
+      "gold_label": "STREET",
+      "predicted_class": "location",
+      "attributed_gold_span": [
+        113,
+        127
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 26.0,
+      "question": "Is the highlighted repeat the same place as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-131"
+    },
+    {
+      "document_id": "dataiku-test-1096",
+      "byte_start": 365,
+      "byte_end": 373,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        31,
+        39
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-132"
+    },
+    {
+      "document_id": "dataiku-test-1108",
+      "byte_start": 114,
+      "byte_end": 120,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        16,
+        22
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-133"
+    },
+    {
+      "document_id": "dataiku-test-1256",
+      "byte_start": 198,
+      "byte_end": 203,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        21,
+        26
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-134"
+    },
+    {
+      "document_id": "dataiku-test-1287",
+      "byte_start": 264,
+      "byte_end": 269,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        19,
+        24
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-135"
+    },
+    {
+      "document_id": "dataiku-test-1307",
+      "byte_start": 111,
+      "byte_end": 118,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        0,
+        7
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-136"
+    },
+    {
+      "document_id": "dataiku-test-1525",
+      "byte_start": 110,
+      "byte_end": 115,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        16,
+        21
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-137"
+    },
+    {
+      "document_id": "dataiku-test-1628",
+      "byte_start": 135,
+      "byte_end": 142,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        18,
+        25
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-138"
+    },
+    {
+      "document_id": "dataiku-test-1664",
+      "byte_start": 640,
+      "byte_end": 646,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        33,
+        39
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-139"
+    },
+    {
+      "document_id": "dataiku-test-1695",
+      "byte_start": 274,
+      "byte_end": 281,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        81,
+        88
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-140"
+    },
+    {
+      "document_id": "dataiku-test-1748",
+      "byte_start": 151,
+      "byte_end": 158,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        24,
+        31
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-141"
+    },
+    {
+      "document_id": "dataiku-test-196",
+      "byte_start": 376,
+      "byte_end": 382,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        61,
+        67
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-142"
+    },
+    {
+      "document_id": "dataiku-test-2148",
+      "byte_start": 459,
+      "byte_end": 464,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        149,
+        154
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-143"
+    },
+    {
+      "document_id": "dataiku-test-2167",
+      "byte_start": 176,
+      "byte_end": 182,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        55,
+        61
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-144"
+    },
+    {
+      "document_id": "dataiku-test-218",
+      "byte_start": 381,
+      "byte_end": 388,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        23,
+        30
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-145"
+    },
+    {
+      "document_id": "dataiku-test-2215",
+      "byte_start": 227,
+      "byte_end": 233,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        69,
+        75
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-146"
+    },
+    {
+      "document_id": "dataiku-test-2346",
+      "byte_start": 274,
+      "byte_end": 281,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        58,
+        65
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-147"
+    },
+    {
+      "document_id": "dataiku-test-2348",
+      "byte_start": 221,
+      "byte_end": 226,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        31,
+        36
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-148"
+    },
+    {
+      "document_id": "dataiku-test-2350",
+      "byte_start": 263,
+      "byte_end": 269,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        53,
+        59
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-149"
+    },
+    {
+      "document_id": "dataiku-test-2502",
+      "byte_start": 292,
+      "byte_end": 299,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        35,
+        42
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-150"
+    },
+    {
+      "document_id": "dataiku-test-2568",
+      "byte_start": 166,
+      "byte_end": 171,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        22,
+        27
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-151"
+    },
+    {
+      "document_id": "dataiku-test-2599",
+      "byte_start": 183,
+      "byte_end": 188,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        34,
+        39
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-152"
+    },
+    {
+      "document_id": "dataiku-test-2604",
+      "byte_start": 258,
+      "byte_end": 265,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        5,
+        12
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-153"
+    },
+    {
+      "document_id": "dataiku-test-2671",
+      "byte_start": 159,
+      "byte_end": 164,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        0,
+        5
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-154"
+    },
+    {
+      "document_id": "dataiku-test-2991",
+      "byte_start": 195,
+      "byte_end": 200,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        40,
+        45
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-155"
+    },
+    {
+      "document_id": "dataiku-test-3022",
+      "byte_start": 348,
+      "byte_end": 356,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        13,
+        21
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-156"
+    },
+    {
+      "document_id": "dataiku-test-3049",
+      "byte_start": 203,
+      "byte_end": 208,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        10,
+        15
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-157"
+    },
+    {
+      "document_id": "dataiku-test-3049",
+      "byte_start": 305,
+      "byte_end": 310,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        10,
+        15
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-158"
+    },
+    {
+      "document_id": "dataiku-test-3150",
+      "byte_start": 152,
+      "byte_end": 157,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        15,
+        20
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-159"
+    },
+    {
+      "document_id": "dataiku-test-3171",
+      "byte_start": 211,
+      "byte_end": 218,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        43,
+        50
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-160"
+    },
+    {
+      "document_id": "dataiku-test-3339",
+      "byte_start": 356,
+      "byte_end": 361,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        18,
+        23
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-161"
+    },
+    {
+      "document_id": "dataiku-test-340",
+      "byte_start": 569,
+      "byte_end": 574,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        320,
+        325
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word",
+        "lowercase_use_in_corpus"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-162"
+    },
+    {
+      "document_id": "dataiku-test-3462",
+      "byte_start": 210,
+      "byte_end": 215,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        39,
+        44
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-163"
+    },
+    {
+      "document_id": "dataiku-test-3520",
+      "byte_start": 263,
+      "byte_end": 268,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        11,
+        16
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-164"
+    },
+    {
+      "document_id": "dataiku-test-3591",
+      "byte_start": 198,
+      "byte_end": 203,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        27,
+        32
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-165"
+    },
+    {
+      "document_id": "dataiku-test-3759",
+      "byte_start": 343,
+      "byte_end": 350,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        19,
+        26
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-166"
+    },
+    {
+      "document_id": "dataiku-test-3765",
+      "byte_start": 274,
+      "byte_end": 279,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        16,
+        21
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-167"
+    },
+    {
+      "document_id": "dataiku-test-3833",
+      "byte_start": 299,
+      "byte_end": 304,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        55,
+        60
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-168"
+    },
+    {
+      "document_id": "dataiku-test-3938",
+      "byte_start": 417,
+      "byte_end": 424,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        107,
+        114
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-169"
+    },
+    {
+      "document_id": "dataiku-test-3980",
+      "byte_start": 557,
+      "byte_end": 562,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        199,
+        204
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-170"
+    },
+    {
+      "document_id": "dataiku-test-4061",
+      "byte_start": 546,
+      "byte_end": 552,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        32,
+        38
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-171"
+    },
+    {
+      "document_id": "dataiku-test-4278",
+      "byte_start": 294,
+      "byte_end": 299,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        16,
+        21
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-172"
+    },
+    {
+      "document_id": "dataiku-test-4403",
+      "byte_start": 588,
+      "byte_end": 594,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        288,
+        294
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-173"
+    },
+    {
+      "document_id": "dataiku-test-447",
+      "byte_start": 362,
+      "byte_end": 368,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        73,
+        79
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-174"
+    },
+    {
+      "document_id": "dataiku-test-4528",
+      "byte_start": 404,
+      "byte_end": 410,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        156,
+        162
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-175"
+    },
+    {
+      "document_id": "dataiku-test-4566",
+      "byte_start": 159,
+      "byte_end": 165,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        11,
+        17
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-176"
+    },
+    {
+      "document_id": "dataiku-test-4566",
+      "byte_start": 532,
+      "byte_end": 538,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        11,
+        17
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-177"
+    },
+    {
+      "document_id": "dataiku-test-4628",
+      "byte_start": 259,
+      "byte_end": 265,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        12,
+        18
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-178"
+    },
+    {
+      "document_id": "dataiku-test-4628",
+      "byte_start": 434,
+      "byte_end": 440,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        12,
+        18
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-179"
+    },
+    {
+      "document_id": "dataiku-test-4670",
+      "byte_start": 299,
+      "byte_end": 306,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        40,
+        47
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-180"
+    },
+    {
+      "document_id": "dataiku-test-4716",
+      "byte_start": 157,
+      "byte_end": 165,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        16,
+        24
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-181"
+    },
+    {
+      "document_id": "dataiku-test-4744",
+      "byte_start": 189,
+      "byte_end": 194,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        27,
+        32
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-182"
+    },
+    {
+      "document_id": "dataiku-test-4747",
+      "byte_start": 345,
+      "byte_end": 351,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        22,
+        28
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-183"
+    },
+    {
+      "document_id": "dataiku-test-4823",
+      "byte_start": 278,
+      "byte_end": 284,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        24,
+        30
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-184"
+    },
+    {
+      "document_id": "dataiku-test-4923",
+      "byte_start": 372,
+      "byte_end": 378,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        173,
+        179
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-185"
+    },
+    {
+      "document_id": "dataiku-test-5012",
+      "byte_start": 356,
+      "byte_end": 365,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        102,
+        111
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-186"
+    },
+    {
+      "document_id": "dataiku-test-587",
+      "byte_start": 354,
+      "byte_end": 359,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        6,
+        11
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-187"
+    },
+    {
+      "document_id": "dataiku-test-643",
+      "byte_start": 231,
+      "byte_end": 238,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        0,
+        7
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-188"
+    },
+    {
+      "document_id": "dataiku-test-674",
+      "byte_start": 197,
+      "byte_end": 204,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        9,
+        16
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-189"
+    },
+    {
+      "document_id": "dataiku-test-734",
+      "byte_start": 521,
+      "byte_end": 529,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        55,
+        63
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-190"
+    },
+    {
+      "document_id": "dataiku-test-762",
+      "byte_start": 420,
+      "byte_end": 425,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        38,
+        43
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-191"
+    },
+    {
+      "document_id": "dataiku-test-808",
+      "byte_start": 393,
+      "byte_end": 398,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        21,
+        26
+      ],
+      "sub_stratum": "ambiguous",
+      "ambiguity_signals": [
+        "english_dictionary_word"
+      ],
+      "design_weight": 4.366666666666666,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-192"
+    },
+    {
+      "document_id": "dataiku-test-973",
+      "byte_start": 166,
+      "byte_end": 173,
+      "gold_label": "SURNAME",
+      "predicted_class": "name",
+      "attributed_gold_span": [
+        13,
+        20
+      ],
+      "sub_stratum": "plain",
+      "ambiguity_signals": [],
+      "design_weight": 13.0625,
+      "question": "Is the highlighted repeat the same person as the labelled value?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-193"
+    },
+    {
+      "document_id": "dataiku-test-1996",
+      "byte_start": 653,
+      "byte_end": 658,
+      "gold_label": "ZIP",
+      "predicted_class": "custom:postal_code",
+      "attributed_gold_span": [
+        104,
+        109
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-194"
+    },
+    {
+      "document_id": "dataiku-test-202",
+      "byte_start": 499,
+      "byte_end": 504,
+      "gold_label": "ZIP",
+      "predicted_class": "custom:postal_code",
+      "attributed_gold_span": [
+        321,
+        326
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-195"
+    },
+    {
+      "document_id": "dataiku-test-3122",
+      "byte_start": 516,
+      "byte_end": 521,
+      "gold_label": "ZIP",
+      "predicted_class": "custom:postal_code",
+      "attributed_gold_span": [
+        144,
+        149
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-196"
+    },
+    {
+      "document_id": "dataiku-test-3837",
+      "byte_start": 823,
+      "byte_end": 830,
+      "gold_label": "ZIP",
+      "predicted_class": "custom:postal_code",
+      "attributed_gold_span": [
+        75,
+        82
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-197"
+    },
+    {
+      "document_id": "dataiku-test-3962",
+      "byte_start": 211,
+      "byte_end": 216,
+      "gold_label": "ZIP",
+      "predicted_class": "custom:postal_code",
+      "attributed_gold_span": [
+        67,
+        72
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-198"
+    },
+    {
+      "document_id": "dataiku-test-4528",
+      "byte_start": 503,
+      "byte_end": 508,
+      "gold_label": "ZIP",
+      "predicted_class": "custom:postal_code",
+      "attributed_gold_span": [
+        91,
+        96
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-199"
+    },
+    {
+      "document_id": "dataiku-test-4703",
+      "byte_start": 424,
+      "byte_end": 429,
+      "gold_label": "ZIP",
+      "predicted_class": "custom:postal_code",
+      "attributed_gold_span": [
+        121,
+        126
+      ],
+      "sub_stratum": "rule_class_census",
+      "ambiguity_signals": [],
+      "design_weight": 1.0,
+      "question": "Is the highlighted repeat the same value used as the same personal datum?",
+      "verdict": null,
+      "second_adjudicator_verdict": null,
+      "note": null,
+      "id": "gg-200"
+    }
+  ]
+}

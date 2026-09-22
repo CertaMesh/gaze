@@ -109,6 +109,45 @@ anything other than v1 names its contract, and the release trend line only
 joins rows measured under the same contract. See
 [`scripts/bench/README.md`](../../../scripts/bench/README.md#scored-label-contracts).
 
+Contract column note: a release row's contract is shown as "scored labels vN"
+beside its version; a row with no contract label was measured under v1. v3
+rows carry the same headline columns as v2 plus the gold-gap diagnostic below.
+
+### Gold-gap protection (contract v3, diagnostic)
+
+The corpus labels a PII value where it is introduced and, in the audited
+candidates, not where it recurs. "My name is Emma Clarke … Emma has always
+enjoyed …" labels the first `Emma` only, so protecting the second one scores
+four false-positive bytes under v2.
+[`scored-labels-v3.json`](scored-labels-v3.json) has v2's labels unchanged and
+adds a `gold_gap` rule: a predicted span that overlaps no scored gold and no
+ignored byte, whose ASCII-whitespace-trimmed bytes equal a scored gold value in
+the same document, whose class is listed against that label in the contract's
+own `compatible_labels` table, and whose trimmed edges touch no letter, digit
+or combining mark, is reported as `gold_gap_protected_bytes` (per label,
+attributed to the first compatible gold span in document order, each byte once).
+Only trimmed bytes are credited; padding stays false positive.
+
+**This is a diagnostic column; the v2 headline is unchanged.** Leaked,
+true-positive and false-positive bytes and byte precision are computed exactly
+as under v2 and stay the release-gate numbers. The diagnostic adds
+`false_positive_bytes_after_gold_gap` (v2 FP − gold-gap) and
+`adjusted_precision` = TP / (TP + FP after gold-gap); every scored predicted
+byte is TP, FP after gold-gap, or gold-gap, with ignored bytes separate. The
+negative corpus has no gold, so nothing there can qualify.
+
+Byte equality is not identity: a same-document homonym ("May" the name and
+"May" the month) passes all four conditions. The column means nothing until a
+human audit of [`gold-gap-sample-v3.json`](gold-gap-sample-v3.json) passes: 200
+seeded (20260922) candidates from the final eligibility set, every rule-class
+candidate plus at least 40 each of `FIRSTNAME`, `SURNAME` and `CITY`, ambiguous
+shapes oversampled with recorded design weights, IDs and byte offsets only (no
+document text). Acceptance, declared before any verdict: the one-sided 95 %
+Clopper-Pearson upper bound on the candidate false-credit rate is at most 5 %,
+which is **at most 4** "no" or "uncertain" of 200 (bound 4.52 %; 5 would give
+5.18 %), with document-clustered counts reported. Scoring and sampling:
+`scripts/bench/gold_gap_evidence.py`.
+
 ### Zero-leak production goals
 
 Production scorecard targets, not claims about any particular historical report:

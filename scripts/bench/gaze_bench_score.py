@@ -1324,6 +1324,33 @@ def safe_ratio(numerator: int | float, denominator: int | float) -> float:
     return numerator / denominator
 
 
+def contract_scoring_view(
+    document: Document, predictions: Sequence[Span]
+) -> tuple[list[tuple[int, int]], list[tuple[int, int]], list[Span]]:
+    """(merged gold, merged ignored bytes, predictions left in the score)."""
+    gold = merge_intervals((span.start, span.end) for span in document.spans)
+    # Bytes only an out-of-contract label covers are outside the score:
+    # protecting them is neither a true nor a false positive.
+    ignored = subtract_intervals(
+        merge_intervals(
+            [(span.start, span.end) for span in document.excluded_spans]
+            + [
+                (span.start, span.end)
+                for span in predictions
+                if span.label in document.neutral_prediction_classes
+            ]
+        ),
+        gold,
+    )
+    if ignored:
+        predictions = [
+            span
+            for span in predictions
+            if not interval_is_covered((span.start, span.end), ignored)
+        ]
+    return gold, ignored, list(predictions)
+
+
 def _is_word_character(character: str) -> bool:
     # A superset of Rust's `char::is_alphanumeric`, which Gaze's
     # `is_inside_word` uses: letters and digits, plus combining marks, which
@@ -1429,26 +1456,7 @@ class MetricAccumulator:
         self.gold_gap_ranges_by_label: Counter[str] = Counter()
 
     def add(self, document: Document, predictions: Sequence[Span]) -> None:
-        gold = merge_intervals((span.start, span.end) for span in document.spans)
-        # Bytes only an out-of-contract label covers are outside the score:
-        # protecting them is neither a true nor a false positive.
-        ignored = subtract_intervals(
-            merge_intervals(
-                [(span.start, span.end) for span in document.excluded_spans]
-                + [
-                    (span.start, span.end)
-                    for span in predictions
-                    if span.label in document.neutral_prediction_classes
-                ]
-            ),
-            gold,
-        )
-        if ignored:
-            predictions = [
-                span
-                for span in predictions
-                if not interval_is_covered((span.start, span.end), ignored)
-            ]
+        gold, ignored, predictions = contract_scoring_view(document, predictions)
         predicted = subtract_intervals(
             merge_intervals((span.start, span.end) for span in predictions), ignored
         )

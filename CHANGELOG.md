@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Benchmark gold-gap diagnostic (scored-label contract v3).**
+  `docs/reference/benchmarks/scored-labels-v3.json` keeps v2's labels and adds
+  a `gold_gap` rule: a predicted span that repeats a scored gold value
+  byte-for-byte in the same document (ASCII-trimmed, class-compatible, on a
+  word boundary, no gold or ignored overlap) is reported as
+  `gold_gap_protected_bytes` with a per-label breakdown and an adjusted
+  precision. It is a diagnostic column; the v2 headline is unchanged, v1/v2
+  never run the step, and a malformed `gold_gap` block fails closed. On the
+  saved `pass2-ner` predictions it credits 1,683 ranges (11,188 bytes) and
+  moves no leaked byte. It stays diagnostic until the committed 200-candidate
+  human audit (`gold-gap-sample-v3.json`) passes.
 - **Nym warm-latency script.** `scripts/bench/nym-warm-latency.py` times the
   production pipeline (`clean_for_bench`) warm, per document, for `pass2-ner`
   and `full-stack-nym-resolve` over the coverage-loop corpus plus 512- and
