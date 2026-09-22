@@ -4993,3 +4993,81 @@ action = "preserve"
         assert!(!clean.contains("3457"), "IBAN leaked raw: {clean}");
     }
 }
+
+/// Todo #3709 through the real trigger: under de-AT, bundled `postal.at_ch`
+/// matches the IBAN's last group plus the next capitalised word
+/// (`3201 Kontoinhaber`). That overlap must not reopen the collision-settled
+/// IBAN, neither under a tokenize-iban + preserve-default policy (where the
+/// family fallback shipped it raw) nor under the core-only chain (where the
+/// class shifted to the family token). The audit check keeps the pin honest:
+/// if `postal.at_ch` stops firing here, this test stops testing the trigger.
+#[test]
+fn postal_at_ch_overlap_does_not_reopen_a_settled_iban() {
+    let input = "Zahlung an AT61 1904 3002 3457 3201 Kontoinhaber Max\n";
+    let dir = tempdir().unwrap();
+    let policy_path = dir.path().join("policy.toml");
+    fs::write(
+        &policy_path,
+        r#"
+schema_version = "0.1.0"
+
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["core", "locale-de"]
+
+[locale]
+active = ["de-AT"]
+
+[[rule]]
+kind = "class"
+class = "custom:iban"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:credit_card"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let policy_arg = format!("--policy={}", policy_path.display());
+    let audit_arg = format!("--audit-db={}", audit_path.display());
+    let core_only = ["--rulepack-bundled", "core", "--locale", "de-AT"];
+
+    for args in [
+        &[policy_arg.as_str(), audit_arg.as_str()][..],
+        &core_only[..],
+    ] {
+        let out = clean_json_with_args(args, input);
+        let clean = out["clean_text"].as_str().unwrap();
+        assert!(clean.contains(":Custom:iban_1>"), "{args:?}: {clean}");
+        assert!(!clean.contains("family"), "{args:?}: {clean}");
+        assert!(
+            !clean.contains("AT61"),
+            "{args:?}: IBAN leaked raw: {clean}"
+        );
+        assert!(
+            !clean.contains("3457"),
+            "{args:?}: IBAN leaked raw: {clean}"
+        );
+    }
+
+    let conn = Connection::open(&audit_path).unwrap();
+    let postal_losers: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM redaction_log \
+             WHERE recognizer_id = 'postal.at_ch' AND conflict_loser = 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(postal_losers, 1, "postal.at_ch no longer overlaps the IBAN");
+}
