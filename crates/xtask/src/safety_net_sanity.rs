@@ -149,6 +149,7 @@ fn run_live_nym_pass(suites: &[Suite]) -> Result<()> {
         "live_salutation_sentence_has_no_suspects",
         "live_long_document_is_scanned_to_the_end",
         "live_capture_matches_the_committed_fixture",
+        "live_token_text_is_masked_before_the_model_reads_it",
     ] {
         if !stdout
             .lines()

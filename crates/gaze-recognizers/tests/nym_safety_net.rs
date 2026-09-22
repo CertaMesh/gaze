@@ -360,3 +360,61 @@ fn capture_all() -> Value {
         "cases": cases,
     })
 }
+
+/// Todo 3681 on the real model. Unmasked, the pinned model flags Gaze's own token text (the class
+/// name spells a Nym label); with the token in the manifest, the net masks it before inference and
+/// no suspect overlaps it. The first half keeps the fixture honest: if the model stopped flagging
+/// token text, the second half would pass without proving anything.
+#[test]
+#[ignore = "needs GAZE_NYM_MODEL_DIR (run by xtask safety-net-sanity when set)"]
+fn live_token_text_is_masked_before_the_model_reads_it() {
+    let tokens = [
+        "<e19efc64:Custom:building_number_1>",
+        "<e19efc64:Custom:license_plate_1>",
+    ];
+    let text = format!(
+        "Die Lieferung geht an die Musterstraße {} in Berlin, Fahrzeug {} steht im Hof.",
+        tokens[0], tokens[1]
+    );
+    let token_spans = tokens
+        .iter()
+        .map(|token| {
+            let start = text.find(token).unwrap();
+            start..start + token.len()
+        })
+        .collect::<Vec<_>>();
+    let overlaps_a_token = |suspect: &gaze_types::LeakSuspect| {
+        token_spans
+            .iter()
+            .any(|token| suspect.span.start < token.end && token.start < suspect.span.end)
+    };
+
+    let unmasked = live_check(&text);
+    assert!(
+        unmasked.iter().any(overlaps_a_token),
+        "fixture no longer exercises token text: {unmasked:?}"
+    );
+
+    let manifest = Manifest::from_spans(
+        token_spans
+            .iter()
+            .zip(["building_number", "license_plate"])
+            .map(|(span, class)| {
+                gaze_types::EmittedTokenSpan::new(
+                    span.clone(),
+                    0..1,
+                    gaze_types::PiiClass::custom(class).unwrap(),
+                )
+            })
+            .collect(),
+    );
+    let context = SafetyNetContext::new(
+        &manifest,
+        &[LocaleTag::Global],
+        DocumentKind::Text,
+        None,
+        None,
+    );
+    let masked = live_net().check(&text, context).expect("nym check");
+    assert!(!masked.iter().any(overlaps_a_token), "{masked:?}");
+}
