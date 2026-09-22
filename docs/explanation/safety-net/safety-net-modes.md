@@ -11,10 +11,10 @@ Existing cross-reference: [`docs/explanation/safety-net/safety-nets.md`](safety-
 ## TL;DR
 
 - Today's CLI only has two outcomes when a safety net flags a suspect: **fail closed** (`strict`, exit 3, empty stdout) or **ship the leak with a warning** (`tolerant`). Both are blunt instruments and `tolerant` is **explicitly not a production mode** (§3).
-- `redact` adds a third outcome: *one-way redact the suspect span and continue*. The cost is reversibility (axis 2) — the redacted bytes are gone for that suspect. The win is axis 1: no leak ships, no exit code, no human-in-the-loop. Available as an explicit opt-in for adopters who want to skip the resolve attempt and strip suspects directly.
+- `redact` adds a third outcome: *one-way redact the suspect span and continue*. The cost is reversibility (axis 2) — the redacted bytes are gone for that suspect. The win is axis 1: no leak ships, no exit code, no human-in-the-loop. Available as an explicit opt-in for adopters who want to skip the resolve attempt and mark suspects directly.
 - `resolve` adds a fourth outcome: *promote each suspect into a synthetic custom-recognizer match and let the existing conflict resolver decide*. Manifest stays intact, restore round-trips for every emitted token, no new pipeline re-entry point. **This is the new production default** (§3, §14 Q9). Naming choice and impl-alt comparison in §7 and §8.
 - **New composable flag `--safety-net-fallback {strict|tolerant|redact}`** (§6). *As implemented*, it applies when the primary mode is `resolve` and the resolve pass cannot honor a suspect or the post-resolve re-run still reports one. Default is `redact`. One-hop cascade only. (The original design below also proposed a `redact` cascade; that half was not implemented — see the note at the top of §6.)
-- **Defaults flip:** `--safety-net-mode` default is now `resolve`; `--safety-net-fallback` default is `redact`. The pairing attempts the reversibility-preserving path first and only strips suspect bytes when resolve cannot honor them (validator-veto, missing anchor, residual suspect after re-run). `strict` stays available as an opt-in for "must fail loud" deployments. Existing `strict` users must pass `--safety-net-mode strict` explicitly to retain that behavior on upgrade (§10).
+- **Defaults flip:** `--safety-net-mode` default is now `resolve`; `--safety-net-fallback` default is `redact`. The pairing attempts the reversibility-preserving path first and only replaces suspect bytes with a marker when resolve cannot honor them (validator-veto, missing anchor, residual suspect after re-run). `strict` stays available as an opt-in for "must fail loud" deployments. Existing `strict` users must pass `--safety-net-mode strict` explicitly to retain that behavior on upgrade (§10).
 - The existing `SafetyNetMode` enum (`crates/gaze-cli/src/commands/mod.rs:399`) gains two additive variants. The current strict/tolerant semantics at `crates/gaze-cli/src/pipeline/run.rs:774` are unchanged for adopters who opt back in.
 - **Recommended ship order: `redact` first (with the new default flip and the fallback flag), `resolve` second**, both within v0.8.x. Reasoning in §11.
 - Concurrent recommendation that ships in the same train: **stderr warning on every `--safety-net-mode tolerant` invocation**, and an open question on tolerant-mode deprecation in v0.9 / removal in v0.10 (§3.3, §14 Q6).
@@ -59,9 +59,9 @@ Axes follow [`AGENTS.md`](../../../AGENTS.md): **A1** reliability (never leak), 
 | `redact`   | full†        | partial loss‡   | great               | full (audit row)    | high            | tiny       | opt-in           |
 | `resolve`  | bounded§     | full            | good (extra pass)   | full (audit row)    | medium          | +1 pass    | **default**      |
 
-† Reliability is preserved by deletion. The suspect span is overwritten with a sentinel before the clean text reaches the LLM; the audit log records the redaction with a typed `decided_by: SafetyNetRedacted` row. From the LLM's perspective the leak never occurred.
+† Reliability is preserved by replacement. The suspect span is overwritten with a one-way `[REDACTED:<class>]` marker before the clean text reaches the LLM; the audit log records the redaction with a typed `decided_by: SafetyNetRedacted` row, and the manifest carries it as a non-reversible entry. From the LLM's perspective the leak never occurred, and unlike deleting, the marker says that something was removed and what class it was.
 
-‡ Reversibility is preserved for every token gaze emitted itself. The break is scoped to safety-net suspect spans; restore returns the sentinel unchanged for those spans. Adopters must treat redacted bytes as lost.
+‡ Reversibility is preserved for every token gaze emitted itself. The break is scoped to safety-net suspect spans; restore returns the marker unchanged for those spans, because a marker is ordinary text to the restore scanner and never a token to substitute. Adopters must treat redacted bytes as lost.
 
 § `resolve` makes no axis-1 promise unless the second pass succeeds. If the second pass also flags a suspect above threshold, the design falls back via `--safety-net-fallback` (§6). Default cascade is `redact`, which preserves axis-1 at axis-2's expense for the residual suspect only; adopters may opt into `strict` for hard-fail.
 
@@ -77,13 +77,13 @@ Where each fits in adopter posture:
 | Mode      | Production posture                                  | Adopter signal                                          |
 |-----------|------------------------------------------------------|---------------------------------------------------------|
 | `resolve` | ✓ **PRODUCTION DEFAULT**                              | Manifest-restorable second pass attempted first; cascades to `--safety-net-fallback` (default `redact`) only when resolve cannot honor a suspect. Axis 1 + Axis 2 safe by construction. |
-| `redact`  | ✓ Production opt-in (latency-sensitive deployments)   | One-way redaction; Axis 2 broken (per suspect) but Axis 1 safe via deletion + audit trail. Skips the resolve attempt. |
+| `redact`  | ✓ Production opt-in (latency-sensitive deployments)   | One-way redaction; Axis 2 broken (per suspect) but Axis 1 safe via marker replacement + audit trail. Skips the resolve attempt. |
 | `strict`  | ✓ Production opt-in (hard-fail deployments)           | Fail-closed on suspect leak. Axis-1 safe. Surfaces gaps loudly to a human or CI gate. |
 | `tolerant`| ✗ **DEV / LOCAL ONLY — never production**             | Ships the leak. Axis-1 violation by design.             |
 
 ### 3.0 Why `resolve` is the production default
 
-The chosen pairing — `--safety-net-mode resolve --safety-net-fallback redact` — is designed to attempt the reversibility-preserving path first and only strip suspect bytes when reversibility cannot be honored. This is a strict improvement over the v0.7.x strict-default along axes 2, 3, and 5 with no weakening of axis 1.
+The chosen pairing — `--safety-net-mode resolve --safety-net-fallback redact` — is designed to attempt the reversibility-preserving path first and only replace suspect bytes with a one-way marker when reversibility cannot be honored. This is a strict improvement over the v0.7.x strict-default along axes 2, 3, and 5 with no weakening of axis 1.
 
 Axis-1 (never leak) is preserved: when `resolve` promotes a suspect to a synthetic custom-recognizer match, the existing conflict resolver tokenizes it through the manifest — the suspect bytes never reach the LLM. When `resolve` cannot honor a suspect (validator-veto, missing anchor, residual suspect after one-shot re-run), the default `redact` fallback strips the suspect span with a sentinel *before* the clean text leaves the chokepoint, and a typed `RedactionEntry` with `decided_by: Fallback` and `fallback_triggered: Some(...)` is appended to the audit DB. From the perspective of "did PII reach the LLM?", resolve-with-redact-fallback is identical to strict — the suspect bytes never crossed the boundary.
 
@@ -258,7 +258,7 @@ Each emits a `decided_by: Fallback` audit row with the corresponding `FallbackRe
 > |---------------------|-------------------------|------------------------------|-------------------|
 > | `strict`            | any                     | `Observe { strict: true }`   | report only; the CLI boundary exits `3` |
 > | `tolerant`          | any                     | `Observe { strict: false }`  | report only; the CLI boundary warns and ships |
-> | `redact`            | any                     | `Redact`                     | delete every suspect span; **no fallback** |
+> | `redact`            | any                     | `Redact`                     | replace every suspect span with a marker; **no fallback** |
 > | `resolve`           | `f`                     | `Resolve { on_residual: f }` | tokenize, re-run the nets, apply `f` to the residual |
 >
 > `redact` is **terminal per suspect**: it has no cascade. Its failure paths are typed errors that
@@ -271,7 +271,7 @@ Each emits a `decided_by: Fallback` audit row with the corresponding `FallbackRe
 > `safety_net_policy_lowering_covers_all_twelve_representable_pairs` in
 > `crates/gaze/tests/safety_net.rs`.
 
-The fallback flag is a per-suspect cascade decision: when the primary `--safety-net-mode` is `resolve` and the primary action cannot be honored, the fallback decides what happens to the residual. The other modes (`strict`, `tolerant`, `redact`) ignore the flag: `strict` exits at the boundary regardless, `tolerant` ships the leak regardless, and `redact` has already removed the bytes or failed closed.
+The fallback flag is a per-suspect cascade decision: when the primary `--safety-net-mode` is `resolve` and the primary action cannot be honored, the fallback decides what happens to the residual. The other modes (`strict`, `tolerant`, `redact`) ignore the flag: `strict` exits at the boundary regardless, `tolerant` ships the leak regardless, and `redact` has already replaced the bytes or failed closed.
 
 ### 6.1 CLI surface
 
@@ -291,16 +291,16 @@ not implemented (see the note at the top of §6). The **default** cell is marked
 
 | primary \ fallback | `strict`                                       | `tolerant`                                       | `redact`                                                    |
 |--------------------|------------------------------------------------|--------------------------------------------------|-------------------------------------------------------------|
-| `resolve`          | Reject the document with `Error::SafetyNetFallback(reason)`; the CLI exits 3. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. | Ship the residual bytes. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. Requires `GAZE_ALLOW_TOLERANT=1` (§6.5). | **Default.** Delete the residual spans. One `decided_by: Fallback` row per residual suspect, `action = Redact`. Axis-1 preserved; axis-2 lost for that span. |
+| `resolve`          | Reject the document with `Error::SafetyNetFallback(reason)`; the CLI exits 3. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. | Ship the residual bytes. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. Requires `GAZE_ALLOW_TOLERANT=1` (§6.5). | **Default.** Replace the residual spans with a one-way `[REDACTED:<class>]` marker. One `decided_by: Fallback` row per residual suspect, `action = Redact`. Axis-1 preserved; axis-2 lost for that span, but the loss is visible rather than silent. |
 | `redact`           | *not consulted* | *not consulted* | *not consulted* |
 | `strict` / `tolerant` | *not consulted* | *not consulted* | *not consulted* |
 
-The `strict` and `redact` cells both preserve axis-1 — `strict` by rejecting the document, `redact` by removing the residual bytes. `redact` is the default. The `tolerant` cell violates axis-1 by design and is dev-only.
+The `strict` and `redact` cells both preserve axis-1 — `strict` by rejecting the document, `redact` by replacing the residual bytes with a marker. `redact` is the default. The `tolerant` cell violates axis-1 by design and is dev-only.
 
 **The fallback acts on the residual report, not the primary one.** When the resolve pass converges
 and the post-resolution re-run flags something, the residual lives in the *re-run* report at
 post-resolve coordinates. The fallback is handed that report. Handing it the primary report would
-point the redactor at stale spans — deleting bytes that resolve had already tokenized while leaving
+point the redactor at stale spans — replacing bytes that resolve had already tokenized while leaving
 the actual residual in the document. Pinned by
 `resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report`.
 
@@ -309,7 +309,7 @@ the actual residual in the document. Pinned by
 The fallback flag is invoked only when the primary action's per-suspect failure conditions trigger. The conditions are closed, enumerated, and audited.
 
 **`redact` primary: no fallback route.** A suspect span that overlaps a committed manifest token is
-handled inline — the deletion is expanded to swallow the whole token
+handled inline — the redacted region is expanded to swallow the whole token
 (`expand_span_to_overlapping_manifest_entries`) and overlapping regions are merged before
 application, so there is nothing left to cascade. A span that is misaligned to a character boundary
 is rounded outward; a span outside the text, or a manifest that contradicts its own alignment, is a
@@ -360,7 +360,7 @@ When the fallback triggers, gaze emits a **loser-only audit row** for the suspec
 
 - `source` = `"safety_net.<backend>.v<N>"`.
 - `class` = the safety-net-mapped class.
-- `action` = what the fallback does to that suspect's bytes, so the row can be read without knowing the flag: `Action::Redact` when the residual span is deleted (`--safety-net-fallback redact`), `Action::Preserve` when the bytes are left in place — under `tolerant` the document then ships, under `strict` it is rejected. Produced by `fallback_row_action` and pinned against the actual mutation by `safety_net_policy_lowering_covers_all_twelve_representable_pairs`.
+- `action` = what the fallback does to that suspect's bytes, so the row can be read without knowing the flag: `Action::Redact` when the residual span is replaced with a marker (`--safety-net-fallback redact`), `Action::Preserve` when the bytes are left in place — under `tolerant` the document then ships, under `strict` it is rejected. Produced by `fallback_row_action` and pinned against the actual mutation by `safety_net_policy_lowering_covers_all_twelve_representable_pairs`.
 - `conflict_loser` = `true`. The primary action lost to the fallback.
 - `decided_by` = `ConflictTier::Fallback`.
 - `fallback_triggered` = `Some(FallbackReason::...)`.
@@ -518,7 +518,7 @@ If maintainer review prefers a single bundled PR, that is fine — the two contr
 
 ## 12. Five-axis alignment for this design
 
-- **A1 (never leak)**: resolve closes the leak by re-tokenization through the manifest; redact closes by deletion + audit row; the default fallback (`redact`) preserves axis-1 even when the primary action cannot be honored. The `tolerant`-mode and `tolerant`-fallback "ship the leak" paths are preserved for adopters who explicitly chose them and explicitly set `GAZE_ALLOW_TOLERANT=1` but are documented as non-production (§3, §6.5) and get a stderr warning on every invocation. The flipped default does not weaken axis-1: the `resolve → redact` pairing is axis-1-safe by construction.
+- **A1 (never leak)**: resolve closes the leak by re-tokenization through the manifest; redact closes by one-way marker replacement + audit row; the default fallback (`redact`) preserves axis-1 even when the primary action cannot be honored. The `tolerant`-mode and `tolerant`-fallback "ship the leak" paths are preserved for adopters who explicitly chose them and explicitly set `GAZE_ALLOW_TOLERANT=1` but are documented as non-production (§3, §6.5) and get a stderr warning on every invocation. The flipped default does not weaken axis-1: the `resolve → redact` pairing is axis-1-safe by construction.
 - **A2 (reversible)**: **strengthened** versus the redact-only path. The default attempts resolve first, which produces a manifest entry for every successfully promoted suspect — fully restorable through `gaze restore`. Only suspects that resolve cannot honor (validator-veto, missing anchor, residual suspect) cascade to the redact fallback. Redact's reversibility break is named, scoped, documented, and surfaced in `gaze restore`. The fallback flag's `redact` default explicitly accepts the residual axis-2 trade-off in exchange for axis-1 + axis-3 on those suspects only.
 - **A3 (agentic-first)**: both new modes and the resolve-default flip are designed for agent loops. Resolve-default eliminates the strict-mode stall as the runtime default; the +1 pipeline pass is well within budget for the dominant deployment shapes. Agents in multi-turn conversation no longer encounter exit-3 on every safety-net suspect. Latency-sensitive callers opt into `--safety-net-mode redact`.
 - **A4 (trust)**: every action — successful resolve, fallback redaction, fallback strict-exit — emits a typed `ConflictTier` audit row. Sentinel string is validated at policy load. Loop count is bounded at one resolve pass plus at most one fallback hop. The fallback flag adds at most one extra audit row per suspect and is one-hop only. No silent fallbacks — every failure path is named in §4.5, §5.4, and §6.3, and every fallback emits a typed `FallbackReason`. Closed-enum surface delta is minimized (two new `ConflictTier` variants + one new `FallbackReason` enum) by the §8.4 impl choice.

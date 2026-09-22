@@ -27,6 +27,13 @@ enum BenchConfig {
     Pass2Ner,
     FullStackOpfResolve,
     FullStackNymResolve,
+    /// Nym-small under `SafetyNetMode::Redact`: every suspect goes through the redact path.
+    ///
+    /// Not a shipped default. It exists because on this corpus the shipped
+    /// `full-stack-nym-resolve` resolves every Nym suspect reversibly, so its `Redact` fallback
+    /// never fires and a change to what redaction writes is invisible there. This arm makes
+    /// that code path measurable.
+    FullStackNymRedact,
     Pass3Opf,
 }
 
@@ -38,6 +45,7 @@ impl BenchConfig {
             Self::Pass2Ner => "pass2-ner",
             Self::FullStackOpfResolve => "full-stack-opf-resolve",
             Self::FullStackNymResolve => "full-stack-nym-resolve",
+            Self::FullStackNymRedact => "full-stack-nym-redact",
             Self::Pass3Opf => "pass3-opf",
         }
     }
@@ -45,7 +53,10 @@ impl BenchConfig {
     fn uses_ner(self) -> bool {
         matches!(
             self,
-            Self::Pass2Ner | Self::FullStackOpfResolve | Self::FullStackNymResolve
+            Self::Pass2Ner
+                | Self::FullStackOpfResolve
+                | Self::FullStackNymResolve
+                | Self::FullStackNymRedact
         )
     }
 
@@ -265,7 +276,9 @@ fn handle_request(
 
     let (post_policy_safety_net_stats, post_policy_scan_ms) = if matches!(
         config,
-        BenchConfig::FullStackOpfResolve | BenchConfig::FullStackNymResolve
+        BenchConfig::FullStackOpfResolve
+            | BenchConfig::FullStackNymResolve
+            | BenchConfig::FullStackNymRedact
     ) {
         let post_policy_scan_start = Instant::now();
         let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
@@ -626,6 +639,7 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
                 "pass2-ner" => BenchConfig::Pass2Ner,
                 "full-stack-opf-resolve" => BenchConfig::FullStackOpfResolve,
                 "full-stack-nym-resolve" => BenchConfig::FullStackNymResolve,
+                "full-stack-nym-redact" => BenchConfig::FullStackNymRedact,
                 "pass3-opf" => BenchConfig::Pass3Opf,
                 _ => return Err(format!("unknown --config {value}").into()),
             };
@@ -651,7 +665,7 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
                 }
             })?;
         }
-        BenchConfig::FullStackNymResolve => {
+        BenchConfig::FullStackNymResolve | BenchConfig::FullStackNymRedact => {
             pipeline = register_nym(pipeline).map_err(|source| {
                 BenchmarkBuildError::SafetyNetRegistration {
                     cell: config.name(),
@@ -867,6 +881,9 @@ fn leak_kind_name(kind: &LeakKind) -> &'static str {
 }
 
 fn safety_net_policy(config: BenchConfig) -> SafetyNetPolicy {
+    if config == BenchConfig::FullStackNymRedact {
+        return SafetyNetPolicy::new(SafetyNetMode::Redact, SafetyNetFallback::Redact);
+    }
     if matches!(
         config,
         BenchConfig::FullStackOpfResolve | BenchConfig::FullStackNymResolve

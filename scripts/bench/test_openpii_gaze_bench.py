@@ -1034,8 +1034,9 @@ class ResponseValidationTests(unittest.TestCase):
                 item["provenance"]["stage"] = stage
                 item["provenance"]["decision"] = decision
                 if action == "redact":
-                    response["manifest_spans"] = []
-                    response["manifest_integrity"]["spans"] = 0
+                    # A redaction keeps its manifest entry: the safety net writes a one-way
+                    # `[REDACTED:<class>]` marker and records it like any other replacement.
+                    # It only loses exact restore, because the marker never restores.
                     response["restore"]["exact"] = False
                 benchmark.validate_response(self.trace_document(), response)
 
@@ -1101,9 +1102,72 @@ class ResponseValidationTests(unittest.TestCase):
         ):
             benchmark.validate_response(self.document(), response)
 
-    def test_redact_protects_safety_but_cannot_claim_exact_restore(self) -> None:
+    def redact_response(self, clean_text: str = "[REDACTED:name] synthetic") -> dict[str, object]:
+        """A safety-net redaction as the pipeline now emits it: a marker plus its entry."""
         response = self.success_response()
+        response["clean_text"] = clean_text
         response["restore"]["exact"] = False
+        response["manifest_spans"] = [
+            {
+                "raw_start": 0,
+                "raw_end": 2,
+                "clean_start": 0,
+                "clean_end": len("[REDACTED:name]"),
+                "class": "name",
+            }
+        ]
+        response["manifest_integrity"]["spans"] = 1
+        response["final_protection_trace"] = [
+            {
+                "raw_start": 0,
+                "raw_end": 2,
+                "class": "name",
+                "action": "redact",
+                "provenance": {
+                    "stage": "safety_net",
+                    "decision": "redact",
+                    "source_ids": ["safety.name"],
+                },
+            }
+        ]
+        return response
+
+    def test_a_redaction_without_its_manifest_entry_is_rejected(self) -> None:
+        """The scorer used to prove a redaction by ABSENCE: no manifest entry overlapped it,
+        because deleting recorded nothing. That passed a trace claiming a redaction the pipeline
+        never made. A redaction is now proven the way a token is -- by the one entry that stands
+        for it -- so a `redact` item with no entry must fail closed."""
+        response = self.redact_response()
+        response["manifest_spans"] = []
+        response["manifest_integrity"]["spans"] = 0
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "agree 1:1 with the final manifest"
+        ):
+            benchmark.validate_response(self.trace_document(), response)
+
+    def test_marker_bytes_never_count_as_leaked_or_false_positive(self) -> None:
+        """Guard (3) of the marker contract. The scorer counts in ORIGINAL-request coordinates:
+        gold spans and trace predictions both point at the request bytes. A marker exists only in
+        the clean text, so its bytes cannot be leaked, raw-shipped or false-positive. Pinned by
+        scoring the same redaction with and without a marker in the clean text, including a
+        clean text made of nothing BUT markers, and requiring identical counts."""
+        document = self.trace_document()
+        results = []
+        for clean_text in (
+            "[REDACTED:name] synthetic",
+            "[REDACTED:name][REDACTED:name][REDACTED:name] synthetic",
+            "[REDACTED:custom:order-id]" * 40,
+        ):
+            response = self.redact_response(clean_text)
+            validated = benchmark.validate_response(document, response)
+            metrics = benchmark.MetricAccumulator()
+            metrics.add(document, benchmark.final_trace_predictions(document, validated))
+            utf8 = metrics.result()["utf8_bytes"]
+            results.append((utf8["leaked"], utf8["false_positive"]))
+        self.assertEqual(results, [(0, 0)] * 3)
+
+    def test_redact_protects_safety_but_cannot_claim_exact_restore(self) -> None:
+        response = self.redact_response()
         response["final_protection_trace"] = [
             {
                 "raw_start": 0,

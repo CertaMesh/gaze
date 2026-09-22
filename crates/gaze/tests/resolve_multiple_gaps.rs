@@ -437,22 +437,28 @@ fn compatibility_wrong_first_gap_preserves_exact_old_fallback_outputs() {
             let (CleanDocument::Text(text), spans, _) = result.unwrap() else {
                 panic!("text")
             };
-            assert_eq!(spans.len(), 1);
+            let redacted = matches!(fallback, SafetyNetFallback::Redact);
+            // Redact adds one marker entry beside the token; tolerant ships the bytes.
+            assert_eq!(spans.len(), if redacted { 2 } else { 1 });
             let before = seen.lock().unwrap()[0].0.clone();
-            assert_eq!(
-                text,
-                if matches!(fallback, SafetyNetFallback::Redact) {
-                    before[..before.len() - 4].to_string()
-                } else {
-                    before
-                }
-            );
+            if redacted {
+                // The trailing four bytes are replaced by exactly one whole marker, not cut.
+                let kept = &before[..before.len() - 4];
+                assert!(text.starts_with(kept), "{text:?}");
+                assert!(
+                    gaze::is_redaction_marker(&text[kept.len()..]),
+                    "expected one marker after {kept:?}, got {text:?}"
+                );
+            } else {
+                assert_eq!(text, before);
+            }
             assert_eq!(
                 session.restore_strict_text(&text).unwrap(),
-                if matches!(fallback, SafetyNetFallback::Redact) {
-                    &RAW[..26]
+                if redacted {
+                    // One-way: the marker survives restore; the bytes it replaced do not.
+                    format!("{}{}", &RAW[..26], &text[before.len() - 4..])
                 } else {
-                    RAW
+                    RAW.to_string()
                 }
             );
         }
@@ -529,9 +535,9 @@ fn compatibility_primary_nonowned_replacements_keep_old_outputs() {
                     format!(
                         "{}{replacement} 尾",
                         if matches!(fallback, SafetyNetFallback::Redact) {
-                            ""
+                            gaze::redaction_marker(&gaze::PiiClass::Email)
                         } else {
-                            "pré "
+                            "pré ".to_string()
                         }
                     )
                 );
@@ -564,10 +570,16 @@ fn compatibility_explicit_redact_still_deletes_only_the_reported_first_gap() {
     else {
         panic!("text")
     };
-    assert_eq!(text, seen.lock().unwrap()[0][5..]);
-    assert_eq!(spans.len(), 1);
-    assert_eq!(spans[0].raw_span, 5..26);
-    assert_eq!(session.restore_strict_text(&text).unwrap(), &RAW[5..]);
+    let marker = gaze::redaction_marker(&gaze::PiiClass::Email);
+    // Only the reported first gap is redacted, and it becomes one marker standing for 0..5.
+    assert_eq!(text, format!("{marker}{}", &seen.lock().unwrap()[0][5..]));
+    assert_eq!(spans.len(), 2);
+    assert_eq!(spans[0].raw_span, 0..5);
+    assert_eq!(spans[1].raw_span, 5..26);
+    assert_eq!(
+        session.restore_strict_text(&text).unwrap(),
+        format!("{marker}{}", &RAW[5..])
+    );
     assert_eq!(seen.lock().unwrap().len(), 1);
 }
 
@@ -617,9 +629,13 @@ fn full_parent_mixed_class_reflags_keep_strict_tolerant_redact_fallbacks() {
                 let (CleanDocument::Text(text), spans, _) = result.unwrap() else {
                     panic!("text")
                 };
-                assert!(text.is_empty());
-                assert!(spans.is_empty());
-                assert!(seen.lock().unwrap()[2].0.is_empty());
+                // The whole document was redacted. It used to become the empty string, which a
+                // reader could not tell from an empty input; it is now one marker standing for
+                // every original byte.
+                assert!(gaze::is_redaction_marker(&text), "{text:?}");
+                assert_eq!(spans.len(), 1);
+                assert_eq!(spans[0].raw_span, 0..RAW.len());
+                assert_eq!(seen.lock().unwrap()[2].0, text);
             }
             _ => unreachable!(),
         }

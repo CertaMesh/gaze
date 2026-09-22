@@ -242,8 +242,10 @@ fn overlapping_resolutions_under_redact_fallback_still_deliver_a_document() {
         !clean.contains("example.invalid"),
         "redact fallback left raw fixture bytes in {clean:?}"
     );
+    // Overlapping flagged spans merge into one region, and one region is one marker.
     assert_eq!(
-        clean, " tail",
+        clean,
+        format!("{} tail", gaze::redaction_marker(&PiiClass::Email)),
         "the union of the flagged spans is redacted and unflagged text survives verbatim"
     );
 }

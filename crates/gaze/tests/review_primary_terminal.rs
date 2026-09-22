@@ -80,7 +80,12 @@ fn prove_primary_action(action: Action, staged: bool) {
     };
     assert!(!text.contains("primary"));
     assert!(!text.contains("barrier"));
-    assert!(text.ends_with(" residual é"));
+    // The safety-net fallback replaced "barrier " -- trailing space included -- with a one-way
+    // marker, so the marker abuts "residual" where deleting used to leave the space behind.
+    assert!(text.ends_with(&format!(
+        "{}residual é",
+        gaze::redaction_marker(&PiiClass::Name)
+    )));
     assert_eq!(manifest[0].raw_span, 0..4);
     assert_eq!(manifest[1].raw_span, 5..12);
     assert_eq!(
@@ -186,7 +191,10 @@ fn reflag_primary(action: Action, staged: bool) {
             session.restore(replacement)
         };
         assert_eq!(restored.as_deref(), Some("primary"));
-        assert!(text.ends_with(" residual é"));
+        assert!(text.ends_with(&format!(
+            "{}residual é",
+            gaze::redaction_marker(&PiiClass::Name)
+        )));
     } else {
         assert!(
             matches!(result, Err(Error::SafetyNetFallback(_))),

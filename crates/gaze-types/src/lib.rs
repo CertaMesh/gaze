@@ -2,6 +2,7 @@
 
 pub mod inspection;
 pub mod nym;
+pub mod redaction_marker;
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap};

@@ -40,7 +40,11 @@ Dataiku Parquet file. Both profiles use only `rule-floor-extended` and
 `pass2-ner`; `pass2-ner` (rules plus Davlan NER, no safety net) is the production
 arm. The opt-in `full-stack-nym-resolve` and `full-stack-opf-resolve` arms run
 through `openpii_gaze_bench.py` or `dataiku_en_de_gaze_bench.py --config`, not
-this runner. The runner removes OPF environment variables and
+this runner. `full-stack-nym-redact` runs the same Nym model under
+`SafetyNetMode::Redact`; it is not a shipped default, and exists because the
+shipped Nym arm resolves every suspect on this corpus, so a change to what
+redaction writes is only measurable here. `marker_ab.py` is the document-level
+A/B built on it. The runner removes OPF environment variables and
 passes no OPF command, checkpoint, or daemon socket, even if the invoking shell
 defines them.
 

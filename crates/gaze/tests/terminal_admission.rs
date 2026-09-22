@@ -129,25 +129,25 @@ impl Harness {
 
 /// The scripted document every terminal case starts from.
 ///
-/// `"alpha bravo charlie delta"`: the second batch tokenizes `alpha`, the fallback deletes
-/// `charlie`, and the terminal pass then sees `"<alpha> bravo  delta"` — two adjacent spaces with
-/// a deletion seam between them, and two never-flagged words on either side of it. `charlie` is
-/// deleted from the MIDDLE so that a seam-containing span exists that touches no token: a span
-/// overlapping a token is rejected for that reason alone, which would make a bound look enforced
-/// when it is not.
+/// `"alpha bravo charlie delta"`: the second batch tokenizes `alpha`, the fallback redacts
+/// `charlie`, and the terminal pass then sees `"<alpha> bravo [REDACTED:name] delta"`.
+///
+/// This fixture used to delete `charlie`, leaving `"<alpha> bravo  delta"` -- two adjacent spaces
+/// with a deletion SEAM between them, which a later pass could read as a new, manufactured shape.
+/// A marker leaves no seam: the fragments stay apart. What remains to pin is how the terminal
+/// pass treats a suspect that touches the marker, which is three different cases -- wholly
+/// inside it, straddling it, and merely abutting it.
 struct Doc {
     session: Session,
     alpha: String,
     /// Text the terminal (fourth) sweep sees.
     terminal: String,
-    /// `delta`'s span in `terminal`. One byte clear of the seam.
+    /// `delta`'s span in `terminal`.
     delta_span: std::ops::Range<usize>,
-    /// `bravo`'s span in `terminal`. On the other side of the seam.
+    /// `bravo`'s span in `terminal`.
     bravo_span: std::ops::Range<usize>,
-    /// The two spaces around the seam: the smallest span the deletion manufactured.
-    seam_span: std::ops::Range<usize>,
-    /// The deletion seam itself, in `terminal`.
-    seam: usize,
+    /// The fallback's `[REDACTED:name]` marker, in `terminal`.
+    marker_span: std::ops::Range<usize>,
     lead: Vec<Step>,
 }
 
@@ -160,8 +160,9 @@ impl Doc {
         let alpha = session
             .tokenize_with_family("safety_net", &PiiClass::Name, "alpha")
             .unwrap();
+        let marker = redaction_marker(&PiiClass::Name);
         let resolved = format!("{alpha} bravo charlie delta");
-        let terminal = format!("{alpha} bravo  delta");
+        let terminal = format!("{alpha} bravo {marker} delta");
         let lead = vec![
             (Self::RAW.into(), Ok(vec![])),
             (Self::RAW.into(), Ok(vec![uncovered(0..5)])),
@@ -170,16 +171,21 @@ impl Doc {
                 Ok(vec![uncovered(alpha.len() + 7..alpha.len() + 14)]),
             ),
         ];
+        let marker_start = alpha.len() + 7;
+        let marker_end = marker_start + marker.len();
         Self {
-            delta_span: alpha.len() + 8..alpha.len() + 13,
+            delta_span: marker_end + 1..marker_end + 6,
             bravo_span: alpha.len() + 1..alpha.len() + 6,
-            seam_span: alpha.len() + 6..alpha.len() + 8,
-            seam: alpha.len() + 7,
+            marker_span: marker_start..marker_end,
             alpha,
             terminal,
             session,
             lead,
         }
+    }
+
+    fn marker(&self) -> String {
+        redaction_marker(&PiiClass::Name)
     }
 
     /// `steps` are the sweeps after the three lead-in sweeps: the terminal scan, then whatever
@@ -215,7 +221,7 @@ fn text_of(doc: CleanDocument) -> String {
 fn terminal_resolves_a_fresh_finding_once_and_completes() {
     let doc = Doc::new();
     let delta = doc.token("delta");
-    let resolved = format!("{} bravo  {delta}", doc.alpha);
+    let resolved = format!("{} bravo {} {delta}", doc.alpha, doc.marker());
     let h = doc.harness(vec![
         (
             doc.terminal.clone(),
@@ -228,16 +234,17 @@ fn terminal_resolves_a_fresh_finding_once_and_completes() {
         .expect("a fresh terminal finding must be resolved, not denied");
     let text = text_of(clean);
     assert_eq!(text, resolved);
-    // Restore is exact for everything the fallback did not delete: `charlie` is gone by the
-    // documented `Redact` contract, and both tokens still restore their own source bytes.
+    // Restore is exact for everything the fallback did not redact: `charlie` is gone by the
+    // documented `Redact` contract, its marker stays where it was, and both tokens still restore
+    // their own source bytes.
     assert_eq!(
         doc.session.restore_strict_text(&text).unwrap(),
-        "alpha bravo  delta"
+        format!("alpha bravo {} delta", doc.marker())
     );
     assert_eq!(
         spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-        [0..5, 20..25],
-        "the terminal round's token must name delta's ORIGINAL bytes"
+        [0..5, 12..19, 20..25],
+        "the marker stands for charlie's ORIGINAL bytes and the round's token for delta's"
     );
     assert!(
         report.suspects.iter().any(|s| s.span == doc.delta_span),
@@ -250,7 +257,7 @@ fn terminal_resolves_a_fresh_finding_once_and_completes() {
     assert_eq!(
         h.actions(),
         [Action::Tokenize, Action::Redact, Action::Tokenize],
-        "second batch, fallback deletion, then the terminal round"
+        "second batch, fallback redaction, then the terminal round"
     );
 }
 
@@ -260,7 +267,7 @@ fn terminal_resolves_a_fresh_finding_once_and_completes() {
 fn terminal_round_happens_at_most_once_and_reports_what_it_could_not_act_on() {
     let doc = Doc::new();
     let delta = doc.token("delta");
-    let resolved = format!("{} bravo  {delta}", doc.alpha);
+    let resolved = format!("{} bravo {} {delta}", doc.alpha, doc.marker());
     let h = doc.harness(vec![
         (
             doc.terminal.clone(),
@@ -287,114 +294,109 @@ fn terminal_round_happens_at_most_once_and_reports_what_it_could_not_act_on() {
     assert!(h.drained(), "no second terminal round");
 }
 
-/// The deletion joined two fragments into a shape the model calls a name. Those bytes are partly
-/// gaze's own artefact, so they are deleted once, and the deletion is proved by byte check.
+/// A suspect wholly inside the fallback's own marker is the net re-flagging gaze's output, not
+/// the document: `REDACTED` is a capitalised word a NER model reads as an organization. It is
+/// dropped as already protected, the document completes, and the marker is not touched again.
+///
+/// Replaces the seam-deletion case this file used to open with. That case cannot arise any more:
+/// a marker leaves no seam, so there is no manufactured shape for a terminal pass to find.
 #[test]
-fn terminal_deletes_a_seam_manufactured_suspect_once() {
+fn a_terminal_suspect_inside_the_marker_is_already_protected() {
     let doc = Doc::new();
-    let deleted = format!("{} bravodelta", doc.alpha);
-    let h = doc.harness(vec![
-        (
-            doc.terminal.clone(),
-            Ok(vec![uncovered(doc.seam_span.clone())]),
-        ),
-        (deleted.clone(), Ok(vec![])),
-    ]);
+    let h = doc.harness(vec![(
+        doc.terminal.clone(),
+        Ok(vec![uncovered(doc.marker_span.clone())]),
+    )]);
     let (clean, spans, _) = doc
         .run(&h)
-        .expect("a seam-manufactured suspect must be deleted, not denied");
-    assert_eq!(text_of(clean), deleted);
+        .expect("re-flagging a marker must not deny the document");
+    assert_eq!(text_of(clean), doc.terminal, "nothing was redacted twice");
     assert_eq!(
         spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-        vec![0..5],
-        "the seam deletion leaves the second batch's token untouched"
+        [0..5, 12..19]
+    );
+    assert!(h.drained(), "no terminal round ran over a marker");
+    assert_eq!(
+        h.actions(),
+        [Action::Tokenize, Action::Redact],
+        "second batch, fallback redaction, and nothing else"
+    );
+}
+
+/// A suspect straddling the marker and real text denies. Dropping it because half of it is a
+/// marker would ship the other half raw: a net that reports `[REDACTED:name] delta` has flagged
+/// `delta`. It is not a broken promise either -- the marker IS the fallback keeping its word --
+/// so what denies it is the ordinary rule for any suspect that overlaps a manifest entry.
+///
+/// The mutation this must catch: relax the marker guard from containment to overlap, and this
+/// document ships with `delta` raw.
+#[test]
+fn a_terminal_suspect_straddling_the_marker_denies() {
+    let doc = Doc::new();
+    let straddle = doc.marker_span.start..doc.delta_span.end;
+    let h = doc.harness(vec![(doc.terminal.clone(), Ok(vec![uncovered(straddle)]))]);
+    assert!(
+        matches!(
+            doc.run(&h),
+            Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
+        ),
+        "a straddling suspect must fail closed, never ship its real half"
     );
     assert!(h.drained());
-    assert_eq!(
-        h.actions(),
-        [Action::Tokenize, Action::Redact, Action::Redact],
-        "second batch, fallback deletion, then the single bounded seam deletion"
-    );
 }
 
-/// Both bounds spent on the same report. The deletion moves every clean offset after it, so the
-/// round's remaining targets are frozen in raw coordinates first and rebased against the document
-/// the deletion left. A rebase that were wrong would mint a token over the wrong bytes — a
-/// restore-breaking token with false provenance — so the original bytes are what this pins.
+/// A fresh finding elsewhere in the report does not buy a straddling suspect through. The
+/// reversible round is all-or-nothing over the report, so one suspect it may not act on denies
+/// the document even beside one it could have resolved.
 #[test]
-fn a_bounded_deletion_rebases_the_round_onto_the_document_it_left() {
+fn a_straddling_suspect_denies_even_beside_a_resolvable_one() {
     let doc = Doc::new();
-    let delta = doc.token("delta");
-    let deleted = format!("{} bravo{delta}", doc.alpha);
-    let h = doc.harness(vec![
-        (
-            doc.terminal.clone(),
-            Ok(vec![
-                uncovered(doc.seam_span.clone()),
-                uncovered(doc.delta_span.clone()),
-            ]),
-        ),
-        (deleted.clone(), Ok(vec![])),
-    ]);
-    let (clean, spans, report) = doc
-        .run(&h)
-        .expect("one deletion and one round are both spendable in the same report");
-    let text = text_of(clean);
-    assert_eq!(text, deleted);
-    assert_eq!(
-        spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-        [0..5, 20..25],
-        "the rebased round must name delta's ORIGINAL bytes, not its pre-deletion offsets"
-    );
-    assert_eq!(
-        doc.session.restore_strict_text(&text).unwrap(),
-        "alpha bravodelta",
-        "both tokens restore their own source bytes"
-    );
+    let h = doc.harness(vec![(
+        doc.terminal.clone(),
+        Ok(vec![
+            uncovered(doc.bravo_span.clone()),
+            uncovered(doc.marker_span.start - 1..doc.marker_span.end),
+        ]),
+    )]);
     assert!(
-        report.suspects.iter().any(|s| s.span == doc.seam_span),
-        "the deleted seam suspect must be surfaced"
+        matches!(
+            doc.run(&h),
+            Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
+        ),
+        "the resolvable finding must not carry the straddling one through"
     );
-    assert!(h.drained(), "one terminal scan, one settled scan");
-    assert_eq!(
-        h.actions(),
-        [
-            Action::Tokenize,
-            Action::Redact,
-            Action::Redact,
-            Action::Tokenize
-        ],
-        "second batch, fallback deletion, bounded seam deletion, terminal round"
-    );
+    assert!(h.drained());
 }
 
-/// Abutting a seam is not containing it: no byte of the suspect was manufactured by the deletion,
-/// so it is a fresh finding and takes the reversible round. The token it mints must name the
-/// surviving original bytes, never the removed ones.
+/// Abutting the marker is not touching it: no byte of the suspect is gaze's output, so it is a
+/// fresh finding and takes the reversible round. The token must name the suspect's own original
+/// bytes -- the space and `delta` -- and never reach back into what the marker stands for.
+///
+/// Pins the containment boundary from the other side: an off-by-one that counted an abutting
+/// span as overlapping would deny this document.
 #[test]
-fn a_suspect_that_only_abuts_the_seam_is_resolved_not_deleted() {
+fn a_suspect_that_only_abuts_the_marker_is_resolved() {
     let doc = Doc::new();
-    // Starts exactly at the seam and runs to the end of `delta`.
-    let abutting = doc.seam..doc.delta_span.end;
+    let abutting = doc.marker_span.end..doc.delta_span.end;
     let token = doc.token(" delta");
-    let resolved = format!("{} bravo {token}", doc.alpha);
+    let resolved = format!("{} bravo {}{token}", doc.alpha, doc.marker());
     let h = doc.harness(vec![
         (doc.terminal.clone(), Ok(vec![uncovered(abutting)])),
         (resolved.clone(), Ok(vec![])),
     ]);
     let (clean, spans, _) = doc
         .run(&h)
-        .expect("an abutting suspect must be resolved, not deleted");
+        .expect("an abutting suspect must be resolved, not denied");
     let text = text_of(clean);
     assert_eq!(text, resolved);
     assert_eq!(
         spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-        [0..5, 19..25],
-        "the abutting token must skip the removed range, not swallow it"
+        [0..5, 12..19, 19..25],
+        "the abutting token names its own original bytes and stops at the marker"
     );
     assert_eq!(
         doc.session.restore_strict_text(&text).unwrap(),
-        "alpha bravo  delta"
+        format!("alpha bravo {} delta", doc.marker())
     );
     assert!(h.drained());
     assert_eq!(
@@ -403,43 +405,16 @@ fn a_suspect_that_only_abuts_the_seam_is_resolved_not_deleted() {
     );
 }
 
-/// Exactly one seam deletion is permitted. A second seam-crossing suspect after it means the
-/// deletion is manufacturing shapes at least as fast as it removes them, so the document fails
-/// closed rather than deleting again.
+/// One suspect inside the marker is dropped as protected; that must not excuse a straddling
+/// sibling in the same report. The two guards are independent per suspect.
 #[test]
-fn a_second_seam_manufactured_suspect_denies() {
-    let doc = Doc::new();
-    let deleted = format!("{} bravodelta", doc.alpha);
-    // The union of both deletions puts the new seam between `bravo` and `delta`.
-    let across = doc.alpha.len() + 5..doc.alpha.len() + 7;
-    let h = doc.harness(vec![
-        (
-            doc.terminal.clone(),
-            Ok(vec![uncovered(doc.seam_span.clone())]),
-        ),
-        (deleted.clone(), Ok(vec![uncovered(across)])),
-    ]);
-    assert!(
-        matches!(
-            doc.run(&h),
-            Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
-        ),
-        "the second seam-manufactured suspect must fail closed"
-    );
-    assert!(h.drained());
-}
-
-/// Two seam-crossing suspects in the same terminal report exceed the bound before any deletion.
-/// Both are anchored at the same start so that neither touches a token: a suspect overlapping one
-/// is rejected for that reason instead, which would make the bound look enforced when it is not.
-#[test]
-fn two_seam_manufactured_suspects_in_one_report_deny() {
+fn a_protected_marker_suspect_does_not_excuse_a_straddling_sibling() {
     let doc = Doc::new();
     let h = doc.harness(vec![(
         doc.terminal.clone(),
         Ok(vec![
-            uncovered(doc.seam_span.clone()),
-            uncovered(doc.seam_span.start..doc.delta_span.end),
+            uncovered(doc.marker_span.clone()),
+            uncovered(doc.marker_span.start..doc.delta_span.end),
         ]),
     )]);
     assert!(
@@ -447,7 +422,7 @@ fn two_seam_manufactured_suspects_in_one_report_deny() {
             doc.run(&h),
             Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
         ),
-        "more seam-manufactured suspects than the bound must fail closed"
+        "the protected suspect must not carry its straddling sibling through"
     );
     assert!(h.drained());
 }
@@ -459,7 +434,10 @@ fn two_seam_manufactured_suspects_in_one_report_deny() {
 fn a_refused_terminal_round_denies_without_deleting() {
     let session = Session::new(Scope::Ephemeral).unwrap();
     let primary = "[REDACTED] alpha bravo charlie";
-    let deleted = "[REDACTED] alpha  charlie";
+    let redacted = format!(
+        "[REDACTED] alpha {} charlie",
+        redaction_marker(&PiiClass::Name)
+    );
     let mut mismatch = uncovered(17..22);
     mismatch.kind = LeakKind::ClassMismatch {
         pipeline_class: PiiClass::Email,
@@ -469,7 +447,7 @@ fn a_refused_terminal_round_denies_without_deleting() {
         vec![
             (primary.into(), Ok(vec![])),
             (primary.into(), Ok(vec![mismatch])),
-            (deleted.into(), Ok(vec![bleed(0..16, 10..16)])),
+            (redacted, Ok(vec![bleed(0..16, 10..16)])),
         ],
         true,
     );
@@ -487,9 +465,9 @@ fn a_refused_terminal_round_denies_without_deleting() {
     assert!(h.drained());
     assert_eq!(
         h.actions(),
-        // The primary pass's own `[REDACTED]`, then the fallback deletion. Nothing after.
+        // The primary pass's own `[REDACTED]`, then the fallback's marker. Nothing after.
         [Action::Redact, Action::Redact],
-        "the refused round must not delete anything"
+        "the refused round must not redact anything"
     );
 }
 
@@ -523,20 +501,29 @@ fn an_unjudgeable_terminal_suspect_denies() {
 /// The fallback's audit row says it redacted a span, and part of that span is still in the
 /// output. That is the fallback breaking its own promise, and it must stay denied.
 ///
-/// The terminal suspect also CONTAINS the deletion seam, so the two denial clauses genuinely
-/// collide here. Without that collision the test would pass on whichever clause happened to fire
-/// and would prove nothing about precedence: a broken promise means the document's own record of
-/// itself is wrong, which has to outrank a shape the deletion manufactured.
+/// The audit row names the WHOLE suspect, `primary tail`, while the redactor acts only on its
+/// uncovered gap. The primary pass's one-way `[REDACTED]` for `primary` therefore survives inside
+/// the promised range: a genuine broken promise.
+///
+/// The terminal suspect spans both the primary `[REDACTED]` and the fallback's own marker, with
+/// its gap on the plain text after them. That makes it judgeable, so the survivor clause is what
+/// decides.
+///
+/// What this does NOT pin: that the fallback's own marker is never read as a survivor. The primary
+/// `[REDACTED]` survivor denies this document either way, so that half is pinned directly by
+/// `fallback_promise_does_not_count_its_own_marker_as_a_survivor` in `pipeline.rs`.
 #[test]
 fn a_surviving_acted_on_span_stays_denied() {
     let session = Session::new(Scope::Ephemeral).unwrap();
     let primary = "[REDACTED] tail rest";
-    let deleted = "[REDACTED] rest";
+    let marker = redaction_marker(&PiiClass::Name);
+    let redacted = format!("[REDACTED]{marker} rest");
+    let end = redacted.len();
     let h = harness(
         vec![
             (primary.into(), Ok(vec![])),
             (primary.into(), Ok(vec![bleed(0..15, 10..15)])),
-            (deleted.into(), Ok(vec![bleed(0..15, 10..15)])),
+            (redacted, Ok(vec![bleed(0..end, end - 5..end)])),
         ],
         true,
     );
@@ -553,9 +540,9 @@ fn a_surviving_acted_on_span_stays_denied() {
     );
     assert_eq!(
         h.actions(),
-        // The primary pass's own `[REDACTED]`, then the fallback deletion. Nothing after.
+        // The primary pass's own `[REDACTED]`, then the fallback's marker. Nothing after.
         [Action::Redact, Action::Redact],
-        "a document refused over a broken promise must not be deleted from first"
+        "a document refused over a broken promise must not be redacted from first"
     );
 }
 
@@ -567,6 +554,9 @@ fn a_surviving_acted_on_span_found_only_after_the_round_still_denies() {
     let rest = session
         .tokenize_with_family("safety_net", &PiiClass::Name, "rest")
         .unwrap();
+    let marker = redaction_marker(&PiiClass::Name);
+    let redacted = format!("[REDACTED]{marker} rest");
+    let rest_at = redacted.len() - 4;
     let h = harness(
         vec![
             ("[REDACTED] tail rest".into(), Ok(vec![])),
@@ -574,8 +564,11 @@ fn a_surviving_acted_on_span_found_only_after_the_round_still_denies() {
                 "[REDACTED] tail rest".into(),
                 Ok(vec![bleed(0..15, 10..15)]),
             ),
-            ("[REDACTED] rest".into(), Ok(vec![uncovered(11..15)])),
-            (format!("[REDACTED] {rest}"), Ok(vec![uncovered(0..10)])),
+            (redacted, Ok(vec![uncovered(rest_at..rest_at + 4)])),
+            (
+                format!("[REDACTED]{marker} {rest}"),
+                Ok(vec![uncovered(0..10)]),
+            ),
         ],
         true,
     );

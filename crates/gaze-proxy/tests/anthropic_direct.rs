@@ -1706,27 +1706,29 @@ async fn no_net_remains_an_explicit_request_coverage_limit() {
     assert!(String::from_utf8_lossy(&captures[0].body).contains(route_net::RESIDUAL));
 }
 
-#[path = "support/fallback_deleting_net.rs"]
-mod fallback_deleting_net;
+#[path = "support/fallback_redacting_net.rs"]
+mod fallback_redacting_net;
 
-/// A configured net that DELETES rather than resolves must still stop provider-origin PII.
+/// A configured net that REDACTS rather than resolves must still stop provider-origin PII.
 ///
 /// `configured_net_direct_response_rejects_after_one_provider_call` above covers the
 /// resolve-SUCCESS half: the single suspect becomes a token whose `raw_span` points into the
 /// candidate the validator was given, and `PipelineResponseResidualValidator::validate` rejects
 /// it for lying outside every authorized output range.
 ///
-/// This is the resolve-FAILURE half. The suspect is routed into the Redact fallback instead,
-/// deletion emits no manifest entry, and `validate` iterates only over the manifest. With no
-/// span to test there is nothing to compare against `authorized_output_ranges`, so the loop
-/// body never runs and the validator returns `Ok(())` — over a candidate it never looked at
-/// again, and whose raw bytes the codec then admits to the client.
+/// This is the resolve-FAILURE half: the suspect is routed into the Redact fallback instead.
+/// When that fallback deleted, it emitted no manifest entry, `validate`'s loop over the manifest
+/// never ran, and only the `manifest_accounts_for_every_change` precondition stood between the
+/// client and the raw bytes. The fallback now records its `[REDACTED:<class>]` marker as a
+/// manifest entry, so `validate` tests that entry's `raw_span` against `authorized_output_ranges`
+/// and rejects on the ordinary path. `safety_net_fallback_redaction_state.rs` pins that the entry
+/// is really there.
 ///
 /// Covered for both wire formats the direct path serves, because the validator sits behind
 /// both: the buffered JSON body and each SSE `text_delta`.
 #[tokio::test]
-async fn regression_fallback_deletion_does_not_admit_provider_origin_pii() {
-    use fallback_deleting_net::{FallbackDeletingNet, MARKER};
+async fn regression_fallback_redaction_does_not_admit_provider_origin_pii() {
+    use fallback_redacting_net::{FallbackRedactingNet, MARKER};
 
     for stream in [false, true] {
         let upstream = spawn_upstream_with_provider_text(MARKER).await;
@@ -1735,7 +1737,7 @@ async fn regression_fallback_deletion_does_not_admit_provider_origin_pii() {
             .detector(RegexDetector::new("alice@example\\.invalid", PiiClass::Email).unwrap())
             .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
             .rule(DefaultRule::new(Action::Preserve))
-            .register_safety_net(FallbackDeletingNet { hits: hits.clone() })
+            .register_safety_net(FallbackRedactingNet { hits: hits.clone() })
             .build()
             .unwrap();
         let proxy = spawn_proxy_with_observability(
@@ -1767,7 +1769,7 @@ async fn regression_fallback_deletion_does_not_admit_provider_origin_pii() {
         assert!(
             !returned.contains(MARKER),
             "stream={stream}: provider-origin PII reached the client after a successful \
-             fallback deletion: {returned}"
+             fallback redaction: {returned}"
         );
         // The buffered path can still choose its status code; the streaming path has already
         // sent its head, so it fails closed in band with the frozen error frame instead.
