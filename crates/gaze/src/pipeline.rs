@@ -13,6 +13,7 @@ use std::sync::Arc;
 use gaze_recognizers::{
     LocaleAwareModelRegistry, ModelError, ModelHints, ModelInput, ModelSpan, ModelStage,
 };
+use gaze_types::redaction_marker::redaction_marker;
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
     LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
@@ -1742,7 +1743,7 @@ impl Pipeline {
         let mut manufactured = None;
         let mut resolvable = Vec::new();
         for suspect in &scanned.suspects {
-            if suspect_is_inside_live_token(target, clean, suspect) {
+            if suspect_is_already_protected(target, clean, suspect) {
                 continue;
             }
             let admission = layout.classify(clean, suspect, &survivors);
@@ -1864,7 +1865,7 @@ impl Pipeline {
         let layout = CleanLayout::of(clean)?;
         let survivors = promise.survivors(&layout);
         for suspect in &settled.suspects {
-            if suspect_is_inside_live_token(target, clean, suspect) {
+            if suspect_is_already_protected(target, clean, suspect) {
                 continue;
             }
             let admission = layout.classify(clean, suspect, &survivors);
@@ -1913,7 +1914,7 @@ impl Pipeline {
         for suspect in &report.suspects {
             // A sub-word suspect is left alone like a protected one: its bytes stay, it gets the
             // same `Preserve` row, and the report's telemetry says why.
-            if suspect_is_inside_live_token(target, clean, suspect)
+            if suspect_is_already_protected(target, clean, suspect)
                 || suspect_is_unactionable_subword(&clean.text, suspect)
             {
                 protected.push(suspect);
@@ -2186,7 +2187,7 @@ impl Pipeline {
         let mut protected = Vec::new();
         let mut actionable = Vec::new();
         for suspect in &report.suspects {
-            if suspect_is_inside_live_token(target, clean, suspect)
+            if suspect_is_already_protected(target, clean, suspect)
                 || suspect_is_unactionable_subword(&clean.text, suspect)
             {
                 protected.push(suspect);
@@ -2337,20 +2338,41 @@ impl Pipeline {
                     )?;
                 }
             }
-            replace_clean_span_checked(clean, plan.clean_span, "", None)?;
-            clean.manifest.describe_deletion(
-                plan.raw_span.clone(),
-                plan.suspects
-                    .iter()
-                    .map(|s| observations[&(*s as *const LeakSuspect)])
-                    .collect(),
+            // A merged region is one marker, carrying the class of its lowest-offset suspect. The
+            // bytes do not come back: this is a one-way replacement, not a token. What changes
+            // is that a reader of the clean document can now tell a redaction from a gap, which
+            // deleting could never say.
+            let region_class = plan.suspects[0].class.clone();
+            let marker = redaction_marker(&region_class);
+            let observed = plan
+                .suspects
+                .iter()
+                .map(|s| observations[&(*s as *const LeakSuspect)])
+                .collect::<Vec<_>>();
+            // The marker is an ordinary one-way manifest entry, the same shape the primary pass
+            // already emits for `Action::Redact`. That is what keeps the clean/raw alignment
+            // affine: a deletion removes clean bytes and no raw bytes, which breaks
+            // `map_clean_boundary_to_raw` from the first hole onwards and forces every later
+            // mapping through `CleanLayout`; a replacement does not.
+            let emitted = Occurrence::new(
+                EmittedTokenSpan::new(
+                    plan.clean_span.start..plan.clean_span.start + marker.len(),
+                    plan.raw_span.clone(),
+                    region_class.clone(),
+                ),
+                Action::Redact,
+                false,
+                Origin::SafetyNetRedaction {
+                    observations: observed,
+                    clean: plan.clean_span.clone(),
+                },
             );
+            replace_clean_span_checked(clean, plan.clean_span, &marker, Some(emitted))?;
             if let Some(trace) = protection_trace.as_deref_mut() {
-                // A merged region is one deletion, so it is one trace item: it carries the class
+                // A merged region is one redaction, so it is one trace item: it carries the class
                 // of its lowest-offset suspect and the ids of every suspect that drove it.
                 // Recording per suspect instead would be self-defeating — `record` evicts items
                 // whose raw spans overlap, so all but the last would silently disappear.
-                let region_class = plan.suspects[0].class.clone();
                 let source_ids = plan
                     .suspects
                     .iter()
@@ -2700,17 +2722,18 @@ impl<'a> ProtectionTraceCollector<'a> {
             return Err(protection_trace_error("overlapping protection trace"));
         }
 
+        // Trace and manifest have to agree one-for-one in BOTH directions, for redactions as well
+        // as for tokens. A redaction used to be proven by ABSENCE — no manifest entry overlapped
+        // it, because the redactor deleted the bytes and recorded nothing. Now it writes a
+        // `[REDACTED:<class>]` marker and records it like any other one-way replacement, so the
+        // weaker absence rule would pass a trace that claimed a redaction gaze never made.
         for item in &self.items {
             let matching_manifest = manifest
                 .iter()
                 .filter(|span| span.raw_span == item.raw_span && span.class == item.class)
                 .count();
             match item.action() {
-                "tokenize" if matching_manifest == 1 => {}
-                "redact"
-                    if !manifest
-                        .iter()
-                        .any(|span| ranges_overlap(&span.raw_span, &item.raw_span)) => {}
+                "tokenize" | "redact" if matching_manifest == 1 => {}
                 _ => return Err(protection_trace_error("trace-manifest mismatch")),
             }
         }
@@ -2719,7 +2742,7 @@ impl<'a> ProtectionTraceCollector<'a> {
                 .items
                 .iter()
                 .filter(|item| {
-                    item.action() == "tokenize"
+                    matches!(item.action(), "tokenize" | "redact")
                         && item.raw_span == span.raw_span
                         && item.class == span.class
                 })
@@ -2970,7 +2993,7 @@ fn plan_followup_resolutions<'a>(
                 return Err(protection_trace_error("false follow-up gap"));
             }
         }
-        if suspect_is_inside_live_token(target, clean, suspect) {
+        if suspect_is_already_protected(target, clean, suspect) {
             protected.push(suspect);
             continue;
         }
@@ -3073,7 +3096,7 @@ fn plan_multiple_gap_resolutions<'a>(
         // The existing exemption is containment in ONE owned token, never a token union.
         match &suspect.kind {
             LeakKind::Uncovered | LeakKind::ClassMismatch { .. }
-                if suspect_is_inside_live_token(target, clean, suspect) =>
+                if suspect_is_already_protected(target, clean, suspect) =>
             {
                 continue;
             }
@@ -3301,6 +3324,23 @@ fn validate_terminal_manifest(
                 "invalid terminal token provenance",
             ));
         }
+        // The fallback's own markers are the one thing it MAY add. They are not survivors of the
+        // pre-fallback manifest, so there is nothing to match them against; what holds them
+        // honest instead is that the bytes in the document have to BE the marker for the class
+        // the record claims. Anything else the fallback invented still falls through to the
+        // survivor match below and is rejected there.
+        if matches!(record.origin, Origin::SafetyNetRedaction { .. }) {
+            if record.action != Some(Action::Redact)
+                || record.owned
+                || clean.text.get(emitted.clean_span.clone())
+                    != Some(redaction_marker(&emitted.class).as_str())
+            {
+                return Err(manifest_integrity_error("invalid terminal redaction marker"));
+            }
+            clean_cursor = emitted.clean_span.end;
+            raw_cursor = emitted.raw_span.end;
+            continue;
+        }
         // Fallback may remove whole entries, but cannot invent, reorder or rewrite survivors.
         let Some(original) =
             originals.find(|original| original.emitted.raw_span.start >= emitted.raw_span.start)
@@ -3491,7 +3531,7 @@ fn unprotected_suspect_reason(
     report
         .suspects
         .iter()
-        .find(|suspect| !suspect_is_inside_live_token(target, clean, suspect))
+        .find(|suspect| !suspect_is_already_protected(target, clean, suspect))
         .map(|suspect| {
             if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
                 FallbackReason::OverlapConflict
@@ -3513,10 +3553,53 @@ fn actionable_suspect_reason(
         .suspects
         .iter()
         .find(|suspect| {
-            !suspect_is_inside_live_token(target, clean, suspect)
+            !suspect_is_already_protected(target, clean, suspect)
                 && !suspect_is_unactionable_subword(&clean.text, suspect)
         })
         .map(fallback_reason_for)
+}
+
+/// True when no stage may act on the suspect because gaze already protected those bytes.
+///
+/// Two ways that happens. The suspect may lie inside a live token, which the primary pass or an
+/// earlier resolve minted; acting on it would tokenize a token and break restore. Or it may
+/// overlap a one-way `[REDACTED:<class>]` marker, which is gaze's own output standing where
+/// flagged bytes used to be. A net re-flagging a marker is re-flagging the redaction, not the
+/// document: `REDACTED` reads as an organization to a NER model, and `name` reads as a name.
+///
+/// Overlap is the right test for a marker, not containment. Half a marker is still gaze's bytes,
+/// and redacting them again would nest markers and move the very spans this change promises to
+/// leave alone.
+fn suspect_is_already_protected(
+    target: &ProtectionTarget<'_, '_>,
+    clean: &CleanText,
+    suspect: &LeakSuspect,
+) -> bool {
+    suspect_is_inside_live_token(target, clean, suspect)
+        || suspect_overlaps_redaction_marker(clean, suspect)
+}
+
+/// True when the suspect shares any byte with a redaction marker this pipeline wrote.
+///
+/// Authority comes from the manifest, not from the text: a document whose own content happens to
+/// contain the literal `[REDACTED:name]` must not gain protection from having typed it. The
+/// manifest entry is checked against the bytes actually standing there, so only a marker gaze
+/// recorded counts.
+fn suspect_overlaps_redaction_marker(clean: &CleanText, suspect: &LeakSuspect) -> bool {
+    let span = &suspect.span;
+    if span.start >= span.end {
+        return false;
+    }
+    clean
+        .manifest
+        .records()
+        .iter()
+        .filter(|record| {
+            matches!(record.origin, Origin::SafetyNetRedaction { .. })
+                && clean.text.get(record.emitted.clean_span.clone())
+                    == Some(redaction_marker(&record.emitted.class).as_str())
+        })
+        .any(|record| ranges_overlap(&record.emitted.clean_span, span))
 }
 
 /// True when the suspect span lies wholly inside exactly one live token.
@@ -5818,9 +5901,15 @@ mod tests {
         assert_eq!(redact_trace[1].stage(), "safety_net");
         assert_eq!(redact_trace[1].decision(), "redact");
         assert_eq!(redact_trace[1].action(), "redact");
-        assert!(redact_manifest
+        // The redaction is the last manifest entry now, standing for exactly the bytes it covered.
+        // It used to leave no entry at all, which is what made the trace the only record that the
+        // redaction had happened.
+        assert_eq!(redact_manifest.len(), 2);
+        assert!(redact_manifest[..1]
             .iter()
             .all(|span| span.raw_span.end <= name_start));
+        assert_eq!(redact_manifest[1].raw_span, name_start..text.len());
+        assert_eq!(redact_manifest[1].class, PiiClass::Name);
 
         let fallback_pipeline = traced_email_pipeline(ManifestMismatchSafetyNet);
         let fallback_session = Session::new(Scope::Ephemeral).expect("session");
@@ -6298,14 +6387,19 @@ mod tests {
             )
             .expect("overlapping redaction spans must merge rather than fail, and never panic");
 
-        // Union of 0..28 and 5..28: everything up to the end of the emitted token is gone and only
-        // the untouched tail survives. Both suspects' bytes are removed — merging never redacts
-        // less than applying the plans separately would have.
-        assert_eq!(clean.text, " end");
-        assert!(
-            clean.manifest.is_empty(),
-            "the emitted token was inside the redacted region, so no manifest entry may survive"
+        // Union of 0..28 and 5..28: everything up to the end of the emitted token is replaced and
+        // only the untouched tail survives. Both suspects' bytes are gone — merging never redacts
+        // less than applying the plans separately would have — and one merged region is one
+        // marker, not two.
+        assert_eq!(clean.text, "[REDACTED:name] end");
+        let records = clean.manifest.records();
+        assert_eq!(
+            records.len(),
+            1,
+            "the emitted token was inside the redacted region, so only the marker may stand there"
         );
+        assert_eq!(records[0].emitted.class, PiiClass::Name);
+        assert_eq!(records[0].emitted.raw_span, 0..24);
     }
 
     /// A merged region must stay auditable: one protection-trace item covering the union, carrying

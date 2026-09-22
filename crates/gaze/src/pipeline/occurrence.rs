@@ -17,6 +17,17 @@ pub(super) enum Origin {
         relation: Relation,
         clean: Range<usize>,
     },
+    /// A one-way `[REDACTED:<class>]` marker the safety net wrote over a flagged region.
+    ///
+    /// Unlike [`Origin::SafetyNet`], which resolves a suspect into a restorable token, this
+    /// records a replacement that is deliberately not reversible. `clean` is the region as it
+    /// stood BEFORE the marker was written, which is what the phase snapshot describes; a merged
+    /// region carries every suspect that drove it, because merging must not merge away who asked
+    /// for the redaction.
+    SafetyNetRedaction {
+        observations: Vec<usize>,
+        clean: Range<usize>,
+    },
     ExistingOwnedUnknown {
         segment: usize,
     },
@@ -585,6 +596,60 @@ impl Ledger {
                         ));
                     }
                 }
+                Origin::SafetyNetRedaction {
+                    observations,
+                    clean,
+                } => {
+                    if observations.is_empty() {
+                        return Err(manifest_integrity_error("redaction names no observation"));
+                    }
+                    // Every suspect that drove the region must be a real observation of the same
+                    // deletion-batch phase. A redaction that cannot say who asked for it is not
+                    // auditable, and axis 4 does not allow an untraceable one-way replacement.
+                    let mut phases = observations.iter().map(|id| {
+                        self.observations
+                            .get(*id)
+                            .ok_or_else(|| manifest_integrity_error("invalid redaction observation"))
+                            .map(|observation| observation.phase)
+                    });
+                    let first = phases
+                        .next()
+                        .expect("non-empty observations checked above")?;
+                    for phase in phases {
+                        if phase? != first {
+                            return Err(manifest_integrity_error(
+                                "redaction spans more than one phase",
+                            ));
+                        }
+                    }
+                    let phase = self
+                        .phases
+                        .get(first)
+                        .ok_or_else(|| manifest_integrity_error("invalid redaction phase"))?;
+                    if phase.batch != Batch::Deletion {
+                        return Err(manifest_integrity_error("invalid redaction basis"));
+                    }
+                    if clean.start >= clean.end || clean.end > phase.text_len {
+                        return Err(manifest_integrity_error("invalid redaction bounds"));
+                    }
+                    // Re-derive the raw span from the phase snapshot, exactly as the resolve arm
+                    // above does. The marker is a replacement rather than a hole, so the snapshot
+                    // stays affine and needs no deletion-aware layout.
+                    let start = map_clean_boundary_to_raw(&phase.projection.spans, clean.start)
+                        .and_then(|v| v.checked_add(phase.raw_offset));
+                    let end = map_clean_boundary_to_raw(&phase.projection.spans, clean.end)
+                        .and_then(|v| v.checked_add(phase.raw_offset));
+                    if start != Some(record.emitted.raw_span.start)
+                        || end != Some(record.emitted.raw_span.end)
+                    {
+                        return Err(manifest_integrity_error("redaction raw mapping mismatch"));
+                    }
+                    if record.action != Some(Action::Redact) || record.owned {
+                        return Err(manifest_integrity_error(
+                            "invalid redaction replacement ownership",
+                        ));
+                    }
+                }
                 Origin::ExistingOwnedUnknown { segment } => {
                     if !record.owned
                         || self
@@ -657,6 +722,11 @@ fn remap_origin(origin: &mut Origin, segment: usize, observation: usize) {
         Origin::SafetyNet {
             observation: id, ..
         } => *id += observation,
+        Origin::SafetyNetRedaction { observations, .. } => {
+            for id in observations {
+                *id += observation;
+            }
+        }
         Origin::Unknown => {}
     }
 }
@@ -1237,9 +1307,11 @@ mod tests {
             assert_eq!((pair[0].1, pair[1].1), (phase, phase));
             assert_eq!(pair[0].2, pair[1].2);
             assert_eq!(pair[0].3, pair[1].3, "nets share the unchanged phase");
+            // The last phase sees 4 spans, not 3: the redaction is a manifest entry now, so the
+            // document handed to the final pass describes every byte it replaced.
             assert_eq!(
                 (pair[0].4, pair[1].4),
-                ([1, 2, 3, 3][phase], [1, 2, 3, 3][phase])
+                ([1, 2, 3, 4][phase], [1, 2, 3, 4][phase])
             );
             if phase > 0 {
                 assert_ne!(pair[0].2, calls[(phase - 1) * 2].2);
@@ -1254,9 +1326,14 @@ mod tests {
         assert!(calls[2].2.ends_with("bbcc"));
         assert!(calls[4].2.ends_with("cc"));
         assert_eq!(calls[6].2, clean.text);
+        // The `cc` tail was redacted, so restore does not bring it back; the marker standing in
+        // its place survives the strict scan as ordinary text.
         assert_eq!(
             session.restore_strict_text(&clean.text).unwrap(),
-            "aaalice@example.invalidbb"
+            format!(
+                "aaalice@example.invalidbb{}",
+                gaze_types::redaction_marker::redaction_marker(&PiiClass::Name)
+            )
         );
         assert_eq!(clean.manifest.projections.get(), 4);
         assert_eq!(
@@ -1274,9 +1351,9 @@ mod tests {
         assert_eq!(clean.manifest.evidence_count(), 1);
         assert_eq!(clean.manifest.segments[0].originals.as_ptr(), payloads);
         assert_eq!(clean.manifest.observations.len(), 3);
-        assert_eq!(clean.manifest.deletions.len(), 1);
-        assert_eq!(clean.manifest.deletions[0].raw, Some(25..27));
-        assert!(clean.manifest.deletions[0].removed.is_empty());
+        assert!(clean.manifest.deletions.is_empty());
+        // 25..27 is the redaction: a fourth manifest record standing for its own original bytes,
+        // where the ledger used to hold a hole no entry described.
         assert_eq!(
             clean
                 .manifest
@@ -1284,9 +1361,9 @@ mod tests {
                 .iter()
                 .map(|r| r.emitted.raw_span.clone())
                 .collect::<Vec<_>>(),
-            vec![0..2, 2..23, 23..25]
+            vec![0..2, 2..23, 23..25, 25..27]
         );
-        // Retained geometry is 1 + 2 + 3 phase entries and 3 final entries, not one copy overall.
+        // Retained geometry is 1 + 2 + 3 phase entries and 4 final entries, not one copy overall.
         assert_eq!(
             clean
                 .manifest
@@ -1295,12 +1372,15 @@ mod tests {
                 .map(|p| p.projection.spans.len())
                 .sum::<usize>()
                 + clean.manifest.projection().spans.len(),
-            9
+            10
         );
     }
 
+    /// Three redactions around two surviving tokens: before, between and after. The surviving
+    /// tokens keep their own original bytes, and each redaction stands for exactly the original
+    /// range it covered, with the markers interleaved in clean order.
     #[test]
-    fn deletion_before_between_after_keeps_original_raw_relations() {
+    fn redaction_before_between_after_keeps_original_raw_relations() {
         let (session, mut clean) = primary(
             "aaalice@example.invalidbbalice@example.invalidcc",
             Action::Tokenize,
@@ -1334,31 +1414,41 @@ mod tests {
             )
             .unwrap();
         validate_terminal_manifest(&target, &clean, &before).unwrap();
-        assert_eq!(
-            clean
-                .manifest
-                .records
-                .iter()
-                .map(|r| r.id)
-                .collect::<Vec<_>>(),
-            original_ids
-        );
-        assert_eq!(
-            clean
-                .manifest
-                .deletions
-                .iter()
-                .map(|d| d.raw.clone().unwrap())
-                .collect::<Vec<_>>(),
-            vec![46..48, 23..25, 0..2]
-        );
+        // The two pre-existing tokens are untouched: same occurrence ids, same original bytes.
+        let survivors = clean
+            .manifest
+            .records
+            .iter()
+            .filter(|r| r.action != Some(Action::Redact))
+            .map(|r| r.id)
+            .collect::<Vec<_>>();
+        assert_eq!(survivors, original_ids);
+
+        // Three redactions, in clean order, each standing for the original range it covered and
+        // none of them recorded as a deletion.
+        let redactions = clean
+            .manifest
+            .records
+            .iter()
+            .filter(|r| r.action == Some(Action::Redact))
+            .map(|r| r.emitted.raw_span.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(redactions, vec![0..2, 23..25, 46..48]);
+        assert!(clean.manifest.deletions.is_empty());
         assert_eq!(clean.manifest.phases.len(), 1);
         assert_eq!(clean.manifest.observations.len(), 3);
-        assert!(clean
+
+        // Markers replace, so the whole document is still describable by the affine mapper: every
+        // record's clean bytes are exactly what the manifest says stands there.
+        let marker = gaze_types::redaction_marker::redaction_marker(&PiiClass::Name);
+        for record in clean
             .manifest
-            .deletions
+            .records
             .iter()
-            .all(|d| d.removed.is_empty()));
+            .filter(|r| r.action == Some(Action::Redact))
+        {
+            assert_eq!(&clean.text[record.emitted.clean_span.clone()], marker);
+        }
     }
 
     #[test]
@@ -1415,8 +1505,14 @@ mod tests {
         assert_eq!(ledger.records[0].origin, Origin::Unknown);
     }
 
+    /// The redact path replaces a flagged region with a one-way `[REDACTED:<class>]` marker and
+    /// records it as an ordinary non-owned manifest entry, so the ledger keeps NO deletion at all.
+    ///
+    /// That is the whole point of the change: a deletion removes clean bytes and no raw bytes,
+    /// which breaks the affine clean/raw mapping from the first hole onwards. A replacement keeps
+    /// it, and it keeps the redaction visible to whoever reads the clean document.
     #[test]
-    fn deletion_retains_disposition_and_never_an_empty_emission() {
+    fn redaction_writes_a_marker_entry_and_records_no_deletion() {
         let (session, mut clean) = primary(
             "aaalice@example.invalidbbalice@example.invalidcc",
             Action::Tokenize,
@@ -1437,12 +1533,46 @@ mod tests {
                 None,
             )
             .unwrap();
-        assert_eq!(clean.manifest.records.len(), 1);
-        assert_eq!(clean.manifest.deletions.len(), 1);
-        assert_eq!(clean.manifest.deletions[0].removed[0].id, original_id);
-        assert_eq!(clean.manifest.deletions[0].raw, Some(2..23));
-        assert_eq!(clean.manifest.deletions[0].observations.len(), 1);
-        assert_eq!(clean.manifest.records[0].emitted.raw_span, 25..46);
+        let marker = gaze_types::redaction_marker::redaction_marker(&PiiClass::Name);
+        assert!(
+            clean.text.contains(&marker),
+            "the flagged bytes are replaced by a visible marker, never cut: {}",
+            clean.text
+        );
+        assert!(
+            clean.manifest.deletions.is_empty(),
+            "a marker is a replacement, so nothing may be recorded as removed"
+        );
+        assert_eq!(clean.manifest.records.len(), 2);
+
+        let redaction = clean
+            .manifest
+            .records
+            .iter()
+            .find(|r| r.action == Some(Action::Redact))
+            .expect("the redaction is a manifest record");
+        assert_eq!(redaction.emitted.raw_span, 2..23);
+        assert_eq!(redaction.emitted.class, PiiClass::Name);
+        assert!(
+            !redaction.owned,
+            "a one-way marker is not owned output and must never restore"
+        );
+        assert_eq!(&clean.text[redaction.emitted.clean_span.clone()], marker);
+        let Origin::SafetyNetRedaction { observations, .. } = &redaction.origin else {
+            panic!("a redaction carries the suspects that drove it");
+        };
+        assert_eq!(observations.len(), 1);
+
+        // The token the redaction swallowed is gone; the untouched one still stands for its own
+        // original bytes, at the coordinates the marker's width implies.
+        let survivor = clean
+            .manifest
+            .records
+            .iter()
+            .find(|r| r.action != Some(Action::Redact))
+            .expect("the untouched token survives");
+        assert_ne!(survivor.id, original_id);
+        assert_eq!(survivor.emitted.raw_span, 25..46);
         assert!(clean
             .manifest
             .records
