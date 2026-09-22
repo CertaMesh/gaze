@@ -80,10 +80,11 @@ Nym-small net and needs its pinned bundle.
 
 Warm per-document latency of the Nym arm is measured by
 [`scripts/bench/nym-warm-latency.py`](../../../scripts/bench/nym-warm-latency.py)
-(`python3 scripts/bench/nym-warm-latency.py --repo-root .` after
-`gaze setup --safety-net nym`). It times the release harness warm for
+(`uv run --with tokenizers python scripts/bench/nym-warm-latency.py --repo-root .`
+after `gaze setup --safety-net nym`). It times the release harness warm for
 `pass2-ner` and `full-stack-nym-resolve` over the coverage-loop corpus plus
-512- and 1,024-piece synthetic documents, and prints p50, p95 and mean with a
+512- and 1,024-piece synthetic documents, whose piece counts it checks against
+the installed tokenizer before timing, and prints p50, p95 and mean with a
 hardware line and the host load average. No numbers are recorded here yet: a
 latency row needs a quiet host (load average below 2), and every run so far was
 on a shared, loaded one.

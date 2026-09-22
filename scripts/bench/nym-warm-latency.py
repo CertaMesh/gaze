@@ -16,7 +16,11 @@ windows).
 Needs the pinned bundles from `gaze setup --safety-net nym` (Nym plus Davlan
 NER). Usage:
 
-    python3 scripts/bench/nym-warm-latency.py --repo-root .
+    uv run --with tokenizers python scripts/bench/nym-warm-latency.py --repo-root .
+
+The synthetic piece counts are checked against the pinned tokenizer before any timing;
+`--skip-verify-pieces` skips that check and the output then records
+`"synthetic_pieces_verified": false`.
 """
 
 from __future__ import annotations
@@ -39,8 +43,8 @@ SYNTHETIC_SENTENCE = (
     "Vorgehen. "
 )
 #: Word counts that give exactly 512 and 1,024 pieces with the pinned Nym tokenizer
-#: (`tokenizer.json` of NYM_SMALL_INT8_BUNDLE_SHA256, no special tokens); checked by
-#: `--verify-pieces` when the `tokenizers` package is importable.
+#: (`tokenizer.json` of NYM_SMALL_INT8_BUNDLE_SHA256, no special tokens); every run checks
+#: them against the installed tokenizer unless `--skip-verify-pieces` is passed.
 SYNTHETIC_DOCUMENTS = {"synthetic-512-pieces": (395, 512), "synthetic-1024-pieces": (790, 1024)}
 DEFAULT_CORPUS = Path("crates/gaze-recognizers/testdata/coverage-loop/corpus")
 BINARY = Path("target/release/examples/clean_for_bench")
@@ -54,7 +58,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--nym-model-dir", type=Path, default=default_model_dir("GAZE_NYM_MODEL_DIR", "nym-small-int8"))
     parser.add_argument("--ner-model-dir", type=Path, default=default_model_dir("GAZE_NER_MODEL_DIR", "davlan-mbert-ner-hrl"))
     parser.add_argument("--skip-build", action="store_true")
-    parser.add_argument("--verify-pieces", action="store_true")
+    parser.add_argument("--skip-verify-pieces", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -152,7 +156,13 @@ def load_documents(root: Path, corpus_dir: Path) -> list[dict[str, object]]:
 
 
 def verify_pieces(nym_model_dir: Path) -> None:
-    from tokenizers import Tokenizer
+    try:
+        from tokenizers import Tokenizer
+    except ImportError as error:
+        raise SystemExit(
+            "the `tokenizers` package is needed to check the synthetic piece counts; run with "
+            "`uv run --with tokenizers` or pass --skip-verify-pieces"
+        ) from error
 
     tokenizer = Tokenizer.from_file(str(nym_model_dir / "tokenizer.json"))
     for fixture_id, (words, pieces) in SYNTHETIC_DOCUMENTS.items():
@@ -201,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     for label, path in (("Nym", args.nym_model_dir), ("NER", args.ner_model_dir)):
         if not path.is_dir():
             raise SystemExit(f"{label} bundle missing at {path}; run `gaze setup --safety-net nym`")
-    if args.verify_pieces:
+    if not args.skip_verify_pieces:
         verify_pieces(args.nym_model_dir)
     if not args.skip_build:
         subprocess.run(
@@ -222,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         "hardware": hardware_line(info),
         "host": info,
         "load_average_1_5_15_at_start": [round(value, 2) for value in os.getloadavg()],
+        "synthetic_pieces_verified": not args.skip_verify_pieces,
         "arms": {},
     }
     for arm in ARMS:

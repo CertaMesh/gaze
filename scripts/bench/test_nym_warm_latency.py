@@ -78,6 +78,10 @@ class SyntheticDocumentTest(unittest.TestCase):
             self.assertEqual(text, latency.synthetic_text(words))
             self.assertEqual(text, text.strip())
 
+    def test_piece_counts_are_verified_unless_skipped(self) -> None:
+        self.assertFalse(latency.parse_args([]).skip_verify_pieces)
+        self.assertTrue(latency.parse_args(["--skip-verify-pieces"]).skip_verify_pieces)
+
 
 if __name__ == "__main__":
     unittest.main()
