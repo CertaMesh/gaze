@@ -1565,6 +1565,26 @@ mod tests {
         assert_eq!(with[0].token_family, without[0].token_family);
     }
 
+    /// Same defect when the IBAN arrives second and takes the slot from the
+    /// card variant by collision policy (`CandidateWins`), then the unrelated
+    /// overlap arrives.
+    #[test]
+    fn incoming_collision_policy_winner_stays_settled() {
+        let registry = payment_family_registry();
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![card_at(0..10), iban_at(5..24), foreign_postal_at(20..37)],
+            registry.family_policy(),
+            &AnchorResolver::default(),
+            SETTLED_IBAN_INPUT,
+            &[LocaleTag::DeAt],
+        );
+
+        assert_eq!(resolved.len(), 1, "{resolved:?}");
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(resolved[0].class, PiiClass::Custom("iban".to_string()));
+        assert_eq!(resolved[0].decided_by, ConflictTier::RulePriority);
+    }
+
     /// Negative control: an IBAN whose family was never settled (no card
     /// rival) still takes the missing-anchor fallback, with or without the
     /// unrelated overlap. The fix must not widen the skip.
