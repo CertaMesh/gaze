@@ -865,6 +865,21 @@ fn iban_mod97_check(input: &str) -> bool {
     remainder == 1
 }
 
+/// Canonical IBAN length for an ISO 3166-1 alpha-2 country code, or `None` when
+/// the country is not in the ISO 13616 IBAN Registry.
+///
+/// This is the one source of truth for IBAN length in the workspace. The
+/// `iban_mod97` validator gates candidates on it, and the `iban.structural`
+/// pattern in the bundled `core` rulepack carries one alternation branch per
+/// registry length so a candidate span stops at the country's real IBAN length
+/// instead of borrowing the following word (solo todo #3708). The two are held
+/// in agreement by a drift test in `gaze-recognizers`, which is why this needs
+/// to be reachable from outside the crate.
+#[must_use]
+pub fn iban_registry_length(country: &str) -> Option<usize> {
+    iban_country_length(country.as_bytes())
+}
+
 fn iban_country_length(country: &[u8]) -> Option<usize> {
     // ISO 13616 IBAN Registry country lengths. MOD-97 alone has a false-accept
     // rate near 1/97, so exact country length gates candidates before checksum.
