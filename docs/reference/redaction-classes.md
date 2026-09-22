@@ -319,7 +319,7 @@ rewrites the deprecated `core-extended` selection to `core` while returning an
 `auto_activate_locale_gated` bit
 (`crates/gaze-cli/src/pipeline/run.rs:712-728`). `CleanOverrides::apply_to`
 carries that bit into `Policy::rulepacks`
-(`crates/gaze-cli/src/clean_overrides.rs:48-63`). Pipeline construction then
+(`crates/gaze-cli/src/clean_overrides.rs:48-62`). Pipeline construction then
 adds the auto-activation locales to the compatibility locale chain. That set is
 derived from the loaded rulepacks by
 `gaze_assembly::locale_gated_activation_locales`
