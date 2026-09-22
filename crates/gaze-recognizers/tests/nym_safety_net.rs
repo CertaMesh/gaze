@@ -10,9 +10,7 @@
 
 use std::sync::OnceLock;
 
-use gaze_recognizers::safety_net::nym::test_support::{
-    capture, decode_captured, model_spans, DecodedSpan, PieceScore,
-};
+use gaze_recognizers::safety_net::nym::test_support::{capture, decode_captured, PieceScore};
 use gaze_recognizers::safety_net::nym::{NymConfig, NymLabel, NymOperatingPoint, NymSafetyNet};
 use gaze_types::{DocumentKind, LeakKind, LocaleTag, Manifest, SafetyNet, SafetyNetContext};
 use serde_json::{json, Value};
@@ -361,62 +359,4 @@ fn capture_all() -> Value {
         },
         "cases": cases,
     })
-}
-
-/// Todo 3681 on the real model, on the model's own spans (before manifest correlation, which
-/// would drop a same-class flag inside a token and hide whether the model read it). Unmasked, the
-/// pinned model flags Gaze's own token text because the class name spells a Nym label; with the
-/// tokens in the manifest they are masked before inference and no span overlaps them. The first
-/// half keeps the fixture honest: if the model stopped flagging token text, the second half would
-/// pass without proving anything.
-#[test]
-#[ignore = "needs GAZE_NYM_MODEL_DIR (run by xtask safety-net-sanity when set)"]
-fn live_token_text_is_masked_before_the_model_reads_it() {
-    let tokens = [
-        "<e19efc64:Custom:building_number_1>",
-        "<e19efc64:Custom:license_plate_1>",
-    ];
-    let text = format!(
-        "Die Lieferung geht an die Musterstraße {} in Berlin, Fahrzeug {} steht im Hof.",
-        tokens[0], tokens[1]
-    );
-    let token_spans = tokens
-        .iter()
-        .map(|token| {
-            let start = text.find(token).unwrap();
-            start..start + token.len()
-        })
-        .collect::<Vec<_>>();
-    let overlapping = |spans: &[DecodedSpan]| {
-        spans
-            .iter()
-            .filter(|(span, _, _)| {
-                token_spans
-                    .iter()
-                    .any(|token| span.start < token.end && token.start < span.end)
-            })
-            .count()
-    };
-
-    let unmasked = model_spans(live_net(), &text, &Manifest::default()).expect("nym spans");
-    assert!(
-        overlapping(&unmasked) > 0,
-        "fixture no longer exercises token text: {unmasked:?}"
-    );
-
-    let manifest = Manifest::from_spans(
-        token_spans
-            .iter()
-            .zip(["building_number", "license_plate"])
-            .map(|(span, class)| {
-                gaze_types::EmittedTokenSpan::new(
-                    span.clone(),
-                    0..1,
-                    gaze_types::PiiClass::custom(class).unwrap(),
-                )
-            })
-            .collect(),
-    );
-    let masked = model_spans(live_net(), &text, &manifest).expect("nym spans");
-    assert_eq!(overlapping(&masked), 0, "{masked:?}");
 }

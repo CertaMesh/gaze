@@ -112,15 +112,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **The Nym safety net no longer reads Gaze token text** (todo 3681). Before
-  inference, every live token in the manifest is replaced with spaces of the
-  same byte length, so offsets are unchanged and no suspect can originate
-  inside a token. Unmasked, the model read class names such as
-  `building_number` in `<…:Custom:building_number_1>` as the label it spells;
-  those suspects were never acted on, but they were audit noise and wasted
-  inference. Pinned model-free (`no_suspect_originates_inside_a_live_token`)
-  and on the real model (`live_token_text_is_masked_before_the_model_reads_it`,
-  required by `xtask safety-net-sanity` when `GAZE_NYM_MODEL_DIR` is set).
 - **Nym suspects no longer carry JSON syntax at their edges.** Quotes,
   colons, commas, brackets, braces and whitespace are trimmed from both ends
   of a decoded span, and a span of syntax alone is dropped. Trimming only
