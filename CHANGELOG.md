@@ -13,8 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   production pipeline (`clean_for_bench`) warm, per document, for `pass2-ner`
   and `full-stack-nym-resolve` over the coverage-loop corpus plus 512- and
   1,024-piece synthetic documents, and prints p50, p95 and mean with a
-  hardware line (chip, cores, RAM, OS, ort version, bundle SHA). Numbers are
-  in the benchmark reference next to the Nym arm.
+  hardware line (chip, cores, RAM, OS, ort version, bundle SHA) and the host
+  load average. No latency row is recorded until it runs on a quiet host.
 - **Benchmark shape-recall column.** Each scorecard run now splits every
   validator-backed label's surviving bytes into gold that passes its validator
   and gold that fails it (`production_recall_by_gold_validity`), next to the
