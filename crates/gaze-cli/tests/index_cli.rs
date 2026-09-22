@@ -377,6 +377,81 @@ Support summary: Alice Mueller from Globex GmbH wrote from alice@example.invalid
     }
 }
 
+/// Ingest runs the same `core` floor as a policy-less `gaze clean`, so the structured
+/// identifiers NER never sees are tokenized before they reach the snippet that search prints.
+/// The fake output net reports nothing, so this pins the deterministic floor, not a net.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    let index_env = index_ner(&temp);
+    fs::create_dir_all(&corpus).expect("corpus dir");
+    fs::write(
+        corpus.join("identifiers.md"),
+        "\
+Alice Mueller wrote from alice@example.invalid about her refund.
+Card 4111 1111 1111 1111 was charged twice.
+IBAN AT61 1904 3002 3457 3201 is the refund target.
+Her router is at ip 10.1.2.3 and she can be reached on +43 1 234 5678.
+",
+    )
+    .expect("write identifiers");
+
+    let ingest = gaze_index_command(&index_env)
+        .arg("ingest")
+        .arg(&corpus)
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index ingest");
+    assert!(
+        ingest.status.success(),
+        "ingest failed: stderr={}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+
+    let search = gaze_index_command(&index_env)
+        .args(["search", "alice@example.invalid"])
+        .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index search");
+    assert!(
+        search.status.success(),
+        "search failed: stderr={}",
+        String::from_utf8_lossy(&search.stderr)
+    );
+
+    let stdout = String::from_utf8(search.stdout).expect("utf8 stdout");
+    assert!(stdout.contains("doc: doc:"), "expected a hit: {stdout}");
+    for token in [
+        ":Custom:credit_card_",
+        ":Custom:iban_",
+        ":Custom:ip_address_",
+        ":Custom:phone_",
+    ] {
+        assert!(
+            stdout.contains(token),
+            "search stdout lacks a {token} token: {stdout}"
+        );
+    }
+    for raw in [
+        "alice@example.invalid",
+        "Alice Mueller",
+        "4111 1111 1111 1111",
+        "AT61 1904 3002 3457 3201",
+        "10.1.2.3",
+        "+43 1 234 5678",
+    ] {
+        assert!(
+            !stdout.contains(raw),
+            "search stdout leaked raw fixture value {raw}: {stdout}"
+        );
+    }
+}
+
 #[test]
 #[file_serial(gaze_subprocess)]
 fn index_ingest_fails_closed_without_ner_model() {

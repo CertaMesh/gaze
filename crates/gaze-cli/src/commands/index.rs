@@ -9,14 +9,14 @@ use std::time::Duration;
 
 use clap::ValueEnum;
 use gaze::{
-    Action, ClassRule, DefaultRule, Detection, Detector, LocaleTag, PiiClass, Pipeline,
-    PipelineBuilder, SafetyNetFallback,
+    Detection, Detector, DictionaryBundle, LocaleTag, PiiClass, Pipeline, PipelineBuilder,
+    SafetyNetFallback,
 };
 use gaze_recognizers::safety_net::nym::{verify_nym_bundle, NymConfig, NymSafetyNet};
 use gaze_recognizers::safety_net::openai_filter::{
     OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
 };
-use gaze_recognizers::{NerOptions, NerRecognizer, RegexDetector};
+use gaze_recognizers::{NerOptions, NerRecognizer};
 use gaze_token_bridge::adapter::CorpusIndexStore;
 use gaze_token_bridge::bridge::TokenBridge;
 use gaze_token_bridge::ingest::CorpusIngestor;
@@ -30,7 +30,9 @@ use gaze_token_bridge::registry::IndexDomainRegistry;
 use gaze_token_bridge::util::sha256_hex;
 use gaze_token_bridge::{BridgeError, DenyReason, RedactionSession};
 
+use crate::clean_overrides::CleanOverrides;
 use crate::error::CliError;
+use crate::pipeline::build::{map_pipeline_error, resolve_pipeline_builder};
 
 const NER_MODEL_DIR_ENV: &str = "GAZE_NER_MODEL_DIR";
 const NYM_MODEL_DIR_ENV: &str = "GAZE_NYM_MODEL_DIR";
@@ -104,7 +106,7 @@ pub(crate) fn ingest(args: IngestArgs) -> Result<(), CliError> {
     let index_path = resolve_index_path(args.index_path);
     let docs = collect_docs(&args.dir)?;
     let classes = classes_for_docs(&docs);
-    let pipeline = build_index_pipeline(&classes, args.ner_model_dir, &args.net)?;
+    let ingest = build_index_pipeline(args.ner_model_dir, &args.net)?;
 
     let mut store = FileCorpusIndexStore::load_or_create(&index_path, &args.domain, &classes)
         .map_err(map_bridge_error)?;
@@ -115,8 +117,10 @@ pub(crate) fn ingest(args: IngestArgs) -> Result<(), CliError> {
         .cloned()
         .ok_or_else(index_failed)?;
     let projector = HmacDomainProjector::new(&registry);
-    let ingestor = CorpusIngestor::new(&pipeline, &domain, &projector)
-        .with_safety_net_resolution_fallback(args.on_residual.fallback());
+    let ingestor =
+        CorpusIngestor::with_locale_chain(&ingest.pipeline, &domain, &projector, ingest.locales)
+            .with_dictionaries(ingest.dictionaries)
+            .with_safety_net_resolution_fallback(args.on_residual.fallback());
 
     store.clear_domain(&args.domain);
     let mut ingested_files = 0_usize;
@@ -266,30 +270,35 @@ fn classes_for_docs(docs: &[SourceDoc]) -> Vec<PiiClass> {
     classes.into_iter().collect()
 }
 
+/// The ingest pipeline and the detection inputs it was resolved with.
+struct IndexIngestPipeline {
+    pipeline: Pipeline,
+    locales: Vec<LocaleTag>,
+    dictionaries: DictionaryBundle,
+}
+
+/// The policy-less `gaze clean` resolution (bundled `core`, default rule tokenize) plus the
+/// index's pinned NER bundle, field-label detector and optional net. Sharing the resolver keeps
+/// one owner for the deterministic floor: an identifier `gaze clean` tokenizes never reaches the
+/// snippet that `gaze index search` prints raw.
 fn build_index_pipeline(
-    classes: &[PiiClass],
     ner_model_dir: Option<PathBuf>,
     net: &IndexSafetyNetArgs,
-) -> Result<Pipeline, CliError> {
-    let mut builder = Pipeline::builder()
-        .detector(RegexDetector::emails().map_err(|err| {
-            CliError::PolicyConfigDetail(format!("index email detector failed: {err}"))
-        })?)
+) -> Result<IndexIngestPipeline, CliError> {
+    let ner = index_ner_recognizer(ner_model_dir)?;
+    let resolved = resolve_pipeline_builder(None, &CleanOverrides::default(), &[], None, None)?;
+    let builder = resolved
+        .builder
         .detector(FieldEntityDetector)
-        .recognizer(index_ner_recognizer(ner_model_dir)?);
-    builder = register_index_safety_net(builder, net)?;
-
-    let mut rule_classes =
-        BTreeSet::from([PiiClass::Email, PiiClass::Name, PiiClass::Organization]);
-    rule_classes.extend(classes.iter().cloned());
-    for class in rule_classes {
-        builder = builder.rule(ClassRule::new(class, Action::Tokenize));
-    }
-
-    builder
-        .rule(DefaultRule::new(Action::Preserve))
+        .recognizer(ner);
+    let pipeline = register_index_safety_net(builder, net)?
         .build()
-        .map_err(|err| CliError::PolicyConfigDetail(format!("index pipeline build failed: {err}")))
+        .map_err(map_pipeline_error)?;
+    Ok(IndexIngestPipeline {
+        pipeline,
+        locales: resolved.locale_chain.as_slice().to_vec(),
+        dictionaries: resolved.dictionaries,
+    })
 }
 
 fn build_index_output_safety_net_pipeline(net: &IndexSafetyNetArgs) -> Result<Pipeline, CliError> {
