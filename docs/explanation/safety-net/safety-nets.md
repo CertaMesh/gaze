@@ -563,6 +563,14 @@ and converts them to UTF-8 byte offsets, with fixtures on umlauts, NFD combining
 marks, emoji, NBSP, NARROW NBSP, CRLF line breaks and a span that ends the
 text.
 
+A decoded span is then trimmed of structural punctuation at both edges: JSON
+double quotes, colons, commas, square brackets, braces and whitespace. A piece
+can carry the quote or brace next to a value (`"Anna`), so without the trim a
+suspect over tool-call JSON reaches into the syntax around the value. Trimming
+only narrows a span and never widens it; the new edges border a structural
+character, so they never cut a word, and a span that is syntax alone is
+dropped. Inner punctuation stays: `M-AB 1234` keeps its hyphen and space.
+
 ### Every byte is scanned
 
 Input is tokenized without truncation and scored in windows of 512 pieces that
@@ -617,7 +625,12 @@ the model reads token text such as `Custom:building_number` as a building
 number. A suspect inside a live token is never acted on, so bytes and restore
 are unaffected, under every `Resolve` fallback including `strict`
 (`nym_suspect_inside_its_own_token_text_is_protected_under_every_resolve_fallback`).
-Masking token text before the net reads it is a follow-up (todo 3681).
+Masking token text before the net reads it is a follow-up (todo 3681). A first
+attempt replaced every manifest token with same-length spaces before inference
+and was measured and not shipped: it removed the token-text flags, but the
+model lost the tokens as context and bought 18 % fewer leaked bytes (v2 6,154
+to 5,039 on the 2,910 documents), so a different mask shape needs its own
+measured proposal.
 
 ### Known gaps and open review items
 

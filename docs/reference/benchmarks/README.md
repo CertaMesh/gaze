@@ -78,6 +78,17 @@ verified 2.6 GB checkpoint and a warmed daemon, and it has a measured
 fail-closed invalid-output rate. `full-stack-nym-resolve` exercises the in-process
 Nym-small net and needs its pinned bundle.
 
+Warm per-document latency of the Nym arm is measured by
+[`scripts/bench/nym-warm-latency.py`](../../../scripts/bench/nym-warm-latency.py)
+(`uv run --with tokenizers python scripts/bench/nym-warm-latency.py --repo-root .`
+after `gaze setup --safety-net nym`). It times the release harness warm for
+`pass2-ner` and `full-stack-nym-resolve` over the coverage-loop corpus plus
+512- and 1,024-piece synthetic documents, whose piece counts it checks against
+the installed tokenizer before timing, and prints p50, p95 and mean with a
+hardware line and the host load average. No numbers are recorded here yet: a
+latency row needs a quiet host (load average below 2), and every run so far was
+on a shared, loaded one.
+
 Release rows up to v0.14.0 predate the removal of the Kiji DistilBERT safety net
 and report `full-stack-kiji-resolve`, which was the shipped default then. Those rows
 are kept as measured.

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Nym warm-latency script.** `scripts/bench/nym-warm-latency.py` times the
+  production pipeline (`clean_for_bench`) warm, per document, for `pass2-ner`
+  and `full-stack-nym-resolve` over the coverage-loop corpus plus 512- and
+  1,024-piece synthetic documents, and prints p50, p95 and mean with a
+  hardware line (chip, cores, RAM, OS, ort version, bundle SHA) and the host
+  load average. No latency row is recorded until it runs on a quiet host.
 - **Benchmark shape-recall column.** Each scorecard run now splits every
   validator-backed label's surviving bytes into gold that passes its validator
   and gold that fails it (`production_recall_by_gold_validity`), next to the
@@ -106,6 +112,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Nym suspects no longer carry JSON syntax at their edges.** Quotes,
+  colons, commas, brackets, braces and whitespace are trimmed from both ends
+  of a decoded span, and a span of syntax alone is dropped. Trimming only
+  narrows a span, so a tool-call value like `"name": "Anna Müller",` yields
+  `Anna Müller`, not `"Anna Müller",`.
 - **BREAKING (`gaze-mcp-rmcp`): rmcp 2.x.** `gaze-mcp-rmcp`,
   `gaze-mcp-bridge` and `gaze-document` move from rmcp 1.6 to rmcp 2.x, whose
   `ContentBlock` replaces `Content` / `RawContent`. Adopters that name rmcp
