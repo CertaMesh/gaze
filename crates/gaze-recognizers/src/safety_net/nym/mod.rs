@@ -289,16 +289,19 @@ mod tests {
         );
     }
 
-    /// A stand-in model that flags every occurrence of a label word in the text it is given, the
-    /// way the real model flags the class name inside `<…:Custom:building_number_N>` (todo 3681).
-    fn flag_every(word: &'static str) -> impl Fn(&str) -> Result<Vec<NymSpan>, SafetyNetError> {
+    /// A stand-in model that flags every occurrence of a word in the text it is given, the way
+    /// the real model flags the class name inside `<…:Custom:building_number_N>` (todo 3681).
+    fn flag_every(
+        word: &'static str,
+        label: NymLabel,
+    ) -> impl Fn(&str) -> Result<Vec<NymSpan>, SafetyNetError> {
         move |text| {
             Ok(text
                 .match_indices(word)
                 .map(|(start, _)| NymSpan {
                     start,
                     end: start + word.len(),
-                    label: NymLabel::BuildingNumber,
+                    label,
                     score: 0.9,
                 })
                 .collect())
@@ -306,7 +309,9 @@ mod tests {
     }
 
     /// Todo 3681: a suspect can no longer originate inside a live token. The class name inside the
-    /// token is masked before inference; the same word in plain text is still scanned.
+    /// token is masked before inference; the same word in plain text is still scanned. The label
+    /// differs from the token's class, as in the 2,910-document run (plate, username and DOB flags
+    /// on `building_number` tokens), so the manifest alone would report a class mismatch.
     #[test]
     fn no_suspect_originates_inside_a_live_token() {
         let token = "<Custom:building_number_1>";
@@ -322,7 +327,7 @@ mod tests {
             &text,
             context(&manifest),
             &NymOperatingPoint::op_b(),
-            flag_every("building_number"),
+            flag_every("building_number", NymLabel::LicensePlate),
         )
         .unwrap();
         let plain = text.rfind("building_number").unwrap();
