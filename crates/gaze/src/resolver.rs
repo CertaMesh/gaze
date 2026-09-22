@@ -1565,6 +1565,92 @@ mod tests {
         assert_eq!(with[0].token_family, without[0].token_family);
     }
 
+    /// The precedence-tie family token is settled by construction, not by the
+    /// accident that its synthetic id has no family membership today. The
+    /// public builder accepts any recognizer id, so an id that shadows the
+    /// token (`collision-family:<f>`) with a mandatory anchor must not pull
+    /// the token back through the missing-anchor fallback.
+    #[test]
+    fn precedence_tie_token_never_reenters_anchor_fallback() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "doc.alpha",
+                crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
+            )
+            .register_collision(
+                "doc.beta",
+                crate::CollisionMembership::new("tenant-document", "beta", 10, None),
+            )
+            .register_collision(
+                "collision-family:tenant-document",
+                crate::CollisionMembership::new("shadow", "token", 10, Some("shadow".to_string())),
+            )
+            .build();
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![
+                prioritized(
+                    candidate(0..5, PiiClass::custom("alpha").unwrap(), 0.70, "doc.alpha"),
+                    10,
+                ),
+                prioritized(
+                    candidate(0..5, PiiClass::custom("beta").unwrap(), 0.70, "doc.beta"),
+                    10,
+                ),
+                foreign_postal_at(3..10),
+            ],
+            registry.family_policy(),
+            &AnchorResolver::default(),
+            "AB123 Wiener",
+            &[LocaleTag::DeAt],
+        );
+
+        assert_eq!(resolved.len(), 1, "{resolved:?}");
+        assert_eq!(resolved[0].class, PiiClass::family("tenant-document"));
+        assert_eq!(
+            resolved[0].recognizer_id,
+            "collision-family:tenant-document"
+        );
+    }
+
+    /// Axis-4 invariant behind #3709: the survivor must not depend on the
+    /// order the three overlapping candidates arrive in. `candidate_order`
+    /// fixes the order in production, so feed every permutation of ids to the
+    /// pool directly; only `decided_by` (the last-rung audit label) may vary.
+    #[test]
+    fn collision_settled_survivor_is_arrival_order_independent() {
+        let registry = payment_family_registry();
+        let originals = vec![iban_at(0..24), card_at(5..24), foreign_postal_at(20..37)];
+        let permutations = [
+            [0, 1, 2],
+            [0, 2, 1],
+            [1, 0, 2],
+            [1, 2, 0],
+            [2, 0, 1],
+            [2, 1, 0],
+        ];
+        let resolver = AnchorResolver::default();
+        let survivors = permutations.map(|ids| {
+            CandidatePool::new(originals.clone())
+                .resolve(
+                    &ids,
+                    registry.family_policy(),
+                    Some((&resolver, SETTLED_IBAN_INPUT, &[LocaleTag::DeAt])),
+                )
+                .into_iter()
+                .map(|node| {
+                    let c = node.candidate;
+                    (c.span, c.class, c.recognizer_id, c.token_family)
+                })
+                .collect::<Vec<_>>()
+        });
+
+        assert_eq!(survivors[0].len(), 1, "{survivors:?}");
+        assert_eq!(survivors[0][0].1, PiiClass::Custom("iban".to_string()));
+        for (ids, survivor) in permutations.iter().zip(&survivors) {
+            assert_eq!(survivor, &survivors[0], "arrival order {ids:?}");
+        }
+    }
+
     /// Same defect when the IBAN arrives second and takes the slot from the
     /// card variant by collision policy (`CandidateWins`), then the unrelated
     /// overlap arrives.
