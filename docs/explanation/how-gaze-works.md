@@ -90,7 +90,7 @@ Steps 1 to 4 are the deterministic floor: same input, same output, every placeho
 | Mode | What happens to a suspect | Reversible? | Who refuses |
 |---|---|---|---|
 | `resolve` **(default)** | Becomes a normal placeholder. If that is impossible, the fallback decides. | Yes | Only a `strict` fallback |
-| `redact` | The suspect bytes are deleted from the text (no marker yet), and an audit row is written. | No, for that span | Nobody |
+| `redact` | The suspect bytes are replaced with a one-way `[REDACTED:<class>]` marker, and an audit row is written. | No, for that span | Nobody |
 | `strict` | The whole document is refused (exit code 3, empty output). | Nothing was sent | Gaze |
 | `tolerant` | A warning only. **The suspect reaches the model.** Development use only. | Yes | Nobody, the leak ships |
 

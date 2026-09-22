@@ -212,7 +212,11 @@ mod tests {
             // Also in context: a marker sitting in prose must not lend a token shape to its
             // neighbours, and must survive the strict restore scan untouched.
             let sentence = format!("Dear {marker}, your order shipped.");
-            assert_eq!(find_token(&sentence), None, "marker taints prose: {sentence}");
+            assert_eq!(
+                find_token(&sentence),
+                None,
+                "marker taints prose: {sentence}"
+            );
             assert!(
                 validate_restore_shapes(&sentence).is_ok(),
                 "the strict restore scan must not flag a marker: {sentence}"

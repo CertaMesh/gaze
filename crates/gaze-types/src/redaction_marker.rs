@@ -50,9 +50,9 @@ pub fn is_redaction_marker(text: &str) -> bool {
         return false;
     };
     !body.is_empty()
-        && body
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b':' | b'-'))
+        && body.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b':' | b'-')
+        })
 }
 
 /// Byte spans of every redaction marker in `text`, ascending and disjoint.

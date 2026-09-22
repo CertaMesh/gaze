@@ -617,7 +617,9 @@ impl Ledger {
                     let mut phases = observations.iter().map(|id| {
                         self.observations
                             .get(*id)
-                            .ok_or_else(|| manifest_integrity_error("invalid redaction observation"))
+                            .ok_or_else(|| {
+                                manifest_integrity_error("invalid redaction observation")
+                            })
                             .map(|observation| observation.phase)
                     });
                     let first = phases

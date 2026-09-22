@@ -59,9 +59,9 @@ Axes follow [`AGENTS.md`](../../../AGENTS.md): **A1** reliability (never leak), 
 | `redact`   | full†        | partial loss‡   | great               | full (audit row)    | high            | tiny       | opt-in           |
 | `resolve`  | bounded§     | full            | good (extra pass)   | full (audit row)    | medium          | +1 pass    | **default**      |
 
-† Reliability is preserved by deletion. The suspect span is overwritten with a sentinel before the clean text reaches the LLM; the audit log records the redaction with a typed `decided_by: SafetyNetRedacted` row. From the LLM's perspective the leak never occurred.
+† Reliability is preserved by replacement. The suspect span is overwritten with a one-way `[REDACTED:<class>]` marker before the clean text reaches the LLM; the audit log records the redaction with a typed `decided_by: SafetyNetRedacted` row, and the manifest carries it as a non-reversible entry. From the LLM's perspective the leak never occurred, and unlike deleting, the marker says that something was removed and what class it was.
 
-‡ Reversibility is preserved for every token gaze emitted itself. The break is scoped to safety-net suspect spans; restore returns the sentinel unchanged for those spans. Adopters must treat redacted bytes as lost.
+‡ Reversibility is preserved for every token gaze emitted itself. The break is scoped to safety-net suspect spans; restore returns the marker unchanged for those spans, because a marker is ordinary text to the restore scanner and never a token to substitute. Adopters must treat redacted bytes as lost.
 
 § `resolve` makes no axis-1 promise unless the second pass succeeds. If the second pass also flags a suspect above threshold, the design falls back via `--safety-net-fallback` (§6). Default cascade is `redact`, which preserves axis-1 at axis-2's expense for the residual suspect only; adopters may opt into `strict` for hard-fail.
 
@@ -258,7 +258,7 @@ Each emits a `decided_by: Fallback` audit row with the corresponding `FallbackRe
 > |---------------------|-------------------------|------------------------------|-------------------|
 > | `strict`            | any                     | `Observe { strict: true }`   | report only; the CLI boundary exits `3` |
 > | `tolerant`          | any                     | `Observe { strict: false }`  | report only; the CLI boundary warns and ships |
-> | `redact`            | any                     | `Redact`                     | delete every suspect span; **no fallback** |
+> | `redact`            | any                     | `Redact`                     | replace every suspect span with a marker; **no fallback** |
 > | `resolve`           | `f`                     | `Resolve { on_residual: f }` | tokenize, re-run the nets, apply `f` to the residual |
 >
 > `redact` is **terminal per suspect**: it has no cascade. Its failure paths are typed errors that
@@ -271,7 +271,7 @@ Each emits a `decided_by: Fallback` audit row with the corresponding `FallbackRe
 > `safety_net_policy_lowering_covers_all_twelve_representable_pairs` in
 > `crates/gaze/tests/safety_net.rs`.
 
-The fallback flag is a per-suspect cascade decision: when the primary `--safety-net-mode` is `resolve` and the primary action cannot be honored, the fallback decides what happens to the residual. The other modes (`strict`, `tolerant`, `redact`) ignore the flag: `strict` exits at the boundary regardless, `tolerant` ships the leak regardless, and `redact` has already removed the bytes or failed closed.
+The fallback flag is a per-suspect cascade decision: when the primary `--safety-net-mode` is `resolve` and the primary action cannot be honored, the fallback decides what happens to the residual. The other modes (`strict`, `tolerant`, `redact`) ignore the flag: `strict` exits at the boundary regardless, `tolerant` ships the leak regardless, and `redact` has already replaced the bytes or failed closed.
 
 ### 6.1 CLI surface
 
@@ -291,11 +291,11 @@ not implemented (see the note at the top of §6). The **default** cell is marked
 
 | primary \ fallback | `strict`                                       | `tolerant`                                       | `redact`                                                    |
 |--------------------|------------------------------------------------|--------------------------------------------------|-------------------------------------------------------------|
-| `resolve`          | Reject the document with `Error::SafetyNetFallback(reason)`; the CLI exits 3. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. | Ship the residual bytes. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. Requires `GAZE_ALLOW_TOLERANT=1` (§6.5). | **Default.** Delete the residual spans. One `decided_by: Fallback` row per residual suspect, `action = Redact`. Axis-1 preserved; axis-2 lost for that span. |
+| `resolve`          | Reject the document with `Error::SafetyNetFallback(reason)`; the CLI exits 3. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. | Ship the residual bytes. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. Requires `GAZE_ALLOW_TOLERANT=1` (§6.5). | **Default.** Replace the residual spans with a one-way `[REDACTED:<class>]` marker. One `decided_by: Fallback` row per residual suspect, `action = Redact`. Axis-1 preserved; axis-2 lost for that span, but the loss is visible rather than silent. |
 | `redact`           | *not consulted* | *not consulted* | *not consulted* |
 | `strict` / `tolerant` | *not consulted* | *not consulted* | *not consulted* |
 
-The `strict` and `redact` cells both preserve axis-1 — `strict` by rejecting the document, `redact` by removing the residual bytes. `redact` is the default. The `tolerant` cell violates axis-1 by design and is dev-only.
+The `strict` and `redact` cells both preserve axis-1 — `strict` by rejecting the document, `redact` by replacing the residual bytes with a marker. `redact` is the default. The `tolerant` cell violates axis-1 by design and is dev-only.
 
 **The fallback acts on the residual report, not the primary one.** When the resolve pass converges
 and the post-resolution re-run flags something, the residual lives in the *re-run* report at

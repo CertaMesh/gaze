@@ -1739,7 +1739,7 @@ impl Pipeline {
         // reconciles the manifest against the deletion ledger, so a document whose own record of
         // itself is wrong fails closed before anything acts on it.
         let layout = CleanLayout::of(clean)?;
-        let survivors = promise.survivors(&layout);
+        let survivors = promise.survivors(clean, &layout);
         let mut manufactured = None;
         let mut resolvable = Vec::new();
         for suspect in &scanned.suspects {
@@ -1809,7 +1809,7 @@ impl Pipeline {
             // output is a fact about the output, and asking the model again would only produce
             // another opinion to adjudicate.
             let layout = CleanLayout::of(clean)?;
-            if !promise.survivors(&layout).is_empty() {
+            if !promise.survivors(clean, &layout).is_empty() {
                 return Err(Error::SafetyNetFallback(reason));
             }
             for (suspect, raw) in resolvable.iter_mut().zip(frozen) {
@@ -1863,7 +1863,7 @@ impl Pipeline {
         )?;
         merge_subword_telemetry(report, &settled);
         let layout = CleanLayout::of(clean)?;
-        let survivors = promise.survivors(&layout);
+        let survivors = promise.survivors(clean, &layout);
         for suspect in &settled.suspects {
             if suspect_is_already_protected(target, clean, suspect) {
                 continue;
@@ -3335,7 +3335,9 @@ fn validate_terminal_manifest(
                 || clean.text.get(emitted.clean_span.clone())
                     != Some(redaction_marker(&emitted.class).as_str())
             {
-                return Err(manifest_integrity_error("invalid terminal redaction marker"));
+                return Err(manifest_integrity_error(
+                    "invalid terminal redaction marker",
+                ));
             }
             clean_cursor = emitted.clean_span.end;
             raw_cursor = emitted.raw_span.end;
@@ -3397,12 +3399,20 @@ impl FallbackPromise {
     ///
     /// Empty is the fallback keeping its word. Anything else is a promise it recorded and did not
     /// honour, which is not a state any admission rule may reason past.
-    fn survivors(&self, layout: &CleanLayout) -> Vec<Range<usize>> {
+    fn survivors(&self, clean_text: &CleanText, layout: &CleanLayout) -> Vec<Range<usize>> {
+        // The fallback's own markers stand exactly on the raw ranges it promised to remove. They
+        // are that promise KEPT: the bytes are gone and a marker says so. Counting a marker as a
+        // survivor would read every redaction as a broken promise and deny the document for doing
+        // what it recorded.
+        let markers = recorded_redaction_markers(clean_text).collect::<Vec<_>>();
         let mut survivors = Vec::new();
         for run in &layout.runs {
             let Some((clean, raw)) = run.spans() else {
                 continue;
             };
+            if matches!(run, Run::Replacement { .. }) && markers.contains(clean) {
+                continue;
+            }
             for promised in &self.claimed {
                 if !ranges_overlap(raw, promised) {
                     continue;
@@ -3580,26 +3590,36 @@ fn suspect_is_already_protected(
 /// Containment, not overlap, and the difference is a fail-closed one. An overlap test would
 /// excuse a suspect that is merely MALFORMED -- out of bounds, reversed, splitting a character --
 /// whenever it happened to touch a marker, and those must stay unjudgeable and deny the document.
-/// It would also excuse a suspect straddling a marker and real text, where the real half may
-/// still need acting on. Both fall through to the ordinary rules instead, exactly as they do for
-/// the live-token sibling above.
-///
-/// Authority comes from the manifest, not from the text: a document whose own content happens to
-/// contain the literal `[REDACTED:name]` must not gain protection from having typed it. The
-/// manifest entry is checked against the bytes actually standing there, so only a marker gaze
-/// itself recorded counts.
+/// It would also excuse a suspect straddling a marker and real text, which is a leak: a net that
+/// reports `[REDACTED:name] Schmidt` has flagged a surname, and dropping the whole finding because
+/// half of it is a marker would ship `Schmidt` raw. A straddling suspect falls through to the
+/// ordinary rules instead, exactly as it does for the live-token sibling below.
 fn suspect_is_inside_redaction_marker(clean: &CleanText, suspect: &LeakSuspect) -> bool {
     let span = &suspect.span;
     if span.start >= span.end || !is_char_boundary_range(&clean.text, span) {
         return false;
     }
-    clean.manifest.records().iter().any(|record| {
-        matches!(record.origin, Origin::SafetyNetRedaction { .. })
-            && record.emitted.clean_span.start <= span.start
-            && span.end <= record.emitted.clean_span.end
-            && clean.text.get(record.emitted.clean_span.clone())
-                == Some(redaction_marker(&record.emitted.class).as_str())
-    })
+    recorded_redaction_markers(clean)
+        .any(|marker| marker.start <= span.start && span.end <= marker.end)
+}
+
+/// Clean spans of every `[REDACTED:<class>]` marker this pipeline recorded, ascending.
+///
+/// Authority comes from the manifest, not from the text: a document whose own content happens to
+/// contain the literal `[REDACTED:name]` must not gain protection from having typed it. Each entry
+/// is checked against the bytes actually standing there, so only a marker gaze itself wrote and
+/// recorded counts. The one place that decides "is this a marker"; every caller asks it.
+fn recorded_redaction_markers(clean: &CleanText) -> impl Iterator<Item = Range<usize>> + '_ {
+    clean
+        .manifest
+        .records()
+        .iter()
+        .filter(|record| {
+            matches!(record.origin, Origin::SafetyNetRedaction { .. })
+                && clean.text.get(record.emitted.clean_span.clone())
+                    == Some(redaction_marker(&record.emitted.class).as_str())
+        })
+        .map(|record| record.emitted.clean_span.clone())
 }
 
 /// True when the suspect span lies wholly inside exactly one live token.
@@ -6646,6 +6666,74 @@ mod tests {
             clean_span,
             raw_span,
         }
+    }
+
+    /// The fallback promises to remove a raw range, then writes its marker exactly on it. That
+    /// marker is the promise KEPT. `FallbackPromise::survivors` must not report it, or every
+    /// fallback redaction would read as a broken promise the moment anything looked.
+    ///
+    /// Driven directly because no integration test can tell the difference by outcome: every
+    /// terminal suspect that reaches the marker is either dropped as protected or denied as
+    /// unjudgeable before the survivor clause matters. The one place it would decide alone -- the
+    /// byte check after a terminal redaction -- is unreachable now that markers leave no seam
+    /// (solo todo 3739). Unfalsifiable-by-outcome is exactly when a guard needs a direct test.
+    ///
+    /// Mutation: drop the marker skip in `survivors` and this fails with the marker span reported.
+    #[test]
+    fn fallback_promise_does_not_count_its_own_marker_as_a_survivor() {
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
+        let mut clean = CleanText {
+            text: "keep flagged keep".to_string(),
+            manifest: Ledger::default(),
+        };
+        let suspect = LeakSuspect::new(
+            5..12,
+            PiiClass::Name,
+            "probe.promise",
+            Some(1.0),
+            LeakKind::Uncovered,
+            "person",
+            None,
+        );
+        let promise = FallbackPromise::capture(&clean, &[&suspect]).expect("capture");
+        pipeline
+            .redact_safety_net_suspects(
+                &mut target,
+                &mut clean,
+                &[&suspect],
+                DocumentKind::Text,
+                None,
+                Some(FallbackReason::ResidualSuspect),
+                false,
+                None,
+            )
+            .expect("redact");
+        assert_eq!(clean.text, "keep [REDACTED:name] keep");
+
+        let layout = CleanLayout::of(&clean).expect("layout");
+        assert_eq!(
+            promise.survivors(&clean, &layout),
+            Vec::<Range<usize>>::new(),
+            "the marker standing on the promised range is the promise kept, not a survivor"
+        );
+
+        // The control: a genuine survivor is still reported. Put the flagged bytes back where
+        // the marker is and the same promise must see them.
+        let broken = CleanText {
+            text: "keep flagged keep".to_string(),
+            manifest: Ledger::default(),
+        };
+        let layout = CleanLayout::of(&broken).expect("layout");
+        assert_eq!(
+            promise.survivors(&broken, &layout),
+            vec![5..12],
+            "flagged bytes still standing on the promised range are a broken promise"
+        );
     }
 
     /// `replace_clean_span_checked` is the floor under both safety-net apply loops: a span that no

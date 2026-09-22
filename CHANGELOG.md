@@ -185,6 +185,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`postal.at_ch`, above).
 
 ### Changed
+- **The safety net no longer deletes: it writes a one-way `[REDACTED:<class>]`
+  marker.** `SafetyNetMode::Redact` and the `Resolve` + `Redact` fallback used
+  to replace a flagged span with the empty string, so the bytes vanished and
+  nothing downstream could tell a redaction from a typo. They now write a
+  visible marker (`[REDACTED:name]`, `[REDACTED:custom:phone]`), recorded as an
+  ordinary non-owned manifest entry with `Action::Redact` -- the same shape the
+  primary pass has always emitted for a redacting policy -- carrying the raw
+  span and the ids of every suspect that drove it. **Which spans get redacted
+  is unchanged; only what is written in their place changes.** The marker is
+  deliberately outside the token grammar: restore passes it through as ordinary
+  text, the strict restore scan does not flag it, and the class path renders
+  with `_` mapped to `-` so a custom class named `address_2` cannot make the
+  marker parse as the bare token shape `custom:address_2`. `gaze` re-exports
+  `is_redaction_marker` as the single predicate every consumer should ask.
+  **Behaviour change for adopters using `redact` (including the default
+  `Resolve` + `Redact` fallback):** clean output now contains marker text where
+  bytes previously disappeared, so it is longer, not shorter, for those spans.
+  See `docs/explanation/safety-net/safety-nets.md#the-redaction-marker`.
 
 - **Nym suspects no longer carry JSON syntax at their edges.** Quotes,
   colons, commas, brackets, braces and whitespace are trimmed from both ends

@@ -810,10 +810,7 @@ fn actual_two_net_sequence_sees_residual_output_and_deletes_its_final_authority(
         trace.iter().filter(|t| t.action() == "tokenize").count(),
         manifest.len() - 1
     );
-    assert_eq!(
-        trace.iter().filter(|t| t.action() == "redact").count(),
-        1
-    );
+    assert_eq!(trace.iter().filter(|t| t.action() == "redact").count(), 1);
     // Restore is the contract this change is measured against. The redacted bytes do not come
     // back — a marker is one-way — but the marker itself passes through the strict scan verbatim:
     // it is ordinary text to restore, never a token to substitute and never a reason to reject.

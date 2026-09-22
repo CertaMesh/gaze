@@ -184,9 +184,7 @@ fn run(
                     };
                     spans
                         .iter()
-                        .filter(|span| {
-                            !gaze::is_redaction_marker(&text[span.clean_span.clone()])
-                        })
+                        .filter(|span| !gaze::is_redaction_marker(&text[span.clean_span.clone()]))
                         .count()
                 })
             );
