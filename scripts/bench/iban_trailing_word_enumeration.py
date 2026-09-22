@@ -2,7 +2,7 @@
 """IBAN trailing-word enumeration for the `iban.structural` length branches (todo #3708).
 
 Runs a deterministic IBAN document set through two `gaze daemon` binaries (base,
-fix) under four policies and compares, per document, the class each binary gives
+fix) under five policies and compares, per document, the class each binary gives
 the IBAN span and the IBAN bytes each binary protects (union of manifest
 `raw_span`s).
 
@@ -152,6 +152,10 @@ POLICIES = {
     "core-en-us": ('"core", "locale-en"', "en-US"),
     "core-both-locales-de-de": ('"core", "locale-de", "locale-en"', "de-DE"),
     "core-both-locales-en-us": ('"core", "locale-de", "locale-en"', "en-US"),
+    # `postal.at_ch` (#613) matches a four-digit group directly before a
+    # capitalised word under de-AT/de-CH -- which is an IBAN's last group before
+    # `Bank PKO`. This arm checks that it never fragments an IBAN.
+    "core-de-at": ('"core", "locale-de"', "de-AT"),
 }
 
 
