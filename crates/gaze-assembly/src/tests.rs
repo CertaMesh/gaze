@@ -1869,3 +1869,225 @@ fn uncovered_family_classes_ignores_family_rule_shadowed_by_default() {
         "a family rule shadowed by an earlier default rule is dead code and must stay flagged: {uncovered:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// todo 3746: a collision-family token derives its action from its member
+// classes' rules (strictest wins, never laxer than the family's own default)
+// unless the policy names the family class explicitly. Product path:
+// `build_pipeline` on the bundled `core` + `locale-de` packs under de-DE.
+// ---------------------------------------------------------------------------
+
+/// No IBAN cue (`Überweisung` is not one), non-Luhn BBAN: `iban.structural`
+/// fires alone, the mandatory anchor is missing, and the span is emitted as
+/// `custom:family:payment-card-or-iban`.
+const NO_CUE_IBAN: &str = "Überweisung DE89 3704 0044 0532 0130 00";
+/// No cue, Luhn-valid BBAN: `card.structural` also fires, the family policy
+/// settles the overlap for the IBAN (#619), so the span keeps `custom:iban`.
+/// Already protected on main; pinned so the fix does not disturb it.
+const NO_CUE_LUHN_BBAN_IBAN: &str = "Überweisung DE24 9635 8749 2586 6121 02";
+/// No cue and a trailing number: a Luhn-valid card run crosses the IBAN's end
+/// into the number, the collision falls to the family fallback, and on main
+/// the WHOLE IBAN shipped raw under a member-only policy (todo 3746, comment 2115).
+const TRAILING_NUMBER_IBANS: [&str; 3] = [
+    "Bitte überweisen auf FO14 5878 0013 4155 73 1234",
+    "Bitte überweisen auf GL07 3135 5673 6936 21 1234",
+    "Bitte überweisen auf SA77 3476 4281 2318 7317 7425 1234",
+];
+const FAMILY_TOKEN_MARKER: &str = ":Custom:family:payment-card-or-iban_";
+
+fn payment_family_policy(rules: &[(&str, Action)], default: Action) -> gaze::Policy {
+    let mut policy = gaze::Policy::default();
+    policy.session = SessionPolicy::default();
+    policy.locale = Some(vec![LocaleTag::DeDe]);
+    policy.rules = rules
+        .iter()
+        .map(|(class, action)| RuleSpec::Class {
+            class: PiiClass::from_policy_name(class).expect("policy class"),
+            action: *action,
+        })
+        .chain(std::iter::once(RuleSpec::Default { action: default }))
+        .collect();
+    policy
+}
+
+fn member_only_tokenize_policy() -> gaze::Policy {
+    payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Tokenize),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Preserve,
+    )
+}
+
+fn clean_payment(policy: &gaze::Policy, input: &str) -> String {
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+    clean_with_policy_and_rulepacks(policy, &rulepacks, input)
+}
+
+/// Every space-separated group of the value after `prefix` must be gone from
+/// `clean`. Failure messages carry only the group index, never the bytes.
+fn assert_no_group_survives(clean: &str, input: &str, prefix: &str) {
+    let value = input.strip_prefix(prefix).expect("fixture prefix");
+    for (index, group) in value.split(' ').enumerate() {
+        assert!(
+            !clean.contains(group),
+            "group {index} of the value survived in the clean text"
+        );
+    }
+}
+
+#[test]
+fn member_only_policy_tokenizes_a_no_cue_iban_family_token() {
+    let clean = clean_payment(&member_only_tokenize_policy(), NO_CUE_IBAN);
+
+    assert!(
+        clean.contains(FAMILY_TOKEN_MARKER),
+        "expected one family-level token, got: {clean}"
+    );
+    assert_no_group_survives(&clean, NO_CUE_IBAN, "Überweisung ");
+}
+
+#[test]
+fn member_only_policy_tokenizes_trailing_number_family_tokens() {
+    for (index, input) in TRAILING_NUMBER_IBANS.iter().enumerate() {
+        let clean = clean_payment(&member_only_tokenize_policy(), input);
+        assert!(
+            clean.contains(FAMILY_TOKEN_MARKER),
+            "fixture {index}: expected a family-level token, got: {clean}"
+        );
+        assert_no_group_survives(&clean, input, "Bitte überweisen auf ");
+    }
+}
+
+#[test]
+fn no_cue_luhn_valid_bban_iban_keeps_its_settled_iban_token() {
+    let clean = clean_payment(&member_only_tokenize_policy(), NO_CUE_LUHN_BBAN_IBAN);
+
+    assert!(
+        clean.contains(":Custom:iban_"),
+        "the settled family verdict must keep the narrow class: {clean}"
+    );
+    assert_no_group_survives(&clean, NO_CUE_LUHN_BBAN_IBAN, "Überweisung ");
+}
+
+#[test]
+fn explicit_family_preserve_rule_overrides_member_derivation() {
+    let policy = payment_family_policy(
+        &[
+            ("custom:family:payment-card-or-iban", Action::Preserve),
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Tokenize),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Preserve,
+    );
+
+    assert_eq!(clean_payment(&policy, NO_CUE_IBAN), NO_CUE_IBAN);
+}
+
+#[test]
+fn all_members_preserve_under_a_preserve_default_keeps_the_family_token_raw() {
+    let policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Preserve),
+            ("custom:credit_card", Action::Preserve),
+            ("custom:phone", Action::Preserve),
+        ],
+        Action::Preserve,
+    );
+
+    assert_eq!(clean_payment(&policy, NO_CUE_IBAN), NO_CUE_IBAN);
+}
+
+#[test]
+fn all_members_preserve_under_a_tokenize_default_still_tokenizes_the_family_token() {
+    // Monotone: derivation never lands below the family's own default action.
+    let policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Preserve),
+            ("custom:credit_card", Action::Preserve),
+            ("custom:phone", Action::Preserve),
+        ],
+        Action::Tokenize,
+    );
+    let clean = clean_payment(&policy, NO_CUE_IBAN);
+
+    assert!(clean.contains(FAMILY_TOKEN_MARKER), "got: {clean}");
+    assert_no_group_survives(&clean, NO_CUE_IBAN, "Überweisung ");
+}
+
+fn tenant_tie_policy(rules: Vec<RuleSpec>) -> gaze::Policy {
+    let mut policy = gaze::Policy::default();
+    policy.session = SessionPolicy::default();
+    policy.rules = rules;
+    for (name, class, variant) in [
+        ("tenant.alpha", "custom:alpha_doc", "alpha"),
+        ("tenant.beta", "custom:beta_doc", "beta"),
+    ] {
+        let mut detector = gaze::DetectorSpec::default();
+        detector.kind = DetectorKind::Regex;
+        detector.name = name.to_string();
+        detector.pattern = Some(r"CASE-[0-9]{4}".to_string());
+        detector.class = PiiClass::from_policy_name(class).expect("class");
+        detector.collision = Some(gaze::CollisionMembership::new(
+            "tenant-document",
+            variant,
+            10,
+            None,
+        ));
+        policy.detectors.push(detector);
+    }
+    policy
+}
+
+#[test]
+fn precedence_tie_family_token_derives_its_action_from_member_rules() {
+    let policy = tenant_tie_policy(vec![
+        RuleSpec::Class {
+            class: PiiClass::from_policy_name("custom:alpha_doc").expect("class"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Class {
+            class: PiiClass::from_policy_name("custom:beta_doc").expect("class"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ]);
+    let clean = clean_with_policy_and_rulepacks(&policy, &[], "ticket CASE-0001 open");
+
+    assert!(
+        clean.contains(":Custom:family:tenant-document_"),
+        "equal precedence must emit the family token: {clean}"
+    );
+    assert!(!clean.contains("CASE-0001"), "tie token leaked: {clean}");
+}
+
+#[test]
+fn precedence_tie_family_token_honours_an_explicit_family_rule() {
+    let policy = tenant_tie_policy(vec![
+        RuleSpec::Class {
+            class: PiiClass::family("tenant-document"),
+            action: Action::Preserve,
+        },
+        RuleSpec::Class {
+            class: PiiClass::from_policy_name("custom:alpha_doc").expect("class"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Class {
+            class: PiiClass::from_policy_name("custom:beta_doc").expect("class"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ]);
+
+    assert_eq!(
+        clean_with_policy_and_rulepacks(&policy, &[], "ticket CASE-0001 open"),
+        "ticket CASE-0001 open"
+    );
+}

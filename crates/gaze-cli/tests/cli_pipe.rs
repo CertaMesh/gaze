@@ -5071,3 +5071,158 @@ action = "preserve"
         .unwrap();
     assert_eq!(postal_losers, 1, "postal.at_ch no longer overlaps the IBAN");
 }
+
+// ---------------------------------------------------------------------------
+// todo 3746: family-level tokens derive their action from their member classes'
+// rules through the real binary. A policy that names only `custom:iban` and
+// `custom:credit_card` with a `preserve` default used to ship every no-cue
+// IBAN raw because `custom:family:payment-card-or-iban` matched no rule.
+// ---------------------------------------------------------------------------
+
+fn write_member_only_payment_policy(rules: &str, default: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["de-DE"]
+
+[policy.rulepacks]
+bundled = ["core", "locale-de"]
+paths = []
+{rules}
+[[rule]]
+kind = "default"
+action = "{default}"
+"#
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
+const MEMBER_ONLY_TOKENIZE_RULES: &str = r#"
+[[rule]]
+kind = "class"
+class = "custom:iban"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:credit_card"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:phone"
+action = "tokenize"
+"#;
+
+/// Every space-separated group of the value after `prefix` must be gone from
+/// `clean`. Failure messages carry only the group index, never the bytes.
+fn assert_no_group_survives(clean: &str, input: &str, prefix: &str) {
+    let value = input.strip_prefix(prefix).expect("fixture prefix");
+    for (index, group) in value.split(' ').enumerate() {
+        assert!(
+            !clean.contains(group),
+            "group {index} of the value survived in the clean text"
+        );
+    }
+}
+
+fn clean_text_with_policy(policy: &std::path::Path, input: &str) -> (String, String) {
+    let out = clean_raw_with_args(&[&format!("--policy={}", policy.display())], input);
+    assert!(
+        out.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
+    (
+        stdout["clean_text"].as_str().unwrap().to_string(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn clean_member_only_policy_tokenizes_a_no_cue_iban_family_token() {
+    let (_dir, policy) = write_member_only_payment_policy(MEMBER_ONLY_TOKENIZE_RULES, "preserve");
+    let input = "Überweisung DE89 3704 0044 0532 0130 00";
+
+    let (clean, stderr) = clean_text_with_policy(&policy, input);
+
+    assert!(
+        clean.contains(":Custom:family:payment-card-or-iban_"),
+        "expected a family-level token, got: {clean}"
+    );
+    assert_no_group_survives(&clean, input, "Überweisung ");
+    // The load-time notice is informational now: it names the family class the
+    // adopter will see instead of `custom:iban`, and no longer claims a leak.
+    assert!(
+        stderr.contains("custom:family:payment-card-or-iban"),
+        "notice must name the family class: {stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("leak"),
+        "notice must not claim the span leaks: {stderr}"
+    );
+}
+
+#[test]
+fn clean_member_only_policy_tokenizes_trailing_number_family_tokens() {
+    let (_dir, policy) = write_member_only_payment_policy(MEMBER_ONLY_TOKENIZE_RULES, "preserve");
+    for (index, input) in [
+        "Bitte überweisen auf FO14 5878 0013 4155 73 1234",
+        "Bitte überweisen auf GL07 3135 5673 6936 21 1234",
+        "Bitte überweisen auf SA77 3476 4281 2318 7317 7425 1234",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let (clean, _) = clean_text_with_policy(&policy, input);
+        assert!(
+            clean.contains(":Custom:family:payment-card-or-iban_"),
+            "fixture {index}: expected a family-level token, got: {clean}"
+        );
+        assert_no_group_survives(&clean, input, "Bitte überweisen auf ");
+    }
+}
+
+#[test]
+fn clean_all_members_preserve_under_preserve_default_keeps_family_token_raw() {
+    let rules = MEMBER_ONLY_TOKENIZE_RULES.replace("tokenize", "preserve");
+    let (_dir, policy) = write_member_only_payment_policy(&rules, "preserve");
+    let input = "Überweisung DE89 3704 0044 0532 0130 00";
+
+    let (clean, _) = clean_text_with_policy(&policy, input);
+
+    assert_eq!(clean, input, "all members preserve: no over-protection");
+}
+
+#[test]
+fn clean_explicit_family_preserve_rule_overrides_member_derivation() {
+    let rules = format!(
+        r#"
+[[rule]]
+kind = "class"
+class = "custom:family:payment-card-or-iban"
+action = "preserve"
+{MEMBER_ONLY_TOKENIZE_RULES}"#
+    );
+    let (_dir, policy) = write_member_only_payment_policy(&rules, "preserve");
+    let input = "Überweisung DE89 3704 0044 0532 0130 00";
+
+    let (clean, stderr) = clean_text_with_policy(&policy, input);
+
+    assert_eq!(clean, input, "an explicit family rule is honoured verbatim");
+    assert!(
+        !stderr.contains("custom:family:payment-card-or-iban"),
+        "an explicit family rule silences the notice: {stderr}"
+    );
+}

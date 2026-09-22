@@ -1893,3 +1893,54 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
         "no eviction occurred, so no AuditWriteFailed on stderr: {stderr}"
     );
 }
+
+/// todo 3746: the daemon builds its pipeline through the same `resolve_pipeline`
+/// as `gaze clean`, so a member-only policy must protect a no-cue IBAN's
+/// family-level token here too.
+#[test]
+#[file_serial(daemon_smoke)]
+fn daemon_member_only_policy_tokenizes_a_no_cue_iban_family_token() {
+    let dir = tempdir().unwrap();
+    let policy = dir.path().join("policy.toml");
+    fs::write(
+        &policy,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["de-DE"]
+
+[policy.rulepacks]
+bundled = ["core", "locale-de"]
+paths = []
+
+[[rule]]
+kind = "class"
+class = "custom:iban"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:credit_card"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let (value, _) = daemon_request(&policy, &[], "Überweisung DE89 3704 0044 0532 0130 00");
+    let clean = value["clean_text"].as_str().expect("clean_text");
+
+    assert!(
+        clean.contains(":Custom:family:payment-card-or-iban_"),
+        "expected a family-level token, got: {clean}"
+    );
+    for (index, group) in ["DE89", "3704", "0044", "0532", "0130"].iter().enumerate() {
+        assert!(!clean.contains(group), "group {index} survived");
+    }
+}
