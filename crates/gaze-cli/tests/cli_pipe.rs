@@ -1449,9 +1449,8 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
         "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\trestore_policy\trestore_decision\trestore_unknown_token_count\trestore_manifest_bypass_count\trestore_fresh_pii_count\trestore_phase_mask\trestore_trap_shape_count\n"
     ));
     assert!(
-        stdout
-            .lines()
-            .any(|line| line.starts_with("email.global\temail.global\t\temail\ttokenize\t\ttext\tfalse\t")),
+        stdout.lines().any(|line| line
+            .starts_with("email.global\temail.global\t\temail\ttokenize\t\ttext\tfalse\t")),
         "unexpected query stdout: {stdout}"
     );
 
@@ -1633,7 +1632,9 @@ fn s2_audit_cli_smoke_filters_created_at_range() {
     let stdout = String::from_utf8(query.stdout).unwrap();
     let row = stdout
         .lines()
-        .find(|line| line.starts_with("email.global\temail.global\t\temail\ttokenize\t\ttext\tfalse\t"))
+        .find(|line| {
+            line.starts_with("email.global\temail.global\t\temail\ttokenize\t\ttext\tfalse\t")
+        })
         .expect("expected email audit row in bounded time range");
     let created_at = row
         .split('\t')
