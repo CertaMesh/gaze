@@ -320,6 +320,9 @@ fn the_rule_is_gated_to_de_at_and_de_ch_documents() {
     }
 }
 
+/// A locale chain paired with the later-locale `(text, code)` fragments it must still tokenize.
+type ChainCase<'a> = (&'a [LocaleTag], &'a [(&'a str, &'a str)]);
+
 /// `custom:postal_code` document-basis rules resolve per span across the locale chain
 /// (`RecognizerRegistry::detect_candidate_pool`): an earlier locale wins only where its candidates
 /// overlap a later locale's. A four-digit match at `de-AT` / `de-CH`, true or false, must not
@@ -339,7 +342,7 @@ fn mixed_country_document_tokenizes_four_and_five_digit_codes_under_every_chain(
         ("PLZ 80331", "80331"),
     ];
     let us = [("Springfield, IL 90210", "90210")];
-    let chains: [(&[LocaleTag], &[(&str, &str)]); 3] = [
+    let chains: [ChainCase; 3] = [
         (&[LocaleTag::DeAt, LocaleTag::DeDe], &german),
         (&[LocaleTag::DeCh, LocaleTag::DeDe], &german),
         (&[LocaleTag::DeAt, LocaleTag::EnUs], &us),
