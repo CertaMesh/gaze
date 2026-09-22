@@ -192,8 +192,10 @@ $ cargo run -p gaze-cli --features index -- index ingest ./notes
 $ cargo run -p gaze-cli --features index -- index search "alice@example.invalid" --class email
 ```
 
-`index ingest` requires the pinned Davlan mBERT NER bundle that `gaze setup`
-installs, passed as `--ner-model-dir <dir>` or `GAZE_NER_MODEL_DIR`. It is the
+`index ingest` runs the same deterministic floor as `gaze clean` without a
+policy (bundled `core`, every detected span tokenized), plus the `Label: value`
+field detector and the NER bundle. It requires the pinned Davlan mBERT NER
+bundle that `gaze setup` installs, passed as `--ner-model-dir <dir>` or `GAZE_NER_MODEL_DIR`. It is the
 detector for prose names and organizations. The directory must verify against
 the pinned digests. A missing or unpinned directory fails closed with the typed
 `IndexNerModelMissing` error (exit `2`) and nothing is written. `gaze setup`

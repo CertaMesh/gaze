@@ -69,6 +69,25 @@ through raw. It now runs the bundled `core` rulepack, the same as
 - **Older releases:** pass `--rulepack-bundled core`, or a policy, to get the
   protected default.
 
+## Pending security fix: `gaze index ingest` runs `core`
+
+From v0.12.0 through v0.14.0, `gaze index ingest` detected only emails,
+`Label: value` fields and NER names and organizations. Cards, IBANs, IPs,
+phones and the other `core` classes stayed raw in the stored snippets, and
+`gaze index search` printed them. Ingest now runs the same `core` floor as a
+policy-less `gaze clean`.
+
+- **Re-ingest every index.** Run `gaze index ingest` again over the same
+  directory and domain; it replaces the domain's documents. Until then search
+  keeps printing the raw values stored by the old ingest.
+- **Expect more tokens in search snippets** for every `core` class. They are
+  protected, not searchable: `gaze index search` still looks up names, emails,
+  organizations and field classes only.
+- **Emails on `test.local` are no longer tokenized** at ingest: `core`
+  excludes that fixture domain by design.
+- **Older releases:** there is no workaround flag. Do not hand their search
+  output to an agent for documents that contain structured identifiers.
+
 ## Pending security fix: prefix reuse disabled
 
 `enable_prefix_cache()` and `PipelineOptimizationConfig::with_prefix_cache(true)`
