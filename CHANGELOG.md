@@ -320,7 +320,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Security: `gaze index ingest` now runs the `core` rulepack, so
   `gaze index search` no longer prints identifiers raw.** Shipped defect in
-  every release from v0.12.0 through v0.14.0: ingest built its own pipeline
+  every release from v0.11.0 through v0.14.0: ingest built its own pipeline
   (email regex, `Label: value` fields, NER, default rule preserve) without
   `core`. Credit card numbers, IBANs, IP addresses, phone numbers and every
   other `core` class stayed raw inside the stored snippet, and

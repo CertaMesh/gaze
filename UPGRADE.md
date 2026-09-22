@@ -71,7 +71,7 @@ through raw. It now runs the bundled `core` rulepack, the same as
 
 ## Pending security fix: `gaze index ingest` runs `core`
 
-From v0.12.0 through v0.14.0, `gaze index ingest` detected only emails,
+From v0.11.0 through v0.14.0, `gaze index ingest` detected only emails,
 `Label: value` fields and NER names and organizations. Cards, IBANs, IPs,
 phones and the other `core` classes stayed raw in the stored snippets, and
 `gaze index search` printed them. Ingest now runs the same `core` floor as a

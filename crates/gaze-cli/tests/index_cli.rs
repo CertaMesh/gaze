@@ -450,6 +450,35 @@ Her router is at ip 10.1.2.3 and she can be reached on +43 1 234 5678.
             "search stdout leaked raw fixture value {raw}: {stdout}"
         );
     }
+
+    // Core classes are protected in the snippet, not searchable: an agent cannot probe the
+    // index for a card number.
+    let probe = gaze_index_command(&index_env)
+        .args(["search", "4111 1111 1111 1111"])
+        .args([
+            "--class",
+            "custom:credit_card",
+            "--domain",
+            DOMAIN,
+            "--index-path",
+        ])
+        .arg(&index)
+        .output()
+        .expect("run index search by core class");
+    assert!(
+        !probe.status.success(),
+        "a core class must not be searchable: stdout={}",
+        String::from_utf8_lossy(&probe.stdout)
+    );
+    let probe_stderr = String::from_utf8_lossy(&probe.stderr);
+    assert!(
+        probe_stderr.contains("ClassNotAllowed"),
+        "expected a ClassNotAllowed denial, got: {probe_stderr}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&probe.stdout).contains("4111"),
+        "denied search printed the raw card"
+    );
 }
 
 #[test]
