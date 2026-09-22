@@ -196,11 +196,10 @@ impl Daemon {
             None,
             Some(Arc::clone(&logger) as Arc<dyn RedactionLogger>),
         )?;
-        let loaded_policy = resolved.policy.expect("daemon requires a policy path");
+        let loaded_policy = resolved.policy;
         let locale_chain = resolved.locale_chain;
         let dictionaries = resolved.dictionaries;
-        let pipeline =
-            maybe_register_safety_net(resolved.pipeline, &options, Some(&loaded_policy))?;
+        let pipeline = maybe_register_safety_net(resolved.pipeline, &options, &loaded_policy)?;
         Ok(Self {
             pipeline,
             policy: loaded_policy,

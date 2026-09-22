@@ -860,7 +860,9 @@ fn clean_json_emits_empty_top_level_entries_without_detections() {
 
 #[test]
 fn t02_canary_absent_in_clean_reappears_in_restore() {
-    let canary = "CANARY_DO_NOT_LEAK@test.local";
+    // A routable-shape domain: core's email.global deliberately excludes the
+    // `test.local` fixture domain, and the policy-less default is core (#3706).
+    let canary = "CANARY_DO_NOT_LEAK@example.com";
     let input = format!("Ping {canary} before noon.");
 
     let (clean_text, blob, _) = clean_ok(&input);
@@ -1449,7 +1451,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     assert!(
         stdout
             .lines()
-            .any(|line| line.starts_with("regex\tregex\t\temail\ttokenize\t\ttext\tfalse\t")),
+            .any(|line| line.starts_with("email.global\temail.global\t\temail\ttokenize\t\ttext\tfalse\t")),
         "unexpected query stdout: {stdout}"
     );
 
@@ -1466,7 +1468,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
             "--output",
             export_path.to_str().unwrap(),
             "--source",
-            "regex",
+            "email.global",
         ])
         .output()
         .unwrap();
@@ -1479,8 +1481,8 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     let rows = fs::read_to_string(export_path).unwrap();
     let row: Value = serde_json::from_str(rows.lines().next().unwrap()).unwrap();
     assert_eq!(row["class"], "email");
-    assert_eq!(row["source"], "regex");
-    assert_eq!(row["recognizer_id"], "regex");
+    assert_eq!(row["source"], "email.global");
+    assert_eq!(row["recognizer_id"], "email.global");
     assert_eq!(row["recognizer_version_id"], Value::Null);
     assert_eq!(row["action"], "tokenize");
     assert_eq!(row["field_name"], Value::Null);
@@ -1631,7 +1633,7 @@ fn s2_audit_cli_smoke_filters_created_at_range() {
     let stdout = String::from_utf8(query.stdout).unwrap();
     let row = stdout
         .lines()
-        .find(|line| line.starts_with("regex\tregex\t\temail\ttokenize\t\ttext\tfalse\t"))
+        .find(|line| line.starts_with("email.global\temail.global\t\temail\ttokenize\t\ttext\tfalse\t"))
         .expect("expected email audit row in bounded time range");
     let created_at = row
         .split('\t')
@@ -2765,13 +2767,20 @@ fn s2_core_extended_cli_opt_in_mirrors_toml_and_rejects_garbage_symmetrically() 
     assert_symmetric_policy_config(cli_out, toml_out);
 }
 
+/// The policy-less default is plain `core` (#3706), not the `core-extended`
+/// compatibility alias: the locale-gated rows stay off and the chain stays
+/// `global`, so a bare US ZIP is not tokenized without a locale.
 #[test]
 fn s2_core_extended_default_surface_does_not_load_phase2_recognizers() {
-    let input = "IBAN GB82WEST12345698765432 card 4111111111111111";
+    let input = "ZIP 90210";
     let default = clean_json_with_args(&[], input);
 
     assert_eq!(default["clean_text"], input);
     assert_eq!(default["stats"]["detections"], 0);
+    assert_eq!(default["stats"]["locale_chain"], json!(["global"]));
+
+    let extended = clean_json_with_args(&["--rulepack-bundled=core-extended"], input);
+    assert_ne!(extended["clean_text"], input, "{extended}");
 }
 
 #[test]

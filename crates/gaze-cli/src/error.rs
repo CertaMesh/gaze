@@ -35,9 +35,6 @@ pub(crate) enum CliError {
     UnknownToken {
         token: String,
     },
-    UnsupportedSessionScope {
-        variant: String,
-    },
     InvalidSignature,
     InvalidBlobVersion,
     BlobExpired,
@@ -69,7 +66,6 @@ impl CliError {
             Self::IndexNerModelMissing(_) => 2,
             Self::SafetyNetConfigDetail(_) | Self::SafetyNetFailure { .. } => 3,
             Self::UnknownToken { .. }
-            | Self::UnsupportedSessionScope { .. }
             | Self::InvalidSignature
             | Self::InvalidBlobVersion
             | Self::BlobExpired
@@ -100,7 +96,6 @@ impl CliError {
             Self::IndexNerModelMissing(_) => "IndexNerModelMissing",
             Self::AuditPurgeIso8601 { .. } => "AuditPurgeIso8601",
             Self::UnknownToken { .. } => "UnknownToken",
-            Self::UnsupportedSessionScope { .. } => "UnsupportedSessionScope",
             Self::InvalidSignature => "InvalidSignature",
             Self::InvalidBlobVersion => "InvalidBlobVersion",
             Self::BlobExpired => "BlobExpired",
@@ -230,16 +225,6 @@ impl CliError {
                     self.variant_name(),
                     self.exit_code(),
                     detail
-                )
-            }
-            Self::UnsupportedSessionScope { variant } => {
-                let variant = serde_json::to_string(variant)
-                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
-                    r#"{{"error":"{}","exit":{},"variant":{}}}"#,
-                    self.variant_name(),
-                    self.exit_code(),
-                    variant
                 )
             }
             _ => eprintln!(
