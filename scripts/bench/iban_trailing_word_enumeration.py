@@ -378,9 +378,18 @@ def main() -> int:
                 # stops matching before an ` OK`, and matches across the boundary
                 # into a ` 1234` -- whose context sensitivity is their own and is
                 # identical in base. Those are reported, not asserted.
+                #
+                # Only trailer dependence the fix INTRODUCES is a failure: base must
+                # be trailer-independent on the same document. A Luhn-valid card
+                # run that crosses the IBAN's end into trailing digits (`... 73
+                # 1234`) collides with the IBAN in both arms and, with no cue,
+                # falls to the family fallback (todo 3746); that dependence is
+                # shared and reported, not attributed to this change.
                 if f_bytes != fix_bare:
-                    if fix_bare_whole:
+                    if fix_bare_whole and b_bytes == base_bare:
                         stats["fix_trailer_dependent"] += 1
+                    elif fix_bare_whole:
+                        stats["trailer_dependent_shared_with_base"] += 1
                     else:
                         stats["trailer_dependent_other_recognizers"] += 1
                 if lost:
@@ -445,6 +454,9 @@ def main() -> int:
                 "lost_bytes_trailer_artifact": stats["lost_bytes_trailer_artifact"],
                 "lost_bytes_unexplained": stats["lost_bytes_unexplained"],
                 "fix_trailer_dependent": stats["fix_trailer_dependent"],
+                "trailer_dependent_shared_with_base": stats[
+                    "trailer_dependent_shared_with_base"
+                ],
                 "trailer_dependent_other_recognizers": stats[
                     "trailer_dependent_other_recognizers"
                 ],
