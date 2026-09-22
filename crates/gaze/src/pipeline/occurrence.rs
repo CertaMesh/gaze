@@ -654,10 +654,10 @@ impl Ledger {
                     {
                         return Err(manifest_integrity_error("redaction raw mapping mismatch"));
                     }
-                    if record.action != Some(Action::Redact) || record.owned {
-                        return Err(manifest_integrity_error(
-                            "invalid redaction replacement ownership",
-                        ));
+                    // Ownership is enforced once, below, by the rule every one-way replacement
+                    // shares; repeating it here would only be a second copy to keep in step.
+                    if record.action != Some(Action::Redact) {
+                        return Err(manifest_integrity_error("invalid redaction action"));
                     }
                 }
                 Origin::ExistingOwnedUnknown { segment } => {
@@ -1383,6 +1383,100 @@ mod tests {
                 .sum::<usize>()
                 + clean.manifest.projection().spans.len(),
             10
+        );
+    }
+
+    /// A redaction is one-way, so the ledger must never accept one marked as owned: an owned entry
+    /// is one restore may turn back into original bytes. Pinned against the shared rule rather than
+    /// a per-origin copy, so the SafetyNetRedaction origin cannot quietly opt out of it.
+    #[test]
+    fn a_redaction_marker_entry_can_never_be_owned_or_a_token() {
+        let (session, mut clean) = primary("aaalice@example.invalidbb", Action::Tokenize);
+        let pipeline = Pipeline::builder().build().unwrap();
+        let first = clean.manifest[0].clean_span.clone();
+        let report = [suspect(first, LeakKind::Uncovered)];
+        pipeline
+            .redact_safety_net_suspects(
+                &mut ProtectionTarget::Live(&session),
+                &mut clean,
+                &report.iter().collect::<Vec<_>>(),
+                DocumentKind::Text,
+                None,
+                None,
+                true,
+                None,
+            )
+            .unwrap();
+        let at = clean
+            .manifest
+            .records
+            .iter()
+            .position(|r| matches!(r.origin, Origin::SafetyNetRedaction { .. }))
+            .expect("a redaction record");
+        clean
+            .manifest
+            .validate()
+            .expect("the honest ledger validates");
+
+        let mut owned = clean.manifest.clone();
+        owned.records[at].owned = true;
+        assert!(
+            owned.validate().is_err(),
+            "an owned redaction must be rejected"
+        );
+
+        let mut tokenizing = clean.manifest.clone();
+        tokenizing.records[at].action = Some(Action::Tokenize);
+        assert!(
+            tokenizing.validate().is_err(),
+            "a redaction recorded as a tokenization must be rejected"
+        );
+    }
+
+    /// `validate_terminal_manifest` lets the fallback add exactly one kind of entry nobody minted
+    /// before it ran: its own marker. What keeps that from being a hole is the byte check -- the
+    /// entry is admitted only if the text standing there IS the marker for its class. Honest
+    /// pipeline output always passes it, so no end-to-end test can see it removed; this drives it.
+    ///
+    /// Mutation: drop the byte comparison and a redaction entry standing on the original bytes is
+    /// admitted as though it were a marker.
+    #[test]
+    fn the_terminal_check_admits_a_redaction_only_over_its_marker_bytes() {
+        let (session, mut clean) = primary("aaalice@example.invalidbb", Action::Tokenize);
+        let pipeline = Pipeline::builder().build().unwrap();
+        let target = ProtectionTarget::Live(&session);
+        let before = TerminalManifestProvenance::capture(&target, &clean).unwrap();
+        let first = clean.manifest[0].clean_span.clone();
+        let report = [suspect(first, LeakKind::Uncovered)];
+        pipeline
+            .redact_safety_net_suspects(
+                &mut ProtectionTarget::Live(&session),
+                &mut clean,
+                &report.iter().collect::<Vec<_>>(),
+                DocumentKind::Text,
+                None,
+                None,
+                true,
+                None,
+            )
+            .unwrap();
+        validate_terminal_manifest(&target, &clean, &before).expect("honest output validates");
+
+        // Same length, so every coordinate still lines up and only the bytes are wrong.
+        let span = clean
+            .manifest
+            .records
+            .iter()
+            .find(|r| matches!(r.origin, Origin::SafetyNetRedaction { .. }))
+            .expect("a redaction record")
+            .emitted
+            .clean_span
+            .clone();
+        let forged = "x".repeat(span.end - span.start);
+        clean.text.replace_range(span, &forged);
+        assert!(
+            validate_terminal_manifest(&target, &clean, &before).is_err(),
+            "a redaction entry over bytes that are not its marker must be rejected"
         );
     }
 

@@ -3330,8 +3330,9 @@ fn validate_terminal_manifest(
         // the record claims. Anything else the fallback invented still falls through to the
         // survivor match below and is rejected there.
         if matches!(record.origin, Origin::SafetyNetRedaction { .. }) {
+            // Ownership is not re-checked here: `clean.manifest.validate()` below already
+            // rejects an owned one-way replacement for every origin.
             if record.action != Some(Action::Redact)
-                || record.owned
                 || clean.text.get(emitted.clean_span.clone())
                     != Some(redaction_marker(&emitted.class).as_str())
             {
@@ -5228,15 +5229,26 @@ mod tests {
             clean_text: &str,
             context: SafetyNetContext<'_>,
         ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
-            let (needle, class) = match clean_text.find(self.first) {
-                Some(_) => (self.first, PiiClass::Name),
-                None => ("REDACTED", PiiClass::Organization),
+            // First pass: flag the literal as a class mismatch on plain text, which `Resolve`
+            // refuses, so the `Redact` fallback writes a marker over it. Every later pass (the
+            // terminal scan) re-flags `REDACTED` inside that marker.
+            let (needle, class, kind) = if clean_text.contains(self.first) {
+                (
+                    self.first,
+                    PiiClass::Name,
+                    Some(LeakKind::ClassMismatch {
+                        pipeline_class: PiiClass::Email,
+                        safety_net_class: PiiClass::Name,
+                    }),
+                )
+            } else {
+                ("REDACTED", PiiClass::Organization, None)
             };
             let Some(start) = clean_text.find(needle) else {
                 return Ok(Vec::new());
             };
             let span = start..start + needle.len();
-            let Some(kind) = context.manifest.diff_against(&span, &class) else {
+            let Some(kind) = kind.or_else(|| context.manifest.diff_against(&span, &class)) else {
                 return Ok(Vec::new());
             };
             Ok(vec![LeakSuspect::new(
@@ -5255,8 +5267,12 @@ mod tests {
     /// the document. Acting on that would nest markers, move spans this change promises to leave
     /// alone, and grow the output on every pass.
     ///
-    /// The mutation this must catch: drop the marker arm from `suspect_is_already_protected` and
-    /// the second pass redacts `REDACTED` into `[REDACTED:organization]`, leaving a nested marker.
+    /// Runs the SHIPPED default policy, `Resolve` + `Redact`, because only a policy with a pass
+    /// after the fallback can re-flag a marker at all. An earlier version of this test ran
+    /// `Redact` mode, which never scans again, so it passed with the guard removed -- a mutation
+    /// probe caught it proving nothing.
+    ///
+    /// The mutation this must catch: drop the marker arm from `suspect_is_already_protected`.
     #[test]
     fn a_redaction_marker_is_never_redacted_again() {
         let text = "alice@example.invalid met Dr. Schmidt";
@@ -5270,9 +5286,9 @@ mod tests {
                 text,
                 &[crate::LocaleTag::Global],
                 &DictionaryBundle::default(),
-                SafetyNetPolicy::new(SafetyNetMode::Redact, SafetyNetFallback::Redact),
+                SafetyNetPolicy::default(),
             )
-            .expect("the second pass must be a no-op, not a failure");
+            .expect("re-flagging the marker must be a no-op, not a failure");
 
         let CleanDocument::Text(output) = output else {
             panic!("a text document cleans to text");
