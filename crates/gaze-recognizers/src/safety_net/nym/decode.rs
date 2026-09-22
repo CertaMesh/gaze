@@ -779,6 +779,102 @@ mod tests {
         assert_eq!(trim_structural_edges(r#"",{"#, span(0, 3)), None);
     }
 
+    /// Each row: text, the substring the raw span covers, and what the trim must leave (`None`
+    /// when the span is syntax alone). Sentence punctuation and typographic quotes are not JSON
+    /// syntax and stay; a bracket at the edge of a username is trimmed even when it belongs to
+    /// the value (one non-identifying byte stays outside the suspect).
+    #[test]
+    fn trim_fixtures_cover_tool_call_and_prose_shapes() {
+        let rows: &[(&str, &str, Option<&str>)] = &[
+            (
+                r#""name": "Anna Müller","#,
+                r#""Anna Müller","#,
+                Some("Anna Müller"),
+            ),
+            (
+                r#"{"customer":"Jonas Weber"}"#,
+                r#""Jonas Weber"}"#,
+                Some("Jonas Weber"),
+            ),
+            (r#"["Berlin"]"#, r#"["Berlin"]"#, Some("Berlin")),
+            ("key: value", ": value", Some("value")),
+            ("Hauptstr. 12.", "12.", Some("12.")),
+            ("Nr. 12;", "12;", Some("12;")),
+            (r#"",:{}[] "#, r#"",:{}[] "#, None),
+            ("\"", "\"", None),
+            ("O'Brien", "O'Brien", Some("O'Brien")),
+            ("\u{a0}Anna\u{a0}", "\u{a0}Anna\u{a0}", Some("Anna")),
+            ("\u{202f}12b\u{202f}", "\u{202f}12b\u{202f}", Some("12b")),
+            (r#""M-AB 1234""#, r#""M-AB 1234""#, Some("M-AB 1234")),
+            (r#""12/03/1985","#, r#""12/03/1985","#, Some("12/03/1985")),
+            ("\t\r\n\"x\"\n", "\t\r\n\"x\"\n", Some("x")),
+            (r#""a"b""#, r#""a"b""#, Some(r#"a"b"#)),
+            ("„Jürgen“", "„Jürgen“", Some("„Jürgen“")),
+            ("[CLAN]name", "[CLAN]name", Some("CLAN]name")),
+        ];
+        for &(text, raw, want) in rows {
+            let start = text.find(raw).unwrap();
+            let span = NymSpan {
+                start,
+                end: start + raw.len(),
+                label: NymLabel::Username,
+                score: 0.9,
+            };
+            let got = trim_structural_edges(text, span);
+            assert_eq!(
+                got.map(|s| &text[s.start..s.end]),
+                want,
+                "text {text:?} raw {raw:?}"
+            );
+        }
+    }
+
+    /// Exhaustive over short strings: the trim never widens, never moves an edge into a word
+    /// that was not already cut there, is idempotent, and never leaves structural syntax at an
+    /// edge.
+    #[test]
+    fn trim_never_widens_or_cuts_a_word() {
+        let alphabet = ['a', 'ü', '"', ':', ' ', ',', '-', '}'];
+        let mut text = String::new();
+        for code in 0..alphabet.len().pow(5) {
+            text.clear();
+            let mut rest = code;
+            for _ in 0..5 {
+                text.push(alphabet[rest % alphabet.len()]);
+                rest /= alphabet.len();
+            }
+            let bounds = text
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain([text.len()])
+                .collect::<Vec<_>>();
+            for (i, &start) in bounds.iter().enumerate() {
+                for &end in &bounds[i..] {
+                    let span = NymSpan {
+                        start,
+                        end,
+                        label: NymLabel::Username,
+                        score: 0.9,
+                    };
+                    let Some(out) = trim_structural_edges(&text, span) else {
+                        assert!(text[start..end].chars().all(is_structural_edge));
+                        continue;
+                    };
+                    assert!(start <= out.start && out.end <= end && out.start < out.end);
+                    for (edge, before) in [(out.start, start), (out.end, end)] {
+                        if edge != before {
+                            assert!(!gaze_types::is_inside_word(&text, edge), "{text:?}");
+                        }
+                    }
+                    let value = &text[out.start..out.end];
+                    assert!(!value.starts_with(is_structural_edge));
+                    assert!(!value.ends_with(is_structural_edge));
+                    assert_eq!(trim_structural_edges(&text, out.clone()), Some(out));
+                }
+            }
+        }
+    }
+
     #[test]
     fn malformed_model_output_is_a_typed_error() {
         let op = NymOperatingPoint::op_b();
