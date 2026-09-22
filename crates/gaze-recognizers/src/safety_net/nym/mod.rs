@@ -111,14 +111,14 @@ impl SafetyNet for NymSafetyNet {
     }
 }
 
-/// The check around one model call: mask live tokens, infer, map spans to suspects.
+/// The check around one model call: infer on the masked text, map spans to suspects.
 fn check_with(
     clean_text: &str,
     context: SafetyNetContext<'_>,
     operating_point: &NymOperatingPoint,
     infer: impl FnOnce(&str) -> Result<Vec<NymSpan>, SafetyNetError>,
 ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
-    let spans = infer(&mask_live_tokens(clean_text, context.manifest)?)?;
+    let spans = model_spans(clean_text, context.manifest, infer)?;
     let mut suspects = Vec::with_capacity(spans.len());
     for span in spans {
         if let Some(suspect) = span_to_suspect(span, clean_text, operating_point, context)? {
@@ -126,6 +126,16 @@ fn check_with(
         }
     }
     Ok(suspects)
+}
+
+/// What the model flags in `clean_text` once every live token is masked, before manifest
+/// correlation.
+fn model_spans(
+    clean_text: &str,
+    manifest: &Manifest,
+    infer: impl FnOnce(&str) -> Result<Vec<NymSpan>, SafetyNetError>,
+) -> Result<Vec<NymSpan>, SafetyNetError> {
+    infer(&mask_live_tokens(clean_text, manifest)?)
 }
 
 /// Hooks for tests that replay captured model output through the production decoder.
@@ -149,6 +159,22 @@ pub mod test_support {
     ) -> Result<Vec<DecodedSpan>, SafetyNetError> {
         Ok(
             decode::decode_pieces(text, char_offsets, scores, operating_point)?
+                .into_iter()
+                .map(|span| (span.start..span.end, span.label, span.score))
+                .collect(),
+        )
+    }
+
+    /// The real model's decoded spans for `text` on the production check path (live tokens in
+    /// `manifest` masked), before manifest correlation drops same-class spans.
+    pub fn model_spans(
+        net: &NymSafetyNet,
+        text: &str,
+        manifest: &Manifest,
+    ) -> Result<Vec<DecodedSpan>, SafetyNetError> {
+        let backend = net.backend()?;
+        Ok(
+            super::model_spans(text, manifest, |masked| backend.infer(masked))?
                 .into_iter()
                 .map(|span| (span.start..span.end, span.label, span.score))
                 .collect(),

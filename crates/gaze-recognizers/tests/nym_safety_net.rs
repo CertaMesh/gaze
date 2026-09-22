@@ -10,7 +10,9 @@
 
 use std::sync::OnceLock;
 
-use gaze_recognizers::safety_net::nym::test_support::{capture, decode_captured, PieceScore};
+use gaze_recognizers::safety_net::nym::test_support::{
+    capture, decode_captured, model_spans, DecodedSpan, PieceScore,
+};
 use gaze_recognizers::safety_net::nym::{NymConfig, NymLabel, NymOperatingPoint, NymSafetyNet};
 use gaze_types::{DocumentKind, LeakKind, LocaleTag, Manifest, SafetyNet, SafetyNetContext};
 use serde_json::{json, Value};
@@ -361,10 +363,12 @@ fn capture_all() -> Value {
     })
 }
 
-/// Todo 3681 on the real model. Unmasked, the pinned model flags Gaze's own token text (the class
-/// name spells a Nym label); with the token in the manifest, the net masks it before inference and
-/// no suspect overlaps it. The first half keeps the fixture honest: if the model stopped flagging
-/// token text, the second half would pass without proving anything.
+/// Todo 3681 on the real model, on the model's own spans (before manifest correlation, which
+/// would drop a same-class flag inside a token and hide whether the model read it). Unmasked, the
+/// pinned model flags Gaze's own token text because the class name spells a Nym label; with the
+/// tokens in the manifest they are masked before inference and no span overlaps them. The first
+/// half keeps the fixture honest: if the model stopped flagging token text, the second half would
+/// pass without proving anything.
 #[test]
 #[ignore = "needs GAZE_NYM_MODEL_DIR (run by xtask safety-net-sanity when set)"]
 fn live_token_text_is_masked_before_the_model_reads_it() {
@@ -383,15 +387,20 @@ fn live_token_text_is_masked_before_the_model_reads_it() {
             start..start + token.len()
         })
         .collect::<Vec<_>>();
-    let overlaps_a_token = |suspect: &gaze_types::LeakSuspect| {
-        token_spans
+    let overlapping = |spans: &[DecodedSpan]| {
+        spans
             .iter()
-            .any(|token| suspect.span.start < token.end && token.start < suspect.span.end)
+            .filter(|(span, _, _)| {
+                token_spans
+                    .iter()
+                    .any(|token| span.start < token.end && token.start < span.end)
+            })
+            .count()
     };
 
-    let unmasked = live_check(&text);
+    let unmasked = model_spans(live_net(), &text, &Manifest::default()).expect("nym spans");
     assert!(
-        unmasked.iter().any(overlaps_a_token),
+        overlapping(&unmasked) > 0,
         "fixture no longer exercises token text: {unmasked:?}"
     );
 
@@ -408,13 +417,6 @@ fn live_token_text_is_masked_before_the_model_reads_it() {
             })
             .collect(),
     );
-    let context = SafetyNetContext::new(
-        &manifest,
-        &[LocaleTag::Global],
-        DocumentKind::Text,
-        None,
-        None,
-    );
-    let masked = live_net().check(&text, context).expect("nym check");
-    assert!(!masked.iter().any(overlaps_a_token), "{masked:?}");
+    let masked = model_spans(live_net(), &text, &manifest).expect("nym spans");
+    assert_eq!(overlapping(&masked), 0, "{masked:?}");
 }
