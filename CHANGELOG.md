@@ -76,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokens.
 
   Measured on the full 2,910-document population, both scored-label contracts,
-  base `9f1cd524`: ZIP entities fully covered rise from 548 to 862 (+314), ZIP
+  base `095ddaff`: ZIP entities fully covered rise from 548 to 862 (+314), ZIP
   byte recall on the rule floor from 59.7% to 83.0%, and total leaked bytes fall
   by **1,270** (contract v2 rule floor 87,647 to 86,377; `pass2-ner` 20,727 to
   19,457). No document failed closed; every restore stayed exact.
@@ -87,7 +87,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   likely unannotated codes; 12 follow a capitalised word. German capitalises
   every noun, so `1500 Euro` or `3000 Mitarbeiter` looks like `1500 Musterstadt`
   to this anchor, and the `regex` crate has no negative lookahead to hold a
-  stop-list. Every such token restores losslessly. 3 more tokens cover the year
+  stop-list. The same shape covers years, versions, flight and train numbers,
+  ports and error codes before a capitalised word (`Am 12.03.2024 Treffen`
+  tokenizes the year), and English text under the `core-extended` chain. Every such token restores losslessly. 3 more tokens cover the year
   of a date of birth. Zero matches on the 1,024 A4 negative documents, both as
   committed and with every document forced to `de-AT` or `de-CH`.
 
@@ -110,7 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `postal_at_ch.rs`). The no-policy `core-extended` compatibility chain
   (`global, en-US, de-DE, de-AT, de-CH`) therefore runs this rule on every
   document and keeps each match no US or German candidate overlaps; forced onto the
-  1,319 other holdout documents it produced 54 gold ZIP, 142 other-gold and 10
+  1,319 other holdout documents it produced 54 gold ZIP, 141 other-gold and 10
   no-gold tokens. Pass `--locale=global` or a narrower policy chain to avoid it.
 
   `en-AU` and `en-NZ` stay uncovered: their postcode follows the locality, so

@@ -259,6 +259,20 @@ fn digit_runs_longer_than_four_are_never_split() {
 }
 
 #[test]
+fn digit_runs_shorter_than_four_are_never_codes() {
+    // RED if either branch is widened to `\d{3,4}`: a three-digit number before a capitalised
+    // word (amounts, page numbers) would then join the four-digit false-positive class unseen.
+    // City branch:
+    assert_survives("Lieferung nach 123 Wien", "123");
+    assert_survives("Lieferung nach A-123 Wien", "A-123");
+    assert_survives("Es kostet 100 Euro netto.", "100");
+    assert_survives("Siehe Seite 250 Kapitel drei.", "250");
+    // Cue branch:
+    assert_survives("PLZ 123 fehlt noch", "PLZ 123");
+    assert_survives("PLZ: 123", "123");
+}
+
+#[test]
 fn spaced_iban_and_phone_digit_groups_survive() {
     // Each group is followed by another digit group, never by a city-shaped token.
     let iban = "IBAN AT61 1904 3002 3457 3201 bitte verwenden.";

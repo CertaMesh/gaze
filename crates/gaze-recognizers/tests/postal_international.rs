@@ -590,8 +590,9 @@ fn adjacent_postal_codes_separated_by_one_character_both_tokenize() {
 /// The core claim of this change: all three recognizers are `locale_basis = "format"`, so they run
 /// for EVERY document locale, including `--locale=global` and including locales that have their own
 /// postal rule. `RecognizerRegistry::detect_all_resolved` runs format-basis recognizers
-/// unconditionally before the per-locale fallback loop, so they compose ADDITIVELY with the
-/// document-basis `postal.de` / `postal.us` instead of racing them in the first-locale-wins loop.
+/// unconditionally, outside the per-span locale-chain walk that document-basis rules go through,
+/// so they compose ADDITIVELY with the document-basis `postal.de` / `postal.us` and are never
+/// displaced by an earlier chain locale's span.
 #[test]
 fn format_basis_rules_run_at_every_locale() {
     let cases: &[(&str, &str)] = &[("Z1Z 9Z9", "ca"), ("ZZ9 9ZZ", "gb"), ("Y99 X4X7", "ie")];
