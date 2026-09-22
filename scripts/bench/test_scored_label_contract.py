@@ -20,6 +20,7 @@ import test_run_no_opf_benchmark as runner_tests
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 V2_PATH = REPO_ROOT / "docs/reference/benchmarks/scored-labels-v2.json"
+V3_PATH = REPO_ROOT / "docs/reference/benchmarks/scored-labels-v3.json"
 
 # The 29 labels observed in the pinned Dataiku EN/DE selection.
 CORPUS_LABELS = frozenset(
@@ -367,6 +368,451 @@ class RendererContractTests(unittest.TestCase):
             row.pop("scored_label_contract", None)
         self.assertIn("line [30000, 25000, 20000]", render.render_charts(history))
         self.assertNotIn("another contract", render.render_charts(history))
+
+
+def v3() -> score.ScoredLabelContract:
+    return score.load_scored_label_contract(V3_PATH)
+
+
+def gap_document(text: str, *spans: score.Span, uid: str = "synthetic-gap-1") -> score.Document:
+    """A document with byte-offset gold spans located by value."""
+    return score.Document(
+        uid=uid,
+        text=text,
+        language="en",
+        region="US",
+        source_dataset="synthetic",
+        spans=tuple(spans),
+    )
+
+
+def at(text: str, value: str, label: str, occurrence: int = 0) -> score.Span:
+    """Span over the `occurrence`-th byte-level occurrence of `value` in `text`."""
+    raw = text.encode("utf-8")
+    needle = value.encode("utf-8")
+    start = -1
+    for _ in range(occurrence + 1):
+        start = raw.index(needle, start + 1)
+    return score.Span(start, start + len(needle), label)
+
+
+def under(contract: score.ScoredLabelContract, doc: score.Document) -> score.Document:
+    (applied,) = score.apply_scored_label_contract([doc], contract)
+    return applied
+
+
+def gap(result: dict) -> dict:
+    return result["gold_gap"]
+
+
+EMMA_TEXT = "My name is Emma Clarke. Emma likes tea."
+
+
+def emma_document() -> score.Document:
+    return gap_document(
+        EMMA_TEXT,
+        at(EMMA_TEXT, "Emma", "FIRSTNAME"),
+        at(EMMA_TEXT, "Clarke", "SURNAME"),
+    )
+
+
+def emma_predictions(repeat_class: str = "name") -> list[score.Span]:
+    first = at(EMMA_TEXT, "Emma Clarke", "name")
+    repeat = at(EMMA_TEXT, "Emma", repeat_class, occurrence=1)
+    return [first, repeat]
+
+
+class GoldGapContractTests(unittest.TestCase):
+    """Contract v3 loader: the gold_gap block is closed and fails closed."""
+
+    def v3_value(self) -> dict:
+        return json.loads(V3_PATH.read_text(encoding="utf-8"))
+
+    def load(self, value: dict) -> score.ScoredLabelContract:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contract.json"
+            path.write_text(json.dumps(value), encoding="utf-8")
+            return score.load_scored_label_contract(path)
+
+    def test_v3_labels_are_v2_labels(self) -> None:
+        contract = v3()
+        self.assertEqual(contract.contract_id, "scored-labels-v3")
+        self.assertEqual(contract.version, 3)
+        self.assertEqual(contract.scored_labels, v2().scored_labels)
+        self.assertEqual(contract.excluded_labels, v2().excluded_labels)
+        self.assertEqual(
+            contract.neutral_prediction_classes, v2().neutral_prediction_classes
+        )
+        self.assertIsNone(v2().gold_gap)
+        self.assertEqual(
+            self.v3_value()["labels"],
+            json.loads(V2_PATH.read_text(encoding="utf-8"))["labels"],
+        )
+
+    def test_every_scored_label_is_ruled_on_once(self) -> None:
+        block = self.v3_value()["gold_gap"]
+        creditable = {
+            label for labels in block["compatible_labels"].values() for label in labels
+        }
+        not_creditable = {entry["label"] for entry in block["not_creditable"]}
+        self.assertFalse(creditable & not_creditable)
+        self.assertEqual(creditable | not_creditable, v3().scored_labels)
+
+    def test_malformed_gold_gap_fails_closed(self) -> None:
+        def with_block(mutate) -> dict:
+            value = self.v3_value()
+            mutate(value)
+            return value
+
+        cases = {
+            "needs a gold_gap block": lambda v: v.pop("gold_gap"),
+            "must be an object": lambda v: v.update(gold_gap=[]),
+            "unknown keys": lambda v: v["gold_gap"].update(case_fold=True),
+            "missing keys": lambda v: v["gold_gap"].pop("boundary"),
+            "same_document must be True": lambda v: v["gold_gap"].update(
+                same_document=False
+            ),
+            "match must be": lambda v: v["gold_gap"].update(match="case_insensitive"),
+            "trim must be": lambda v: v["gold_gap"].update(trim="unicode_whitespace"),
+            "status must be": lambda v: v["gold_gap"].update(status="headline"),
+            "does not rule on scored labels": lambda v: v["gold_gap"].update(
+                not_creditable=[]
+            ),
+            "not a scored label": lambda v: v["gold_gap"]["compatible_labels"].update(
+                {"custom:password": ["PASSWORD"]}
+            ),
+            "rules on AGE twice": lambda v: v["gold_gap"]["compatible_labels"].update(
+                {"custom:age": ["AGE"]}
+            ),
+            "lists a label twice": lambda v: v["gold_gap"]["compatible_labels"].update(
+                {"name": ["FIRSTNAME", "FIRSTNAME", "SURNAME"]}
+            ),
+            "needs contract_version 3": lambda v: v.update(contract_version=2),
+            "not supported by this scorer": lambda v: v.update(contract_version=4),
+        }
+        for expected, mutate in cases.items():
+            with self.subTest(expected):
+                with self.assertRaisesRegex(score.ScoredLabelContractError, expected):
+                    self.load(with_block(mutate))
+
+    def test_report_names_the_diagnostic_only_under_v3(self) -> None:
+        doc = emma_document()
+        v3_report = score.scored_label_contract_report(v3(), [under(v3(), doc)])
+        v2_report = score.scored_label_contract_report(v2(), [under(v2(), doc)])
+        self.assertEqual(v3_report["gold_gap"], {"status": "diagnostic"})
+        self.assertNotIn("gold_gap", v2_report)
+        self.assertEqual(v3_report["version"], 3)
+
+
+class GoldGapScoringTests(unittest.TestCase):
+    """Contract v3 scoring: which unlabelled repeats count as gold-gap protection."""
+
+    def credited(self, doc: score.Document, predictions: list[score.Span]) -> dict:
+        return gap(metrics(under(v3(), doc), *predictions))
+
+    def assert_not_credited(self, doc: score.Document, predictions: list[score.Span]) -> None:
+        result = metrics(under(v3(), doc), *predictions)
+        self.assertEqual(gap(result)["gold_gap_protected_bytes"], 0)
+        self.assertEqual(
+            gap(result)["false_positive_bytes_after_gold_gap"],
+            result["utf8_bytes"]["false_positive"],
+        )
+
+    def test_exact_repeat_is_credited(self) -> None:
+        result = metrics(under(v3(), emma_document()), *emma_predictions())
+        self.assertEqual(result["utf8_bytes"]["false_positive"], 5)  # " " + "Emma"
+        self.assertEqual(gap(result)["gold_gap_protected_bytes"], 4)
+        self.assertEqual(gap(result)["gold_gap_protected_bytes_by_label"], {"FIRSTNAME": 4})
+        self.assertEqual(gap(result)["false_positive_bytes_after_gold_gap"], 1)
+        self.assertEqual(gap(result)["status"], "diagnostic")
+
+    def test_case_variant_is_not_credited(self) -> None:
+        text = "My name is Emma Clarke. EMMA likes tea."
+        doc = gap_document(text, at(text, "Emma", "FIRSTNAME"), at(text, "Clarke", "SURNAME"))
+        self.assert_not_credited(doc, [at(text, "EMMA", "name")])
+
+    def test_substring_of_a_gold_value_is_not_credited(self) -> None:
+        text = "Her name is Annabel. Anna likes tea."
+        doc = gap_document(text, at(text, "Annabel", "FIRSTNAME"))
+        self.assert_not_credited(doc, [at(text, "Anna", "name", occurrence=1)])
+
+    def test_superstring_of_a_gold_value_is_not_credited(self) -> None:
+        text = "My name is Emma Clarke. Emma Clarke likes tea."
+        doc = gap_document(text, at(text, "Emma", "FIRSTNAME"), at(text, "Clarke", "SURNAME"))
+        self.assert_not_credited(doc, [at(text, "Emma Clarke", "name", occurrence=1)])
+
+    def test_cross_document_repeat_is_not_credited(self) -> None:
+        other_text = "Emma likes tea."
+        other = gap_document(other_text, uid="synthetic-gap-2")
+        accumulator = score.MetricAccumulator()
+        accumulator.add(under(v3(), emma_document()), emma_predictions()[:1])
+        accumulator.add(under(v3(), other), [at(other_text, "Emma", "name")])
+        result = accumulator.result()
+        self.assertEqual(result["utf8_bytes"]["false_positive"], 5)  # " " + "Emma"
+        self.assertEqual(gap(result)["gold_gap_protected_bytes"], 0)
+
+    def test_class_mismatch_is_not_credited(self) -> None:
+        self.assert_not_credited(emma_document(), emma_predictions("location"))
+        self.assert_not_credited(emma_document(), emma_predictions("custom:phone"))
+
+    def test_padded_span_credits_only_the_trimmed_bytes(self) -> None:
+        text = "Alice met Bob.  Alice  went home."
+        doc = gap_document(text, at(text, "Alice", "FIRSTNAME"), at(text, "Bob", "FIRSTNAME"))
+        padded = at(text, "  Alice  ", "name")
+        result = metrics(under(v3(), doc), padded)
+        self.assertEqual(result["utf8_bytes"]["false_positive"], 9)
+        self.assertEqual(gap(result)["gold_gap_protected_bytes"], 5)
+        self.assertEqual(gap(result)["false_positive_bytes_after_gold_gap"], 4)
+
+    def test_padding_with_newlines_and_tabs_is_trimmed(self) -> None:
+        text = "City: Berlin\n\tBerlin\n"
+        doc = gap_document(text, at(text, "Berlin", "CITY"))
+        result = metrics(under(v3(), doc), at(text, "\n\tBerlin\n", "location"))
+        self.assertEqual(gap(result)["gold_gap_protected_bytes"], 6)
+        self.assertEqual(gap(result)["false_positive_bytes_after_gold_gap"], 3)
+
+    def test_word_boundary_violations_are_not_credited(self) -> None:
+        cases = {
+            "Berliner": ("City: Berlin. Ein Berliner kam.", "Berlin", "CITY", "location"),
+            "Berlinbesuch": ("City: Berlin. Ein Berlinbesuch.", "Berlin", "CITY", "location"),
+            "Meiers": ("Herr Meier. Das Haus des Meiers.", "Meier", "SURNAME", "name"),
+            "Annas": ("Name: Anna. Annas Hund bellt.", "Anna", "FIRSTNAME", "name"),
+            "digit": ("Name: Anna. Anna2 ist ein Login.", "Anna", "FIRSTNAME", "name"),
+            "leading letter": ("Name: Anna. MaryAnna kam.", "Anna", "FIRSTNAME", "name"),
+            "NFD mark": ("Herr Meier. Meieŕ kam.", "Meier", "SURNAME", "name"),
+            # Rust calls these alphanumeric, so is_inside_word would too.
+            "circled letter": ("Name: Anna. x AnnaⒶ y", "Anna", "FIRSTNAME", "name"),
+            "newer Unicode letter": (
+                "Name: Anna. x Anna\U000323b0 y", "Anna", "FIRSTNAME", "name"
+            ),
+        }
+        for name, (text, value, label, predicted_class) in cases.items():
+            with self.subTest(name):
+                doc = gap_document(text, at(text, value, label))
+                repeat = at(text, value, predicted_class, occurrence=1)
+                self.assert_not_credited(doc, [repeat])
+
+    def test_word_character_covers_every_rust_alphanumeric(self) -> None:
+        # The boundary must reject every edge Gaze's `is_inside_word` would:
+        # each code point Rust's `char::is_alphanumeric` accepts under the
+        # pinned toolchain is a word character here too.
+        table = json.loads(
+            (Path(__file__).resolve().parent / "fixtures/rust-char-is-alphanumeric.json")
+            .read_text(encoding="utf-8")
+        )
+        missing = [
+            code_point
+            for first, last in table["ranges"]
+            for code_point in range(first, last + 1)
+            if not score._is_word_character(chr(code_point))
+        ]
+        self.assertEqual(
+            sum(last - first + 1 for first, last in table["ranges"]), table["code_points"]
+        )
+        self.assertEqual(missing, [])
+
+    def test_punctuation_neighbours_are_boundaries(self) -> None:
+        cases = {
+            "Berlin-Reise": ("City: Berlin. Die Berlin-Reise.", "Berlin", "CITY", "location"),
+            "apostrophe": ("Name: Anna. Anna's dog.", "Anna", "FIRSTNAME", "name"),
+            "underscore": ("Name: Anna. Anna_x wrote.", "Anna", "FIRSTNAME", "name"),
+            "end of text": ("Name: Anna. Bye Anna", "Anna", "FIRSTNAME", "name"),
+            "non-ascii neighbour value": ("Stadt: Köln. Nach Köln.", "Köln", "CITY", "location"),
+        }
+        for name, (text, value, label, predicted_class) in cases.items():
+            with self.subTest(name):
+                doc = gap_document(text, at(text, value, label))
+                repeat = at(text, value, predicted_class, occurrence=1)
+                result = self.credited(doc, [repeat])
+                self.assertEqual(
+                    result["gold_gap_protected_bytes"], len(value.encode("utf-8"))
+                )
+
+    def test_same_document_homonym_is_credited_by_the_rule(self) -> None:
+        # The blind spot the human audit exists for: byte equality is not
+        # identity. The rule credits it; the audit decides whether it may.
+        text = "May Example submitted the form. Delivery is scheduled for May."
+        doc = gap_document(text, at(text, "May", "FIRSTNAME"), at(text, "Example", "SURNAME"))
+        result = self.credited(doc, [at(text, "May", "name", occurrence=1)])
+        self.assertEqual(result["gold_gap_protected_bytes"], 3)
+
+    def test_overlap_with_gold_or_ignored_bytes_is_not_credited(self) -> None:
+        text = "Emma pw Emma end Emma"
+        doc = gap_document(
+            text,
+            at(text, "Emma", "FIRSTNAME"),
+            at(text, "Emma", "PASSWORD", occurrence=1),
+        )
+        applied = under(v3(), doc)
+        # Touching gold: the prediction spills one byte into the gold span.
+        spill = score.Span(3, 4, "name")
+        self.assertEqual(gap(metrics(applied, spill))["gold_gap_protected_bytes"], 0)
+        # Touching an excluded-label span (v2 ignores those bytes).
+        on_excluded = at(text, "Emma", "name", occurrence=1)
+        self.assertEqual(gap(metrics(applied, on_excluded))["gold_gap_protected_bytes"], 0)
+        # Touching a neutral prediction class's bytes.
+        neutral = score.Span(at(text, "end", "x").start, at(text, "end", "x").end, "custom:secret")
+        wide = score.Span(neutral.start, at(text, "Emma", "x", occurrence=2).end, "name")
+        self.assertEqual(
+            gap(metrics(applied, neutral, wide))["gold_gap_protected_bytes"], 0
+        )
+        # The clean repeat is credited, so the fixture itself can credit.
+        clean = at(text, "Emma", "name", occurrence=2)
+        self.assertEqual(gap(metrics(applied, clean))["gold_gap_protected_bytes"], 4)
+
+    def test_duplicate_and_overlapping_predictions_are_credited_once(self) -> None:
+        text = "City: Nelson. Name: Nelson Park. Nelson again."
+        doc = gap_document(
+            text,
+            at(text, "Nelson", "CITY"),
+            at(text, "Nelson", "FIRSTNAME", occurrence=1),
+            at(text, "Park", "SURNAME"),
+        )
+        repeat_name = at(text, "Nelson", "name", occurrence=2)
+        repeat_location = at(text, "Nelson", "location", occurrence=2)
+        result = self.credited(doc, [repeat_name, repeat_name, repeat_location])
+        self.assertEqual(result["gold_gap_protected_bytes"], 6)
+        # First compatible gold span in document order: the CITY.
+        self.assertEqual(result["gold_gap_protected_bytes_by_label"], {"CITY": 6})
+        self.assertEqual(result["gold_gap_protected_ranges"], 1)
+
+    def test_conservation_holds_per_document(self) -> None:
+        text = "Alice met Bob.  Alice  went. Bob, Berliner, Alice."
+        doc = gap_document(text, at(text, "Alice", "FIRSTNAME"), at(text, "Bob", "FIRSTNAME"))
+        predictions = [
+            at(text, "Alice", "name"),
+            at(text, "  Alice  ", "name"),
+            at(text, "Bob", "name", occurrence=1),
+            at(text, "Berliner", "location"),
+            at(text, "Alice", "name", occurrence=2),
+            at(text, "went", "organization"),
+        ]
+        result = metrics(under(v3(), doc), *predictions)
+        utf8 = result["utf8_bytes"]
+        self.assertEqual(
+            utf8["predicted"],
+            utf8["true_positive"]
+            + gap(result)["false_positive_bytes_after_gold_gap"]
+            + gap(result)["gold_gap_protected_bytes"],
+        )
+        self.assertEqual(gap(result)["gold_gap_protected_bytes"], 5 + 3 + 5)
+        self.assertAlmostEqual(
+            gap(result)["adjusted_precision"],
+            utf8["true_positive"]
+            / (utf8["predicted"] - gap(result)["gold_gap_protected_bytes"]),
+        )
+
+    def test_v2_numbers_are_unchanged_under_v3(self) -> None:
+        text = "Alice met Bob.  Alice  went. Bob, Berliner, Alice. pw hunter22"
+        doc = gap_document(
+            text,
+            at(text, "Alice", "FIRSTNAME"),
+            at(text, "Bob", "FIRSTNAME"),
+            at(text, "hunter22", "PASSWORD"),
+        )
+        predictions = [
+            at(text, "Alice", "name"),
+            at(text, "  Alice  ", "name"),
+            at(text, "Bob", "name", occurrence=1),
+            at(text, "Berliner", "location"),
+            at(text, "hunter22", "custom:password"),
+        ]
+        v2_result = metrics(under(v2(), doc), *predictions)
+        v3_result = metrics(under(v3(), doc), *predictions)
+        self.assertNotIn("gold_gap", v2_result)
+        self.assertGreater(gap(v3_result)["gold_gap_protected_bytes"], 0)
+        v3_result.pop("gold_gap")
+        self.assertEqual(v3_result, v2_result)
+        self.assertEqual(
+            json.dumps(v3_result, sort_keys=True), json.dumps(v2_result, sort_keys=True)
+        )
+
+    def test_gold_gap_never_runs_under_v1_or_v2(self) -> None:
+        with mock.patch.object(
+            score, "gold_gap_credits", side_effect=AssertionError("called")
+        ):
+            metrics(emma_document(), *emma_predictions())
+            metrics(under(v2(), emma_document()), *emma_predictions())
+            with self.assertRaisesRegex(AssertionError, "called"):
+                metrics(under(v3(), emma_document()), *emma_predictions())
+
+
+
+class GoldGapRenderTests(unittest.TestCase):
+    """A v3 row prints the diagnostic beside the unchanged v2 columns."""
+
+    def card(self, version: int, gold_gap: bool) -> dict:
+        card = render_tests.scorecard()
+        card["scoring"] = {
+            "scored_label_contract": {
+                "id": f"scored-labels-v{version}",
+                "version": version,
+                "file_sha256": "e" * 64,
+                "excluded_labels": ["PASSWORD"],
+            }
+        }
+        if gold_gap:
+            for index, run in enumerate(card["runs"]):
+                run["metrics"]["gold_gap"] = {
+                    "status": "diagnostic",
+                    "gold_gap_protected_bytes": 1000 + index,
+                    "gold_gap_protected_bytes_by_label": {
+                        "CITY": 400,
+                        "FIRSTNAME": 600 + index,
+                    },
+                    "gold_gap_protected_ranges": 10,
+                    "gold_gap_protected_ranges_by_label": {"CITY": 4, "FIRSTNAME": 6},
+                    "false_positive_bytes_after_gold_gap": 2000,
+                    "adjusted_precision": 0.5,
+                }
+        return card
+
+    def entry(self, card: dict) -> dict:
+        return render.history_entry_from_scorecard(
+            card,
+            version="v0.16.0",
+            machine="Test host, 1 core, 1 GB",
+            scorecard_filename="scorecard-v0.16.0.json",
+            scorecard_sha256="0" * 64,
+        )
+
+    def test_v3_row_renders_the_diagnostic_beside_the_headline(self) -> None:
+        v3_entry = self.entry(self.card(3, gold_gap=True))
+        v2_entry = self.entry(self.card(2, gold_gap=False))
+        arm = v3_entry["arms"][render.SHIPPED_DEFAULT_ARM]
+        self.assertEqual(arm["gold_gap"]["gold_gap_protected_bytes"], 1001)
+        # The headline columns are the v2 numbers, identical in both rows.
+        for name, block in v2_entry["arms"].items():
+            headline = {k: v for k, v in v3_entry["arms"][name].items() if k != "gold_gap"}
+            self.assertEqual(headline, block)
+        history = {**render.empty_history(), "releases": [v3_entry]}
+        render.validate_history(history)
+        text = render.render_current_release(history)
+        self.assertIn("diagnostic; v2 headline unchanged", text)
+        self.assertIn("| `pass2-ner` | 1,001 | 2,000 | 0.500000 |", text)
+        self.assertIn("False-positive bytes ↔", text)
+        v2_text = render.render_current_release(
+            {**render.empty_history(), "releases": [v2_entry]}
+        )
+        self.assertNotIn("Gold-gap", v2_text)
+
+    def test_gold_gap_outside_v3_or_malformed_fails_closed(self) -> None:
+        with self.assertRaisesRegex(render.RenderError, "only there"):
+            self.entry(self.card(2, gold_gap=True))
+        with self.assertRaisesRegex(render.RenderError, "only there"):
+            self.entry(self.card(3, gold_gap=False))
+        card = self.card(3, gold_gap=True)
+        card["runs"][0]["metrics"]["gold_gap"]["gold_gap_protected_bytes"] += 1
+        with self.assertRaisesRegex(render.RenderError, "do not sum"):
+            self.entry(card)
+        card = self.card(3, gold_gap=True)
+        card["runs"][0]["metrics"]["gold_gap"]["status"] = "headline"
+        with self.assertRaisesRegex(render.RenderError, "diagnostic"):
+            self.entry(card)
+        v3_entry = self.entry(self.card(3, gold_gap=True))
+        del v3_entry["arms"][render.SHIPPED_DEFAULT_ARM]["gold_gap"]["adjusted_precision"]
+        with self.assertRaisesRegex(render.RenderError, "malformed gold_gap"):
+            render.validate_history({**render.empty_history(), "releases": [v3_entry]})
 
 
 if __name__ == "__main__":

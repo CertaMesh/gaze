@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 import tomllib
+import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -156,6 +157,8 @@ class Document:
     # Prediction classes the contract treats as neutral: they still protect
     # scored gold, but their other bytes are not false positives.
     neutral_prediction_classes: frozenset[str] = frozenset()
+    # Contract v3 gold-gap rule; None under v1 and v2, where it never runs.
+    gold_gap: GoldGapRule | None = None
 
     @property
     def locale_chain(self) -> list[str]:
@@ -168,6 +171,116 @@ SCORED_LABEL_CONTRACT_V1_ID = "scored-labels-v1"
 
 class ScoredLabelContractError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class GoldGapRule:
+    """Contract v3: when an unlabelled repeat of a gold value counts as protection.
+
+    A predicted span is credited when it overlaps no scored gold and no ignored
+    byte, its ASCII-whitespace-trimmed bytes equal the value of a scored gold
+    span in the same document, its class is compatible with that gold label,
+    and neither trimmed edge touches a word character (a superset of Rust's
+    `char::is_alphanumeric`, see `_is_word_character`). Only
+    the trimmed bytes are credited. The credit is a diagnostic beside the v2
+    numbers, never a change to them.
+    """
+
+    # (Gaze class, corpus label) pairs; TP scoring stays class-agnostic.
+    compatible: frozenset[tuple[str, str]]
+
+    def is_compatible(self, predicted_class: str, label: str) -> bool:
+        return (predicted_class, label) in self.compatible
+
+
+# Every gold_gap setting is a closed vocabulary with one supported value, so a
+# contract file that asks for anything else fails closed instead of being
+# scored under a rule it does not state.
+GOLD_GAP_FIXED_SETTINGS: dict[str, object] = {
+    "status": "diagnostic",
+    "same_document": True,
+    "overlap": "zero_overlap_with_scored_gold_and_ignored_bytes",
+    "trim": "ascii_whitespace_both_ends",
+    "match": "byte_identical",
+    "boundary": "outer_neighbour_not_letter_digit_or_mark",
+    "attribution": "first_compatible_gold_in_document_order",
+}
+GOLD_GAP_KEYS = frozenset(GOLD_GAP_FIXED_SETTINGS) | {
+    "semantics",
+    "compatible_labels",
+    "not_creditable",
+}
+GOLD_GAP_TRIM_BYTES = frozenset(b" \t\n\r\x0b\x0c")
+
+
+def _load_gold_gap_rule(
+    value: object, scored: frozenset[str], excluded: frozenset[str]
+) -> GoldGapRule:
+    if not isinstance(value, dict):
+        raise ScoredLabelContractError("scored-label contract gold_gap must be an object")
+    keys = set(value)
+    if keys != GOLD_GAP_KEYS:
+        raise ScoredLabelContractError(
+            "scored-label contract gold_gap has unknown keys "
+            f"{sorted(keys - GOLD_GAP_KEYS)} and missing keys "
+            f"{sorted(GOLD_GAP_KEYS - keys)}"
+        )
+    for key, expected in GOLD_GAP_FIXED_SETTINGS.items():
+        if value[key] != expected or type(value[key]) is not type(expected):
+            raise ScoredLabelContractError(
+                f"scored-label contract gold_gap.{key} must be {expected!r}"
+            )
+    semantics = value["semantics"]
+    if not isinstance(semantics, str) or not semantics.strip():
+        raise ScoredLabelContractError("scored-label contract gold_gap needs semantics")
+    table = value["compatible_labels"]
+    if not isinstance(table, dict) or not table:
+        raise ScoredLabelContractError(
+            "scored-label contract gold_gap.compatible_labels must be a non-empty object"
+        )
+    compatible: set[tuple[str, str]] = set()
+    creditable: set[str] = set()
+    for predicted_class, labels in table.items():
+        context = f"scored-label contract gold_gap.compatible_labels[{predicted_class!r}]"
+        if not isinstance(labels, list) or not labels:
+            raise ScoredLabelContractError(f"{context} must be a non-empty list")
+        if len(set(labels)) != len(labels):
+            raise ScoredLabelContractError(f"{context} lists a label twice")
+        for label in labels:
+            if not isinstance(label, str) or label not in scored:
+                raise ScoredLabelContractError(
+                    f"{context} names {label!r}, which is not a scored label"
+                )
+            compatible.add((predicted_class, label))
+            creditable.add(label)
+    not_creditable: set[str] = set()
+    entries = value["not_creditable"]
+    if not isinstance(entries, list):
+        raise ScoredLabelContractError(
+            "scored-label contract gold_gap.not_creditable must be a list"
+        )
+    for index, entry in enumerate(entries):
+        context = f"scored-label contract gold_gap.not_creditable[{index}]"
+        if not isinstance(entry, dict) or set(entry) != {"label", "reason"}:
+            raise ScoredLabelContractError(f"{context} must be {{label, reason}}")
+        label = entry["label"]
+        if not isinstance(label, str) or label not in scored:
+            raise ScoredLabelContractError(f"{context} must name a scored label")
+        if label in not_creditable or label in creditable:
+            raise ScoredLabelContractError(f"{context} rules on {label} twice")
+        if not isinstance(entry["reason"], str) or not entry["reason"].strip():
+            raise ScoredLabelContractError(f"{context} needs a non-empty reason")
+        not_creditable.add(label)
+    # Every scored label is ruled on exactly once; an unlisted one fails closed.
+    # Excluded labels are not gold and are rejected above, so they can never
+    # be credited.
+    unruled = sorted(scored - creditable - not_creditable)
+    if unruled:
+        raise ScoredLabelContractError(
+            f"scored-label contract gold_gap does not rule on scored labels {unruled}"
+        )
+    assert not (creditable & excluded)
+    return GoldGapRule(compatible=frozenset(compatible))
 
 
 @dataclass(frozen=True)
@@ -186,6 +299,7 @@ class ScoredLabelContract:
     scored_labels: frozenset[str] | None
     excluded_labels: frozenset[str]
     neutral_prediction_classes: frozenset[str] = frozenset()
+    gold_gap: GoldGapRule | None = None
 
     @property
     def is_implicit_v1(self) -> bool:
@@ -229,6 +343,10 @@ def load_scored_label_contract(
         raise ScoredLabelContractError(
             "scored-label contract_version must be an integer >= 2; v1 is implicit"
         )
+    if version > 3:
+        raise ScoredLabelContractError(
+            f"scored-label contract_version {version} is not supported by this scorer"
+        )
     labels = value.get("labels")
     if not isinstance(labels, list) or not labels:
         raise ScoredLabelContractError("scored-label contract labels must be non-empty")
@@ -264,6 +382,19 @@ def load_scored_label_contract(
         if not isinstance(reason, str) or not reason.strip():
             raise ScoredLabelContractError(f"{context} needs a non-empty reason")
         neutral.add(entry["class"])
+    gold_gap: GoldGapRule | None = None
+    if version >= 3:
+        if "gold_gap" not in value:
+            raise ScoredLabelContractError(
+                f"scored-label contract_version {version} needs a gold_gap block"
+            )
+        gold_gap = _load_gold_gap_rule(
+            value["gold_gap"], frozenset(scored), frozenset(excluded)
+        )
+    elif "gold_gap" in value:
+        raise ScoredLabelContractError(
+            "scored-label contract gold_gap needs contract_version 3"
+        )
     return ScoredLabelContract(
         contract_id=contract_id,
         version=version,
@@ -272,6 +403,7 @@ def load_scored_label_contract(
         scored_labels=frozenset(scored),
         excluded_labels=frozenset(excluded),
         neutral_prediction_classes=frozenset(neutral),
+        gold_gap=gold_gap,
     )
 
 
@@ -294,7 +426,11 @@ def apply_scored_label_contract(
         excluded = tuple(
             span for span in document.spans if span.label in contract.excluded_labels
         )
-        if not excluded and not contract.neutral_prediction_classes:
+        if (
+            not excluded
+            and not contract.neutral_prediction_classes
+            and contract.gold_gap is None
+        ):
             applied.append(document)
             continue
         applied.append(
@@ -312,6 +448,7 @@ def apply_scored_label_contract(
                 negative_category=document.negative_category,
                 excluded_spans=document.excluded_spans + excluded,
                 neutral_prediction_classes=contract.neutral_prediction_classes,
+                gold_gap=contract.gold_gap,
             )
         )
     return applied
@@ -358,6 +495,12 @@ def scored_label_contract_report(
         ),
         "excluded_gold_utf8_bytes": excluded_bytes,
         "scored_gold_digest": scored_gold_digest(documents),
+        # Present only under contract v3, so v2 scorecards stay byte-identical.
+        **(
+            {"gold_gap": {"status": "diagnostic"}}
+            if contract.gold_gap is not None
+            else {}
+        ),
     }
 
 
@@ -1182,6 +1325,139 @@ def safe_ratio(numerator: int | float, denominator: int | float) -> float:
     return numerator / denominator
 
 
+def contract_scoring_view(
+    document: Document, predictions: Sequence[Span]
+) -> tuple[list[tuple[int, int]], list[tuple[int, int]], list[Span]]:
+    """(merged gold, merged ignored bytes, predictions left in the score)."""
+    gold = merge_intervals((span.start, span.end) for span in document.spans)
+    # Bytes only an out-of-contract label covers are outside the score:
+    # protecting them is neither a true nor a false positive.
+    ignored = subtract_intervals(
+        merge_intervals(
+            [(span.start, span.end) for span in document.excluded_spans]
+            + [
+                (span.start, span.end)
+                for span in predictions
+                if span.label in document.neutral_prediction_classes
+            ]
+        ),
+        gold,
+    )
+    if ignored:
+        predictions = [
+            span
+            for span in predictions
+            if not interval_is_covered((span.start, span.end), ignored)
+        ]
+    return gold, ignored, list(predictions)
+
+
+def _is_word_character(character: str) -> bool:
+    # A superset of Rust's `char::is_alphanumeric`, which Gaze's
+    # `is_inside_word` uses, so wider only ever means fewer credits:
+    # letters, digits and combining marks (NFD `e` + U+0301 belongs to the
+    # `e`); `So` letters Rust counts as alphabetic (circled `Ⓐ`); and
+    # unassigned `Cn`, since Rust may run a newer Unicode than this Python.
+    # test_word_character_covers_every_rust_alphanumeric pins the superset
+    # against a table the pinned rustc generated.
+    category = unicodedata.category(character)
+    return (
+        category[0] in "LNM"
+        or category == "Cn"
+        or (category == "So" and "LETTER" in unicodedata.name(character, ""))
+    )
+
+
+def _is_char_boundary(text: bytes, offset: int) -> bool:
+    return offset in (0, len(text)) or (text[offset] & 0xC0) != 0x80
+
+
+def gold_gap_on_word_boundary(text: bytes, start: int, end: int) -> bool:
+    """Neither neighbour of text[start:end] is a word character.
+
+    So `Berliner`, `Meiers` and `Annas` never credit `Berlin`, `Meier` or
+    `Anna`, while a hyphen, apostrophe or underscore is a boundary. An edge
+    that is not a UTF-8 character boundary is never credited.
+    """
+    if not (_is_char_boundary(text, start) and _is_char_boundary(text, end)):
+        return False
+    before = text[max(0, start - 4) : start].decode("utf-8", errors="ignore")[-1:]
+    after = text[end : end + 4].decode("utf-8", errors="ignore")[:1]
+    return not (before and _is_word_character(before)) and not (
+        after and _is_word_character(after)
+    )
+
+
+@dataclass(frozen=True)
+class GoldGapCredit:
+    """A credited range, the gold label it counts for, the prediction class
+    that earned it and the gold span it repeats."""
+
+    start: int
+    end: int
+    label: str
+    predicted_class: str
+    attributed_start: int
+    attributed_end: int
+
+
+def gold_gap_credits(
+    document: Document,
+    predictions: Sequence[Span],
+    gold: Sequence[tuple[int, int]],
+    ignored: Sequence[tuple[int, int]],
+) -> list[GoldGapCredit]:
+    """Disjoint byte ranges contract v3 credits, with who earned each one.
+
+    `gold` and `ignored` are the merged intervals the v2 accounting already
+    built for this document. Attribution goes to the first compatible gold
+    span in document order; where eligible predictions overlap, each byte is
+    credited once, to the earliest candidate, whose predicted class and gold
+    span the credit carries. This is the only place that decides them: the
+    audit sample reads them from here.
+    """
+    rule = document.gold_gap
+    assert rule is not None
+    text = document.text.encode("utf-8")
+    gold_by_value: dict[bytes, list[Span]] = defaultdict(list)
+    for span in sorted(document.spans, key=lambda item: (item.start, item.end, item.label)):
+        gold_by_value[text[span.start : span.end]].append(span)
+    blocked = merge_intervals([*gold, *ignored])
+    candidates: list[tuple[int, int, int, int, str, str]] = []
+    for span in predictions:
+        if interval_overlaps((span.start, span.end), blocked):
+            continue
+        start, end = span.start, span.end
+        while start < end and text[start] in GOLD_GAP_TRIM_BYTES:
+            start += 1
+        while end > start and text[end - 1] in GOLD_GAP_TRIM_BYTES:
+            end -= 1
+        if start == end:
+            continue
+        attributed = next(
+            (
+                gold_span
+                for gold_span in gold_by_value.get(text[start:end], ())
+                if rule.is_compatible(span.label, gold_span.label)
+            ),
+            None,
+        )
+        if attributed is None or not gold_gap_on_word_boundary(text, start, end):
+            continue
+        candidates.append(
+            (start, end, attributed.start, attributed.end, attributed.label, span.label)
+        )
+    credits: list[GoldGapCredit] = []
+    claimed: list[tuple[int, int]] = []
+    for start, end, gold_start, gold_end, label, predicted in sorted(set(candidates)):
+        for fresh_start, fresh_end in subtract_intervals([(start, end)], claimed):
+            credits.append(
+                GoldGapCredit(fresh_start, fresh_end, label, predicted, gold_start, gold_end)
+            )
+        claimed = merge_intervals([*claimed, (start, end)])
+    return credits
+
+
 class MetricAccumulator:
     def __init__(self) -> None:
         self.documents = 0
@@ -1198,28 +1474,15 @@ class MetricAccumulator:
         self.entities_exact = 0
         self.prediction_spans = 0
         self.prediction_spans_overlapped = 0
+        # Contract v3 only; the result gains a gold_gap block when set.
+        self.gold_gap_active = False
+        self.gold_gap_bytes = 0
+        self.gold_gap_bytes_by_label: Counter[str] = Counter()
+        self.gold_gap_ranges = 0
+        self.gold_gap_ranges_by_label: Counter[str] = Counter()
 
     def add(self, document: Document, predictions: Sequence[Span]) -> None:
-        gold = merge_intervals((span.start, span.end) for span in document.spans)
-        # Bytes only an out-of-contract label covers are outside the score:
-        # protecting them is neither a true nor a false positive.
-        ignored = subtract_intervals(
-            merge_intervals(
-                [(span.start, span.end) for span in document.excluded_spans]
-                + [
-                    (span.start, span.end)
-                    for span in predictions
-                    if span.label in document.neutral_prediction_classes
-                ]
-            ),
-            gold,
-        )
-        if ignored:
-            predictions = [
-                span
-                for span in predictions
-                if not interval_is_covered((span.start, span.end), ignored)
-            ]
+        gold, ignored, predictions = contract_scoring_view(document, predictions)
         predicted = subtract_intervals(
             merge_intervals((span.start, span.end) for span in predictions), ignored
         )
@@ -1228,6 +1491,10 @@ class MetricAccumulator:
         predicted_bytes = interval_length(predicted)
         true_positive_bytes = intersection_length(gold, predicted)
         false_positive_bytes = predicted_bytes - true_positive_bytes
+        if document.gold_gap is not None:
+            self._add_gold_gap(
+                document, predictions, gold, ignored, predicted, false_positive_bytes
+            )
 
         self.documents += 1
         self.documents_without_leaks += true_positive_bytes == gold_bytes
@@ -1254,6 +1521,31 @@ class MetricAccumulator:
         self.prediction_spans_overlapped += sum(
             interval_overlaps((span.start, span.end), gold) for span in predictions
         )
+
+    def _add_gold_gap(
+        self,
+        document: Document,
+        predictions: Sequence[Span],
+        gold: Sequence[tuple[int, int]],
+        ignored: Sequence[tuple[int, int]],
+        predicted: Sequence[tuple[int, int]],
+        false_positive_bytes: int,
+    ) -> None:
+        credits = gold_gap_credits(document, predictions, gold, ignored)
+        credited = merge_intervals((credit.start, credit.end) for credit in credits)
+        credited_bytes = interval_length(credited)
+        # Conservation: credited bytes are a subset of this document's v2
+        # false-positive bytes, so predicted = TP + FP(v3) + gold-gap holds.
+        if intersection_length(credited, subtract_intervals(predicted, gold)) != (
+            credited_bytes
+        ) or credited_bytes > false_positive_bytes:
+            raise RuntimeError(f"{document.uid}: gold-gap credit outside FP bytes")
+        self.gold_gap_active = True
+        self.gold_gap_bytes += credited_bytes
+        for credit in credits:
+            self.gold_gap_bytes_by_label[credit.label] += credit.end - credit.start
+            self.gold_gap_ranges += 1
+            self.gold_gap_ranges_by_label[credit.label] += 1
 
     def result(self) -> dict[str, object]:
         precision = safe_ratio(self.true_positive_bytes, self.predicted_bytes)
@@ -1300,6 +1592,27 @@ class MetricAccumulator:
                     self.prediction_spans_overlapped, self.prediction_spans
                 ),
             },
+            **({"gold_gap": self._gold_gap_result()} if self.gold_gap_active else {}),
+        }
+
+    def _gold_gap_result(self) -> dict[str, object]:
+        """Contract v3 diagnostic; the v2 `utf8_bytes` block above is unchanged."""
+        false_positive = self.false_positive_bytes - self.gold_gap_bytes
+        return {
+            "status": "diagnostic",
+            "gold_gap_protected_bytes": self.gold_gap_bytes,
+            "gold_gap_protected_bytes_by_label": dict(
+                sorted(self.gold_gap_bytes_by_label.items())
+            ),
+            "gold_gap_protected_ranges": self.gold_gap_ranges,
+            "gold_gap_protected_ranges_by_label": dict(
+                sorted(self.gold_gap_ranges_by_label.items())
+            ),
+            "false_positive_bytes_after_gold_gap": false_positive,
+            # TP / (predicted - gold-gap): gold-gap bytes leave the denominator.
+            "adjusted_precision": safe_ratio(
+                self.true_positive_bytes, self.true_positive_bytes + false_positive
+            ),
         }
 
 
