@@ -245,9 +245,31 @@ per suspect — merging must not merge away who asked for the redaction.
 ordinary prose, which is exactly what a NER model reads as an organization. A
 suspect lying wholly inside a marker is dropped as already protected, on the
 manifest's authority rather than the text's — a document that merely *types*
-`[REDACTED:name]` gains nothing. Containment and not overlap: an overlap test
-would excuse a suspect that is merely malformed whenever it happened to touch a
-marker, and those must stay unjudgeable and deny.
+`[REDACTED:name]` gains nothing.
+
+**Containment, not overlap.** The first design dropped any suspect that merely
+*overlapped* a marker. That was rejected because it leaks: a net that reports
+`[REDACTED:name] Schmidt` has flagged a surname, and dropping the whole finding
+because half of it is a marker ships `Schmidt` raw. It also excused suspects that
+were simply malformed -- out of bounds, reversed, splitting a character --
+whenever they happened to touch a marker, where those must stay unjudgeable and
+deny. So a suspect is protected only when it lies *wholly inside* a marker gaze
+recorded. A suspect that straddles a marker and real text is judged by the
+ordinary rules, and since it overlaps a manifest entry it denies the document:
+fail-closed, never a leak. On the benchmark corpus no straddling suspect occurs
+-- see the evidence below -- so the denial costs nothing measured; if one ever
+appears in practice, the refinement is to act on the bytes outside the marker,
+not to relax containment.
+
+**Evidence.** The benchmark's `full-stack-nym-redact` arm runs Nym-small under
+`SafetyNetMode::Redact` so that every suspect goes through the redaction path;
+the shipped `full-stack-nym-resolve` arm cannot show this, because on the corpus
+it resolves every Nym suspect reversibly and its fallback never fires. Compared
+against the deleting implementation over the full 2,910-document corpus,
+`scripts/bench/marker_ab.py` found the same 1,296 spans redacted in the same
+1,014 documents, identical leaked and false-positive byte counts, no new
+rejections, and -- in every document -- clean text identical to the deleting
+output once the markers are removed.
 
 **What it costs.** The output is longer than the input for those spans, where
 deleting made it shorter. Adopters who diffed clean text against raw byte counts
