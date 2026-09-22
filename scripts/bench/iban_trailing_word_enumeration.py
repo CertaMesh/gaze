@@ -330,7 +330,16 @@ def main() -> int:
             # in both arms and is a property of the rule set, not the pattern), so
             # the policies here tokenize every class that can claim IBAN bytes.
             # The behaviour itself is disclosed in the PR as a separate finding.
-            for cls in ("custom:iban", "custom:credit_card", "custom:phone"):
+            #
+            # `custom:postal_code` joins for the same reason: under de-AT,
+            # `postal.at_ch` claims an IBAN's last four-digit group when a
+            # capitalised word follows (`... 4500 BIC`). With postal_code
+            # preserved, that preserve winner displaces the IBAN, and the card
+            # bytes the IBAN had displaced end up covered by nothing (todo 3740):
+            # 40 bytes over 8 documents, de-AT only, all one PL IBAN. With
+            # postal_code tokenized the fix leaves zero raw bytes there while
+            # main still leaks the country code and a group.
+            for cls in ("custom:iban", "custom:credit_card", "custom:phone", "custom:postal_code"):
                 text += RULE.format(cls=cls)
             text += DEFAULT
             policy = Path(tmp) / f"{name}.toml"
