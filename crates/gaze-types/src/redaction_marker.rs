@@ -24,17 +24,35 @@ pub const REDACTION_MARKER_SUFFIX: &str = "]";
 
 /// Renders the one-way marker that stands for `class`.
 ///
-/// The class path is the canonical audit label ([`PiiClass::to_canonical_str`]) with every `_`
-/// mapped to `-`. That substitution is load-bearing rather than cosmetic: every bare arm of the
-/// token-shape grammar requires a trailing `_<digits>` inside word boundaries, so a custom class
-/// legitimately named `address_2` would make `[REDACTED:custom:address_2]` contain the token shape
+/// The class path is the canonical audit label ([`PiiClass::to_canonical_str`]), lowercased, with
+/// `:` kept as the namespace separator and every other non-alphanumeric byte mapped to `-`.
+///
+/// Mapping `_` is load-bearing rather than cosmetic: every bare arm of the token-shape grammar
+/// requires a trailing `_<digits>` inside word boundaries, so a custom class legitimately named
+/// `address_2` would make `[REDACTED:custom:address_2]` contain the token shape
 /// `custom:address_2`. Stripping the underscore makes those arms unmatchable by construction
-/// instead of merely untested. The exact class is still carried by the audit row.
+/// instead of merely untested.
+///
+/// Mapping *everything* else is what keeps the emitter and [`is_redaction_marker`] from drifting
+/// apart. [`PiiClass::custom`] normalises, but [`PiiClass::Custom`] is a public variant an adopter
+/// can build directly (a custom [`crate::LeakSuspect`] class) or deserialize, and
+/// [`PiiClass::family`] does not normalise its name. A class carrying an uppercase letter, a
+/// space or a `]` would otherwise render a marker the shared predicate rejects, and the one
+/// production consumer of that predicate -- the token-bridge index, which skips markers so a
+/// one-way redaction never becomes a searchable, translatable entity -- would index the redacted
+/// bytes instead. Sanitising here makes `is_redaction_marker(redaction_marker(c))` true for every
+/// `PiiClass` by construction. The exact class is still carried by the audit row.
 pub fn redaction_marker(class: &PiiClass) -> String {
-    format!(
-        "{REDACTION_MARKER_PREFIX}{}{REDACTION_MARKER_SUFFIX}",
-        class.to_canonical_str().replace('_', "-")
-    )
+    let canonical = class.to_canonical_str();
+    let mut body = String::with_capacity(canonical.len());
+    for character in canonical.chars() {
+        match character {
+            ':' => body.push(':'),
+            c if c.is_ascii_alphanumeric() => body.push(c.to_ascii_lowercase()),
+            _ => body.push('-'),
+        }
+    }
+    format!("{REDACTION_MARKER_PREFIX}{body}{REDACTION_MARKER_SUFFIX}")
 }
 
 /// Whether `text` is exactly one redaction marker and nothing else.
@@ -108,7 +126,74 @@ mod tests {
         for name in ["address_2", "phone", "class_alpha_1", "iban_99"] {
             classes.push(PiiClass::custom(name).expect("valid custom class"));
         }
+        // Classes that never went through the normalising constructor. `PiiClass::Custom` is a
+        // public variant an adopter can build directly or deserialize, and `PiiClass::family`
+        // does not normalise. Each of these used to render a marker the shared predicate
+        // rejected, which is how a redaction could still be indexed as a searchable entity.
+        for name in [
+            "Tenant Docs",
+            "a]b",
+            "a\nb",
+            "Gr\u{fc}\u{df}e",
+            "UPPER_1",
+            "  ",
+        ] {
+            classes.push(PiiClass::Custom(name.to_string()));
+            classes.push(PiiClass::family(name));
+        }
         classes
+    }
+
+    /// The emitter and the predicate must never disagree, for ANY `PiiClass`.
+    ///
+    /// `every_rendered_marker_is_recognised_by_the_shared_predicate` states the invariant; this
+    /// names the concrete shapes that broke it before the emitter sanitised the class, so a
+    /// regression reads as "the marker for a space-carrying class is not recognised" rather than
+    /// as an opaque loop failure.
+    ///
+    /// Mutation: drop the sanitiser (keep only `.replace('_', "-")`) and this goes RED, together
+    /// with `a_redaction_marker_with_an_unnormalised_class_is_never_indexed` in `gaze-token-bridge`.
+    #[test]
+    fn a_class_that_never_went_through_the_normalising_constructor_still_renders_a_valid_marker() {
+        for (class, expected) in [
+            (
+                PiiClass::Custom("Tenant Docs".to_string()),
+                "[REDACTED:custom:tenant-docs]",
+            ),
+            (PiiClass::Custom("a]b".to_string()), "[REDACTED:custom:a-b]"),
+            (
+                PiiClass::family("Tenant Docs"),
+                "[REDACTED:custom:family:tenant-docs]",
+            ),
+            (
+                PiiClass::Custom("UPPER_1".to_string()),
+                "[REDACTED:custom:upper-1]",
+            ),
+        ] {
+            let marker = redaction_marker(&class);
+            assert_eq!(marker, expected);
+            assert!(is_redaction_marker(&marker), "not recognised: {marker}");
+        }
+    }
+
+    /// A marker can never carry a `]` of its own, so text that does is prose, not gaze output.
+    ///
+    /// `redaction_marker_spans` is the text-only helper: it answers "what LOOKS like a marker",
+    /// which is deliberately weaker than "what did gaze redact". It reads `[REDACTED:custom:a]b]`
+    /// as the marker `[REDACTED:custom:a]` followed by the prose `b]`. That is harmless precisely
+    /// because nothing decides protection from it -- the runtime's suspect guard asks the
+    /// manifest -- and because the emitter can no longer produce that shape.
+    #[test]
+    fn a_bracket_inside_bracketed_prose_is_split_at_the_first_close() {
+        let text = "[REDACTED:custom:a]b] tail";
+        let spans = redaction_marker_spans(text);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(&text[spans[0].clone()], "[REDACTED:custom:a]");
+        assert_eq!(
+            redaction_marker(&PiiClass::Custom("a]b".to_string())),
+            "[REDACTED:custom:a-b]",
+            "the emitter can never produce the split shape"
+        );
     }
 
     #[test]

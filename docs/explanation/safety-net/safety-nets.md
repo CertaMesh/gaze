@@ -225,15 +225,26 @@ restore scan treats it as ordinary prose. `gaze::is_redaction_marker` is the one
 predicate every consumer asks; a second spelling elsewhere would be a second
 thing to keep in step with the emitter.
 
-The class path renders lowercase with `_` mapped to `-`, and that substitution
-is load-bearing rather than cosmetic. Every bare arm of the token-shape grammar
-needs a trailing `_<digits>` inside word boundaries, so a custom class
-legitimately named `address_2` would otherwise make `[REDACTED:custom:address_2]`
-contain the token shape `custom:address_2` — the marker would parse as a token.
-Dropping the underscore makes that unrepresentable rather than merely untested;
+The class path renders lowercased, with `:` kept as the namespace separator and
+every other non-alphanumeric byte mapped to `-`. Mapping `_` is load-bearing
+rather than cosmetic: every bare arm of the token-shape grammar needs a trailing
+`_<digits>` inside word boundaries, so a custom class legitimately named
+`address_2` would otherwise make `[REDACTED:custom:address_2]` contain the token
+shape `custom:address_2` — the marker would parse as a token. Dropping the
+underscore makes that unrepresentable rather than merely untested;
 `a_redaction_marker_never_parses_as_a_token` pins it against every builtin class
-and the adversarial custom ones. The exact class is still carried by the audit
-row.
+and the adversarial custom ones.
+
+Mapping everything else is what keeps the emitter and the predicate from drifting
+apart. `PiiClass::custom` normalises, but `PiiClass::Custom` is a public variant
+an adopter's own `SafetyNet` can build directly or deserialize, and
+`PiiClass::family` does not normalise its name; a class carrying an uppercase
+letter, a space or a `]` used to render a marker `is_redaction_marker` rejected.
+The index is the one production consumer of that predicate — it skips markers so
+a one-way redaction never becomes a searchable, translatable entity — so the
+divergence meant those redactions were indexed. Sanitising in the emitter makes
+`is_redaction_marker(redaction_marker(c))` true for every `PiiClass` by
+construction. The exact class is still carried by the audit row.
 
 **In the manifest.** A marker is recorded like any other one-way replacement:
 `Action::Redact`, not owned, standing for the original bytes it covered, with

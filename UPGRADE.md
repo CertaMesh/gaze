@@ -40,10 +40,15 @@ redacted has not changed. What is written in their place has.
    safe, because an absence cannot distinguish a redaction from a net that did
    nothing.
 
-5. **Custom classes render with `_` mapped to `-`** in the marker
-   (`custom:address_2` → `[REDACTED:custom:address-2]`). This keeps the marker
-   outside the token grammar, which requires a trailing `_<digits>`. The exact
-   class is unchanged in the audit row.
+5. **Custom classes render lowercased, with every non-alphanumeric byte
+   except `:` mapped to `-`** (`custom:address_2` →
+   `[REDACTED:custom:address-2]`). Mapping `_` keeps the marker outside the
+   token grammar, which requires a trailing `_<digits>`. Mapping the rest means
+   `gaze::is_redaction_marker(gaze::redaction_marker(&class))` holds for every
+   `PiiClass`, including one you built as `PiiClass::Custom(..)` yourself in a
+   custom `SafetyNet` — so your redactions are recognised as protected output by
+   every consumer, including the index. The exact class is unchanged in the
+   audit row.
 
 ## Pending (unreleased): the Kiji DistilBERT safety net is removed
 

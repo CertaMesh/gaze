@@ -659,6 +659,42 @@ impl Ledger {
                     if record.action != Some(Action::Redact) {
                         return Err(manifest_integrity_error("invalid redaction action"));
                     }
+                    // The region must be explained by the suspects it names, the way the resolve
+                    // arm above requires its replacement to sit inside its observed suspect. The
+                    // direction is the other way round here: a redaction merges suspects and
+                    // expands outward over every manifest entry it swallows, so each driving
+                    // suspect's ACTION span lies inside the region rather than containing it.
+                    // Without this a record could name observations that had nothing to do with
+                    // the bytes it replaced, and the audit trail would credit a redaction to
+                    // suspects that did not ask for it.
+                    //
+                    // The action span, not `suspect.span`: a `PartialBleed` suspect is acted on
+                    // over its uncovered sub-range only, so requiring the whole suspect span here
+                    // would reject honest output.
+                    let mut classes = Vec::with_capacity(observations.len());
+                    for id in observations {
+                        let observation = self.observations.get(*id).ok_or_else(|| {
+                            manifest_integrity_error("invalid redaction observation")
+                        })?;
+                        let acted = super::suspect_action_span(&observation.suspect);
+                        if acted.start < clean.start || acted.end > clean.end {
+                            return Err(manifest_integrity_error(
+                                "redaction does not cover its observation",
+                            ));
+                        }
+                        classes.push(&observation.suspect.class);
+                    }
+                    // A merged region carries the class of one of its suspects -- the emitter uses
+                    // the lowest-offset one -- and that class is what the marker renders and what
+                    // the reader of the clean document is told was removed. Membership rather than
+                    // "the lowest" is deliberate: the emitter orders by EXPANDED region start,
+                    // which the ledger cannot reconstruct from observations alone, and a check
+                    // that guessed at that ordering would reject honest output. Membership still
+                    // rejects a class no suspect ever asked for, which is the mislabelling this
+                    // guards against.
+                    if !classes.contains(&&record.emitted.class) {
+                        return Err(manifest_integrity_error("invalid redaction class"));
+                    }
                 }
                 Origin::ExistingOwnedUnknown { segment } => {
                     if !record.owned
@@ -1430,6 +1466,121 @@ mod tests {
         assert!(
             tokenizing.validate().is_err(),
             "a redaction recorded as a tokenization must be rejected"
+        );
+    }
+
+    /// Builds an honest ledger carrying exactly one safety-net redaction, plus the index of that
+    /// record. Every rule below is probed by mutating this ledger one field at a time, so each
+    /// test names the single thing that made it invalid.
+    fn ledger_with_one_redaction() -> (Session, CleanText, usize) {
+        let (session, mut clean) = primary("aaalice@example.invalidbb", Action::Tokenize);
+        let pipeline = Pipeline::builder().build().unwrap();
+        let first = clean.manifest[0].clean_span.clone();
+        let report = [suspect(first, LeakKind::Uncovered)];
+        pipeline
+            .redact_safety_net_suspects(
+                &mut ProtectionTarget::Live(&session),
+                &mut clean,
+                &report.iter().collect::<Vec<_>>(),
+                DocumentKind::Text,
+                None,
+                None,
+                true,
+                None,
+            )
+            .unwrap();
+        let at = clean
+            .manifest
+            .records
+            .iter()
+            .position(|r| matches!(r.origin, Origin::SafetyNetRedaction { .. }))
+            .expect("a redaction record");
+        clean
+            .manifest
+            .validate()
+            .expect("the honest ledger validates");
+        (session, clean, at)
+    }
+
+    /// A redaction that cannot say who asked for it is not auditable. Axis 4 does not allow an
+    /// untraceable one-way replacement, so an observation id naming nothing must fail closed
+    /// rather than validate with an empty provenance.
+    #[test]
+    fn a_redaction_naming_an_observation_that_does_not_exist_is_rejected() {
+        let (_session, clean, at) = ledger_with_one_redaction();
+        let mut forged = clean.manifest.clone();
+        let Origin::SafetyNetRedaction { observations, .. } = &mut forged.records[at].origin else {
+            panic!("a redaction record");
+        };
+        observations.push(usize::MAX);
+        assert!(
+            forged.validate().is_err(),
+            "an observation id that names nothing must be rejected"
+        );
+    }
+
+    /// The raw span is re-derived from the phase snapshot rather than trusted. A record claiming
+    /// original bytes the projection does not map to is a manifest that disagrees with itself,
+    /// and everything downstream -- restore, the proxy residual check, the index -- reads that
+    /// span as the authority for what the marker stands for.
+    #[test]
+    fn a_redaction_whose_raw_span_the_projection_does_not_yield_is_rejected() {
+        let (_session, clean, at) = ledger_with_one_redaction();
+        let mut forged = clean.manifest.clone();
+        forged.records[at].emitted.raw_span.end += 1;
+        assert!(
+            forged.validate().is_err(),
+            "a raw span the phase projection does not yield must be rejected"
+        );
+    }
+
+    /// The region must be explained by the suspects it names. A record whose observation covers
+    /// bytes outside the redacted region is attributing the redaction to a suspect that did not
+    /// drive it.
+    #[test]
+    fn a_redaction_that_does_not_cover_its_observation_is_rejected() {
+        let (_session, clean, at) = ledger_with_one_redaction();
+        let mut forged = clean.manifest.clone();
+        let Origin::SafetyNetRedaction { observations, .. } = &forged.records[at].origin else {
+            panic!("a redaction record");
+        };
+        let observation = observations[0];
+        forged.observations[observation].suspect.span.end += 1;
+        assert!(
+            forged.validate().is_err(),
+            "an observation reaching outside the redacted region must be rejected"
+        );
+    }
+
+    /// A merged region carries the class of its lowest-offset suspect, and that class is what the
+    /// marker renders and what the reader of the clean document is told was removed. A record
+    /// labelled with a class no suspect asked for mislabels the redaction in the manifest while
+    /// the audit row still says something else.
+    #[test]
+    fn a_redaction_labelled_with_a_class_no_suspect_asked_for_is_rejected() {
+        let (_session, clean, at) = ledger_with_one_redaction();
+        let mut forged = clean.manifest.clone();
+        forged.records[at].emitted.class = PiiClass::Organization;
+        assert!(
+            forged.validate().is_err(),
+            "a class no driving suspect asked for must be rejected"
+        );
+    }
+
+    /// The region is stated in the coordinates of the phase snapshot it was taken against. One
+    /// that runs past the end of that snapshot describes a document that never existed.
+    #[test]
+    fn a_redaction_whose_region_falls_outside_its_phase_is_rejected() {
+        let (_session, clean, at) = ledger_with_one_redaction();
+        let mut forged = clean.manifest.clone();
+        let Origin::SafetyNetRedaction { clean: region, .. } = &mut forged.records[at].origin
+        else {
+            panic!("a redaction record");
+        };
+        region.end = usize::MAX;
+        assert!(
+            forged.validate().is_err(),
+            "a region outside the phase snapshot must be rejected"
         );
     }
 

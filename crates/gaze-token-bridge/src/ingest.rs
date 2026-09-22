@@ -453,6 +453,66 @@ mod tests {
         assert!(!crate::util::contains_domain_alias(&marker));
     }
 
+    /// The same one-way guarantee for a class that never went through `PiiClass::custom`.
+    ///
+    /// `PiiClass::Custom` is a public variant -- an adopter's own `SafetyNet` can hand the
+    /// pipeline one directly -- and `PiiClass::family` does not normalise its name. Before the
+    /// emitter sanitised the class, such a class rendered a marker `gaze::is_redaction_marker`
+    /// rejected, so this skip did not fire and the redacted bytes were canonicalised into an
+    /// entity with a fingerprint, a posting and a translatable domain alias. The index is the one
+    /// production consumer of that predicate, which is why the divergence had teeth here.
+    ///
+    /// Mutation: drop the sanitiser in `redaction_marker` and this goes RED with `Schmidt` stored
+    /// as an entity raw value.
+    #[test]
+    fn a_redaction_marker_with_an_unnormalised_class_is_never_indexed() {
+        let raw = "Email alice@example.invalid and Schmidt about the case.";
+        for class in [
+            PiiClass::Custom("Tenant Docs".to_string()),
+            PiiClass::Custom("a]b".to_string()),
+            PiiClass::family("Tenant Docs"),
+        ] {
+            let marker = gaze::redaction_marker(&class);
+            assert!(
+                gaze::is_redaction_marker(&marker),
+                "emitter and predicate disagree on {marker}"
+            );
+            let clean = format!("Email <tok> and {marker} about the case.");
+            let marker_at = clean.find(&marker).expect("fixture");
+            let redacted = raw.find("Schmidt").expect("fixture");
+            let spans = vec![
+                EmittedTokenSpan::new(6..11, 6..27, PiiClass::Email),
+                EmittedTokenSpan::new(
+                    marker_at..marker_at + marker.len(),
+                    redacted..redacted + "Schmidt".len(),
+                    class.clone(),
+                ),
+            ];
+            let projector = RecordingProjector::default();
+            let hit = build_index_hit(
+                "doc-1".to_string(),
+                raw,
+                clean.clone(),
+                &spans,
+                &domain(),
+                &projector,
+            )
+            .unwrap();
+            assert_eq!(
+                projector.canonical_values.borrow().as_slice(),
+                ["email:alice@example.invalid"],
+                "{marker}: the redacted bytes must never be canonicalized"
+            );
+            assert!(
+                hit.entities
+                    .iter()
+                    .all(|entity| entity.raw_value != "Schmidt"),
+                "{marker}: the redacted bytes must not be stored as an entity raw value"
+            );
+            assert!(!hit.snippet.contains("Schmidt"), "{:?}", hit.snippet);
+        }
+    }
+
     #[test]
     fn projected_entities_keep_raw_value_only_in_owner_side_entity_field() {
         let (hit, _, _) = ingest_fixture();

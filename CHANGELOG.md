@@ -196,9 +196,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is unchanged; only what is written in their place changes.** The marker is
   deliberately outside the token grammar: restore passes it through as ordinary
   text, the strict restore scan does not flag it, and the class path renders
-  with `_` mapped to `-` so a custom class named `address_2` cannot make the
-  marker parse as the bare token shape `custom:address_2`. `gaze` re-exports
-  `is_redaction_marker` as the single predicate every consumer should ask.
+  lowercased with every non-alphanumeric byte except `:` mapped to `-`. Mapping
+  `_` is what stops a custom class named `address_2` making the marker parse as
+  the bare token shape `custom:address_2`; mapping the rest is what keeps the
+  emitter and the predicate from drifting apart, because `PiiClass::Custom` is a
+  public variant an adopter can build directly and `PiiClass::family` does not
+  normalise. `gaze` re-exports `is_redaction_marker` as the single predicate
+  every consumer should ask, and
+  `is_redaction_marker(redaction_marker(class))` now holds for every class.
   **Behaviour change for adopters using `redact` (including the default
   `Resolve` + `Redact` fallback):** clean output now contains marker text where
   bytes previously disappeared, so it is longer, not shorter, for those spans.

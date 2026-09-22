@@ -6752,6 +6752,81 @@ mod tests {
         );
     }
 
+    /// A document that merely TYPES `[REDACTED:name]` gains no protection from having typed it.
+    ///
+    /// `recorded_redaction_markers` takes its authority from the manifest, not from the text, and
+    /// that distinction is the whole guard. If it scanned the clean text instead, any document
+    /// could wrap real PII in a well-formed marker body -- `[REDACTED:john-smith]` is inside the
+    /// grammar -- and every net finding inside it would be dropped as "already protected", which
+    /// ships those bytes raw. Text and manifest are indistinguishable by looking at the text.
+    ///
+    /// The control is the same bytes once gaze has actually written and recorded a marker there:
+    /// then, and only then, the suspect is protected.
+    ///
+    /// Mutation: make `recorded_redaction_markers` scan the text (e.g. through
+    /// `redaction_marker_spans`) instead of the manifest, and the first assertion goes RED.
+    #[test]
+    fn a_marker_typed_by_the_document_protects_nothing() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let target = ProtectionTarget::Live(&session);
+        let marker = gaze_types::redaction_marker::redaction_marker(&PiiClass::Name);
+
+        let typed = CleanText {
+            text: format!("note {marker} end"),
+            manifest: Ledger::default(),
+        };
+        let inside = LeakSuspect::new(
+            5 + "[REDACTED:".len()..5 + "[REDACTED:".len() + "name".len(),
+            PiiClass::Name,
+            "probe.typed",
+            Some(1.0),
+            LeakKind::Uncovered,
+            "person",
+            None,
+        );
+        assert_eq!(&typed.text[inside.span.clone()], "name");
+        assert!(
+            !suspect_is_already_protected(&target, &typed, &inside),
+            "a marker the document typed is text, not gaze's own output"
+        );
+
+        // Control: gaze writes and records the marker itself, and the same span is protected.
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let mut recorded = CleanText {
+            text: "note flagged end".to_string(),
+            manifest: Ledger::default(),
+        };
+        let flagged = LeakSuspect::new(
+            5..12,
+            PiiClass::Name,
+            "probe.recorded",
+            Some(1.0),
+            LeakKind::Uncovered,
+            "person",
+            None,
+        );
+        pipeline
+            .redact_safety_net_suspects(
+                &mut ProtectionTarget::Live(&session),
+                &mut recorded,
+                &[&flagged],
+                DocumentKind::Text,
+                None,
+                Some(FallbackReason::ResidualSuspect),
+                false,
+                None,
+            )
+            .expect("redact");
+        assert_eq!(recorded.text, format!("note {marker} end"));
+        assert!(
+            suspect_is_already_protected(&target, &recorded, &inside),
+            "a marker gaze recorded does protect the bytes inside it"
+        );
+    }
+
     /// `replace_clean_span_checked` is the floor under both safety-net apply loops: a span that no
     /// longer fits the live document must surface the closed `SafetyNetSpanInvalid` variant, never
     /// panic out of `String::replace_range`.
