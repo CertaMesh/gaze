@@ -425,8 +425,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gate, so it could never have produced a token. Measured base vs fix over
   55,536 documents (89 registry countries × 2 BBAN alphabets × 4 seeded valid
   IBANs × spaced/compact × 3 prefixes × 13 trailing contexts,
-  `scripts/bench/iban_trailing_word_enumeration.py`): zero IBAN bytes lost in
-  any policy. Fixtures in `crates/gaze-recognizers/tests/iban_trailing_group.rs`
+  `scripts/bench/iban_trailing_word_enumeration.py`, 5 policies): about 7,400
+  documents per policy go from leaking to fully covered, and no IBAN byte is lost
+  that main protected on the same IBAN with no trailing word. The remaining
+  losses (275 B under de-DE, 1,715 B under de-AT, all in documents with no IBAN
+  cue) are the pre-existing family-fallback class tracked as todo 3746: with
+  `custom:family:payment-card-or-iban` left to a policy's default `preserve`,
+  main's extra coverage in those documents came only from the swallowed word.
+  Fixtures in `crates/gaze-recognizers/tests/iban_trailing_group.rs`
   cover every registry country, and
   `iban_pattern_branch_lengths_match_the_validator_registry` pins the pattern's
   length branches to `gaze_types::iban_registry_length` so the two tables
