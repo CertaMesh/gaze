@@ -11,7 +11,7 @@ use serde::Serialize;
 
 use gaze::{
     DictionarySource, DocumentKind, LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, PiiClass,
-    RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult, Scope,
+    RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult,
     SensitiveSnapshot, Session, SessionScope, SessionSnapshotEntry, TypedContext,
 };
 use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
@@ -105,21 +105,14 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let loaded_rulepacks = resolved.rulepacks;
     let locale_chain = resolved.locale_chain;
     let dictionaries = resolved.dictionaries;
-    let pipeline =
-        maybe_register_safety_net(resolved.pipeline, &options, effective_policy.as_ref())?;
+    let pipeline = maybe_register_safety_net(resolved.pipeline, &options, &effective_policy)?;
     validate_safety_net_tolerant_gate(options.safety_net_mode, options.safety_net_fallback)?;
     // Lowered once, here. The library owns the (mode, fallback) -> decision mapping; the CLI
     // reads it rather than re-deriving which flag is consulted when.
     let policy = safety_net_policy(options.safety_net_mode, options.safety_net_fallback);
 
-    let session = match effective_policy.as_ref() {
-        Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
-        None => Session::new(scope_for_cli_without_policy(
-            clean_overrides.session_scope.as_ref(),
-            options.session_ttl,
-        )?),
-    }
-    .map_err(|_| CliError::Pipeline)?;
+    let session = Session::from_policy_with_ttl_override(&effective_policy, options.session_ttl)
+        .map_err(|_| CliError::Pipeline)?;
 
     let safety_net_active = options.safety_net.is_some() || options.safety_net_registry;
     let (clean_doc, leak_report) = if safety_net_active {
@@ -188,9 +181,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     // Surface fail-open policy coverage gaps only once the clean succeeded — on
     // an error path there is no output to leak, and the warning must not corrupt
     // the single-line JSON error envelope on stderr (issue #360).
-    if let Some(policy) = effective_policy.as_ref() {
-        warn_uncovered_collision_families(policy, &loaded_rulepacks, &locale_chain);
-    }
+    warn_uncovered_collision_families(&effective_policy, &loaded_rulepacks, &locale_chain);
     println!("{json}");
     Ok(())
 }
@@ -198,9 +189,9 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
 pub(crate) fn maybe_register_safety_net(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
-    policy: Option<&gaze::Policy>,
+    policy: &gaze::Policy,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
-    let nym_policy = policy.and_then(|policy| policy.safety_net.nym.as_ref());
+    let nym_policy = policy.safety_net.nym.as_ref();
     // A policy that tunes the Nym net while a different net (or none) runs would read as
     // protection that is not there; refuse instead of ignoring the table.
     if nym_policy.is_some()
@@ -538,22 +529,6 @@ fn normalize_rulepack_bundles(raw: &[String]) -> (Vec<String>, bool) {
         }
     }
     (bundled, auto_activate_locale_gated)
-}
-
-pub(crate) fn scope_for_cli_without_policy(
-    scope: Option<&SessionScope>,
-    ttl_secs: Option<u64>,
-) -> std::result::Result<Scope, CliError> {
-    match scope.unwrap_or(&SessionScope::Persistent) {
-        SessionScope::Ephemeral => Ok(Scope::Ephemeral),
-        SessionScope::Conversation => Ok(Scope::Conversation("cli".to_string())),
-        SessionScope::Persistent => Ok(Scope::Persistent {
-            ttl: Duration::from_secs(ttl_secs.unwrap_or(86_400)),
-        }),
-        _ => Err(CliError::UnsupportedSessionScope {
-            variant: format!("{:?}", scope.unwrap_or(&SessionScope::Persistent)),
-        }),
-    }
 }
 
 struct CountingLogger {

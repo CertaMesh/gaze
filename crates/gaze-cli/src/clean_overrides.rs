@@ -46,11 +46,13 @@ impl CleanOverrides {
         };
 
         resolved.rulepacks = RulepackPolicy::default();
+        // The flag replaces the policy's selection. The policy value is already
+        // resolved: the loader defaults an omitted `[policy.rulepacks]` to
+        // `["core"]`, and the policy-less path seeds the same default.
         resolved.rulepacks.bundled = self
             .rulepack_bundled
             .clone()
-            .or(Some(policy.rulepacks.bundled.clone()))
-            .unwrap_or_else(|| vec!["core".to_string()]);
+            .unwrap_or_else(|| policy.rulepacks.bundled.clone());
         resolved.rulepacks.paths = if self.rulepack_paths.is_empty() {
             policy.rulepacks.paths.clone()
         } else {

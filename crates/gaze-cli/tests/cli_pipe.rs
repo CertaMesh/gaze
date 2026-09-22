@@ -860,7 +860,9 @@ fn clean_json_emits_empty_top_level_entries_without_detections() {
 
 #[test]
 fn t02_canary_absent_in_clean_reappears_in_restore() {
-    let canary = "CANARY_DO_NOT_LEAK@test.local";
+    // A routable-shape domain: core's email.global deliberately excludes the
+    // `test.local` fixture domain, and the policy-less default is core (#3706).
+    let canary = "CANARY_DO_NOT_LEAK@example.com";
     let input = format!("Ping {canary} before noon.");
 
     let (clean_text, blob, _) = clean_ok(&input);
@@ -1447,9 +1449,8 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
         "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\trestore_policy\trestore_decision\trestore_unknown_token_count\trestore_manifest_bypass_count\trestore_fresh_pii_count\trestore_phase_mask\trestore_trap_shape_count\n"
     ));
     assert!(
-        stdout
-            .lines()
-            .any(|line| line.starts_with("regex\tregex\t\temail\ttokenize\t\ttext\tfalse\t")),
+        stdout.lines().any(|line| line
+            .starts_with("email.global\temail.global\t\temail\ttokenize\t\ttext\tfalse\t")),
         "unexpected query stdout: {stdout}"
     );
 
@@ -1466,7 +1467,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
             "--output",
             export_path.to_str().unwrap(),
             "--source",
-            "regex",
+            "email.global",
         ])
         .output()
         .unwrap();
@@ -1479,8 +1480,8 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     let rows = fs::read_to_string(export_path).unwrap();
     let row: Value = serde_json::from_str(rows.lines().next().unwrap()).unwrap();
     assert_eq!(row["class"], "email");
-    assert_eq!(row["source"], "regex");
-    assert_eq!(row["recognizer_id"], "regex");
+    assert_eq!(row["source"], "email.global");
+    assert_eq!(row["recognizer_id"], "email.global");
     assert_eq!(row["recognizer_version_id"], Value::Null);
     assert_eq!(row["action"], "tokenize");
     assert_eq!(row["field_name"], Value::Null);
@@ -1631,7 +1632,9 @@ fn s2_audit_cli_smoke_filters_created_at_range() {
     let stdout = String::from_utf8(query.stdout).unwrap();
     let row = stdout
         .lines()
-        .find(|line| line.starts_with("regex\tregex\t\temail\ttokenize\t\ttext\tfalse\t"))
+        .find(|line| {
+            line.starts_with("email.global\temail.global\t\temail\ttokenize\t\ttext\tfalse\t")
+        })
         .expect("expected email audit row in bounded time range");
     let created_at = row
         .split('\t')
@@ -2765,13 +2768,20 @@ fn s2_core_extended_cli_opt_in_mirrors_toml_and_rejects_garbage_symmetrically() 
     assert_symmetric_policy_config(cli_out, toml_out);
 }
 
+/// The policy-less default is plain `core` (#3706), not the `core-extended`
+/// compatibility alias: the locale-gated rows stay off and the chain stays
+/// `global`, so a bare US ZIP is not tokenized without a locale.
 #[test]
 fn s2_core_extended_default_surface_does_not_load_phase2_recognizers() {
-    let input = "IBAN GB82WEST12345698765432 card 4111111111111111";
+    let input = "ZIP 90210";
     let default = clean_json_with_args(&[], input);
 
     assert_eq!(default["clean_text"], input);
     assert_eq!(default["stats"]["detections"], 0);
+    assert_eq!(default["stats"]["locale_chain"], json!(["global"]));
+
+    let extended = clean_json_with_args(&["--rulepack-bundled=core-extended"], input);
+    assert_ne!(extended["clean_text"], input, "{extended}");
 }
 
 #[test]
@@ -3418,6 +3428,97 @@ fn context_json_standalone_dictionary_detects_without_policy_entry() {
         v["stats"]["dictionaries_loaded"],
         json!([{ "name": "songs", "term_count": 1, "source": "cli" }])
     );
+}
+
+// Synthetic values only: a Luhn-valid test card, the mod-97-valid example IBAN,
+// a private IPv4 and a reserved-domain email.
+const POLICY_LESS_CORE_INPUT: &str = "Card 4111 1111 1111 1111 ok, IBAN AT61 1904 3002 3457 3201 \
+     bitte, ip 10.1.2.3, mail jane.roe@example.com";
+const POLICY_LESS_CORE_RAW: [&str; 4] = [
+    "4111 1111 1111 1111",
+    "AT61 1904 3002 3457 3201",
+    "10.1.2.3",
+    "jane.roe@example.com",
+];
+const POLICY_LESS_CORE_TOKENS: [&str; 4] = [
+    ":Custom:credit_card_1>",
+    ":Custom:iban_1>",
+    ":Custom:ip_address_1>",
+    ":Email_1>",
+];
+
+/// Todo #3706: `gaze clean` with neither `--policy` nor `--rulepack-bundled`
+/// used to run an email-only stub, so cards, IBANs and IPs shipped raw while
+/// the run looked healthy. The policy-less default is the bundled `core` pack.
+#[test]
+fn policy_less_clean_loads_the_core_rulepack() {
+    let v = clean_json_with_args(&[], POLICY_LESS_CORE_INPUT);
+    let clean = v["clean_text"].as_str().unwrap();
+
+    for raw in POLICY_LESS_CORE_RAW {
+        assert!(!clean.contains(raw), "raw {raw:?} leaked: {clean}");
+    }
+    for token in POLICY_LESS_CORE_TOKENS {
+        assert!(clean.contains(token), "missing {token}: {clean}");
+    }
+    assert_eq!(v["stats"]["detections"], 4);
+    assert_eq!(v["stats"]["locale_chain"], json!(["global"]));
+}
+
+/// The policy-less default and an explicit `--rulepack-bundled core` are one
+/// detection surface: same classes, same count, same locale chain.
+#[test]
+fn policy_less_clean_matches_explicit_core_bundle() {
+    let token_classes = |clean: &str| -> Vec<String> {
+        let re = Regex::new(r"<[0-9a-f]+:([^>]+)>").unwrap();
+        re.captures_iter(clean).map(|c| c[1].to_string()).collect()
+    };
+    let default = clean_json_with_args(&[], POLICY_LESS_CORE_INPUT);
+    let explicit = clean_json_with_args(&["--rulepack-bundled=core"], POLICY_LESS_CORE_INPUT);
+
+    assert_eq!(
+        token_classes(default["clean_text"].as_str().unwrap()),
+        token_classes(explicit["clean_text"].as_str().unwrap())
+    );
+    assert_eq!(default["stats"], explicit["stats"]);
+}
+
+/// A policy-less run with `--context-json` keeps the core floor and still
+/// tokenizes context dictionary terms, mapped or not.
+#[test]
+fn policy_less_context_json_keeps_core_and_tokenizes_context_terms() {
+    let dir = tempdir().unwrap();
+    let context_path = dir.path().join("context.json");
+    fs::write(
+        &context_path,
+        r#"{
+          "dictionaries": {
+            "songs": { "terms": ["context-song-123"], "case_sensitive": true },
+            "venues": { "terms": ["context-venue-456"], "case_sensitive": true }
+          },
+          "class_map": { "songs": "custom:song" },
+          "fields": {}
+        }"#,
+    )
+    .unwrap();
+
+    let v = clean_json_with_args(
+        &[&format!("--context-json={}", context_path.display())],
+        "track context-song-123 at context-venue-456, IBAN AT61 1904 3002 3457 3201",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    for raw in [
+        "context-song-123",
+        "context-venue-456",
+        "AT61 1904 3002 3457 3201",
+    ] {
+        assert!(!clean.contains(raw), "raw {raw:?} leaked: {clean}");
+    }
+    assert!(clean.contains(":Custom:song_1>"), "{clean}");
+    assert!(clean.contains(":Custom:venues_1>"), "{clean}");
+    assert!(clean.contains(":Custom:iban_1>"), "{clean}");
+    assert_eq!(v["stats"]["detections"], 3);
 }
 
 #[test]
@@ -4828,4 +4929,67 @@ fn strict_incomplete_prefixed_wrapper_fails() {
     assert_eq!(code, Some(3));
     assert!(stdout.is_empty());
     assert_eq!(parse_stderr_variant(&stderr)["error"], "UnknownToken");
+}
+
+/// Todo #3709: IBAN beats the card variant by collision policy, then an
+/// unrelated lower-priority recognizer overlaps the IBAN's last group plus the
+/// next capitalised word (the shape postal.at_ch produces). The resolver used
+/// to read the family as unsettled after that overlap, send the IBAN through
+/// the missing-anchor fallback, and ship it raw under this tokenize-iban +
+/// preserve-default policy. The verdict must match the run without the
+/// unrelated recognizer.
+#[test]
+fn collision_settled_iban_is_not_reopened_by_an_unrelated_overlap() {
+    let input = "Zahlung an AT61 1904 3002 3457 3201 Kontoinhaber Max\n";
+    for foreign in [
+        "",
+        r#"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "trailing_group_word"
+pattern = '\b\d{4} [A-Z][a-z]+'
+class = "custom:group_word"
+"#,
+    ] {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("policy.toml");
+        fs::write(
+            &path,
+            format!(
+                r#"
+schema_version = "0.1.0"
+
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["core", "locale-de"]
+
+[locale]
+active = ["de-AT"]
+{foreign}
+[[rule]]
+kind = "class"
+class = "custom:iban"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:credit_card"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#
+            ),
+        )
+        .unwrap();
+        let out = clean_json_with_args(&[&format!("--policy={}", path.display())], input);
+        let clean = out["clean_text"].as_str().unwrap();
+        assert!(clean.contains(":Custom:iban_1>"), "{clean}");
+        assert!(!clean.contains("AT61"), "IBAN leaked raw: {clean}");
+        assert!(!clean.contains("3457"), "IBAN leaked raw: {clean}");
+    }
 }

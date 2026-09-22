@@ -26,9 +26,15 @@ and turned into a [`Pipeline`](../../crates/gaze/src/pipeline.rs) via
   unknown action, missing required field, no recognizers/rulepacks, no rules) → exit `2`,
   stderr `{"error":"PolicyConfig","exit":2}`.
 
-If `--policy` is omitted, `gaze clean` falls back to a hard-coded stub pipeline
-(email regex + tokenize). The stub exists only so the CLI surface can be
-exercised before a policy is written; **production use requires `--policy`**.
+If `--policy` is omitted, `gaze clean` runs the bundled `core` rulepack, the
+same default a policy file gets when it omits `[policy.rulepacks]`. It is the
+same detection surface as `--rulepack-bundled core`: every class `core`
+activates is tokenized, and a span with no class rule (a `--context-json`
+dictionary term, an NER span) is tokenized rather than preserved. The locale
+chain is `global` unless `--locale` says otherwise. `--rulepack-bundled` or
+`--rulepack-path` replace the `core` default, exactly as the matching
+`[policy.rulepacks]` keys do in a policy file. Write a policy when you need
+custom recognizers, dictionaries, or non-tokenize actions.
 
 ## CLI overrides for runtime knobs
 
@@ -1048,7 +1054,7 @@ exports a `SensitiveSnapshot` (the `session_blob` field of stdout) so that
 
 The `--session-ttl=<secs>` CLI flag overrides the policy TTL for persistent
 sessions. If the flag is omitted, `gaze clean` uses `[session].ttl_secs`;
-policy-less stub mode falls back to `86400`.
+a policy-less run falls back to `86400`.
 
 The `--ner-threshold=<float>` CLI flag overrides `[ner].threshold` for one
 `gaze clean` invocation. Precedence is CLI flag, then policy TOML, then the

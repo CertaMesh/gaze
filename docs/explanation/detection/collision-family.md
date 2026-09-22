@@ -16,6 +16,13 @@ class-priority chain.
 - Same `(family, variant)` recognizers cooperate but do not arbitrate each
   other. Different variants in the same family compare by precedence; lower
   precedence wins and emits `ConflictTier::CollisionPolicy`.
+- A collision-policy win settles the family for that span. The settlement is
+  resolver state kept apart from `decided_by`: a later overlap with a
+  recognizer outside the family can still relabel `decided_by` for audit (for
+  example `RulePriority` when the settled IBAN also beats a lower-priority
+  postal candidate), but it never reopens the family. The missing-anchor
+  fallback skips settled spans, so the verdict does not depend on the order
+  or presence of unrelated overlaps.
 - Equal precedence between variants is ambiguous. The resolver emits a
   family-level token using `PiiClass::Custom("family:<name>")`, attaches an
   `AmbiguityRecord` with `AmbiguityReason::PrecedenceTie`, and writes

@@ -57,37 +57,59 @@ fn resolve_candidates_inner(
             .then_with(|| a.recognizer_id.cmp(&b.recognizer_id))
     });
 
-    let mut resolved: Vec<Candidate> = Vec::new();
+    let mut resolved: Vec<Slot> = Vec::new();
     for candidate in std::mem::take(candidates) {
         insert_candidate(&mut resolved, candidate, policy, anchor_ctx);
     }
-    if let Some(anchor_ctx) = anchor_ctx {
-        resolved = resolved
-            .into_iter()
-            .map(|candidate| apply_missing_anchor_fallback(candidate, policy, anchor_ctx))
-            .collect();
-    }
+    let mut resolved = resolved
+        .into_iter()
+        .map(|slot| match anchor_ctx {
+            Some(anchor_ctx) => {
+                apply_missing_anchor_fallback(slot.candidate, slot.settled, policy, anchor_ctx)
+            }
+            None => slot.candidate,
+        })
+        .collect::<Vec<_>>();
     resolved.sort_by_key(|candidate| candidate.span.start);
     resolved
 }
 
+/// A resolved candidate plus whether collision policy settled its family.
+/// `decided_by` is only the last rung's audit label (todo #3709).
+struct Slot {
+    candidate: Candidate,
+    settled: bool,
+}
+
 fn insert_candidate(
-    resolved: &mut Vec<Candidate>,
+    resolved: &mut Vec<Slot>,
     candidate: Candidate,
     policy: &FamilyPolicyTable,
     anchor_ctx: Option<AnchorContext<'_>>,
 ) {
     let mut index = 0;
     while index < resolved.len() {
-        let Some(overlap) = Overlap::classify(&resolved[index].span, &candidate.span) else {
+        let Some(overlap) = Overlap::classify(&resolved[index].candidate.span, &candidate.span)
+        else {
             index += 1;
             continue;
         };
 
-        match arbitrate(&resolved[index], &candidate, overlap, policy, anchor_ctx) {
-            Arbitration::Merge => merge_same_span_same_class(&mut resolved[index], candidate),
+        match arbitrate(
+            &resolved[index].candidate,
+            &candidate,
+            overlap,
+            policy,
+            anchor_ctx,
+        ) {
+            Arbitration::Merge => {
+                merge_same_span_same_class(&mut resolved[index].candidate, candidate)
+            }
             Arbitration::Family(tie) => {
-                resolved[index] = tie;
+                resolved[index] = Slot {
+                    candidate: tie,
+                    settled: true,
+                };
                 if overlap != Overlap::Exact {
                     remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
                 }
@@ -97,20 +119,28 @@ fn insert_candidate(
                 candidate.decided_by = tier;
                 candidate
                     .merged_sources
-                    .push(resolved[index].source.clone());
-                resolved[index] = candidate;
+                    .push(resolved[index].candidate.source.clone());
+                resolved[index] = Slot {
+                    candidate,
+                    settled: tier == ConflictTier::CollisionPolicy,
+                };
                 if overlap != Overlap::Exact {
                     remove_overlaps(resolved, index, tier);
                 }
             }
             Arbitration::ExistingWins(tier) => {
-                resolved[index].decided_by = tier;
-                resolved[index].merged_sources.push(candidate.source);
+                let slot = &mut resolved[index];
+                slot.candidate.decided_by = tier;
+                slot.settled |= tier == ConflictTier::CollisionPolicy;
+                slot.candidate.merged_sources.push(candidate.source);
             }
         }
         return;
     }
-    resolved.push(candidate);
+    resolved.push(Slot {
+        candidate,
+        settled: false,
+    });
 }
 
 /// Geometric relation between an already-resolved span and an incoming one.
@@ -356,10 +386,11 @@ fn family_tie_candidate(
 
 fn apply_missing_anchor_fallback(
     candidate: Candidate,
+    settled: bool,
     policy: &FamilyPolicyTable,
     anchor_ctx: AnchorContext<'_>,
 ) -> Candidate {
-    if candidate.decided_by == ConflictTier::CollisionPolicy {
+    if settled {
         return candidate;
     }
     match anchor_ctx.resolver.resolve(
@@ -418,22 +449,25 @@ thread_local! {
     static REMOVE_OVERLAPS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-fn remove_overlaps(resolved: &mut Vec<Candidate>, winner_index: usize, tier: ConflictTier) {
+fn remove_overlaps(resolved: &mut Vec<Slot>, winner_index: usize, tier: ConflictTier) {
     #[cfg(test)]
     REMOVE_OVERLAPS_CALLS.with(|calls| calls.set(calls.get() + 1));
 
-    let winner_span = resolved[winner_index].span.clone();
+    let winner_span = resolved[winner_index].candidate.span.clone();
     let mut index = 0;
     while index < resolved.len() {
-        if index != winner_index && overlaps(&resolved[index].span, &winner_span) {
+        if index != winner_index && overlaps(&resolved[index].candidate.span, &winner_span) {
             let loser = resolved.remove(index);
             let target = if index < winner_index {
                 winner_index - 1
             } else {
                 winner_index
             };
-            resolved[target].merged_sources.push(loser.source);
-            resolved[target].decided_by = tier;
+            resolved[target]
+                .candidate
+                .merged_sources
+                .push(loser.candidate.source);
+            resolved[target].candidate.decided_by = tier;
             continue;
         }
         index += 1;

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Nym warm-latency script.** `scripts/bench/nym-warm-latency.py` times the
+  production pipeline (`clean_for_bench`) warm, per document, for `pass2-ner`
+  and `full-stack-nym-resolve` over the coverage-loop corpus plus 512- and
+  1,024-piece synthetic documents, and prints p50, p95 and mean with a
+  hardware line (chip, cores, RAM, OS, ort version, bundle SHA) and the host
+  load average. No latency row is recorded until it runs on a quiet host.
 - **Benchmark shape-recall column.** Each scorecard run now splits every
   validator-backed label's surviving bytes into gold that passes its validator
   and gold that fails it (`production_recall_by_gold_validity`), next to the
@@ -167,6 +173,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Nym suspects no longer carry JSON syntax at their edges.** Quotes,
+  colons, commas, brackets, braces and whitespace are trimmed from both ends
+  of a decoded span, and a span of syntax alone is dropped. Trimming only
+  narrows a span, so a tool-call value like `"name": "Anna Müller",` yields
+  `Anna Müller`, not `"Anna Müller",`.
 - **BREAKING (`gaze-mcp-rmcp`): rmcp 2.x.** `gaze-mcp-rmcp`,
   `gaze-mcp-bridge` and `gaze-document` move from rmcp 1.6 to rmcp 2.x, whose
   `ContentBlock` replaces `Content` / `RawContent`. Adopters that name rmcp
@@ -367,6 +378,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GAZE_NER_MODEL_DIR` (see Changed).
 
 ### Fixed
+
+- **Security: `gaze index ingest` now runs the `core` rulepack, so
+  `gaze index search` no longer prints identifiers raw.** Shipped defect in
+  every release from v0.11.0 through v0.14.0: ingest built its own pipeline
+  (email regex, `Label: value` fields, NER, default rule preserve) without
+  `core`. Credit card numbers, IBANs, IP addresses, phone numbers and every
+  other `core` class stayed raw inside the stored snippet, and
+  `gaze index search` printed them to the agent-facing output under the
+  footer "raw PII never shown", with the required output net in place (the
+  Nym net does not flag these shapes). The encrypted store never held them in
+  plaintext at rest. Ingest now resolves the same policy as a policy-less
+  `gaze clean` (bundled `core`, tokenize default rule) and adds the pinned NER
+  bundle, the field detector and the optional net on top, so the two verbs
+  share one deterministic floor. **Re-run `gaze index ingest` on every
+  existing index**: stored snippets keep the raw values until then. No
+  workaround exists on older releases; do not pass their search output to an
+  agent for documents with structured identifiers. `gaze-assembly` gains
+  `build_pipeline_builder` and `CorpusIngestor` gains `with_dictionaries`
+  (solo todo #3711).
+- **Security: `gaze clean` without `--policy` now runs the `core` rulepack.**
+  Shipped defect in every release from v0.3.0 through v0.14.0: with neither
+  `--policy` nor `--rulepack-bundled`/`--rulepack-path`, `gaze clean` ran a
+  stub pipeline that tokenized only email addresses. Credit card numbers,
+  IBANs, IP addresses, phone numbers, national IDs and every other `core`
+  class went out raw, while the run reported success. The documented default
+  (`["core"]` when `[policy.rulepacks]` is omitted) held only for policy files.
+  A policy-less run now resolves the same policy as `--rulepack-bundled core`,
+  with a tokenize default rule, which also keeps `--context-json` dictionary
+  terms tokenized. **Adopters calling `gaze clean` without a policy now get
+  tokens for values that used to pass through; this is intended.** Workaround
+  on older releases: pass `--rulepack-bundled core`. `gaze daemon` always
+  required a policy; `gaze mcp serve` and policy-less `gaze proxy` already ran
+  `core`. The now unreachable `UnsupportedSessionScope` CLI error variant is
+  removed (solo todo #3706).
+
+- **A family settled by collision policy stays settled when a later,
+  unrelated overlap is decided.** Shipped defect in v0.14.0 (since the
+  resolver began relabelling the incumbent with the deciding rung,
+  3878c5f9): when `iban.structural` beat `card.structural` by collision policy
+  and a lower-priority recognizer outside the family then overlapped the
+  IBAN (for example a four-digit group plus the next capitalised word), the
+  base-ladder rung overwrote `decided_by`. The missing-anchor fallback keyed
+  on that label, so the settled IBAN was anchor-checked again and, with no
+  cue in range, became the `family:payment-card-or-iban` token.
+  - Axis 1: under a policy that tokenizes `custom:iban` and
+    `custom:credit_card` with a preserve default and no family rule,
+    `Zahlung an AT61 1904 3002 3457 3201 Kontoinhaber Max` shipped the IBAN
+    raw (reproduced on main with a custom recognizer as the unrelated overlap,
+    and with `postal.at_ch` from #613).
+  - Axis 4: the IBAN's class depended on whether an unrelated overlap existed.
+  The resolver now records collision-policy settlement as its own internal
+  state, set on a collision-policy win or a precedence-tie family token and
+  kept across later ladder wins, merges and collateral removals, and the
+  fallback keys on it. `decided_by` keeps its audit meaning (the last rung that
+  touched the span), so a settled IBAN that later beat an unrelated rival on
+  rule priority is audited as `RulePriority`. An IBAN whose family was never
+  settled by policy still takes the missing-anchor fallback. Enumeration
+  script: `scripts/bench/collision_settled_enumeration.py`.
 
 - **The OpenAI Privacy Filter safety net now reads OPF span offsets as
   characters, not bytes.** Shipped defect since the `openai_filter` backend

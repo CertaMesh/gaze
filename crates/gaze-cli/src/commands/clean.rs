@@ -18,7 +18,7 @@ use crate::pipeline::{run_clean, CleanOptions};
 /// declaration plus a hand-written destructure/restructure pair.
 #[derive(ClapArgs, Debug)]
 pub(crate) struct Args {
-    /// Path to policy.toml. Required once the policy loader lands (issue #3).
+    /// Path to policy.toml. Without it, the bundled `core` rulepack runs.
     #[arg(long)]
     pub(crate) policy: Option<PathBuf>,
     /// Output format. Only `json` is supported today.

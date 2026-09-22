@@ -4,7 +4,7 @@ Usage: gaze clean [OPTIONS]
 
 Options:
       --policy <POLICY>
-          Path to policy.toml. Required once the policy loader lands (issue #3)
+          Path to policy.toml. Without it, the bundled `core` rulepack runs
       --format <FORMAT>
           Output format. Only `json` is supported today [default: json]
       --session-ttl <SESSION_TTL>
