@@ -22,6 +22,11 @@ any document at all. Every changed document is listed with the reason class:
 
     family-derived      base left the family token raw, head tokenizes it
                         (the fix; only under a member-only policy)
+    family-residual     another class won a sub-run in both arms (phone.national.de
+                        under de-DE); base left the losing IBAN's remaining bytes
+                        raw, head covers them with family-class residual tokens
+                        (residual coverage previews the loser's standalone view,
+                        the family class, whose action now derives to tokenize)
 
 Any other transition is UNEXPLAINED and fails the run.
 
@@ -106,6 +111,13 @@ def classify(base_cls: str, base_bytes: int, head_cls: str, head_bytes: int, spa
     """Reason class for a document whose IBAN view differs between the arms."""
     if base_cls == "raw" and head_cls == FAMILY_TOKEN_CLASS and head_bytes == span:
         return "family-derived"
+    if (
+        base_cls != "raw"
+        and FAMILY_TOKEN_CLASS in head_cls.split("+")
+        and head_bytes > base_bytes
+        and set(base_cls.split("+")) <= set(head_cls.split("+"))
+    ):
+        return "family-residual"
     if base_bytes > head_bytes:
         return "LOST"
     return "UNEXPLAINED"
@@ -177,7 +189,7 @@ def main() -> int:
                     stats["lost_bytes"] > 0
                     or stats["missing_response"] > 0
                     or (not may_change and changed)
-                    or any(reason != "family-derived" for reason in reasons)
+                    or any(reason not in ("family-derived", "family-residual") for reason in reasons)
                 )
                 failed |= arm_failed
                 report["arms"][arm] = {

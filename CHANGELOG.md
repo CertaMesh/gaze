@@ -431,7 +431,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   v0.11; the north star does not let protection depend on reading a warning.
   The action is now derived from the member rules (see Changed), through the
   one resolver every surface shares (`gaze clean`, `gaze daemon`, proxy, MCP,
-  index). Solo todo #3746.
+  index). The residual-coverage cell path, which re-implemented the lookup
+  inline, now uses the same resolver: under de-DE a long no-cue IBAN whose
+  sub-run `phone.national.de` wins previously left the rest raw, and with the
+  derivation alone would have failed the whole document closed
+  (`residual policy preview mismatch`); its remaining bytes now carry
+  family-class residual tokens. Solo todo #3746.
 - **Security: an IBAN followed by an upper-case word could match nothing at
   all.** Whichever of two outcomes an adopter got depended only on whether the
   IBAN's digits happened to be Luhn-valid: for BE, and for any IBAN whose BBAN

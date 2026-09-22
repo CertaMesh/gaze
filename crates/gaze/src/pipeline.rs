@@ -1122,11 +1122,11 @@ impl Pipeline {
             });
             let (span, class, replacement, action, owned, origin, trace_sources) = if is_residual {
                 let (id, cell) = residuals.next().expect("peeked residual");
+                // The same resolver the planner previewed with: a residual cell
+                // of a family class derives its action from the members too.
                 let actual = self
-                    .rules
-                    .iter()
-                    .find_map(|rule| rule.action(&cell.class, &build_context(field_name)))
-                    .unwrap_or(Action::Preserve);
+                    .resolve_action(&cell.class, &build_context(field_name))
+                    .action;
                 if actual != Action::Tokenize {
                     return Err(clean_to_raw_mapping_error(
                         "residual policy preview mismatch",

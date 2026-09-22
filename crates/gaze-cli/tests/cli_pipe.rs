@@ -5143,6 +5143,11 @@ fn assert_no_group_survives(clean: &str, input: &str, prefix: &str, suffix: &str
         .strip_prefix(prefix)
         .and_then(|rest| rest.strip_suffix(suffix))
         .expect("fixture prefix and suffix");
+    // The random eight-hex session prefix of a token can contain a short
+    // digit group by chance (`<2d752c57:` holds `57`); strip it first.
+    let clean = regex::Regex::new(r"[0-9a-f]{8}:")
+        .unwrap()
+        .replace_all(clean, ":");
     for (index, group) in value.split(' ').enumerate() {
         assert!(
             !clean.contains(group),

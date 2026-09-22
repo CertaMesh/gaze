@@ -1959,6 +1959,11 @@ fn assert_no_group_survives(clean: &str, input: &str, prefix: &str, suffix: &str
         .strip_prefix(prefix)
         .and_then(|rest| rest.strip_suffix(suffix))
         .expect("fixture prefix and suffix");
+    // The random eight-hex session prefix of a token can contain a short
+    // digit group by chance (`<2d752c57:` holds `57`); strip it first.
+    let clean = regex::Regex::new(r"[0-9a-f]{8}:")
+        .unwrap()
+        .replace_all(clean, ":");
     for (index, group) in value.split(' ').enumerate() {
         assert!(
             !clean.contains(group),
@@ -2336,4 +2341,64 @@ fn protective_actions_execute_on_family_tokens_and_leak_no_original_byte() {
             );
         }
     }
+}
+
+/// Under de-DE, `phone.national.de` wins a sub-run of a long no-cue IBAN on rule
+/// priority and the unanchored IBAN candidate loses. Residual coverage then
+/// previews the loser's standalone view, the family class, and admits the
+/// evidence because the family action derives to `tokenize`; the residual
+/// cell's own action lookup must derive the same way, or the whole document
+/// fails closed with `residual policy preview mismatch` (found by the
+/// policy-matrix enumeration, 976 documents).
+#[test]
+fn unanchored_iban_evidence_beside_a_phone_win_is_covered_by_family_residual_cells() {
+    let mut policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Tokenize),
+            ("custom:phone", Action::Tokenize),
+            ("custom:postal_code", Action::Tokenize),
+        ],
+        Action::Preserve,
+    );
+    policy.locale = Some(vec![LocaleTag::DeDe]);
+    let input = "Bitte überweisen auf AD56 7551 0585 4139 9502 9893 BIC";
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let logger = MemoryLogger::default();
+    let pipeline =
+        build_pipeline_builder(&policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("builder")
+            .redaction_logger(logger.clone())
+            .build()
+            .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+
+    let clean = clean_text(
+        pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                active_locales.as_slice(),
+                &gaze::DictionaryBundle::default(),
+            )
+            .expect("the residual cell must resolve like its preview"),
+    );
+
+    assert!(clean.contains(":Custom:phone_"), "phone win kept: {clean}");
+    assert!(
+        clean.contains(FAMILY_TOKEN_MARKER),
+        "the losing IBAN's evidence is covered by family residual tokens: {clean}"
+    );
+    assert_no_group_survives(&clean, input, "Bitte überweisen auf ", " BIC");
+    assert!(
+        logger
+            .entries()
+            .iter()
+            .any(
+                |entry| entry.recognizer_id.as_deref() == Some("phone.national.de")
+                    && !entry.conflict_loser
+            ),
+        "fixture must exercise the phone win, or it pins nothing"
+    );
 }
