@@ -293,6 +293,12 @@ def run(binary: str, policy: Path, docs: list[dict]) -> list[dict]:
 TOKEN = re.compile(r"<[0-9a-f]{8}:[^>]+>")
 
 
+def blanked(response: dict) -> str | None:
+    """The clean text with every token replaced by one NUL, or None without clean text."""
+    clean = response.get("clean_text")
+    return None if clean is None else re.sub(r"\x00+", "\x00", TOKEN.sub("\x00", clean))
+
+
 def raw_residue(response: dict, doc: dict) -> str | None:
     """What survives untokenized where the IBAN was, or None if fully covered.
 
@@ -387,6 +393,7 @@ def main() -> int:
             gained_by_trailer = defaultdict(int)
             recovered_by_trailer = Counter()
             changed_by_trailer = Counter()
+            lost_bytes_by_trailer = Counter()
             identifier_glued_changes = []
             lost_examples = []
             partial_examples = []
@@ -465,8 +472,12 @@ def main() -> int:
                 if base_residue is not None and fix_residue is None:
                     stats["recovered"] += 1
                     recovered_by_trailer[doc["trailer"]] += 1
-                if b.get("clean_text") != f.get("clean_text"):
+                # Session token hex differs per run, so "changed" is judged on the
+                # token-blanked text, the same view `raw_residue` scores.
+                if blanked(b) != blanked(f):
                     changed_by_trailer[doc["trailer"]] += 1
+                    if lost:
+                        lost_bytes_by_trailer[doc["trailer"]] += lost
                     # A digit or underscore glued to the IBAN could be more identifier: the
                     # boundary must refuse it in the fix arm exactly as `\b` did in base, so
                     # the two arms must agree byte for byte on those documents.
@@ -534,6 +545,7 @@ def main() -> int:
                 "gained_bytes_by_trailer": dict(gained_by_trailer),
                 "recovered_by_trailer": dict(recovered_by_trailer),
                 "changed_by_trailer": dict(changed_by_trailer),
+                "lost_bytes_by_trailer": dict(lost_bytes_by_trailer),
                 "identifier_glued_changed": stats["identifier_glued_changed"],
                 "identifier_glued_examples": identifier_glued_changes,
                 "lost_examples": lost_examples,

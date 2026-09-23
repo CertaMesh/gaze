@@ -128,7 +128,6 @@ impl RegexDetector {
             PiiClass::Email,
         )?;
         detector.ascii_email_boundary = true;
-        detector.identifier_run_boundary = false;
         Ok(detector)
     }
 

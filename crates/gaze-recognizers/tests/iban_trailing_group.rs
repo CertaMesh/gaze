@@ -105,6 +105,40 @@ fn pipeline_for(locales: &[LocaleTag]) -> Pipeline {
         .expect("pipeline")
 }
 
+/// The same bundle with `custom:phone` tokenized too, for the shape where `phone.national.de`
+/// claims a sub-run of the IBAN: with phone preserved, a preserve winner would leave those
+/// bytes raw and hide what the fixture is about.
+fn pipeline_tokenizing_phone() -> Pipeline {
+    let rulepacks: Vec<Rulepack> = ["core", "locale-de", "locale-en"]
+        .into_iter()
+        .map(|name| {
+            Rulepack::load(RulepackSource::Embedded(
+                embedded(name).unwrap_or_else(|| panic!("{name} rulepack")),
+            ))
+            .unwrap_or_else(|error| panic!("{name} loads: {error}"))
+        })
+        .collect();
+    let mut policy = gaze::Policy::default();
+    policy.rules = ["iban", "credit_card", "phone"]
+        .into_iter()
+        .map(|class| RuleSpec::Class {
+            class: custom(class),
+            action: Action::Tokenize,
+        })
+        .chain(std::iter::once(RuleSpec::Default {
+            action: Action::Preserve,
+        }))
+        .collect();
+    policy.rulepacks.bundled = vec![
+        "core".to_string(),
+        "locale-de".to_string(),
+        "locale-en".to_string(),
+    ];
+    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(LOCALES));
+    gaze_assembly::build_pipeline(&policy, &empty_context(), &rulepacks, &chain, None)
+        .expect("pipeline")
+}
+
 /// One pipeline for the whole file. Building it per document dominated the runtime of the
 /// every-country fixture, which cleans several thousand documents.
 fn shared_pipeline() -> &'static Pipeline {
@@ -571,11 +605,12 @@ fn label_glued_to_a_compact_iban_stays_outside_the_token() {
     // The shipped repros, verbatim.
     assert_iban_tokenized("IBAN ", "AT611904300234573201", "BIC");
     assert_iban_tokenized("IBAN:", "AT611904300234573201", "BIC:BKAUATWW");
+    // The spaced German form is deliberately absent here: see
+    // `label_glued_to_a_spaced_german_iban_leaves_no_byte_raw_but_is_fragmented` below.
     for iban in [
         "AT611904300234573201",
         "AT61 1904 3002 3457 3201",
         "DE89370400440532013000",
-        "DE89 3704 0044 0532 0130 00",
     ] {
         for prefix in ["IBAN ", "IBAN:", "IBAN: "] {
             for trailer in [
@@ -602,17 +637,54 @@ fn label_glued_to_a_compact_iban_stays_outside_the_token() {
     }
 }
 
+/// A label glued to a SPACED German IBAN is only partly recovered, and this pins exactly how.
+///
 /// `phone.national.de` opens with a no-capture branch that consumes a 22-character IBAN grouping
-/// so its phone branches never see `0532 0130` inside a German IBAN. That branch used to end in
-/// `\b` as well, so a glued label switched it off, the phone rule (priority 85) claimed the
-/// inner run, and the IBAN token was fragmented around a phone token (or, with `custom:phone`
-/// preserved as here, the whole IBAN stayed raw). This is the fixture that reddens when that
-/// trailing `\b` comes back.
+/// so its phone branches never see `0532 0130` inside a German IBAN. That branch keeps its
+/// trailing `\b` (dropping it uncovered 7,212 bytes on digit-glued documents, solo todo #3764),
+/// so a glued label stops the consumption, the phone rule (priority 85) claims `0532 0130`, and
+/// the IBAN token is split around a phone token. The axis-1 property that must hold is that no
+/// IBAN byte leaves the process under a policy that tokenizes every claiming class: main left
+/// `DE89 3704 0044 … 00BIC` raw beside one phone token. The compact German form tokenizes whole
+/// (previous fixture).
 #[test]
-fn german_phone_rule_does_not_fragment_a_spaced_iban_glued_to_a_label() {
-    for trailer in ["BIC", "BIC:COBADEFF", "EUR", "Bank"] {
-        assert_iban_tokenized("IBAN ", "DE89 3704 0044 0532 0130 00", trailer);
-        assert_iban_tokenized("IBAN:", "DE89 3704 0044 0532 0130 00", trailer);
+fn label_glued_to_a_spaced_german_iban_leaves_no_byte_raw_but_is_fragmented() {
+    let pipeline = pipeline_tokenizing_phone();
+    let iban = "DE89 3704 0044 0532 0130 00";
+    for (prefix, trailer) in [
+        ("IBAN ", "BIC"),
+        ("IBAN:", "BIC:COBADEFF"),
+        ("IBAN ", "EUR"),
+    ] {
+        let text = format!("{prefix}{iban}{trailer}");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(text.clone()),
+                LOCALES,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text");
+        };
+        // Adjacent tokens collapse to one blank: the property is coverage, not token count.
+        let blanked = gaze::token_shape::pattern()
+            .replace_all(&cleaned, TOKEN_BLANK)
+            .replace(concat!("\u{0}", "\u{0}", "\u{0}"), TOKEN_BLANK);
+        assert_eq!(
+            blanked,
+            format!("{prefix}{TOKEN_BLANK}{trailer}"),
+            "every IBAN byte must be covered and the label must stay raw: {}",
+            shape_of(&cleaned)
+        );
+        assert!(
+            cleaned.contains(":Custom:phone_") && cleaned.matches(":Custom:iban_").count() == 2,
+            "this pins the fragmented shape <iban_1><phone_1><iban_2>; if the IBAN is now whole, \
+             todo #3764 is done and the fixture belongs in the glued-label test: {}",
+            shape_of(&cleaned)
+        );
     }
 }
 
@@ -624,7 +696,8 @@ fn german_phone_rule_does_not_fragment_a_spaced_iban_glued_to_a_label() {
 fn non_ascii_letters_glued_to_an_iban_are_a_word_not_more_identifier() {
     for trailer in ["Überweisung", "über", "ÄrgerBIC", "Straße", "élan"] {
         assert_iban_tokenized("IBAN ", "AT611904300234573201", trailer);
-        assert_iban_tokenized("IBAN ", "DE89 3704 0044 0532 0130 00", trailer);
+        assert_iban_tokenized("IBAN ", "AT61 1904 3002 3457 3201", trailer);
+        assert_iban_tokenized("IBAN ", "DE89370400440532013000", trailer);
     }
 }
 

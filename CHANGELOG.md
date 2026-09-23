@@ -469,10 +469,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `…3201und` and `…3201Überweisung` behave alike), and rejects it when the run
   holds a digit or an underscore. `RegexDetector` applies it to every
   `iban_mod97`-validated recognizer, and the pattern's trailing `\b` is gone.
-  The IBAN-consuming branch of `phone.national.de` lost its trailing `\b` for
-  the same reason: with a label glued to a spaced German IBAN it stopped
-  consuming, the phone branches saw `0532 0130` inside the IBAN, and the phone
-  rule (priority 85) fragmented the IBAN token around a phone token.
+  One shape is recovered only in part: a label glued to a SPACED German IBAN
+  (`IBAN DE89 3704 0044 0532 0130 00BIC`) is now a candidate, but
+  `phone.national.de` (priority 85) still wins the `0532 0130` sub-run, because
+  its 22-character IBAN-consuming branch ends in `\b` and stops consuming at the
+  glued label. Under a policy that tokenizes `custom:phone` every byte is
+  covered (`<iban_1><phone_1><iban_2>`, where main left 18 bytes raw beside one
+  phone token); under a phone-preserving policy it stays raw as on main.
+  Dropping that `\b` too was measured and rejected: it makes the branch consume
+  the first 22 characters of every longer spaced IBAN, which repairs 1,866
+  fragmented documents per German policy but uncovers 7,212 bytes that an
+  accidental phone token had hidden on digit-glued documents, so it is a
+  separate change with its own trade (solo todo #3764).
   **Residual gap, by design:** an IBAN glued to a digit or an underscore
   (`…32011234`, `…3201_x`) stays raw exactly as before, because it is
   indistinguishable from a longer opaque identifier; accepting every validated
@@ -487,7 +495,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/bench/iban_trailing_word_enumeration.py`, now 98,256 documents with
   ten glued trailers, scored on output bytes. Fixtures in
   `crates/gaze-recognizers/tests/iban_trailing_group.rs` pin both directions
-  and the phone interplay; the enumeration script now reads the registry
+  and the spaced-German phone interplay; the enumeration script now reads the registry
   length table out of `crates/gaze-types/src/lib.rs` instead of carrying a
   third hand-copied table. Solo todo #3756.
 

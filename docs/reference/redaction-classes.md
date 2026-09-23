@@ -375,8 +375,7 @@ format-basis and run at every locale including `--locale=global`. An adopter
 who must not tokenize Canadian, UK, or Irish postal codes cannot suppress them
 with a locale chain and has to disable the recognizer.
 
-`iban.structural` carries a leading word boundary but no trailing one, and
-neither does the IBAN-consuming branch of `phone.national.de`. A compact IBAN
+`iban.structural` carries a leading word boundary but no trailing one. A compact IBAN
 glued to the next label (`IBAN AT611904300234573201BIC`, the dense footer
 `IBAN:<value>BIC:<value>`) is therefore a candidate, and the trailing boundary
 is decided in code by `gaze_types::word_run_extends_identifier`, which reads
@@ -397,6 +396,13 @@ The Dataiku EN/DE holdout, the A4 negative corpus and `docs/**/*.md` are
 byte-identical under either rule (the A4 corpus contains no registry-shaped
 mod-97-valid token), so the evidence for the rule is the synthetic enumeration
 in `scripts/bench/iban_trailing_word_enumeration.py` (solo todo #3756).
+One related shape is only partly covered: a label glued to a spaced German
+IBAN (`IBAN DE89 3704 0044 0532 0130 00BIC`) is a candidate, but
+`phone.national.de` (priority 85) still claims the `0532 0130` sub-run, because
+its 22-character IBAN-consuming branch keeps its trailing `\b` and stops
+consuming at the glued label; with `custom:phone` tokenized every byte is
+covered as `<iban_1><phone_1><iban_2>`, with it preserved the IBAN stays raw
+as before (solo todo #3764). Compact German IBANs glued to a label tokenize whole.
 
 ## Residual coverage
 

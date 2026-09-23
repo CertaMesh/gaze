@@ -239,12 +239,15 @@ kind = "regex"
 # parser-backed validator while preserving identifier-attached rejection.
 # Broad candidate scanning stays tenant-agnostic. Leading no-capture branches
 # consume country-neutral 22-character IBAN grouping and short 4+5 numeric ID
-# shapes before phone parsing sees phone-like substrings. The IBAN branch has
-# no trailing `\b` on purpose, matching `iban.structural`: a label glued to
-# the IBAN (`… 0130 00BIC`) must not stop it consuming, or the phone branches
-# see `0532 0130` inside the IBAN and this rule (priority 85) fragments the
-# IBAN token around a phone token (solo todo #3756).
-pattern = '''(?x)\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){4}\s?[A-Z0-9]{2}|(?:^|[^[:alnum:]_+])0[1-9]\d{2}[\s./-]*\d{5}\b|(?:^|[^[:alnum:]_+])((?:\+49[\s.-]*|0)[1-9]\d{1,4}[\s./-]*\d(?:[\s./-]*\d){4,10})\b'''
+# shapes before phone parsing sees phone-like substrings. The IBAN branch
+# keeps its trailing `\b` although `iban.structural` dropped its own (solo
+# todo #3756): without it the branch consumes the first 22 characters of every
+# LONGER spaced IBAN too, which uncovered 7,212 bytes an accidental phone token
+# had hidden on digit-glued documents. The cost of keeping it is that a label
+# glued to a spaced German IBAN (`… 0130 00BIC`) stops the consumption and
+# this rule (priority 85) still claims `0532 0130` inside the IBAN; measured
+# and filed as solo todo #3764.
+pattern = '''(?x)\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){4}\s?[A-Z0-9]{2}\b|(?:^|[^[:alnum:]_+])0[1-9]\d{2}[\s./-]*\d{5}\b|(?:^|[^[:alnum:]_+])((?:\+49[\s.-]*|0)[1-9]\d{1,4}[\s./-]*\d(?:[\s./-]*\d){4,10})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
