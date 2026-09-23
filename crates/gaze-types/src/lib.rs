@@ -2254,6 +2254,21 @@ impl Action {
             self
         }
     }
+
+    /// Whether the action replaces the span it applies to: every action but
+    /// `Preserve` (the actions ranked above 0 by [`Action::strictness_rank`]).
+    ///
+    /// Residual coverage admits a losing candidate's evidence only when every
+    /// action in its overlap component is protective. The gate used to be "is
+    /// exactly `tokenize`", which let a stricter action on a neighbour, or on
+    /// the family class a loser resolves through, silently drop coverage of
+    /// the loser's remaining bytes.
+    pub const fn is_protective(self) -> bool {
+        match self {
+            Self::Tokenize | Self::Redact | Self::Generalize | Self::FormatPreserve => true,
+            Self::Preserve => false,
+        }
+    }
 }
 
 /// Conflict resolution tier that selected or rejected a candidate.
@@ -3338,6 +3353,31 @@ impl DictionaryEntry {
     /// Returns configured dictionary terms.
     pub fn terms(&self) -> &[String] {
         &self.terms
+    }
+}
+
+#[cfg(test)]
+mod action_tests {
+    use super::*;
+
+    /// `is_protective` and `strictness_rank` are two views of one order: an
+    /// action protects the span exactly when it ranks above `preserve`.
+    #[test]
+    fn protective_means_ranked_above_preserve() {
+        for action in [
+            Action::Tokenize,
+            Action::Redact,
+            Action::FormatPreserve,
+            Action::Generalize,
+            Action::Preserve,
+        ] {
+            assert_eq!(
+                action.is_protective(),
+                action.strictness_rank() > Action::Preserve.strictness_rank(),
+                "{action:?}"
+            );
+        }
+        assert!(!Action::Preserve.is_protective());
     }
 }
 

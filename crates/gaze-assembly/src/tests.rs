@@ -1874,6 +1874,32 @@ fn uncovered_family_classes_respects_explicit_family_rule() {
 }
 
 #[test]
+fn uncovered_family_classes_flags_a_member_rule_shadowed_by_default() {
+    // Review 3746 finding 6: a member rule pasted AFTER the default rule is
+    // dead too, and the family token then falls to the default. The old notice
+    // fired for this shape; the reworked one must keep doing so.
+    let mut policy = iban_preserve_default_policy();
+    policy.rules = vec![
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+        RuleSpec::Class {
+            class: PiiClass::custom("iban").expect("valid custom class"),
+            action: Action::Tokenize,
+        },
+    ];
+    let rulepacks = [embedded_rulepack("core")];
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+
+    let uncovered = uncovered_collision_family_classes(&policy, &rulepacks, &active_locales);
+
+    assert!(
+        uncovered.contains(&"custom:family:payment-card-or-iban".to_string()),
+        "a member rule shadowed by an earlier default rule shows intent and must be flagged: {uncovered:?}"
+    );
+}
+
+#[test]
 fn uncovered_family_classes_ignores_family_rule_shadowed_by_default() {
     let mut policy = iban_preserve_default_policy();
     // Pasting the family rule AFTER the default rule (the natural end-of-file
@@ -1919,6 +1945,11 @@ const TRAILING_NUMBER_IBANS: [&str; 3] = [
     "Bitte überweisen auf SA77 3476 4281 2318 7317 7425 1234",
 ];
 const FAMILY_TOKEN_MARKER: &str = ":Custom:family:payment-card-or-iban_";
+/// No cue, long IBAN: under de-DE `phone.national.de` wins a sub-run on rule
+/// priority, the unanchored IBAN candidate loses, and its remaining bytes are
+/// only covered by residual cells previewed on its standalone view, the family
+/// class.
+const PHONE_WIN_IBAN: &str = "Bitte überweisen auf AD56 7551 0585 4139 9502 9893 BIC";
 
 fn payment_family_policy(rules: &[(&str, Action)], default: Action) -> gaze::Policy {
     let mut policy = gaze::Policy::default();
@@ -2362,7 +2393,7 @@ fn unanchored_iban_evidence_beside_a_phone_win_is_covered_by_family_residual_cel
         Action::Preserve,
     );
     policy.locale = Some(vec![LocaleTag::DeDe]);
-    let input = "Bitte überweisen auf AD56 7551 0585 4139 9502 9893 BIC";
+    let input = PHONE_WIN_IBAN;
     let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let logger = MemoryLogger::default();
@@ -2401,4 +2432,94 @@ fn unanchored_iban_evidence_beside_a_phone_win_is_covered_by_family_residual_cel
             ),
         "fixture must exercise the phone win, or it pins nothing"
     );
+}
+
+/// Product path (`build_pipeline_builder`, core + locale-de) with the redaction
+/// log attached, so a fixture can prove it exercised the sub-run win it pins.
+fn clean_payment_logged(policy: &gaze::Policy, input: &str) -> (String, MemoryLogger) {
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let logger = MemoryLogger::default();
+    let pipeline =
+        build_pipeline_builder(policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("builder")
+            .redaction_logger(logger.clone())
+            .build()
+            .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(
+        pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                active_locales.as_slice(),
+                &gaze::DictionaryBundle::default(),
+            )
+            .expect("a residual cell must resolve like its preview"),
+    );
+    (clean, logger)
+}
+
+/// The phone-win document must leave the process with the phone token, family
+/// residual tokens over the losing IBAN's bytes, and no IBAN group readable.
+fn assert_phone_win_iban_fully_covered(clean: &str, logger: &MemoryLogger) {
+    assert!(clean.contains(":Custom:phone_"), "phone win kept: {clean}");
+    assert!(
+        clean.contains(FAMILY_TOKEN_MARKER),
+        "the losing IBAN's evidence is covered by family residual tokens: {clean}"
+    );
+    assert_no_group_survives(clean, PHONE_WIN_IBAN, "Bitte überweisen auf ", " BIC");
+    assert!(
+        logger
+            .entries()
+            .iter()
+            .any(
+                |entry| entry.recognizer_id.as_deref() == Some("phone.national.de")
+                    && !entry.conflict_loser
+            ),
+        "fixture must exercise the phone win, or it pins nothing"
+    );
+}
+
+/// Review 3746 finding 7: one member (`custom:credit_card`) set to `redact`
+/// makes the losing IBAN's standalone view, the family class, derive `redact`.
+/// Residual coverage used to admit a loser only when its previewed action was
+/// exactly `tokenize`, so raising the family action silently dropped every
+/// residual cell and the IBAN bytes beside the phone win shipped raw (872
+/// documents in the reviewer's 192-arm matrix, `AD56 7551` and `9893` raw).
+/// Admission is "the resolved action protects the span"; residual cells keep
+/// emitting tokens.
+#[test]
+fn a_redacting_member_keeps_the_losing_iban_evidence_covered() {
+    let policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Redact),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Tokenize,
+    );
+
+    let (clean, logger) = clean_payment_logged(&policy, PHONE_WIN_IBAN);
+
+    assert_phone_win_iban_fully_covered(&clean, &logger);
+}
+
+/// The pre-existing hole behind finding 7: an explicit `default = redact`
+/// reached the same `tokenize`-only gate on main, where the family class took
+/// the default, so the losing IBAN's bytes shipped raw there too.
+#[test]
+fn a_redact_default_keeps_the_losing_iban_evidence_covered() {
+    let policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Tokenize),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Redact,
+    );
+
+    let (clean, logger) = clean_payment_logged(&policy, PHONE_WIN_IBAN);
+
+    assert_phone_win_iban_fully_covered(&clean, &logger);
 }

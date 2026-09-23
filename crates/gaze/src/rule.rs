@@ -366,6 +366,9 @@ mod tests {
         );
     }
 
+    /// Review 3746 finding 3: only a member whose EXPLICIT rule produced the
+    /// derived action is credited. `credit_card` reaches `tokenize` through the
+    /// same default here and names no rule, so it is never the credit.
     #[test]
     fn a_member_as_strict_as_the_default_is_credited() {
         let resolved = chain(
@@ -378,9 +381,29 @@ mod tests {
 
         assert_eq!(
             resolved.derived.and_then(|derived| derived.member_class),
-            Some(custom("credit_card")),
-            "the first member in class order at the default's strictness is credited"
+            Some(custom("iban")),
+            "the member whose explicit rule is as strict as the default is credited"
         );
+    }
+
+    #[test]
+    fn a_member_resolved_by_the_default_is_never_credited() {
+        for rules in [
+            vec![RuleEntry::new(DefaultRule::new(Action::Tokenize))],
+            vec![
+                class_rule("credit_card", Action::Preserve),
+                RuleEntry::new(DefaultRule::new(Action::Tokenize)),
+            ],
+        ] {
+            let resolved = chain(rules, &family());
+
+            assert_eq!(resolved.action, Action::Tokenize);
+            assert_eq!(
+                resolved.derived,
+                Some(DerivedFamilyAction::new(Action::Tokenize, None)),
+                "the family's own default applied; no member rule set the action"
+            );
+        }
     }
 
     #[test]
