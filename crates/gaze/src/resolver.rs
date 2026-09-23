@@ -387,6 +387,23 @@ fn arbitrate(
         }
     }
 
+    // Containment-precedence rung: a candidate that wholly contains a
+    // candidate of another class wins the whole span as one token, unless it
+    // is less certain than what it would swallow (todo #3740). It sits after
+    // collision-family policy and the anchor rung so those keep deciding what
+    // they decide today, and before the structured-containment rung, which it
+    // generalises: that rung still catches a custom container the guard
+    // refuses (a plain-regex URL over a validated email).
+    if let Some(container_is_candidate) =
+        containment_precedence(existing, candidate, overlap, policy, anchor_ctx)
+    {
+        return if container_is_candidate {
+            Arbitration::CandidateWins(ConflictTier::ContainmentPrecedence)
+        } else {
+            Arbitration::ExistingWins(ConflictTier::ContainmentPrecedence)
+        };
+    }
+
     // Structured-containment rung: a builtin-class span strictly inside a
     // custom-class structured span never evicts its container. Without it the
     // base ladder's class priority (Email/Name/Organization/Location above
@@ -428,6 +445,83 @@ fn structured_containment(
     let structured_container = matches!(container.class, PiiClass::Custom(_));
     let builtin_enclosed = !matches!(enclosed.class, PiiClass::Custom(_));
     (structured_container && builtin_enclosed).then_some(candidate_encloses)
+}
+
+/// Certainty of a candidate's evidence, read from fields it already carries.
+/// The order is the guard of the containment-precedence rung: a container
+/// may swallow a differently-classed candidate only when its tier is at
+/// least the contained candidate's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum EvidenceTier {
+    /// A learned NER span (the `ner` recognizer, `ner/<backend>` source).
+    Learned,
+    /// A plain regex or dictionary term.
+    Pattern,
+    /// An anchored or cue-structured match (`structural.*` source, or a
+    /// mandatory anchor found in context).
+    Anchored,
+    /// A validator passed: mod-97, Luhn, RFC email, E.164, ... (the
+    /// candidate carries a canonical form).
+    Validated,
+}
+
+fn evidence_tier(
+    candidate: &Candidate,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
+) -> EvidenceTier {
+    if candidate.canonical_form.is_some() {
+        return EvidenceTier::Validated;
+    }
+    if candidate.source.starts_with("structural.") {
+        return EvidenceTier::Anchored;
+    }
+    if let Some(ctx) = anchor_ctx {
+        if matches!(
+            ctx.resolver
+                .resolve(candidate, ctx.input, policy, ctx.locale_chain),
+            AnchorOutcome::Found
+        ) {
+            return EvidenceTier::Anchored;
+        }
+    }
+    if candidate.recognizer_id == "ner"
+        || candidate.source == "ner"
+        || candidate.source.starts_with("ner/")
+    {
+        return EvidenceTier::Learned;
+    }
+    EvidenceTier::Pattern
+}
+
+/// Detects the containment-precedence shape and says which side is the
+/// container: `Some(true)` when `candidate` wholly encloses a
+/// differently-classed `existing` and may swallow it, `Some(false)` when
+/// `existing` encloses `candidate` and may, `None` when the spans are not
+/// nested, share a class, or the container's evidence tier is below the
+/// contained candidate's. Equal tiers go to the container: on the reference
+/// letter the phone rule is validator-backed like the IBAN, and breaking the
+/// tie by score hands the middle of the IBAN to the phone. Geometry and
+/// tiers decide, never arrival order. Partial overlaps and same-class pairs
+/// keep today's rungs.
+fn containment_precedence(
+    existing: &Candidate,
+    candidate: &Candidate,
+    overlap: Overlap,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
+) -> Option<bool> {
+    if overlap != Overlap::Containment || existing.class == candidate.class {
+        return None;
+    }
+    let candidate_encloses = contains(&candidate.span, &existing.span);
+    let (container, enclosed) = if candidate_encloses {
+        (candidate, existing)
+    } else {
+        (existing, candidate)
+    };
+    (evidence_tier(container, policy, anchor_ctx) >= evidence_tier(enclosed, policy, anchor_ctx))
+        .then_some(candidate_encloses)
 }
 
 fn requires_anchor(
@@ -1310,11 +1404,13 @@ mod tests {
     }
 
     /// An NER organisation token strictly inside a rule-recognised URL: the
-    /// structured container keeps the slot whichever candidate arrives first,
-    /// the enclosed span is recorded as a merged source, and the rung that
-    /// decided it is named truthfully. Before this rung existed the enclosed
-    /// builtin span won on `ClassPriority` and `remove_overlaps` dropped the
-    /// whole URL, leaving its head and tail raw around a mid-word token.
+    /// container keeps the slot whichever candidate arrives first, the
+    /// enclosed span is recorded as a merged source, and the rung that
+    /// decided it is named truthfully: containment precedence, a pattern-tier
+    /// container over a learned-tier sub-token. Before the containment rungs
+    /// existed the enclosed builtin span won on `ClassPriority` and
+    /// `remove_overlaps` dropped the whole URL, leaving its head and tail raw
+    /// around a mid-word token.
     #[test]
     fn builtin_sub_span_does_not_evict_custom_container() {
         for container_first in [true, false] {
@@ -1343,7 +1439,7 @@ mod tests {
                 PiiClass::custom("url").expect("valid custom class")
             );
             assert_eq!(resolved[0].recognizer_id, "url.anchored");
-            assert_eq!(resolved[0].decided_by, ConflictTier::StructuredContainment);
+            assert_eq!(resolved[0].decided_by, ConflictTier::ContainmentPrecedence);
             assert_eq!(resolved[0].merged_sources, vec!["ner".to_string()]);
         }
     }
@@ -1372,7 +1468,41 @@ mod tests {
             resolved[0].class,
             PiiClass::custom("url").expect("valid custom class")
         );
-        assert_eq!(resolved[0].decided_by, ConflictTier::StructuredContainment);
+        assert_eq!(resolved[0].decided_by, ConflictTier::ContainmentPrecedence);
+    }
+
+    /// The structured-containment rung still names the case the guard
+    /// refuses: a plain custom container over a validator-backed builtin
+    /// sub-span (a URL regex over an RFC-validated email) keeps the slot for
+    /// the todo #3025 reason, and the row says `StructuredContainment`.
+    #[test]
+    fn structured_containment_still_names_a_guard_refused_builtin_sub_span() {
+        for container_first in [true, false] {
+            let container = prioritized(
+                candidate(
+                    0..24,
+                    PiiClass::custom("url").expect("valid custom class"),
+                    0.80,
+                    "url.anchored",
+                ),
+                85,
+            );
+            let mut enclosed =
+                prioritized(candidate(8..20, PiiClass::Email, 0.99, "email.global"), 90);
+            enclosed.canonical_form = Some("a@b.invalid".into());
+            let input = if container_first {
+                vec![container, enclosed]
+            } else {
+                vec![enclosed, container]
+            };
+
+            let resolved = resolve_candidates(input);
+
+            assert_eq!(resolved.len(), 1, "container_first={container_first}");
+            assert_eq!(resolved[0].recognizer_id, "url.anchored");
+            assert_eq!(resolved[0].decided_by, ConflictTier::StructuredContainment);
+            assert_eq!(resolved[0].merged_sources, vec!["email.global".to_string()]);
+        }
     }
 
     /// Scope pin: the rung is containment-only. A builtin span that merely
@@ -1398,12 +1528,14 @@ mod tests {
         assert_eq!(resolved[0].decided_by, ConflictTier::ClassPriority);
     }
 
-    /// Scope pin: containment between two custom-class spans is untouched and
-    /// keeps going through the base ladder (here rule priority).
+    /// Containment precedence (todo #3740): a custom span that wholly
+    /// contains a differently-classed custom span wins the whole span as one
+    /// token when its evidence tier is at least the contained span's, and
+    /// the rung, not the base ladder, is named on the row.
     #[test]
-    fn custom_inside_custom_containment_still_uses_the_base_ladder() {
-        let resolved = resolve_candidates(vec![
-            prioritized(
+    fn custom_inside_custom_containment_goes_to_the_container() {
+        for container_first in [true, false] {
+            let container = prioritized(
                 candidate(
                     0..13,
                     PiiClass::custom("tax_number").expect("valid custom class"),
@@ -1411,8 +1543,8 @@ mod tests {
                     "tax_number.cue_anchored",
                 ),
                 84,
-            ),
-            prioritized(
+            );
+            let enclosed = prioritized(
                 candidate(
                     8..13,
                     PiiClass::custom("postal_code").expect("valid custom class"),
@@ -1420,12 +1552,284 @@ mod tests {
                     "postal.de",
                 ),
                 70,
+            );
+            let input = if container_first {
+                vec![container, enclosed]
+            } else {
+                vec![enclosed, container]
+            };
+
+            let resolved = resolve_candidates(input);
+
+            assert_eq!(resolved.len(), 1, "container_first={container_first}");
+            assert_eq!(resolved[0].span, 0..13);
+            assert_eq!(resolved[0].recognizer_id, "tax_number.cue_anchored");
+            assert_eq!(resolved[0].decided_by, ConflictTier::ContainmentPrecedence);
+            assert_eq!(resolved[0].merged_sources, vec!["postal.de".to_string()]);
+        }
+    }
+
+    /// Equal certainty goes to the container. The reference letter: a
+    /// validator-backed phone inside a validator-backed IBAN, the phone with
+    /// the higher rule priority and score. Breaking the tie by either hands
+    /// the middle of the IBAN to the phone and fragments one entity into
+    /// five tokens.
+    #[test]
+    fn a_tie_in_evidence_tier_goes_to_the_container() {
+        for container_first in [true, false] {
+            let mut container = prioritized(
+                candidate(
+                    5..39,
+                    PiiClass::custom("iban").expect("valid custom class"),
+                    0.80,
+                    "iban.structural",
+                ),
+                80,
+            );
+            container.canonical_form = Some("PL56094289817280566322004500".into());
+            let mut enclosed = prioritized(
+                candidate(
+                    10..24,
+                    PiiClass::custom("phone").expect("valid custom class"),
+                    0.95,
+                    "phone.national.de",
+                ),
+                85,
+            );
+            enclosed.canonical_form = Some("+49942898172805".into());
+            let input = if container_first {
+                vec![container, enclosed]
+            } else {
+                vec![enclosed, container]
+            };
+
+            let resolved = resolve_candidates(input);
+
+            assert_eq!(resolved.len(), 1, "container_first={container_first}");
+            assert_eq!(resolved[0].span, 5..39);
+            assert_eq!(resolved[0].recognizer_id, "iban.structural");
+            assert_eq!(resolved[0].decided_by, ConflictTier::ContainmentPrecedence);
+            assert_eq!(
+                resolved[0].merged_sources,
+                vec!["phone.national.de".to_string()]
+            );
+        }
+    }
+
+    /// The guard: a container less certain than what it would swallow falls
+    /// through to today's rungs. A plain-regex JSON field over a validated
+    /// phone with the higher rule priority loses on the base ladder, so the
+    /// identifier keeps its own class and token; the field's remainder is
+    /// residual coverage's job.
+    #[test]
+    fn a_less_certain_container_does_not_swallow_a_validated_identifier() {
+        let container = prioritized(
+            candidate(
+                0..30,
+                PiiClass::custom("json_field").expect("valid custom class"),
+                0.90,
+                "json.field",
             ),
-        ]);
+            50,
+        );
+        let mut enclosed = prioritized(
+            candidate(
+                11..25,
+                PiiClass::custom("phone").expect("valid custom class"),
+                0.80,
+                "phone.e164",
+            ),
+            80,
+        );
+        enclosed.canonical_form = Some("+49301234567".into());
+
+        let resolved = resolve_candidates(vec![container, enclosed]);
 
         assert_eq!(resolved.len(), 1);
-        assert_eq!(resolved[0].recognizer_id, "tax_number.cue_anchored");
+        assert_eq!(resolved[0].span, 11..25);
+        assert_eq!(resolved[0].recognizer_id, "phone.e164");
         assert_eq!(resolved[0].decided_by, ConflictTier::RulePriority);
+    }
+
+    /// A learned (NER-tier) container ranks below a plain regex, so the base
+    /// ladder decides: here the regex's higher rule priority wins and the
+    /// learned span is evicted. With a higher priority the learned container
+    /// still wins, but on `RulePriority`, never on containment.
+    #[test]
+    fn a_learned_container_ranks_below_a_plain_regex() {
+        for (container_priority, expected_id, expected_tier) in [
+            (50, "postal.de", ConflictTier::RulePriority),
+            (90, "ner", ConflictTier::RulePriority),
+        ] {
+            let mut container = prioritized(
+                candidate(
+                    0..30,
+                    PiiClass::custom("blob").expect("valid custom class"),
+                    0.99,
+                    "ner",
+                ),
+                container_priority,
+            );
+            container.source = "ner/bert".into();
+            let enclosed = prioritized(
+                candidate(
+                    10..15,
+                    PiiClass::custom("postal_code").expect("valid custom class"),
+                    0.80,
+                    "postal.de",
+                ),
+                70,
+            );
+
+            let resolved = resolve_candidates(vec![container, enclosed]);
+
+            assert_eq!(resolved.len(), 1, "priority={container_priority}");
+            assert_eq!(resolved[0].recognizer_id, expected_id);
+            assert_eq!(resolved[0].decided_by, expected_tier);
+        }
+    }
+
+    /// An anchored or cue-structured match (`structural.*` source) outranks a
+    /// plain regex and yields to a validated identifier.
+    #[test]
+    fn a_structural_container_ranks_between_pattern_and_validated() {
+        let structural = || {
+            let mut container = prioritized(
+                candidate(
+                    0..20,
+                    PiiClass::custom("recipient").expect("valid custom class"),
+                    0.85,
+                    "name.forward_marker",
+                ),
+                10,
+            );
+            container.source = "structural.forward_marker".into();
+            container
+        };
+        let pattern = prioritized(
+            candidate(
+                5..10,
+                PiiClass::custom("postal_code").expect("valid custom class"),
+                0.80,
+                "postal.de",
+            ),
+            70,
+        );
+        let resolved = resolve_candidates(vec![structural(), pattern]);
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "name.forward_marker");
+        assert_eq!(resolved[0].decided_by, ConflictTier::ContainmentPrecedence);
+
+        let mut validated = prioritized(
+            candidate(
+                5..10,
+                PiiClass::custom("iban").expect("valid custom class"),
+                0.80,
+                "iban.structural",
+            ),
+            70,
+        );
+        validated.canonical_form = Some("DE89".into());
+        let resolved = resolve_candidates(vec![structural(), validated]);
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(resolved[0].decided_by, ConflictTier::RulePriority);
+    }
+
+    /// Placement: collision-family policy decides a declared rivalry before
+    /// containment does. A lower-precedence family member that wholly
+    /// contains a higher-precedence rival still loses to it on
+    /// `CollisionPolicy`; with the rung placed before family policy the
+    /// container would win and the family label would change.
+    #[test]
+    fn family_policy_decides_before_containment_precedence() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "pan.structural",
+                crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
+            )
+            .register_collision(
+                "iban.structural",
+                crate::CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
+            )
+            .build();
+
+        let resolved = resolve_candidates_with_policy(
+            vec![
+                candidate(
+                    0..12,
+                    PiiClass::custom("pan").expect("valid custom class"),
+                    0.90,
+                    "pan.structural",
+                ),
+                candidate(
+                    2..10,
+                    PiiClass::custom("iban").expect("valid custom class"),
+                    0.70,
+                    "iban.structural",
+                ),
+            ],
+            registry.family_policy(),
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].span, 2..10);
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+    }
+
+    /// Placement: an anchored incoming candidate takes the slot from a plain
+    /// container on the anchor rung; containment precedence never sees the
+    /// pair, so the container cannot swallow an anchored identifier.
+    #[test]
+    fn anchor_rung_decides_before_containment_precedence() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "iban.structural",
+                crate::CollisionMembership::new(
+                    "payment-card-or-iban",
+                    "iban",
+                    10,
+                    Some("iban".to_string()),
+                ),
+            )
+            .build();
+        let mut anchors = AnchorResolver::default();
+        anchors.register(LocaleTag::DeDe, "iban", vec!["IBAN".to_string()], None);
+        let input = "IBAN: DE89 3704 0044 0532 0130 00 end";
+
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![
+                prioritized(
+                    candidate(
+                        0..input.len(),
+                        PiiClass::custom("json_field").expect("valid custom class"),
+                        0.90,
+                        "json.field",
+                    ),
+                    90,
+                ),
+                candidate(
+                    6..33,
+                    PiiClass::custom("iban").expect("valid custom class"),
+                    0.70,
+                    "iban.structural",
+                ),
+            ],
+            registry.family_policy(),
+            &anchors,
+            input,
+            &[LocaleTag::DeDe],
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].span, 6..33);
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(
+            resolved[0].class,
+            PiiClass::custom("iban").expect("valid custom class")
+        );
+        assert_eq!(resolved[0].decided_by, ConflictTier::AnchoredContext);
     }
 
     /// Scope pin: a builtin container over a custom sub-span already won on

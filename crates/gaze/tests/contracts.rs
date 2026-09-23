@@ -477,26 +477,32 @@ fn overlap_conflict_logs_losing_detection_without_raw_pii() {
     let CleanDocument::Text(text) = clean else {
         panic!("expected text document");
     };
-    // The email wins the overlap. The losing name has a protective rule of
-    // its own (`redact`), so its remaining bytes (`alice@`) are admitted to
-    // residual coverage and leave as a name token, never raw; before review
-    // 3746 only a `tokenize` loser was admitted and `alice@` shipped raw.
-    assert!(text.starts_with("reach <"), "{text}");
-    assert!(!text.contains("alice"), "{text}");
-    assert!(text.contains(":Name_1>"), "{text}");
-    assert!(text.ends_with(":Email_1>"), "{text}");
+    // The name span wholly contains the email span and both are plain
+    // patterns, so containment precedence hands the whole span to the
+    // container as one entity (todo #3740); the name's own action applies and
+    // nothing of the value survives. The email is recorded as the loser.
+    assert_eq!(text, "reach [REDACTED]");
 
-    // Winner row, loser row, and the residual cell's own row.
+    // Winner row and loser row; no residual cell, nothing was left uncovered.
     let entries = logger.entries();
-    assert_eq!(entries.len(), 3, "{entries:?}");
-    assert!(entries.iter().any(|entry| !entry.conflict_loser));
-    assert!(entries.iter().any(|entry| entry.conflict_loser));
-    assert!(entries.iter().any(|entry| {
-        entry.provenance_stage.as_deref() == Some("primary_pipeline.residual")
-            && entry.class == PiiClass::Name
-            && entry.action == Action::Tokenize
-    }));
+    assert_eq!(entries.len(), 2, "{entries:?}");
+    let winner = entries
+        .iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner");
+    assert_eq!(winner.class, PiiClass::Name);
+    assert_eq!(winner.action, Action::Redact);
+    assert_eq!(winner.decided_by, gaze::ConflictTier::ContainmentPrecedence);
+    let loser = entries
+        .iter()
+        .find(|entry| entry.conflict_loser)
+        .expect("loser");
+    assert_eq!(loser.source, "email-detector");
+    assert_eq!(loser.decided_by, gaze::ConflictTier::ContainmentPrecedence);
     assert!(entries.iter().all(|entry| entry.field_name.is_none()));
+    assert!(entries
+        .iter()
+        .all(|entry| !format!("{entry:?}").contains("alice")));
 }
 
 #[derive(Clone, Default)]
@@ -881,12 +887,13 @@ fn mandatory_anchor_present_keeps_variant_token_without_ambiguity() {
 }
 
 #[test]
-fn anchored_iban_beating_a_rival_on_score_logs_score_not_anchored_context() {
+fn anchored_iban_beating_a_rival_inside_it_logs_containment_not_anchored_context() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let logger = MemoryLogger::default();
     // Anchored IBAN pipeline plus a lower-score digit-run rival that lands
-    // inside the IBAN span; the anchor is present, so the variant token wins
-    // by Score and the audit row must say so.
+    // inside the IBAN span; the anchor is present and the incumbent IBAN
+    // wholly contains the rival, so it wins on containment precedence and
+    // the audit row must say that, never `AnchoredContext`.
     let pipeline = Pipeline::builder()
         .recognizer(
             RegexDetector::with_rulepack_fields(
@@ -962,7 +969,7 @@ fn anchored_iban_beating_a_rival_on_score_logs_score_not_anchored_context() {
         .expect("winner");
     assert_eq!(winner.recognizer_id.as_deref(), Some("iban.structural"));
     assert_eq!(winner.class, PiiClass::Custom("iban".to_string()));
-    assert_eq!(winner.decided_by, gaze::ConflictTier::Score);
+    assert_eq!(winner.decided_by, gaze::ConflictTier::ContainmentPrecedence);
     assert!(winner.ambiguity_record.is_none());
     let losers: Vec<_> = entries
         .iter()
@@ -974,7 +981,7 @@ fn anchored_iban_beating_a_rival_on_score_logs_score_not_anchored_context() {
     );
     for loser in losers {
         assert_eq!(loser.recognizer_id.as_deref(), Some("digits.generic"));
-        assert_eq!(loser.decided_by, gaze::ConflictTier::Score);
+        assert_eq!(loser.decided_by, gaze::ConflictTier::ContainmentPrecedence);
     }
 }
 

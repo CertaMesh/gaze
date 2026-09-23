@@ -361,15 +361,20 @@ fn preserve_primary_stays_frozen_while_disjoint_name_recovers() {
         .unwrap();
     let session = Session::new(Scope::Ephemeral).unwrap();
     let (output, spans, _) = clean(&pipeline, &session).unwrap();
+    // The preserved email primary is never tokenized as a whole, but the
+    // bytes the tokenized password claimed inside it (`15..21`) leave as a
+    // fragment: protection beats preservation on exactly those bytes (todo
+    // #3740). The email's own remainder (`21..29`) stays raw.
     assert_eq!(
         spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-        vec![11..15]
+        vec![11..15, 15..21]
     );
     let CleanDocument::Text(text) = output else {
         panic!("text")
     };
-    assert!(text.contains(&RAW[16..29]));
+    assert!(text.contains(&RAW[21..29]));
     assert!(!text.contains("left"));
+    assert!(!text.contains("right"));
     assert_eq!(session.restore_strict_text(&text).unwrap(), RAW);
 }
 

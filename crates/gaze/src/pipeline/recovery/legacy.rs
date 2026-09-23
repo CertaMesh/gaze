@@ -236,6 +236,23 @@ fn arbitrate(
         }
     }
 
+    // Containment-precedence rung: a candidate that wholly contains a
+    // candidate of another class wins the whole span as one token, unless it
+    // is less certain than what it would swallow (todo #3740). It sits after
+    // collision-family policy and the anchor rung so those keep deciding what
+    // they decide today, and before the structured-containment rung, which it
+    // generalises: that rung still catches a custom container the guard
+    // refuses (a plain-regex URL over a validated email).
+    if let Some(container_is_candidate) =
+        containment_precedence(existing, candidate, overlap, policy, anchor_ctx)
+    {
+        return if container_is_candidate {
+            Arbitration::CandidateWins(ConflictTier::ContainmentPrecedence)
+        } else {
+            Arbitration::ExistingWins(ConflictTier::ContainmentPrecedence)
+        };
+    }
+
     // Structured-containment rung: a builtin-class span strictly inside a
     // custom-class structured span never evicts its container. Without it the
     // base ladder's class priority (Email/Name/Organization/Location above
@@ -277,6 +294,83 @@ fn structured_containment(
     let structured_container = matches!(container.class, PiiClass::Custom(_));
     let builtin_enclosed = !matches!(enclosed.class, PiiClass::Custom(_));
     (structured_container && builtin_enclosed).then_some(candidate_encloses)
+}
+
+/// Certainty of a candidate's evidence, read from fields it already carries.
+/// The order is the guard of the containment-precedence rung: a container
+/// may swallow a differently-classed candidate only when its tier is at
+/// least the contained candidate's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum EvidenceTier {
+    /// A learned NER span (the `ner` recognizer, `ner/<backend>` source).
+    Learned,
+    /// A plain regex or dictionary term.
+    Pattern,
+    /// An anchored or cue-structured match (`structural.*` source, or a
+    /// mandatory anchor found in context).
+    Anchored,
+    /// A validator passed: mod-97, Luhn, RFC email, E.164, ... (the
+    /// candidate carries a canonical form).
+    Validated,
+}
+
+fn evidence_tier(
+    candidate: &Candidate,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
+) -> EvidenceTier {
+    if candidate.canonical_form.is_some() {
+        return EvidenceTier::Validated;
+    }
+    if candidate.source.starts_with("structural.") {
+        return EvidenceTier::Anchored;
+    }
+    if let Some(ctx) = anchor_ctx {
+        if matches!(
+            ctx.resolver
+                .resolve(candidate, ctx.input, policy, ctx.locale_chain),
+            AnchorOutcome::Found
+        ) {
+            return EvidenceTier::Anchored;
+        }
+    }
+    if candidate.recognizer_id == "ner"
+        || candidate.source == "ner"
+        || candidate.source.starts_with("ner/")
+    {
+        return EvidenceTier::Learned;
+    }
+    EvidenceTier::Pattern
+}
+
+/// Detects the containment-precedence shape and says which side is the
+/// container: `Some(true)` when `candidate` wholly encloses a
+/// differently-classed `existing` and may swallow it, `Some(false)` when
+/// `existing` encloses `candidate` and may, `None` when the spans are not
+/// nested, share a class, or the container's evidence tier is below the
+/// contained candidate's. Equal tiers go to the container: on the reference
+/// letter the phone rule is validator-backed like the IBAN, and breaking the
+/// tie by score hands the middle of the IBAN to the phone. Geometry and
+/// tiers decide, never arrival order. Partial overlaps and same-class pairs
+/// keep today's rungs.
+fn containment_precedence(
+    existing: &Candidate,
+    candidate: &Candidate,
+    overlap: Overlap,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
+) -> Option<bool> {
+    if overlap != Overlap::Containment || existing.class == candidate.class {
+        return None;
+    }
+    let candidate_encloses = contains(&candidate.span, &existing.span);
+    let (container, enclosed) = if candidate_encloses {
+        (candidate, existing)
+    } else {
+        (existing, candidate)
+    };
+    (evidence_tier(container, policy, anchor_ctx) >= evidence_tier(enclosed, policy, anchor_ctx))
+        .then_some(candidate_encloses)
 }
 
 fn requires_anchor(

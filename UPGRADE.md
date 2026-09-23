@@ -5,6 +5,45 @@ workspace (the published cargo name; the library is imported as `gaze`).
 Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
+## Pending (unreleased): one entity, one token; protection beats preservation
+
+**Action required if you count manifest entries per entity, pin token
+shapes for nested identifiers, or rely on `preserve` shielding every byte
+of a span.** Two resolver changes from solo todo #3740, both breaking in
+0.x.
+
+1. **A span that wholly contains a differently-classed span now wins the
+   whole span as one token** (`ConflictTier::ContainmentPrecedence`), unless
+   it is less certain than what it would swallow (validator passed > anchored
+   or cue-structured match > plain regex or dictionary > learned NER; ties go
+   to the container). `IBAN PL56 0942 8981 7280 5663 2200 4500 BIC` is one
+   `<iban_1>` where it used to be `<iban_1><phone_1><iban_2><iban_3>
+   <postal_code_1>`; a card number whose tail is a phone shape is one card
+   token; a cue-less IBAN over a phone shape is one family token. Fewer
+   manifest entries, never more; leaked bytes are unchanged or lower on every
+   measured corpus. Partial overlaps are unchanged. A learned NER span or a
+   plain adopter regex still cannot relabel a validated phone, email or IBAN
+   inside it. Audit: the swallowed candidate's loser row carries
+   `containment_precedence`.
+2. **`preserve` keeps a class's characters unless the same characters are
+   also PII of a class you protect.** With `custom:url = preserve` and
+   `email = tokenize` the email inside a URL now leaves as one `<Email_1>`
+   fragment inside the otherwise raw URL; with `custom:postal_code =
+   preserve` a postal code that is also part of a protected IBAN is
+   protected. The fragment takes the protected class's own action (`redact`
+   writes `[REDACTED:<class>]`, `generalize` the placeholder) and its audit
+   row says `decided_by: protection_override`. The candidates a preserved
+   span represents are not affected: an explicit
+   `custom:family:<name> = preserve` rule still leaves the ambiguous span
+   raw. If you need a preserved span left entirely raw although a protected
+   class claims part of it, preserve that class too.
+3. **Residual fragments merge per claimant.** One losing candidate yields one
+   fragment per uncovered run; a fragment is no longer split where an inner
+   candidate starts or ends.
+
+Manifests written before this change still restore. `redact` and
+`generalize` fragments are one-way, like whole spans under those actions.
+
 ## Pending (unreleased): the safety net redacts with a marker instead of deleting
 
 **Action required if your clean output goes anywhere that assumed redaction

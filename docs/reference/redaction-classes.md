@@ -40,13 +40,16 @@ below.
 
 `PiiClass` is the closed class vocabulary at
 `crates/gaze-types/src/lib.rs:62-96`. During generic overlap resolution, a
-higher class-priority integer wins containment
-(`compare_base_ladder` and `class_priority` in `crates/gaze/src/resolver.rs`),
-with one exception decided
-before the generic tiers: a custom-class structured span that strictly encloses
-a builtin-class span keeps the slot (`structured_containment` in
-`crates/gaze/src/resolver.rs`, `ConflictTier::StructuredContainment`), so an
-NER token inside a URL, IBAN or credential cannot split the identifier.
+higher class-priority integer wins a partial overlap
+(`compare_base_ladder` and `class_priority` in `crates/gaze/src/resolver.rs`).
+Two rungs decide containment before the generic tiers: **containment
+precedence** hands a span that wholly contains a differently-classed span the
+whole span as one token when its evidence tier is at least the contained
+span's (`containment_precedence` in `crates/gaze/src/resolver.rs`,
+`ConflictTier::ContainmentPrecedence`), and where that guard refuses, a
+custom-class structured span that strictly encloses a builtin-class span still
+keeps the slot (`structured_containment`, `ConflictTier::StructuredContainment`),
+so an NER token inside a URL, IBAN or credential cannot split the identifier.
 
 <!-- redaction-classes-gate:pii-classes:start -->
 | Rust variant | Policy spelling | Class priority | Source |
@@ -237,29 +240,50 @@ The end-to-end order is:
    resolved (`crates/gaze/src/registry.rs:382-390`). The detailed typed audit
    contract is [Validator Veto](../explanation/detection/validator-veto.md).
 3. For an overlap, collision-family precedence is consulted first, then
-   mandatory-anchor context, then structured containment, then the generic
-   tiers (`arbitrate` in `crates/gaze/src/resolver.rs`).
-4. Structured containment: when a custom-class span strictly encloses a
-   builtin-class (`Email`/`Name`/`Organization`/`Location`) span, the enclosing
-   span wins and the enclosed candidate is recorded as a merged source
-   (`structured_containment` in `crates/gaze/src/resolver.rs`, audit tier
-   `ConflictTier::StructuredContainment`). Geometry decides, never arrival
-   order; partial overlaps, custom-inside-custom, builtin-inside-builtin and
-   builtin containers over custom spans fall through to the generic tiers.
-5. The generic tiers are **class priority > rule priority > score > span length
+   mandatory-anchor context, then containment precedence, then structured
+   containment, then the generic tiers (`arbitrate` in
+   `crates/gaze/src/resolver.rs`).
+4. Containment precedence (one entity, one token): when a span wholly
+   contains a span of a different class, the container wins the whole span
+   and the contained candidate is recorded as a merged source, unless the
+   container's evidence tier is below the contained candidate's. The tiers
+   are read from what a candidate already carries: **validator passed**
+   (mod-97, Luhn, RFC email, E.164; a canonical form is present) >
+   **anchored or cue-structured match** (a `structural.*` source, or a
+   mandatory anchor found in context) > **plain regex or dictionary term** >
+   **learned NER** (the `ner` recognizer). Equal tiers go to the container:
+   a validated German phone shape inside a validated IBAN is folded into one
+   IBAN token, whatever its rule priority or score. Audit tier
+   `ConflictTier::ContainmentPrecedence` on the winner; the swallowed
+   candidates keep loser rows (`containment_precedence` in
+   `crates/gaze/src/resolver.rs`). Geometry and tiers decide, never arrival
+   order. Partial overlaps keep the rungs below; nested chains resolve
+   outermost-first; same-class containment keeps step 7. Because the rung
+   sits after collision-family policy and the anchor rung, a declared
+   rivalry (card inside IBAN) keeps its family verdict and a cue-anchored
+   identifier inside an adopter regex keeps its own token.
+5. Structured containment: when the guard above refuses a custom-class span
+   that strictly encloses a builtin-class (`Email`/`Name`/`Organization`/
+   `Location`) span (a plain URL regex over an RFC-validated email), the
+   enclosing span still wins and the enclosed candidate is recorded as a
+   merged source (`structured_containment` in `crates/gaze/src/resolver.rs`,
+   audit tier `ConflictTier::StructuredContainment`). Builtin containers over
+   custom spans and builtin-inside-builtin pairs the guard refuses fall
+   through to the generic tiers.
+6. The generic tiers are **class priority > rule priority > score > span length
    > lexicographically smaller recognizer id**
    (`compare_base_ladder` in `crates/gaze/src/resolver.rs`).
-6. Same-class containment has one extra check before those generic tiers: a
+7. Same-class containment has one extra check before those generic tiers: a
    candidate with a validator-produced canonical form defeats an otherwise
    equivalent unvalidated candidate (the same-class containment branch of
    `arbitrate` in `crates/gaze/src/resolver.rs`). This is
    `ConflictTier::Validator`, distinct from the pre-resolver
    `ValidatorVeto`.
-7. Replacement removes every overlap with the winner, so multi-overlap inputs
+8. Replacement removes every overlap with the winner, so multi-overlap inputs
    converge to a disjoint fixed point rather than leaving a candidate that
    overlapped an earlier loser (`insert_candidate` and `remove_overlaps` in
    `crates/gaze/src/resolver.rs`).
-8. After pairwise resolution, a surviving candidate that requires but lacks a
+9. After pairwise resolution, a surviving candidate that requires but lacks a
    mandatory anchor is converted to its family-level fallback
    (`resolve_candidates_inner` and `apply_missing_anchor_fallback` in
    `crates/gaze/src/resolver.rs`).
@@ -417,15 +441,34 @@ library API all get it.
 Conflict resolution picks one winning selection per overlap and discards the
 losers. When a losing original covered raw bytes that the winner does not, those
 bytes previously survived into the clean text **in the clear**. Residual coverage
-emits a second reversible replacement over them.
+emits a second replacement over them.
 
-Coverage is limited to the **admitted union**: the bytes that admitted originals
-actually evidenced. Two consequences follow, and both are deliberate:
+The invariant is per character: **every byte claimed by a candidate of a class
+the policy protects leaves the process protected.** A class is protected when
+its resolved action is protective (`Action::is_protective`: anything but
+`preserve`). Concretely (`crates/gaze/src/pipeline/residual.rs`):
 
-- A component is admitted only when *every* member's class previews as
-  `Tokenize` under the active rules. Mixed or unknown components stay on the
-  legacy path and emit no residual, so `Preserve` and `FormatPreserve` are never
-  reinterpreted.
+- Admission is **per original**, never per overlap component. An original is
+  admitted when its own class and its standalone fallback class (the family
+  class, for a cue-less collision-family member) both preview protective. A
+  preserved, redacted or unknown neighbour in the same overlap group cannot
+  switch another claimant's coverage off.
+- A **`preserve` winner does not shield the bytes a protected class claimed.**
+  Only protective selections block the sweep; inside a preserved selection,
+  bytes an admitted original claimed become a cell of the highest-ranked such
+  claimant, and the preserved winner keeps every other byte raw. The cell's
+  audit row says `decided_by: protection_override`. The candidates a
+  preserved selection *represents* (its own original, a same-span merge, the
+  rivals of a precedence tie) never override it: an explicit
+  `custom:family:<name> = preserve` rule still leaves the ambiguous span raw.
+- **One claimant, one fragment per uncovered run.** Adjacent cells of the same
+  representative and class merge even where an inner candidate starts or
+  ends, so an email inside a preserved URL leaves as one `<Email_1>`.
+- A cell emits under **its claimant's own action**: `tokenize` and
+  `format_preserve` mint a reversible class token (a fragment has no format
+  to preserve), `redact` writes the one-way `[REDACTED:<class>]` marker,
+  `generalize` the class placeholder. A neighbour's action never changes what
+  a fragment becomes.
 - Bytes that **no** original evidenced are still not protected. For
   `password: "left right"` with a `password.field` original matching `0..21` and
   a Name selection winning `0..15`, the residual covers `15..21` (`" right"`).
@@ -434,18 +477,26 @@ actually evidenced. Two consequences follow, and both are deliberate:
   [`crates/gaze-recognizers/tests/explicit_field_collision_control.rs`](../../crates/gaze-recognizers/tests/explicit_field_collision_control.rs),
   which pins exactly that geometry on the real `core` and opt-in `secrets` rulepacks.
 
+Rules with no static preview (an adopter `Rule` impl that answers at runtime
+only) stay on the legacy path: such a selection blocks the sweep and its
+runtime verdict is not second-guessed; such an original is not admitted.
+
 ### What changes in the token stream
 
-**One recognized value can now produce more than one replacement.** Adopters
-counting manifest entries are counting *replacements*, not distinct recognized
-values. Anything that reported "N values found" from a span count now reports a
-number that can exceed the number of entities. See
+**One recognized value can produce more than one replacement**, although
+containment precedence now folds a wholly contained rival into the container
+(the reference letter `IBAN PL56 0942 8981 7280 5663 2200 4500 BIC` is one
+IBAN token; fragments remain for partial overlaps and for claims inside a
+preserved winner). Adopters counting manifest entries are counting
+*replacements*, not distinct recognized values. See
 [`EmittedTokenOrigin`](metrics.md#52-per-call-output) for how to tell the two
 apart, and `BundleReport::pii_token_count` in `gaze-document` for the same
 distinction on the bundle side.
 
-Restore is unaffected: a residual replacement is an ordinary reversible token, and
-`Session::restore_strict_text` round-trips a document containing one.
+Restore: a `tokenize` or `format_preserve` fragment is an ordinary reversible
+token, and `Session::restore_strict_text` round-trips a document containing
+one; a `redact` or `generalize` fragment is one-way exactly where the adopter
+chose a one-way action for that class.
 
 Activation does **not** move the bundled `core` tokenization snapshot: the
 `bundle-tokenization-drift` corpus contains only contained overlaps, never a

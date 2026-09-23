@@ -1125,21 +1125,30 @@ impl Pipeline {
                 let (id, cell) = residuals.next().expect("peeked residual");
                 // The same resolver the planner previewed with: a residual cell
                 // of a family class derives its action from the members too.
-                // The cell was admitted on a protective preview; the runtime
-                // verdict must still protect, and the cell emits a token.
-                let actual = self
-                    .resolve_action(&cell.class, &build_context(field_name))
-                    .action;
-                if !actual.is_protective() {
+                // The cell was planned on a previewed action; the runtime
+                // verdict must be that action, and it must protect.
+                let actual = residual::fragment_action(
+                    self.resolve_action(&cell.class, &build_context(field_name))
+                        .action,
+                );
+                if actual != cell.action || !actual.is_protective() {
                     return Err(clean_to_raw_mapping_error(
                         "residual policy preview mismatch",
                     ));
                 }
-                let replacement = target.tokenize_with_family(
-                    &cell.family,
-                    &cell.class,
-                    &text[cell.raw.clone()],
-                )?;
+                if protection_trace.is_some() && actual != Action::Tokenize {
+                    return Err(Error::UnsupportedActionVariant);
+                }
+                let replacement = match actual {
+                    Action::Tokenize => target.tokenize_with_family(
+                        &cell.family,
+                        &cell.class,
+                        &text[cell.raw.clone()],
+                    )?,
+                    Action::Redact => crate::redaction_marker(&cell.class),
+                    Action::Generalize => generalize_token(&cell.class),
+                    _ => return Err(Error::UnsupportedActionVariant),
+                };
                 let representative = &ledger.segment().originals[cell.representative];
                 self.log_residual_entry(
                     target,
@@ -1147,6 +1156,8 @@ impl Pipeline {
                     &cell.class,
                     field_name,
                     document_kind,
+                    actual,
+                    cell.overrides_preserve,
                 )?;
                 let sources = cell
                     .parents
@@ -1161,13 +1172,13 @@ impl Pipeline {
                     cell.raw.clone(),
                     cell.class.clone(),
                     Some(replacement),
-                    Action::Tokenize,
-                    true,
+                    actual,
+                    actual == Action::Tokenize,
                     Origin::Residual {
                         segment: 0,
                         residual: id,
                     },
-                    Some(sources),
+                    (actual == Action::Tokenize).then_some(sources),
                 )
             } else {
                 let (span, class, replacement, action, owned, selection) =
@@ -1185,6 +1196,12 @@ impl Pipeline {
                     None,
                 )
             };
+            // A `preserve` selection leaves its bytes to the cursor copy below,
+            // so a residual cell placed inside it (a protected class claimed
+            // those bytes too) can still emit there.
+            if replacement.is_none() {
+                continue;
+            }
             // Checked append avoids copying the whole output for each residual cell.
             if span.start < cursor
                 || span.end > text.len()
@@ -1238,7 +1255,7 @@ impl Pipeline {
         }
         out.push_str(&text[cursor..]);
         if let Some(plan) = residual_plan {
-            ledger.set_residuals(plan.cells, order);
+            ledger.set_residuals(plan.cells, order, plan.admitted);
         }
         ledger.validate()?;
         Ok(CleanText {
@@ -1247,6 +1264,10 @@ impl Pipeline {
         })
     }
 
+    /// A residual row names the representative claimant, the cell's own
+    /// action, and `decided_by: ProtectionOverride` when the cell replaced
+    /// bytes inside a `preserve` selection.
+    #[allow(clippy::too_many_arguments)]
     fn log_residual_entry(
         &self,
         target: &ProtectionTarget<'_, '_>,
@@ -1254,15 +1275,21 @@ impl Pipeline {
         class: &PiiClass,
         field_name: Option<&str>,
         document_kind: DocumentKind,
+        action: Action,
+        overrides_preserve: bool,
     ) -> Result<()> {
         let mut entry = RedactionEntry::new(
             representative.source.clone(),
             class.clone(),
-            Action::Tokenize,
+            action,
             field_name.map(str::to_owned),
             document_kind,
             false,
-            ConflictTier::None,
+            if overrides_preserve {
+                ConflictTier::ProtectionOverride
+            } else {
+                ConflictTier::None
+            },
             crate::redaction_log::current_epoch_ms(),
             Some(target.audit_session_id().to_owned()),
         )
@@ -3633,7 +3660,9 @@ fn recorded_redaction_markers(clean: &CleanText) -> impl Iterator<Item = Range<u
         .records()
         .iter()
         .filter(|record| {
-            matches!(record.origin, Origin::SafetyNetRedaction { .. })
+            (matches!(record.origin, Origin::SafetyNetRedaction { .. })
+                || (matches!(record.origin, Origin::Residual { .. })
+                    && record.action == Some(Action::Redact)))
                 && clean.text.get(record.emitted.clean_span.clone())
                     == Some(redaction_marker(&record.emitted.class).as_str())
         })
@@ -7197,7 +7226,7 @@ mod tests {
 
     /// Deterministic probe for the container-eviction defect (todo #3025 slice U):
     /// an NER organisation sub-token inside a rule-recognised credential must not
-    /// split the credential. Before `ConflictTier::StructuredContainment` the
+    /// split the credential. Before the containment rungs the
     /// builtin sub-span won on class priority, `remove_overlaps` dropped the whole
     /// credential span, and the clean text carried a mid-word organisation token
     /// with the rest of the secret raw on both sides.
@@ -7268,7 +7297,10 @@ mod tests {
         let loser = entries.iter().find(|e| e.conflict_loser).expect("loser");
         assert_eq!(winner.source, "security_token.anchored");
         assert_eq!(loser.source, "ner/bert");
-        assert_eq!(loser.decided_by, ConflictTier::StructuredContainment);
+        // A rule-recognised container over a learned sub-token is decided by
+        // containment precedence (pattern tier over NER tier); the
+        // structured-containment rung remains for containers the guard refuses.
+        assert_eq!(loser.decided_by, ConflictTier::ContainmentPrecedence);
     }
 
     #[test]

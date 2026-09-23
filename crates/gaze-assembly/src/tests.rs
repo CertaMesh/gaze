@@ -1950,6 +1950,12 @@ const FAMILY_TOKEN_MARKER: &str = ":Custom:family:payment-card-or-iban_";
 /// only covered by residual cells previewed on its standalone view, the family
 /// class.
 const PHONE_WIN_IBAN: &str = "Bitte überweisen auf AD56 7551 0585 4139 9502 9893 BIC";
+/// No cue, a German phone shape straddling the IBAN's last group and a
+/// trailing number (todo 3769): a PARTIAL overlap, which containment
+/// precedence leaves to today's rungs, so the phone still wins its sub-run on
+/// rule priority and the IBAN's remainder still reaches residual coverage on
+/// its standalone view, the family class.
+const PARTIAL_PHONE_IBAN: &str = "Bitte überweisen auf AD82 5402 2980 2202 2393 0418 1234";
 
 fn payment_family_policy(rules: &[(&str, Action)], default: Action) -> gaze::Policy {
     let mut policy = gaze::Policy::default();
@@ -2416,22 +2422,7 @@ fn unanchored_iban_evidence_beside_a_phone_win_is_covered_by_family_residual_cel
             .expect("the residual cell must resolve like its preview"),
     );
 
-    assert!(clean.contains(":Custom:phone_"), "phone win kept: {clean}");
-    assert!(
-        clean.contains(FAMILY_TOKEN_MARKER),
-        "the losing IBAN's evidence is covered by family residual tokens: {clean}"
-    );
-    assert_no_group_survives(&clean, input, "Bitte überweisen auf ", " BIC");
-    assert!(
-        logger
-            .entries()
-            .iter()
-            .any(
-                |entry| entry.recognizer_id.as_deref() == Some("phone.national.de")
-                    && !entry.conflict_loser
-            ),
-        "fixture must exercise the phone win, or it pins nothing"
-    );
+    assert_phone_shape_iban_fully_covered(&clean, &logger, FAMILY_TOKEN_MARKER);
 }
 
 /// Product path (`build_pipeline_builder`, core + locale-de) with the redaction
@@ -2460,24 +2451,43 @@ fn clean_payment_logged(policy: &gaze::Policy, input: &str) -> (String, MemoryLo
     (clean, logger)
 }
 
-/// The phone-win document must leave the process with the phone token, family
-/// residual tokens over the losing IBAN's bytes, and no IBAN group readable.
-fn assert_phone_win_iban_fully_covered(clean: &str, logger: &MemoryLogger) {
-    assert!(clean.contains(":Custom:phone_"), "phone win kept: {clean}");
+/// The phone-shape document must leave the process as one replacement over
+/// the whole IBAN (`replacement` names its shape: the family token marker or
+/// the one-way `[REDACTED]`), with no phone token and no IBAN group readable.
+/// Since containment precedence (todo #3740) the validated IBAN wins the
+/// whole span over the validated phone shape inside it (equal tiers go to
+/// the container); the phone is a loser row that names that rung, and its
+/// old sub-run win is exactly what this fixture must no longer exhibit.
+fn assert_phone_shape_iban_fully_covered(clean: &str, logger: &MemoryLogger, replacement: &str) {
     assert!(
-        clean.contains(FAMILY_TOKEN_MARKER),
-        "the losing IBAN's evidence is covered by family residual tokens: {clean}"
+        !clean.contains(":Custom:phone_"),
+        "phone must not win: {clean}"
+    );
+    assert!(
+        clean.contains(replacement),
+        "the IBAN leaves as one {replacement} replacement: {clean}"
     );
     assert_no_group_survives(clean, PHONE_WIN_IBAN, "Bitte überweisen auf ", " BIC");
+    // The loser row carries the winner's final label: the containment rung,
+    // or `AnchoredContext` once the cue-less IBAN is rebuilt as the family
+    // fallback (the fallback relabels every row it carries, as before).
+    let entries = logger.entries();
     assert!(
-        logger
-            .entries()
-            .iter()
-            .any(
-                |entry| entry.recognizer_id.as_deref() == Some("phone.national.de")
-                    && !entry.conflict_loser
-            ),
-        "fixture must exercise the phone win, or it pins nothing"
+        entries.iter().any(|entry| {
+            entry.recognizer_id.as_deref() == Some("phone.national.de")
+                && entry.conflict_loser
+                && matches!(
+                    entry.decided_by,
+                    ConflictTier::ContainmentPrecedence | ConflictTier::AnchoredContext
+                )
+        }),
+        "fixture must exercise the containment win over the phone shape, or it pins nothing"
+    );
+    assert!(
+        !entries.iter().any(|entry| {
+            entry.recognizer_id.as_deref() == Some("phone.national.de") && !entry.conflict_loser
+        }),
+        "the phone shape must not win a sub-run any more"
     );
 }
 
@@ -2502,7 +2512,58 @@ fn a_redacting_member_keeps_the_losing_iban_evidence_covered() {
 
     let (clean, logger) = clean_payment_logged(&policy, PHONE_WIN_IBAN);
 
-    assert_phone_win_iban_fully_covered(&clean, &logger);
+    assert_phone_shape_iban_fully_covered(&clean, &logger, "[REDACTED]");
+}
+
+/// The #624 regression class on the shape that still reaches residual
+/// coverage under containment precedence (ORCH-RULING 3740 #1): the phone
+/// wins its straddling sub-run, and the losing IBAN's remaining bytes are
+/// covered under the claimant's own derived action. With
+/// `custom:credit_card = redact` the family view derives `redact`, so the
+/// fragment is the one-way `[REDACTED:<family class>]` marker; an admission
+/// gate of "exactly `tokenize`" would drop the cell and ship `AD82 5402 2980
+/// 2202 2393` raw.
+#[test]
+fn a_redacting_member_keeps_a_partially_overlapped_iban_covered() {
+    let redacting = payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Redact),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Tokenize,
+    );
+    let (clean, logger) = clean_payment_logged(&redacting, PARTIAL_PHONE_IBAN);
+    assert!(
+        clean.contains(":Custom:phone_"),
+        "phone sub-run win kept: {clean}"
+    );
+    let family_marker = gaze::redaction_marker(&PiiClass::family("payment-card-or-iban"));
+    assert!(
+        clean.contains(&family_marker),
+        "the IBAN's remainder leaves under the family's derived redact: {clean}"
+    );
+    assert_no_group_survives(&clean, PARTIAL_PHONE_IBAN, "Bitte überweisen auf ", "");
+    let entries = logger.entries();
+    let fragment = entries
+        .iter()
+        .find(|entry| entry.provenance_stage.as_deref() == Some("primary_pipeline.residual"))
+        .expect("residual fragment row");
+    assert_eq!(fragment.class, PiiClass::family("payment-card-or-iban"));
+    assert_eq!(fragment.action, Action::Redact);
+    assert_eq!(fragment.decided_by, ConflictTier::None);
+    assert!(
+        entries.iter().any(|entry| {
+            entry.recognizer_id.as_deref() == Some("phone.national.de") && !entry.conflict_loser
+        }),
+        "fixture must exercise the partial-overlap phone win, or it pins nothing"
+    );
+
+    // Same shape, every member tokenized: the remainder is a family token.
+    let (clean, _) = clean_payment_logged(&member_only_tokenize_policy(), PARTIAL_PHONE_IBAN);
+    assert!(clean.contains(":Custom:phone_"), "{clean}");
+    assert!(clean.contains(FAMILY_TOKEN_MARKER), "{clean}");
+    assert_no_group_survives(&clean, PARTIAL_PHONE_IBAN, "Bitte überweisen auf ", "");
 }
 
 /// Review 3746 finding 4: under an active protection trace (the MCP and proxy
@@ -2580,5 +2641,5 @@ fn a_redact_default_keeps_the_losing_iban_evidence_covered() {
 
     let (clean, logger) = clean_payment_logged(&policy, PHONE_WIN_IBAN);
 
-    assert_phone_win_iban_fully_covered(&clean, &logger);
+    assert_phone_shape_iban_fully_covered(&clean, &logger, "[REDACTED]");
 }

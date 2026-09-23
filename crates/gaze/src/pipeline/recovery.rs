@@ -84,6 +84,7 @@ pub(super) fn plan(
             selections,
             residuals: Vec::new(),
             residual_order: Vec::new(),
+            residual_admitted: Vec::new(),
             events: std::sync::Arc::clone(&events),
             raw_offset: 0,
             clean_offset: 0,

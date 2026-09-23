@@ -103,6 +103,10 @@ pub(super) struct Segment {
     pub(super) selections: Vec<Selection>,
     pub(super) residuals: Vec<super::residual::Cell>,
     pub(super) residual_order: Vec<usize>,
+    /// Per original: admitted to residual coverage (its effective class
+    /// previews a protective action). Lets `residual::validate` recompute the
+    /// cell parents exactly as the planner filtered them.
+    pub(super) residual_admitted: Vec<bool>,
     pub(super) events: Arc<[crate::resolver::ResolutionEvent]>,
     pub(super) raw_offset: usize,
     pub(super) clean_offset: usize,
@@ -154,9 +158,15 @@ impl Ledger {
     pub(super) fn segment(&self) -> &Segment {
         &self.segments[0]
     }
-    pub(super) fn set_residuals(&mut self, cells: Vec<super::residual::Cell>, order: Vec<usize>) {
+    pub(super) fn set_residuals(
+        &mut self,
+        cells: Vec<super::residual::Cell>,
+        order: Vec<usize>,
+        admitted: Vec<bool>,
+    ) {
         self.segments[0].residuals = cells;
         self.segments[0].residual_order = order;
+        self.segments[0].residual_admitted = admitted;
     }
     pub(super) fn set_selection_action(&mut self, selection: usize, action: Action) {
         self.segments[0].selections[selection].action = Some(action);
@@ -300,6 +310,7 @@ impl Ledger {
             selections: Vec::new(),
             residuals: Vec::new(),
             residual_order: Vec::new(),
+            residual_admitted: Vec::new(),
             events: Arc::from([]),
             raw_offset: emitted.raw_span.start,
             clean_offset: emitted.clean_span.start,
@@ -516,8 +527,10 @@ impl Ledger {
                         .residuals
                         .get(*residual)
                         .ok_or_else(|| manifest_integrity_error("invalid residual identity"))?;
-                    if record.action != Some(Action::Tokenize)
-                        || !record.owned
+                    // A cell emits under its claimant's own action; only a
+                    // token is a session-owned replacement.
+                    if record.action != Some(cell.action)
+                        || record.owned != (cell.action == Action::Tokenize)
                         || record.emitted.class != cell.class
                         || record.emitted.raw_span != shift(&cell.raw, segment.raw_offset)?
                     {

@@ -1,19 +1,32 @@
 //! Raw evidence coverage for the closed known-protective domain.
 //!
-//! A losing candidate's evidence is admitted when the static preview of every
-//! action in its overlap component is protective (`Action::is_protective`).
-//! Admitted cells always emit tokens; what they should emit under a
-//! non-`tokenize` action is decided by todo 3740.
+//! Every byte that a candidate of a protected class claimed (its effective
+//! class previews a protective action, `Action::is_protective`) and that no
+//! protective selection covers becomes a residual cell of the highest-ranked
+//! such claimant, per byte, even inside a `preserve` selection. Admission is
+//! per original, never per overlap component, so a preserved or redacted
+//! neighbour cannot switch a claimant's coverage off (todo #3740). A cell
+//! emits under its claimant's own action: `tokenize` and `format_preserve`
+//! mint a class token (a fragment has no format to preserve), `redact` writes
+//! the one-way `[REDACTED:<class>]` marker, `generalize` the class placeholder.
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Cell {
     pub(super) raw: Range<usize>,
+    /// Admitted originals active somewhere in the cell, rank order; the
+    /// representative first.
     pub(super) parents: Vec<usize>,
     pub(super) representative: usize,
     pub(super) class: PiiClass,
     pub(super) family: String,
+    /// What every emission of this cell must do: the representative's
+    /// previewed action with `format_preserve` mapped to `tokenize`.
+    pub(super) action: Action,
+    /// Some byte of the cell lies inside a `preserve` selection, so protection
+    /// beat preservation there; the audit row says so.
+    pub(super) overrides_preserve: bool,
 }
 
 #[cfg(test)]
@@ -28,20 +41,47 @@ pub(super) struct Plan {
     #[cfg(test)]
     pub(super) work: Work,
     pub(super) cells: Vec<Cell>,
-    selected: Vec<usize>,
+    /// Per original: its effective class previews a protective action.
+    pub(super) admitted: Vec<bool>,
+    /// Per selection: `Some(true)` previews protective (covers its bytes and
+    /// blocks the sweep), `Some(false)` previews `preserve` (cells may be
+    /// placed inside it), `None` has no static preview and stays on the
+    /// legacy path: it blocks, and its runtime action is not second-guessed.
+    blocking: Vec<Option<bool>>,
 }
 impl Plan {
+    /// The planner previewed every selection's action; where a preview
+    /// exists the runtime verdict must agree on whether it protects, in both
+    /// directions. A selection previewed protective that ships raw left its
+    /// claimants uncovered; one previewed `preserve` that replaces bytes would
+    /// collide with the cells placed inside it.
     pub(super) fn check_actual(&self, segment: &occurrence::Segment) -> Result<()> {
-        if self.selected.iter().any(|&id| {
-            !segment.selections[id]
-                .action
-                .is_some_and(Action::is_protective)
-        }) {
+        if self.blocking.len() != segment.selections.len()
+            || self
+                .blocking
+                .iter()
+                .zip(&segment.selections)
+                .any(|(&blocks, s)| {
+                    blocks
+                        .is_some_and(|blocks| s.action.is_some_and(Action::is_protective) != blocks)
+                })
+        {
             return Err(clean_to_raw_mapping_error(
                 "residual policy preview mismatch",
             ));
         }
         Ok(())
+    }
+}
+
+/// The action a residual fragment takes for a claimant resolved to `action`.
+/// A fragment has no surface shape of its own to preserve, so
+/// `format_preserve` becomes a plain reversible class token; every other
+/// action is the claimant's own.
+pub(super) fn fragment_action(action: Action) -> Action {
+    match action {
+        Action::FormatPreserve => Action::Tokenize,
+        other => other,
     }
 }
 
@@ -64,105 +104,113 @@ pub(super) fn plan(
         .map(|c| pipeline.registry.effective_view(c, normalized, locales))
         .collect::<Vec<_>>();
     let mut policies = std::collections::HashMap::new();
-    let mut known = |class: &PiiClass| {
-        policies
-            .entry(class.clone())
-            .or_insert_with(|| {
-                #[cfg(test)]
-                {
-                    work.preview_queries += 1;
-                }
-                crate::rule::preview(&pipeline.rules, class, context, |family| {
-                    pipeline.registry.family_member_classes(family)
-                })
+    let mut preview = |class: &PiiClass| -> Option<Action> {
+        *policies.entry(class.clone()).or_insert_with(|| {
+            #[cfg(test)]
+            {
+                work.preview_queries += 1;
+            }
+            crate::rule::preview(&pipeline.rules, class, context, |family| {
+                pipeline.registry.family_member_classes(family)
             })
-            .is_some_and(Action::is_protective)
+        })
     };
+    let protective = |action: Option<Action>| action.is_some_and(Action::is_protective);
     // Require the original policy as well as its real standalone fallback policy.
-    let original_known = segment
-        .originals
+    let mut admitted = Vec::with_capacity(segment.originals.len());
+    let mut actions = Vec::with_capacity(segment.originals.len());
+    for (candidate, (class, _)) in segment.originals.iter().zip(&views) {
+        let own = preview(&candidate.class);
+        let view = preview(class);
+        admitted.push(protective(own) && protective(view));
+        actions.push(view.map(fragment_action));
+    }
+    let blocking = selected
         .iter()
-        .zip(&views)
-        .map(|(c, (class, _))| known(&c.class) && known(class))
+        .map(|candidate| preview(&candidate.class).map(Action::is_protective))
         .collect::<Vec<_>>();
-    let mut intervals = segment
-        .original_raw
+    let blocks = blocking
         .iter()
-        .enumerate()
-        .map(|(id, span)| (span.clone(), false, id))
-        .chain(
-            segment
-                .selections
-                .iter()
-                .enumerate()
-                .map(|(id, s)| (s.raw.clone(), true, id)),
-        )
-        .collect::<Vec<_>>();
-    intervals.sort_by_key(|(span, _, _)| (span.start, span.end));
-    let mut admitted = vec![false; segment.originals.len()];
-    let mut checked_selected = Vec::new();
-    let mut start = 0;
-    while start < intervals.len() {
-        let mut end = start + 1;
-        let mut boundary = intervals[start].0.end;
-        while end < intervals.len() && intervals[end].0.start < boundary {
-            boundary = boundary.max(intervals[end].0.end);
-            end += 1;
-        }
-        let component = &intervals[start..end];
-        if component.iter().all(|(_, is_selected, id)| {
-            if *is_selected {
-                known(&selected[*id].class)
-            } else {
-                original_known[*id]
-            }
-        }) {
-            for (_, is_selected, id) in component {
-                if *is_selected {
-                    checked_selected.push(*id);
-                } else {
-                    admitted[*id] = true;
-                }
+        .map(|blocks| blocks.unwrap_or(true))
+        .collect::<Vec<bool>>();
+    // A `preserve` selection is the adopter's verdict for the candidates it
+    // represents: its structural members (the winner, a same-span merge, the
+    // rivals of a precedence tie) never override it, only candidates it
+    // defeated do. This keeps an explicit family-class `preserve` rule
+    // meaningful for the ambiguous span it names.
+    for (selection, blocks) in segment.selections.iter().zip(&blocking) {
+        if *blocks == Some(false) {
+            for &member in &selection.members {
+                admitted[member] = false;
             }
         }
-        start = end;
     }
     let mut cells = Vec::<Cell>::new();
-    sweep(segment, order, |span, parents, blocked| {
-        #[cfg(test)]
-        {
-            work.endpoint_cells += 1;
-            work.active_parent_visits += parents.len();
-        }
-        if blocked || parents.is_empty() || !admitted[parents[0]] {
-            return Ok(());
-        }
-        let representative = parents[0];
-        let (class, family) = &views[representative];
-        if !raw.is_char_boundary(span.start) || !raw.is_char_boundary(span.end) || span.is_empty() {
-            return Err(clean_to_raw_mapping_error("invalid residual raw geometry"));
-        }
-        if let Some(last) = cells.last_mut() {
-            if last.raw.end == span.start
-                && last.parents == parents
-                && last.representative == representative
-                && last.class == *class
-                && last.family == *family
+    sweep(
+        segment,
+        order,
+        &blocks,
+        |span, parents, blocked, preserved| {
+            #[cfg(test)]
             {
-                last.raw.end = span.end;
+                work.endpoint_cells += 1;
+                work.active_parent_visits += parents.len();
+            }
+            let parents = parents
+                .iter()
+                .copied()
+                .filter(|&id| admitted[id])
+                .collect::<Vec<_>>();
+            if blocked || parents.is_empty() {
                 return Ok(());
             }
-        }
-        cells.push(Cell {
-            raw: span,
-            parents: parents.to_vec(),
-            representative,
-            class: class.clone(),
-            family: family.clone(),
-        });
-        Ok(())
-    })?;
-    // An independent interval-union check proves W + R equals the admitted U.
+            let representative = parents[0];
+            let (class, family) = &views[representative];
+            let Some(action) = actions[representative] else {
+                return Err(clean_to_raw_mapping_error(
+                    "residual policy preview mismatch",
+                ));
+            };
+            if !raw.is_char_boundary(span.start)
+                || !raw.is_char_boundary(span.end)
+                || span.is_empty()
+            {
+                return Err(clean_to_raw_mapping_error("invalid residual raw geometry"));
+            }
+            // One claimant yields one fragment per uncovered run: adjacent cells
+            // of the same representative and class merge even where an inner
+            // candidate starts or ends, and the parent list becomes the union.
+            if let Some(last) = cells.last_mut() {
+                if last.raw.end == span.start
+                    && last.representative == representative
+                    && last.class == *class
+                    && last.family == *family
+                {
+                    last.raw.end = span.end;
+                    last.overrides_preserve |= preserved;
+                    for id in parents {
+                        if !last.parents.contains(&id) {
+                            last.parents.push(id);
+                        }
+                    }
+                    return Ok(());
+                }
+            }
+            cells.push(Cell {
+                raw: span,
+                parents,
+                representative,
+                class: class.clone(),
+                family: family.clone(),
+                action,
+                overrides_preserve: preserved,
+            });
+            Ok(())
+        },
+    )?;
+    // An independent interval-union check proves W + R equals the admitted U:
+    // every byte an admitted original claimed is under a protective selection
+    // or a cell, and no cell lies outside that union.
     let union = |mut spans: Vec<Range<usize>>| {
         spans.sort_by_key(|s| (s.start, s.end));
         let mut result = Vec::<Range<usize>>::new();
@@ -177,9 +225,12 @@ pub(super) fn plan(
         }
         result
     };
-    let selected_spans = checked_selected
+    let selected_spans = segment
+        .selections
         .iter()
-        .map(|&id| segment.selections[id].raw.clone())
+        .zip(&blocks)
+        .filter(|(_, &blocks)| blocks)
+        .map(|(s, _)| s.raw.clone())
         .collect::<Vec<_>>();
     let expected = union(
         segment
@@ -204,15 +255,20 @@ pub(super) fn plan(
         #[cfg(test)]
         work,
         cells,
-        selected: checked_selected,
+        admitted,
+        blocking,
     })
 }
 
-// Events at equal endpoints are applied together. Touching intervals never share a cell.
+// Events at equal endpoints are applied together. Touching intervals never
+// share a cell. `blocking[id]` says whether selection `id` covers its bytes;
+// a selection that does not (a `preserve` winner) is reported to the visitor
+// as `preserved` instead of blocking it.
 fn sweep(
     segment: &occurrence::Segment,
     order: &[usize],
-    mut visit: impl FnMut(Range<usize>, &[usize], bool) -> Result<()>,
+    blocking: &[bool],
+    mut visit: impl FnMut(Range<usize>, &[usize], bool, bool) -> Result<()>,
 ) -> Result<()> {
     let mut ranks = vec![0; order.len()];
     for (rank, &id) in order.iter().enumerate() {
@@ -235,6 +291,7 @@ fn sweep(
     }
     let mut active = BTreeSet::new();
     let mut blocked = 0usize;
+    let mut preserved = 0usize;
     let mut previous = None;
     for (position, changes) in events {
         if let Some(start) = previous {
@@ -244,7 +301,7 @@ fn sweep(
                 } else {
                     Vec::new()
                 };
-                visit(start..position, &parents, blocked != 0)?;
+                visit(start..position, &parents, blocked != 0, preserved != 0)?;
             }
         }
         for (original, id, add) in changes {
@@ -254,10 +311,17 @@ fn sweep(
                 } else {
                     active.remove(&(ranks[id], id));
                 }
-            } else if add {
-                blocked += 1;
             } else {
-                blocked -= 1;
+                let counter = if blocking[id] {
+                    &mut blocked
+                } else {
+                    &mut preserved
+                };
+                if add {
+                    *counter += 1;
+                } else {
+                    *counter -= 1;
+                }
             }
         }
         previous = Some(position);
@@ -280,32 +344,62 @@ pub(super) fn validate(segment: &occurrence::Segment) -> Result<()> {
     if *order != crate::resolver::candidate_order(&segment.originals)
         || order.len() != segment.originals.len()
         || order.iter().copied().collect::<BTreeSet<_>>() != (0..segment.originals.len()).collect()
+        || segment.residual_admitted.len() != segment.originals.len()
     {
         return Err(manifest_integrity_error("invalid residual evidence order"));
     }
+    let admitted = &segment.residual_admitted;
+    let blocking = segment
+        .selections
+        .iter()
+        .map(|s| s.action.is_some_and(Action::is_protective))
+        .collect::<Vec<_>>();
     let mut cell = 0;
     let mut covered_end = 0;
-    sweep(segment, order, |span, parents, blocked| {
-        let Some(current) = segment.residuals.get(cell) else {
-            return Ok(());
-        };
-        if span.end <= current.raw.start {
-            return Ok(());
-        }
-        if span.start < current.raw.start
-            || span.end > current.raw.end
-            || blocked
-            || parents != current.parents
-            || parents.first() != Some(&current.representative)
-        {
-            return Err(manifest_integrity_error("invalid residual parent coverage"));
-        }
-        covered_end = span.end;
-        if span.end == current.raw.end {
-            cell += 1;
-        }
-        Ok(())
-    })?;
+    let mut seen_parents = BTreeSet::new();
+    let mut seen_preserved = false;
+    sweep(
+        segment,
+        order,
+        &blocking,
+        |span, parents, blocked, preserved| {
+            let Some(current) = segment.residuals.get(cell) else {
+                return Ok(());
+            };
+            if span.end <= current.raw.start {
+                return Ok(());
+            }
+            let parents = parents
+                .iter()
+                .copied()
+                .filter(|&id| admitted[id])
+                .collect::<Vec<_>>();
+            if span.start < current.raw.start
+                || span.end > current.raw.end
+                || blocked
+                || parents.first() != Some(&current.representative)
+                || current.parents.first() != Some(&current.representative)
+                || parents.iter().any(|id| !current.parents.contains(id))
+            {
+                return Err(manifest_integrity_error("invalid residual parent coverage"));
+            }
+            seen_parents.extend(parents);
+            seen_preserved |= preserved;
+            covered_end = span.end;
+            if span.end == current.raw.end {
+                if seen_parents.len() != current.parents.len()
+                    || seen_preserved != current.overrides_preserve
+                    || !current.action.is_protective()
+                {
+                    return Err(manifest_integrity_error("invalid residual parent coverage"));
+                }
+                seen_parents.clear();
+                seen_preserved = false;
+                cell += 1;
+            }
+            Ok(())
+        },
+    )?;
     if cell != segment.residuals.len()
         || segment
             .residuals
