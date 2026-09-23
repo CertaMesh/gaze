@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 430" width="960" height="430" role="img" aria-labelledby="t d">
   <title id="t">The seven steps inside Gaze</title>
-  <desc id="d">Steps 1 to 4 (normalize, recognize, resolve, swap) form the deterministic floor. Step 5, the optional safety net, rereads the output; step 6, the output check, turns each suspect into a placeholder, deletes it, or refuses the document. The text then goes to the AI model, and step 7 restores the real values in the reply.</desc>
+  <desc id="d">Steps 1 to 4 (normalize, recognize, resolve, swap) form the deterministic floor. Step 5, the optional safety net, rereads the output; step 6, the output check, turns each suspect into a placeholder, replaces it with a one-way [REDACTED:class] marker, or refuses the document. The text then goes to the AI model, and step 7 restores the real values in the reply.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#5B6B7C"/>
@@ -68,7 +68,7 @@
   <text class="num" x="286" y="268">6</text>
   <text class="name" x="286" y="292">Output check</text>
   <text class="sub" x="286" y="316">Each suspect becomes a</text>
-  <text class="sub" x="286" y="334">placeholder, is deleted, or</text>
+  <text class="sub" x="286" y="334">placeholder, is redacted, or</text>
   <text class="sub" x="286" y="352">the document is refused</text>
 
   <rect class="model" x="496" y="244" width="190" height="124" rx="10"/>

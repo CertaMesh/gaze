@@ -5,6 +5,51 @@ workspace (the published cargo name; the library is imported as `gaze`).
 Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
+## Pending (unreleased): the safety net redacts with a marker instead of deleting
+
+**Action required if your clean output goes anywhere that assumed redaction
+removed bytes.** This affects everyone on the shipped default policy, because
+the default is `Resolve` + `Redact`: the fallback runs whenever the resolve
+pass cannot honour a suspect reversibly.
+
+Previously the redact path replaced a flagged span with the empty string. It
+now writes a one-way `[REDACTED:<class>]` marker — `[REDACTED:name]`,
+`[REDACTED:custom:phone]` — and records it in the manifest. Which spans get
+redacted has not changed. What is written in their place has.
+
+1. **Expect clean output to be longer, not shorter, for redacted spans.** Any
+   assertion that clean text is no longer than the raw input, or that a
+   redaction shrinks the document, no longer holds. Byte-count diffing between
+   raw and clean needs to account for marker text.
+
+2. **Do not pattern-match the marker yourself.** Call
+   `gaze::is_redaction_marker` (also `redaction_marker_spans` and
+   `redaction_marker_byte_len` for whole-document work). A local copy of the
+   shape is a second spelling to keep in step with the emitter, and the
+   predicate takes authority from the manifest where the runtime does.
+
+3. **Restore is unchanged, deliberately.** A marker is not a token: restore
+   passes it through verbatim and the strict restore scan does not flag it.
+   Redacted bytes are still unrecoverable — that is what "one-way" means — but
+   the restored document now shows *where* they were.
+
+4. **If you consume the manifest, expect one more entry per redaction.** It
+   carries `Action::Redact`, is not owned, and stands for the original bytes it
+   covered. Code that inferred "a redaction happened" from the *absence* of a
+   manifest entry must now look for the entry instead; that inference was never
+   safe, because an absence cannot distinguish a redaction from a net that did
+   nothing.
+
+5. **Custom classes render lowercased, with every non-alphanumeric byte
+   except `:` mapped to `-`** (`custom:address_2` →
+   `[REDACTED:custom:address-2]`). Mapping `_` keeps the marker outside the
+   token grammar, which requires a trailing `_<digits>`. Mapping the rest means
+   `gaze::is_redaction_marker(gaze::redaction_marker(&class))` holds for every
+   `PiiClass`, including one you built as `PiiClass::Custom(..)` yourself in a
+   custom `SafetyNet` — so your redactions are recognised as protected output by
+   every consumer, including the index. The exact class is unchanged in the
+   audit row.
+
 ## Pending (unreleased): the Kiji DistilBERT safety net is removed
 
 **Action required if you ran `gaze setup`, use `gaze index`, or selected the

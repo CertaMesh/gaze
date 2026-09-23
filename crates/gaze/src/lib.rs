@@ -29,6 +29,14 @@ pub use dictionaries::{
     dictionary_bundle_from_context, DictionaryBundle, DictionaryBundleExt, DictionaryEntry,
     DictionaryLoadError, DictionarySource, DictionaryStats, RulepackDict,
 };
+/// The one-way `[REDACTED:<class>]` marker the safety net writes in place of flagged bytes.
+///
+/// Re-exported so adopters recognise protected output through the SAME predicate the runtime
+/// uses. A consumer that re-spells the shape locally is a second spelling to keep in step.
+pub use gaze_types::redaction_marker::{
+    is_redaction_marker, redaction_marker, redaction_marker_byte_len, redaction_marker_spans,
+    REDACTION_MARKER_PREFIX, REDACTION_MARKER_SUFFIX,
+};
 pub use gaze_types::{
     CodecAuditRow, CodecCapabilitySet, CollisionMembership, DocumentExtension,
     DocumentExtensionBuilder, DocumentExtensionError, EmittedTokenSpan, EmptyCustomClassName,

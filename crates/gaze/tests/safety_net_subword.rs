@@ -323,14 +323,20 @@ fn forced_refusal() -> Probe {
 }
 
 #[test]
-fn redact_fallback_deletes_the_residual_but_not_a_subword() {
+fn redact_fallback_redacts_the_residual_but_not_a_subword() {
     let raw = "Bitte residue Passwort ein";
     let net = ScriptedNet::new(vec![
         vec![forced_refusal(), probe(|t| find(t, "Passwort", 0..4))],
         vec![],
     ]);
     let (text, report, _, _) = clean(net, raw, resolve());
-    assert_eq!(text, "Bitte  Passwort ein");
+    assert_eq!(
+        text,
+        format!(
+            "Bitte {} Passwort ein",
+            gaze::redaction_marker(&PiiClass::Name)
+        )
+    );
     assert!(!subword_rows(&report).is_empty());
 }
 
@@ -342,28 +348,55 @@ fn terminal_round_admits_a_subword_instead_of_tokenizing_it() {
         vec![probe(|t| find(t, "Passwort", 0..4))],
     ]);
     let (text, report, _, _) = clean(net, raw, resolve());
-    assert_eq!(text, "Bitte  Passwort ein");
+    assert_eq!(
+        text,
+        format!(
+            "Bitte {} Passwort ein",
+            gaze::redaction_marker(&PiiClass::Name)
+        )
+    );
     assert!(!subword_rows(&report).is_empty());
+    // Located in the output rather than hard-coded: the marker is wider than the gap deleting
+    // left, so "Passwort" sits further right than it used to.
+    let at = text.find("Passwort").expect("the subword survives");
     assert!(
-        report.suspects.iter().any(|s| s.span == (7..11)),
+        report.suspects.iter().any(|s| s.span == (at..at + 4)),
         "the admitted finding stays in the report"
     );
 }
 
+/// Deleting `residue` out of `Pasresiduewort` used to glue `Pas` and `wort` into `Paswort` -- a
+/// word that exists only because gaze removed what sat between the fragments, and that the next
+/// net pass then flagged as a new finding. That seam-manufactured class is what the marker
+/// removes: the marker keeps the fragments apart, so the manufactured word never exists for any
+/// pass to see.
+///
+/// The mutation this must catch: write `""` instead of the marker, and `Paswort` reappears in
+/// the output and in the net's input.
 #[test]
-fn terminal_round_admits_a_seam_crossing_subword_instead_of_deleting_it() {
+fn a_redaction_marker_leaves_no_seam_for_a_subword_to_cross() {
     let raw = "Pasresiduewort ein";
     let net = ScriptedNet::new(vec![
         vec![forced_refusal()],
         vec![probe(|t| find(t, "Paswort", 1..5))],
     ]);
     let (text, report, _, _) = clean(net, raw, resolve());
-    assert_eq!(text, "Paswort ein");
-    assert!(!subword_rows(&report).is_empty());
+    assert_eq!(
+        text,
+        format!("Pas{}wort ein", gaze::redaction_marker(&PiiClass::Name))
+    );
+    assert!(
+        !text.contains("Paswort"),
+        "the manufactured word must not exist in the output"
+    );
+    assert!(
+        subword_rows(&report).is_empty(),
+        "no pass may find a seam-crossing subword when there is no seam"
+    );
 }
 
 #[test]
-fn redact_mode_deletes_whole_words_and_leaves_subwords() {
+fn redact_mode_redacts_whole_words_and_leaves_subwords() {
     let raw = "Anna und Passwort";
     let net = ScriptedNet::every_call(vec![
         probe(|t| find(t, "Anna", 0..4)),
@@ -374,7 +407,9 @@ fn redact_mode_deletes_whole_words_and_leaves_subwords() {
         raw,
         SafetyNetPolicy::new(SafetyNetMode::Redact, SafetyNetFallback::Redact),
     );
-    assert_eq!(text, " und Passwort");
+    let marker = gaze::redaction_marker(&PiiClass::Name);
+    assert_eq!(text, format!("{marker} und Passwort"));
+    // The subword row names the span in the text the net was given, which is the raw document.
     assert_eq!(subword_rows(&report), vec![(9..13, PiiClass::Name)]);
 }
 

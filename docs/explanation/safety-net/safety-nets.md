@@ -182,8 +182,8 @@ The *backend* is observer-only; the *pipeline* may still act on what it reports.
 A `SafetyNet` can never rewrite bytes itself — the trait has no return channel
 for replacement text and no mutable handle to the manifest, by construction —
 but the `SafetyNetPolicy` the caller passes decides what the deterministic core
-does with the resulting `LeakReport`: nothing (`Strict`, `Tolerant`), delete the
-suspect spans (`Redact`), or tokenize them reversibly and re-run
+does with the resulting `LeakReport`: nothing (`Strict`, `Tolerant`), replace the
+suspect spans with a one-way marker (`Redact`), or tokenize them reversibly and re-run
 (`Resolve`). The policy-less entry points below use
 `SafetyNetPolicy::default()`, which is `Resolve` + `Redact` — the shipped
 production default since v0.8.1. Pass an explicit `Strict` policy to
@@ -206,31 +206,112 @@ core. A safety net cannot rewrite, append to, or veto the clean text: under an
 enforcing policy it is still the core's tokenizer and redactor that mutate the
 document, driven by the report, never the backend.
 
+### The redaction marker
+
+Where the redact path once wrote the empty string, it now writes
+`[REDACTED:<class>]` — for example `[REDACTED:name]` or
+`[REDACTED:custom:phone]`.
+
+Deleting was a silent one-way loss. Nobody downstream could tell a redaction
+from a typo: not the person reading the clean document, not the model consuming
+it, and not a later pass of gaze itself, which saw two fragments that deletion
+had glued together and read the join as a new finding. The marker keeps the same
+decision — those bytes do not cross the boundary — and makes the decision
+legible.
+
+**It is not a token.** No session prefix, no ordinal, nothing to look up. Restore
+never substitutes it, the hallucination guard never judges it, and the strict
+restore scan treats it as ordinary prose. `gaze::is_redaction_marker` is the one
+predicate every consumer asks; a second spelling elsewhere would be a second
+thing to keep in step with the emitter.
+
+The class path renders lowercased, with `:` kept as the namespace separator and
+every other non-alphanumeric byte mapped to `-`. Mapping `_` is load-bearing
+rather than cosmetic: every bare arm of the token-shape grammar needs a trailing
+`_<digits>` inside word boundaries, so a custom class legitimately named
+`address_2` would otherwise make `[REDACTED:custom:address_2]` contain the token
+shape `custom:address_2` — the marker would parse as a token. Dropping the
+underscore makes that unrepresentable rather than merely untested;
+`a_redaction_marker_never_parses_as_a_token` pins it against every builtin class
+and the adversarial custom ones.
+
+Mapping everything else is what keeps the emitter and the predicate from drifting
+apart. `PiiClass::custom` normalises, but `PiiClass::Custom` is a public variant
+an adopter's own `SafetyNet` can build directly or deserialize, and
+`PiiClass::family` does not normalise its name; a class carrying an uppercase
+letter, a space or a `]` used to render a marker `is_redaction_marker` rejected.
+The index is the one production consumer of that predicate — it skips markers so
+a one-way redaction never becomes a searchable, translatable entity — so the
+divergence meant those redactions were indexed. Sanitising in the emitter makes
+`is_redaction_marker(redaction_marker(c))` true for every `PiiClass` by
+construction. The exact class is still carried by the audit row.
+
+**In the manifest.** A marker is recorded like any other one-way replacement:
+`Action::Redact`, not owned, standing for the original bytes it covered, with
+the ids of every suspect that drove it. A merged region is one marker carrying
+the class of its lowest-offset suspect, while the audit log still writes one row
+per suspect — merging must not merge away who asked for the redaction.
+
+**A marker is never redacted again.** `REDACTED` is a capitalised word in
+ordinary prose, which is exactly what a NER model reads as an organization. A
+suspect lying wholly inside a marker is dropped as already protected, on the
+manifest's authority rather than the text's — a document that merely *types*
+`[REDACTED:name]` gains nothing.
+
+**Containment, not overlap.** The first design dropped any suspect that merely
+*overlapped* a marker. That was rejected because it leaks: a net that reports
+`[REDACTED:name] Schmidt` has flagged a surname, and dropping the whole finding
+because half of it is a marker ships `Schmidt` raw. It also excused suspects that
+were simply malformed -- out of bounds, reversed, splitting a character --
+whenever they happened to touch a marker, where those must stay unjudgeable and
+deny. So a suspect is protected only when it lies *wholly inside* a marker gaze
+recorded. A suspect that straddles a marker and real text is judged by the
+ordinary rules, and since it overlaps a manifest entry it denies the document:
+fail-closed, never a leak. On the benchmark corpus no straddling suspect occurs
+-- see the evidence below -- so the denial costs nothing measured; if one ever
+appears in practice, the refinement is to act on the bytes outside the marker,
+not to relax containment.
+
+**Evidence.** The benchmark's `full-stack-nym-redact` arm runs Nym-small under
+`SafetyNetMode::Redact` so that every suspect goes through the redaction path;
+the shipped `full-stack-nym-resolve` arm cannot show this, because on the corpus
+it resolves every Nym suspect reversibly and its fallback never fires. Compared
+against the deleting implementation over the full 2,910-document corpus,
+`scripts/bench/marker_ab.py` found the same 1,296 spans redacted in the same
+1,014 documents, identical leaked and false-positive byte counts, no new
+rejections, and -- in every document -- clean text identical to the deleting
+output once the markers are removed.
+
+**What it costs.** The output is longer than the input for those spans, where
+deleting made it shorter. Adopters who diffed clean text against raw byte counts
+will see that change; nothing about which spans get redacted moved.
+
 ### Terminal admission after a `Redact` fallback
 
-Under `Resolve` + `Redact` the fallback *deletes* the residual spans it could
-not resolve. Deleting bytes changes the whole input string, so the scan that
-follows is the first pass to see that text, and it routinely reports a short
-sub-word span that the earlier passes read and accepted. Denying on every such
-span held a fallback document to a standard no completing document has to meet.
+Under `Resolve` + `Redact` the fallback *replaces* the residual spans it could
+not resolve with a one-way marker. That changes the input string, so the scan
+that follows is the first pass to see that text, and it routinely reports a
+short sub-word span that the earlier passes read and accepted. Denying on every
+such span held a fallback document to a standard no completing document has to
+meet.
 
-The terminal report instead gets one reversible round and one bounded deletion,
-and each remaining suspect is classified into a closed set:
+The terminal report instead gets one reversible round and one bounded
+replacement, and each remaining suspect is classified into a closed set:
 
 | Case | Condition | Outcome |
 |------|-----------|---------|
-| `FallbackIncomplete` | The suspect covers bytes the fallback's own audit rows say it removed. | Deny. Nothing further is deleted first. |
-| `SeamManufactured` | The suspect's span strictly **contains** a deletion seam, so part of its shape exists only because the fallback removed what sat between two fragments. Abutting a seam is not this. | One bounded deletion through the ordinary fallback path. A second one denies. |
+| `FallbackIncomplete` | The suspect covers bytes the fallback's own audit rows say it removed. | Deny. Nothing further is replaced first. |
+| `SeamManufactured` | The suspect's span strictly **contains** a deletion seam, so part of its shape exists only because the fallback removed what sat between two fragments. Abutting a seam is not this. | One bounded replacement through the ordinary fallback path. A second one denies. **Unreachable since the fallback started writing a marker** — a marker separates the fragments a deletion used to glue together, so no seam exists to contain. Kept, unmeasured-for-removal, under solo todo 3739. |
 | `Unjudgeable` | The suspect names no real range of the document, its own coverage claim contradicts the manifest, or the bytes it covers carry a token shape this pipeline never minted. | Deny. |
 | `Admit` | Anything else: a finding about the document that no stage is permitted to act on. | Merged into the returned `LeakReport`; the document completes carrying it. |
 
-Both bounds — one reversible round, one deletion — are straight-line code, not a
+Both bounds — one reversible round, one replacement — are straight-line code, not a
 loop with a counter. After they are spent, one more scan runs and the same
 classification applies: `Admit` ships with an honest report, anything else
 denies. Admission is strictly wider than the rule it replaced, so no document
 that completed before can begin denying.
 
-The round tokenizes; it never deletes. Its audit rows are
+The round tokenizes; it never redacts. Its audit rows are
 `decided_by: Resolve` with `action: Tokenize`, carrying the `FallbackReason`
 that made the round run — the combination that tells them apart from the
 second batch's rows. The protection trace projects them as an ordinary
@@ -239,14 +320,19 @@ provenance set is unchanged.
 
 **Coordinates.** `map_clean_boundary_to_raw` infers original-request offsets
 from the manifest alone, assuming every untokenized clean run stands for an
-equal-length raw run. A deletion removes clean bytes and no raw bytes, so that
-assumption fails for everything after the first removed region. The terminal
-phase therefore works through a layout rebuilt from the deletion ledger's raw
-coordinates — the one system no later edit shifts — reconciled against the
-manifest's clean spans; a document that disagrees with its own ledger fails
-closed. A clean boundary landing exactly on a seam has two truthful raw images,
-so it resolves by direction: a span **starts** at the first surviving byte after
-the removed range and **ends** at the last surviving byte before it. A
+equal-length raw run. A *deletion* removes clean bytes and no raw bytes, so that
+assumption failed for everything after the first removed region, and every later
+mapping had to be rebuilt from a deletion ledger.
+
+Writing a marker is what removed that whole branch from the product path. A
+marker is an ordinary one-way manifest entry — `Action::Redact`, not owned,
+exactly the shape the primary pass has always emitted for a redacting policy —
+so the clean/raw alignment stays affine and the plain mapper describes the
+document end to end. The layout code that reconciled a deletion ledger against
+the manifest remains in tree but is no longer reachable; solo todo 3739 measures
+its removal.
+
+A
 resolution gap must map to exactly as many raw bytes as it has clean bytes,
 which is what prevents a token standing for bytes on both sides of a seam.
 

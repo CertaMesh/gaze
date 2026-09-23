@@ -126,29 +126,46 @@ fn prove_ordering(route: Route) {
         let CleanDocument::Text(text) = doc else {
             panic!("text")
         };
-        let expected_raw: Vec<_> = raw.match_indices("seed").map(|(i, _)| i..i + 4).collect();
+        let marker = redaction_marker(&PiiClass::Name);
+        // Every `seed` is a token and every `barrier ` is a marker, each standing for its own
+        // ORIGINAL bytes -- which is what makes the manifest describe the whole document where
+        // deleting left holes nothing described.
+        let seeds: Vec<_> = raw.match_indices("seed").map(|(i, _)| i..i + 4).collect();
+        let mut expected_raw: Vec<_> = seeds
+            .iter()
+            .cloned()
+            .chain(raw.match_indices("barrier ").map(|(i, _)| i..i + 8))
+            .collect();
+        expected_raw.sort_by_key(|r| r.start);
         assert_eq!(
             spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
             expected_raw
         );
         assert_eq!(
             report.suspects.len(),
-            expected_raw.len() + raw.matches("barrier ").count()
+            seeds.len() + raw.matches("barrier ").count()
         );
         assert!(!text.contains("barrier"));
-        assert!(text.ends_with(" residual é"));
+        assert!(text.ends_with("residual é"));
+        // Ordered and disjoint. Not necessarily separated: a marker replaces "barrier " with its
+        // trailing space, so it can abut the next token directly.
         assert!(spans
             .windows(2)
-            .all(|p| p[0].clean_span.end < p[1].clean_span.start));
+            .all(|p| p[0].clean_span.end <= p[1].clean_span.start));
         for span in &spans {
             assert_eq!(span.class, PiiClass::Name);
-            let token = text.get(span.clean_span.clone()).unwrap();
+            let replacement = text.get(span.clean_span.clone()).unwrap();
             let restored = if matches!(route, Route::Staged) {
-                transaction.restore(token)
+                transaction.restore(replacement)
             } else {
-                session.restore(token)
+                session.restore(replacement)
             };
-            assert_eq!(restored.as_deref(), Some(&raw[span.raw_span.clone()]));
+            if is_redaction_marker(replacement) {
+                // One-way: a marker restores to nothing, whichever route minted the session.
+                assert_eq!(restored, None);
+            } else {
+                assert_eq!(restored.as_deref(), Some(&raw[span.raw_span.clone()]));
+            }
         }
         let restored = if matches!(route, Route::Staged) {
             assert!(session.tokens().is_empty());
@@ -156,11 +173,11 @@ fn prove_ordering(route: Route) {
         } else {
             session.restore_strict_text(&text).unwrap()
         };
-        assert_eq!(restored, raw.replace("barrier ", ""));
+        assert_eq!(restored, raw.replace("barrier ", &marker));
         let scans = seen.lock().unwrap();
         assert_eq!(scans.len(), 3, "exactly one terminal scan, no retry");
         assert_eq!(scans[0], raw);
-        assert_eq!(scans[1].replace("barrier ", ""), text);
+        assert_eq!(scans[1].replace("barrier ", &marker), text);
         assert_eq!(scans[2], text, "terminal scan must not mutate");
         drop(transaction);
         if matches!(route, Route::Staged) {
@@ -308,17 +325,20 @@ fn deletion_authorizes_one_reversible_round_over_a_raw_gap() {
             panic!("text")
         };
         assert!(!text.contains("gap"), "{route:?} shipped the gap raw");
+        // 0..8 is the redacted "barrier " -- a marker standing for its own original bytes, where
+        // deleting used to leave nothing in the manifest to say it had been there.
         assert_eq!(
             spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-            [8..12, 13..16, 17..21],
-            "{route:?}: the round names the gap's ORIGINAL bytes, past the deleted barrier"
+            [0..8, 8..12, 13..16, 17..21],
+            "{route:?}: the round names the gap's ORIGINAL bytes, past the redacted barrier"
         );
+        assert!(is_redaction_marker(&text[spans[0].clean_span.clone()]));
         let target: &dyn Fn(&str) -> Option<String> = &|token| match route {
             Route::Staged => transaction.restore(token),
             _ => session.restore(token),
         };
         assert_eq!(
-            target(&text[spans[1].clean_span.clone()]).as_deref(),
+            target(&text[spans[2].clean_span.clone()]).as_deref(),
             Some("gap")
         );
         assert_eq!(
@@ -408,7 +428,10 @@ fn deletion_does_not_authorize_spills_foreign_tokens_or_malformed_reports() {
             }
             let scans = seen.lock().unwrap();
             assert_eq!(scans.len(), 3);
-            assert_eq!(scans[1].replace("barrier ", ""), scans[2]);
+            assert_eq!(
+                scans[1].replace("barrier ", &redaction_marker(&PiiClass::Name)),
+                scans[2]
+            );
             if matches!(route, Route::Staged) {
                 assert_eq!(transaction.tokens().len(), 1);
                 assert!(session.tokens().is_empty());

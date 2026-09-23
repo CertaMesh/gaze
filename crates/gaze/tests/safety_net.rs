@@ -11,6 +11,27 @@ use gaze::{
     Session, Value,
 };
 
+/// The manifest holds exactly `expected` entries and every one of them is a redaction marker.
+///
+/// These sites used to assert `manifest.is_empty()`, because deleting recorded nothing. Asserting
+/// a COUNT alone would be a weaker test than the one it replaced: it would pass on a manifest
+/// holding a live token where a marker belongs. The bytes have to be a marker, asked through the
+/// shared predicate rather than by re-spelling the shape here.
+fn assert_only_redaction_markers(
+    clean: &str,
+    manifest: &[gaze::EmittedTokenSpan],
+    expected: usize,
+) {
+    assert_eq!(manifest.len(), expected, "manifest: {manifest:?}");
+    for span in manifest {
+        assert!(
+            gaze::is_redaction_marker(&clean[span.clean_span.clone()]),
+            "manifest entry is not a redaction marker: {:?}",
+            &clean[span.clean_span.clone()]
+        );
+    }
+}
+
 #[derive(Clone)]
 struct FixedDetector {
     span: Range<usize>,
@@ -286,10 +307,6 @@ fn traced_clean(
     (text(clean), manifest, report, trace)
 }
 
-fn ranges_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
-    left.start < right.end && right.start < left.end
-}
-
 fn assert_trace_manifest_contract(
     raw: &str,
     clean: &str,
@@ -297,6 +314,10 @@ fn assert_trace_manifest_contract(
     trace: &[GazeLocalProtectionTraceItem],
     session: &Session,
 ) {
+    // Trace and manifest agree one-for-one, for redactions as well as tokens. A redaction used
+    // to be proven by ABSENCE (no manifest entry overlapped it) because deleting recorded
+    // nothing; that would pass a trace claiming a redaction gaze never made. It is a marker entry
+    // now, so it is proven the same way a token is: by the one entry that stands for it.
     for item in trace {
         let raw_span = item.raw_start()..item.raw_end();
         assert!(raw_span.start < raw_span.end);
@@ -304,34 +325,34 @@ fn assert_trace_manifest_contract(
         assert!(raw.is_char_boundary(raw_span.start));
         assert!(raw.is_char_boundary(raw_span.end));
 
+        let matching = manifest
+            .iter()
+            .filter(|span| span.raw_span == raw_span && &span.class == item.class())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            matching.len(),
+            1,
+            "{} trace item must match one manifest entry",
+            item.action()
+        );
+        let replacement = &clean[matching[0].clean_span.clone()];
         match item.action() {
-            "tokenize" => {
-                let matching = manifest
-                    .iter()
-                    .filter(|span| span.raw_span == raw_span && &span.class == item.class())
-                    .count();
-                assert_eq!(
-                    matching, 1,
-                    "reversible trace item must match one manifest entry"
-                );
-            }
+            "tokenize" => assert!(
+                !gaze::is_redaction_marker(replacement),
+                "a reversible trace item must not stand on a redaction marker"
+            ),
             "redact" => assert!(
-                !manifest
-                    .iter()
-                    .any(|span| ranges_overlap(&span.raw_span, &raw_span)),
-                "redact trace item must not retain an overlapping manifest entry"
+                gaze::is_redaction_marker(replacement),
+                "a redact trace item must stand on a redaction marker, got {replacement:?}"
             ),
             action => panic!("unexpected protection action: {action}"),
         }
     }
 
     assert_eq!(
-        trace
-            .iter()
-            .filter(|item| item.action() == "tokenize")
-            .count(),
+        trace.len(),
         manifest.len(),
-        "every final manifest entry must have one reversible trace item"
+        "every final manifest entry must have exactly one trace item"
     );
     for span in manifest {
         assert!(span.raw_span.start < span.raw_span.end);
@@ -342,11 +363,22 @@ fn assert_trace_manifest_contract(
         assert!(span.clean_span.end <= clean.len());
         assert!(clean.is_char_boundary(span.clean_span.start));
         assert!(clean.is_char_boundary(span.clean_span.end));
-        let token = &clean[span.clean_span.clone()];
-        assert_eq!(
-            session.restore(token).expect("manifest token restores"),
-            raw[span.raw_span.clone()]
-        );
+        let replacement = &clean[span.clean_span.clone()];
+        if gaze::is_redaction_marker(replacement) {
+            // One-way: a marker is never a token, so it must never restore to anything.
+            assert_eq!(
+                session.restore(replacement),
+                None,
+                "a redaction marker must not restore"
+            );
+        } else {
+            assert_eq!(
+                session
+                    .restore(replacement)
+                    .expect("manifest token restores"),
+                raw[span.raw_span.clone()]
+            );
+        }
     }
 }
 
@@ -559,8 +591,8 @@ fn safety_net_trace_redact_action_protects_utf8_span_without_claiming_restore() 
     );
 
     assert_eq!(report.stats.uncovered_count, 1);
-    assert_eq!(clean, " von Dr. Schmidt");
-    assert!(manifest.is_empty());
+    assert_eq!(clean, "[REDACTED:name] von Dr. Schmidt");
+    assert_only_redaction_markers(&clean, &manifest, 1);
     assert_eq!(trace.len(), 1);
     assert_eq!(trace[0].raw_start(), 0);
     assert_eq!(trace[0].raw_end(), suspect.len());
@@ -634,8 +666,9 @@ fn safety_net_redact_mode_strips_suspect_without_manifest_entry() {
         )
         .expect("redact");
 
-    assert_eq!(text(clean), "Reach ");
-    assert!(manifest.is_empty());
+    let clean = text(clean);
+    assert_eq!(clean, "Reach [REDACTED:email]");
+    assert_only_redaction_markers(&clean, &manifest, 1);
     assert_eq!(report.stats.uncovered_count, 1);
 }
 
@@ -661,9 +694,9 @@ fn safety_net_redact_mode_rounds_misaligned_multibyte_suspect_outward() {
         .expect("misaligned redact rounds outward");
     let clean_text = text(clean);
 
-    assert_eq!(clean_text, "Grße von Dr. Schmidt");
+    assert_eq!(clean_text, "Gr[REDACTED:name]ße von Dr. Schmidt");
     assert!(!clean_text.contains("Grüße"));
-    assert!(manifest.is_empty());
+    assert_only_redaction_markers(&clean_text, &manifest, 1);
     assert_eq!(report.stats.uncovered_count, 1);
 }
 
@@ -693,13 +726,18 @@ fn safety_net_redact_mode_expands_overlap_to_entire_emitted_token() {
         .expect("overlap redact expands to emitted token");
     let clean_text = text(clean);
 
-    assert_eq!(clean_text, " ok");
+    // The redaction swallowed the emitted token and left one marker standing for the union.
+    assert_eq!(clean_text, "[REDACTED:name] ok");
     assert!(!clean_text.contains('<'));
     assert!(!clean_text.contains("Email"));
-    assert!(manifest.is_empty());
+    assert_eq!(manifest.len(), 1);
+    assert!(gaze::is_redaction_marker(
+        &clean_text[manifest[0].clean_span.clone()]
+    ));
+    // Restore leaves the marker exactly where it is: it is not a token to substitute.
     assert_eq!(
         session.restore_strict_text(&clean_text).expect("restore"),
-        " ok"
+        "[REDACTED:name] ok"
     );
     assert_eq!(report.stats.class_mismatch_count, 1);
 }
@@ -766,8 +804,9 @@ fn safety_net_redact_mode_keeps_aligned_span_redaction_behavior() {
         )
         .expect("aligned redact");
 
-    assert_eq!(text(clean), "Hello ");
-    assert!(manifest.is_empty());
+    let clean = text(clean);
+    assert_eq!(clean, "Hello [REDACTED:name]");
+    assert_only_redaction_markers(&clean, &manifest, 1);
     assert_eq!(report.stats.uncovered_count, 1);
 }
 
@@ -1344,14 +1383,23 @@ fn safety_net_policy_lowering_covers_all_twelve_representable_pairs() {
                     assert_eq!(clean_a, baseline_a, "{mode:?}/{fallback:?}");
                     assert_eq!(manifest_a.len(), 1, "{mode:?}/{fallback:?}");
                 }
-                // Redact deletes the suspect bytes one-way; no fallback is consulted.
+                // Redact replaces the suspect bytes with a one-way marker; no fallback is
+                // consulted. The primary token survives beside it, so there are two entries.
                 gaze::SafetyNetMode::Redact => {
                     assert_eq!(
                         clean_a,
-                        baseline_a[..uncovered.start],
+                        format!(
+                            "{}{}",
+                            &baseline_a[..uncovered.start],
+                            gaze::redaction_marker(&PiiClass::Email)
+                        ),
                         "{mode:?}/{fallback:?}"
                     );
-                    assert_eq!(manifest_a.len(), 1, "{mode:?}/{fallback:?}");
+                    assert_eq!(manifest_a.len(), 2, "{mode:?}/{fallback:?}");
+                    assert!(
+                        gaze::is_redaction_marker(&clean_a[manifest_a[1].clean_span.clone()]),
+                        "{mode:?}/{fallback:?}"
+                    );
                 }
                 // Resolve promotes the suspect reversibly and converges, so the fallback is
                 // never reached and restore still round-trips.
@@ -1670,15 +1718,24 @@ fn resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens(
             "{expected_reason:?}: residual must be redacted"
         );
         // ...and the minted token survived intact, so its manifest entry and restore path live.
+        // The manifest also carries the residual's marker now; what must hold is that exactly
+        // one entry is still a live token and everything else is a marker, not merely a count.
+        let tokens = manifest
+            .iter()
+            .filter(|span| !gaze::is_redaction_marker(&clean[span.clean_span.clone()]))
+            .count();
         assert_eq!(
-            manifest.len(),
-            1,
+            tokens, 1,
             "{expected_reason:?}: the protected token must survive fallback"
         );
         assert_eq!(
             session.restore_strict_text(&clean).expect("restore"),
-            "alice@example.invalid ",
-            "{expected_reason:?}: restore must round-trip the protected token"
+            format!(
+                "alice@example.invalid {}",
+                gaze::redaction_marker(&PiiClass::Name)
+            ),
+            "{expected_reason:?}: restore must round-trip the protected token and leave the \
+             marker standing where the residual was"
         );
 
         // Both dispositions are on the record: the residual was redacted, the protected suspect
@@ -1990,10 +2047,14 @@ fn first_pass_refusal_redacts_only_the_actionable_suspect_and_audits_the_protect
         .unwrap_or_else(|err| panic!("{refusal:?}: {err:?}"));
         let clean = text(clean);
 
-        // The protected token survived, so its manifest entry and restore path are intact.
+        // The protected token survived, so its manifest entry and restore path are intact. The
+        // redaction marker sits beside it in the manifest; count tokens, not entries.
+        let tokens = manifest
+            .iter()
+            .filter(|span| !gaze::is_redaction_marker(&clean[span.clean_span.clone()]))
+            .count();
         assert_eq!(
-            manifest.len(),
-            1,
+            tokens, 1,
             "{refusal:?}: the protected token must survive the fallback"
         );
         let restored = session.restore_strict_text(&clean).expect("restore");

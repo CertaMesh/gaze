@@ -148,7 +148,10 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
         let scan1 = "a bé delete [REDACTED] tail";
         let scan2 = format!("{a} bé delete [REDACTED] tail");
         let scan3 = format!("{a} {b} delete [REDACTED] tail");
-        let final_text = format!("{a} {b} [REDACTED] tail");
+        // "delete " is the fallback's residual: it becomes one `[REDACTED:name]` marker, which
+        // sits directly against the primary pass's own `[REDACTED]` for "primary".
+        let marker = redaction_marker(&PiiClass::Name);
+        let final_text = format!("{a} {b} {marker}[REDACTED] tail");
         let terminal_report = match terminal {
             0 => Ok(vec![
                 raw(0..a.len()),
@@ -172,7 +175,7 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
         ];
         // Case 1 is the only terminal report the round can act on: a fresh finding on plain
         // surviving text. It gets one reversible round and one settled sweep.
-        let resolved = format!("{a} {b} [REDACTED] {tail}");
+        let resolved = format!("{a} {b} {marker}[REDACTED] {tail}");
         if terminal == 1 {
             sweeps.push((resolved.clone(), Ok(vec![])));
         }
@@ -197,12 +200,12 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
             assert_eq!(text, resolved);
             assert_eq!(
                 spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-                [0..1, 2..5, 13..20, 21..25],
-                "the terminal round names the tail's ORIGINAL bytes across the deleted range"
+                [0..1, 2..5, 6..13, 13..20, 21..25],
+                "the terminal round names the tail's ORIGINAL bytes across the redacted range"
             );
             assert_eq!(
                 session.restore_strict_text(&text).unwrap(),
-                "a bé [REDACTED] tail"
+                format!("a bé {marker}[REDACTED] tail")
             );
             assert!(queue.lock().unwrap().is_empty());
             assert_eq!(
@@ -230,9 +233,13 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
             assert_eq!(text, final_text);
             assert_eq!(
                 spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-                [0..1, 2..5, 13..20]
+                [0..1, 2..5, 6..13, 13..20]
             );
-            assert_eq!(&text[spans[2].clean_span.clone()], "[REDACTED]");
+            // The fallback's marker and the primary pass's own redaction are distinct entries:
+            // only the former is the safety net's one-way marker.
+            assert!(is_redaction_marker(&text[spans[2].clean_span.clone()]));
+            assert_eq!(&text[spans[3].clean_span.clone()], "[REDACTED]");
+            assert!(!is_redaction_marker("[REDACTED]"));
             assert!(!session.contains_token("[REDACTED]"));
             assert_eq!(report.suspects.len(), 3);
             assert_eq!(report.suspects[1].span, a.len() + 1..a.len() + 4);
@@ -283,7 +290,8 @@ fn second_batch_ineligible_and_not_applicable_paths_keep_exact_sweeps() {
                     ("raw".into(), Ok(vec![mismatch(0..3)])),
                 ];
                 if fallback == SafetyNetFallback::Redact {
-                    steps.push(("".into(), Ok(vec![])));
+                    // The terminal sweep sees the marker, not an empty document.
+                    steps.push((redaction_marker(&PiiClass::Name), Ok(vec![])));
                 }
                 steps
             } else {
@@ -305,9 +313,9 @@ fn second_batch_ineligible_and_not_applicable_paths_keep_exact_sweeps() {
                     if mode == SafetyNetMode::Redact
                         || (mode == SafetyNetMode::Resolve && fallback == SafetyNetFallback::Redact)
                     {
-                        ""
+                        redaction_marker(&PiiClass::Name)
                     } else {
-                        "raw"
+                        "raw".to_string()
                     }
                 );
             }
@@ -315,11 +323,12 @@ fn second_batch_ineligible_and_not_applicable_paths_keep_exact_sweeps() {
             assert!(session.tokens().is_empty());
         }
     }
-    // First refusal has no eligible follow-up, and protected/empty scan2 needs no third sweep.
+    // First refusal has no eligible follow-up, and a scan2 that is only the fallback's marker
+    // needs no third sweep: there is nothing left in it that a net could report.
     let session = Session::new(Scope::Ephemeral).unwrap();
     let (p, steps) = pipeline(vec![
         ("raw".into(), Ok(vec![mismatch(0..3)])),
-        ("".into(), Ok(vec![])),
+        (redaction_marker(&PiiClass::Name), Ok(vec![])),
     ]);
     run(&p, &session, "raw", SafetyNetPolicy::default()).unwrap();
     assert!(steps.lock().unwrap().is_empty());
@@ -517,12 +526,13 @@ fn five_sweeps_can_mean_ten_backend_calls_and_still_only_one_second_batch() {
     let c = session
         .tokenize_with_family("safety_net", &PiiClass::Name, "é")
         .unwrap();
+    let marker = redaction_marker(&PiiClass::Name);
     let texts = [
         "a b c é".to_owned(),
         format!("{a} b c é"),
         format!("{a} {b} c é"),
-        format!("{a} {b}  é"),
-        format!("{a} {b}  {c}"),
+        format!("{a} {b} {marker} é"),
+        format!("{a} {b} {marker} {c}"),
     ];
     let active = Arc::new(Mutex::new(VecDeque::from(vec![
         (texts[0].clone(), Ok(vec![raw(0..1)])),
@@ -557,11 +567,14 @@ fn five_sweeps_can_mean_ten_backend_calls_and_still_only_one_second_batch() {
     assert_eq!(text, texts[4]);
     assert_eq!(
         spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-        [0..1, 2..3, 6..8]
+        [0..1, 2..3, 4..5, 6..8]
     );
-    // Restore is exact for everything the fallback did not delete; `c` is gone by the documented
-    // `Redact` contract.
-    assert_eq!(session.restore_strict_text(&text).unwrap(), "a b  é");
+    // Restore is exact for everything the fallback did not redact; `c` is gone by the documented
+    // `Redact` contract, and its marker survives restore in its place.
+    assert_eq!(
+        session.restore_strict_text(&text).unwrap(),
+        format!("a b {marker} é")
+    );
     assert!(active.lock().unwrap().is_empty());
     assert!(passive.lock().unwrap().is_empty());
     assert_eq!(
@@ -668,11 +681,12 @@ fn second_batch_terminal_registry_malformed_spans_are_enforced_before_conversion
         let b = session
             .tokenize_with_family("safety_net", &PiiClass::Name, "b")
             .unwrap();
+        let marker = redaction_marker(&PiiClass::Name);
         let texts = [
             "a b c é".to_owned(),
             format!("{a} b c é"),
             format!("{a} {b} c é"),
-            format!("{a} {b}  é"),
+            format!("{a} {b} {marker} é"),
         ];
         let queue = Arc::new(Mutex::new(VecDeque::from(vec![
             (texts[0].clone(), Ok(vec![raw(0..1)])),
@@ -713,7 +727,8 @@ fn second_batch_then_fallback_trace_keeps_original_raw_coordinates() {
     let b = session
         .tokenize_with_family("safety_net", &PiiClass::Name, "b")
         .unwrap();
-    let final_text = format!("{a} {b} ");
+    let marker = redaction_marker(&PiiClass::Name);
+    let final_text = format!("{a} {b} {marker}");
     let (p, steps) = pipeline(vec![
         ("a b c".into(), Ok(vec![raw(0..1)])),
         (format!("{a} b c"), Ok(vec![raw(a.len() + 1..a.len() + 2)])),
@@ -739,10 +754,15 @@ fn second_batch_then_fallback_trace_keeps_original_raw_coordinates() {
         panic!("text")
     };
     assert_eq!(text, final_text);
-    assert_eq!(session.restore_strict_text(&text).unwrap(), "a b ");
+    assert_eq!(
+        session.restore_strict_text(&text).unwrap(),
+        format!("a b {marker}")
+    );
+    // The marker stands for `c`'s ORIGINAL byte, 4..5, exactly where the trace says the
+    // fallback redacted.
     assert_eq!(
         spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
-        [0..1, 2..3]
+        [0..1, 2..3, 4..5]
     );
     assert_eq!(
         trace

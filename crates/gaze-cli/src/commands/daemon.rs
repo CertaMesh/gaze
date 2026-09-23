@@ -649,4 +649,99 @@ mod residual_wire_tests {
         // A fragment says so, so a client can choose not to count it as a value.
         assert_eq!(manifest[1]["origin"], "residual_fragment");
     }
+
+    /// Flags a literal as an uncovered name; the `Redact` mode writes a marker over it.
+    struct LiteralNet;
+
+    impl gaze::SafetyNet for LiteralNet {
+        fn id(&self) -> &str {
+            "daemon.fixture"
+        }
+        fn supported_locales(&self) -> &[gaze::LocaleTag] {
+            &[gaze::LocaleTag::Global]
+        }
+        fn check(
+            &self,
+            text: &str,
+            _: gaze::SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+            Ok(text
+                .find("Schmidt")
+                .map(|start| {
+                    vec![gaze::LeakSuspect::new(
+                        start..start + "Schmidt".len(),
+                        PiiClass::Name,
+                        self.id(),
+                        Some(1.0),
+                        gaze::LeakKind::Uncovered,
+                        "person",
+                        None,
+                    )]
+                })
+                .unwrap_or_default())
+        }
+    }
+
+    /// The daemon's `Clean` response carries the manifest verbatim and, separately, the session's
+    /// restorable tokens. A safety-net redaction is now a manifest entry, so a client reading the
+    /// manifest will meet one; it must be able to tell that entry is a one-way marker, and the
+    /// `tokens` list -- what the client may hand back for restore -- must never advertise it.
+    ///
+    /// Built from a real pipeline run and a real session, assembled the way `clean_request` does,
+    /// so the JSON under test is the JSON a client parses.
+    #[test]
+    fn a_redaction_marker_is_in_the_manifest_but_never_in_the_restorable_tokens() {
+        let pipeline = gaze::Pipeline::builder()
+            .rule(gaze::DefaultRule::new(gaze::Action::Preserve))
+            .register_safety_net(LiteralNet)
+            .build()
+            .expect("pipeline");
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");
+        let (clean_doc, manifest, _) = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                gaze::RawDocument::Text("Dear Schmidt, hello".into()),
+                &[gaze::LocaleTag::Global],
+                &gaze::DictionaryBundle::default(),
+                gaze::SafetyNetPolicy::new(
+                    gaze::SafetyNetMode::Redact,
+                    gaze::SafetyNetFallback::Strict,
+                ),
+            )
+            .expect("clean");
+        let gaze::CleanDocument::Text(clean_text) = clean_doc else {
+            panic!("text");
+        };
+        let response = DaemonResponse::Clean {
+            session_id: "s-1".to_string(),
+            clean_text: clean_text.clone(),
+            manifest,
+            tokens: session
+                .snapshot_entries()
+                .into_iter()
+                .map(TokenJson::from)
+                .collect(),
+        };
+        let value: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&response).unwrap()).unwrap();
+
+        let manifest = value["manifest"].as_array().unwrap();
+        assert_eq!(manifest.len(), 1, "one entry, for the one redaction");
+        let start = manifest[0]["clean_span"]["start"].as_u64().unwrap() as usize;
+        let end = manifest[0]["clean_span"]["end"].as_u64().unwrap() as usize;
+        let replacement = &clean_text[start..end];
+        assert!(
+            gaze::is_redaction_marker(replacement),
+            "a client must be able to identify the entry as a marker: {replacement:?}"
+        );
+        assert!(
+            value["tokens"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|token| token["token"] != replacement),
+            "the marker must never be advertised as a restorable token"
+        );
+        assert!(value["tokens"].as_array().unwrap().is_empty());
+    }
 }
