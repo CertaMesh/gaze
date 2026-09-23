@@ -136,6 +136,15 @@ impl RegexDetector {
         self.locale_basis = locale_basis;
         self
     }
+
+    /// Overrides the confidence every candidate is emitted with.
+    ///
+    /// The conflict ladder compares score after class and rule priority, so a
+    /// recognizer registered through this type competes at this value.
+    pub fn with_base_score(mut self, base_score: f32) -> Self {
+        self.base_score = base_score;
+        self
+    }
 }
 
 impl Detector for RegexDetector {

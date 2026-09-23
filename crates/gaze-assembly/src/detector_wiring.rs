@@ -15,6 +15,12 @@ use crate::{
     BuildError,
 };
 
+/// Confidence of every policy regex candidate. `PipelineBuilder::detector`,
+/// the path these rules used to register through, hard-coded it; the value is
+/// kept so a policy rule still outranks a bundled rule of the same class and
+/// rule priority at the ladder's score rung.
+const POLICY_REGEX_SCORE: f32 = 1.0;
+
 pub(crate) fn register_policy_detectors(
     builder: &mut AssemblyBuilder,
     policy: &gaze::Policy,
@@ -27,17 +33,31 @@ pub(crate) fn register_policy_detectors(
             _ => detector.name.clone(),
         };
         match &detector.kind {
-            DetectorKind::Regex => builder.detector(RegexDetector::with_source(
-                detector
-                    .pattern
-                    .as_deref()
-                    .ok_or_else(|| PolicyError::BadDictionary {
-                        name: detector.name.clone(),
-                        reason: "regex recognizer missing pattern".to_string(),
-                    })?,
-                detector.class.clone(),
-                &detector.name,
-            )?),
+            DetectorKind::Regex => {
+                let pattern =
+                    detector
+                        .pattern
+                        .as_deref()
+                        .ok_or_else(|| PolicyError::BadDictionary {
+                            name: detector.name.clone(),
+                            reason: "regex recognizer missing pattern".to_string(),
+                        })?;
+                // Registered as a `Recognizer` under the policy `name`, not
+                // through `PipelineBuilder::detector`: that wrapper reports a
+                // constant id and a placeholder class, so the registry could
+                // not find this rule by the id its collision membership is
+                // filed under, `family_member_classes` saw no member, and a
+                // family token over policy regex rules derived its action from
+                // the default alone (solo todo 3757). The wrapper emitted every
+                // candidate at score 1.0 and outside the per-locale claiming
+                // step; the same score and the format basis keep the conflict
+                // ladder and the candidate pool as they were.
+                builder.recognizer(
+                    RegexDetector::with_source(pattern, detector.class.clone(), &detector.name)?
+                        .with_base_score(POLICY_REGEX_SCORE)
+                        .with_locale_basis(LocaleBasis::Format),
+                );
+            }
             DetectorKind::Dictionary => {
                 let dictionary_name = detector.dictionary_name.as_deref().ok_or_else(|| {
                     PolicyError::BadDictionary {

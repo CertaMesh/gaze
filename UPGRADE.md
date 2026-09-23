@@ -43,6 +43,49 @@ of a span.** Two resolver changes from solo todo #3740, both breaking in
 
 Manifests written before this change still restore. `redact` and
 `generalize` fragments are one-way, like whole spans under those actions.
+## Pending (unreleased): policy regex collision families protect their family token
+
+**Action required only if your policy declares
+`[policy.custom_recognizers.collision]` on a `kind = "regex"` recognizer and
+relies on the family token that a precedence tie or a missing anchor cue emits
+being left raw.** A regex custom recognizer used to register under the constant
+recognizer id `legacy-detector`, so the registry could not find it by the policy
+`name` its membership is filed under. Precedence, ties and mandatory anchors
+still decided (a candidate always carried the policy `name`), but the family
+token they emit (`custom:family:<name>`) derived its action from no member at
+all and took your `default` rule: under `default = "preserve"` the span left the
+process raw, with zero detections and a success exit, although every member
+rule said `tokenize`. Dictionary custom recognizers (`dict/<name>`) were never
+affected. The id mismatch dates from v0.7.1, when the metadata was introduced;
+until the strictest-member derivation (the entry below) it was invisible
+because every family token took the default rule.
+
+1. **Family tokens over regex members now derive the strictest member action**,
+   exactly as bundled and dictionary families do
+   ([How a family-level token picks its action](docs/reference/policy.md#how-a-family-level-token-picks-its-action)).
+   To keep such a token raw on purpose, declare a rule for the family class
+   **before** your `default` rule:
+
+   ```toml
+   [[rule]]
+   kind = "class"
+   class = "custom:family:tenant-orders"
+   action = "preserve"
+   ```
+
+2. **Audit rows.** Loser rows of a regex-member family carry the member's own
+   class (they carried the winner's family class), and the family token's
+   `ambiguity_record.losing_candidates` lists every member (it was empty).
+   `recognizer_id` is unchanged: it was already the policy `name`.
+3. **Library API.** `Pipeline::registry()` exposes the built
+   `RecognizerRegistry`; `FamilyPolicyTable::anchored_families()` lists the
+   families with a `mandatory_anchor` member; `RegexDetector::with_base_score()`
+   sets the emitted confidence; `gaze` re-exports `AmbiguityRecord`,
+   `AmbiguityReason`, `LosingCandidate` and `DerivedFamilyAction`.
+   `PipelineBuilder::detector` is unchanged: a `Detector` registered through it
+   still reports the constant id and cannot join a collision family.
+
+Manifests, tokens and restore are unchanged.
 
 ## Pending (unreleased): the safety net redacts with a marker instead of deleting
 

@@ -1,4 +1,4 @@
-use gaze::{CollisionMembership, Detector, LocaleTag, PipelineBuilder, Recognizer, Rule};
+use gaze::{CollisionMembership, LocaleTag, PipelineBuilder, Recognizer, Rule};
 
 /// [`PipelineBuilder`] wrapper that counts every recognizer it registers.
 ///
@@ -20,14 +20,6 @@ impl AssemblyBuilder {
     /// cue bundles, and rules do not detect anything and are excluded).
     pub(crate) fn registered_recognizers(&self) -> usize {
         self.registered_recognizers
-    }
-
-    pub(crate) fn detector<D>(&mut self, detector: D)
-    where
-        D: Detector + 'static,
-    {
-        self.map(|builder| builder.detector(detector));
-        self.registered_recognizers += 1;
     }
 
     pub(crate) fn recognizer<R>(&mut self, recognizer: R)
