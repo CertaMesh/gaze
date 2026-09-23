@@ -442,6 +442,13 @@ impl std::fmt::Debug for Pipeline {
 }
 
 impl Pipeline {
+    /// The recognizer registry this pipeline detects with: every registered
+    /// recognizer by id, the collision-family table, and the member classes a
+    /// family token derives its action from.
+    pub fn registry(&self) -> &RecognizerRegistry {
+        &self.registry
+    }
+
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::default()
     }
