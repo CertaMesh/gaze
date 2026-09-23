@@ -149,8 +149,16 @@ fn the_new_guard_is_a_strict_subset_that_loses_no_delimited_address() {
         .expect("reconstructed base ip.v6 compiles");
 
     let addresses = addresses();
-    let prefixes: Vec<&str> = PREFIXES.iter().chain(WORDY_PREFIXES.iter()).copied().collect();
-    let suffixes: Vec<&str> = SUFFIXES.iter().chain(WORDY_SUFFIXES.iter()).copied().collect();
+    let prefixes: Vec<&str> = PREFIXES
+        .iter()
+        .chain(WORDY_PREFIXES.iter())
+        .copied()
+        .collect();
+    let suffixes: Vec<&str> = SUFFIXES
+        .iter()
+        .chain(WORDY_SUFFIXES.iter())
+        .copied()
+        .collect();
 
     // Only forms the base rule actually recognises are "real addresses" for this comparison;
     // anything the base never matched cannot be a loss.

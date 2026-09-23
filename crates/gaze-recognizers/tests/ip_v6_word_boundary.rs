@@ -184,7 +184,11 @@ fn addresses_in_the_usual_delimiters_still_tokenize() {
     assert_tokenized("addr=2001:db8::1", "2001:db8::1", &["addr="]);
     assert_tokenized("ping(2001:db8::1)", "2001:db8::1", &["ping(", ")"]);
     assert_tokenized("host 2001:db8::1.", "2001:db8::1", &["host ", "."]);
-    assert_tokenized("host 2001:db8::1, next", "2001:db8::1", &["host ", ", next"]);
+    assert_tokenized(
+        "host 2001:db8::1, next",
+        "2001:db8::1",
+        &["host ", ", next"],
+    );
     assert_tokenized("prefix 2001:db8::/32", "2001:db8::", &["prefix ", "/32"]);
 }
 
