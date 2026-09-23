@@ -2380,15 +2380,16 @@ fn protective_actions_execute_on_family_tokens_and_leak_no_original_byte() {
     }
 }
 
-/// Under de-DE, `phone.national.de` wins a sub-run of a long no-cue IBAN on rule
-/// priority and the unanchored IBAN candidate loses. Residual coverage then
-/// previews the loser's standalone view, the family class, and admits the
-/// evidence because the family action derives to `tokenize`; the residual
-/// cell's own action lookup must derive the same way, or the whole document
-/// fails closed with `residual policy preview mismatch` (found by the
-/// policy-matrix enumeration, 976 documents).
+/// Under de-DE a long no-cue IBAN wholly contains a `phone.national.de`
+/// shape. Containment precedence hands the validated IBAN the whole span
+/// (equal tiers go to the container), the missing anchor then rebuilds it as
+/// the family token, and the family action derives to `tokenize` from the
+/// members; the span leaves as one family token with no phone sub-run and
+/// no IBAN group readable. (Before the rung the phone won the sub-run on
+/// rule priority and the IBAN's remainder reached residual coverage on its
+/// family view, found by the policy-matrix enumeration, 976 documents.)
 #[test]
-fn unanchored_iban_evidence_beside_a_phone_win_is_covered_by_family_residual_cells() {
+fn unanchored_iban_containing_a_phone_shape_is_one_family_token() {
     let mut policy = payment_family_policy(
         &[
             ("custom:iban", Action::Tokenize),
