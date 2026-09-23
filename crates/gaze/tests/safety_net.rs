@@ -2339,7 +2339,10 @@ fn nym_suspect_inside_its_own_token_text_is_protected_under_every_resolve_fallba
                 .find("building_number")
                 .expect("token spells its class");
             assert!(
-                clean[..at].contains('<') && !clean.contains("12a"),
+                clean[..at].contains('<')
+                    && !gaze::token_shape::pattern()
+                        .replace_all(&clean, "\0")
+                        .contains("12a"),
                 "{class:?}/{fallback:?}: {clean}"
             );
             assert!(calls.load(Ordering::SeqCst) >= 1);

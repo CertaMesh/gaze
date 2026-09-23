@@ -38,6 +38,10 @@ use gaze::{
 };
 use gaze_recognizers::embedded;
 
+#[path = "support/token_assertions.rs"]
+mod token_assertions;
+use token_assertions::without_tokens;
+
 fn empty_context() -> Context {
     Context {
         dictionaries: std::collections::HashMap::new(),
@@ -111,8 +115,8 @@ fn clean(text: &str) -> String {
 fn assert_postal_removed(text: &str, code: &str, surviving_context: &[&str]) {
     let cleaned = clean(text);
     assert!(
-        !cleaned.contains(code),
-        "postal code {code:?} survived tokenization in {cleaned:?}"
+        !without_tokens(&cleaned).contains(code),
+        "postal code survived outside a token"
     );
     for fragment in surviving_context {
         assert!(
@@ -129,8 +133,8 @@ fn assert_postal_removed(text: &str, code: &str, surviving_context: &[&str]) {
 fn assert_value_survives(text: &str, value: &str) {
     let cleaned = clean(text);
     assert!(
-        cleaned.contains(value),
-        "{value:?} must NOT be tokenized, but is missing from {cleaned:?}"
+        without_tokens(&cleaned).contains(value),
+        "value must survive outside a token"
     );
 }
 
@@ -631,8 +635,8 @@ fn document_basis_numeric_rules_keep_their_locale_gates() {
         "Die Postleitzahl 10115 steht im Formular.",
     );
     assert!(
-        !de.contains("10115"),
-        "postal.de must still fire under de-DE, got {de:?}"
+        !without_tokens(&de).contains("10115"),
+        "postal.de must still fire under de-DE"
     );
     assert_value_survives("Die Postleitzahl 10115 steht im Formular.", "10115");
 }

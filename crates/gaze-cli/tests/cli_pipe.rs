@@ -21,6 +21,10 @@ use gaze_audit::{
     build_audit_query_sql, AuditFilter, PresentColumns, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
 };
 
+#[path = "support/token_assertions.rs"]
+mod token_assertions;
+use token_assertions::without_tokens;
+
 fn all_audit_columns() -> PresentColumns {
     PresentColumns::new(
         AUDIT_RESTRICTED_COLUMNS
@@ -4998,7 +5002,10 @@ action = "preserve"
         let clean = out["clean_text"].as_str().unwrap();
         assert!(clean.contains(":Custom:iban_1>"), "{clean}");
         assert!(!clean.contains("AT61"), "IBAN leaked raw: {clean}");
-        assert!(!clean.contains("3457"), "IBAN leaked raw: {clean}");
+        assert!(
+            !without_tokens(clean).contains("3457"),
+            "IBAN group leaked raw"
+        );
     }
 }
 
@@ -5063,8 +5070,8 @@ action = "preserve"
             "{args:?}: IBAN leaked raw: {clean}"
         );
         assert!(
-            !clean.contains("3457"),
-            "{args:?}: IBAN leaked raw: {clean}"
+            !without_tokens(clean).contains("3457"),
+            "{args:?}: IBAN group leaked raw"
         );
     }
 
@@ -5143,11 +5150,7 @@ fn assert_no_group_survives(clean: &str, input: &str, prefix: &str, suffix: &str
         .strip_prefix(prefix)
         .and_then(|rest| rest.strip_suffix(suffix))
         .expect("fixture prefix and suffix");
-    // The random eight-hex session prefix of a token can contain a short
-    // digit group by chance (`<2d752c57:` holds `57`); strip it first.
-    let clean = regex::Regex::new(r"[0-9a-f]{8}:")
-        .unwrap()
-        .replace_all(clean, ":");
+    let clean = without_tokens(clean);
     for (index, group) in value.split(' ').enumerate() {
         assert!(
             !clean.contains(group),

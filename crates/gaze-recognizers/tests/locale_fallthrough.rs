@@ -15,6 +15,10 @@ use gaze::{
 };
 use gaze_recognizers::embedded;
 
+#[path = "support/token_assertions.rs"]
+mod token_assertions;
+use token_assertions::without_tokens;
+
 fn pipeline_for(locales: &[LocaleTag]) -> Pipeline {
     let rulepack = Rulepack::load(RulepackSource::Embedded(
         embedded("core").expect("core rulepack"),
@@ -63,7 +67,7 @@ const NATIONAL: &str = "030 12345678";
 #[test]
 fn national_rule_fires_alone_under_de_de() {
     let cleaned = clean_in(&[LocaleTag::DeDe], &format!("Büro: {NATIONAL}."));
-    assert!(!cleaned.contains("12345678"), "{cleaned:?}");
+    assert!(!without_tokens(&cleaned).contains("12345678"));
 }
 
 #[test]
@@ -75,7 +79,7 @@ fn global_first_chain_keeps_national_rule_beside_an_international_number() {
     ] {
         let cleaned = clean_in(&chain, &text);
         assert!(!cleaned.contains(INTERNATIONAL), "{chain:?}: {cleaned:?}");
-        assert!(!cleaned.contains("12345678"), "{chain:?}: {cleaned:?}");
+        assert!(!without_tokens(&cleaned).contains("12345678"), "{chain:?}");
         assert!(cleaned.contains("Büro: "), "{chain:?}: {cleaned:?}");
     }
 }
