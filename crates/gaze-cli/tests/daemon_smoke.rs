@@ -12,6 +12,10 @@ use serde_json::{json, Value};
 use serial_test::file_serial;
 use tempfile::tempdir;
 
+#[path = "support/token_assertions.rs"]
+mod token_assertions;
+use token_assertions::without_tokens;
+
 const PARITY_INPUT: &str = "id ES-TEST-123456 track Sonnenlied";
 
 fn write_cross_verb_parity_policy() -> (tempfile::TempDir, std::path::PathBuf) {
@@ -1941,6 +1945,9 @@ action = "preserve"
         "expected a family-level token, got: {clean}"
     );
     for (index, group) in ["DE89", "3704", "0044", "0532", "0130"].iter().enumerate() {
-        assert!(!clean.contains(group), "group {index} survived");
+        assert!(
+            !without_tokens(clean).contains(group),
+            "group {index} survived"
+        );
     }
 }

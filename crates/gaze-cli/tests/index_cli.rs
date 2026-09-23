@@ -7,6 +7,10 @@ use std::path::PathBuf;
 use assert_cmd::Command;
 use serial_test::file_serial;
 
+#[path = "support/token_assertions.rs"]
+mod token_assertions;
+use token_assertions::without_tokens;
+
 const DOMAIN: &str = "local_owner/support_notes/v1";
 const TEST_INDEX_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 const WRONG_INDEX_KEY: &str = "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f";
@@ -690,8 +694,8 @@ fn index_search_without_class_finds_organization_and_custom_class_entities() {
     for stdout in [&org_default_stdout, &custom_default_stdout] {
         for raw in ["Globex GmbH", "90210"] {
             assert!(
-                !stdout.contains(raw),
-                "default search leaked raw fixture value {raw}: {stdout}"
+                !without_tokens(stdout).contains(raw),
+                "default search leaked raw fixture value"
             );
         }
         assert!(

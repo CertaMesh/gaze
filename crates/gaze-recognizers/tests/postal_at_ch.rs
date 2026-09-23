@@ -25,6 +25,10 @@ use gaze::{
 };
 use gaze_recognizers::embedded;
 
+#[path = "support/token_assertions.rs"]
+mod token_assertions;
+use token_assertions::without_tokens;
+
 fn empty_context() -> Context {
     Context {
         dictionaries: std::collections::HashMap::new(),
@@ -62,11 +66,15 @@ fn pipeline_for(locales: &[LocaleTag]) -> Pipeline {
 }
 
 fn clean_in(locales: &[LocaleTag], text: &str) -> String {
-    let pipeline = pipeline_for(locales);
     let session = Session::new(Scope::Ephemeral).expect("session");
+    clean_in_session(locales, text, &session)
+}
+
+fn clean_in_session(locales: &[LocaleTag], text: &str, session: &Session) -> String {
+    let pipeline = pipeline_for(locales);
     let (clean, _, _) = pipeline
         .clean_with_safety_net_detect_context(
-            &session,
+            session,
             RawDocument::Text(text.to_string()),
             locales,
             &DictionaryBundle::default(),
@@ -78,17 +86,31 @@ fn clean_in(locales: &[LocaleTag], text: &str) -> String {
     }
 }
 
+#[test]
+fn postal_code_inside_fixed_token_hex_does_not_count_as_surviving() {
+    let session =
+        Session::new_with_session_hex_for_tests(Scope::Ephemeral, [0xe4, 0x02, 0x0c, 0xce])
+            .expect("fixed session");
+    let cleaned = clean_in_session(&[LocaleTag::DeAt], "PLZ: 4020", &session);
+    assert!(cleaned.contains("<e4020cce:Custom:postal_code_1>"));
+    assert!(cleaned.contains("4020")); // The former raw search would fail here.
+    assert_code_removed(&cleaned, "4020", "de-AT");
+}
+
 const AT_CH: [LocaleTag; 2] = [LocaleTag::DeAt, LocaleTag::DeCh];
+
+fn assert_code_removed(cleaned: &str, code: &str, locale: &str) {
+    assert!(
+        !without_tokens(cleaned).contains(code),
+        "{locale}: postal code survived outside a token"
+    );
+}
 
 /// Asserts the WHOLE code is gone and the named context survives, under BOTH de-AT and de-CH.
 fn assert_removed(text: &str, code: &str, surviving_context: &[&str]) {
     for locale in &AT_CH {
         let cleaned = clean_in(std::slice::from_ref(locale), text);
-        assert!(
-            !cleaned.contains(code),
-            "{}: postal code {code:?} survived in {cleaned:?}",
-            locale.as_str()
-        );
+        assert_code_removed(&cleaned, code, locale.as_str());
         for fragment in surviving_context {
             assert!(
                 cleaned.contains(fragment),
@@ -104,8 +126,8 @@ fn assert_survives(text: &str, value: &str) {
     for locale in &AT_CH {
         let cleaned = clean_in(std::slice::from_ref(locale), text);
         assert!(
-            cleaned.contains(value),
-            "{}: {value:?} must NOT be tokenized, but is missing from {cleaned:?}",
+            without_tokens(&cleaned).contains(value),
+            "{}: value must survive outside a token",
             locale.as_str()
         );
     }
@@ -306,7 +328,7 @@ fn known_cost_capitalized_nouns_after_a_four_digit_number_are_tokenized() {
     // the CHANGELOG. Every such token restores losslessly. Pinned so a future tightening is a
     // deliberate, measured change rather than an accident.
     let cleaned = clean_in(&[LocaleTag::DeAt], "Kosten 1500 Euro pro Jahr.");
-    assert!(!cleaned.contains("1500"), "{cleaned:?}");
+    assert!(!without_tokens(&cleaned).contains("1500"));
 }
 
 // ======================================================= locale contract
@@ -368,12 +390,12 @@ fn mixed_country_document_tokenizes_four_and_five_digit_codes_under_every_chain(
                 let doc = format!("Kosten laut Anlage: {trigger}. Lieferadresse: {later_text}.");
                 let cleaned = clean_in(chain, &doc);
                 assert!(
-                    !cleaned.contains(trigger_code),
-                    "{names:?} {doc:?}: four-digit trigger must be tokenized: {cleaned:?}"
+                    !without_tokens(&cleaned).contains(trigger_code),
+                    "{names:?}: four-digit trigger must be tokenized"
                 );
                 assert!(
-                    !cleaned.contains(later_code),
-                    "{names:?} {doc:?}: later-locale code must still be tokenized: {cleaned:?}"
+                    !without_tokens(&cleaned).contains(later_code),
+                    "{names:?}: later-locale code must still be tokenized"
                 );
             }
         }
@@ -389,21 +411,21 @@ fn locale_chain_order_does_not_change_the_postal_token_set() {
     // de-AT only: the German five-digit code is not claimed by this rule and is never split
     // into a four-digit fragment.
     let at = clean_in(&[LocaleTag::DeAt], mixed);
-    assert!(!at.contains("4020"), "{at:?}");
-    assert!(at.contains("10115"), "{at:?}");
+    assert!(!without_tokens(&at).contains("4020"));
+    assert!(without_tokens(&at).contains("10115"));
 
     // de-DE only: exactly the pre-existing behaviour.
     let de = clean_in(&[LocaleTag::DeDe], mixed);
-    assert!(de.contains("4020"), "{de:?}");
-    assert!(!de.contains("10115"), "{de:?}");
+    assert!(without_tokens(&de).contains("4020"));
+    assert!(!without_tokens(&de).contains("10115"));
 
     for chain in [
         [LocaleTag::DeAt, LocaleTag::DeDe],
         [LocaleTag::DeDe, LocaleTag::DeAt],
     ] {
         let both = clean_in(&chain, mixed);
-        assert!(!both.contains("4020"), "{chain:?} {both:?}");
-        assert!(!both.contains("10115"), "{chain:?} {both:?}");
+        assert!(!without_tokens(&both).contains("4020"), "{chain:?}");
+        assert!(!without_tokens(&both).contains("10115"), "{chain:?}");
     }
 }
 
@@ -427,8 +449,8 @@ fn anchored_four_digit_codes_restore_exactly() {
             CleanDocument::Text(text) => text,
             _ => panic!("expected text"),
         };
-        assert!(!clean_text.contains("8999"), "{clean_text:?}");
-        assert!(!clean_text.contains("4020"), "{clean_text:?}");
+        assert!(!without_tokens(&clean_text).contains("8999"));
+        assert!(!without_tokens(&clean_text).contains("4020"));
         let restored = pipeline
             .restore_strict_text(&session, &clean_text)
             .expect("restore");

@@ -288,8 +288,9 @@ fn identifier_classes_keep_resolving_inside_words() {
         },
     ]);
     let (text, report, _, _) = clean(net, raw, resolve());
-    assert!(!text.contains("12345"), "{text}");
-    assert!(!text.contains("8001"), "{text}");
+    let outside_tokens = gaze::token_shape::pattern().replace_all(&text, "\0");
+    assert!(!outside_tokens.contains("12345"));
+    assert!(!outside_tokens.contains("8001"));
     assert!(subword_rows(&report).is_empty());
 }
 
