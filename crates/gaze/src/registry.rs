@@ -227,6 +227,20 @@ impl FamilyPolicyTable {
             .map(|(id, _)| id.as_str())
     }
 
+    /// Families that declare a `mandatory_anchor` on at least one member: the
+    /// families that emit a `custom:family:<name>` token whenever their anchor
+    /// cue is out of range.
+    pub fn anchored_families(&self) -> BTreeSet<String> {
+        let FamilyPolicyTableInner::Populated { by_recognizer, .. } = &self.inner else {
+            return BTreeSet::new();
+        };
+        by_recognizer
+            .values()
+            .filter(|membership| membership.mandatory_anchor.is_some())
+            .map(|membership| membership.family.clone())
+            .collect()
+    }
+
     pub(crate) fn precedence_tie_family(&self, a: &str, b: &str) -> Option<&str> {
         let ma = self.membership(a)?;
         let mb = self.membership(b)?;

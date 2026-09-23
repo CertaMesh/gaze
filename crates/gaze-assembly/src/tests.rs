@@ -2085,8 +2085,8 @@ fn all_members_preserve_under_a_tokenize_default_still_tokenizes_the_family_toke
 
 /// Two policy dictionary recognizers in one tenant family with equal
 /// precedence. Dictionary detectors register as `dict/<name>` on both the
-/// recognizer and the collision side, so the family policy binds; regex
-/// policy detectors do not (solo todo: `legacy-detector` id mismatch).
+/// recognizer and the collision side; the regex analogue is the todo 3757
+/// section below.
 fn tenant_tie_policy(rules: Vec<RuleSpec>) -> (gaze::Policy, Context) {
     let mut policy = gaze::Policy::default();
     policy.session = SessionPolicy::default();
@@ -2581,4 +2581,527 @@ fn a_redact_default_keeps_the_losing_iban_evidence_covered() {
     let (clean, logger) = clean_payment_logged(&policy, PHONE_WIN_IBAN);
 
     assert_phone_win_iban_fully_covered(&clean, &logger);
+}
+
+// ---------------------------------------------------------------------------
+// todo 3757: policy regex custom recognizers bind their collision metadata
+// through the registry. Product path: `build_pipeline` on a policy whose
+// custom recognizers are regex rules, the `[[policy.custom_recognizers]]`
+// shape from docs/reference/policy.md, with no bundled pack except where an
+// anchor cue pack is needed.
+//
+// The candidate side always bound (a regex rule's candidates carry the policy
+// `name` as `recognizer_id`), so precedence, ties and anchors decided before
+// this fix. The registry side did not: the rule was wrapped as a detector with
+// a constant id and a placeholder class, so `family_member_classes` saw no
+// member and a family token derived its action from the default alone. Under a
+// `preserve` default the tie token and the no-anchor token shipped raw.
+// ---------------------------------------------------------------------------
+
+struct RegexMember {
+    name: &'static str,
+    class: &'static str,
+    variant: &'static str,
+    precedence: u32,
+    mandatory_anchor: Option<&'static str>,
+}
+
+fn regex_family_policy(
+    family: &str,
+    pattern: &str,
+    members: &[RegexMember],
+    rules: Vec<RuleSpec>,
+    locale: LocaleTag,
+) -> gaze::Policy {
+    let mut policy = gaze::Policy::default();
+    policy.session = SessionPolicy::default();
+    policy.locale = Some(vec![locale]);
+    policy.rules = rules;
+    for member in members {
+        let mut detector = gaze::DetectorSpec::default();
+        detector.kind = DetectorKind::Regex;
+        detector.name = member.name.to_string();
+        detector.pattern = Some(pattern.to_string());
+        detector.class = PiiClass::from_policy_name(member.class).expect("class");
+        detector.collision = Some(gaze::CollisionMembership::new(
+            family,
+            member.variant,
+            member.precedence,
+            member.mandatory_anchor.map(str::to_string),
+        ));
+        policy.detectors.push(detector);
+    }
+    policy
+}
+
+fn class_rule(class: &str, action: Action) -> RuleSpec {
+    RuleSpec::Class {
+        class: PiiClass::from_policy_name(class).expect("class"),
+        action,
+    }
+}
+
+fn clean_regex_family(
+    policy: &gaze::Policy,
+    rulepacks: &[Rulepack],
+    input: &str,
+) -> (String, MemoryLogger) {
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let logger = MemoryLogger::default();
+    let pipeline =
+        build_pipeline_builder(policy, &empty_context(), rulepacks, &active_locales, None)
+            .expect("builder")
+            .redaction_logger(logger.clone())
+            .build()
+            .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(
+        pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                active_locales.as_slice(),
+                &gaze::DictionaryBundle::default(),
+            )
+            .expect("redact"),
+    );
+    (clean, logger)
+}
+
+fn family_token_row(logger: &MemoryLogger, family: &str) -> RedactionEntry {
+    logger
+        .entries()
+        .into_iter()
+        .find(|entry| entry.class == PiiClass::family(family) && !entry.conflict_loser)
+        .expect("family token row")
+}
+
+fn loser_row(logger: &MemoryLogger, recognizer_id: &str) -> RedactionEntry {
+    logger
+        .entries()
+        .into_iter()
+        .find(|entry| entry.conflict_loser && entry.recognizer_id.as_deref() == Some(recognizer_id))
+        .unwrap_or_else(|| panic!("loser row for {recognizer_id}"))
+}
+
+/// The todo's two-recognizer family: `tenant.alpha` and `tenant.beta` on one
+/// pattern, one family, equal precedence.
+fn tenant_document_members(precedence: (u32, u32)) -> [RegexMember; 2] {
+    [
+        RegexMember {
+            name: "tenant.alpha",
+            class: "custom:alpha_doc",
+            variant: "alpha",
+            precedence: precedence.0,
+            mandatory_anchor: None,
+        },
+        RegexMember {
+            name: "tenant.beta",
+            class: "custom:beta_doc",
+            variant: "beta",
+            precedence: precedence.1,
+            mandatory_anchor: None,
+        },
+    ]
+}
+
+const TENANT_TICKET: &str = "ticket CASE-0001 open";
+const TENANT_FAMILY_MARKER: &str = ":Custom:family:tenant-document_";
+
+#[test]
+fn policy_regex_precedence_tie_family_token_derives_the_member_action() {
+    let policy = regex_family_policy(
+        "tenant-document",
+        r"CASE-[0-9]{4}",
+        &tenant_document_members((10, 10)),
+        vec![
+            class_rule("custom:alpha_doc", Action::Tokenize),
+            class_rule("custom:beta_doc", Action::Tokenize),
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        LocaleTag::Global,
+    );
+    let (clean, logger) = clean_regex_family(&policy, &[], TENANT_TICKET);
+
+    assert!(
+        clean.contains(TENANT_FAMILY_MARKER),
+        "equal precedence must emit and protect the family token: {clean}"
+    );
+    assert!(!clean.contains("CASE-0001"), "tie token leaked: {clean}");
+
+    let row = family_token_row(&logger, "tenant-document");
+    assert_eq!(row.action, Action::Tokenize);
+    assert_eq!(row.decided_by, ConflictTier::CollisionPolicy);
+    let record = row.ambiguity_record.as_ref().expect("ambiguity record");
+    let derived = record.derived_action.as_ref().expect("derived action");
+    assert_eq!(derived.action, Action::Tokenize);
+    assert_eq!(
+        derived.member_class,
+        Some(PiiClass::from_policy_name("custom:alpha_doc").expect("class")),
+        "the member whose rule set the action is credited"
+    );
+    assert_eq!(
+        record.losing_candidates,
+        vec![
+            gaze::LosingCandidate::new(
+                PiiClass::from_policy_name("custom:alpha_doc").expect("class"),
+                "tenant.alpha",
+            ),
+            gaze::LosingCandidate::new(
+                PiiClass::from_policy_name("custom:beta_doc").expect("class"),
+                "tenant.beta",
+            ),
+        ],
+        "both tied members are listed with their own class"
+    );
+    for (recognizer_id, class) in [
+        ("tenant.alpha", "custom:alpha_doc"),
+        ("tenant.beta", "custom:beta_doc"),
+    ] {
+        let loser = loser_row(&logger, recognizer_id);
+        assert_eq!(
+            loser.class,
+            PiiClass::from_policy_name(class).expect("class"),
+            "loser row carries the member's own class, not the winner's"
+        );
+        assert_eq!(loser.collision_family.as_deref(), Some("tenant-document"));
+    }
+}
+
+#[test]
+fn policy_regex_precedence_tie_takes_the_strictest_member_action() {
+    let policy = regex_family_policy(
+        "tenant-document",
+        r"CASE-[0-9]{4}",
+        &tenant_document_members((10, 10)),
+        vec![
+            class_rule("custom:alpha_doc", Action::Tokenize),
+            class_rule("custom:beta_doc", Action::Redact),
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        LocaleTag::Global,
+    );
+    let (clean, logger) = clean_regex_family(&policy, &[], TENANT_TICKET);
+
+    assert_eq!(clean, "ticket [REDACTED] open");
+    let derived = family_token_row(&logger, "tenant-document")
+        .ambiguity_record
+        .and_then(|record| record.derived_action)
+        .expect("derived action");
+    assert_eq!(derived.action, Action::Redact);
+    assert_eq!(
+        derived.member_class,
+        Some(PiiClass::from_policy_name("custom:beta_doc").expect("class"))
+    );
+}
+
+/// The shape of the docs/reference/policy.md precedence example, under neutral
+/// names (`xtask no-tenant-knowledge` denies tenant-shaped identifiers in crate
+/// sources): the lower `precedence` member outranks the other. Both directions,
+/// so registration order cannot fake the verdict.
+#[test]
+fn policy_regex_precedence_decides_the_family_winner() {
+    for (ref_precedence, code_precedence, winner, loser) in [
+        (50, 60, "ticket_ref", "ticket_code"),
+        (60, 50, "ticket_code", "ticket_ref"),
+    ] {
+        let policy = regex_family_policy(
+            "tenant-tickets",
+            r"ORD-[0-9]+",
+            &[
+                RegexMember {
+                    name: "tenant.ticket_ref",
+                    class: "custom:ticket_ref",
+                    variant: "ticket-ref",
+                    precedence: ref_precedence,
+                    mandatory_anchor: None,
+                },
+                RegexMember {
+                    name: "tenant.ticket_code",
+                    class: "custom:ticket_code",
+                    variant: "ticket-code",
+                    precedence: code_precedence,
+                    mandatory_anchor: None,
+                },
+            ],
+            vec![
+                class_rule("custom:ticket_ref", Action::Tokenize),
+                class_rule("custom:ticket_code", Action::Tokenize),
+                RuleSpec::Default {
+                    action: Action::Preserve,
+                },
+            ],
+            LocaleTag::Global,
+        );
+        let (clean, logger) = clean_regex_family(&policy, &[], "order ORD-1234 shipped");
+
+        assert!(
+            clean.contains(&format!(":Custom:{winner}_")),
+            "lower precedence wins: {clean}"
+        );
+        assert!(!clean.contains("ORD-1234"), "leaked: {clean}");
+        let winner_row = logger
+            .entries()
+            .into_iter()
+            .find(|entry| !entry.conflict_loser)
+            .expect("winner row");
+        assert_eq!(winner_row.decided_by, ConflictTier::CollisionPolicy);
+        assert_eq!(
+            winner_row.recognizer_id.as_deref(),
+            Some(format!("tenant.{winner}").as_str())
+        );
+        let loser_row = loser_row(&logger, &format!("tenant.{loser}"));
+        assert_eq!(
+            loser_row.class,
+            PiiClass::from_policy_name(&format!("custom:{loser}")).expect("class")
+        );
+    }
+}
+
+/// A policy regex member with `mandatory_anchor = "iban"` under the `locale-de`
+/// cue pack: no cue in range falls back to the family token, whose action
+/// derives from the member's rule; a cue in range keeps the member's class.
+#[test]
+fn policy_regex_mandatory_anchor_applies_and_the_fallback_derives_the_member_action() {
+    let policy = regex_family_policy(
+        "tenant-account",
+        r"K-[0-9]{6}",
+        &[RegexMember {
+            name: "tenant.konto",
+            class: "custom:konto",
+            variant: "konto",
+            precedence: 10,
+            mandatory_anchor: Some("iban"),
+        }],
+        vec![
+            class_rule("custom:konto", Action::Tokenize),
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ],
+        LocaleTag::DeDe,
+    );
+    let rulepacks = [embedded_rulepack("locale-de")];
+
+    let (clean, logger) = clean_regex_family(&policy, &rulepacks, "Zahlung K-123456 heute");
+    assert!(
+        clean.contains(":Custom:family:tenant-account_"),
+        "no cue in range must fall back to the family token: {clean}"
+    );
+    assert!(
+        !clean.contains("K-123456"),
+        "no-anchor token leaked: {clean}"
+    );
+    let row = family_token_row(&logger, "tenant-account");
+    assert_eq!(row.action, Action::Tokenize);
+    assert_eq!(row.decided_by, ConflictTier::AnchoredContext);
+    let record = row.ambiguity_record.expect("ambiguity record");
+    assert_eq!(record.reason, gaze::AmbiguityReason::NoAnchor);
+    assert_eq!(
+        record.losing_candidates,
+        vec![gaze::LosingCandidate::new(
+            PiiClass::from_policy_name("custom:konto").expect("class"),
+            "tenant.konto",
+        )]
+    );
+    let derived = record.derived_action.expect("derived action");
+    assert_eq!(derived.action, Action::Tokenize);
+    assert_eq!(
+        derived.member_class,
+        Some(PiiClass::from_policy_name("custom:konto").expect("class"))
+    );
+
+    let (clean, _) = clean_regex_family(&policy, &rulepacks, "IBAN K-123456 heute");
+    assert!(
+        clean.contains(":Custom:konto_"),
+        "a cue in range keeps the member class: {clean}"
+    );
+}
+
+#[test]
+fn policy_regex_recognizers_register_under_their_policy_name() {
+    let policy = regex_family_policy(
+        "tenant-document",
+        r"CASE-[0-9]{4}",
+        &tenant_document_members((10, 10)),
+        vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }],
+        LocaleTag::Global,
+    );
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline =
+        build_pipeline(&policy, &empty_context(), &[], &active_locales, None).expect("pipeline");
+
+    for (name, class) in [
+        ("tenant.alpha", "custom:alpha_doc"),
+        ("tenant.beta", "custom:beta_doc"),
+    ] {
+        let recognizer = pipeline
+            .registry()
+            .recognizer(name)
+            .unwrap_or_else(|| panic!("{name} is registered under its policy name"));
+        assert_eq!(recognizer.id(), name);
+        assert_eq!(
+            recognizer.supported_class(),
+            &PiiClass::from_policy_name(class).expect("class")
+        );
+    }
+    assert_eq!(
+        pipeline.registry().family_member_classes("tenant-document"),
+        vec![
+            PiiClass::from_policy_name("custom:alpha_doc").expect("class"),
+            PiiClass::from_policy_name("custom:beta_doc").expect("class"),
+        ]
+    );
+}
+
+/// A policy `kind = "regex"` recognizer emits at the confidence the `Detector`
+/// wrapper hard-coded (1.0), not `RegexDetector::with_source`'s 0.70 default.
+/// Class priority and rule priority tie here (same class, both rules at
+/// priority 0) and the two spans overlap without being identical, so the score
+/// rung decides ahead of span length, and dropping
+/// `with_base_score` in `register_policy_detectors` would silently hand it to
+/// the rulepack rule. Pins that behaviour-preserver: the policy rule must win,
+/// and it must win *on score*.
+#[test]
+fn policy_regex_rule_outranks_a_same_class_rulepack_rule_on_score() {
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "score-rival"
+rulepack_version = "0.6.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "pack.shape"
+class = "custom:shape"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = 'ACME-[0-9]{4} END'
+
+[recognizers.scoring]
+base = 0.70
+priority = 0
+"#,
+    )
+    .expect("rulepack");
+    let mut policy = gaze::Policy::default();
+    policy.session = SessionPolicy::default();
+    policy.locale = Some(vec![LocaleTag::Global]);
+    policy.rules = vec![
+        class_rule("custom:shape", Action::Tokenize),
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ];
+    let mut detector = gaze::DetectorSpec::default();
+    detector.kind = DetectorKind::Regex;
+    detector.name = "tenant.shape".to_string();
+    detector.pattern = Some("ACME-[0-9]{4}".to_string());
+    detector.class = PiiClass::from_policy_name("custom:shape").expect("class");
+    policy.detectors.push(detector);
+
+    let (clean, logger) = clean_regex_family(&policy, &[rulepack], "ref ACME-1234 END");
+
+    assert!(!clean.contains("ACME-1234"), "leaked: {clean}");
+    let winner = logger
+        .entries()
+        .into_iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner row");
+    assert_eq!(
+        winner.recognizer_id.as_deref(),
+        Some("tenant.shape"),
+        "the policy rule's score must outrank the rulepack rule's 0.70"
+    );
+    assert_eq!(
+        winner.decided_by,
+        ConflictTier::Score,
+        "the score rung decides it; any other tier means the scores tied"
+    );
+    let loser = loser_row(&logger, "pack.shape");
+    assert_eq!(
+        loser.class,
+        PiiClass::from_policy_name("custom:shape").expect("class")
+    );
+}
+
+/// Member classes of every anchored family, from the built registry.
+fn registry_anchored_family_members(
+    pipeline: &gaze::Pipeline,
+) -> BTreeMap<String, BTreeSet<PiiClass>> {
+    let registry = pipeline.registry();
+    registry
+        .family_policy()
+        .anchored_families()
+        .into_iter()
+        .map(|family| {
+            let members = registry
+                .family_member_classes(&family)
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            (family, members)
+        })
+        .collect()
+}
+
+/// Todo 3761's validation: the registry (which decides the runtime action)
+/// and `mandatory_anchor_families` (which decides the load-time notice) must
+/// agree on which classes belong to every anchored family, for the same
+/// rulepacks and policy, policy regex members included.
+#[test]
+fn collision_family_members_agree_between_registry_and_assembly() {
+    let policy = regex_family_policy(
+        "tenant-account",
+        r"K-[0-9]{6}",
+        &[
+            RegexMember {
+                name: "tenant.konto",
+                class: "custom:konto",
+                variant: "konto",
+                precedence: 10,
+                mandatory_anchor: Some("iban"),
+            },
+            RegexMember {
+                name: "tenant.kunde",
+                class: "custom:kunde",
+                variant: "kunde",
+                precedence: 20,
+                mandatory_anchor: None,
+            },
+        ],
+        vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }],
+        LocaleTag::DeDe,
+    );
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = build_pipeline(&policy, &empty_context(), &rulepacks, &active_locales, None)
+        .expect("pipeline");
+
+    let from_registry = registry_anchored_family_members(&pipeline);
+    let from_assembly = mandatory_anchor_families(&policy, &rulepacks, &active_locales);
+
+    assert_eq!(from_registry, from_assembly);
+    assert_eq!(
+        from_registry.get("tenant-account"),
+        Some(&BTreeSet::from([
+            PiiClass::from_policy_name("custom:konto").expect("class"),
+            PiiClass::from_policy_name("custom:kunde").expect("class"),
+        ])),
+        "the policy regex family is anchored and both members are visible"
+    );
+    assert!(
+        from_registry.contains_key("payment-card-or-iban"),
+        "the bundled anchored family is in the comparison: {from_registry:?}"
+    );
 }

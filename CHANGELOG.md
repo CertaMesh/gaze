@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`Pipeline::registry`**, **`FamilyPolicyTable::anchored_families`** and
+  **`RegexDetector::with_base_score`**; `gaze` re-exports `AmbiguityRecord`,
+  `AmbiguityReason`, `LosingCandidate` and `DerivedFamilyAction`, the types
+  behind `RedactionEntry::ambiguity_record`. `gaze-assembly` pins that the
+  registry's anchored-family member map equals the one
+  `uncovered_collision_family_classes` derives from policy and rulepacks
+  (the validation solo todo 3761 asked for; the single-source refactor is
+  not done).
 - **`Action::strictness_rank` and `Action::strictest`** in `gaze-types`: the
   fail-closed order over the closed action set (`redact` > `tokenize` >
   `generalize` > `format_preserve` > `preserve`), and `Action` now serializes
@@ -202,6 +210,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`postal.at_ch`, above).
 
 ### Changed
+- **Audit rows of a policy-regex collision family name the members.** A
+  loser row now carries the losing member's own class (it carried the
+  winner's family class), and a family token's
+  `ambiguity_record.losing_candidates` lists every member with its class (it
+  was `[]`), because both are resolved through the registry by recognizer id.
+  `recognizer_id` itself is unchanged: it was already the policy `name`.
+
 - **Drift corpus: a Rust scope-separator line.** `[bundle-tokenization-drift]`
   snapshots for the `core` and `secrets` bundles change in `fixtures_sha256`
   only. The corpus had no code-shaped path, so the gate could not see the
@@ -505,6 +520,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the spaced-German phone interplay; the enumeration script now reads the registry
   length table out of `crates/gaze-types/src/lib.rs` instead of carrying a
   third hand-copied table. Solo todo #3756.
+- **Security: a collision family of policy regex recognizers shipped its
+  family token raw under a `preserve` default.** A `kind = "regex"`
+  `[[policy.custom_recognizers]]` rule registered through the `Detector`
+  wrapper, whose `Recognizer::id()` is the constant `legacy-detector`, so the
+  registry could not find it by the policy `name` its
+  `[policy.custom_recognizers.collision]` membership is filed under. The
+  candidate side always carried the policy `name`: precedence decided, an
+  equal precedence emitted `custom:family:<name>`, and a missing
+  `mandatory_anchor` cue fell back to it, as documented. But
+  `RecognizerRegistry::family_member_classes` saw no member, so the
+  strictest-member derivation credited nothing and the family token took the
+  policy default: `ticket CASE-0001 open` left `gaze clean` unchanged with
+  zero detections and exit 0 under two `tokenize` members and
+  `default = "preserve"`; the same two rules without collision metadata
+  tokenized it. Dictionary rules (`dict/<name>`) were never affected. The
+  mismatch dates from v0.7.1 and was invisible until the derivation landed in
+  this cycle (#624), because every family token took the default before.
+  Policy regex rules now register as `Recognizer`s under `detector.name`, at
+  the score the wrapper hard-coded (1.0) and on the format basis, so the
+  conflict ladder and the per-locale candidate pool see the same candidates
+  as before; only the registry lookups change. Pinned through
+  `gaze_assembly::build_pipeline` and the `gaze` binary for the tie, the
+  strictest-member (`redact`) tie, both precedence directions of the
+  `docs/reference/policy.md` example, and the anchored member with and
+  without its cue. Measured both directions with
+  `scripts/bench/policy_regex_collision_matrix.py` (36 arms, synthetic set
+  plus the Dataiku en/de holdout): 1,907 documents, 658 expected spans, `lost_bytes = 0` and `lost_values = 0` in every arm; the only changed documents are 427 family tokens (395 documents, +2,162 protected bytes) that base shipped raw under a `preserve` default and head protects, and the same tokens written as `[REDACTED]` where a `redact` member outranks a `tokenize` default; every collision-off and preserve-member arm is byte-identical, so no conflict winner moved. Solo todo 3757.
 
 - **Security: a custom policy naming only member classes shipped no-cue IBANs
   raw.** The mandatory-anchor fallback and precedence-tie family token

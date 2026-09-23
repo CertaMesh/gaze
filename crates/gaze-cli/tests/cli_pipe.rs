@@ -5246,3 +5246,141 @@ action = "preserve"
         "an explicit family rule silences the notice: {stderr}"
     );
 }
+
+/// Two regex custom recognizers in one collision family with equal precedence:
+/// the `[[policy.custom_recognizers]]` shape from docs/reference/policy.md.
+fn write_policy_with_regex_collision_family() -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "tenant.alpha"
+pattern = 'CASE-[0-9]{4}'
+class = "custom:alpha_doc"
+
+[policy.custom_recognizers.collision]
+family = "tenant-document"
+variant = "alpha"
+precedence = 10
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "tenant.beta"
+pattern = 'CASE-[0-9]{4}'
+class = "custom:beta_doc"
+
+[policy.custom_recognizers.collision]
+family = "tenant-document"
+variant = "beta"
+precedence = 10
+
+[[rule]]
+kind = "class"
+class = "custom:alpha_doc"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:beta_doc"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+    (dir, path)
+}
+
+/// Todo 3757: a precedence tie between two policy regex recognizers emits the
+/// family token, and that token takes the members' `tokenize` rule instead of
+/// the `preserve` default. Before the fix the registry could not find a policy
+/// regex recognizer by id, the derivation saw no member, and `gaze clean`
+/// shipped the span raw with zero detections and a success exit.
+#[test]
+fn policy_regex_collision_family_tie_is_protected_through_the_cli() {
+    let (dir, policy_path) = write_policy_with_regex_collision_family();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let v = clean_json_with_args(
+        &[
+            &format!("--policy={}", policy_path.display()),
+            &format!("--audit-db={}", audit_path.display()),
+        ],
+        "ticket CASE-0001 open",
+    );
+
+    let clean_text = v["clean_text"].as_str().unwrap();
+    assert!(
+        clean_text.contains(":Custom:family:tenant-document_"),
+        "equal precedence must emit the family token: {clean_text}"
+    );
+    assert!(
+        !clean_text.contains("CASE-0001"),
+        "tie token leaked: {clean_text}"
+    );
+    assert_eq!(v["stats"]["detections"], 1);
+
+    let entries = SqliteLogger::new(&audit_path)
+        .expect("audit log opens")
+        .entries()
+        .expect("audit entries");
+    let family_row = entries
+        .iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("family token row");
+    assert_eq!(
+        family_row.class,
+        PiiClass::family("tenant-document"),
+        "the tie winner is the family token"
+    );
+    assert_eq!(family_row.action, gaze::Action::Tokenize);
+    let record = family_row
+        .ambiguity_record
+        .as_ref()
+        .expect("ambiguity record");
+    let derived = record.derived_action.as_ref().expect("derived action");
+    assert_eq!(derived.action, gaze::Action::Tokenize);
+    assert_eq!(
+        derived.member_class,
+        Some(PiiClass::from_policy_name("custom:alpha_doc").unwrap())
+    );
+    assert_eq!(
+        record
+            .losing_candidates
+            .iter()
+            .map(|candidate| (candidate.class.clone(), candidate.recognizer_id.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                PiiClass::from_policy_name("custom:alpha_doc").unwrap(),
+                "tenant.alpha"
+            ),
+            (
+                PiiClass::from_policy_name("custom:beta_doc").unwrap(),
+                "tenant.beta"
+            ),
+        ]
+    );
+    for (recognizer_id, class) in [
+        ("tenant.alpha", "custom:alpha_doc"),
+        ("tenant.beta", "custom:beta_doc"),
+    ] {
+        let loser = entries
+            .iter()
+            .find(|entry| {
+                entry.conflict_loser && entry.recognizer_id.as_deref() == Some(recognizer_id)
+            })
+            .unwrap_or_else(|| panic!("loser row for {recognizer_id}"));
+        assert_eq!(loser.class, PiiClass::from_policy_name(class).unwrap());
+        assert_eq!(loser.collision_family.as_deref(), Some("tenant-document"));
+    }
+}
