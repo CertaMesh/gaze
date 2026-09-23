@@ -211,6 +211,22 @@ impl FamilyPolicyTable {
         by_recognizer.get(recognizer_id)
     }
 
+    /// Recognizer ids registered under `family`, in no particular order.
+    pub fn member_recognizer_ids<'a>(
+        &'a self,
+        family: &'a str,
+    ) -> impl Iterator<Item = &'a str> + 'a {
+        let by_recognizer = match &self.inner {
+            FamilyPolicyTableInner::Populated { by_recognizer, .. } => Some(by_recognizer),
+            FamilyPolicyTableInner::Empty => None,
+        };
+        by_recognizer
+            .into_iter()
+            .flat_map(|memberships| memberships.iter())
+            .filter(move |(_, membership)| membership.family == family)
+            .map(|(id, _)| id.as_str())
+    }
+
     pub(crate) fn precedence_tie_family(&self, a: &str, b: &str) -> Option<&str> {
         let ma = self.membership(a)?;
         let mb = self.membership(b)?;
@@ -816,6 +832,21 @@ impl RecognizerRegistry {
 
     pub fn family_policy(&self) -> &FamilyPolicyTable {
         &self.family_policy
+    }
+
+    /// Classes emitted by the recognizers registered under collision family
+    /// `family`, sorted and deduplicated. A family-level token that no policy
+    /// rule names derives its action from these classes' rules.
+    pub fn family_member_classes(&self, family: &str) -> Vec<PiiClass> {
+        let mut classes = self
+            .family_policy
+            .member_recognizer_ids(family)
+            .filter_map(|id| self.recognizers_by_id.get(id))
+            .map(|recognizer| recognizer.supported_class().clone())
+            .collect::<Vec<_>>();
+        classes.sort();
+        classes.dedup();
+        classes
     }
 }
 

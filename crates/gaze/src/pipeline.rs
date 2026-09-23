@@ -1043,10 +1043,16 @@ impl Pipeline {
             .into_iter()
             .map(|candidate| indexed_detection_from_candidate(candidate, &self.registry));
         let primary_count = detections.len();
-        for (index, detection) in detections.into_iter().chain(recovered).enumerate() {
+        for (index, mut detection) in detections.into_iter().chain(recovered).enumerate() {
             let raw = text[detection.detection.span.clone()].to_string();
             let context = build_context(field_name);
-            let action = self.action_for(&detection.detection, &context);
+            let resolved = self.resolve_action(&detection.detection.class, &context);
+            let action = resolved.action;
+            if let (Some(derived), Some(record)) =
+                (resolved.derived, detection.ambiguity_record.as_mut())
+            {
+                *record = record.clone().with_derived_action(derived);
+            }
             if protection_trace.is_some() && !matches!(action, Action::Tokenize | Action::Preserve)
             {
                 return Err(Error::UnsupportedActionVariant);
@@ -1117,12 +1123,14 @@ impl Pipeline {
             });
             let (span, class, replacement, action, owned, origin, trace_sources) = if is_residual {
                 let (id, cell) = residuals.next().expect("peeked residual");
+                // The same resolver the planner previewed with: a residual cell
+                // of a family class derives its action from the members too.
+                // The cell was admitted on a protective preview; the runtime
+                // verdict must still protect, and the cell emits a token.
                 let actual = self
-                    .rules
-                    .iter()
-                    .find_map(|rule| rule.action(&cell.class, &build_context(field_name)))
-                    .unwrap_or(Action::Preserve);
-                if actual != Action::Tokenize {
+                    .resolve_action(&cell.class, &build_context(field_name))
+                    .action;
+                if !actual.is_protective() {
                     return Err(clean_to_raw_mapping_error(
                         "residual policy preview mismatch",
                     ));
@@ -2455,11 +2463,20 @@ impl Pipeline {
         Ok(())
     }
 
+    /// The one policy lookup for every span this pipeline acts on or logs;
+    /// see `rule::resolve` for the family-token derivation.
+    fn resolve_action(
+        &self,
+        class: &PiiClass,
+        context: &RuleContext,
+    ) -> crate::rule::ResolvedAction {
+        crate::rule::resolve(&self.rules, class, context, |family| {
+            self.registry.family_member_classes(family)
+        })
+    }
+
     fn action_for(&self, detection: &Detection, context: &RuleContext) -> Action {
-        self.rules
-            .iter()
-            .find_map(|rule| rule.action(&detection.class, context))
-            .unwrap_or(Action::Preserve)
+        self.resolve_action(&detection.class, context).action
     }
 
     fn log_entry(

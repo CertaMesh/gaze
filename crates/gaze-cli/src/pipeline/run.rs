@@ -178,9 +178,9 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         leak_report: LeakReportResponse::from(&leak_report),
     };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
-    // Surface fail-open policy coverage gaps only once the clean succeeded — on
-    // an error path there is no output to leak, and the warning must not corrupt
-    // the single-line JSON error envelope on stderr (issue #360).
+    // Surface family-class notices only once the clean succeeded: on an error
+    // path there is no output, and the notice must not corrupt the single-line
+    // JSON error envelope on stderr (issue #360).
     warn_uncovered_collision_families(&effective_policy, &loaded_rulepacks, &locale_chain);
     println!("{json}");
     Ok(())
