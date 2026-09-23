@@ -14,9 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `generalize` > `format_preserve` > `preserve`), and `Action` now serializes
   with its canonical audit spelling.
 - **`AmbiguityRecord::derived_action`** (`DerivedFamilyAction { action,
-  member_class }`): a family-level token's audit row records which member
-  rule set its action when no rule named the family class. Serialized only
-  when present, so existing rows and fixtures are unchanged.
+  member_class }`): a family-level token's audit row records which member's
+  explicit rule set its action when no rule named the family class;
+  `member_class` is `null` when the family's own default applied. Serialized
+  only when present, so existing rows and fixtures are unchanged.
+- **`Action::is_protective`** in `gaze-types`: every action but `preserve`,
+  the admission test residual coverage uses.
 
 - **Benchmark gold-gap diagnostic (scored-label contract v3).**
   `docs/reference/benchmarks/scored-labels-v3.json` keeps v2's labels and adds
@@ -235,8 +238,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [How a family-level token picks its action](docs/reference/policy.md#how-a-family-level-token-picks-its-action).
   The `gaze clean` load-time notice and
   `gaze_assembly::uncovered_collision_family_classes` now fire when a policy
-  names a member class (or a dead post-default family rule) without a reachable
-  family rule, whatever the default, and no longer claim a leak.
+  names a member class (before or after the default rule) or a dead
+  post-default family rule without a reachable family rule, whatever the
+  default, and no longer claim a leak.
+  Under an active protection trace (the MCP and proxy chokepoints) only
+  `tokenize` and `preserve` are executable, so a family token that now derives
+  `redact`, `generalize` or `format_preserve` fails closed there with
+  `UnsupportedActionVariant`, the same error an explicit rule with that action
+  on a member class already produced; nothing is emitted.
 - **Nym suspects no longer carry JSON syntax at their edges.** Quotes,
   colons, commas, brackets, braces and whitespace are trimmed from both ends
   of a decoded span, and a span of syntax alone is dropped. Trimming only
@@ -460,6 +469,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   derivation alone would have failed the whole document closed
   (`residual policy preview mismatch`); its remaining bytes now carry
   family-class residual tokens. Solo todo #3746.
+- **Security: residual coverage switched off under any action but `tokenize`.**
+  The cells that cover a losing candidate's remaining bytes beside an
+  overlapping winner were planned only when every previewed action in the
+  overlap was exactly `tokenize`. A stricter action anywhere in the component
+  (a `redact` member rule reaching the family class through the derivation
+  above, or an explicit `default = redact`, which reached the same gate before
+  this release) silently dropped every cell, and the loser's bytes left the
+  process raw with a success exit: under de-DE, `custom:credit_card = redact`
+  with a tokenize default shipped `AD56 7551` and `9893` of a no-cue IBAN
+  beside the phone token that won its middle (872 of 18,556 family documents
+  in the review matrix). Admission is now "every action in the component is
+  protective" (`Action::is_protective`) at the planner, the plan's runtime
+  check and the residual cell's own lookup; admitted cells keep emitting
+  tokens. Found by the review of the derivation change; the fix and the
+  derivation ship together, so no release carries the regression.
 - **Security: an IBAN followed by an upper-case word could match nothing at
   all.** Whichever of two outcomes an adopter got depended only on whether the
   IBAN's digits happened to be Luhn-valid: for BE, and for any IBAN whose BBAN

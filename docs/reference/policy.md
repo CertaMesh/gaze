@@ -916,6 +916,19 @@ and redacting the other member only costs restorability, never a leak. With
 redacted. Every protective action is executable on a family class, so the
 derived action is applied as-is.
 
+Two consequences of a derived action that is not `tokenize`:
+
+- **Under a protection trace** (the MCP and proxy chokepoints, which prove
+  every byte's disposition) only `tokenize` and `preserve` are executable. A
+  family token that derives `redact`, `generalize` or `format_preserve` fails
+  closed there with `UnsupportedActionVariant`, exactly as an explicit rule
+  with that action on a member class already does. Nothing is emitted.
+- **Residual coverage** (the cells that cover a losing candidate's remaining
+  bytes beside an overlapping winner) admits evidence when every action in
+  the overlap component is protective, not only when it is `tokenize`. The
+  cells themselves still emit tokens; what they should emit under a
+  non-`tokenize` action is an open design question (todo 3740).
+
 > **To preserve family tokens you must say so.** Because the derivation is
 > strictest-wins, the only way to leave an ambiguous span raw while a member
 > class or the default is protective is an explicit rule for the family class
@@ -934,16 +947,18 @@ derived action is applied as-is.
 
 The audit row of a family token records how its action was chosen. Its
 `ambiguity_record` JSON carries `derived_action = { action, member_class }`
-whenever the action was derived; `member_class` names the member whose rule set
-it (the lowest class in `PiiClass` order on a tie), or is `null` when the
-family's own default applied. The field is absent when an explicit family rule
-matched, and on rows written before it existed.
+whenever the action was derived; `member_class` names the member whose
+**explicit** rule set it (the lowest class in `PiiClass` order on a tie, a
+member exactly as strict as the default included), or is `null` when the
+family's own default applied and no member's own rule reached that strictness.
+The field is absent when an explicit family rule matched, and on rows written
+before it existed.
 
 `gaze clean` prints a `warning:` to stderr at load time for every
 collision-family class with a mandatory anchor that an active recognizer can
-emit when your policy names one of its member classes, or names the family class
-only after the `default` rule, but has no reachable rule for the family class
-itself. The notice is informational: the span is protected by derivation, and
+emit when your policy names one of its member classes (before or after the
+`default` rule), or names the family class only after the `default` rule, but
+has no reachable rule for the family class itself. The notice is informational: the span is protected by derivation, and
 the notice tells you the token class you will see is the family class, not the
 member class you named, and how to set its action explicitly. Rust adopters get
 the same list from `gaze_assembly::uncovered_collision_family_classes`. The

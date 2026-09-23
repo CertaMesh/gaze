@@ -96,6 +96,55 @@ default now. The full removed surface is in the
 Manifests written before this change still restore. Only which spans get
 detected differs.
 
+## Pending (unreleased): collision-family tokens take the strictest member action
+
+**Action required only if you relied on a family token falling to a `preserve`
+default, or run `redact` / `generalize` / `format_preserve` member rules behind
+the MCP or proxy chokepoint.** A collision-family token
+(`custom:family:<name>`, today `custom:family:payment-card-or-iban`, emitted
+when no IBAN cue is in range or a Luhn-valid card run collides with the IBAN)
+no longer takes the `default` rule when no reachable rule names the family
+class. It takes the strictest action among its member classes' resolved rules
+and its own default (`redact` > `tokenize` > `generalize` > `format_preserve`
+> `preserve`); an explicit family rule declared before the default still wins
+verbatim. Full contract:
+[How a family-level token picks its action](docs/reference/policy.md#how-a-family-level-token-picks-its-action).
+
+1. **To keep family tokens raw, say so explicitly.** A member-only policy
+   (`custom:iban = tokenize`, `default = preserve`) now tokenizes the family
+   token instead of shipping the ambiguous IBAN raw. If that raw output was
+   intended, add, **before** your `default` rule:
+
+   ```toml
+   [[rule]]
+   kind = "class"
+   class = "custom:family:payment-card-or-iban"
+   action = "preserve"
+   ```
+
+   A rule placed after the `default` rule is dead (`default` matches
+   unconditionally); `gaze clean` prints a load-time `warning:` naming the
+   family class whenever a member or family rule shows intent without a
+   reachable family rule, dead post-default rules included.
+2. **Behind a protection trace, a derived `redact` fails closed.** The MCP
+   and proxy chokepoints accept only `tokenize` and `preserve`. A family token
+   that derives `redact`, `generalize` or `format_preserve` from a member rule
+   now fails the request with `UnsupportedActionVariant`, the same error an
+   explicit rule with that action on a member class already produced there.
+   Either tokenize the member, or add an explicit `tokenize` family rule
+   before the default.
+3. **Residual coverage is unchanged in output shape, wider in reach.** The
+   cells that cover a losing candidate's bytes beside an overlapping winner
+   are now planned whenever every action in the overlap protects its span,
+   not only under `tokenize`; they still emit tokens.
+4. **Audit rows.** A family token's `ambiguity_record` gains
+   `derived_action = { action, member_class }`; `member_class` names the
+   member whose explicit rule set the action, or is `null` when the default
+   applied. Rows written before this change are unchanged.
+
+Manifests written before this change still restore. Only which action an
+ambiguous span takes differs.
+
 ## Pending security fix: `gaze clean` without `--policy` runs `core`
 
 Through v0.14.0, `gaze clean` with no `--policy` and no rulepack flag ran an

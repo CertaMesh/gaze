@@ -2505,6 +2505,66 @@ fn a_redacting_member_keeps_the_losing_iban_evidence_covered() {
     assert_phone_win_iban_fully_covered(&clean, &logger);
 }
 
+/// Review 3746 finding 4: under an active protection trace (the MCP and proxy
+/// chokepoints) only `tokenize` and `preserve` are executable, so a family
+/// token that derives `redact` fails closed with `UnsupportedActionVariant`.
+/// That is the same failure an explicit `redact` rule on a member class
+/// already produces on main; the derivation adds no new failure class, it
+/// only makes the existing one reachable from a member rule.
+#[test]
+fn a_derived_redact_fails_under_a_protection_trace_like_an_explicit_one() {
+    let cases = [
+        (
+            "explicit member rule, settled custom:iban token",
+            payment_family_policy(
+                &[
+                    ("custom:iban", Action::Redact),
+                    ("custom:credit_card", Action::Tokenize),
+                    ("custom:phone", Action::Tokenize),
+                ],
+                Action::Preserve,
+            ),
+            NO_CUE_LUHN_BBAN_IBAN,
+        ),
+        (
+            "derived from a redacting member, family token",
+            payment_family_policy(
+                &[
+                    ("custom:iban", Action::Tokenize),
+                    ("custom:credit_card", Action::Redact),
+                    ("custom:phone", Action::Tokenize),
+                ],
+                Action::Preserve,
+            ),
+            NO_CUE_IBAN,
+        ),
+    ];
+    for (case, policy, input) in cases {
+        let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+        let pipeline =
+            build_pipeline(&policy, &empty_context(), &rulepacks, &active_locales, None)
+                .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        let err = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                input,
+                active_locales.as_slice(),
+                &gaze::DictionaryBundle::default(),
+                gaze::SafetyNetPolicy::default(),
+            )
+            .err()
+            .unwrap_or_else(|| panic!("{case}: a redact under a trace must fail closed"));
+
+        assert!(
+            matches!(err, gaze::Error::UnsupportedActionVariant),
+            "{case}: {err:?}"
+        );
+    }
+}
+
 /// The pre-existing hole behind finding 7: an explicit `default = redact`
 /// reached the same `tokenize`-only gate on main, where the family class took
 /// the default, so the losing IBAN's bytes shipped raw there too.
