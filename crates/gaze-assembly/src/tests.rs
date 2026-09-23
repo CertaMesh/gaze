@@ -2799,37 +2799,38 @@ fn policy_regex_precedence_tie_takes_the_strictest_member_action() {
     );
 }
 
-/// The docs/reference/policy.md example: `tenant.order_id` outranks
-/// `tenant.order_ref` by precedence. Both directions, so registration order
-/// cannot fake the verdict.
+/// The shape of the docs/reference/policy.md precedence example, under neutral
+/// names (`xtask no-tenant-knowledge` denies tenant-shaped identifiers in crate
+/// sources): the lower `precedence` member outranks the other. Both directions,
+/// so registration order cannot fake the verdict.
 #[test]
 fn policy_regex_precedence_decides_the_family_winner() {
-    for (order_id_precedence, order_ref_precedence, winner, loser) in [
-        (50, 60, "order_id", "order_ref"),
-        (60, 50, "order_ref", "order_id"),
+    for (ref_precedence, code_precedence, winner, loser) in [
+        (50, 60, "ticket_ref", "ticket_code"),
+        (60, 50, "ticket_code", "ticket_ref"),
     ] {
         let policy = regex_family_policy(
-            "tenant-orders",
+            "tenant-tickets",
             r"ORD-[0-9]+",
             &[
                 RegexMember {
-                    name: "tenant.order_id",
-                    class: "custom:order_id",
-                    variant: "order-id",
-                    precedence: order_id_precedence,
+                    name: "tenant.ticket_ref",
+                    class: "custom:ticket_ref",
+                    variant: "ticket-ref",
+                    precedence: ref_precedence,
                     mandatory_anchor: None,
                 },
                 RegexMember {
-                    name: "tenant.order_ref",
-                    class: "custom:order_ref",
-                    variant: "order-ref",
-                    precedence: order_ref_precedence,
+                    name: "tenant.ticket_code",
+                    class: "custom:ticket_code",
+                    variant: "ticket-code",
+                    precedence: code_precedence,
                     mandatory_anchor: None,
                 },
             ],
             vec![
-                class_rule("custom:order_id", Action::Tokenize),
-                class_rule("custom:order_ref", Action::Tokenize),
+                class_rule("custom:ticket_ref", Action::Tokenize),
+                class_rule("custom:ticket_code", Action::Tokenize),
                 RuleSpec::Default {
                     action: Action::Preserve,
                 },
