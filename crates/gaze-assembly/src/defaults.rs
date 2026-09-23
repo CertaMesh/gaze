@@ -42,6 +42,18 @@ impl CorePipelineConfig {
         self
     }
 
+    /// Bundled rulepacks selected by this configuration, in load order.
+    pub fn bundled_rulepack_ids(&self) -> Vec<&str> {
+        std::iter::once(CORE_BUNDLED_RULEPACK)
+            .chain(
+                self.extra_bundled
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|id| !matches!(*id, "core" | "core-extended")),
+            )
+            .collect()
+    }
+
     pub fn build(self) -> Result<CorePipeline, BuildError> {
         let rulepacks = self.load_rulepacks()?;
         let auto_activate_locale_gated = self
@@ -78,13 +90,7 @@ impl CorePipelineConfig {
 
     fn load_rulepacks(&self) -> Result<Vec<Rulepack>, BuildError> {
         let mut rulepacks = Vec::new();
-        let contents = load_embedded_rulepack_contents(CORE_BUNDLED_RULEPACK)?;
-        rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
-
-        for bundled in &self.extra_bundled {
-            if matches!(bundled.as_str(), "core" | "core-extended") {
-                continue;
-            }
+        for bundled in self.bundled_rulepack_ids() {
             let contents = load_embedded_rulepack_contents(bundled)?;
             rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
         }

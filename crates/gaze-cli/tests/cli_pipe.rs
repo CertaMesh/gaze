@@ -66,8 +66,7 @@ fn clean_ok_with_args(args: &[&str], input: &str) -> (String, String, u64) {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
-        out.stderr.is_empty()
-            || out.stderr == b"notice: core rulepack floor is off (custom rulepacks only)\n",
+        out.stderr.is_empty() || out.stderr == b"notice: core rulepack floor is off\n",
         "unexpected stderr on success"
     );
     let v: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
@@ -3550,6 +3549,59 @@ action = "tokenize"
         );
         assert_eq!(clean["stats"]["detections"], 1);
         assert!(String::from_utf8_lossy(&run.stderr).contains("core rulepack floor is off"));
+    }
+}
+
+#[test]
+fn non_core_bundled_selection_emits_core_floor_notice() {
+    let dir = tempdir().unwrap();
+    let policy_path = dir.path().join("policy.toml");
+    fs::write(
+        &policy_path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["secrets"]
+
+[[rule]]
+kind = "default"
+action = "tokenize"
+"#,
+    )
+    .unwrap();
+
+    let runs = [
+        clean_raw_with_args(&["--rulepack-bundled=secrets"], POLICY_LESS_CORE_INPUT),
+        clean_raw_with_args(
+            &[&format!("--policy={}", policy_path.display())],
+            POLICY_LESS_CORE_INPUT,
+        ),
+    ];
+    for run in runs {
+        assert!(run.status.success(), "non-core run failed");
+        assert_eq!(run.stderr, b"notice: core rulepack floor is off\n");
+        let clean: Value = serde_json::from_slice(&run.stdout).unwrap();
+        let clean_text = clean["clean_text"].as_str().unwrap();
+        for raw in POLICY_LESS_CORE_RAW {
+            assert!(clean_text.contains(raw), "core unexpectedly loaded");
+        }
+    }
+}
+
+#[test]
+fn core_and_core_extended_suppress_core_floor_notice() {
+    for args in [
+        Vec::<&str>::new(),
+        vec!["--rulepack-bundled=core"],
+        vec!["--rulepack-bundled=core-extended"],
+        vec!["--rulepack-bundled=core,secrets"],
+    ] {
+        let run = clean_raw_with_args(&args, POLICY_LESS_CORE_INPUT);
+        assert!(run.status.success(), "core run failed");
+        assert!(!String::from_utf8_lossy(&run.stderr).contains("core rulepack floor is off"));
     }
 }
 

@@ -49,15 +49,14 @@ pub(crate) fn resolve_pipeline(
         context.as_ref(),
     )?;
     let pipeline = resolved.builder.build().map_err(map_pipeline_error)?;
-    if !resolved.policy.rulepacks.paths.is_empty()
-        && !resolved
-            .policy
-            .rulepacks
-            .bundled
-            .iter()
-            .any(|id| id == "core")
+    if !resolved
+        .policy
+        .rulepacks
+        .bundled
+        .iter()
+        .any(|id| matches!(id.as_str(), "core" | "core-extended"))
     {
-        eprintln!("notice: core rulepack floor is off (custom rulepacks only)");
+        eprintln!("notice: core rulepack floor is off");
     }
     let pipeline = match logger {
         Some(logger) => pipeline.with_redaction_logger(ArcLogger(logger)),
@@ -399,5 +398,35 @@ pub(crate) struct ArcLogger(pub(crate) Arc<dyn RedactionLogger>);
 impl RedactionLogger for ArcLogger {
     fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         self.0.log(entry)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn policy_less_selection_matches_core_pipeline_config() {
+        let resolved = resolve_pipeline_builder(None, &CleanOverrides::default(), &[], None, None)
+            .expect("default CLI pipeline resolves");
+        let cli_ids: Vec<_> = resolved
+            .rulepacks
+            .iter()
+            .map(|pack| pack.rulepack_id.as_str())
+            .collect();
+        let config = gaze_assembly::CorePipelineConfig::new();
+        let config_ids = config.bundled_rulepack_ids();
+        let config_pack_ids: Vec<_> = config_ids
+            .iter()
+            .map(|id| {
+                let contents = gaze_recognizers::embedded(id).expect("embedded rulepack exists");
+                Rulepack::load(RulepackSource::Embedded(contents))
+                    .expect("embedded rulepack loads")
+                    .rulepack_id
+            })
+            .collect();
+
+        assert_eq!(resolved.policy.rulepacks.bundled, config_ids);
+        assert_eq!(cli_ids, config_pack_ids);
     }
 }
