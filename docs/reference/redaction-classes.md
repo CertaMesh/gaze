@@ -97,7 +97,7 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `phone.e164.spaced` | `regex` | Spaced or punctuated international phone candidates outside the US and German branches | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 79 |
 | `core, core-extended` | `phone.national.de` | `regex` | German national or plus-49 phone shapes accepted by the German regional parser | `custom:phone` | `de-DE, de-AT, de-CH` | `e164_phone_national_de` | `none` | `locale_gated` | no | 0.82 | 85 |
 | `core, core-extended` | `phone.national.us` | `regex` | US NANPA phone shapes, including the documented synthetic 555-01xx range | `custom:phone` | `en-US` | `e164_phone_national_us` | `none` | `safe_default` | yes | 0.82 | 85 |
-| `core, core-extended` | `iban.structural` | `regex` | Space-tolerant IBAN shapes at the country's ISO 13616 registry length that pass MOD-97 after canonicalization | `custom:iban` | `global` | `iban_mod97` | `iban_canonical` | `safe_default` | yes | 0.70 | 80 |
+| `core, core-extended` | `iban.structural` | `regex` | Space-tolerant IBAN shapes at the country's ISO 13616 registry length that pass MOD-97 after canonicalization; no trailing word boundary in the pattern, the code boundary accepts a glued label and refuses a glued digit or underscore | `custom:iban` | `global` | `iban_mod97` | `iban_canonical` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `card.structural` | `regex` | 13 to 19 digit payment-card shapes with optional spaces or dashes that pass Luhn | `custom:credit_card` | `global` | `luhn` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `ip.v4` | `regex` | Decimal dotted-quad IPv4 addresses with octets from 0 through 255 | `custom:ip_address` | `global` | `ipv4_parse` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `ip.v6` | `regex` | Full, compressed (including bare `::`), and IPv4-embedded IPv6 textual forms; bare `::` also matches the scope separator inside Rust and C++ paths at every locale (todo #2402) | `custom:ip_address` | `global` | `ipv6_parse` | `none` | `safe_default` | yes | 0.70 | 80 |
@@ -374,6 +374,29 @@ positions ordinary prose and identifiers do not produce, so they are
 format-basis and run at every locale including `--locale=global`. An adopter
 who must not tokenize Canadian, UK, or Irish postal codes cannot suppress them
 with a locale chain and has to disable the recognizer.
+
+`iban.structural` carries a leading word boundary but no trailing one, and
+neither does the IBAN-consuming branch of `phone.national.de`. A compact IBAN
+glued to the next label (`IBAN AT611904300234573201BIC`, the dense footer
+`IBAN:<value>BIC:<value>`) is therefore a candidate, and the trailing boundary
+is decided in code by `gaze_types::word_run_extends_identifier`, which reads
+the word run after a validated registry-length candidate with the same word
+predicate as `is_inside_word`: an empty run or a run of letters only (Unicode
+`is_alphabetic`) is a glued label or word and the IBAN tokenizes whole; a run
+holding a digit or an underscore could be more identifier and the candidate is
+dropped, so `ref AT611904300234573201XQ7 end` yields no token over its
+checksum-valid prefix. The disclosed gap is the other side of that rule: an
+IBAN glued to a digit or an underscore (`…32011234`, `…3201_x`) stays raw,
+because it cannot be told from a longer opaque identifier. The trade was
+measured, not assumed: a random registry-shaped prefix passes mod-97 1.02 % of
+the time (1 in 97, 200k tokens), so accepting every validated prefix would
+tokenize 1 % of every registry-shaped upper-case token regardless of length,
+while the letters-only rule's false-accept is 1 % × (26/36)^k for a glued
+upper-case alphanumeric run of k characters (0.7 % at k = 1, 0.07 % at k = 8).
+The Dataiku EN/DE holdout, the A4 negative corpus and `docs/**/*.md` are
+byte-identical under either rule (the A4 corpus contains no registry-shaped
+mod-97-valid token), so the evidence for the rule is the synthetic enumeration
+in `scripts/bench/iban_trailing_word_enumeration.py` (solo todo #3756).
 
 ## Residual coverage
 

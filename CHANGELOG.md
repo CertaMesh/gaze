@@ -452,6 +452,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Security: a compact IBAN glued to the next word shipped raw.**
+  `IBAN AT611904300234573201BIC` and the dense footer
+  `IBAN:AT611904300234573201BIC:BKAUATWW` cleaned to themselves with
+  `detections: 0`, an empty leak report and a success exit, in every release
+  from v0.4.3-rc.1 (#48) through v0.14.0 and on main after #622. The
+  `iban.structural` pattern ended in `\b`, so a candidate immediately followed
+  by a letter or digit was never a candidate at all. The boundary was also
+  load-bearing the other way: without it the exact-length branches match a
+  checksum-valid prefix of a longer opaque token (`ref AT611904300234573201XQ7
+  end`), and Rust's `regex` has no lookahead to say "not followed by more
+  identifier". The trailing boundary now lives in code, next to
+  `is_inside_word`: `gaze_types::word_run_extends_identifier` reads the word
+  run after a validated registry-length candidate with the same word predicate,
+  accepts it when the run is empty or letters only (Unicode `is_alphabetic`, so
+  `…3201und` and `…3201Überweisung` behave alike), and rejects it when the run
+  holds a digit or an underscore. `RegexDetector` applies it to every
+  `iban_mod97`-validated recognizer, and the pattern's trailing `\b` is gone.
+  The IBAN-consuming branch of `phone.national.de` lost its trailing `\b` for
+  the same reason: with a label glued to a spaced German IBAN it stopped
+  consuming, the phone branches saw `0532 0130` inside the IBAN, and the phone
+  rule (priority 85) fragmented the IBAN token around a phone token.
+  **Residual gap, by design:** an IBAN glued to a digit or an underscore
+  (`…32011234`, `…3201_x`) stays raw exactly as before, because it is
+  indistinguishable from a longer opaque identifier; accepting every validated
+  prefix would tokenize 1 % of every registry-shaped upper-case token of any
+  length (mod-97 false-accept, measured 1.02 % over 200k random tokens), while
+  the letters-only rule's false-accept decays with the glued run's length
+  (1 % × (26/36)^k for an upper-case alphanumeric run of k characters, so 0.7 %
+  at k = 1 and 0.07 % at k = 8). The Dataiku EN/DE holdout, the A4 negative
+  corpus and `docs/**/*.md` are byte-identical under the old and new boundary
+  (the A4 corpus holds no registry-shaped mod-97-valid token at all), so the
+  evidence is the synthetic enumeration: base vs fix over
+  `scripts/bench/iban_trailing_word_enumeration.py`, now 98,256 documents with
+  ten glued trailers, scored on output bytes. Fixtures in
+  `crates/gaze-recognizers/tests/iban_trailing_group.rs` pin both directions
+  and the phone interplay; the enumeration script now reads the registry
+  length table out of `crates/gaze-types/src/lib.rs` instead of carrying a
+  third hand-copied table. Solo todo #3756.
+
 - **Security: a custom policy naming only member classes shipped no-cue IBANs
   raw.** The mandatory-anchor fallback and precedence-tie family token
   (`custom:family:payment-card-or-iban`, emitted since v0.7.1 whenever no IBAN

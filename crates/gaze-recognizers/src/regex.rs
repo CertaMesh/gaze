@@ -56,6 +56,10 @@ pub struct RegexDetector {
     validator_kind: Option<ValidatorKind>,
     normalizer_kind: Option<NormalizerKind>,
     ascii_email_boundary: bool,
+    /// The candidate must not be a prefix of a longer identifier: the word run after it may hold
+    /// letters only (`gaze_types::word_run_extends_identifier`). Set for `iban_mod97`, whose
+    /// pattern carries no trailing `\b` so a compact IBAN glued to a label is still a candidate.
+    identifier_run_boundary: bool,
 }
 
 impl RegexDetector {
@@ -95,6 +99,7 @@ impl RegexDetector {
     ) -> Result<Self> {
         let regex = Regex::new(pattern).map_err(RecognizerError::InvalidRegex)?;
         let ascii_email_boundary = class == PiiClass::Email && source == "email.global";
+        let identifier_run_boundary = validator_kind == Some(ValidatorKind::IbanMod97);
 
         Ok(Self {
             regex,
@@ -113,6 +118,7 @@ impl RegexDetector {
             validator_kind,
             normalizer_kind,
             ascii_email_boundary,
+            identifier_run_boundary,
         })
     }
 
@@ -122,6 +128,7 @@ impl RegexDetector {
             PiiClass::Email,
         )?;
         detector.ascii_email_boundary = true;
+        detector.identifier_run_boundary = false;
         Ok(detector)
     }
 
@@ -244,6 +251,10 @@ impl RegexDetector {
     }
 
     fn boundary_accepts(&self, input: &str, span: &std::ops::Range<usize>) -> bool {
+        if self.identifier_run_boundary && gaze_types::word_run_extends_identifier(input, span.end)
+        {
+            return false;
+        }
         if !self.ascii_email_boundary {
             return true;
         }

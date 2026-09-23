@@ -239,8 +239,12 @@ kind = "regex"
 # parser-backed validator while preserving identifier-attached rejection.
 # Broad candidate scanning stays tenant-agnostic. Leading no-capture branches
 # consume country-neutral 22-character IBAN grouping and short 4+5 numeric ID
-# shapes before phone parsing sees phone-like substrings.
-pattern = '''(?x)\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){4}\s?[A-Z0-9]{2}\b|(?:^|[^[:alnum:]_+])0[1-9]\d{2}[\s./-]*\d{5}\b|(?:^|[^[:alnum:]_+])((?:\+49[\s.-]*|0)[1-9]\d{1,4}[\s./-]*\d(?:[\s./-]*\d){4,10})\b'''
+# shapes before phone parsing sees phone-like substrings. The IBAN branch has
+# no trailing `\b` on purpose, matching `iban.structural`: a label glued to
+# the IBAN (`… 0130 00BIC`) must not stop it consuming, or the phone branches
+# see `0532 0130` inside the IBAN and this rule (priority 85) fragments the
+# IBAN token around a phone token (solo todo #3756).
+pattern = '''(?x)\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){4}\s?[A-Z0-9]{2}|(?:^|[^[:alnum:]_+])0[1-9]\d{2}[\s./-]*\d{5}\b|(?:^|[^[:alnum:]_+])((?:\+49[\s.-]*|0)[1-9]\d{1,4}[\s./-]*\d(?:[\s./-]*\d){4,10})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
@@ -305,9 +309,19 @@ kind = "regex"
 # uppercase token -- `IBAN AT61 ... BIC: ...` -- which failed mod-97, lost the
 # candidate to validator veto, and leaked the country code and check digits raw
 # while `card.structural` mis-claimed the digits (solo todo #3708).
-# The country -> length map here is pinned to `gaze_types::iban_country_length`
-# by `embedded_core_iban_pattern_lengths_match_the_validator_registry`; nothing
-# this pattern drops could ever have passed the validator, so recall is unchanged.
+# The country -> length map here is pinned to `gaze_types::iban_registry_length`
+# by `iban_pattern_branch_lengths_match_the_validator_registry` in
+# `crates/gaze-recognizers/tests/iban_trailing_group.rs`; nothing this pattern
+# drops could ever have passed the validator, so recall is unchanged.
+# There is deliberately NO trailing `\b`: with one, a compact IBAN glued to the
+# next label (`IBAN AT611904300234573201BIC`, `IBAN:<v>BIC:<v>` footers) was
+# never a candidate and shipped raw (solo todo #3756). `regex` has no lookahead,
+# so the trailing boundary is decided in code for every `iban_mod97` recognizer
+# (`gaze_types::word_run_extends_identifier`): the word run after the candidate
+# may be empty or letters only; a digit or `_` in it means the candidate is a
+# prefix of a longer identifier and it is dropped. Pinned both ways by
+# `label_glued_to_a_compact_iban_stays_outside_the_token` and
+# `iban_shaped_prefix_of_a_longer_identifier_is_not_tokenized`.
 pattern = '''
 (?x)\b(?:
   (?:NO)\d{2}(?:\x20?[A-Z0-9]{4}){2}\x20?[A-Z0-9]{3}
@@ -328,7 +342,7 @@ pattern = '''
 | (?:MT|SC)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{3}
 | (?:LC)\d{2}(?:\x20?[A-Z0-9]{4}){7}
 | (?:RU)\d{2}(?:\x20?[A-Z0-9]{4}){7}\x20?[A-Z0-9]{1}
-)\b
+)
 '''
 
 [recognizers.validator]

@@ -17,7 +17,12 @@ one alternation branch per ISO 13616 registry length.
 
 Document set: every one of the 89 registry countries x 2 BBAN alphabets x
 PER_COUNTRY valid mod-97 IBANs x spaced/compact x 3 prefixes x TRAILERS trailing
-contexts. Divergences are reported split by OUTCOME CLASS, because the defect
+contexts. Since todo #3756 the trailers include GLUED shapes (no separator at
+all: `…3201BIC`, `…3201:`, `…32011234`): the trailing boundary of
+`iban.structural` moved out of the pattern into code, so a glued label must be
+recovered while a glued digit or underscore must leave the document unchanged
+in both arms. Per-trailer counts are reported under `recovered_by_trailer` and
+`changed_by_trailer`, and any change on an identifier-glued trailer fails the run. Divergences are reported split by OUTCOME CLASS, because the defect
 had two of them and which one an adopter got depended on the BBAN alphabet. The trailers
 are the invoice/footer shapes that trigger the defect (` BIC`, ` BIC:`, ` SWIFT`,
 ` EUR`, ` OK`) plus controls that never did (lower-case words, punctuation,
@@ -42,7 +47,7 @@ that. Where the IBAN's coverage comes from other recognizers instead (no cue, so
 the anchor declines), their own context sensitivity is reported separately.
 
 Exit status is 1 when any UNEXPLAINED IBAN byte is lost, when the fix's coverage
-depends on the trailer, when
+depends on the trailer, when an identifier-glued document changes at all, when
 any document leaves IBAN bytes untokenized in the fix arm that base DID protect,
 or when any daemon response is missing. The clean text is read directly: tokens
 are blanked and what remains must be exactly the prefix and the trailer. Residue
@@ -80,24 +85,35 @@ ALPHABETS = {
     "digits": "0123456789",
     "alnum": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
 }
-# ISO 13616 IBAN Registry lengths, mirroring `gaze_types::iban_registry_length`.
-# A country missing here would go unexercised, so the count is asserted below.
-LENGTHS = {
-    "AD": 24, "AE": 23, "AL": 28, "AT": 20, "AZ": 28, "BA": 20, "BE": 16,
-    "BG": 22, "BH": 22, "BI": 27, "BR": 29, "BY": 28, "CH": 21, "CR": 22,
-    "CY": 28, "CZ": 24, "DE": 22, "DJ": 27, "DK": 18, "DO": 28, "EE": 20,
-    "EG": 29, "ES": 24, "FI": 18, "FK": 18, "FO": 18, "FR": 27, "GB": 22,
-    "GE": 22, "GI": 23, "GL": 18, "GR": 27, "GT": 28, "HN": 28, "HR": 21,
-    "HU": 28, "IE": 22, "IL": 23, "IQ": 23, "IS": 26, "IT": 27, "JO": 30,
-    "KW": 30, "KZ": 20, "LB": 28, "LC": 32, "LI": 21, "LT": 20, "LU": 20,
-    "LV": 21, "LY": 25, "MC": 27, "MD": 24, "ME": 22, "MK": 19, "MN": 20,
-    "MR": 27, "MT": 31, "MU": 30, "NI": 28, "NL": 18, "NO": 15, "OM": 23,
-    "PK": 24, "PL": 28, "PS": 29, "PT": 25, "QA": 29, "RO": 24, "RS": 22,
-    "RU": 33, "SA": 24, "SC": 31, "SD": 18, "SE": 24, "SI": 19, "SK": 24,
-    "SM": 27, "SO": 23, "ST": 25, "SV": 28, "TL": 23, "TN": 24, "TR": 26,
-    "UA": 29, "VA": 22, "VG": 24, "XK": 20, "YE": 30,
-}
+# ISO 13616 IBAN Registry lengths, read out of `gaze_types::iban_country_length` in
+# `crates/gaze-types/src/lib.rs` rather than hand-copied: a wrong length for one
+# country would silently generate invalid IBANs for it and weaken exactly the
+# evidence this script exists to produce, and a count assert cannot catch that.
+# The validator, the `iban.structural` length branches and this table are then
+# three views of one source (the branches are pinned to it by the drift test
+# `iban_pattern_branch_lengths_match_the_validator_registry`).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+GAZE_TYPES_LIB = REPO_ROOT / "crates" / "gaze-types" / "src" / "lib.rs"
+
+
+def registry_lengths() -> dict[str, int]:
+    source = GAZE_TYPES_LIB.read_text(encoding="utf-8")
+    start = source.index("fn iban_country_length(country: &[u8]) -> Option<usize> {")
+    body = source[start : source.index("\n}\n", start)]
+    lengths = {
+        country: int(length)
+        for country, length in re.findall(r'b"([A-Z]{2})" => Some\((\d+)\)', body)
+    }
+    assert len(lengths) == EXPECTED_COUNTRIES, (
+        f"parsed {len(lengths)} registry countries out of {GAZE_TYPES_LIB}, "
+        f"expected {EXPECTED_COUNTRIES}"
+    )
+    assert all(15 <= length <= 34 for length in lengths.values()), lengths
+    return lengths
+
+
 EXPECTED_COUNTRIES = 89
+LENGTHS = registry_lengths()
 
 # `iban.structural` declares `mandatory_anchor = "iban"`, so a document with no IBAN cue is
 # deliberately not detected at all -- in BOTH arms. The third prefix carries no cue and is kept on
@@ -121,7 +137,24 @@ TRAILERS = {
     ",": False,
     "\nBIC": False,
     "": False,
+    # GLUED trailers (todo #3756): nothing separates the IBAN from what follows.
+    # Letters are a glued label or word and must tokenize; the fix arm recovers
+    # them. A digit or an underscore glued to the IBAN is ambiguous with a longer
+    # opaque identifier and stays raw in BOTH arms by design -- those rows must
+    # show no change, which is the precision half of the boundary.
+    "BIC": False,
+    "BIC:BKAUATWW": False,
+    "EUR": False,
+    "und": False,
+    "Überweisung": False,
+    ":": False,
+    '"': False,
+    "1234": False,
+    "XQ7": False,
+    "_x": False,
 }
+GLUED_LETTER_TRAILERS = {"BIC", "BIC:BKAUATWW", "EUR", "und", "Überweisung"}
+GLUED_IDENTIFIER_TRAILERS = {"1234", "XQ7", "_x"}
 
 POLICY_HEAD = """schema_version = "0.1.0"
 
@@ -352,6 +385,9 @@ def main() -> int:
             outcome_transitions = Counter()
             by_class_and_country = defaultdict(Counter)
             gained_by_trailer = defaultdict(int)
+            recovered_by_trailer = Counter()
+            changed_by_trailer = Counter()
+            identifier_glued_changes = []
             lost_examples = []
             partial_examples = []
             # Coverage of the SAME IBAN and prefix with no trailing word, per arm.
@@ -428,6 +464,18 @@ def main() -> int:
                 stats["base_raw_residue"] += base_residue is not None
                 if base_residue is not None and fix_residue is None:
                     stats["recovered"] += 1
+                    recovered_by_trailer[doc["trailer"]] += 1
+                if b.get("clean_text") != f.get("clean_text"):
+                    changed_by_trailer[doc["trailer"]] += 1
+                    # A digit or underscore glued to the IBAN could be more identifier: the
+                    # boundary must refuse it in the fix arm exactly as `\b` did in base, so
+                    # the two arms must agree byte for byte on those documents.
+                    if doc["trailer"] in GLUED_IDENTIFIER_TRAILERS:
+                        stats["identifier_glued_changed"] += 1
+                        if len(identifier_glued_changes) < 5:
+                            identifier_glued_changes.append(
+                                {"text": doc["text"], "base": b_cls, "fix": f_cls}
+                            )
                 # The only failure is a REGRESSION: bytes left raw by the fix
                 # that base protected. A document with residue in BOTH arms is
                 # not this change's doing -- one prefix in three carries no IBAN
@@ -456,6 +504,7 @@ def main() -> int:
                 or stats["fix_trailer_dependent"]
                 or stats["regressed"]
                 or stats["missing_response"]
+                or stats["identifier_glued_changed"]
             ):
                 failed = True
             report["policies"][name] = {
@@ -483,6 +532,10 @@ def main() -> int:
                     name: dict(counter) for name, counter in by_class_and_country.items()
                 },
                 "gained_bytes_by_trailer": dict(gained_by_trailer),
+                "recovered_by_trailer": dict(recovered_by_trailer),
+                "changed_by_trailer": dict(changed_by_trailer),
+                "identifier_glued_changed": stats["identifier_glued_changed"],
+                "identifier_glued_examples": identifier_glued_changes,
                 "lost_examples": lost_examples,
                 "regression_examples": partial_examples,
             }

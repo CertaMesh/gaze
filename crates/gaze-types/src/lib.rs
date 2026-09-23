@@ -2050,7 +2050,36 @@ impl OpenAiPrivateLabel {
 pub fn is_inside_word(text: &str, at: usize) -> bool {
     let before = text.get(..at).and_then(|head| head.chars().next_back());
     let after = text.get(at..).and_then(|tail| tail.chars().next());
-    before.is_some_and(char::is_alphanumeric) && after.is_some_and(char::is_alphanumeric)
+    before.is_some_and(is_word_char) && after.is_some_and(is_word_char)
+}
+
+/// The one word-character rule behind [`is_inside_word`] and
+/// [`word_run_extends_identifier`]: Unicode alphanumeric. Both edge checks must agree on what a
+/// word is, so neither may grow its own predicate.
+fn is_word_char(ch: char) -> bool {
+    ch.is_alphanumeric()
+}
+
+/// True when the word run starting at byte offset `at` in `text` could be more of an identifier:
+/// it holds a digit (Unicode numeric), an underscore, or any other word character that is not a
+/// letter. A run of letters only (`BIC`, `und`, `Überweisung`) is a label or a word glued to the
+/// value, not more value. An empty run, an offset out of range, or one not on a character
+/// boundary returns false.
+///
+/// This is the trailing boundary for identifier recognizers whose pattern must not end in `\b`
+/// (solo todo #3756): `iban.structural` matches a registry-length candidate without a trailing
+/// boundary so a compact IBAN glued to the next label (`IBAN AT611904300234573201BIC`) is still a
+/// candidate, and this decides whether what follows is a label or the rest of a longer opaque
+/// token (`AT611904300234573201XQ7`). Rust `regex` has no lookahead, so it cannot be said in the
+/// pattern. The word run reads the same characters as [`is_inside_word`] plus `_`, which joins
+/// identifiers and which `\b` counts as a word character; a combining mark is not a word
+/// character to either check and ends the run.
+pub fn word_run_extends_identifier(text: &str, at: usize) -> bool {
+    text.get(at..).is_some_and(|tail| {
+        tail.chars()
+            .take_while(|ch| is_word_char(*ch) || *ch == '_')
+            .any(|ch| !ch.is_alphabetic())
+    })
 }
 
 /// Closed safety-net PII vocabulary before mapping into `PiiClass`.
@@ -3379,6 +3408,91 @@ mod action_tests {
             );
         }
         assert!(!Action::Preserve.is_protective());
+    }
+}
+
+#[cfg(test)]
+mod word_boundary_tests {
+    use super::*;
+
+    const IBAN: &str = "AT611904300234573201";
+
+    fn extends(trailer: &str) -> bool {
+        let text = format!("IBAN {IBAN}{trailer}");
+        word_run_extends_identifier(&text, 5 + IBAN.len())
+    }
+
+    /// Letters glued to the value are a label or a word: ASCII either case, and any Unicode
+    /// letter, so `…3201Überweisung` and `…3201und` behave alike.
+    #[test]
+    fn a_run_of_letters_does_not_extend_the_identifier() {
+        for trailer in [
+            "",
+            "BIC",
+            "bic",
+            "BIC:BKAUATWW",
+            "Überweisung",
+            "über",
+            "Straße",
+            "élan",
+        ] {
+            assert!(!extends(trailer), "{trailer:?}");
+        }
+    }
+
+    /// A digit, an underscore, or a non-ASCII digit anywhere in the run could be more identifier.
+    #[test]
+    fn a_digit_or_underscore_anywhere_in_the_run_extends_the_identifier() {
+        for trailer in [
+            "1",
+            "XQ7",
+            "BIC1",
+            "_",
+            "_x",
+            "x_",
+            "\u{661}",
+            "BIC\u{661}",
+            "٣",
+        ] {
+            assert!(extends(trailer), "{trailer:?}");
+        }
+    }
+
+    /// The run stops at the first non-word character, so what comes after a separator is not
+    /// read, and a combining mark is not a word character to this check or to `is_inside_word`.
+    #[test]
+    fn the_run_stops_at_a_separator_or_a_combining_mark() {
+        for trailer in [" 1234", ":1234", "BIC:1", "\u{301}1", "\u{301}", "-1", ".1"] {
+            assert!(!extends(trailer), "{trailer:?}");
+        }
+        assert!(!is_inside_word("a\u{301}", 1));
+    }
+
+    /// Malformed offsets are not an identifier continuation.
+    #[test]
+    fn out_of_range_or_mid_character_offsets_return_false() {
+        assert!(!word_run_extends_identifier("AT61", 99));
+        assert!(!word_run_extends_identifier("AT61", 4));
+        assert!(!word_run_extends_identifier("ü1", 1));
+    }
+
+    /// The two edge checks share one word predicate.
+    #[test]
+    fn both_edge_checks_agree_on_word_characters() {
+        for ch in ['a', 'Z', '9', 'ü', '\u{661}', '_', '-', ' ', '\u{301}', '<'] {
+            let text = format!("x{ch}");
+            assert_eq!(
+                is_inside_word(&text, 1),
+                is_word_char(ch),
+                "{ch:?}: is_inside_word must follow is_word_char"
+            );
+            let run_reads_it = word_run_extends_identifier(&format!("{ch}1"), 0);
+            assert_eq!(
+                run_reads_it,
+                is_word_char(ch) || ch == '_',
+                "{ch:?}: the run must read exactly the word characters plus underscore"
+            );
+        }
     }
 }
 
