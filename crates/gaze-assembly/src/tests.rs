@@ -2560,6 +2560,30 @@ fn a_redacting_member_keeps_a_partially_overlapped_iban_covered() {
         "fixture must exercise the partial-overlap phone win, or it pins nothing"
     );
 
+    // Same shape under a `redact` default with every member tokenized: the
+    // family class takes the default, so the remainder is the same one-way
+    // marker (review 3746 finding 7's hole, on a letter that still reaches
+    // residual coverage).
+    let redact_default = payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Tokenize),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Redact,
+    );
+    let (clean, logger) = clean_payment_logged(&redact_default, PARTIAL_PHONE_IBAN);
+    assert!(clean.contains(":Custom:phone_"), "{clean}");
+    assert!(clean.contains(&family_marker), "{clean}");
+    assert_no_group_survives(&clean, PARTIAL_PHONE_IBAN, "Bitte überweisen auf ", "");
+    assert!(
+        logger.entries().iter().any(|entry| {
+            entry.provenance_stage.as_deref() == Some("primary_pipeline.residual")
+                && entry.action == Action::Redact
+        }),
+        "the remainder must leave as a residual redact fragment"
+    );
+
     // Same shape, every member tokenized: the remainder is a family token.
     let (clean, _) = clean_payment_logged(&member_only_tokenize_policy(), PARTIAL_PHONE_IBAN);
     assert!(clean.contains(":Custom:phone_"), "{clean}");
@@ -2627,8 +2651,13 @@ fn a_derived_redact_fails_under_a_protection_trace_like_an_explicit_one() {
 }
 
 /// The pre-existing hole behind finding 7: an explicit `default = redact`
-/// reached the same `tokenize`-only gate on main, where the family class took
-/// the default, so the losing IBAN's bytes shipped raw there too.
+/// reached the same `tokenize`-only residual gate, where the family class took
+/// the default, so the losing IBAN's bytes shipped raw there too. Since
+/// containment precedence (todo #3740) this whole-IBAN letter no longer
+/// reaches residual coverage: the family token itself derives `redact` and the
+/// span leaves as one `[REDACTED]`. The residual arm of the same derivation is
+/// pinned on the partial-overlap letter in
+/// `a_redacting_member_keeps_a_partially_overlapped_iban_covered`.
 #[test]
 fn a_redact_default_keeps_the_losing_iban_evidence_covered() {
     let policy = payment_family_policy(

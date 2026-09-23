@@ -43,6 +43,7 @@ of a span.** Two resolver changes from solo todo #3740, both breaking in
 
 Manifests written before this change still restore. `redact` and
 `generalize` fragments are one-way, like whole spans under those actions.
+
 ## Pending (unreleased): policy regex collision families protect their family token
 
 **Action required only if your policy declares
