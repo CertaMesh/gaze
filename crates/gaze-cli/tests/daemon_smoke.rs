@@ -1285,6 +1285,19 @@ fn eviction_row_count(audit_db: &Path) -> i64 {
     }
 }
 
+fn eviction_row_count_for(audit_db: &Path, audit_session_id: &str) -> i64 {
+    let conn = rusqlite::Connection::open(audit_db).expect("open audit db for post-eviction query");
+    match conn.query_row(
+        "SELECT count(*) FROM redaction_log WHERE source = 'daemon.session_eviction' AND session_id = ?1",
+        [audit_session_id],
+        |row| row.get(0),
+    ) {
+        Ok(count) => count,
+        Err(rusqlite::Error::SqliteFailure(_, Some(msg))) if msg.contains("no such table") => 0,
+        Err(err) => panic!("unexpected error querying audit db: {err}"),
+    }
+}
+
 /// Polls `redaction_log` until at least `min_count` rows are present or the
 /// deadline is exceeded.  Returns the final row count.  This replaces a fixed
 /// `thread::sleep` before breaking the audit DB so the test is not sensitive
@@ -1309,6 +1322,45 @@ fn wait_for_redaction_rows(audit_db: &Path, min_count: i64, timeout: Duration) -
     }
 }
 
+fn wait_for_eviction_rows(audit_db: &Path, min_count: i64) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        if eviction_row_count(audit_db) >= min_count {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for eviction audit row"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn wait_for_audit_failure(stderr: &mpsc::Receiver<String>) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let line = stderr
+            .recv_timeout(remaining)
+            .expect("timed out waiting for AuditWriteFailed on daemon stderr");
+        if line.contains("AuditWriteFailed") {
+            return;
+        }
+    }
+}
+
+fn refresh_session_after_break(guard: &mut ChildGuard, session_id: &str) {
+    // A request after the break guarantees an active session even if host load
+    // let the original one expire before the test could break the DB.
+    writeln!(
+        guard.0.stdin.as_mut().unwrap(),
+        "{}",
+        json!({"session_id": session_id, "text": ""})
+    )
+    .unwrap();
+    guard.0.stdin.as_mut().unwrap().flush().unwrap();
+}
+
 /// Spawns `gaze daemon` and returns the child plus background stdout/stderr
 /// reader threads. The threads collect all lines so the test can keep stdin
 /// open (to let the session age out for idle eviction) and close it when
@@ -1320,6 +1372,7 @@ fn spawn_daemon_collect(
     ChildGuard,
     thread::JoinHandle<Vec<String>>,
     thread::JoinHandle<Vec<String>>,
+    mpsc::Receiver<String>,
 ) {
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
         .args(args)
@@ -1330,6 +1383,7 @@ fn spawn_daemon_collect(
         .unwrap();
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
+    let (stderr_tx, stderr_rx) = mpsc::channel();
     let stdout_thread = thread::spawn(move || {
         std::io::BufReader::new(stdout)
             .lines()
@@ -1339,10 +1393,14 @@ fn spawn_daemon_collect(
     let stderr_thread = thread::spawn(move || {
         std::io::BufReader::new(stderr)
             .lines()
-            .map(|l| l.unwrap())
+            .map(|line| {
+                let line = line.unwrap();
+                let _ = stderr_tx.send(line.clone());
+                line
+            })
             .collect::<Vec<_>>()
     });
-    (ChildGuard(child), stdout_thread, stderr_thread)
+    (ChildGuard(child), stdout_thread, stderr_thread, stderr_rx)
 }
 
 /// T1 — Idle-eviction audit-write failure surfaces on stderr.
@@ -1354,7 +1412,7 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
     let audit_dir = tempdir().unwrap();
     let audit_db = audit_dir.path().join("audit.db");
 
-    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+    let (mut guard, stdout_thread, stderr_thread, stderr_rx) = spawn_daemon_collect(&[
         "daemon",
         "--policy",
         policy.to_str().unwrap(),
@@ -1379,14 +1437,15 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
 
     // Poll until the audit row lands instead of sleeping a fixed interval;
     // this prevents the test from being sensitive to daemon startup latency.
-    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(5));
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(30));
 
     // Break the audit DB so the next SQLite write fails with
     // `RedactionLogError::Sqlite`.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
+    refresh_session_after_break(&mut guard, t1_caller_id);
 
-    // Wait for idle eviction (session-idle-timeout is 1s).
-    thread::sleep(Duration::from_millis(2000));
+    // The error line proves idle eviction ran after the DB was broken.
+    wait_for_audit_failure(&stderr_rx);
 
     drop(guard.0.stdin.take());
     let status = guard.0.wait().unwrap();
@@ -1443,15 +1502,15 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
     // Eviction emits no JSONL response.
     assert_eq!(
         stdout_lines.len(),
-        1,
-        "stdout should be exactly the one clean response, got: {stdout_lines:?}"
+        2,
+        "stdout should contain exactly the two request responses, got: {stdout_lines:?}"
     );
     // The eviction audit row is still lost (log_eviction cannot fail-closed),
     // but the loss is now detectable via stderr.
     assert_eq!(
-        eviction_row_count(&audit_db),
+        eviction_row_count_for(&audit_db, audit_id),
         0,
-        "eviction audit row should be absent (write failed)"
+        "failed eviction audit row should be absent"
     );
 }
 
@@ -1464,7 +1523,7 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
     let audit_dir = tempdir().unwrap();
     let audit_db = audit_dir.path().join("audit.db");
 
-    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+    let (mut guard, stdout_thread, stderr_thread, _stderr_rx) = spawn_daemon_collect(&[
         "daemon",
         "--policy",
         policy.to_str().unwrap(),
@@ -1490,7 +1549,7 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
     // Poll until the audit row lands before breaking the DB.
     // This guards against a timing race where the daemon hasn't yet committed
     // the SQLite write when chattr +i is applied to the directory.
-    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(5));
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(30));
 
     // Break the audit DB.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
@@ -1505,8 +1564,6 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
-    thread::sleep(Duration::from_millis(500));
-
     drop(guard.0.stdin.take());
     let status = guard.0.wait().unwrap();
     let stdout_lines = stdout_thread.join().unwrap();
@@ -1585,7 +1642,7 @@ fn daemon_eviction_writes_audit_row_when_db_healthy() {
     let audit_dir = tempdir().unwrap();
     let audit_db = audit_dir.path().join("audit.db");
 
-    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+    let (mut guard, stdout_thread, stderr_thread, _stderr_rx) = spawn_daemon_collect(&[
         "daemon",
         "--policy",
         policy.to_str().unwrap(),
@@ -1604,10 +1661,9 @@ fn daemon_eviction_writes_audit_row_when_db_healthy() {
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
-    thread::sleep(Duration::from_millis(500));
-
-    // Wait for idle eviction (session-idle-timeout is 1s, audit DB is healthy).
-    thread::sleep(Duration::from_millis(2000));
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(30));
+    // Keep stdin open until the idle eviction has committed its audit row.
+    wait_for_eviction_rows(&audit_db, 1);
 
     drop(guard.0.stdin.take());
     let status = guard.0.wait().unwrap();
@@ -1669,7 +1725,7 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
 
     let hostile = r#"a"b\c{d}e"#;
 
-    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+    let (mut guard, stdout_thread, stderr_thread, stderr_rx) = spawn_daemon_collect(&[
         "daemon",
         "--policy",
         policy.to_str().unwrap(),
@@ -1690,13 +1746,15 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
-    thread::sleep(Duration::from_millis(500));
+    // The request audit row must exist before the DB is broken. This also
+    // proves startup and request handling completed under host load.
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(30));
 
     // Break the audit DB.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
+    refresh_session_after_break(&mut guard, hostile);
 
-    // Wait for idle eviction of the hostile-id session.
-    thread::sleep(Duration::from_millis(2000));
+    wait_for_audit_failure(&stderr_rx);
 
     drop(guard.0.stdin.take());
     let status = guard.0.wait().unwrap();
@@ -1704,7 +1762,7 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
     let stderr_lines = stderr_thread.join().unwrap();
 
     assert!(status.success());
-    assert_eq!(stdout_lines.len(), 1, "one clean response only");
+    assert_eq!(stdout_lines.len(), 2, "one response per request only");
 
     let stderr_text = stderr_lines.join("\n");
     assert!(
@@ -1757,12 +1815,12 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
 fn daemon_eviction_without_audit_db_produces_no_error() {
     let (_policy_dir, policy) = write_policy();
 
-    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+    let (mut guard, stdout_thread, stderr_thread, _stderr_rx) = spawn_daemon_collect(&[
         "daemon",
         "--policy",
         policy.to_str().unwrap(),
         "--session-idle-timeout",
-        "1",
+        "0",
         "--idle-timeout",
         "30",
     ]);
@@ -1774,11 +1832,14 @@ fn daemon_eviction_without_audit_db_produces_no_error() {
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
-    thread::sleep(Duration::from_millis(500));
-
-    // Wait for idle eviction — no audit DB, so log_eviction's Ok(()) guard
-    // means no error and no AuditWriteFailed stderr line.
-    thread::sleep(Duration::from_millis(2000));
+    // Zero idle timeout makes the next request trigger idle eviction before
+    // its response, without depending on a wall-clock sleep.
+    writeln!(
+        guard.0.stdin.as_mut().unwrap(),
+        "{}",
+        json!({"session_id":"sess2","text":"alice@example.invalid"})
+    )
+    .unwrap();
 
     drop(guard.0.stdin.take());
     let status = guard.0.wait().unwrap();
@@ -1793,8 +1854,8 @@ fn daemon_eviction_without_audit_db_produces_no_error() {
     );
     assert_eq!(
         stdout_lines.len(),
-        1,
-        "stdout should have exactly one clean response"
+        2,
+        "stdout should have exactly two clean responses"
     );
 }
 
