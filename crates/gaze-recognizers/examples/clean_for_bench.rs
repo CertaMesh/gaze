@@ -1675,6 +1675,32 @@ mod tests {
         ));
     }
 
+    /// The single-pass arms name every learned class explicitly: a learned class never falls
+    /// through to the default rule, and the other arms' policies are untouched.
+    #[test]
+    fn single_pass_policy_declares_an_explicit_tokenize_rule_per_learned_class() {
+        let rulepack = load_bundled_rulepack("core-extended").expect("core-extended");
+        let learned = [
+            "custom:building_number",
+            "custom:date",
+            "custom:license_plate",
+            "custom:username",
+        ]
+        .map(|class| PiiClass::custom(class.trim_start_matches("custom:")).expect("class"));
+        let policy = benchmark_policy(&rulepack, true, &learned);
+        for class in &learned {
+            assert!(
+                policy.rules.iter().any(|rule| matches!(
+                    rule,
+                    RuleSpec::Class { class: named, action: Action::Tokenize } if named == class
+                )),
+                "{class:?} has no explicit tokenize rule"
+            );
+        }
+        let without = benchmark_policy(&rulepack, true, &[]);
+        assert_eq!(policy.rules.len(), without.rules.len() + learned.len());
+    }
+
     #[test]
     fn success_response_keeps_empty_protection_trace_field() {
         let response = rule_floor_response("empty-1", "en", "nothing sensitive here.");

@@ -2,8 +2,30 @@ use std::process::Command as ProcessCommand;
 
 use anyhow::{bail, Context, Result};
 
-// One more than the suite count: the Nym suite runs a second, live pass when a bundle is set.
-const MAX_CARGO_TEST_INVOCATIONS: usize = 6;
+// The suite count plus one live pass per Nym suite (the safety net and the recognizer), run
+// only when a bundle is set.
+const MAX_CARGO_TEST_INVOCATIONS: usize = 8;
+
+/// The test targets whose ignored `live_*` tests run against the pinned Nym bundle, with every
+/// live test each one must run and pass.
+const NYM_LIVE_PASSES: &[(&str, &[&str])] = &[
+    (
+        "nym_safety_net",
+        &[
+            "live_plate_in_prose_is_a_suspect",
+            "live_salutation_sentence_has_no_suspects",
+            "live_long_document_is_scanned_to_the_end",
+            "live_capture_matches_the_committed_fixture",
+        ],
+    ),
+    (
+        "nym_recognizer",
+        &[
+            "live_recognizer_capture_matches_the_committed_fixture",
+            "live_recognizer_tokenizes_a_plate_in_one_pass",
+        ],
+    ),
+];
 
 /// Pinned Nym bundle for the live pass. Unset: the Nym suite still runs its captured
 /// real-model fixtures, and the live pass is reported as not run.
@@ -11,7 +33,7 @@ const NYM_MODEL_DIR_ENV: &str = "GAZE_NYM_MODEL_DIR";
 
 pub fn run() -> Result<()> {
     let suites = suites();
-    if suites.len() + 1 > MAX_CARGO_TEST_INVOCATIONS {
+    if suites.len() + NYM_LIVE_PASSES.len() > MAX_CARGO_TEST_INVOCATIONS {
         bail!(
             "safety_net_sanity: expected at most {MAX_CARGO_TEST_INVOCATIONS} batched cargo test invocations, got {}",
             suites.len()
@@ -102,6 +124,23 @@ fn suites() -> Vec<Suite> {
             ],
         },
         Suite {
+            label: "Nym recognizer (single-pass Stage A) in the pipeline",
+            package: "gaze-recognizers",
+            test_target: "nym_recognizer",
+            features: &["safety-net-nym", "test-support"],
+            required_tests: &[
+                "a_rule_container_swallows_a_contained_nym_candidate",
+                "a_nym_span_never_swallows_a_contained_rule_candidate",
+                "a_nym_span_never_swallows_a_contained_validated_email",
+                "every_action_pair_leaves_no_protected_claim_raw",
+                "the_model_reads_normalized_text_and_spans_map_back_to_raw_bytes",
+                "one_inference_per_request_and_none_stale_across_requests",
+                "concurrent_requests_never_share_an_inference",
+                "the_default_pipeline_never_registers_nym",
+                "captured_tool_calls_keep_every_key_and_stay_json",
+            ],
+        },
+        Suite {
             label: "safety_net_log metadata-only schema",
             package: "gaze-audit",
             test_target: "safety_net_log",
@@ -114,9 +153,10 @@ fn suites() -> Vec<Suite> {
     ]
 }
 
-/// Live pass: the ignored `live_*` tests of the Nym suite load the real pinned bundle, check a
-/// positive and a negative sentence end to end, and prove the committed fixture is still what the
-/// model outputs. They need the 150 MB bundle, so they run only when `GAZE_NYM_MODEL_DIR` is set.
+/// Live pass: the ignored `live_*` tests of the Nym suites load the real pinned bundle, check
+/// sentences end to end (as a safety net and as a recognizer), and prove each committed fixture is
+/// still what the model outputs. They need the 150 MB bundle, so they run only when
+/// `GAZE_NYM_MODEL_DIR` is set.
 fn run_live_nym_pass(suites: &[Suite]) -> Result<()> {
     if std::env::var_os(NYM_MODEL_DIR_ENV).is_none() {
         println!(
@@ -124,37 +164,34 @@ fn run_live_nym_pass(suites: &[Suite]) -> Result<()> {
         );
         return Ok(());
     }
-    let suite = suites
-        .iter()
-        .find(|suite| suite.test_target == "nym_safety_net")
-        .context("nym suite missing")?;
-    println!("safety_net_sanity: running nym live pass against the pinned bundle");
-    let output = cargo_test_command(suite)
-        .arg("--")
-        .arg("--ignored")
-        .arg("live_")
-        .output()
-        .context("failed to run the nym live pass")?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    print!("{stdout}");
-    if !output.status.success() {
-        bail!(
-            "safety_net_sanity: nym live pass failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    // A filter that matched nothing exits 0; require every live test by name.
-    for required in [
-        "live_plate_in_prose_is_a_suspect",
-        "live_salutation_sentence_has_no_suspects",
-        "live_long_document_is_scanned_to_the_end",
-        "live_capture_matches_the_committed_fixture",
-    ] {
-        if !stdout
-            .lines()
-            .any(|line| line == format!("test {required} ... ok"))
-        {
-            bail!("safety_net_sanity: nym live test `{required}` did not run and pass");
+    for (target, required_tests) in NYM_LIVE_PASSES {
+        let suite = suites
+            .iter()
+            .find(|suite| suite.test_target == *target)
+            .with_context(|| format!("nym suite {target} missing"))?;
+        println!("safety_net_sanity: running the {target} live pass against the pinned bundle");
+        let output = cargo_test_command(suite)
+            .arg("--")
+            .arg("--ignored")
+            .arg("live_")
+            .output()
+            .with_context(|| format!("failed to run the {target} live pass"))?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        print!("{stdout}");
+        if !output.status.success() {
+            bail!(
+                "safety_net_sanity: {target} live pass failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        // A filter that matched nothing exits 0; require every live test by name.
+        for required in *required_tests {
+            if !stdout
+                .lines()
+                .any(|line| line == format!("test {required} ... ok"))
+            {
+                bail!("safety_net_sanity: nym live test `{required}` did not run and pass");
+            }
         }
     }
     Ok(())

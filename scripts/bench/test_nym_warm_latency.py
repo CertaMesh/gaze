@@ -71,6 +71,19 @@ class HostInfoTest(unittest.TestCase):
 
 
 class SyntheticDocumentTest(unittest.TestCase):
+    def test_timing_is_valid_only_on_a_quiet_host(self) -> None:
+        self.assertTrue(latency.timing_validity(0.4, 1.9)["timing_valid"])
+        for start, end in ((2.0, 0.1), (0.1, 2.0), (15.0, 17.3)):
+            validity = latency.timing_validity(start, end)
+            self.assertFalse(validity["timing_valid"])
+            self.assertTrue(str(validity["timing_note"]).startswith("timing invalid"))
+
+    def test_every_nym_configuration_is_an_arm(self) -> None:
+        self.assertEqual(
+            latency.ARMS,
+            ("pass2-ner", "full-stack-nym-resolve", "single-pass-nym", "single-pass-nym-observed"),
+        )
+
     def test_word_counts_are_exact_and_stable(self) -> None:
         for words, _pieces in latency.SYNTHETIC_DOCUMENTS.values():
             text = latency.synthetic_text(words)

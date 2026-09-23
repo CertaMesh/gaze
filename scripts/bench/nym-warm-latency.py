@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""Measure warm per-document latency of the opt-in Nym-small arm.
+"""Measure warm per-document latency of the opt-in Nym-small arms.
 
 Drives the canonical harness binary (`clean_for_bench`, the production pipeline)
-twice: `pass2-ner` (rules plus NER, no net) and `full-stack-nym-resolve` (the
-same plus the in-process Nym net under Resolve). Each process loads its models,
-cleans one warm-up document, then cleans every measured document once per
-repetition. The sample is the binary's own `timing.clean_ms`, so process start,
-pipe transport and JSON handling are excluded. The difference between the two
-arms is what the net adds.
+once per arm: `pass2-ner` (rules plus NER, no net), `full-stack-nym-resolve`
+(the same plus the in-process Nym net under Resolve), `single-pass-nym` (Nym as
+a recognizer in the candidate pool, one model pass) and
+`single-pass-nym-observed` (the recognizer plus the observer net, two passes).
+Each process loads its models, cleans one warm-up document, then cleans every
+measured document once per repetition. The sample is the binary's own
+`timing.clean_ms`, so process start, pipe transport and JSON handling are
+excluded. The difference to `pass2-ner` is what each Nym configuration adds.
+
+Timing is only a claim on a quiet host: the 1-minute load average must stay
+below 2 at the start and the end of the run, otherwise the output says
+`"timing_valid": false` with the loads it saw.
 
 Documents: the committed coverage-loop corpus plus two synthetic German
 documents of exactly 512 and 1,024 Nym tokenizer pieces (one and two model
@@ -36,7 +42,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-ARMS = ("pass2-ner", "full-stack-nym-resolve")
+ARMS = ("pass2-ner", "full-stack-nym-resolve", "single-pass-nym", "single-pass-nym-observed")
+#: A 1-minute load average at or above this makes a run's timing invalid.
+QUIET_LOAD = 2.0
 SYNTHETIC_SENTENCE = (
     "Sehr geehrte Damen und Herren, wir bestätigen den Eingang Ihrer Unterlagen vom "
     "12. März und melden uns in den nächsten Tagen mit einer Rückmeldung zum weiteren "
@@ -81,6 +89,20 @@ def latency_summary(samples: list[float]) -> dict[str, float | int]:
         "warm_p95_ms": round(ordered[p95_index], 3),
         "warm_mean_ms": round(statistics.mean(ordered), 3),
         "samples": len(ordered),
+    }
+
+
+def timing_validity(load_at_start: float, load_at_end: float) -> dict[str, object]:
+    """Whether a run's timing may be quoted: quiet at both ends, or invalid with the reason."""
+    valid = max(load_at_start, load_at_end) < QUIET_LOAD
+    return {
+        "timing_valid": valid,
+        "timing_note": (
+            "quiet host"
+            if valid
+            else f"timing invalid: 1-minute load {load_at_start:.2f} at start, "
+            f"{load_at_end:.2f} at end (quiet means below {QUIET_LOAD})"
+        ),
     }
 
 
@@ -240,6 +262,10 @@ def main(argv: list[str] | None = None) -> int:
         synthetic = {fixture_id: latency_summary(samples.pop(fixture_id)) for fixture_id in SYNTHETIC_DOCUMENTS}
         corpus = [value for values in samples.values() for value in values]
         result["arms"][arm] = {"corpus": latency_summary(corpus), **synthetic}
+    result["load_average_1_5_15_at_end"] = [round(value, 2) for value in os.getloadavg()]
+    result.update(
+        timing_validity(result["load_average_1_5_15_at_start"][0], result["load_average_1_5_15_at_end"][0])
+    )
     json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.write("\n")
     return 0

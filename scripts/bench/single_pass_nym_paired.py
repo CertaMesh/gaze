@@ -125,11 +125,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     environment = release.build_no_opf_environment(os.environ)
     environment["GAZE_NER_MODEL_DIR"] = str(args.model_dir.expanduser().resolve())
     environment["GAZE_NER_THRESHOLD"] = str(args.threshold)
+    # Recorded before any arm runs: the tree the binary was built from, not whatever the
+    # checkout holds when the last arm finishes.
+    git = score.git_metadata(repo_root)
     runs = []
     for arm in args.arm or ARMS:
         print(f"running {arm} on {len(documents)} documents", file=sys.stderr)
         runs.append(run_arm(repo_root, binary, arm, documents, environment, out / f"{arm}.jsonl"))
-    git = score.git_metadata(repo_root)
     manifest = {
         "binary": str(binary.relative_to(repo_root)) if binary.is_relative_to(repo_root) else str(binary),
         "binary_sha256": score.sha256_file(binary),
