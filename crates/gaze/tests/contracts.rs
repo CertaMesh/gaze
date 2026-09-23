@@ -477,13 +477,25 @@ fn overlap_conflict_logs_losing_detection_without_raw_pii() {
     let CleanDocument::Text(text) = clean else {
         panic!("expected text document");
     };
-    assert!(text.starts_with("reach alice@<"));
-    assert!(text.ends_with(":Email_1>"));
+    // The email wins the overlap. The losing name has a protective rule of
+    // its own (`redact`), so its remaining bytes (`alice@`) are admitted to
+    // residual coverage and leave as a name token, never raw; before review
+    // 3746 only a `tokenize` loser was admitted and `alice@` shipped raw.
+    assert!(text.starts_with("reach <"), "{text}");
+    assert!(!text.contains("alice"), "{text}");
+    assert!(text.contains(":Name_1>"), "{text}");
+    assert!(text.ends_with(":Email_1>"), "{text}");
 
+    // Winner row, loser row, and the residual cell's own row.
     let entries = logger.entries();
-    assert_eq!(entries.len(), 2);
+    assert_eq!(entries.len(), 3, "{entries:?}");
     assert!(entries.iter().any(|entry| !entry.conflict_loser));
     assert!(entries.iter().any(|entry| entry.conflict_loser));
+    assert!(entries.iter().any(|entry| {
+        entry.provenance_stage.as_deref() == Some("primary_pipeline.residual")
+            && entry.class == PiiClass::Name
+            && entry.action == Action::Tokenize
+    }));
     assert!(entries.iter().all(|entry| entry.field_name.is_none()));
 }
 

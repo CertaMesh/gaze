@@ -482,8 +482,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the review matrix). Admission is now "every action in the component is
   protective" (`Action::is_protective`) at the planner, the plan's runtime
   check and the residual cell's own lookup; admitted cells keep emitting
-  tokens. Found by the review of the derivation change; the fix and the
-  derivation ship together, so no release carries the regression.
+  tokens. The same gate also reaches losers whose own rule is `redact`,
+  `generalize` or `format_preserve`: a `redact` name overlapped by a winning
+  email used to leave its remaining bytes raw beside the email token and now
+  leaves them as a name token, with a residual audit row
+  (`provenance_stage = "primary_pipeline.residual"`). Found by the review of
+  the derivation change; the fix and the derivation ship together, so no
+  release carries the regression.
 - **Security: an IBAN followed by an upper-case word could match nothing at
   all.** Whichever of two outcomes an adopter got depended only on whether the
   IBAN's digits happened to be Luhn-valid: for BE, and for any IBAN whose BBAN
