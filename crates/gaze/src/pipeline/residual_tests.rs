@@ -381,6 +381,46 @@ fn override_cells_are_audited_as_protection_override() {
     }
 }
 
+/// A `redact` residual fragment is a `[REDACTED:<class>]` marker gaze wrote
+/// and recorded, so a safety-net suspect wholly inside it is already
+/// protected, exactly like a marker the net's own redaction wrote (#623);
+/// otherwise a net re-flagging the fragment would act on the marker again.
+/// The control is the same text with no manifest record: a typed marker
+/// protects nothing.
+#[test]
+fn a_redact_residual_fragment_is_a_recorded_marker() {
+    use crate::rule::{ClassRule, DefaultRule, RuleEntry};
+    let mut p = pipeline(pair(), true);
+    p.rules = vec![
+        RuleEntry::new(ClassRule::new(PiiClass::Name, Action::Tokenize)),
+        RuleEntry::new(DefaultRule::new(Action::Redact)),
+    ];
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&p, &session, RAW).unwrap();
+    let marker = crate::redaction_marker(&field());
+    let start = output.text.find(&marker).expect("redact fragment written");
+    let suspect = LeakSuspect::new(
+        start + "[REDACTED:".len()..start + marker.len() - 1,
+        field(),
+        "probe.residual",
+        Some(1.0),
+        LeakKind::Uncovered,
+        "secret",
+        None,
+    );
+    let target = ProtectionTarget::Live(&session);
+    assert!(
+        suspect_is_already_protected(&target, &output, &suspect),
+        "a recorded residual marker protects the bytes inside it: {}",
+        output.text
+    );
+    let typed = CleanText {
+        text: output.text.clone(),
+        manifest: Ledger::default(),
+    };
+    assert!(!suspect_is_already_protected(&target, &typed, &suspect));
+}
+
 struct Unknown {
     calls: Arc<std::sync::atomic::AtomicUsize>,
 }

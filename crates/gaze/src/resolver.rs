@@ -1736,6 +1736,79 @@ mod tests {
         assert_eq!(resolved[0].decided_by, ConflictTier::RulePriority);
     }
 
+    /// The anchored tier also counts a mandatory anchor found in context. Every
+    /// bundled anchored rule is validator-backed, so this is how an adopter's
+    /// anchored rule without a validator reaches it. With its cue present the
+    /// container ties a cue-structured (`structural.*`) span inside it and
+    /// keeps the whole span; without the cue it is a plain pattern, the guard
+    /// refuses, and the base ladder hands the span to the inner span's higher
+    /// rule priority.
+    #[test]
+    fn a_found_mandatory_anchor_ranks_a_container_as_anchored() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "contract.anchored",
+                crate::CollisionMembership::new(
+                    "tenant-document",
+                    "contract",
+                    10,
+                    Some("contract".to_string()),
+                ),
+            )
+            .build();
+        let mut anchors = AnchorResolver::default();
+        anchors.register(
+            LocaleTag::DeDe,
+            "contract",
+            vec!["Vertrag".to_string()],
+            None,
+        );
+        for (input, expected_id, expected_tier) in [
+            (
+                "Vertrag: AB-1234-XYZ-7788 end",
+                "contract.anchored",
+                ConflictTier::ContainmentPrecedence,
+            ),
+            (
+                "Notiz:   AB-1234-XYZ-7788 end",
+                "name.forward_marker",
+                ConflictTier::RulePriority,
+            ),
+        ] {
+            let container = prioritized(
+                candidate(
+                    9..25,
+                    PiiClass::custom("contract").expect("valid custom class"),
+                    0.80,
+                    "contract.anchored",
+                ),
+                10,
+            );
+            let mut inner = prioritized(
+                candidate(
+                    12..20,
+                    PiiClass::custom("recipient").expect("valid custom class"),
+                    0.85,
+                    "name.forward_marker",
+                ),
+                90,
+            );
+            inner.source = "structural.forward_marker".into();
+
+            let resolved = resolve_candidates_with_policy_and_anchors(
+                vec![container, inner],
+                registry.family_policy(),
+                &anchors,
+                input,
+                &[LocaleTag::DeDe],
+            );
+
+            assert_eq!(resolved.len(), 1, "{input}");
+            assert_eq!(resolved[0].recognizer_id, expected_id, "{input}");
+            assert_eq!(resolved[0].decided_by, expected_tier, "{input}");
+        }
+    }
+
     /// Placement: collision-family policy decides a declared rivalry before
     /// containment does. A lower-precedence family member that wholly
     /// contains a higher-precedence rival still loses to it on
