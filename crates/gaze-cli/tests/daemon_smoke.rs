@@ -1377,19 +1377,19 @@ fn assert_two_request_responses(lines: &[String], session_id: &str) {
     );
 }
 
+type DaemonCollection = (
+    ChildGuard,
+    thread::JoinHandle<Vec<String>>,
+    thread::JoinHandle<Vec<String>>,
+    mpsc::Receiver<String>,
+);
+
 /// Spawns `gaze daemon` and returns the child plus background stdout/stderr
 /// reader threads. The threads collect all lines so the test can keep stdin
 /// open (to let the session age out for idle eviction) and close it when
 /// ready. The child is wrapped in `ChildGuard` so a panicked test does not
 /// leak a daemon process.
-fn spawn_daemon_collect(
-    args: &[&str],
-) -> (
-    ChildGuard,
-    thread::JoinHandle<Vec<String>>,
-    thread::JoinHandle<Vec<String>>,
-    mpsc::Receiver<String>,
-) {
+fn spawn_daemon_collect(args: &[&str]) -> DaemonCollection {
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
         .args(args)
         .stdin(Stdio::piped())
