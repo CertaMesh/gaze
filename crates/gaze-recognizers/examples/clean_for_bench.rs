@@ -35,6 +35,13 @@ enum BenchConfig {
     /// that code path measurable.
     FullStackNymRedact,
     Pass3Opf,
+    /// Stage A of single-pass: rules + Davlan NER + the Nym recognizer adapters in one
+    /// candidate pool at the frozen recognizer operating point, and no observer net, so the model
+    /// runs exactly once per document.
+    SinglePassNym,
+    /// [`Self::SinglePassNym`] plus the Nym observer net under the shipped `Resolve` policy: two
+    /// model passes, measured so the observer's remaining contribution is visible.
+    SinglePassNymObserved,
 }
 
 impl BenchConfig {
@@ -47,6 +54,8 @@ impl BenchConfig {
             Self::FullStackNymResolve => "full-stack-nym-resolve",
             Self::FullStackNymRedact => "full-stack-nym-redact",
             Self::Pass3Opf => "pass3-opf",
+            Self::SinglePassNym => "single-pass-nym",
+            Self::SinglePassNymObserved => "single-pass-nym-observed",
         }
     }
 
@@ -57,7 +66,13 @@ impl BenchConfig {
                 | Self::FullStackOpfResolve
                 | Self::FullStackNymResolve
                 | Self::FullStackNymRedact
+                | Self::SinglePassNym
+                | Self::SinglePassNymObserved
         )
+    }
+
+    fn uses_nym_recognizer(self) -> bool {
+        matches!(self, Self::SinglePassNym | Self::SinglePassNymObserved)
     }
 
     fn uses_extended_rule_floor(self) -> bool {
@@ -190,6 +205,7 @@ enum Outcome {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = parse_config()?;
+    let tracing = enable_exclusion_trace(config)?;
     let stdin = io::stdin();
     let mut stdout = io::BufWriter::new(io::stdout().lock());
     let full = build_pipeline(config)?;
@@ -200,7 +216,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let request: Request = serde_json::from_str(&line)?;
-        match handle_request(config, &full, request)? {
+        let traced = tracing.then(|| (request.fixture_id.clone(), request.text.clone()));
+        let outcome = handle_request(config, &full, request)?;
+        if let Some((fixture_id, text)) = traced {
+            flush_exclusion_trace(&fixture_id, &text)?;
+        }
+        match outcome {
             Outcome::Success(response) => {
                 serde_json::to_writer(&mut stdout, &response)?;
                 stdout.write_all(b"\n")?;
@@ -279,6 +300,7 @@ fn handle_request(
         BenchConfig::FullStackOpfResolve
             | BenchConfig::FullStackNymResolve
             | BenchConfig::FullStackNymRedact
+            | BenchConfig::SinglePassNymObserved
     ) {
         let post_policy_scan_start = Instant::now();
         let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
@@ -641,6 +663,8 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
                 "full-stack-nym-resolve" => BenchConfig::FullStackNymResolve,
                 "full-stack-nym-redact" => BenchConfig::FullStackNymRedact,
                 "pass3-opf" => BenchConfig::Pass3Opf,
+                "single-pass-nym" => BenchConfig::SinglePassNym,
+                "single-pass-nym-observed" => BenchConfig::SinglePassNymObserved,
                 _ => return Err(format!("unknown --config {value}").into()),
             };
         }
@@ -656,7 +680,10 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
     };
     let mut pipeline = assemble_rule_floor(config, ner)?;
     match config {
-        BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended | BenchConfig::Pass2Ner => {}
+        BenchConfig::RuleFloorCore
+        | BenchConfig::RuleFloorExtended
+        | BenchConfig::Pass2Ner
+        | BenchConfig::SinglePassNym => {}
         BenchConfig::FullStackOpfResolve => {
             pipeline = register_opf(pipeline).map_err(|source| {
                 BenchmarkBuildError::SafetyNetRegistration {
@@ -665,7 +692,9 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
                 }
             })?;
         }
-        BenchConfig::FullStackNymResolve | BenchConfig::FullStackNymRedact => {
+        BenchConfig::FullStackNymResolve
+        | BenchConfig::FullStackNymRedact
+        | BenchConfig::SinglePassNymObserved => {
             pipeline = register_nym(pipeline).map_err(|source| {
                 BenchmarkBuildError::SafetyNetRegistration {
                     cell: config.name(),
@@ -723,7 +752,25 @@ fn assemble_rule_floor(
         "core"
     };
     let rulepack = load_bundled_rulepack(bundle)?;
-    let mut policy = benchmark_policy(&rulepack, config.uses_extended_rule_floor());
+    let nym_recognizers = if config.uses_nym_recognizer() {
+        Some(load_nym_recognizers().map_err(|source| {
+            BenchmarkBuildError::SafetyNetRegistration {
+                cell: config.name(),
+                source,
+            }
+        })?)
+    } else {
+        None
+    };
+    let learned_classes = nym_recognizers
+        .as_ref()
+        .map(nym_recognizer_classes)
+        .unwrap_or_default();
+    let mut policy = benchmark_policy(
+        &rulepack,
+        config.uses_extended_rule_floor(),
+        &learned_classes,
+    );
     let ner_threshold = if config.uses_ner() {
         let ner = ner.ok_or(BenchmarkBuildError::MissingNerModelDir)?;
         let mut ner_policy = NerPolicy::default();
@@ -737,13 +784,17 @@ fn assemble_rule_floor(
     };
     let active_locales = benchmark_locale_chain(&policy, &rulepack);
 
-    Ok(gaze_assembly::build_pipeline(
+    let mut builder = gaze_assembly::build_pipeline_builder(
         &policy,
         &empty_context(),
         &[rulepack],
         &active_locales,
         ner_threshold,
-    )?)
+    )?;
+    if let Some(nym_recognizers) = nym_recognizers {
+        builder = register_nym_recognizers(builder, nym_recognizers);
+    }
+    Ok(builder.build().map_err(gaze_assembly::BuildError::from)?)
 }
 
 fn load_bundled_rulepack(id: &str) -> Result<Rulepack, BenchmarkBuildError> {
@@ -754,7 +805,14 @@ fn load_bundled_rulepack(id: &str) -> Result<Rulepack, BenchmarkBuildError> {
         .map_err(BenchmarkBuildError::from)
 }
 
-fn benchmark_policy(rulepack: &Rulepack, auto_activate_locale_gated: bool) -> gaze::Policy {
+/// Every rulepack class tokenized, plus an explicit `tokenize` rule for each learned class the
+/// Nym recognizer emits (`learned_classes`, empty for arms without it): a learned class never
+/// relies on the default rule.
+fn benchmark_policy(
+    rulepack: &Rulepack,
+    auto_activate_locale_gated: bool,
+    learned_classes: &[PiiClass],
+) -> gaze::Policy {
     let mut seen = BTreeSet::<PiiClass>::new();
     let mut rules = Vec::new();
     for recognizer in rulepack
@@ -780,6 +838,14 @@ fn benchmark_policy(rulepack: &Rulepack, auto_activate_locale_gated: bool) -> ga
                     action: Action::Tokenize,
                 });
             }
+        }
+    }
+    for class in learned_classes {
+        if seen.insert(class.clone()) {
+            rules.push(RuleSpec::Class {
+                class: class.clone(),
+                action: Action::Tokenize,
+            });
         }
     }
     rules.push(RuleSpec::Default {
@@ -827,6 +893,265 @@ fn register_nym(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Erro
 #[cfg(not(feature = "safety-net-nym"))]
 fn register_nym(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
     Err("compile with gaze-recognizers feature safety-net-nym".into())
+}
+
+/// The Nym recognizer adapters from `GAZE_NYM_MODEL_DIR` at the frozen recognizer operating
+/// point, loaded before the first document so a bad bundle fails the cell.
+#[cfg(feature = "safety-net-nym")]
+type NymRecognizerSet = gaze_recognizers::NymRecognizers;
+#[cfg(not(feature = "safety-net-nym"))]
+type NymRecognizerSet = std::convert::Infallible;
+
+#[cfg(feature = "safety-net-nym")]
+fn load_nym_recognizers() -> Result<NymRecognizerSet, Box<dyn std::error::Error>> {
+    use gaze_recognizers::nym_recognizer::recognizer_operating_point;
+    use gaze_recognizers::safety_net::nym::NymConfig;
+
+    let config = NymConfig::from_env()?.with_operating_point(recognizer_operating_point()?);
+    Ok(gaze_recognizers::NymRecognizers::load(config)?)
+}
+
+#[cfg(not(feature = "safety-net-nym"))]
+fn load_nym_recognizers() -> Result<NymRecognizerSet, Box<dyn std::error::Error>> {
+    Err("compile with gaze-recognizers feature safety-net-nym".into())
+}
+
+#[cfg(feature = "safety-net-nym")]
+fn nym_recognizer_classes(recognizers: &NymRecognizerSet) -> Vec<PiiClass> {
+    recognizers.classes()
+}
+
+#[cfg(not(feature = "safety-net-nym"))]
+fn nym_recognizer_classes(recognizers: &NymRecognizerSet) -> Vec<PiiClass> {
+    match *recognizers {}
+}
+
+#[cfg(feature = "safety-net-nym")]
+fn register_nym_recognizers(
+    mut builder: gaze::PipelineBuilder,
+    recognizers: NymRecognizerSet,
+) -> gaze::PipelineBuilder {
+    if let Some(trace) = exclusion_trace::get() {
+        for adapter in recognizers.adapters() {
+            builder = builder.recognizer(exclusion_trace::Recording::new(
+                adapter,
+                std::sync::Arc::clone(&trace),
+            ));
+        }
+        return builder.redaction_logger(exclusion_trace::Rows(trace));
+    }
+    for adapter in recognizers.adapters() {
+        builder = builder.recognizer(adapter);
+    }
+    builder
+}
+
+/// `--exclusion-trace <path>` on a single-pass arm: per document, what the Nym adapters put into
+/// the candidate pool and every audit row naming a Nym adapter, written to `<path>` for
+/// `scripts/bench/nym_exclusion_stages.py`. The scored stdout is unchanged: the recording
+/// wrapper returns exactly the adapter's candidates and the logger only listens.
+#[cfg(feature = "safety-net-nym")]
+mod exclusion_trace {
+    use std::fs::File;
+    use std::io::{BufWriter, Write};
+    use std::ops::Range;
+    use std::sync::{Arc, Mutex, OnceLock};
+
+    use gaze::{
+        Candidate, DetectContext, DetectError, LocaleBasis, LocaleTag, PiiClass, Recognizer,
+        RedactionEntry, RedactionLogError, RedactionLogger,
+    };
+    use gaze_recognizers::NymLabelRecognizer;
+    use serde::Serialize;
+
+    pub(super) struct Trace {
+        candidates: Mutex<Vec<(String, Range<usize>, f32)>>,
+        rows: Mutex<Vec<RedactionEntry>>,
+        out: Mutex<BufWriter<File>>,
+    }
+
+    static TRACE: OnceLock<Arc<Trace>> = OnceLock::new();
+
+    pub(super) fn enable(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let trace = Trace {
+            candidates: Mutex::new(Vec::new()),
+            rows: Mutex::new(Vec::new()),
+            out: Mutex::new(BufWriter::new(File::create(path)?)),
+        };
+        TRACE
+            .set(Arc::new(trace))
+            .map_err(|_| "exclusion trace enabled twice")?;
+        Ok(())
+    }
+
+    pub(super) fn get() -> Option<Arc<Trace>> {
+        TRACE.get().cloned()
+    }
+
+    pub(super) struct Recording {
+        inner: NymLabelRecognizer,
+        trace: Arc<Trace>,
+    }
+
+    impl Recording {
+        pub(super) fn new(inner: NymLabelRecognizer, trace: Arc<Trace>) -> Self {
+            Self { inner, trace }
+        }
+    }
+
+    impl Recognizer for Recording {
+        fn id(&self) -> &str {
+            self.inner.id()
+        }
+        fn supported_class(&self) -> &PiiClass {
+            self.inner.supported_class()
+        }
+        fn detect(
+            &self,
+            input: &str,
+            ctx: &DetectContext<'_>,
+        ) -> Result<Vec<Candidate>, DetectError> {
+            let candidates = self.inner.detect(input, ctx)?;
+            self.trace.candidates.lock().expect("trace").extend(
+                candidates
+                    .iter()
+                    .map(|c| (c.recognizer_id.clone(), c.span.clone(), c.score)),
+            );
+            Ok(candidates)
+        }
+        fn token_family(&self) -> &str {
+            self.inner.token_family()
+        }
+        fn locales(&self) -> &[LocaleTag] {
+            self.inner.locales()
+        }
+        fn locale_basis(&self) -> LocaleBasis {
+            self.inner.locale_basis()
+        }
+    }
+
+    pub(super) struct Rows(pub(super) Arc<Trace>);
+
+    impl RedactionLogger for Rows {
+        fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+            if entry
+                .recognizer_id
+                .as_deref()
+                .is_some_and(|id| id.starts_with("nym/"))
+            {
+                self.0.rows.lock().expect("trace").push(entry.clone());
+            }
+            Ok(())
+        }
+    }
+
+    #[derive(Serialize)]
+    struct TracedCandidate {
+        id: String,
+        normalized: [usize; 2],
+        raw: [usize; 2],
+        score: f32,
+    }
+
+    #[derive(Serialize)]
+    struct TracedRow {
+        recognizer_id: String,
+        class: String,
+        action: String,
+        conflict_loser: bool,
+        decided_by: String,
+        provenance_stage: Option<String>,
+    }
+
+    #[derive(Serialize)]
+    struct TracedDocument<'a> {
+        fixture_id: &'a str,
+        candidates: Vec<TracedCandidate>,
+        rows: Vec<TracedRow>,
+    }
+
+    pub(super) fn flush(fixture_id: &str, raw: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let Some(trace) = get() else {
+            return Ok(());
+        };
+        let (_, map) = gaze::normalize_for_tests(raw);
+        let candidates = std::mem::take(&mut *trace.candidates.lock().expect("trace"))
+            .into_iter()
+            .map(|(id, span, score)| TracedCandidate {
+                id,
+                raw: [map[span.start].0, map[span.end - 1].1],
+                normalized: [span.start, span.end],
+                score,
+            })
+            .collect();
+        let rows = std::mem::take(&mut *trace.rows.lock().expect("trace"))
+            .into_iter()
+            .map(|row| TracedRow {
+                recognizer_id: row.recognizer_id.unwrap_or_default(),
+                class: row.class.to_canonical_str(),
+                action: format!("{:?}", row.action),
+                conflict_loser: row.conflict_loser,
+                decided_by: format!("{:?}", row.decided_by),
+                provenance_stage: row.provenance_stage,
+            })
+            .collect();
+        let mut out = trace.out.lock().expect("trace");
+        serde_json::to_writer(
+            &mut *out,
+            &TracedDocument {
+                fixture_id,
+                candidates,
+                rows,
+            },
+        )?;
+        out.write_all(b"\n")?;
+        out.flush()?;
+        Ok(())
+    }
+}
+
+/// Parses `--exclusion-trace <path>`; only the single-pass arms have Nym adapters to trace.
+fn enable_exclusion_trace(config: BenchConfig) -> Result<bool, Box<dyn std::error::Error>> {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--exclusion-trace" {
+            let path = args.next().ok_or("--exclusion-trace requires a path")?;
+            if !config.uses_nym_recognizer() {
+                return Err("--exclusion-trace needs a single-pass arm".into());
+            }
+            #[cfg(feature = "safety-net-nym")]
+            {
+                exclusion_trace::enable(&path)?;
+                return Ok(true);
+            }
+            #[cfg(not(feature = "safety-net-nym"))]
+            {
+                let _ = path;
+                return Err("compile with gaze-recognizers feature safety-net-nym".into());
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn flush_exclusion_trace(fixture_id: &str, text: &str) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(feature = "safety-net-nym")]
+    {
+        exclusion_trace::flush(fixture_id, text)
+    }
+    #[cfg(not(feature = "safety-net-nym"))]
+    {
+        let _ = (fixture_id, text);
+        Ok(())
+    }
+}
+
+#[cfg(not(feature = "safety-net-nym"))]
+fn register_nym_recognizers(
+    _builder: gaze::PipelineBuilder,
+    recognizers: NymRecognizerSet,
+) -> gaze::PipelineBuilder {
+    match recognizers {}
 }
 
 #[cfg(feature = "safety-net-openai")]
@@ -886,7 +1211,9 @@ fn safety_net_policy(config: BenchConfig) -> SafetyNetPolicy {
     }
     if matches!(
         config,
-        BenchConfig::FullStackOpfResolve | BenchConfig::FullStackNymResolve
+        BenchConfig::FullStackOpfResolve
+            | BenchConfig::FullStackNymResolve
+            | BenchConfig::SinglePassNymObserved
     ) {
         SafetyNetPolicy::default()
     } else {

@@ -30,6 +30,11 @@ pub(crate) struct Args {
     /// Regenerate in memory and compare with the committed corpus without writing.
     #[arg(long)]
     verify: bool,
+
+    /// Write to this path instead of the committed corpus (a development corpus with another
+    /// seed must never replace the evaluation corpus).
+    #[arg(long, conflicts_with = "verify")]
+    out: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +72,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
         return Ok(());
     }
 
+    let path = args.out.unwrap_or(path);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;

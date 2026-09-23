@@ -11,6 +11,10 @@ required_artifacts = ["model.onnx", "tokenizer.json", "config.json", "tokenizer_
 [builtin_source_ids]
 ids = [
     "ner",
+    "nym/building_number",
+    "nym/date_of_birth",
+    "nym/license_plate",
+    "nym/username",
     "openai-privacy-filter",
     "openai-privacy-filter-subprocess",
 ]

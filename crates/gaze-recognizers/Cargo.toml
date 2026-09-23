@@ -92,3 +92,7 @@ harness = false
 [[bench]]
 name = "safety_net_matrix"
 harness = false
+
+[[example]]
+name = "nym_dev_sweep"
+required-features = ["safety-net-nym", "test-support"]

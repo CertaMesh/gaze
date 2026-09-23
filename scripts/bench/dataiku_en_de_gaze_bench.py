@@ -35,6 +35,8 @@ CONFIG_CHOICES = (
     "full-stack-opf-resolve",
     "full-stack-nym-resolve",
     "full-stack-nym-redact",
+    "single-pass-nym",
+    "single-pass-nym-observed",
 )
 
 COUNTRY_REGIONS = {
@@ -187,6 +189,8 @@ def build_binary(repo_root: Path, configs: tuple[str, ...]) -> Path:
     features = []
     if any("opf" in config for config in configs):
         features.append("safety-net-openai")
+    if any("nym" in config for config in configs):
+        features.append("safety-net-nym")
     if features:
         command.extend(["--features", ",".join(features)])
     subprocess.run(command, cwd=repo_root, check=True)

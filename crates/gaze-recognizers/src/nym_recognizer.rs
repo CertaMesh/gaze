@@ -16,10 +16,11 @@
 //!   is rejected when the operating point is built. Model output that names a disabled label or
 //!   an impossible span fails the request ([`DetectError`]), never a silent skip.
 //! * **Lowest standing.** A candidate carries no canonical form, the lowest rule priority and a
-//!   `nym/<LABEL>` source, so the resolver places it in the learned evidence tier: a rule
+//!   `nym/<label>` source, so the resolver places it in the learned evidence tier: a rule
 //!   container swallows it, it never swallows a rule candidate, and a rule wins every other
 //!   overlap. Its bytes outside the rule token stay protected by residual coverage.
-//! * **Audit.** The recognizer id and source are `nym/<LABEL>`; the version id names the model
+//! * **Audit.** The recognizer id and source are `nym/<label>` (`nym/license_plate`, lowercase
+//!   like every stable source id); the version id names the model
 //!   revision, the rule that fired (`LABEL>=THRESHOLD`), the whole operating point and the input
 //!   representation.
 //!
@@ -45,6 +46,39 @@ use crate::safety_net::nym::{NymConfig, NymOrtBackend, NymSpan, NYM_SMALL_HF_COM
 
 /// Rule priority of every Nym candidate: below any rule, so a rule of the same class wins.
 pub const NYM_RECOGNIZER_PRIORITY: i32 = i32::MIN;
+
+/// The frozen recognizer operating point: the per-label thresholds chosen on the development
+/// split (never the evaluation split), with the selection rule and its evidence.
+pub const NYM_RECOGNIZER_OPERATING_POINT_JSON: &str =
+    include_str!("../nym-recognizer-operating-point.json");
+
+/// Why the frozen operating point could not be read.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum FrozenOperatingPointError {
+    /// The committed file is not the expected JSON shape.
+    #[error("frozen nym recognizer operating point is malformed: {0}")]
+    Malformed(String),
+    /// The thresholds fail the closed-label-set validation.
+    #[error(transparent)]
+    Invalid(#[from] gaze_types::nym::NymConfigError),
+}
+
+/// The frozen recognizer operating point ([`NYM_RECOGNIZER_OPERATING_POINT_JSON`]), validated
+/// like any policy spelling: unknown, unmapped or threshold-less labels fail.
+pub fn recognizer_operating_point() -> Result<NymOperatingPoint, FrozenOperatingPointError> {
+    #[derive(serde::Deserialize)]
+    struct Frozen {
+        labels: Vec<String>,
+        thresholds: std::collections::BTreeMap<String, f32>,
+    }
+    let frozen: Frozen = serde_json::from_str(NYM_RECOGNIZER_OPERATING_POINT_JSON)
+        .map_err(|error| FrozenOperatingPointError::Malformed(error.to_string()))?;
+    Ok(NymOperatingPoint::from_labels_and_thresholds(
+        &frozen.labels,
+        &frozen.thresholds,
+    )?)
+}
 
 /// The text representation the model reads, recorded in every version id.
 pub const NYM_RECOGNIZER_INPUT: &str = "normalized";
@@ -210,7 +244,10 @@ impl NymRecognizers {
             .map(|(label, threshold)| {
                 let class = nym_label_to_pii_class(label)
                     .expect("a validated operating point enables only mapped labels");
-                let id = format!("{NYM_RECOGNIZER_SOURCE_PREFIX}{label}");
+                let id = format!(
+                    "{NYM_RECOGNIZER_SOURCE_PREFIX}{}",
+                    label.as_str().to_ascii_lowercase()
+                );
                 let version_id = format!(
                     "{}/{}/op={}/input={NYM_RECOGNIZER_INPUT}",
                     self.shared.model_revision,
@@ -420,10 +457,10 @@ mod tests {
                 .map(|a| a.id().to_string())
                 .collect::<Vec<_>>(),
             [
-                "nym/BUILDING_NUMBER",
-                "nym/DATE_OF_BIRTH",
-                "nym/LICENSE_PLATE",
-                "nym/USERNAME"
+                "nym/building_number",
+                "nym/date_of_birth",
+                "nym/license_plate",
+                "nym/username"
             ]
         );
         assert_eq!(
@@ -469,8 +506,8 @@ mod tests {
         assert_eq!(&text[candidate.span.clone()], "M-AB 1234");
         assert_eq!(candidate.priority, i32::MIN);
         assert_eq!(candidate.canonical_form, None);
-        assert_eq!(candidate.source, "nym/LICENSE_PLATE");
-        assert_eq!(candidate.recognizer_id, "nym/LICENSE_PLATE");
+        assert_eq!(candidate.source, "nym/license_plate");
+        assert_eq!(candidate.recognizer_id, "nym/license_plate");
         assert!(candidate
             .recognizer_version_id
             .as_deref()
@@ -535,7 +572,7 @@ mod tests {
             let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
             let error = set.adapters()[2].detect(text, &ctx).expect_err(case);
             assert!(
-                matches!(&error, DetectError::Backend { recognizer_id, .. } if recognizer_id == "nym/LICENSE_PLATE"),
+                matches!(&error, DetectError::Backend { recognizer_id, .. } if recognizer_id == "nym/license_plate"),
                 "{case}: {error}"
             );
             assert!(
@@ -555,6 +592,24 @@ mod tests {
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
         assert!(set.adapters()[0].detect("text", &ctx).is_err());
+    }
+
+    /// The committed development-split choice (scripts/bench/nym_recognizer_dev_sweep.py);
+    /// changing it is a new tuning run, never an edit.
+    #[test]
+    fn the_frozen_operating_point_is_the_development_split_choice() {
+        let frozen = recognizer_operating_point().expect("frozen operating point");
+        assert_eq!(
+            frozen.iter().collect::<Vec<_>>(),
+            [
+                (NymLabel::BuildingNumber, 0.4),
+                (NymLabel::DateOfBirth, 0.95),
+                (NymLabel::LicensePlate, 0.3),
+                (NymLabel::Username, 0.3),
+            ]
+        );
+        assert_eq!(frozen.threshold(NymLabel::TaxId), None);
+        assert_eq!(frozen.threshold(NymLabel::ZipCode), None);
     }
 
     #[test]

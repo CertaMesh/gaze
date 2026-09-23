@@ -65,6 +65,16 @@ pub use registry::{
     Recognizer, RecognizerRegistry, RecognizerRegistryBuilder, ValidationResult, Validator,
 };
 pub use resolver::{resolve_candidates, resolve_candidates_with_policy};
+
+/// The text normalization every recognizer reads (joiners dropped, fullwidth folded), with the
+/// raw byte range behind each normalized byte. Test support: tools that replay a recognizer
+/// outside the pipeline map its spans back to raw bytes exactly as the pipeline does.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub fn normalize_for_tests(input: &str) -> (String, Vec<(usize, usize)>) {
+    let normalized = normalize::normalize(input);
+    (normalized.text, normalized.spans)
+}
 pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};
 pub use rulepack::{
     recognizer_composition_validator, AnchoredBoundary, ContextSpec, CuePosition, LocaleBucket,

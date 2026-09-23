@@ -293,8 +293,8 @@ fn a_lone_nym_candidate_is_one_token_of_its_class_with_nym_provenance() {
         .iter()
         .find(|entry| entry.class == PiiClass::custom("license_plate").unwrap())
         .expect("plate row");
-    assert_eq!(row.source, "nym/LICENSE_PLATE");
-    assert_eq!(row.recognizer_id.as_deref(), Some("nym/LICENSE_PLATE"));
+    assert_eq!(row.source, "nym/license_plate");
+    assert_eq!(row.recognizer_id.as_deref(), Some("nym/license_plate"));
     assert!(
         row.recognizer_version_id.as_deref().is_some_and(
             |id| id.contains("/LICENSE_PLATE>=0.5/") && id.ends_with("/input=normalized")
@@ -323,7 +323,7 @@ fn a_rule_container_swallows_a_contained_nym_candidate() {
     let (_, losers) = winner_and_losers(&run);
     let nym_loser = losers
         .iter()
-        .find(|entry| entry.recognizer_id.as_deref() == Some("nym/BUILDING_NUMBER"))
+        .find(|entry| entry.recognizer_id.as_deref() == Some("nym/building_number"))
         .expect("the swallowed Nym candidate keeps a loser row");
     assert_eq!(nym_loser.decided_by, ConflictTier::ContainmentPrecedence);
 }
@@ -375,7 +375,7 @@ fn a_rule_wins_a_partial_overlap_and_the_nym_remainder_stays_protected() {
     let (_, losers) = winner_and_losers(&run);
     assert!(losers
         .iter()
-        .any(|entry| entry.recognizer_id.as_deref() == Some("nym/BUILDING_NUMBER")));
+        .any(|entry| entry.recognizer_id.as_deref() == Some("nym/building_number")));
 }
 
 const BIRTH_LINE: &str = "Herr Beispiel, geboren am 12.03.1985, wohnt hier.";
@@ -394,7 +394,7 @@ fn a_rule_wins_the_same_span_against_a_nym_candidate() {
     let (_, losers) = winner_and_losers(&run);
     let nym_loser = losers
         .iter()
-        .find(|entry| entry.recognizer_id.as_deref() == Some("nym/DATE_OF_BIRTH"))
+        .find(|entry| entry.recognizer_id.as_deref() == Some("nym/date_of_birth"))
         .expect("nym loser row");
     assert_eq!(nym_loser.decided_by, ConflictTier::RulePriority);
 }
@@ -639,4 +639,348 @@ fn the_default_pipeline_never_registers_nym() {
             .recognizer(&format!("nym/{label}"))
             .is_none());
     }
+}
+
+// ---------------------------------------------------------------------------
+// Captured real-model output: agent tool calls.
+//
+// `fixtures/nym_recognizer_pieces.json` holds the tokenizer offsets and per-piece scores the
+// pinned model produced for these texts as the recognizer reads them (normalized). The
+// `captured_*` tests replay them through the production decoder at the frozen recognizer
+// operating point, so the default run checks real model behaviour without the bundle; the
+// ignored `live_*` tests rerun the model (xtask safety-net-sanity runs them when
+// `GAZE_NYM_MODEL_DIR` is set) and one proves the fixture is still what the model outputs.
+
+use std::collections::HashMap;
+
+use gaze_recognizers::nym_recognizer::recognizer_operating_point;
+use gaze_recognizers::safety_net::nym::test_support::{capture, decode_captured, PieceScore};
+use gaze_recognizers::safety_net::nym::{NymConfig, NymSafetyNet};
+use gaze_recognizers::safety_net::SafetyNetError;
+use serde_json::{json, Value};
+
+const CAPTURE: &str = include_str!("fixtures/nym_recognizer_pieces.json");
+const CAPTURE_PATH: &str = "tests/fixtures/nym_recognizer_pieces.json";
+
+/// Synthetic, fictional tool-call traffic: the Nym labels sit in values, next to keys that name
+/// them. Keys are not personal data and must survive byte for byte.
+fn tool_call_cases() -> Vec<(&'static str, &'static str)> {
+    vec![
+        (
+            "tool-call-en",
+            r#"{"tool": "vehicle_lookup", "arguments": {"license_plate": "M-AB 1234", "owner_username": "jdoe_1977"}}"#,
+        ),
+        (
+            "tool-call-profile-en",
+            r#"{"name": "update_profile", "arguments": {"username": "anna.schmidt92", "building_number": "12a", "date_of_birth": "1985-03-12"}}"#,
+        ),
+        (
+            "tool-call-de",
+            r#"{"werkzeug": "fahrzeug_suchen", "parameter": {"kennzeichen": "HH-XY 4711", "benutzername": "mueller_x9", "geburtsdatum": "12.03.1985", "hausnummer": "7b"}}"#,
+        ),
+        (
+            "tool-result-de",
+            r#"{"role": "tool", "content": "Das Fahrzeug B-XY 99E gehört dem Benutzer k.wagner, Hausnummer 14."}"#,
+        ),
+    ]
+}
+
+/// Keys of a JSON text, every nesting level.
+fn json_keys(text: &str) -> Vec<String> {
+    fn walk(value: &Value, out: &mut Vec<String>) {
+        match value {
+            Value::Object(map) => {
+                for (key, value) in map {
+                    out.push(key.clone());
+                    walk(value, out);
+                }
+            }
+            Value::Array(items) => items.iter().for_each(|item| walk(item, out)),
+            _ => {}
+        }
+    }
+    let mut keys = Vec::new();
+    walk(
+        &serde_json::from_str(text).expect("fixture is JSON"),
+        &mut keys,
+    );
+    keys
+}
+
+type Pieces = (Vec<(usize, usize)>, Vec<PieceScore>);
+
+fn committed_capture() -> HashMap<String, Pieces> {
+    let fixture: Value = serde_json::from_str(CAPTURE).expect("capture is JSON");
+    fixture["cases"]
+        .as_array()
+        .expect("cases")
+        .iter()
+        .map(|case| {
+            let offsets = case["offsets"]
+                .as_array()
+                .expect("offsets")
+                .iter()
+                .map(|pair| {
+                    (
+                        pair[0].as_u64().unwrap() as usize,
+                        pair[1].as_u64().unwrap() as usize,
+                    )
+                })
+                .collect();
+            let scores = case["scores"]
+                .as_array()
+                .expect("scores")
+                .iter()
+                .map(|score| PieceScore {
+                    label: NymLabel::parse(score[0].as_str().unwrap()).expect("label"),
+                    mass: score[1].as_f64().unwrap() as f32,
+                    is_begin: score[2].as_bool().unwrap(),
+                })
+                .collect();
+            (
+                case["text"].as_str().unwrap().to_string(),
+                (offsets, scores),
+            )
+        })
+        .collect()
+}
+
+/// The adapters over the committed capture at the frozen recognizer operating point; a text
+/// without a capture fails the request, like a model error would.
+fn captured_nym() -> NymRecognizers {
+    let operating_point = recognizer_operating_point().expect("frozen operating point");
+    let capture = committed_capture();
+    let decoder_point = operating_point.clone();
+    NymRecognizers::scripted(operating_point, move |text| {
+        let (offsets, scores) = capture.get(text).ok_or_else(|| SafetyNetError::Runtime {
+            message: "no committed capture for this text".to_string(),
+        })?;
+        decode_captured(text, offsets, scores, &decoder_point)
+    })
+    .0
+}
+
+fn assert_keys_survive(case: &str, input: &str, clean: &str) {
+    for key in json_keys(input) {
+        assert!(
+            clean.contains(&format!("\"{key}\"")),
+            "{case}: key `{key}` did not survive: {}",
+            shape(clean)
+        );
+    }
+    serde_json::from_str::<Value>(clean)
+        .unwrap_or_else(|error| panic!("{case}: clean text is no longer JSON ({error})"));
+}
+
+#[test]
+fn captured_tool_calls_keep_every_key_and_stay_json() {
+    let nym = captured_nym();
+    for (case, input) in tool_call_cases() {
+        let locale = if case.ends_with("-de") {
+            "de-DE"
+        } else {
+            "en-US"
+        };
+        let run = clean_run(&nym_policy(locale, &[]), input, Some(&nym));
+        assert_keys_survive(case, input, &run.text);
+        assert_eq!(
+            run.session.restore_strict_text(&run.text).unwrap(),
+            input,
+            "{case}"
+        );
+    }
+}
+
+/// The tool-call values the model flags at the frozen operating point leave as tokens of the
+/// learned classes; exact shapes pinned from the committed capture.
+#[test]
+fn captured_tool_call_values_leave_as_learned_class_tokens() {
+    let nym = captured_nym();
+    let expected: HashMap<&str, &str> = captured_tool_call_expectations().into_iter().collect();
+    for (case, input) in tool_call_cases() {
+        let locale = if case.ends_with("-de") {
+            "de-DE"
+        } else {
+            "en-US"
+        };
+        let run = clean_run(&nym_policy(locale, &[]), input, Some(&nym));
+        assert_eq!(shape(&run.text), expected[case], "{case}");
+    }
+}
+
+/// Structured documents are cleaned leaf by leaf, keys never scanned: each leaf is its own
+/// request with its own inference.
+#[test]
+fn captured_structured_leaves_are_separate_requests() {
+    let nym = captured_nym();
+    let logger = MemoryLogger::default();
+    let policy = nym_policy("en-US", &[]);
+    let pipeline = pipeline(&policy, Some(&nym), &logger);
+    let active = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let raw = RawDocument::Structured(std::collections::BTreeMap::from([
+        (
+            "license_plate".to_string(),
+            gaze::Value::String("M-AB 1234".to_string()),
+        ),
+        (
+            "username".to_string(),
+            gaze::Value::String("jdoe_1977".to_string()),
+        ),
+    ]));
+    // The structured path only observes (no net is registered here either way).
+    let observe =
+        SafetyNetPolicy::new(gaze::SafetyNetMode::Strict, gaze::SafetyNetFallback::Redact);
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            raw,
+            active.as_slice(),
+            &DictionaryBundle::default(),
+            observe,
+        )
+        .expect("clean");
+    let CleanDocument::Structured(fields) = clean else {
+        panic!("expected structured output");
+    };
+    let shaped = fields
+        .iter()
+        .map(|(key, value)| (key.clone(), shape(value.as_str().expect("string leaf"))))
+        .collect::<Vec<_>>();
+    assert_eq!(shaped, captured_structured_expectations());
+}
+
+// ---- live: real pinned bundle ----
+
+fn live_net() -> NymSafetyNet {
+    let net = NymSafetyNet::new(
+        NymConfig::from_env().expect("set GAZE_NYM_MODEL_DIR to a verified nym bundle"),
+    );
+    net.preload().expect("pinned nym bundle loads");
+    net
+}
+
+fn capture_texts() -> Vec<String> {
+    let mut texts = tool_call_cases()
+        .into_iter()
+        .map(|(_, text)| gaze::normalize_for_tests(text).0)
+        .collect::<Vec<_>>();
+    texts.extend(["M-AB 1234".to_string(), "jdoe_1977".to_string()]);
+    texts
+}
+
+fn capture_all(net: &NymSafetyNet) -> Value {
+    let cases = capture_texts()
+        .into_iter()
+        .map(|text| {
+            let (offsets, scores) = capture(net, &text).expect("capture");
+            json!({
+                "text": text,
+                "offsets": offsets.iter().map(|(s, e)| json!([s, e])).collect::<Vec<_>>(),
+                "scores": scores
+                    .iter()
+                    .map(|score| json!([score.label.as_str(), score.mass, score.is_begin]))
+                    .collect::<Vec<_>>(),
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "provenance": {
+            "model": "Wismut/nym-pii-multilingual-small@4348999cd3c2e20c49615e9af7c6bbb45b64cd85 int8",
+            "bundle_sha256": gaze_recognizers::safety_net::nym::NYM_SMALL_INT8_BUNDLE_SHA256,
+            "generator": "GAZE_NYM_WRITE_FIXTURE=1 cargo test -p gaze-recognizers --features safety-net-nym,test-support --test nym_recognizer -- --ignored live_recognizer_capture_matches_the_committed_fixture",
+            "input": "the normalized text the recognizer reads",
+            "offsets": "tokenizer character offsets (encode_char_offsets, no special tokens)",
+            "scores": "[label with the largest B+I mass, that mass, P(B) >= P(I)] per piece",
+            "texts": "synthetic, fictional"
+        },
+        "cases": cases,
+    })
+}
+
+/// Re-captures every text and compares it with the committed fixture; with
+/// `GAZE_NYM_WRITE_FIXTURE` set it rewrites the fixture instead.
+#[test]
+#[ignore = "needs GAZE_NYM_MODEL_DIR (run by xtask safety-net-sanity when set)"]
+fn live_recognizer_capture_matches_the_committed_fixture() {
+    let fresh = capture_all(&live_net());
+    if std::env::var_os("GAZE_NYM_WRITE_FIXTURE").is_some() {
+        std::fs::write(CAPTURE_PATH, serde_json::to_string(&fresh).unwrap() + "\n").unwrap();
+        return;
+    }
+    let committed: Value = serde_json::from_str(CAPTURE).unwrap();
+    let fresh_cases = fresh["cases"].as_array().unwrap();
+    let committed_cases = committed["cases"].as_array().unwrap();
+    assert_eq!(fresh_cases.len(), committed_cases.len());
+    for (fresh, committed) in fresh_cases.iter().zip(committed_cases) {
+        assert_eq!(fresh["text"], committed["text"]);
+        assert_eq!(fresh["offsets"], committed["offsets"]);
+        let fresh_scores = fresh["scores"].as_array().unwrap();
+        let committed_scores = committed["scores"].as_array().unwrap();
+        assert_eq!(fresh_scores.len(), committed_scores.len());
+        for (a, b) in fresh_scores.iter().zip(committed_scores) {
+            assert_eq!(a[0], b[0], "label");
+            assert_eq!(a[2], b[2], "begin");
+            assert!(
+                (a[1].as_f64().unwrap() - b[1].as_f64().unwrap()).abs() < 1e-4,
+                "mass {a} vs {b}"
+            );
+        }
+    }
+}
+
+/// The real model through the real pipeline at the frozen operating point: a plate in prose
+/// leaves as one learned-class token, with Nym provenance.
+#[test]
+#[ignore = "needs GAZE_NYM_MODEL_DIR (run by xtask safety-net-sanity when set)"]
+fn live_recognizer_tokenizes_a_plate_in_one_pass() {
+    let config = NymConfig::from_env()
+        .expect("set GAZE_NYM_MODEL_DIR to a verified nym bundle")
+        .with_operating_point(recognizer_operating_point().expect("frozen operating point"));
+    let nym = NymRecognizers::load(config).expect("pinned nym bundle loads");
+    let input = "Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt.";
+    let run = clean_run(&nym_policy("de-DE", &[]), input, Some(&nym));
+    assert_eq!(
+        shape(&run.text),
+        "Das Fahrzeug mit dem Kennzeichen <Custom:license_plate_1> wurde abgeschleppt."
+    );
+    let (winners, _) = winner_and_losers(&run);
+    assert!(winners
+        .iter()
+        .any(|row| row.recognizer_id.as_deref() == Some("nym/license_plate")));
+}
+
+/// Pinned from the committed capture at the frozen operating point. `tool-call-de` keeps its
+/// `geburtsdatum` value raw: the model's date-of-birth mass there stays under the frozen 0.95
+/// threshold and no bundled rule has a cue for a bare JSON date value (a disclosed miss, not a
+/// leak this change introduces).
+fn captured_tool_call_expectations() -> Vec<(&'static str, &'static str)> {
+    vec![
+        (
+            "tool-call-en",
+            r#"{"tool": "vehicle_lookup", "arguments": {"license_plate": "<Custom:license_plate_1>", "owner_username": "<Custom:username_1>"}}"#,
+        ),
+        (
+            "tool-call-profile-en",
+            r#"{"name": "update_profile", "arguments": {"username": "<Custom:username_1>", "building_number": "<Custom:building_number_1>", "date_of_birth": "<Custom:date_1>"}}"#,
+        ),
+        (
+            "tool-call-de",
+            r#"{"werkzeug": "fahrzeug_suchen", "parameter": {"kennzeichen": "<Custom:license_plate_1>", "benutzername": "<Custom:username_1>", "geburtsdatum": "12.03.1985", "hausnummer": "<Custom:building_number_1>"}}"#,
+        ),
+        (
+            "tool-result-de",
+            r#"{"role": "tool", "content": "Das Fahrzeug <Custom:license_plate_1> gehört dem Benutzer <Custom:username_1>, Hausnummer <Custom:building_number_1>."}"#,
+        ),
+    ]
+}
+
+/// A leaf is scanned alone, without its key or any surrounding words: the model flags the
+/// username leaf but not a bare plate leaf, which needs context (a disclosed miss of leaf-wise
+/// structured cleaning, the same input the structured safety-net pass sees).
+fn captured_structured_expectations() -> Vec<(String, String)> {
+    vec![
+        ("license_plate".to_string(), "M-AB 1234".to_string()),
+        ("username".to_string(), "<Custom:username_1>".to_string()),
+    ]
 }

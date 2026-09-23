@@ -16,7 +16,7 @@ use crate::{PiiClass, SafetyNetPiiClass};
 pub const NYM_SAFETY_NET_ID: &str = "nym-small-int8";
 
 /// Prefix of the recognizer id and candidate source of every Nym recognizer candidate
-/// (`nym/LICENSE_PLATE`). The resolver reads it to place those candidates in the learned
+/// (`nym/license_plate`). The resolver reads it to place those candidates in the learned
 /// evidence tier.
 pub const NYM_RECOGNIZER_SOURCE_PREFIX: &str = "nym/";
 

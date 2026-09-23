@@ -1,0 +1,815 @@
+{
+  "schema": "gaze.nym-recognizer-operating-point/v1",
+  "labels": [
+    "BUILDING_NUMBER",
+    "DATE_OF_BIRTH",
+    "LICENSE_PLATE",
+    "USERNAME"
+  ],
+  "thresholds": {
+    "BUILDING_NUMBER": 0.4,
+    "DATE_OF_BIRTH": 0.95,
+    "LICENSE_PLATE": 0.3,
+    "USERNAME": 0.3
+  },
+  "input": "normalized",
+  "model": {
+    "id": "nym-small-int8",
+    "repository": "Wismut/nym-pii-multilingual-small",
+    "commit": "4348999cd3c2e20c49615e9af7c6bbb45b64cd85"
+  },
+  "rule": "per label, the lowest grid threshold with action precision >= 0.7 (gold-touching spans / spans, scored labels of contract v2), fewer than 0.05 flags per development-negative document (op-B) and at most 1 flag per 1,024 development-negative documents (the Stage A acceptance bar, the binding one), the other labels held at op-B; a label no threshold qualifies is left out; the joint point must stay within 1 per 1,024",
+  "rule_note": "op-B's bar alone chose DATE_OF_BIRTH 0.75, which flagged 42 of 978 development negatives; the acceptance bar is applied on development data only",
+  "development_positives": {
+    "source": {
+      "repository": "DataikuNLP/kiji-pii-training-data",
+      "revision": "0275550f0b1f1b8f2dc9356fd31ac1c788b8228b",
+      "file": "data/train-00000-of-00001.parquet",
+      "sha256": "9b37af7eea2718af8cb6696fbe01a4bfd01dc6160716c272c2ce0835e71846de",
+      "rows": 46345
+    },
+    "selection": "English and German rows whose text is not in the test split; per language the 2000 rows with the smallest sha256('20260923:<row index>')",
+    "rows_dropped_for_test_text_overlap": 0,
+    "documents": 4000,
+    "document_ids": {
+      "algorithm": "sha256",
+      "value": "cc3a11eaa3e4bed3fc2c7d24c8124877c00a5e95aedc4b67e91234d33e3e0aba"
+    },
+    "caveat": "same-generator development data: train and test rows may share templates, so the evaluation is not independent of the generator"
+  },
+  "development_negatives": {
+    "generator": "cargo run -p xtask -- generate-negative-corpus --seed 20260923 --out <path>",
+    "sha256": "343d8bb0d64afe24d57f38602e10855a1a9acf9fc3a9c8bdeb3448dc7e2dfbc3",
+    "documents": 978,
+    "dropped_equal_to_an_evaluation_negative": 46,
+    "caveat": "same generator and templates as the A4 evaluation corpus, other values"
+  },
+  "sweep_binary_sha256": "cc195248c0787d9f28975c2344e035382de53e110fdf7600a3e41baa57e0471d",
+  "scored_labels": "docs/reference/benchmarks/scored-labels-v2.json",
+  "sweep": {
+    "BUILDING_NUMBER": {
+      "0.30": {
+        "actions": 1469,
+        "gold_touching": 1142,
+        "precision": 0.7774,
+        "own_label_touching": 1121,
+        "own_label_precision": 0.7631,
+        "own_gold_bytes_covered": 2356,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 2,
+        "flags_per_negative_document": 0.002
+      },
+      "0.35": {
+        "actions": 1466,
+        "gold_touching": 1141,
+        "precision": 0.7783,
+        "own_label_touching": 1121,
+        "own_label_precision": 0.7647,
+        "own_gold_bytes_covered": 2356,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 1,
+        "flags_per_negative_document": 0.001
+      },
+      "0.40": {
+        "actions": 1465,
+        "gold_touching": 1140,
+        "precision": 0.7782,
+        "own_label_touching": 1120,
+        "own_label_precision": 0.7645,
+        "own_gold_bytes_covered": 2353,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.45": {
+        "actions": 1463,
+        "gold_touching": 1140,
+        "precision": 0.7792,
+        "own_label_touching": 1120,
+        "own_label_precision": 0.7656,
+        "own_gold_bytes_covered": 2353,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.50": {
+        "actions": 1461,
+        "gold_touching": 1140,
+        "precision": 0.7803,
+        "own_label_touching": 1120,
+        "own_label_precision": 0.7666,
+        "own_gold_bytes_covered": 2353,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.55": {
+        "actions": 1450,
+        "gold_touching": 1132,
+        "precision": 0.7807,
+        "own_label_touching": 1113,
+        "own_label_precision": 0.7676,
+        "own_gold_bytes_covered": 2331,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.60": {
+        "actions": 1428,
+        "gold_touching": 1114,
+        "precision": 0.7801,
+        "own_label_touching": 1098,
+        "own_label_precision": 0.7689,
+        "own_gold_bytes_covered": 2300,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.65": {
+        "actions": 1413,
+        "gold_touching": 1105,
+        "precision": 0.782,
+        "own_label_touching": 1089,
+        "own_label_precision": 0.7707,
+        "own_gold_bytes_covered": 2284,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.70": {
+        "actions": 1395,
+        "gold_touching": 1089,
+        "precision": 0.7806,
+        "own_label_touching": 1074,
+        "own_label_precision": 0.7699,
+        "own_gold_bytes_covered": 2255,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.75": {
+        "actions": 1373,
+        "gold_touching": 1070,
+        "precision": 0.7793,
+        "own_label_touching": 1056,
+        "own_label_precision": 0.7691,
+        "own_gold_bytes_covered": 2218,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.80": {
+        "actions": 1358,
+        "gold_touching": 1059,
+        "precision": 0.7798,
+        "own_label_touching": 1046,
+        "own_label_precision": 0.7703,
+        "own_gold_bytes_covered": 2197,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.85": {
+        "actions": 1333,
+        "gold_touching": 1040,
+        "precision": 0.7802,
+        "own_label_touching": 1027,
+        "own_label_precision": 0.7704,
+        "own_gold_bytes_covered": 2155,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.90": {
+        "actions": 1306,
+        "gold_touching": 1019,
+        "precision": 0.7802,
+        "own_label_touching": 1006,
+        "own_label_precision": 0.7703,
+        "own_gold_bytes_covered": 2114,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.95": {
+        "actions": 1245,
+        "gold_touching": 970,
+        "precision": 0.7791,
+        "own_label_touching": 960,
+        "own_label_precision": 0.7711,
+        "own_gold_bytes_covered": 2024,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.97": {
+        "actions": 1217,
+        "gold_touching": 946,
+        "precision": 0.7773,
+        "own_label_touching": 938,
+        "own_label_precision": 0.7707,
+        "own_gold_bytes_covered": 1980,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.99": {
+        "actions": 1163,
+        "gold_touching": 898,
+        "precision": 0.7721,
+        "own_label_touching": 893,
+        "own_label_precision": 0.7678,
+        "own_gold_bytes_covered": 1884,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      }
+    },
+    "DATE_OF_BIRTH": {
+      "0.30": {
+        "actions": 362,
+        "gold_touching": 334,
+        "precision": 0.9227,
+        "own_label_touching": 331,
+        "own_label_precision": 0.9144,
+        "own_gold_bytes_covered": 3210,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 86,
+        "flags_per_negative_document": 0.0879
+      },
+      "0.35": {
+        "actions": 365,
+        "gold_touching": 336,
+        "precision": 0.9205,
+        "own_label_touching": 333,
+        "own_label_precision": 0.9123,
+        "own_gold_bytes_covered": 3208,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 86,
+        "flags_per_negative_document": 0.0879
+      },
+      "0.40": {
+        "actions": 365,
+        "gold_touching": 336,
+        "precision": 0.9205,
+        "own_label_touching": 333,
+        "own_label_precision": 0.9123,
+        "own_gold_bytes_covered": 3203,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 86,
+        "flags_per_negative_document": 0.0879
+      },
+      "0.45": {
+        "actions": 365,
+        "gold_touching": 336,
+        "precision": 0.9205,
+        "own_label_touching": 333,
+        "own_label_precision": 0.9123,
+        "own_gold_bytes_covered": 3203,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 86,
+        "flags_per_negative_document": 0.0879
+      },
+      "0.50": {
+        "actions": 363,
+        "gold_touching": 336,
+        "precision": 0.9256,
+        "own_label_touching": 333,
+        "own_label_precision": 0.9174,
+        "own_gold_bytes_covered": 3203,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 87,
+        "flags_per_negative_document": 0.089
+      },
+      "0.55": {
+        "actions": 358,
+        "gold_touching": 332,
+        "precision": 0.9274,
+        "own_label_touching": 329,
+        "own_label_precision": 0.919,
+        "own_gold_bytes_covered": 3189,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 78,
+        "flags_per_negative_document": 0.0798
+      },
+      "0.60": {
+        "actions": 354,
+        "gold_touching": 329,
+        "precision": 0.9294,
+        "own_label_touching": 326,
+        "own_label_precision": 0.9209,
+        "own_gold_bytes_covered": 3183,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 75,
+        "flags_per_negative_document": 0.0767
+      },
+      "0.65": {
+        "actions": 348,
+        "gold_touching": 324,
+        "precision": 0.931,
+        "own_label_touching": 321,
+        "own_label_precision": 0.9224,
+        "own_gold_bytes_covered": 3158,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 68,
+        "flags_per_negative_document": 0.0695
+      },
+      "0.70": {
+        "actions": 343,
+        "gold_touching": 322,
+        "precision": 0.9388,
+        "own_label_touching": 319,
+        "own_label_precision": 0.93,
+        "own_gold_bytes_covered": 3154,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 59,
+        "flags_per_negative_document": 0.0603
+      },
+      "0.75": {
+        "actions": 342,
+        "gold_touching": 322,
+        "precision": 0.9415,
+        "own_label_touching": 319,
+        "own_label_precision": 0.9327,
+        "own_gold_bytes_covered": 3137,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 42,
+        "flags_per_negative_document": 0.0429
+      },
+      "0.80": {
+        "actions": 343,
+        "gold_touching": 324,
+        "precision": 0.9446,
+        "own_label_touching": 320,
+        "own_label_precision": 0.9329,
+        "own_gold_bytes_covered": 3136,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 28,
+        "flags_per_negative_document": 0.0286
+      },
+      "0.85": {
+        "actions": 339,
+        "gold_touching": 321,
+        "precision": 0.9469,
+        "own_label_touching": 317,
+        "own_label_precision": 0.9351,
+        "own_gold_bytes_covered": 3111,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 11,
+        "flags_per_negative_document": 0.0112
+      },
+      "0.90": {
+        "actions": 336,
+        "gold_touching": 320,
+        "precision": 0.9524,
+        "own_label_touching": 316,
+        "own_label_precision": 0.9405,
+        "own_gold_bytes_covered": 3087,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 2,
+        "flags_per_negative_document": 0.002
+      },
+      "0.95": {
+        "actions": 333,
+        "gold_touching": 318,
+        "precision": 0.955,
+        "own_label_touching": 315,
+        "own_label_precision": 0.9459,
+        "own_gold_bytes_covered": 3064,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.97": {
+        "actions": 334,
+        "gold_touching": 319,
+        "precision": 0.9551,
+        "own_label_touching": 316,
+        "own_label_precision": 0.9461,
+        "own_gold_bytes_covered": 3016,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.99": {
+        "actions": 332,
+        "gold_touching": 317,
+        "precision": 0.9548,
+        "own_label_touching": 314,
+        "own_label_precision": 0.9458,
+        "own_gold_bytes_covered": 2913,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      }
+    },
+    "LICENSE_PLATE": {
+      "0.30": {
+        "actions": 506,
+        "gold_touching": 485,
+        "precision": 0.9585,
+        "own_label_touching": 419,
+        "own_label_precision": 0.8281,
+        "own_gold_bytes_covered": 3381,
+        "ignored_out_of_contract": 10,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.35": {
+        "actions": 505,
+        "gold_touching": 484,
+        "precision": 0.9584,
+        "own_label_touching": 418,
+        "own_label_precision": 0.8277,
+        "own_gold_bytes_covered": 3375,
+        "ignored_out_of_contract": 10,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.40": {
+        "actions": 505,
+        "gold_touching": 484,
+        "precision": 0.9584,
+        "own_label_touching": 418,
+        "own_label_precision": 0.8277,
+        "own_gold_bytes_covered": 3375,
+        "ignored_out_of_contract": 8,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.45": {
+        "actions": 503,
+        "gold_touching": 482,
+        "precision": 0.9583,
+        "own_label_touching": 418,
+        "own_label_precision": 0.831,
+        "own_gold_bytes_covered": 3375,
+        "ignored_out_of_contract": 4,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.50": {
+        "actions": 500,
+        "gold_touching": 479,
+        "precision": 0.958,
+        "own_label_touching": 418,
+        "own_label_precision": 0.836,
+        "own_gold_bytes_covered": 3375,
+        "ignored_out_of_contract": 3,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.55": {
+        "actions": 492,
+        "gold_touching": 472,
+        "precision": 0.9593,
+        "own_label_touching": 417,
+        "own_label_precision": 0.8476,
+        "own_gold_bytes_covered": 3369,
+        "ignored_out_of_contract": 3,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.60": {
+        "actions": 490,
+        "gold_touching": 470,
+        "precision": 0.9592,
+        "own_label_touching": 417,
+        "own_label_precision": 0.851,
+        "own_gold_bytes_covered": 3369,
+        "ignored_out_of_contract": 3,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.65": {
+        "actions": 487,
+        "gold_touching": 467,
+        "precision": 0.9589,
+        "own_label_touching": 417,
+        "own_label_precision": 0.8563,
+        "own_gold_bytes_covered": 3369,
+        "ignored_out_of_contract": 3,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.70": {
+        "actions": 486,
+        "gold_touching": 466,
+        "precision": 0.9588,
+        "own_label_touching": 417,
+        "own_label_precision": 0.858,
+        "own_gold_bytes_covered": 3369,
+        "ignored_out_of_contract": 3,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.75": {
+        "actions": 485,
+        "gold_touching": 465,
+        "precision": 0.9588,
+        "own_label_touching": 417,
+        "own_label_precision": 0.8598,
+        "own_gold_bytes_covered": 3369,
+        "ignored_out_of_contract": 3,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.80": {
+        "actions": 481,
+        "gold_touching": 461,
+        "precision": 0.9584,
+        "own_label_touching": 417,
+        "own_label_precision": 0.8669,
+        "own_gold_bytes_covered": 3369,
+        "ignored_out_of_contract": 4,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.85": {
+        "actions": 476,
+        "gold_touching": 456,
+        "precision": 0.958,
+        "own_label_touching": 417,
+        "own_label_precision": 0.8761,
+        "own_gold_bytes_covered": 3369,
+        "ignored_out_of_contract": 4,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.90": {
+        "actions": 474,
+        "gold_touching": 454,
+        "precision": 0.9578,
+        "own_label_touching": 417,
+        "own_label_precision": 0.8797,
+        "own_gold_bytes_covered": 3369,
+        "ignored_out_of_contract": 3,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.95": {
+        "actions": 467,
+        "gold_touching": 447,
+        "precision": 0.9572,
+        "own_label_touching": 415,
+        "own_label_precision": 0.8887,
+        "own_gold_bytes_covered": 3362,
+        "ignored_out_of_contract": 3,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.97": {
+        "actions": 460,
+        "gold_touching": 441,
+        "precision": 0.9587,
+        "own_label_touching": 415,
+        "own_label_precision": 0.9022,
+        "own_gold_bytes_covered": 3356,
+        "ignored_out_of_contract": 3,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.99": {
+        "actions": 451,
+        "gold_touching": 432,
+        "precision": 0.9579,
+        "own_label_touching": 412,
+        "own_label_precision": 0.9135,
+        "own_gold_bytes_covered": 3332,
+        "ignored_out_of_contract": 0,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      }
+    },
+    "USERNAME": {
+      "0.30": {
+        "actions": 356,
+        "gold_touching": 343,
+        "precision": 0.9635,
+        "own_label_touching": 216,
+        "own_label_precision": 0.6067,
+        "own_gold_bytes_covered": 2205,
+        "ignored_out_of_contract": 51,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.35": {
+        "actions": 355,
+        "gold_touching": 342,
+        "precision": 0.9634,
+        "own_label_touching": 216,
+        "own_label_precision": 0.6085,
+        "own_gold_bytes_covered": 2205,
+        "ignored_out_of_contract": 50,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.40": {
+        "actions": 354,
+        "gold_touching": 341,
+        "precision": 0.9633,
+        "own_label_touching": 215,
+        "own_label_precision": 0.6073,
+        "own_gold_bytes_covered": 2195,
+        "ignored_out_of_contract": 47,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.45": {
+        "actions": 352,
+        "gold_touching": 340,
+        "precision": 0.9659,
+        "own_label_touching": 214,
+        "own_label_precision": 0.608,
+        "own_gold_bytes_covered": 2189,
+        "ignored_out_of_contract": 44,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.50": {
+        "actions": 352,
+        "gold_touching": 340,
+        "precision": 0.9659,
+        "own_label_touching": 214,
+        "own_label_precision": 0.608,
+        "own_gold_bytes_covered": 2189,
+        "ignored_out_of_contract": 44,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.55": {
+        "actions": 349,
+        "gold_touching": 337,
+        "precision": 0.9656,
+        "own_label_touching": 214,
+        "own_label_precision": 0.6132,
+        "own_gold_bytes_covered": 2189,
+        "ignored_out_of_contract": 41,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.60": {
+        "actions": 344,
+        "gold_touching": 334,
+        "precision": 0.9709,
+        "own_label_touching": 214,
+        "own_label_precision": 0.6221,
+        "own_gold_bytes_covered": 2189,
+        "ignored_out_of_contract": 40,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.65": {
+        "actions": 343,
+        "gold_touching": 333,
+        "precision": 0.9708,
+        "own_label_touching": 213,
+        "own_label_precision": 0.621,
+        "own_gold_bytes_covered": 2182,
+        "ignored_out_of_contract": 39,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.70": {
+        "actions": 343,
+        "gold_touching": 333,
+        "precision": 0.9708,
+        "own_label_touching": 213,
+        "own_label_precision": 0.621,
+        "own_gold_bytes_covered": 2182,
+        "ignored_out_of_contract": 39,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.75": {
+        "actions": 342,
+        "gold_touching": 332,
+        "precision": 0.9708,
+        "own_label_touching": 213,
+        "own_label_precision": 0.6228,
+        "own_gold_bytes_covered": 2182,
+        "ignored_out_of_contract": 36,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.80": {
+        "actions": 336,
+        "gold_touching": 327,
+        "precision": 0.9732,
+        "own_label_touching": 213,
+        "own_label_precision": 0.6339,
+        "own_gold_bytes_covered": 2182,
+        "ignored_out_of_contract": 35,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.85": {
+        "actions": 333,
+        "gold_touching": 325,
+        "precision": 0.976,
+        "own_label_touching": 212,
+        "own_label_precision": 0.6366,
+        "own_gold_bytes_covered": 2178,
+        "ignored_out_of_contract": 33,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.90": {
+        "actions": 329,
+        "gold_touching": 321,
+        "precision": 0.9757,
+        "own_label_touching": 212,
+        "own_label_precision": 0.6444,
+        "own_gold_bytes_covered": 2178,
+        "ignored_out_of_contract": 28,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.95": {
+        "actions": 320,
+        "gold_touching": 312,
+        "precision": 0.975,
+        "own_label_touching": 213,
+        "own_label_precision": 0.6656,
+        "own_gold_bytes_covered": 2169,
+        "ignored_out_of_contract": 22,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.97": {
+        "actions": 310,
+        "gold_touching": 302,
+        "precision": 0.9742,
+        "own_label_touching": 212,
+        "own_label_precision": 0.6839,
+        "own_gold_bytes_covered": 2161,
+        "ignored_out_of_contract": 20,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      },
+      "0.99": {
+        "actions": 304,
+        "gold_touching": 296,
+        "precision": 0.9737,
+        "own_label_touching": 213,
+        "own_label_precision": 0.7007,
+        "own_gold_bytes_covered": 2159,
+        "ignored_out_of_contract": 17,
+        "negative_flags": 0,
+        "flags_per_negative_document": 0.0
+      }
+    }
+  },
+  "joint": {
+    "BUILDING_NUMBER": {
+      "actions": 1465,
+      "gold_touching": 1140,
+      "precision": 0.7782,
+      "own_label_touching": 1120,
+      "own_label_precision": 0.7645,
+      "own_gold_bytes_covered": 2353,
+      "ignored_out_of_contract": 0,
+      "negative_flags": 0,
+      "flags_per_negative_document": 0.0
+    },
+    "DATE_OF_BIRTH": {
+      "actions": 333,
+      "gold_touching": 318,
+      "precision": 0.955,
+      "own_label_touching": 315,
+      "own_label_precision": 0.9459,
+      "own_gold_bytes_covered": 3064,
+      "ignored_out_of_contract": 0,
+      "negative_flags": 0,
+      "flags_per_negative_document": 0.0
+    },
+    "LICENSE_PLATE": {
+      "actions": 506,
+      "gold_touching": 485,
+      "precision": 0.9585,
+      "own_label_touching": 419,
+      "own_label_precision": 0.8281,
+      "own_gold_bytes_covered": 3381,
+      "ignored_out_of_contract": 10,
+      "negative_flags": 0,
+      "flags_per_negative_document": 0.0
+    },
+    "USERNAME": {
+      "actions": 356,
+      "gold_touching": 343,
+      "precision": 0.9635,
+      "own_label_touching": 216,
+      "own_label_precision": 0.6067,
+      "own_gold_bytes_covered": 2205,
+      "ignored_out_of_contract": 51,
+      "negative_flags": 0,
+      "flags_per_negative_document": 0.0
+    }
+  },
+  "op_b_reference": {
+    "BUILDING_NUMBER": 0.5,
+    "DATE_OF_BIRTH": 0.9,
+    "LICENSE_PLATE": 0.5,
+    "USERNAME": 0.5
+  }
+}
