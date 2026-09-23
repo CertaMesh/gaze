@@ -190,6 +190,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`postal.at_ch`, above).
 
 ### Changed
+- **Drift corpus: a Rust scope-separator line.** `[bundle-tokenization-drift]`
+  snapshots for the `core` and `secrets` bundles change in `fixtures_sha256`
+  only. The corpus had no code-shaped path, so the gate could not see the
+  `ip.v6` word boundary at all; the new line must stay untokenized. Detections
+  are unchanged at 12 for `core` and 2 for `secrets`, and no byte span or token
+  shape moved, because the line is appended and tokenizes nothing.
+
 - **The safety net no longer deletes: it writes a one-way `[REDACTED:<class>]`
   marker.** `SafetyNetMode::Redact` and the `Resolve` + `Redact` fallback used
   to replace a flagged span with the empty string, so the bytes vanished and

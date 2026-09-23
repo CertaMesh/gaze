@@ -109,6 +109,9 @@ fn assert_tokenized(text: &str, address: &str, surviving_context: &[&str]) {
 
 // ============================================== the defect: `::` paths must not fire (todo 3710)
 
+// drift-ack: the drift corpus gained a Rust scope-separator line so the bundled no-policy gate
+// can see this boundary too. Only `fixtures_sha256` moved in both snapshots; detections stayed
+// at 12 for `core` and 2 for `secrets`, because the new line tokenizes nothing.
 #[test]
 fn rust_paths_from_the_report_survive_verbatim() {
     // Every one of these was mangled in a real PR body this cycle (todo 3710, comment 2127).
