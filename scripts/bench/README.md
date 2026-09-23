@@ -273,6 +273,32 @@ runs on every pull request in `.github/workflows/docs.yml`:
 python3 scripts/bench/render_benchmark_doc.py --check
 ```
 
+## Policy-matrix enumerations (base binary vs head binary)
+
+Three model-free scripts drive two `gaze daemon` binaries over the #3708 IBAN
+document set (`iban_trailing_word_enumeration.documents()`, 55,536 synthetic
+documents) and compare the two per document. Each records both binaries'
+SHA-256 and refuses identical builds; run them against immutable copies.
+
+- `iban_trailing_word_enumeration.py` — the IBAN-plus-trailing-word contract:
+  per-document IBAN view and raw residue under the bundled locale packs.
+- `family_action_policy_matrix.py` — ten arms (five payment-family policies
+  x two locales); every changed document must be `family-derived` or
+  `family-residual`, `lost_bytes` must be 0.
+- `family_action_full_matrix.py` — every `Action` value on every axis the
+  family derivation reads: `custom:iban` x `custom:credit_card` in
+  {tokenize, redact, generalize, format_preserve, preserve, unset}, default in
+  {tokenize, redact, preserve}, family rule in {none, preserve, tokenize},
+  two locales: 648 arms on the family-capable subset plus a seeded 1%
+  control. Scores the bytes that leave the process (IBAN 4-grams surviving
+  after every replacement shape is blanked), never manifest arithmetic, and
+  fails on any document whose head leak exceeds its base leak. Every changed
+  document is written per arm with its transition to a gzip JSONL next to the
+  report. This is the acceptance bar for any change to how a policy action is
+  chosen: a rank-monotone derivation is not a byte-monotone one (review of
+  PR #624 found 872 regressed documents behind a `redact` arm the ten-arm
+  matrix did not have).
+
 ## Model-free verification
 
 Normal CI runs only the locked Python tests:
