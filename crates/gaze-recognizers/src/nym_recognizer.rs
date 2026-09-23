@@ -33,8 +33,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use gaze_types::nym::{
-    nym_label_to_pii_class, NymLabel, NymOperatingPoint, NYM_RECOGNIZER_SOURCE_PREFIX,
-    NYM_SAFETY_NET_ID,
+    nym_label_to_pii_class, nym_recognizer_id, NymLabel, NymOperatingPoint, NYM_SAFETY_NET_ID,
 };
 use gaze_types::{
     is_inside_word, Candidate, ConflictTier, DetectContext, DetectError, LocaleBasis, PiiClass,
@@ -244,10 +243,9 @@ impl NymRecognizers {
             .map(|(label, threshold)| {
                 let class = nym_label_to_pii_class(label)
                     .expect("a validated operating point enables only mapped labels");
-                let id = format!(
-                    "{NYM_RECOGNIZER_SOURCE_PREFIX}{}",
-                    label.as_str().to_ascii_lowercase()
-                );
+                let id = nym_recognizer_id(label)
+                    .expect("a validated operating point enables only mapped labels")
+                    .to_string();
                 let version_id = format!(
                     "{}/{}/op={}/input={NYM_RECOGNIZER_INPUT}",
                     self.shared.model_revision,

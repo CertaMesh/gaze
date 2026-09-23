@@ -123,6 +123,21 @@ pub fn nym_label_to_safety_net_class(label: NymLabel) -> Result<SafetyNetPiiClas
     }
 }
 
+/// Recognizer id and candidate source of the Nym recognizer adapter for `label`, or `None` for
+/// a label that can never be enabled. A closed literal table: every id that can reach an audit
+/// row or a benchmark trace is written out once, in the stable lowercase source-id shape.
+pub fn nym_recognizer_id(label: NymLabel) -> Option<&'static str> {
+    match label {
+        NymLabel::BuildingNumber => Some("nym/building_number"),
+        NymLabel::DateOfBirth => Some("nym/date_of_birth"),
+        NymLabel::LicensePlate => Some("nym/license_plate"),
+        NymLabel::Username => Some("nym/username"),
+        NymLabel::TaxId => Some("nym/tax_id"),
+        NymLabel::ZipCode => Some("nym/zip_code"),
+        _ => None,
+    }
+}
+
 /// Convenience: Nym label to Gaze `PiiClass`.
 pub fn nym_label_to_pii_class(label: NymLabel) -> Result<PiiClass, NymConfigError> {
     nym_label_to_safety_net_class(label).map(SafetyNetPiiClass::to_pii_class)
@@ -316,6 +331,27 @@ mod tests {
                 label: "GIVEN_NAME".to_string()
             })
         );
+    }
+
+    #[test]
+    fn every_mapped_label_has_exactly_one_recognizer_id() {
+        for label in NymLabel::ALL {
+            let id = nym_recognizer_id(*label);
+            assert_eq!(
+                id.is_some(),
+                nym_label_to_safety_net_class(*label).is_ok(),
+                "{label}"
+            );
+            if let Some(id) = id {
+                assert_eq!(
+                    id,
+                    format!(
+                        "{NYM_RECOGNIZER_SOURCE_PREFIX}{}",
+                        label.as_str().to_ascii_lowercase()
+                    )
+                );
+            }
+        }
     }
 
     #[test]

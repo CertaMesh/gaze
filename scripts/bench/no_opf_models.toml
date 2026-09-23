@@ -14,7 +14,9 @@ ids = [
     "nym/building_number",
     "nym/date_of_birth",
     "nym/license_plate",
+    "nym/tax_id",
     "nym/username",
+    "nym/zip_code",
     "openai-privacy-filter",
     "openai-privacy-filter-subprocess",
 ]

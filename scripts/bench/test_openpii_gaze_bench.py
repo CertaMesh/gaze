@@ -24,12 +24,24 @@ import render_benchmark_doc
 EXPECTED_BUILTIN_SOURCE_IDS = frozenset(
     {
         "ner",
+        "nym/building_number",
+        "nym/date_of_birth",
+        "nym/license_plate",
+        "nym/tax_id",
+        "nym/username",
+        "nym/zip_code",
         "openai-privacy-filter",
         "openai-privacy-filter-subprocess",
     }
 )
 BUILTIN_SOURCE_LITERAL_PATHS = {
     "ner": "crates/gaze-recognizers/src/ner/recognizer.rs",
+    "nym/building_number": "crates/gaze-types/src/nym.rs",
+    "nym/date_of_birth": "crates/gaze-types/src/nym.rs",
+    "nym/license_plate": "crates/gaze-types/src/nym.rs",
+    "nym/tax_id": "crates/gaze-types/src/nym.rs",
+    "nym/username": "crates/gaze-types/src/nym.rs",
+    "nym/zip_code": "crates/gaze-types/src/nym.rs",
     "openai-privacy-filter": (
         "crates/gaze-recognizers/src/safety_net/openai_filter/mod.rs"
     ),
