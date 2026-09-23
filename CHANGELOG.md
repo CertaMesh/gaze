@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Nym-small as an opt-in recognizer (single-pass Stage A).**
+  `gaze_recognizers::NymRecognizers` (feature `safety-net-nym`) puts the pinned
+  Nym-small model into the candidate pool instead of an observer pass after it:
+  one `NymLabelRecognizer` per label the operating point enables (building
+  number, date of birth, licence plate, username; tax ID and ZIP code stay off),
+  each a plain `Recognizer` with id and source `nym/<label>`, format locale
+  basis, the lowest rule priority and no canonical form. The adapters read the
+  normalized text every recognizer reads and share **one model inference per
+  detection request** through the new request-scoped `gaze_types::DetectMemo`
+  (`DetectContext::memo`, and `DetectContext::narrowed` for the per-locale
+  contexts, which share it); nothing is cached across requests and no input
+  text is kept. Model output naming a disabled label, or a span that is out of
+  bounds, below its threshold or cuts a word, fails the request. The version id
+  names the model revision, the rule that fired (`LABEL>=THRESHOLD`), the whole
+  operating point and `input=normalized`. Nothing registers it by default; the
+  classes it emits need explicit policy actions (`NymRecognizers::classes`).
+  Its operating point is frozen in
+  `crates/gaze-recognizers/nym-recognizer-operating-point.json` (building number
+  0.40, date of birth 0.95, licence plate 0.30, username 0.30), chosen on a
+  development split of the Dataiku train split and a fresh-seed negative set by
+  `scripts/bench/nym_recognizer_dev_sweep.py`, never on the evaluation data.
+- **Benchmark arms `single-pass-nym` and `single-pass-nym-observed`** in
+  `clean_for_bench` (rules, Davlan and the Nym recognizer in one pass; the same
+  plus the observer net), with `scripts/bench/single_pass_nym_paired.py` (paired,
+  all-request five-arm comparison), `scripts/bench/nym_exclusion_stages.py`
+  (where every model-positive byte ends up) and an `--exclusion-trace` side
+  output. `nym-warm-latency.py` times the new arms and marks a run on a loaded
+  host `timing_valid: false`. `cargo run -p xtask -- generate-negative-corpus`
+  gains `--out` so a development corpus never overwrites the evaluation one.
+  Measured on the 2,910 documents: `single-pass-nym` buys 4,835 leaked bytes
+  over `pass2-ner` against `full-stack-nym-resolve`'s 5,413 (+501 false-positive
+  bytes, 0 flags on the 1,024 negatives, every document completed and restored
+  exactly), so Stage A's bar of matching the resolve arm is not met; the
+  pipeline loses none of the model's bytes, the model finds fewer building
+  numbers reading raw text. `single-pass-nym-observed` buys 5,835 for +548.
+
 - **`ConflictTier::ContainmentPrecedence`** (audit string
   `containment_precedence`): a candidate that wholly contains a candidate of
   another class won the whole span as one token; the swallowed candidate is a
@@ -217,6 +253,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`postal.at_ch`, above).
 
 ### Changed
+- The resolver places `nym/<label>` candidates in the learned evidence tier of
+  containment precedence, and the structured-containment rung no longer hands a
+  learned custom-class span the bytes of a rule candidate it contains (no
+  bundled or policy recognizer emitted a learned custom class before, so no
+  existing output changes).
 - **One entity, one token: containment precedence** (solo todo #3740,
   concept v2 approved 2026-09-23; breaking in 0.x). When one candidate
   wholly contains a candidate of a different class, the container wins the

@@ -718,6 +718,92 @@ model lost the tokens as context and bought 18 % fewer leaked bytes (v2 6,154
 to 5,039 on the 2,910 documents), so a different mask shape needs its own
 measured proposal.
 
+### Nym as a recogniser (Stage A)
+
+Single-pass Stage A (solo todo 3738) puts the same pinned model into the
+candidate pool instead of after it: [`NymRecognizers`](../../../crates/gaze-recognizers/src/nym_recognizer.rs)
+builds one `Recognizer` per label the operating point enables, and the rules,
+the Davlan NER and the Nym labels compete in one resolver. It is **opt-in and
+programmatic**: nothing registers it by default (pinned by
+`the_default_pipeline_never_registers_nym`), there is no CLI flag yet, and
+the observer net above is unchanged.
+
+- **Input.** The adapters read the normalized text every recogniser reads
+  (joiners dropped, fullwidth folded), never the raw input or the tokenized
+  output, and their spans map back to raw bytes like every candidate's.
+- **One model pass per request.** The four adapters share one inference per
+  detection request through the request's `DetectMemo`
+  (`DetectContext::memo`; the per-locale contexts the registry derives with
+  `DetectContext::narrowed` share it). The key is a digest of the input, the
+  model revision and the operating point; nothing is cached across requests,
+  no input text is kept, and the memo is not `Sync`, so concurrent requests
+  never share one.
+- **Closed labels, fail closed.** Only enabled labels get an adapter (tax ID
+  and ZIP code stay off). Model output naming a disabled label, or a span out
+  of bounds, below its threshold or cutting a word, fails the request.
+- **Lowest standing.** Candidates carry no canonical form, the lowest rule
+  priority and a `nym/<label>` source, which the resolver places in the
+  learned evidence tier. A rule container (tier 2 or above) swallows a Nym
+  candidate as one token; a Nym span never swallows a rule candidate (the
+  structured-containment rung no longer hands a learned custom-class span a
+  rule's bytes either); a rule wins every other overlap. Nym bytes outside the
+  winning rule token stay protected by the per-character residual net.
+- **Policy.** The four learned classes (`custom:building_number`,
+  `custom:date`, `custom:license_plate`, `custom:username`) need explicit
+  actions; `NymRecognizers::classes` lists them. The bench arms declare
+  `tokenize` for each.
+- **Audit.** Recogniser id and source `nym/<label>`; the version id names the
+  model revision, the rule that fired (`LABEL>=THRESHOLD`), the whole
+  operating point and `input=normalized`.
+
+**Operating point.** Reading raw text instead of tokenized output moves the
+model's operating point, so op-B was not reused. The thresholds were chosen on
+a development split and frozen in
+[`nym-recognizer-operating-point.json`](../../../crates/gaze-recognizers/nym-recognizer-operating-point.json)
+before any evaluation run: 4,000 English and German rows of the pinned
+Dataiku *train* split (seeded, none sharing a text with the test split) and 978
+negatives from the A4 generator run with a new seed (46 texts equal to an
+evaluation negative dropped). Rule: per label, the lowest threshold from 0.30
+to 0.99 with action precision at least 0.70 and at most one flag per 1,024
+negatives. That bar is Stage A's own acceptance bar and is stricter than op-B's
+"below 0.05 flags per negative document", which alone chose date of birth at
+0.75 and flagged 42 of the 978 development negatives. Frozen: building number
+0.40, date of birth 0.95, licence plate 0.30, username 0.30; jointly 0
+development-negative flags. Reproduce with
+`scripts/bench/nym_recognizer_dev_sweep.py`.
+
+**Measured** (one run per arm on commit `a082b821`, clean tree, binary
+`clean_for_bench` sha256 `bdc75312…`, 2,910 documents, scored-label contract
+v2 headline, `scripts/bench/single_pass_nym_paired.py`):
+
+| Arm | Model passes | Leaked bytes | Bought vs `pass2-ner` | FP bytes added | Negative flags | Completed / exact restore |
+|---|---:|---:|---:|---:|---:|---:|
+| `pass2-ner` | 0 | 19,457 | | | 0 | 2,910 / 2,910 |
+| `full-stack-nym-resolve` | 1 | 14,044 | 5,413 | +493 | 1 | 2,910 / 2,910 |
+| `single-pass-nym` | 1 | 14,622 | 4,835 | +501 | 0 | 2,910 / 2,910 |
+| `single-pass-nym-observed` | 2 | 13,622 | 5,835 | +548 | 1 | 2,910 / 2,910 |
+
+By language, `single-pass-nym` leaks 9,513 bytes in English (resolve 8,849)
+and 5,109 in German (resolve 5,195). By label it leaks fewer licence-plate
+(57 vs 74), username (47 vs 77) and date-of-birth (1,068 vs 1,088) bytes and
+more building-number bytes (2,024 vs 1,528). **Stage A's bar, buying at least
+what `full-stack-nym-resolve` buys, is not met.** The exclusion enumeration
+(`scripts/bench/nym_exclusion_stages.py`) shows the pipeline loses none of the
+6,742 model-positive bytes (1,131 spans leave whole under a Nym token, 62 lose
+arbitration and 44 are swallowed by a rule container with every byte under the
+winner's token; no veto, no preserve, nothing dropped). The shortfall is the
+model: reading the raw text it finds 650 building-number spans (507 touching
+gold) where, reading the tokenized output, the observer acted on 841 (700
+touching gold). Timing from these runs is not a latency claim (host load 9 to
+19).
+
+**Structured input.** On tool-call JSON sent as text, the captured real-model
+fixtures keep every key and turn the plate, username and building-number
+values into learned-class tokens; a German `"geburtsdatum": "12.03.1985"`
+value stays raw at the 0.95 date-of-birth threshold. Structured documents are
+cleaned leaf by leaf, so a bare `"M-AB 1234"` leaf, with no words around it, is
+not flagged.
+
 ### Known gaps and open review items
 
 - **Room, platform and seat numbers.** `BUILDING_NUMBER` fires on "Raum 204"

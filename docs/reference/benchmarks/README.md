@@ -89,6 +89,32 @@ hardware line and the host load average. No numbers are recorded here yet: a
 latency row needs a quiet host (load average below 2), and every run so far was
 on a shared, loaded one.
 
+#### Single-pass Nym (Stage A, opt-in, not a release row)
+
+Two more opt-in arms measure Nym-small as a recogniser in the candidate pool
+(solo todo 3738): `single-pass-nym` (rules, Davlan and the Nym recogniser at
+its frozen operating point, one model pass) and `single-pass-nym-observed` (the
+same plus the observer net, two passes). The recogniser's thresholds were
+chosen on a development split of the Dataiku *train* split and a fresh-seed
+negative set, never on this corpus (see
+[Nym as a recogniser](../../explanation/safety-net/safety-nets.md#nym-as-a-recogniser-stage-a)).
+`scripts/bench/single_pass_nym_paired.py` runs the arms on one binary over the
+2,910 documents and scores them with the release scorer's accumulators;
+`scripts/bench/nym_exclusion_stages.py` follows every model-positive byte to
+the output.
+
+Measured on commit `a082b821` (clean tree), binary sha256 `bdc75312…`,
+scored-label contract v2, one run per arm; Apple M5 Max, 18 cores, 64 GiB RAM,
+macOS 26.5, ort 2.0.0-rc.12, one Nym intra-op thread. Correctness only: host
+load 9 to 19, so no timing is claimed.
+
+| Arm | Leaked bytes | Bought vs `pass2-ner` | FP bytes added | Negative flags | Completed / exact |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `pass2-ner` | 19,457 | | | 0 | 2,910 / 2,910 |
+| `full-stack-nym-resolve` | 14,044 | 5,413 | +493 | 1 | 2,910 / 2,910 |
+| `single-pass-nym` | 14,622 | 4,835 | +501 | 0 | 2,910 / 2,910 |
+| `single-pass-nym-observed` | 13,622 | 5,835 | +548 | 1 | 2,910 / 2,910 |
+
 Release rows up to v0.14.0 predate the removal of the Kiji DistilBERT safety net
 and report `full-stack-kiji-resolve`, which was the shipped default then. Those rows
 are kept as measured.

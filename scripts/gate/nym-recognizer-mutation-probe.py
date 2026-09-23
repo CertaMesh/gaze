@@ -59,7 +59,7 @@ CASES = (
         "        let _ = (ctx.memo(), MEMO_OWNER);\n        self.checked(input).map(Rc::new)\n",
         (tuple(LIB), tuple(PIPELINE)),
         frozenset({
-            "tests::one_inference_per_request_across_every_adapter",
+            "nym_recognizer::tests::one_inference_per_request_across_every_adapter",
             "one_inference_per_request_and_none_stale_across_requests",
             "concurrent_requests_never_share_an_inference",
         }),
@@ -71,7 +71,7 @@ CASES = (
         "            input.as_bytes(),\n            self.model_revision.as_bytes(),\n",
         "            self.model_revision.as_bytes(),\n",
         (tuple(LIB),),
-        frozenset({"tests::a_new_request_never_sees_the_previous_result"}),
+        frozenset({"nym_recognizer::tests::a_new_request_never_sees_the_previous_result"}),
     ),
     Case(
         "span-check-off",
@@ -80,7 +80,7 @@ CASES = (
         "    let invalid = |message: &str| SafetyNetError::InvalidOutput {\n        message: message.to_string(),\n    };\n    if span.start >= span.end\n",
         "    let invalid = |message: &str| SafetyNetError::InvalidOutput {\n        message: message.to_string(),\n    };\n    if true {\n        return Ok(());\n    }\n    if span.start >= span.end\n",
         (tuple(LIB),),
-        frozenset({"tests::impossible_model_output_fails_closed"}),
+        frozenset({"nym_recognizer::tests::impossible_model_output_fails_closed"}),
     ),
     Case(
         "priority-highest",
