@@ -13,9 +13,7 @@
 //! fire. That class is a strict subset of the old one, so the change can only ever remove
 //! matches, never add them.
 //!
-//! Two shapes below are pinned as they behave on the base rule, NOT as new behaviour:
-//! `http://[::1]:8080/` (the URL recognizer wins conflict resolution and the URL class is not
-//! tokenized here) and `Address:2001:db8::1` (a leading `:` was already excluded by the guard).
+//! The URL recognizer used to shield `http://[::1]:8080/`; the IPv6 fragment is now protected.
 //! A standalone `a::b` still tokenizes: with nothing on either side it is indistinguishable from
 //! the address it literally is, and refusing it would cost real recall.
 //!
@@ -43,7 +41,7 @@ fn ip_class() -> PiiClass {
 
 /// The core bundle through the real activation path, with only `custom:ip_address` tokenized so
 /// any change in the output is this rule's doing.
-fn pipeline() -> Pipeline {
+fn pipeline_for_locales(locales: &[LocaleTag]) -> Pipeline {
     let rulepack = Rulepack::load(RulepackSource::Embedded(
         embedded("core").expect("core rulepack"),
     ))
@@ -60,9 +58,13 @@ fn pipeline() -> Pipeline {
     ];
     policy.rulepacks.bundled = vec!["core".to_string()];
     policy.rulepacks.auto_activate_locale_gated = false;
-    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&LOCALES));
+    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(locales));
     gaze_assembly::build_pipeline(&policy, &empty_context(), &[rulepack], &chain, None)
         .expect("pipeline")
+}
+
+fn pipeline() -> Pipeline {
+    pipeline_for_locales(&LOCALES)
 }
 
 fn clean(text: &str) -> String {
@@ -82,6 +84,7 @@ fn clean(text: &str) -> String {
 }
 
 const LOCALES: [LocaleTag; 1] = [LocaleTag::EnUs];
+const DE_LOCALES: [LocaleTag; 1] = [LocaleTag::DeDe];
 
 /// Asserts the input survives byte for byte: nothing in it was taken for an address.
 fn assert_untouched(text: &str) {
@@ -95,15 +98,9 @@ fn assert_untouched(text: &str) {
 /// Asserts the whole address is gone and the surrounding text survives.
 fn assert_tokenized(text: &str, address: &str, surviving_context: &[&str]) {
     let cleaned = clean(text);
-    assert!(
-        !cleaned.contains(address),
-        "address in {text:?} survived in {cleaned:?}"
-    );
+    assert!(!cleaned.contains(address), "address survived cleaning");
     for fragment in surviving_context {
-        assert!(
-            cleaned.contains(fragment),
-            "context {fragment:?} should survive but is missing from {cleaned:?}"
-        );
+        assert!(cleaned.contains(fragment), "surrounding context changed");
     }
 }
 
@@ -168,10 +165,7 @@ fn bare_addresses_still_tokenize() {
         "2001:db8::1",
     ] {
         let cleaned = clean(address);
-        assert!(
-            !cleaned.contains(address),
-            "address must still tokenize, but survived as {cleaned:?}"
-        );
+        assert!(!cleaned.contains(address), "bare address survived cleaning");
     }
 }
 
@@ -226,9 +220,73 @@ fn a_standalone_all_hex_path_still_tokenizes() {
 }
 
 #[test]
-fn shapes_the_base_rule_already_left_alone_are_unchanged() {
-    // Not a regression from todo 3710: a leading `:` was already outside the guard class.
-    assert_untouched("Address:2001:db8::1");
+fn glued_cue_addresses_are_protected() {
+    for (text, address, context) in [
+        ("Address:2001:db8::1", "2001:db8::1", "Address:"),
+        ("IP:fe80::1", "fe80::1", "IP:"),
+        ("ipv6:2001:db8::a", "2001:db8::a", "ipv6:"),
+        ("host:2001:db8::1", "2001:db8::1", "host:"),
+        ("Adresse:2001:db8::1", "2001:db8::1", "Adresse:"),
+        ("{\"ip\":\"2001:db8::1\"}", "2001:db8::1", "{\"ip\":\""),
+    ] {
+        assert_tokenized(text, address, &[context]);
+    }
+}
+
+#[test]
+fn glued_cue_manifest_spans_cover_only_the_address() {
+    for locales in [&LOCALES[..], &DE_LOCALES[..]] {
+        let pipeline = pipeline_for_locales(locales);
+        for (prefix, address, suffix) in [
+            ("Address:", "2001:db8::1", ""),
+            ("address:", "2001:db8::1", ""),
+            ("ADDRESS:", "2001:db8::1", ""),
+            ("IP:", "fe80::1", ""),
+            ("ipv6:", "2001:db8::a", ""),
+            ("ip=", "2001:db8::1", ""),
+            ("host:", "2001:db8::1", ""),
+            ("addr:", "2001:db8::1", ""),
+            ("Adresse:", "2001:db8::1", ""),
+            ("{\"ip\":\"", "2001:db8::1", "\"}"),
+        ] {
+            let raw = format!("{prefix}{address}{suffix}");
+            let session = Session::new(Scope::Ephemeral).expect("session");
+            let (clean, manifest, _) = pipeline
+                .clean_with_safety_net_detect_context(
+                    &session,
+                    RawDocument::Text(raw),
+                    locales,
+                    &DictionaryBundle::default(),
+                )
+                .expect("clean");
+            let CleanDocument::Text(clean) = clean else {
+                panic!("expected text");
+            };
+            assert_eq!(manifest.len(), 1, "one address token expected");
+            let span = &manifest[0];
+            assert_eq!(span.class, ip_class());
+            assert_eq!(span.raw_span, prefix.len()..prefix.len() + address.len());
+            assert_eq!(span.clean_span.start, prefix.len());
+            let token = &clean[span.clean_span.clone()];
+            assert_eq!(clean, format!("{prefix}{token}{suffix}"));
+            assert_eq!(session.restore(token).as_deref(), Some(address));
+        }
+    }
+}
+
+#[test]
+fn cue_words_followed_by_scope_separators_are_untouched() {
+    for path in [
+        "Foo::bar",
+        "std::fs::read",
+        "gaze::rule::resolve",
+        "Policy::default()",
+        "Address::new",
+        "IP::from",
+        "host::connect",
+    ] {
+        assert_untouched(path);
+    }
 }
 
 /// The URL recognizer owns `http://[::1]:8080/` and the policy preserves URLs by default, but
