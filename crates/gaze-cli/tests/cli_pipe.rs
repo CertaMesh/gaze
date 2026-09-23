@@ -66,9 +66,9 @@ fn clean_ok_with_args(args: &[&str], input: &str) -> (String, String, u64) {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
-        out.stderr.is_empty(),
-        "expected empty stderr on success, got: {}",
-        String::from_utf8_lossy(&out.stderr)
+        out.stderr.is_empty()
+            || out.stderr == b"notice: core rulepack floor is off (custom rulepacks only)\n",
+        "unexpected stderr on success"
     );
     let v: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
     let clean_text = v["clean_text"].as_str().unwrap().to_string();
@@ -3450,6 +3450,137 @@ const POLICY_LESS_CORE_TOKENS: [&str; 4] = [
     ":Custom:ip_address_1>",
     ":Email_1>",
 ];
+
+#[test]
+fn custom_rulepack_path_keeps_core_for_cli_and_policy() {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("class-alpha.toml");
+    fs::write(&rulepack_path, class_alpha_rulepack()).unwrap();
+    let policy_path = dir.path().join("policy.toml");
+    fs::write(
+        &policy_path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+paths = ["{}"]
+
+[[rule]]
+kind = "default"
+action = "tokenize"
+"#,
+            rulepack_path.display()
+        ),
+    )
+    .unwrap();
+
+    let input = format!("{POLICY_LESS_CORE_INPUT}, ticket class-alpha-123");
+    let runs = [
+        clean_json_with_args(
+            &[&format!("--rulepack-path={}", rulepack_path.display())],
+            &input,
+        ),
+        clean_json_with_args(&[&format!("--policy={}", policy_path.display())], &input),
+    ];
+    for run in runs {
+        let clean = run["clean_text"].as_str().unwrap();
+        for raw in POLICY_LESS_CORE_RAW {
+            assert!(!clean.contains(raw), "core span leaked");
+        }
+        assert!(!clean.contains("class-alpha-123"), "custom span leaked");
+        for token in POLICY_LESS_CORE_TOKENS {
+            assert!(clean.contains(token), "core token missing");
+        }
+        assert!(clean.contains(":Custom:class_alpha_1>"));
+        assert_eq!(run["stats"]["detections"], 5);
+    }
+}
+
+#[test]
+fn explicit_custom_only_rulepack_selection_is_symmetric() {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("class-alpha.toml");
+    fs::write(&rulepack_path, class_alpha_rulepack()).unwrap();
+    let policy_path = dir.path().join("policy.toml");
+    fs::write(
+        &policy_path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = []
+paths = ["{}"]
+
+[[rule]]
+kind = "default"
+action = "tokenize"
+"#,
+            rulepack_path.display()
+        ),
+    )
+    .unwrap();
+
+    let input = format!("{POLICY_LESS_CORE_INPUT}, ticket class-alpha-123");
+    let runs = [
+        clean_raw_with_args(
+            &[
+                "--rulepack-bundled=none",
+                &format!("--rulepack-path={}", rulepack_path.display()),
+            ],
+            &input,
+        ),
+        clean_raw_with_args(&[&format!("--policy={}", policy_path.display())], &input),
+    ];
+    for run in runs {
+        assert!(run.status.success(), "custom-only run failed");
+        let clean: Value = serde_json::from_slice(&run.stdout).unwrap();
+        let clean_text = clean["clean_text"].as_str().unwrap();
+        for raw in POLICY_LESS_CORE_RAW {
+            assert!(clean_text.contains(raw), "core unexpectedly loaded");
+        }
+        assert!(
+            !clean_text.contains("class-alpha-123"),
+            "custom span leaked"
+        );
+        assert_eq!(clean["stats"]["detections"], 1);
+        assert!(String::from_utf8_lossy(&run.stderr).contains("core rulepack floor is off"));
+    }
+}
+
+#[test]
+fn policy_without_rulepack_table_keeps_core() {
+    let dir = tempdir().unwrap();
+    let policy_path = dir.path().join("policy.toml");
+    fs::write(
+        &policy_path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[rule]]
+kind = "default"
+action = "tokenize"
+"#,
+    )
+    .unwrap();
+
+    let run = clean_json_with_args(
+        &[&format!("--policy={}", policy_path.display())],
+        POLICY_LESS_CORE_INPUT,
+    );
+    let clean = run["clean_text"].as_str().unwrap();
+    for raw in POLICY_LESS_CORE_RAW {
+        assert!(!clean.contains(raw), "core span leaked");
+    }
+    assert_eq!(run["stats"]["detections"], 4);
+}
 
 /// Todo #3706: `gaze clean` with neither `--policy` nor `--rulepack-bundled`
 /// used to run an email-only stub, so cards, IBANs and IPs shipped raw while

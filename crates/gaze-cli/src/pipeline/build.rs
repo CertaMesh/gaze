@@ -49,6 +49,16 @@ pub(crate) fn resolve_pipeline(
         context.as_ref(),
     )?;
     let pipeline = resolved.builder.build().map_err(map_pipeline_error)?;
+    if !resolved.policy.rulepacks.paths.is_empty()
+        && !resolved
+            .policy
+            .rulepacks
+            .bundled
+            .iter()
+            .any(|id| id == "core")
+    {
+        eprintln!("notice: core rulepack floor is off (custom rulepacks only)");
+    }
     let pipeline = match logger {
         Some(logger) => pipeline.with_redaction_logger(ArcLogger(logger)),
         None => pipeline,
@@ -75,6 +85,14 @@ pub(crate) fn resolve_pipeline_builder(
         Some(path) => overrides.apply_to(&Policy::load_for_cli(path).map_err(map_policy_error)?),
         None => policy_less_policy(overrides)?,
     };
+    if policy.detectors.is_empty()
+        && policy.rulepacks.bundled.is_empty()
+        && policy.rulepacks.paths.is_empty()
+    {
+        return Err(CliError::PolicyConfigDetail(
+            "no detectors or rulepacks configured".to_string(),
+        ));
+    }
     let rulepacks = load_rulepacks(&policy).map_err(map_pipeline_error)?;
 
     let context_bundle = context
@@ -115,15 +133,9 @@ pub(crate) fn resolve_pipeline_builder(
     })
 }
 
-/// Bundled selection for a run without `--policy` or rulepack flags. It is the
-/// same `["core"]` a loaded policy gets when `[policy.rulepacks]` is omitted
-/// (`Policy::try_from`), so omitting the policy file never drops the floor.
-const POLICY_LESS_DEFAULT_BUNDLED: &str = "core";
-
 /// Synthesizes the policy for a run without `--policy`.
 ///
-/// Rulepack flags replace the default selection exactly as they would a policy
-/// value; with neither flag the run gets [`POLICY_LESS_DEFAULT_BUNDLED`]. Every
+/// Rulepack flags override their matching policy fields. Every
 /// activated class tokenizes and the default rule tokenizes too, so spans with
 /// no class rule (context dictionaries, NER) fail closed instead of passing
 /// through raw. This matches `gaze_assembly::CorePipelineConfig`, which backs
@@ -135,9 +147,7 @@ fn policy_less_policy(overrides: &CleanOverrides) -> std::result::Result<Policy,
 
     let mut base = Policy::default();
     base.session = session;
-    if overrides.rulepack_paths.is_empty() {
-        base.rulepacks.bundled = vec![POLICY_LESS_DEFAULT_BUNDLED.to_string()];
-    }
+    base.rulepacks.bundled = gaze::RulepackPolicy::default_bundled();
     let mut policy = overrides.apply_to(&base);
 
     let mut rules = class_rules_for_rulepacks(&policy.rulepacks.bundled, &policy.rulepacks.paths)?;

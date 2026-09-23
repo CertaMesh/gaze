@@ -116,7 +116,7 @@ pub(crate) struct NymArgs {
 /// flags were missing, leaving the wiring hardcoded to "no override".
 #[derive(Args, Debug)]
 pub(crate) struct RulepackOverrideArgs {
-    /// Override policy.rulepacks.bundled. Comma-separated and repeatable.
+    /// Override policy.rulepacks.bundled. Comma-separated and repeatable; "none" disables all bundled packs.
     #[arg(long, value_delimiter = ',')]
     pub(crate) rulepack_bundled: Vec<String>,
     /// Override policy.rulepacks.paths. Repeatable.

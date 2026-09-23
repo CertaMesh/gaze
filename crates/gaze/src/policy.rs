@@ -200,6 +200,13 @@ pub struct RulepackPolicy {
     pub auto_activate_locale_gated: bool,
 }
 
+impl RulepackPolicy {
+    /// Default bundle selection when a policy or CLI run does not specify one.
+    pub fn default_bundled() -> Vec<String> {
+        vec!["core".to_string()]
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RuleSpec {
@@ -389,7 +396,7 @@ struct RawPolicyTables {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawRulepackPolicy {
-    #[serde(default)]
+    #[serde(default = "RulepackPolicy::default_bundled")]
     bundled: Vec<String>,
     #[serde(default)]
     paths: Vec<String>,
@@ -446,7 +453,7 @@ impl TryFrom<RawPolicy> for Policy {
             .map(parse_rulepack_policy)
             .transpose()?
             .unwrap_or_else(|| RulepackPolicy {
-                bundled: vec!["core".to_string()],
+                bundled: RulepackPolicy::default_bundled(),
                 paths: Vec::new(),
                 auto_activate_locale_gated: false,
             });
@@ -817,6 +824,32 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn omitted_bundled_key_keeps_core_but_explicit_empty_disables_it() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("policy.toml");
+        for (table, expected) in [
+            ("", vec!["core"]),
+            (
+                "[policy.rulepacks]\npaths = [\"custom.toml\"]",
+                vec!["core"],
+            ),
+            (
+                "[policy.rulepacks]\nbundled = []\npaths = [\"custom.toml\"]",
+                vec![],
+            ),
+        ] {
+            fs::write(
+                &path,
+                format!(
+                    "[session]\nscope = \"persistent\"\nttl_secs = 86400\n\n{table}\n\n[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n"
+                ),
+            )
+            .unwrap();
+            assert_eq!(Policy::load(&path).unwrap().rulepacks.bundled, expected);
+        }
+    }
 
     #[test]
     fn bundled_family_policy_classes_preserve_the_family_namespace() {
