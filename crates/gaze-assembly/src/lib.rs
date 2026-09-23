@@ -148,9 +148,9 @@ pub fn build_pipeline_builder(
 
 /// Collision-family fallback classes (`custom:family:<name>`) that an active
 /// mandatory-anchor recognizer can emit and that the policy shows intent about
-/// without naming reachably: a live rule names one of the family's member
-/// classes, or a rule names the family class only after the first `Default`
-/// rule, where it is never reached.
+/// without naming reachably: some rule names one of the family's member
+/// classes (before or after the first `Default` rule), or a rule names the
+/// family class only after the first `Default` rule, where it is never reached.
 ///
 /// Such a token does not leak: it takes the strictest action among its member
 /// classes' rules and the default (`gaze::Action::strictness_rank`). The list
@@ -186,8 +186,12 @@ pub fn uncovered_collision_family_classes(
         .into_iter()
         .filter(|(family, members)| {
             let family_class = PiiClass::family(family);
+            // Intent counts wherever it is declared: a member or family rule
+            // placed after the default rule is dead, and the adopter who wrote
+            // it is exactly who needs to hear the family class falls to the
+            // default.
             !names(live_rules, &family_class)
-                && (members.iter().any(|member| names(live_rules, member))
+                && (members.iter().any(|member| names(&policy.rules, member))
                     || names(&policy.rules, &family_class))
         })
         .map(|(family, _)| format!("custom:family:{family}"))

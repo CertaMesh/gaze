@@ -169,9 +169,10 @@ pub(crate) struct ResolvedAction {
 /// `custom:iban` and `custom:credit_card` fail-closed on the family token
 /// without ever landing laxer than the default the family would have taken.
 /// An explicit rule for the family class, wherever a first-match walk reaches
-/// it, wins unchanged. A member that is exactly as strict as the default is
-/// credited in the audit record; ties between members go to the lowest class
-/// in `PiiClass` order.
+/// it, wins unchanged. The audit record credits the member whose explicit
+/// rule set the action (the lowest class in `PiiClass` order on a tie, a
+/// member exactly as strict as the default included); it credits no member
+/// when the default applied.
 fn resolve_with<E>(
     rules: &[RuleEntry],
     probe: &impl Fn(&RuleEntry, &PiiClass) -> Result<Option<Action>, E>,
@@ -191,12 +192,20 @@ fn resolve_with<E>(
     let mut strictest = own.action();
     let mut member_class = None;
     for member in members(family) {
-        let action = first_match(rules, probe, &member)?.action();
+        let resolved = first_match(rules, probe, &member)?;
+        let action = resolved.action();
         let rank = action.strictness_rank();
-        if rank > strictest.strictness_rank()
-            || (member_class.is_none() && rank == strictest.strictness_rank())
-        {
+        if rank > strictest.strictness_rank() {
             strictest = action;
+            member_class = None;
+        }
+        // Only a member's own rule is credited. A member that reached this
+        // rank through the default (or no rule) named nothing the adopter
+        // could point at, so the credit stays with the default: `None`.
+        if member_class.is_none()
+            && rank == strictest.strictness_rank()
+            && matches!(resolved, FirstMatch::Explicit(_))
+        {
             member_class = Some(member);
         }
     }

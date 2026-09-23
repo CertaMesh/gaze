@@ -1,4 +1,9 @@
-//! Raw evidence coverage for the closed known-Tokenize domain.
+//! Raw evidence coverage for the closed known-protective domain.
+//!
+//! A losing candidate's evidence is admitted when the static preview of every
+//! action in its overlap component is protective (`Action::is_protective`).
+//! Admitted cells always emit tokens; what they should emit under a
+//! non-`tokenize` action is decided by todo 3740.
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,11 +32,11 @@ pub(super) struct Plan {
 }
 impl Plan {
     pub(super) fn check_actual(&self, segment: &occurrence::Segment) -> Result<()> {
-        if self
-            .selected
-            .iter()
-            .any(|&id| segment.selections[id].action != Some(Action::Tokenize))
-        {
+        if self.selected.iter().any(|&id| {
+            !segment.selections[id]
+                .action
+                .is_some_and(Action::is_protective)
+        }) {
             return Err(clean_to_raw_mapping_error(
                 "residual policy preview mismatch",
             ));
@@ -60,7 +65,7 @@ pub(super) fn plan(
         .collect::<Vec<_>>();
     let mut policies = std::collections::HashMap::new();
     let mut known = |class: &PiiClass| {
-        *policies.entry(class.clone()).or_insert_with(|| {
+        policies.entry(class.clone()).or_insert_with(|| {
             #[cfg(test)]
             {
                 work.preview_queries += 1;
@@ -68,7 +73,8 @@ pub(super) fn plan(
             crate::rule::preview(&pipeline.rules, class, context, |family| {
                 pipeline.registry.family_member_classes(family)
             })
-        }) == Some(Action::Tokenize)
+        })
+        .is_some_and(Action::is_protective)
     };
     // Require the original policy as well as its real standalone fallback policy.
     let original_known = segment

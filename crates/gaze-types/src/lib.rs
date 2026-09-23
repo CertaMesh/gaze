@@ -474,9 +474,10 @@ impl LosingCandidate {
 pub struct DerivedFamilyAction {
     /// The action applied to the family token.
     pub action: Action,
-    /// The class whose resolved rule set the action. `None` when every member
-    /// resolved laxer than the family's own default rule, which then applied.
-    /// Ties between members go to the lowest class in `PiiClass` order.
+    /// The member class whose explicit rule set the action. `None` when the
+    /// family's own default rule applied: no member's own rule reached the
+    /// derived strictness. Ties between members go to the lowest class in
+    /// `PiiClass` order.
     #[serde(with = "optional_pii_class_audit_serde", default)]
     pub member_class: Option<PiiClass>,
 }

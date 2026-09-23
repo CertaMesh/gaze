@@ -1125,10 +1125,12 @@ impl Pipeline {
                 let (id, cell) = residuals.next().expect("peeked residual");
                 // The same resolver the planner previewed with: a residual cell
                 // of a family class derives its action from the members too.
+                // The cell was admitted on a protective preview; the runtime
+                // verdict must still protect, and the cell emits a token.
                 let actual = self
                     .resolve_action(&cell.class, &build_context(field_name))
                     .action;
-                if actual != Action::Tokenize {
+                if !actual.is_protective() {
                     return Err(clean_to_raw_mapping_error(
                         "residual policy preview mismatch",
                     ));
