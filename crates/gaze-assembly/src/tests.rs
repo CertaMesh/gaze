@@ -1795,7 +1795,7 @@ fn iban_preserve_default_policy() -> gaze::Policy {
 }
 
 #[test]
-fn uncovered_family_classes_flags_preserve_default_iban_leak() {
+fn uncovered_family_classes_flags_a_named_member_with_an_unnamed_family() {
     let policy = iban_preserve_default_policy();
     let rulepacks = [embedded_rulepack("core")];
     let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
@@ -1804,14 +1804,39 @@ fn uncovered_family_classes_flags_preserve_default_iban_leak() {
 
     assert!(
         uncovered.contains(&"custom:family:payment-card-or-iban".to_string()),
-        "preserve-default IBAN policy must flag the uncovered family class: {uncovered:?}"
+        "a policy naming custom:iban but not the family must be told the family class: {uncovered:?}"
     );
 }
 
 #[test]
-fn uncovered_family_classes_empty_when_default_tokenizes() {
+fn uncovered_family_classes_flags_a_named_member_even_under_a_tokenize_default() {
+    // The notice is informational (the token class differs from the class the
+    // adopter named), so a protective default does not silence it.
     let mut policy = iban_preserve_default_policy();
-    // Flip the default to a protective action: no span can leak, so nothing is flagged.
+    policy.rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::custom("iban").expect("valid custom class"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Tokenize,
+        },
+    ];
+    let rulepacks = [embedded_rulepack("core")];
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+
+    let uncovered = uncovered_collision_family_classes(&policy, &rulepacks, &active_locales);
+
+    assert!(
+        uncovered.contains(&"custom:family:payment-card-or-iban".to_string()),
+        "a named member is flagged whatever the default: {uncovered:?}"
+    );
+}
+
+#[test]
+fn uncovered_family_classes_empty_when_no_rule_names_the_family_or_a_member() {
+    let mut policy = iban_preserve_default_policy();
+    // A bare default shows no intent about the family; the notice stays quiet.
     policy.rules = vec![RuleSpec::Default {
         action: Action::Tokenize,
     }];
@@ -1822,7 +1847,7 @@ fn uncovered_family_classes_empty_when_default_tokenizes() {
 
     assert!(
         uncovered.is_empty(),
-        "a tokenizing default action leaks nothing: {uncovered:?}"
+        "a bare default rule names nothing to notice: {uncovered:?}"
     );
 }
 
@@ -1849,12 +1874,38 @@ fn uncovered_family_classes_respects_explicit_family_rule() {
 }
 
 #[test]
+fn uncovered_family_classes_flags_a_member_rule_shadowed_by_default() {
+    // Review 3746 finding 6: a member rule pasted AFTER the default rule is
+    // dead too, and the family token then falls to the default. The old notice
+    // fired for this shape; the reworked one must keep doing so.
+    let mut policy = iban_preserve_default_policy();
+    policy.rules = vec![
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+        RuleSpec::Class {
+            class: PiiClass::custom("iban").expect("valid custom class"),
+            action: Action::Tokenize,
+        },
+    ];
+    let rulepacks = [embedded_rulepack("core")];
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+
+    let uncovered = uncovered_collision_family_classes(&policy, &rulepacks, &active_locales);
+
+    assert!(
+        uncovered.contains(&"custom:family:payment-card-or-iban".to_string()),
+        "a member rule shadowed by an earlier default rule shows intent and must be flagged: {uncovered:?}"
+    );
+}
+
+#[test]
 fn uncovered_family_classes_ignores_family_rule_shadowed_by_default() {
     let mut policy = iban_preserve_default_policy();
-    // Pasting the covering rule AFTER the default rule (the natural
-    // end-of-file edit) leaves it unreachable at runtime — `action_for` is
-    // first-match-wins and `Default` matches unconditionally. The checker
-    // must keep flagging the family or the warning goes silent on a live leak.
+    // Pasting the family rule AFTER the default rule (the natural end-of-file
+    // edit) leaves it unreachable at runtime: `rule::resolve` is
+    // first-match-wins and `Default` matches unconditionally. The checker must
+    // keep flagging the family so the adopter learns the rule is dead.
     policy.rules.push(RuleSpec::Class {
         class: PiiClass::Custom("family:payment-card-or-iban".to_string()),
         action: Action::Tokenize,
@@ -1868,4 +1919,666 @@ fn uncovered_family_classes_ignores_family_rule_shadowed_by_default() {
         uncovered.contains(&"custom:family:payment-card-or-iban".to_string()),
         "a family rule shadowed by an earlier default rule is dead code and must stay flagged: {uncovered:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// todo 3746: a collision-family token derives its action from its member
+// classes' rules (strictest wins, never laxer than the family's own default)
+// unless the policy names the family class explicitly. Product path:
+// `build_pipeline` on the bundled `core` + `locale-de` packs under de-DE.
+// ---------------------------------------------------------------------------
+
+/// No IBAN cue (`Überweisung` is not one), non-Luhn BBAN: `iban.structural`
+/// fires alone, the mandatory anchor is missing, and the span is emitted as
+/// `custom:family:payment-card-or-iban`.
+const NO_CUE_IBAN: &str = "Überweisung DE89 3704 0044 0532 0130 00";
+/// No cue, Luhn-valid BBAN: `card.structural` also fires, the family policy
+/// settles the overlap for the IBAN (#619), so the span keeps `custom:iban`.
+/// Already protected on main; pinned so the fix does not disturb it.
+const NO_CUE_LUHN_BBAN_IBAN: &str = "Überweisung DE24 9635 8749 2586 6121 02";
+/// No cue and a trailing number: a Luhn-valid card run crosses the IBAN's end
+/// into the number, the collision falls to the family fallback, and on main
+/// the WHOLE IBAN shipped raw under a member-only policy (todo 3746, comment 2115).
+const TRAILING_NUMBER_IBANS: [&str; 3] = [
+    "Bitte überweisen auf FO14 5878 0013 4155 73 1234",
+    "Bitte überweisen auf GL07 3135 5673 6936 21 1234",
+    "Bitte überweisen auf SA77 3476 4281 2318 7317 7425 1234",
+];
+const FAMILY_TOKEN_MARKER: &str = ":Custom:family:payment-card-or-iban_";
+/// No cue, long IBAN: under de-DE `phone.national.de` wins a sub-run on rule
+/// priority, the unanchored IBAN candidate loses, and its remaining bytes are
+/// only covered by residual cells previewed on its standalone view, the family
+/// class.
+const PHONE_WIN_IBAN: &str = "Bitte überweisen auf AD56 7551 0585 4139 9502 9893 BIC";
+
+fn payment_family_policy(rules: &[(&str, Action)], default: Action) -> gaze::Policy {
+    let mut policy = gaze::Policy::default();
+    policy.session = SessionPolicy::default();
+    policy.locale = Some(vec![LocaleTag::DeDe]);
+    policy.rules = rules
+        .iter()
+        .map(|(class, action)| RuleSpec::Class {
+            class: PiiClass::from_policy_name(class).expect("policy class"),
+            action: *action,
+        })
+        .chain(std::iter::once(RuleSpec::Default { action: default }))
+        .collect();
+    policy
+}
+
+fn member_only_tokenize_policy() -> gaze::Policy {
+    payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Tokenize),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Preserve,
+    )
+}
+
+fn clean_payment(policy: &gaze::Policy, input: &str) -> String {
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+    clean_with_policy_and_rulepacks(policy, &rulepacks, input)
+}
+
+/// Every space-separated group of the IBAN between `prefix` and `suffix` must
+/// be gone from `clean`. Failure messages carry only the group index, never
+/// the bytes.
+fn assert_no_group_survives(clean: &str, input: &str, prefix: &str, suffix: &str) {
+    let value = input
+        .strip_prefix(prefix)
+        .and_then(|rest| rest.strip_suffix(suffix))
+        .expect("fixture prefix and suffix");
+    // The random eight-hex session prefix of a token can contain a short
+    // digit group by chance (`<2d752c57:` holds `57`); strip it first.
+    let clean = regex::Regex::new(r"[0-9a-f]{8}:")
+        .unwrap()
+        .replace_all(clean, ":");
+    for (index, group) in value.split(' ').enumerate() {
+        assert!(
+            !clean.contains(group),
+            "group {index} of the value survived in the clean text"
+        );
+    }
+}
+
+#[test]
+fn member_only_policy_tokenizes_a_no_cue_iban_family_token() {
+    let clean = clean_payment(&member_only_tokenize_policy(), NO_CUE_IBAN);
+
+    assert!(
+        clean.contains(FAMILY_TOKEN_MARKER),
+        "expected one family-level token, got: {clean}"
+    );
+    assert_no_group_survives(&clean, NO_CUE_IBAN, "Überweisung ", "");
+}
+
+#[test]
+fn member_only_policy_tokenizes_trailing_number_family_tokens() {
+    for (index, input) in TRAILING_NUMBER_IBANS.iter().enumerate() {
+        let clean = clean_payment(&member_only_tokenize_policy(), input);
+        assert!(
+            clean.contains(FAMILY_TOKEN_MARKER),
+            "fixture {index}: expected a family-level token, got: {clean}"
+        );
+        assert_no_group_survives(&clean, input, "Bitte überweisen auf ", " 1234");
+    }
+}
+
+#[test]
+fn no_cue_luhn_valid_bban_iban_keeps_its_settled_iban_token() {
+    let clean = clean_payment(&member_only_tokenize_policy(), NO_CUE_LUHN_BBAN_IBAN);
+
+    assert!(
+        clean.contains(":Custom:iban_"),
+        "the settled family verdict must keep the narrow class: {clean}"
+    );
+    assert_no_group_survives(&clean, NO_CUE_LUHN_BBAN_IBAN, "Überweisung ", "");
+}
+
+#[test]
+fn explicit_family_preserve_rule_overrides_member_derivation() {
+    let policy = payment_family_policy(
+        &[
+            ("custom:family:payment-card-or-iban", Action::Preserve),
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Tokenize),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Preserve,
+    );
+
+    assert_eq!(clean_payment(&policy, NO_CUE_IBAN), NO_CUE_IBAN);
+}
+
+#[test]
+fn all_members_preserve_under_a_preserve_default_keeps_the_family_token_raw() {
+    let policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Preserve),
+            ("custom:credit_card", Action::Preserve),
+            ("custom:phone", Action::Preserve),
+        ],
+        Action::Preserve,
+    );
+
+    assert_eq!(clean_payment(&policy, NO_CUE_IBAN), NO_CUE_IBAN);
+}
+
+#[test]
+fn all_members_preserve_under_a_tokenize_default_still_tokenizes_the_family_token() {
+    // Monotone: derivation never lands below the family's own default action.
+    let policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Preserve),
+            ("custom:credit_card", Action::Preserve),
+            ("custom:phone", Action::Preserve),
+        ],
+        Action::Tokenize,
+    );
+    let clean = clean_payment(&policy, NO_CUE_IBAN);
+
+    assert!(clean.contains(FAMILY_TOKEN_MARKER), "got: {clean}");
+    assert_no_group_survives(&clean, NO_CUE_IBAN, "Überweisung ", "");
+}
+
+/// Two policy dictionary recognizers in one tenant family with equal
+/// precedence. Dictionary detectors register as `dict/<name>` on both the
+/// recognizer and the collision side, so the family policy binds; regex
+/// policy detectors do not (solo todo: `legacy-detector` id mismatch).
+fn tenant_tie_policy(rules: Vec<RuleSpec>) -> (gaze::Policy, Context) {
+    let mut policy = gaze::Policy::default();
+    policy.session = SessionPolicy::default();
+    policy.locale = Some(vec![LocaleTag::Global]);
+    policy.rules = rules;
+    let mut dictionaries = std::collections::HashMap::new();
+    for (name, class, variant) in [
+        ("tenant.alpha", "custom:alpha_doc", "alpha"),
+        ("tenant.beta", "custom:beta_doc", "beta"),
+    ] {
+        let mut detector = gaze::DetectorSpec::default();
+        detector.kind = DetectorKind::Dictionary;
+        detector.name = name.to_string();
+        detector.dictionary_name = Some(format!("dict_{variant}"));
+        detector.case_sensitive = true;
+        detector.class = PiiClass::from_policy_name(class).expect("class");
+        detector.collision = Some(gaze::CollisionMembership::new(
+            "tenant-document",
+            variant,
+            10,
+            None,
+        ));
+        policy.detectors.push(detector);
+        dictionaries.insert(
+            format!("dict_{variant}"),
+            gaze::ContextDictionary {
+                terms: vec!["CASE-0001".to_string()],
+                case_sensitive: true,
+            },
+        );
+    }
+    let context = Context {
+        dictionaries,
+        class_map: std::collections::HashMap::new(),
+        fields: serde_json::Map::new(),
+    };
+    (policy, context)
+}
+
+fn clean_tenant_tie(policy: &gaze::Policy, context: &Context, input: &str) -> String {
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = build_pipeline(policy, context, &[], &active_locales, None).expect("pipeline");
+    let dictionaries = gaze::dictionary_bundle_from_context(context);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    clean_text(
+        pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                active_locales.as_slice(),
+                &dictionaries,
+            )
+            .expect("redact"),
+    )
+}
+
+#[test]
+fn precedence_tie_family_token_derives_its_action_from_member_rules() {
+    let (policy, context) = tenant_tie_policy(vec![
+        RuleSpec::Class {
+            class: PiiClass::from_policy_name("custom:alpha_doc").expect("class"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Class {
+            class: PiiClass::from_policy_name("custom:beta_doc").expect("class"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ]);
+    let clean = clean_tenant_tie(&policy, &context, "ticket CASE-0001 open");
+
+    assert!(
+        clean.contains(":Custom:family:tenant-document_"),
+        "equal precedence must emit the family token: {clean}"
+    );
+    assert!(!clean.contains("CASE-0001"), "tie token leaked: {clean}");
+}
+
+#[test]
+fn precedence_tie_family_token_honours_an_explicit_family_rule() {
+    let (policy, context) = tenant_tie_policy(vec![
+        RuleSpec::Class {
+            class: PiiClass::family("tenant-document"),
+            action: Action::Preserve,
+        },
+        RuleSpec::Class {
+            class: PiiClass::from_policy_name("custom:alpha_doc").expect("class"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Class {
+            class: PiiClass::from_policy_name("custom:beta_doc").expect("class"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ]);
+
+    assert_eq!(
+        clean_tenant_tie(&policy, &context, "ticket CASE-0001 open"),
+        "ticket CASE-0001 open"
+    );
+}
+
+/// Ruling 3746 #1 (c): the derived action and the member it came from are
+/// visible on the family token's audit row.
+#[test]
+fn derived_family_action_is_recorded_on_the_audit_row() {
+    let logger = MemoryLogger::default();
+    let policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Redact),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Preserve,
+    );
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline =
+        build_pipeline_builder(&policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("builder")
+            .redaction_logger(logger.clone())
+            .build()
+            .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(
+        pipeline
+            .redact(&session, RawDocument::Text(NO_CUE_IBAN.to_string()))
+            .expect("redact"),
+    );
+
+    // Redact outranks Tokenize: the card member's rule wins the ambiguous span.
+    assert_eq!(clean, "Überweisung [REDACTED]");
+    let row = logger
+        .entries()
+        .into_iter()
+        .find(|entry| {
+            entry.class == PiiClass::family("payment-card-or-iban") && !entry.conflict_loser
+        })
+        .expect("family token row");
+    assert_eq!(row.action, Action::Redact);
+    assert_eq!(row.decided_by, ConflictTier::AnchoredContext);
+    let derived = row
+        .ambiguity_record
+        .as_ref()
+        .and_then(|record| record.derived_action.as_ref())
+        .expect("derived action on the ambiguity record");
+    assert_eq!(derived.action, Action::Redact);
+    assert_eq!(
+        derived.member_class,
+        Some(PiiClass::from_policy_name("custom:credit_card").expect("class"))
+    );
+}
+
+/// An explicit family rule leaves no derivation trace.
+#[test]
+fn explicit_family_rule_leaves_no_derived_action_on_the_audit_row() {
+    let logger = MemoryLogger::default();
+    let policy = payment_family_policy(
+        &[
+            ("custom:family:payment-card-or-iban", Action::Tokenize),
+            ("custom:iban", Action::Redact),
+        ],
+        Action::Preserve,
+    );
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline =
+        build_pipeline_builder(&policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("builder")
+            .redaction_logger(logger.clone())
+            .build()
+            .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(
+        pipeline
+            .redact(&session, RawDocument::Text(NO_CUE_IBAN.to_string()))
+            .expect("redact"),
+    );
+
+    assert!(clean.contains(FAMILY_TOKEN_MARKER), "got: {clean}");
+    let row = logger
+        .entries()
+        .into_iter()
+        .find(|entry| {
+            entry.class == PiiClass::family("payment-card-or-iban") && !entry.conflict_loser
+        })
+        .expect("family token row");
+    assert_eq!(row.action, Action::Tokenize);
+    assert_eq!(
+        row.ambiguity_record
+            .as_ref()
+            .and_then(|record| record.derived_action.as_ref()),
+        None
+    );
+}
+
+/// Length of the longest byte run shared by `a` and `b`.
+fn longest_common_run(a: &str, b: &str) -> usize {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let mut previous = vec![0usize; b.len() + 1];
+    let mut best = 0;
+    for &x in a {
+        let mut current = vec![0usize; b.len() + 1];
+        for (j, &y) in b.iter().enumerate() {
+            if x == y {
+                current[j + 1] = previous[j] + 1;
+                best = best.max(current[j + 1]);
+            }
+        }
+        previous = current;
+    }
+    best
+}
+
+/// Ruling 3746 #1 (a) and (b): every protective action executes on a family
+/// token, and the number of original bytes that reach the output is measured,
+/// not argued. The session hex is stripped from the replacement first so a
+/// chance digit overlap with the random prefix cannot skew the measurement.
+/// The table this prints is copied into the REPORT and the policy reference.
+#[test]
+fn protective_actions_execute_on_family_tokens_and_leak_no_original_byte() {
+    let hex = regex::Regex::new(r"[0-9a-f]{8}").unwrap();
+    let fixtures = [
+        (NO_CUE_IBAN, "Überweisung ", ""),
+        (TRAILING_NUMBER_IBANS[0], "Bitte überweisen auf ", " 1234"),
+    ];
+    for (fixture, (input, prefix, suffix)) in fixtures.iter().enumerate() {
+        let value = input
+            .strip_prefix(prefix)
+            .and_then(|rest| rest.strip_suffix(suffix))
+            .expect("fixture shape");
+        for action in [
+            Action::Redact,
+            Action::Tokenize,
+            Action::Generalize,
+            Action::FormatPreserve,
+        ] {
+            let policy = payment_family_policy(
+                &[
+                    ("custom:iban", action),
+                    ("custom:credit_card", Action::Preserve),
+                    ("custom:phone", Action::Preserve),
+                ],
+                Action::Preserve,
+            );
+            let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+            let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+            let pipeline =
+                build_pipeline(&policy, &empty_context(), &rulepacks, &active_locales, None)
+                    .expect("pipeline");
+            let session = Session::new(Scope::Ephemeral).expect("session");
+            let clean = clean_text(
+                pipeline
+                    .redact(&session, RawDocument::Text(input.to_string()))
+                    .unwrap_or_else(|err| {
+                        panic!("{action:?} must execute on a family token: {err:?}")
+                    }),
+            );
+            let replacement = clean
+                .strip_prefix(prefix)
+                .and_then(|rest| rest.strip_suffix(suffix))
+                .unwrap_or_else(|| panic!("{action:?} fixture {fixture}: output shape changed"));
+            let measured = hex.replace_all(replacement, "");
+            let run = longest_common_run(value, &measured);
+            println!(
+                "family-token action table | fixture {fixture} | {} | original bytes surviving (longest run) {run} | restorable {}",
+                action.as_str(),
+                session.restore(replacement).is_some()
+            );
+            assert!(
+                run < 4,
+                "{action:?} fixture {fixture}: a run of {run} original bytes survived"
+            );
+            let restorable = session.restore(replacement).is_some();
+            assert_eq!(
+                restorable,
+                matches!(action, Action::Tokenize | Action::FormatPreserve),
+                "{action:?} restorability"
+            );
+        }
+    }
+}
+
+/// Under de-DE, `phone.national.de` wins a sub-run of a long no-cue IBAN on rule
+/// priority and the unanchored IBAN candidate loses. Residual coverage then
+/// previews the loser's standalone view, the family class, and admits the
+/// evidence because the family action derives to `tokenize`; the residual
+/// cell's own action lookup must derive the same way, or the whole document
+/// fails closed with `residual policy preview mismatch` (found by the
+/// policy-matrix enumeration, 976 documents).
+#[test]
+fn unanchored_iban_evidence_beside_a_phone_win_is_covered_by_family_residual_cells() {
+    let mut policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Tokenize),
+            ("custom:phone", Action::Tokenize),
+            ("custom:postal_code", Action::Tokenize),
+        ],
+        Action::Preserve,
+    );
+    policy.locale = Some(vec![LocaleTag::DeDe]);
+    let input = PHONE_WIN_IBAN;
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let logger = MemoryLogger::default();
+    let pipeline =
+        build_pipeline_builder(&policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("builder")
+            .redaction_logger(logger.clone())
+            .build()
+            .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+
+    let clean = clean_text(
+        pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                active_locales.as_slice(),
+                &gaze::DictionaryBundle::default(),
+            )
+            .expect("the residual cell must resolve like its preview"),
+    );
+
+    assert!(clean.contains(":Custom:phone_"), "phone win kept: {clean}");
+    assert!(
+        clean.contains(FAMILY_TOKEN_MARKER),
+        "the losing IBAN's evidence is covered by family residual tokens: {clean}"
+    );
+    assert_no_group_survives(&clean, input, "Bitte überweisen auf ", " BIC");
+    assert!(
+        logger
+            .entries()
+            .iter()
+            .any(
+                |entry| entry.recognizer_id.as_deref() == Some("phone.national.de")
+                    && !entry.conflict_loser
+            ),
+        "fixture must exercise the phone win, or it pins nothing"
+    );
+}
+
+/// Product path (`build_pipeline_builder`, core + locale-de) with the redaction
+/// log attached, so a fixture can prove it exercised the sub-run win it pins.
+fn clean_payment_logged(policy: &gaze::Policy, input: &str) -> (String, MemoryLogger) {
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let logger = MemoryLogger::default();
+    let pipeline =
+        build_pipeline_builder(policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("builder")
+            .redaction_logger(logger.clone())
+            .build()
+            .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(
+        pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                active_locales.as_slice(),
+                &gaze::DictionaryBundle::default(),
+            )
+            .expect("a residual cell must resolve like its preview"),
+    );
+    (clean, logger)
+}
+
+/// The phone-win document must leave the process with the phone token, family
+/// residual tokens over the losing IBAN's bytes, and no IBAN group readable.
+fn assert_phone_win_iban_fully_covered(clean: &str, logger: &MemoryLogger) {
+    assert!(clean.contains(":Custom:phone_"), "phone win kept: {clean}");
+    assert!(
+        clean.contains(FAMILY_TOKEN_MARKER),
+        "the losing IBAN's evidence is covered by family residual tokens: {clean}"
+    );
+    assert_no_group_survives(clean, PHONE_WIN_IBAN, "Bitte überweisen auf ", " BIC");
+    assert!(
+        logger
+            .entries()
+            .iter()
+            .any(
+                |entry| entry.recognizer_id.as_deref() == Some("phone.national.de")
+                    && !entry.conflict_loser
+            ),
+        "fixture must exercise the phone win, or it pins nothing"
+    );
+}
+
+/// Review 3746 finding 7: one member (`custom:credit_card`) set to `redact`
+/// makes the losing IBAN's standalone view, the family class, derive `redact`.
+/// Residual coverage used to admit a loser only when its previewed action was
+/// exactly `tokenize`, so raising the family action silently dropped every
+/// residual cell and the IBAN bytes beside the phone win shipped raw (872
+/// documents in the reviewer's 192-arm matrix, `AD56 7551` and `9893` raw).
+/// Admission is "the resolved action protects the span"; residual cells keep
+/// emitting tokens.
+#[test]
+fn a_redacting_member_keeps_the_losing_iban_evidence_covered() {
+    let policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Redact),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Tokenize,
+    );
+
+    let (clean, logger) = clean_payment_logged(&policy, PHONE_WIN_IBAN);
+
+    assert_phone_win_iban_fully_covered(&clean, &logger);
+}
+
+/// Review 3746 finding 4: under an active protection trace (the MCP and proxy
+/// chokepoints) only `tokenize` and `preserve` are executable, so a family
+/// token that derives `redact` fails closed with `UnsupportedActionVariant`.
+/// That is the same failure an explicit `redact` rule on a member class
+/// already produces on main; the derivation adds no new failure class, it
+/// only makes the existing one reachable from a member rule.
+#[test]
+fn a_derived_redact_fails_under_a_protection_trace_like_an_explicit_one() {
+    let cases = [
+        (
+            "explicit member rule, settled custom:iban token",
+            payment_family_policy(
+                &[
+                    ("custom:iban", Action::Redact),
+                    ("custom:credit_card", Action::Tokenize),
+                    ("custom:phone", Action::Tokenize),
+                ],
+                Action::Preserve,
+            ),
+            NO_CUE_LUHN_BBAN_IBAN,
+        ),
+        (
+            "derived from a redacting member, family token",
+            payment_family_policy(
+                &[
+                    ("custom:iban", Action::Tokenize),
+                    ("custom:credit_card", Action::Redact),
+                    ("custom:phone", Action::Tokenize),
+                ],
+                Action::Preserve,
+            ),
+            NO_CUE_IBAN,
+        ),
+    ];
+    for (case, policy, input) in cases {
+        let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+        let pipeline = build_pipeline(&policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        let err = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                input,
+                active_locales.as_slice(),
+                &gaze::DictionaryBundle::default(),
+                gaze::SafetyNetPolicy::default(),
+            )
+            .err()
+            .unwrap_or_else(|| panic!("{case}: a redact under a trace must fail closed"));
+
+        assert!(
+            matches!(err, gaze::Error::UnsupportedActionVariant),
+            "{case}: {err:?}"
+        );
+    }
+}
+
+/// The pre-existing hole behind finding 7: an explicit `default = redact`
+/// reached the same `tokenize`-only gate on main, where the family class took
+/// the default, so the losing IBAN's bytes shipped raw there too.
+#[test]
+fn a_redact_default_keeps_the_losing_iban_evidence_covered() {
+    let policy = payment_family_policy(
+        &[
+            ("custom:iban", Action::Tokenize),
+            ("custom:credit_card", Action::Tokenize),
+            ("custom:phone", Action::Tokenize),
+        ],
+        Action::Redact,
+    );
+
+    let (clean, logger) = clean_payment_logged(&policy, PHONE_WIN_IBAN);
+
+    assert_phone_win_iban_fully_covered(&clean, &logger);
 }

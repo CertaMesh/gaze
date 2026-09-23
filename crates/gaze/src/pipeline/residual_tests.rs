@@ -182,8 +182,12 @@ fn pair_and_triple_use_existing_traced_live_staged_and_strict_calls() {
     }
 }
 
+/// Admission is "every action in the component protects its span", not
+/// "every action is `tokenize`": a stricter action on the winner or on the
+/// loser's own class must not drop coverage of the loser's remaining bytes
+/// (review 3746 finding 7). Admitted residual cells always emit tokens.
 #[test]
-fn all_twenty_five_action_pairs_admit_only_both_tokenize() {
+fn all_twenty_five_action_pairs_admit_only_both_protective() {
     let actions = [
         Action::Tokenize,
         Action::Preserve,
@@ -230,24 +234,35 @@ fn all_twenty_five_action_pairs_admit_only_both_tokenize() {
                 &[crate::LocaleTag::Global],
             )
             .unwrap();
-            assert_eq!(
-                plan.cells.len(),
-                usize::from(a == Action::Tokenize && b == Action::Tokenize),
-                "{a:?}/{b:?}"
-            );
-            if a != Action::Tokenize || b != Action::Tokenize {
-                let session = Session::new(crate::Scope::Ephemeral).unwrap();
-                let new = clean(&p, &session, RAW);
-                p.residual_coverage = false;
-                let old = clean(&p, &session, RAW);
-                match (new, old) {
-                    (Ok(new), Ok(old)) => {
-                        assert_eq!(new.text, old.text);
-                        assert_eq!(new.manifest, old.manifest);
-                    }
-                    (Err(new), Err(old)) => assert_eq!(new.to_string(), old.to_string()),
-                    _ => panic!("ineligible behavior drift"),
+            let admitted = a.is_protective() && b.is_protective();
+            assert_eq!(plan.cells.len(), usize::from(admitted), "{a:?}/{b:?}");
+            let session = Session::new(crate::Scope::Ephemeral).unwrap();
+            let new = clean(&p, &session, RAW);
+            p.residual_coverage = false;
+            let old = clean(&p, &session, RAW);
+            match (new, old) {
+                (Ok(new), Ok(old)) if admitted => {
+                    // The winner keeps its own action; the loser's remaining
+                    // bytes (` right"`, 15..21) leave as a token, never raw.
+                    assert!(!new.text.contains("right"), "{a:?}/{b:?}: {}", new.text);
+                    assert!(old.text.contains("right"), "{a:?}/{b:?}: {}", old.text);
+                    assert_eq!(
+                        new.manifest
+                            .segment()
+                            .residuals
+                            .iter()
+                            .map(|c| c.raw.clone())
+                            .collect::<Vec<_>>(),
+                        vec![15..21],
+                        "{a:?}/{b:?}"
+                    );
                 }
+                (Ok(new), Ok(old)) => {
+                    assert_eq!(new.text, old.text, "{a:?}/{b:?}");
+                    assert_eq!(new.manifest, old.manifest, "{a:?}/{b:?}");
+                }
+                (Err(new), Err(old)) => assert_eq!(new.to_string(), old.to_string()),
+                _ => panic!("ineligible behavior drift {a:?}/{b:?}"),
             }
         }
     }
@@ -302,7 +317,9 @@ fn unknown_order_wrappers_nonmatches_and_clone_preserve_runtime_calls() {
             _ => None,
         };
         assert_eq!(
-            preview(&rules, &PiiClass::Name, &RuleContext::default()),
+            preview(&rules, &PiiClass::Name, &RuleContext::default(), |_| {
+                Vec::new()
+            }),
             expected
         );
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
@@ -351,7 +368,7 @@ fn builtin_preview_matches_runtime_for_actual_class_and_field_context() {
                     RuleEntry::new(DefaultRule::new(Action::Tokenize)),
                 ];
                 assert_eq!(
-                    preview(&rules, &class, &context),
+                    preview(&rules, &class, &context, |_| Vec::new()),
                     Some(
                         rules
                             .iter()
@@ -363,7 +380,8 @@ fn builtin_preview_matches_runtime_for_actual_class_and_field_context() {
         }
     }
     assert_eq!(
-        preview(&[], &PiiClass::Name, &RuleContext::default()),
+        preview(&[], &PiiClass::Name, &RuleContext::default(), |_| Vec::new(
+        )),
         Some(Action::Preserve)
     );
 }
@@ -1114,7 +1132,9 @@ fn generic_production_registration_keeps_builtins_previewable_and_covering() {
     ] {
         for field_name in [None, Some("password"), Some("other")] {
             assert_eq!(
-                preview(&p.rules, &class, &build_context(field_name)),
+                preview(&p.rules, &class, &build_context(field_name), |family| {
+                    p.registry.family_member_classes(family)
+                }),
                 Some(Action::Tokenize),
                 "{class:?} with field {field_name:?} lost static recognizability \
                  across the generic production registration hop"
