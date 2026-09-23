@@ -222,8 +222,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[policy.rulepacks]` table with `paths` but no `bundled` key silently selected
   no bundled packs. The same happened with policy-less `gaze clean
   --rulepack-path`. Omission now means `["core"]` on both surfaces. Explicit
-  `bundled = []` and `--rulepack-bundled=none` keep custom-only behavior and
-  print a one-line stderr notice when a custom pack is loaded without core.
+  `bundled = []` and `--rulepack-bundled=none` keep custom-only behavior. A
+  successful build prints a one-line stderr notice whenever the resolved
+  bundled selection omits `core` and its `core-extended` alias, even if another
+  bundled pack is selected without a custom path.
 - **One entity, one token: containment precedence** (solo todo #3740,
   concept v2 approved 2026-09-23; breaking in 0.x). When one candidate
   wholly contains a candidate of a different class, the container wins the
