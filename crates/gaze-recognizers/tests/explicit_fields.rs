@@ -543,6 +543,11 @@ fn same_span_email_winner_selects_email_policy_instead_of_password_policy() {
             action: Action::Tokenize,
         },
     ];
+    // The email still wins the same-span overlap and selects the email
+    // policy (`preserve`), but the bytes are also a password-field value the
+    // policy tokenizes: protection beats preservation, so the value leaves as
+    // one `custom:password` residual fragment inside the preserved winner
+    // (todo #3740). Before that rule the preserved email shipped the value raw.
     let pipeline = assembled(reverse_rules, &[]);
     let session = Session::new(Scope::Ephemeral).unwrap();
     let (clean, spans, _) = pipeline
@@ -552,11 +557,17 @@ fn same_span_email_winner_selects_email_policy_instead_of_password_policy() {
             &[LocaleTag::Global],
         )
         .unwrap();
-    assert!(spans.is_empty());
+    assert_eq!(spans.len(), 1, "{spans:?}");
+    assert!(spans[0].origin.is_residual_fragment());
+    assert_eq!(spans[0].class, PiiClass::custom("password").unwrap());
+    assert_eq!(&raw[spans[0].raw_span.clone()], "alice@example.invalid");
     let gaze::CleanDocument::Text(clean) = clean else {
         panic!("text")
     };
-    assert_eq!(clean, raw);
+    assert!(clean.starts_with("password: <"), "{clean}");
+    assert!(clean.contains(":Custom:password_"), "{clean}");
+    assert!(!clean.contains("alice"), "{clean}");
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
 }
 
 #[derive(Clone)]

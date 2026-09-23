@@ -227,8 +227,15 @@ fn a_standalone_all_hex_path_still_tokenizes() {
 
 #[test]
 fn shapes_the_base_rule_already_left_alone_are_unchanged() {
-    // Not a regression from todo 3710: the URL recognizer owns the first, and a leading `:` was
-    // already outside the guard class in the second.
-    assert_untouched("http://[::1]:8080/");
+    // Not a regression from todo 3710: a leading `:` was already outside the guard class.
     assert_untouched("Address:2001:db8::1");
+}
+
+/// The URL recognizer owns `http://[::1]:8080/` and the policy preserves URLs by default, but
+/// the bracketed literal is an address the policy tokenizes: protection beats preservation, so
+/// the literal leaves as an `ip_address` fragment inside the otherwise raw URL (todo #3740).
+/// The rule fired on `::1` before as well; the preserved URL used to shield it.
+#[test]
+fn an_address_inside_a_preserved_url_is_still_protected() {
+    assert_tokenized("http://[::1]:8080/", "::1", &["http://[", "]:8080/"]);
 }
