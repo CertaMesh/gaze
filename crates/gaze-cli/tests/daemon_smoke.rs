@@ -1361,6 +1361,22 @@ fn refresh_session_after_break(guard: &mut ChildGuard, session_id: &str) {
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
 }
 
+fn assert_two_request_responses(lines: &[String], session_id: &str) {
+    assert_eq!(lines.len(), 2, "one response per request: {lines:?}");
+    let first: Value = serde_json::from_str(&lines[0]).unwrap();
+    assert_eq!(first["session_id"], session_id);
+    assert!(
+        first.get("clean_text").is_some(),
+        "first request must be clean"
+    );
+    let second: Value = serde_json::from_str(&lines[1]).unwrap();
+    assert_eq!(second["session_id"], session_id);
+    assert!(
+        second.get("clean_text").is_some() || second.get("error").is_some(),
+        "second request must have a typed response"
+    );
+}
+
 /// Spawns `gaze daemon` and returns the child plus background stdout/stderr
 /// reader threads. The threads collect all lines so the test can keep stdin
 /// open (to let the session age out for idle eviction) and close it when
@@ -1500,11 +1516,7 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
         "raw caller session ID must not appear in stderr: {stderr_text}"
     );
     // Eviction emits no JSONL response.
-    assert_eq!(
-        stdout_lines.len(),
-        2,
-        "stdout should contain exactly the two request responses, got: {stdout_lines:?}"
-    );
+    assert_two_request_responses(&stdout_lines, t1_caller_id);
     // The eviction audit row is still lost (log_eviction cannot fail-closed),
     // but the loss is now detectable via stderr.
     assert_eq!(
@@ -1762,7 +1774,7 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
     let stderr_lines = stderr_thread.join().unwrap();
 
     assert!(status.success());
-    assert_eq!(stdout_lines.len(), 2, "one response per request only");
+    assert_two_request_responses(&stdout_lines, hostile);
 
     let stderr_text = stderr_lines.join("\n");
     assert!(
@@ -1857,6 +1869,13 @@ fn daemon_eviction_without_audit_db_produces_no_error() {
         2,
         "stdout should have exactly two clean responses"
     );
+    for line in stdout_lines {
+        let response: Value = serde_json::from_str(&line).unwrap();
+        assert!(
+            response.get("clean_text").is_some(),
+            "request failed: {line}"
+        );
+    }
 }
 
 /// T6 — Request-path audit failure surfaces on stdout (not stderr).
