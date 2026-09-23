@@ -41,7 +41,7 @@ fn ip_class() -> PiiClass {
 
 /// The core bundle through the real activation path, with only `custom:ip_address` tokenized so
 /// any change in the output is this rule's doing.
-fn pipeline() -> Pipeline {
+fn pipeline_for_locales(locales: &[LocaleTag]) -> Pipeline {
     let rulepack = Rulepack::load(RulepackSource::Embedded(
         embedded("core").expect("core rulepack"),
     ))
@@ -58,9 +58,13 @@ fn pipeline() -> Pipeline {
     ];
     policy.rulepacks.bundled = vec!["core".to_string()];
     policy.rulepacks.auto_activate_locale_gated = false;
-    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&LOCALES));
+    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(locales));
     gaze_assembly::build_pipeline(&policy, &empty_context(), &[rulepack], &chain, None)
         .expect("pipeline")
+}
+
+fn pipeline() -> Pipeline {
+    pipeline_for_locales(&LOCALES)
 }
 
 fn clean(text: &str) -> String {
@@ -80,6 +84,7 @@ fn clean(text: &str) -> String {
 }
 
 const LOCALES: [LocaleTag; 1] = [LocaleTag::EnUs];
+const DE_LOCALES: [LocaleTag; 1] = [LocaleTag::DeDe];
 
 /// Asserts the input survives byte for byte: nothing in it was taken for an address.
 fn assert_untouched(text: &str) {
@@ -225,6 +230,47 @@ fn glued_cue_addresses_are_protected() {
         ("{\"ip\":\"2001:db8::1\"}", "2001:db8::1", "{\"ip\":\""),
     ] {
         assert_tokenized(text, address, &[context]);
+    }
+}
+
+#[test]
+fn glued_cue_manifest_spans_cover_only_the_address() {
+    for locales in [&LOCALES[..], &DE_LOCALES[..]] {
+        let pipeline = pipeline_for_locales(locales);
+        for (prefix, address, suffix) in [
+            ("Address:", "2001:db8::1", ""),
+            ("address:", "2001:db8::1", ""),
+            ("ADDRESS:", "2001:db8::1", ""),
+            ("IP:", "fe80::1", ""),
+            ("ipv6:", "2001:db8::a", ""),
+            ("ip=", "2001:db8::1", ""),
+            ("host:", "2001:db8::1", ""),
+            ("addr:", "2001:db8::1", ""),
+            ("Adresse:", "2001:db8::1", ""),
+            ("{\"ip\":\"", "2001:db8::1", "\"}"),
+        ] {
+            let raw = format!("{prefix}{address}{suffix}");
+            let session = Session::new(Scope::Ephemeral).expect("session");
+            let (clean, manifest, _) = pipeline
+                .clean_with_safety_net_detect_context(
+                    &session,
+                    RawDocument::Text(raw),
+                    locales,
+                    &DictionaryBundle::default(),
+                )
+                .expect("clean");
+            let CleanDocument::Text(clean) = clean else {
+                panic!("expected text");
+            };
+            assert_eq!(manifest.len(), 1, "one address token expected");
+            let span = &manifest[0];
+            assert_eq!(span.class, ip_class());
+            assert_eq!(span.raw_span, prefix.len()..prefix.len() + address.len());
+            assert_eq!(span.clean_span.start, prefix.len());
+            let token = &clean[span.clean_span.clone()];
+            assert_eq!(clean, format!("{prefix}{token}{suffix}"));
+            assert_eq!(session.restore(token).as_deref(), Some(address));
+        }
     }
 }
 

@@ -519,7 +519,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **IPv6 after a glued address cue no longer ships raw.** The `core` `ip.v6`
   recognizer now accepts a fully parsed address immediately after `Address:`,
-  `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:`. The existing word guard remains
+  `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` (case-insensitively at every
+  locale). The existing word guard remains
   in force, so Rust and C++ `::` paths, including `Address::new`, stay untouched.
   The identifier-glued form `_2001:db8::1` remains outside this cue rule
   (solo todo #3762).
