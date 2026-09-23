@@ -2960,6 +2960,80 @@ fn policy_regex_recognizers_register_under_their_policy_name() {
     );
 }
 
+/// A policy `kind = "regex"` recognizer emits at the confidence the `Detector`
+/// wrapper hard-coded (1.0), not `RegexDetector::with_source`'s 0.70 default.
+/// Class priority and rule priority tie here (same class, both rules at
+/// priority 0) and the two spans overlap without being identical, so the score
+/// rung decides ahead of span length, and dropping
+/// `with_base_score` in `register_policy_detectors` would silently hand it to
+/// the rulepack rule. Pins that behaviour-preserver: the policy rule must win,
+/// and it must win *on score*.
+#[test]
+fn policy_regex_rule_outranks_a_same_class_rulepack_rule_on_score() {
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "score-rival"
+rulepack_version = "0.6.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "pack.shape"
+class = "custom:shape"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = 'ACME-[0-9]{4} END'
+
+[recognizers.scoring]
+base = 0.70
+priority = 0
+"#,
+    )
+    .expect("rulepack");
+    let mut policy = gaze::Policy::default();
+    policy.session = SessionPolicy::default();
+    policy.locale = Some(vec![LocaleTag::Global]);
+    policy.rules = vec![
+        class_rule("custom:shape", Action::Tokenize),
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ];
+    let mut detector = gaze::DetectorSpec::default();
+    detector.kind = DetectorKind::Regex;
+    detector.name = "tenant.shape".to_string();
+    detector.pattern = Some("ACME-[0-9]{4}".to_string());
+    detector.class = PiiClass::from_policy_name("custom:shape").expect("class");
+    policy.detectors.push(detector);
+
+    let (clean, logger) = clean_regex_family(&policy, &[rulepack], "ref ACME-1234 END");
+
+    assert!(!clean.contains("ACME-1234"), "leaked: {clean}");
+    let winner = logger
+        .entries()
+        .into_iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner row");
+    assert_eq!(
+        winner.recognizer_id.as_deref(),
+        Some("tenant.shape"),
+        "the policy rule's score must outrank the rulepack rule's 0.70"
+    );
+    assert_eq!(
+        winner.decided_by,
+        ConflictTier::Score,
+        "the score rung decides it; any other tier means the scores tied"
+    );
+    let loser = loser_row(&logger, "pack.shape");
+    assert_eq!(
+        loser.class,
+        PiiClass::from_policy_name("custom:shape").expect("class")
+    );
+}
+
 /// Member classes of every anchored family, from the built registry.
 fn registry_anchored_family_members(
     pipeline: &gaze::Pipeline,
