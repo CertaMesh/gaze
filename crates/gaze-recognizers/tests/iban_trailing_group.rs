@@ -105,6 +105,40 @@ fn pipeline_for(locales: &[LocaleTag]) -> Pipeline {
         .expect("pipeline")
 }
 
+/// The same bundle with `custom:phone` tokenized too, for the shape where `phone.national.de`
+/// claims a sub-run of the IBAN: with phone preserved, a preserve winner would leave those
+/// bytes raw and hide what the fixture is about.
+fn pipeline_tokenizing_phone() -> Pipeline {
+    let rulepacks: Vec<Rulepack> = ["core", "locale-de", "locale-en"]
+        .into_iter()
+        .map(|name| {
+            Rulepack::load(RulepackSource::Embedded(
+                embedded(name).unwrap_or_else(|| panic!("{name} rulepack")),
+            ))
+            .unwrap_or_else(|error| panic!("{name} loads: {error}"))
+        })
+        .collect();
+    let mut policy = gaze::Policy::default();
+    policy.rules = ["iban", "credit_card", "phone"]
+        .into_iter()
+        .map(|class| RuleSpec::Class {
+            class: custom(class),
+            action: Action::Tokenize,
+        })
+        .chain(std::iter::once(RuleSpec::Default {
+            action: Action::Preserve,
+        }))
+        .collect();
+    policy.rulepacks.bundled = vec![
+        "core".to_string(),
+        "locale-de".to_string(),
+        "locale-en".to_string(),
+    ];
+    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(LOCALES));
+    gaze_assembly::build_pipeline(&policy, &empty_context(), &rulepacks, &chain, None)
+        .expect("pipeline")
+}
+
 /// One pipeline for the whole file. Building it per document dominated the runtime of the
 /// every-country fixture, which cleans several thousand documents.
 fn shared_pipeline() -> &'static Pipeline {
@@ -151,20 +185,57 @@ fn clean_without_tokens(text: &str) -> String {
 fn assert_iban_tokenized(prefix: &str, iban: &str, trailer: &str) {
     let text = format!("{prefix}{iban}{trailer}");
     let cleaned = clean(&text);
+    let fixture = fixture_label(prefix, iban, trailer);
     assert!(
         !cleaned.contains(":Custom:credit_card_"),
-        "IBAN {iban:?} must not be claimed by card.structural: {cleaned:?}"
+        "{fixture} must not be claimed by card.structural: {}",
+        shape_of(&cleaned)
     );
     assert_eq!(
         cleaned.matches(":Custom:iban_").count(),
         1,
-        "expected exactly one custom:iban token for {iban:?} in {cleaned:?}"
+        "expected exactly one custom:iban token for {fixture} in {}",
+        shape_of(&cleaned)
     );
     assert_eq!(
         clean_without_tokens(&text),
         format!("{prefix}{TOKEN_BLANK}{trailer}"),
-        "the IBAN token must cover the IBAN exactly, nothing more and nothing less: {cleaned:?}"
+        "the IBAN token must cover the IBAN exactly, nothing more and nothing less: {fixture} -> {}",
+        shape_of(&cleaned)
     );
+}
+
+/// Names a fixture without printing its IBAN: country, registry length, spaced or compact, and
+/// the raw prefix and trailer (which carry no PII).
+///
+/// The values are synthetic and reproducible from the seed, so a failure needs only this to be
+/// re-run. The assert messages print nothing else about the value: a panic message is test
+/// output that gets pasted into issues and CI logs, and the same rule that keeps real IBANs
+/// out of logs is applied to these by CodeQL's cleartext-logging query.
+fn fixture_label(prefix: &str, iban: &str, trailer: &str) -> String {
+    let compact: String = iban.chars().filter(|ch| !ch.is_whitespace()).collect();
+    let shape = if compact.len() == iban.len() {
+        "compact"
+    } else {
+        "spaced"
+    };
+    format!(
+        "{}/len {}/{shape}/prefix {prefix:?}/trailer {trailer:?}",
+        &compact[..2],
+        compact.len()
+    )
+}
+
+/// The cleaned text with every token replaced by `<token>` and every run of five or more
+/// alphanumerics replaced by `<alnum×N>`, so a failing assert shows structure but no value.
+fn shape_of(cleaned: &str) -> String {
+    let blanked = gaze::token_shape::pattern().replace_all(cleaned, "<token>");
+    regex::Regex::new(r"[A-Za-z0-9]{5,}")
+        .expect("alnum run regex")
+        .replace_all(&blanked, |caps: &regex::Captures<'_>| {
+            format!("<alnum×{}>", caps[0].len())
+        })
+        .into_owned()
 }
 
 // ============================================================================ IBAN generation
@@ -391,7 +462,7 @@ fn every_registry_country_tokenizes_whole_with_and_without_a_trailing_label() {
             assert_eq!(
                 compact.len(),
                 iban_registry_length(&country).expect("registry country"),
-                "generated {compact} has the wrong length"
+                "generated {country} seed {seed} IBAN has the wrong length"
             );
             for shape in [spaced(&compact), compact.clone()] {
                 assert_iban_tokenized("IBAN ", &shape, "");
@@ -417,7 +488,8 @@ fn non_registry_country_codes_never_tokenize() {
         let cleaned = clean(&text);
         assert!(
             !cleaned.contains(":Custom:iban_"),
-            "{code} is not a registry country and must not produce an IBAN token: {cleaned:?}"
+            "{code} is not a registry country and must not produce an IBAN token: {}",
+            shape_of(&cleaned)
         );
     }
 }
@@ -513,5 +585,199 @@ fn iban_pattern_has_no_open_ended_quantifier() {
         !ranged.is_match(pattern),
         "iban.structural must use exact repetition counts only, found {:?} in {pattern}",
         ranged.find(pattern).map(|m| m.as_str())
+    );
+}
+
+// ============================================================================ glued boundary (#3756)
+
+/// A label glued directly to a compact IBAN stays outside the token; the IBAN tokenizes whole.
+///
+/// Solo todo #3756. The pattern used to end in `\b`, so a candidate immediately followed by a
+/// letter or digit was never a candidate at all, and `IBAN AT611904300234573201BIC` shipped raw
+/// with `detections: 0`, an empty leak report and a success exit, in every release since
+/// v0.4.3-rc.1. The shape is ordinary machine output and dense footers
+/// (`IBAN:<value>BIC:<value>`). Rust `regex` has no lookahead, so the trailing boundary now lives
+/// in code: `gaze_types::word_run_extends_identifier` accepts a validated registry-length
+/// candidate when the word run after it is empty or letters only (a glued label or word), and
+/// rejects it when the run holds a digit or an underscore (it could be more identifier).
+#[test]
+fn label_glued_to_a_compact_iban_stays_outside_the_token() {
+    // The shipped repros, verbatim.
+    assert_iban_tokenized("IBAN ", "AT611904300234573201", "BIC");
+    assert_iban_tokenized("IBAN:", "AT611904300234573201", "BIC:BKAUATWW");
+    // The spaced German form is deliberately absent here: see
+    // `label_glued_to_a_spaced_german_iban_leaves_no_byte_raw_but_is_fragmented` below.
+    for iban in [
+        "AT611904300234573201",
+        "AT61 1904 3002 3457 3201",
+        "DE89370400440532013000",
+    ] {
+        for prefix in ["IBAN ", "IBAN:", "IBAN: "] {
+            for trailer in [
+                "BIC",
+                "BIC:BKAUATWW",
+                "BICBKAUATWW",
+                "SWIFT",
+                "EUR",
+                "OK",
+                "Bank",
+                "bic",
+                "und",
+                "BIC\nBKAUATWW",
+            ] {
+                assert_iban_tokenized(prefix, iban, trailer);
+            }
+        }
+    }
+    // Every registry country, compact, glued to the two footer labels.
+    for country in every_registry_country() {
+        let compact = synthetic_iban(&country, 3756);
+        assert_iban_tokenized("IBAN ", &compact, "BIC");
+        assert_iban_tokenized("IBAN:", &compact, "BIC:BKAUATWW");
+    }
+}
+
+/// A label glued to a SPACED German IBAN is only partly recovered, and this pins exactly how.
+///
+/// `phone.national.de` opens with a no-capture branch that consumes a 22-character IBAN grouping
+/// so its phone branches never see `0532 0130` inside a German IBAN. That branch keeps its
+/// trailing `\b` (dropping it uncovered 7,212 bytes on digit-glued documents, solo todo #3764),
+/// so a glued label stops the consumption, the phone rule (priority 85) claims `0532 0130`, and
+/// the IBAN token is split around a phone token. The axis-1 property that must hold is that no
+/// IBAN byte leaves the process under a policy that tokenizes every claiming class: main left
+/// `DE89 3704 0044 … 00BIC` raw beside one phone token. The compact German form tokenizes whole
+/// (previous fixture).
+#[test]
+fn label_glued_to_a_spaced_german_iban_leaves_no_byte_raw_but_is_fragmented() {
+    let pipeline = pipeline_tokenizing_phone();
+    let iban = "DE89 3704 0044 0532 0130 00";
+    for (prefix, trailer) in [
+        ("IBAN ", "BIC"),
+        ("IBAN:", "BIC:COBADEFF"),
+        ("IBAN ", "EUR"),
+    ] {
+        let text = format!("{prefix}{iban}{trailer}");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(text.clone()),
+                LOCALES,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text");
+        };
+        // Adjacent tokens collapse to one blank: the property is coverage, not token count.
+        let blanked = gaze::token_shape::pattern()
+            .replace_all(&cleaned, TOKEN_BLANK)
+            .replace(concat!("\u{0}", "\u{0}", "\u{0}"), TOKEN_BLANK);
+        assert_eq!(
+            blanked,
+            format!("{prefix}{TOKEN_BLANK}{trailer}"),
+            "every IBAN byte must be covered and the label must stay raw: {}",
+            shape_of(&cleaned)
+        );
+        assert!(
+            cleaned.contains(":Custom:phone_") && cleaned.matches(":Custom:iban_").count() == 2,
+            "this pins the fragmented shape <iban_1><phone_1><iban_2>; if the IBAN is now whole, \
+             todo #3764 is done and the fixture belongs in the glued-label test: {}",
+            shape_of(&cleaned)
+        );
+    }
+}
+
+/// "Letters only" is Unicode `char::is_alphabetic`, not ASCII: a German word glued to the IBAN
+/// behaves like an English one.
+///
+/// This is the fixture that reddens when the run test is narrowed to `is_ascii_alphabetic`.
+#[test]
+fn non_ascii_letters_glued_to_an_iban_are_a_word_not_more_identifier() {
+    for trailer in ["Überweisung", "über", "ÄrgerBIC", "Straße", "élan"] {
+        assert_iban_tokenized("IBAN ", "AT611904300234573201", trailer);
+        assert_iban_tokenized("IBAN ", "AT61 1904 3002 3457 3201", trailer);
+        assert_iban_tokenized("IBAN ", "DE89370400440532013000", trailer);
+    }
+}
+
+/// An IBAN-shaped, checksum-valid prefix of a longer identifier is not an IBAN.
+///
+/// The other direction of the boundary, and the one the old `\b` guarded: with the boundary gone
+/// from the pattern, the exact-length branches happily match a valid prefix of an opaque token
+/// and `iban_mod97` accepts it. A digit, an underscore or a non-ASCII digit anywhere in the word
+/// run after the candidate means the run could be more identifier, so the candidate is dropped
+/// before validation: no `custom:iban` token, no partial token. The no-cue `ref … end` shapes are
+/// the ones todo #3756 measured; the `IBAN …` shapes show the cue does not override the boundary.
+/// This is the fixture that reddens when the code boundary is dropped.
+#[test]
+fn iban_shaped_prefix_of_a_longer_identifier_is_not_tokenized() {
+    for text in [
+        "ref AT611904300234573201XQ7 end",
+        "ref AT6119043002345732019 end",
+        "ref AT611904300234573201BIC1 end",
+        "IBAN AT611904300234573201XQ7",
+        "IBAN AT6119043002345732011234",
+        "IBAN AT611904300234573201_x",
+        "IBAN AT611904300234573201_",
+        "IBAN AT611904300234573201\u{661}",
+        "IBAN DE89370400440532013000ABC1",
+    ] {
+        let cleaned = clean(text);
+        assert_eq!(
+            cleaned,
+            text,
+            "an IBAN-shaped prefix of a longer identifier must produce no token at all: {}",
+            shape_of(&cleaned)
+        );
+    }
+    // Spaced form with digits glued to the last group. `card.structural` may still claim a
+    // Luhn-valid digit run inside it (pre-existing, not this boundary), so only the IBAN half is
+    // asserted here.
+    for text in [
+        "IBAN AT61 1904 3002 3457 32011234",
+        "IBAN AT61 1904 3002 3457 3201_1",
+    ] {
+        let cleaned = clean(text);
+        assert!(
+            !cleaned.contains(":Custom:iban_"),
+            "digits glued to the last group must not yield an IBAN token: {}",
+            shape_of(&cleaned)
+        );
+    }
+}
+
+/// The trailing boundary must stay out of the pattern.
+///
+/// A trailing `\b` is the mutation that silently re-opens the glued-label leak while every
+/// space-separated fixture stays green, so it is pinned here structurally as well as by the
+/// glued fixtures above. The leading `\b` is required: matches must start at a word start.
+#[test]
+fn iban_pattern_keeps_the_leading_boundary_and_has_no_trailing_one() {
+    let rulepack = Rulepack::load(RulepackSource::Embedded(
+        embedded("core").expect("core rulepack"),
+    ))
+    .expect("core loads");
+    let spec = rulepack
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "iban.structural")
+        .expect("iban.structural");
+    let RawMatch::Regex {
+        pattern: Some(pattern),
+        ..
+    } = &spec.matcher
+    else {
+        panic!("iban.structural must be a plain regex recognizer");
+    };
+    let body = pattern.trim();
+    assert!(
+        body.starts_with(r"(?x)\b("),
+        "iban.structural must start at a word boundary: {body:?}"
+    );
+    assert!(
+        !body.ends_with(r"\b"),
+        "iban.structural must not end in a word boundary; the trailing boundary is decided in code \
+         by gaze_types::word_run_extends_identifier: {body:?}"
     );
 }

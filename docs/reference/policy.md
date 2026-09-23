@@ -560,6 +560,11 @@ gaze clean --rulepack-bundled core --locale=en-US --policy ./policy.toml
   multiple phone recognizers without fail-closed same-class rejection.
 - `iban.structural` emits `custom:iban` only for IBAN-shaped candidates that
   pass `iban_mod97`; the canonical form is normalized with `iban_canonical`.
+  The pattern has no trailing word boundary: a compact IBAN glued to the next
+  label (`IBAN AT611904300234573201BIC`) is a candidate, and the boundary is
+  decided in code (`gaze_types::word_run_extends_identifier`) — the word run
+  after the candidate may be empty or letters only; a digit or underscore in it
+  marks the candidate as a prefix of a longer identifier and drops it.
 - `card.structural` emits `custom:credit_card` only for 13- to 19-digit
   candidates that pass `luhn`.
 - `ip.v4` and `ip.v6` emit `custom:ip_address`.
@@ -649,7 +654,7 @@ kind = "luhn"
 | `e164_phone_national_de` | German national or international phone candidates | Parser-backed DE validation with synthetic-non-reachable fixture allowance because Germany has no NANPA 555-01XX equivalent. |
 | `e164_phone_national_us` | US national or international phone candidates | Parser-backed US validation with NANPA 555-0100 through 555-0199 fixture allowance. |
 | `luhn` | Credit-card-like numeric candidates | Mod 10 checksum. ASCII whitespace is ignored; any other non-digit fails validation. |
-| `iban_mod97` | IBAN-like alphanumeric candidates | ISO 7064 mod-97 check. Input is canonicalized as uppercase with ASCII whitespace removed before validation. |
+| `iban_mod97` | IBAN-like alphanumeric candidates | ISO 7064 mod-97 check at the country's ISO 13616 registry length. Input is canonicalized as uppercase with ASCII whitespace removed before validation. Recognizers with this validator also get the identifier-run trailing boundary: the word run after the candidate may be empty or letters only (`gaze_types::word_run_extends_identifier`), so their pattern must not end in `\b`. |
 | `ipv4_parse` | IPv4-like candidates | `std::net::Ipv4Addr` parser validation. Rejects leading-zero octets, hex forms, short forms, and out-of-range octets. |
 | `ipv6_parse` | IPv6-like candidates | `std::net::Ipv6Addr` parser validation for RFC 4291 textual forms, including IPv4-embedded addresses. Rejects bracketed URI literals and zone-id suffixes. |
 | `eth_eip55` | Ethereum address candidates | EIP-55 checksum validation using Keccak-256. Mixed-case addresses must satisfy the checksum; all-lower and all-upper legacy forms are accepted. |
