@@ -241,12 +241,12 @@ fn all_twenty_five_action_pairs_admit_the_loser_under_its_own_action() {
             .unwrap();
             let admitted = b.is_protective();
             let overrides = admitted && a == Action::Preserve;
-            let expected_cells: Vec<Range<usize>> = if !admitted {
+            let expected_cells = if !admitted {
                 Vec::new()
             } else if overrides {
-                Vec::from([11..21])
+                std::iter::once(11..21).collect::<Vec<_>>()
             } else {
-                Vec::from([15..21])
+                std::iter::once(15..21).collect::<Vec<_>>()
             };
             assert_eq!(
                 plan.cells.iter().map(|c| c.raw.clone()).collect::<Vec<_>>(),
