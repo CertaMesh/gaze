@@ -1,8 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+mod detect_memo;
 pub mod inspection;
 pub mod nym;
 pub mod redaction_marker;
+
+pub use detect_memo::DetectMemo;
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap};
@@ -4073,6 +4076,9 @@ impl Candidate {
 }
 
 /// Context supplied to recognizers during detection.
+///
+/// One context is one detection request: it owns the request's [`DetectMemo`], and the
+/// per-locale contexts derived with [`Self::narrowed`] share it.
 #[non_exhaustive]
 pub struct DetectContext<'a> {
     /// Active locale chain.
@@ -4083,16 +4089,43 @@ pub struct DetectContext<'a> {
     pub fields: &'a (),
     /// Whether a recognizer degraded due to unavailable optional capability.
     pub degraded: Cell<bool>,
+    memo: RequestMemo<'a>,
+}
+
+enum RequestMemo<'a> {
+    Owned(DetectMemo),
+    Shared(&'a DetectMemo),
 }
 
 impl<'a> DetectContext<'a> {
-    /// Builds detection context for a recognizer pass.
+    /// Builds detection context for a recognizer pass, with a fresh request memo.
     pub fn new(locale_chain: &'a [LocaleTag], dictionaries: &'a DictionaryBundle) -> Self {
         Self {
             locale_chain,
             dictionaries,
             fields: &(),
             degraded: Cell::new(false),
+            memo: RequestMemo::Owned(DetectMemo::new()),
+        }
+    }
+
+    /// The same request with a narrower locale chain: same dictionaries, the current degraded
+    /// flag, and the same request memo.
+    pub fn narrowed<'b>(&'b self, locale_chain: &'b [LocaleTag]) -> DetectContext<'b> {
+        DetectContext {
+            locale_chain,
+            dictionaries: self.dictionaries,
+            fields: self.fields,
+            degraded: Cell::new(self.degraded.get()),
+            memo: RequestMemo::Shared(self.memo()),
+        }
+    }
+
+    /// The memo of this detection request.
+    pub fn memo(&self) -> &DetectMemo {
+        match &self.memo {
+            RequestMemo::Owned(memo) => memo,
+            RequestMemo::Shared(memo) => memo,
         }
     }
 }

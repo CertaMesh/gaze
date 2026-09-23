@@ -3,6 +3,7 @@ use std::ops::Range;
 use crate::anchor_resolver::{AnchorOutcome, AnchorResolver};
 use crate::LocaleTag;
 use crate::{Candidate, ConflictTier, FamilyPolicyTable, PiiClass};
+use gaze_types::nym::NYM_RECOGNIZER_SOURCE_PREFIX;
 
 pub fn resolve_candidates(candidates: Vec<Candidate>) -> Vec<Candidate> {
     resolve_candidates_with_policy(candidates, &FamilyPolicyTable::EMPTY)
@@ -442,6 +443,11 @@ fn structured_containment(
     } else {
         (existing, candidate)
     };
+    // A learned custom-class span (a Nym recognizer label) is the weakest evidence in the pool:
+    // this rung predates learned custom classes and must not hand one a rule candidate's bytes.
+    if is_learned(container) && !is_learned(enclosed) {
+        return None;
+    }
     let structured_container = matches!(container.class, PiiClass::Custom(_));
     let builtin_enclosed = !matches!(enclosed.class, PiiClass::Custom(_));
     (structured_container && builtin_enclosed).then_some(candidate_encloses)
@@ -453,7 +459,8 @@ fn structured_containment(
 /// least the contained candidate's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum EvidenceTier {
-    /// A learned NER span (the `ner` recognizer, `ner/<backend>` source).
+    /// A learned model span: the `ner` recognizer (`ner/<backend>` source) or a Nym
+    /// recognizer label (`nym/<LABEL>` source).
     Learned,
     /// A plain regex or dictionary term.
     Pattern,
@@ -485,13 +492,22 @@ fn evidence_tier(
             return EvidenceTier::Anchored;
         }
     }
-    if candidate.recognizer_id == "ner"
-        || candidate.source == "ner"
-        || candidate.source.starts_with("ner/")
-    {
+    if is_learned(candidate) {
         return EvidenceTier::Learned;
     }
     EvidenceTier::Pattern
+}
+
+/// A learned model produced this candidate: the bundled NER recognizer, or Nym recognizer
+/// adapters only (a same-span merge with a rule carries the rule's evidence too).
+fn is_learned(candidate: &Candidate) -> bool {
+    candidate.recognizer_id == "ner"
+        || candidate.source == "ner"
+        || candidate.source.starts_with("ner/")
+        || candidate
+            .source
+            .split('+')
+            .all(|part| part.starts_with(NYM_RECOGNIZER_SOURCE_PREFIX))
 }
 
 /// Detects the containment-precedence shape and says which side is the

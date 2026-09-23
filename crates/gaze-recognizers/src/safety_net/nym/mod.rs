@@ -30,8 +30,8 @@ pub use artifacts::{
 };
 pub use ort::{NymConfig, DEFAULT_NYM_INTRA_THREADS};
 
-use decode::NymSpan;
-use ort::NymOrtBackend;
+pub(crate) use decode::NymSpan;
+pub(crate) use ort::NymOrtBackend;
 
 /// The Nym-small safety net. The model loads on first use; a load failure is cached so a broken
 /// bundle fails every check the same way instead of retrying.

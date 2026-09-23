@@ -90,7 +90,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::anchor_resolver::AnchorResolver;
-pub use gaze_types::{Candidate, DetectContext, DetectError, Recognizer};
+pub use gaze_types::{Candidate, DetectContext, DetectError, DetectMemo, Recognizer};
 use gaze_types::{CollisionMembership, LocaleBasis, LocaleChain, LocaleTag, PiiClass};
 
 pub trait Validator: Send + Sync {
@@ -794,8 +794,7 @@ impl RecognizerRegistry {
             // locale did. Global rules repeat their spans at every step and drop out here.
             let mut claimed: Vec<std::ops::Range<usize>> = Vec::new();
             for locale in locale_chain.as_slice() {
-                let locale_ctx = DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
-                locale_ctx.degraded.set(ctx.degraded.get());
+                let locale_ctx = ctx.narrowed(std::slice::from_ref(locale));
                 let mut class_candidates = Vec::new();
                 for recognizer in self
                     .entries

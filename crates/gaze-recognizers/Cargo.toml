@@ -75,6 +75,10 @@ name = "nym_safety_net"
 required-features = ["safety-net-nym", "test-support"]
 
 [[test]]
+name = "nym_recognizer"
+required-features = ["safety-net-nym", "test-support"]
+
+[[test]]
 name = "locale_aware_registry"
 
 [[bench]]

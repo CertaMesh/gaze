@@ -15,6 +15,11 @@ use crate::{PiiClass, SafetyNetPiiClass};
 /// Stable safety-net identifier recorded on every Nym suspect and audit row.
 pub const NYM_SAFETY_NET_ID: &str = "nym-small-int8";
 
+/// Prefix of the recognizer id and candidate source of every Nym recognizer candidate
+/// (`nym/LICENSE_PLATE`). The resolver reads it to place those candidates in the learned
+/// evidence tier.
+pub const NYM_RECOGNIZER_SOURCE_PREFIX: &str = "nym/";
+
 macro_rules! nym_labels {
     ($($variant:ident => $name:literal,)+) => {
         /// The 40 entity types of the pinned Nym-small classifier, in `id2label` order.

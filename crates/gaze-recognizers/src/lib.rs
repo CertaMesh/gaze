@@ -8,6 +8,7 @@
 //! | `phone-parser` | yes | Parser-backed E.164 and national phone validation via `phonenumber` |
 //! | `safety-net` | no | `NerSafetyNet` observer pass |
 //! | `safety-net-openai` | no | OpenAI-filter safety net subprocess; also enables `safety-net` |
+//! | `safety-net-nym` | no | Nym-small safety net and [`NymRecognizers`] (Nym as an opt-in recognizer); also enables `safety-net` |
 //! | `test-support` | no | Fixture helpers for safety-net tests; not for production use |
 //!
 //! With `phone-parser` disabled, parser-backed phone validators fail closed. There is
@@ -21,6 +22,8 @@ mod dictionary;
 mod error;
 mod locale_aware;
 mod ner;
+#[cfg(feature = "safety-net-nym")]
+pub mod nym_recognizer;
 mod regex;
 #[cfg(feature = "safety-net")]
 pub mod safety_net;
@@ -44,6 +47,8 @@ pub use ner::{
     DAVLAN_NER_HF_REPO, DAVLAN_NER_LABELS_JSON, DAVLAN_NER_MODEL_DIR_NAME, DAVLAN_NER_SHA256SUMS,
     DAVLAN_NER_UPSTREAM_FILES, REQUIRED_DAVLAN_NER_ARTIFACTS,
 };
+#[cfg(feature = "safety-net-nym")]
+pub use nym_recognizer::{NymLabelRecognizer, NymRecognizers};
 pub use regex::{NormalizerKind, RegexDetector};
 
 // drift-ack: core snapshot version0.5.3 matches the field rulepack; all detection fields are unchanged.
