@@ -2542,9 +2542,8 @@ fn a_derived_redact_fails_under_a_protection_trace_like_an_explicit_one() {
     for (case, policy, input) in cases {
         let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-de")];
         let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
-        let pipeline =
-            build_pipeline(&policy, &empty_context(), &rulepacks, &active_locales, None)
-                .expect("pipeline");
+        let pipeline = build_pipeline(&policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("pipeline");
         let session = Session::new(Scope::Ephemeral).expect("session");
 
         let err = pipeline

@@ -65,16 +65,18 @@ pub(super) fn plan(
         .collect::<Vec<_>>();
     let mut policies = std::collections::HashMap::new();
     let mut known = |class: &PiiClass| {
-        policies.entry(class.clone()).or_insert_with(|| {
-            #[cfg(test)]
-            {
-                work.preview_queries += 1;
-            }
-            crate::rule::preview(&pipeline.rules, class, context, |family| {
-                pipeline.registry.family_member_classes(family)
+        policies
+            .entry(class.clone())
+            .or_insert_with(|| {
+                #[cfg(test)]
+                {
+                    work.preview_queries += 1;
+                }
+                crate::rule::preview(&pipeline.rules, class, context, |family| {
+                    pipeline.registry.family_member_classes(family)
+                })
             })
-        })
-        .is_some_and(Action::is_protective)
+            .is_some_and(Action::is_protective)
     };
     // Require the original policy as well as its real standalone fallback policy.
     let original_known = segment
