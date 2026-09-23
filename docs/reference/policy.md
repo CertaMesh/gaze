@@ -768,7 +768,10 @@ case_sensitive = true
 #### Custom-recognizer collision metadata
 
 Custom regex and dictionary recognizers may declare a nested collision table
-when they participate in a tenant-defined cross-class rivalry.
+when they participate in a tenant-defined cross-class rivalry. The two rules
+below claim the same shape for two classes: the lower `precedence` wins the
+overlap (`decided_by: collision_policy`), and an equal `precedence` emits the
+family token `custom:family:tenant-orders` instead of either class.
 
 ```toml
 [[policy.custom_recognizers]]
@@ -781,11 +784,33 @@ class = "custom:order_id"
 family = "tenant-orders"
 variant = "order-id"
 precedence = 50
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "tenant.order_ref"
+pattern = 'ORD-[0-9]+'
+class = "custom:order_ref"
+
+[policy.custom_recognizers.collision]
+family = "tenant-orders"
+variant = "order-ref"
+precedence = 60
 ```
 
 `family` and `variant` must be non-empty kebab-case identifiers up to 64 bytes.
 Lower `precedence` wins when two variants in the same family overlap. Missing
-`precedence` defaults to `100`.
+`precedence` defaults to `100`. `mandatory_anchor = "<key>"` names a locale cue
+bucket (`[locale.cues.<key>]` in a loaded locale pack, `iban` in `locale-de`
+and `locale-en`); a member whose cue is out of range falls back to the family
+token ([mandatory-anchor resolution](../explanation/detection/anchor-resolution.md)).
+
+The membership is filed under the recognizer's id: the policy `name` for a
+regex recognizer, `dict/<name>` for a dictionary recognizer. That id is the
+`recognizer_id` on audit rows, the id `losing_candidates` lists on a family
+token's `ambiguity_record`, and the id the registry resolves when a family
+token [derives its action](#how-a-family-level-token-picks-its-action) from
+its members' rules, so a tie or a missing anchor over regex members is
+protected exactly as it is over bundled or dictionary members.
 
 Policy custom recognizers cannot use reserved bundled family names:
 `us-9-digit-id`, `iberian-id`, `payment-card-or-iban`, `phone-or-imei`,

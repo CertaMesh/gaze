@@ -298,6 +298,18 @@ SHA-256 and refuses identical builds; run them against immutable copies.
   chosen: a rank-monotone derivation is not a byte-monotone one (review of
   PR #624 found 872 regressed documents behind a `redact` arm the ten-arm
   matrix did not have).
+- `policy_regex_collision_matrix.py` — the policy REGEX custom-recognizer
+  family contract (todo #3757): four regex rules (an equal-precedence tie
+  family, a precedence family, a `mandatory_anchor` family, an `email`-class
+  rule beside the bundled `email.global`) under collision {on, off} x member
+  action {tokenize, redact, preserve} x default {tokenize, preserve} x
+  bundles {none, core+locale-de, core+locale-en}: 36 arms over a synthetic
+  set plus the pinned Dataiku en/de holdout (`--holdout`). Scores per expected
+  span the manifest bytes AND whether the raw value survives in the clean
+  text; `lost_bytes` and `lost_values` must be 0, every collision-off and
+  preserve-member arm must be byte-identical (pins that the fix moved no
+  conflict winner), and every changed document must be `family-derived` or
+  `family-strictest-member`.
 
 ## Model-free verification
 

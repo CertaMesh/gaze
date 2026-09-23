@@ -34,6 +34,11 @@ class-priority chain.
   (`gaze_types::Action::strictness_rank`); an explicit family rule overrides.
   The audit row records the derivation in `AmbiguityRecord::derived_action`.
   See [How a family-level token picks its action](../../reference/policy.md#how-a-family-level-token-picks-its-action).
+- Policy custom recognizers take part under the id their membership is filed
+  under: the policy `name` for a regex rule, `dict/<name>` for a dictionary
+  rule. The registry resolves the same id, so `family_member_classes` (the
+  input of the action derivation) and the loser rows' class attribution see
+  policy members exactly as they see bundled ones.
 - Normal class-priority, rule-priority, score, span-length, and recognizer-id
   ordering stays unchanged for recognizers without collision declarations.
 
