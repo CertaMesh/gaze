@@ -202,6 +202,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`postal.at_ch`, above).
 
 ### Changed
+- **Drift corpus: a Rust scope-separator line.** `[bundle-tokenization-drift]`
+  snapshots for the `core` and `secrets` bundles change in `fixtures_sha256`
+  only. The corpus had no code-shaped path, so the gate could not see the
+  `ip.v6` word boundary at all; the new line must stay untokenized. Detections
+  are unchanged at 12 for `core` and 2 for `secrets`, and no byte span or token
+  shape moved, because the line is appended and tokenizes nothing.
+
 - **The safety net no longer deletes: it writes a one-way `[REDACTED:<class>]`
   marker.** `SafetyNetMode::Redact` and the `Resolve` + `Redact` fallback used
   to replace a flagged span with the empty string, so the bytes vanished and
@@ -489,6 +496,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`provenance_stage = "primary_pipeline.residual"`). Found by the review of
   the derivation change; the fix and the derivation ship together, so no
   release carries the regression.
+- **Precision: `ip.v6` tokenized Rust and C++ `::` paths mid-identifier.**
+  `::` shorthand makes a great many path segments legal IPv6 addresses: `::a`
+  in `CleanOverrides::apply_to`, `::defa` in `Policy::default()`, `d::f` in
+  `std::fs::read`, and a bare `::` wherever a path has no hex on either side.
+  The `ipv6_parse` validator accepts every one of them, because they really are
+  RFC 4291 addresses. The rule's guard class excluded hex digits only, so any
+  other identifier character satisfied it and the candidate fired inside the
+  word, rewriting `gaze::rule::resolve` as `gaz<...>rul<...>resolve`. Six or
+  more pull-request bodies were mangled this cycle. The guard is now a
+  word-character class, the same edge rule as `gaze_types::is_inside_word`. It
+  is a strict subset of the old class, so the change can only remove matches:
+  a differential enumeration over 256 address forms x 24 prefixes x 24 suffixes
+  finds no case where the new rule matches and the old one did not, and no
+  whole address lost in a context whose delimiters are not identifier
+  characters. Across this repository's own `docs/**/*.md` the class drops from
+  176 matches (616 bytes) to 6 (47 bytes), of which five are IPv4 loopbacks and
+  one is a literal `::` example. A standalone all-hex path with no context
+  either side (`a::b`) is still read as the address it is. No detection is
+  added; this is a precision fix, not a leak fix.
+
 - **Security: an IBAN followed by an upper-case word could match nothing at
   all.** Whichever of two outcomes an adopter got depended only on whether the
   IBAN's digits happened to be Luhn-valid: for BE, and for any IBAN whose BBAN

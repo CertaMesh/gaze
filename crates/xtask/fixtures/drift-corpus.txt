@@ -33,3 +33,9 @@ Email local-part embedded numerics user123@example.invalid should tokenize only 
 # Opt-in `secrets` bundle fixtures: tokenized only when `secrets` is loaded, inert under `core`.
 AWS documentation example key AKIAIOSFODNN7EXAMPLE is non-functional.
 password: synthetic-drift-credential
+
+# drift-ack: Rust scope-separator paths. IPv6 zero-compression shorthand makes many path segments
+# legal addresses, so this line is the gate's only view of the ip.v6 word boundary (todo #3710).
+# It must stay untokenized. Do not write a standalone separator between two non-word characters
+# anywhere in this file: that really is the unspecified address, and it tokenizes by design.
+Rust paths CleanOverrides::apply_to, Policy::default(), gaze::rule::resolve and std::fs::read are code, not addresses.

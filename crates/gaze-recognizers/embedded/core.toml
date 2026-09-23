@@ -410,8 +410,14 @@ locale_basis = "document"
 kind = "regex"
 # IPv4-embedded alternatives derive from RFC 4291 Section 2.2 form 3
 # (`x:x:x:x:x:x:d.d.d.d`), with the audit trail captured in scratchpad 778.
+# The guard classes are word characters, not just hex digits: an IPv6 candidate that starts
+# right after an identifier character or ends right before one is inside a word, and `::`
+# shorthand makes `CleanOverrides::apply_to` offer `::a` and `Policy::default()` offer `::defa`
+# as legal addresses. `ipv6_parse` cannot reject those, so the boundary is the whole guard.
+# This mirrors `gaze_types::is_inside_word`, the shared edge rule; `capture_groups = [1]` keeps
+# the guard characters out of the emitted span. Todo 3710.
 pattern = '''(?ix)
-(?:^|[^0-9a-f:.])
+(?:^|[^\w:.])
 (
   (?:
     (?:[0-9a-f]{1,4}:){6}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}
@@ -436,7 +442,7 @@ pattern = '''(?ix)
     |::
   )
 )
-(?:$|[^0-9a-f:.]|\.(?:$|[^0-9]))
+(?:$|[^\w:.]|\.(?:$|[^0-9]))
 '''
 capture_groups = [1]
 
