@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`ConflictTier::ContainmentPrecedence`** (audit string
+  `containment_precedence`): a candidate that wholly contains a candidate of
+  another class won the whole span as one token; the swallowed candidate is a
+  merged source and its loser row carries the tier. **`ConflictTier::
+  ProtectionOverride`** (`protection_override`): a residual fragment's row
+  when the fragment replaced bytes inside a `preserve` selection because a
+  protected class claimed them.
 - **`Pipeline::registry`**, **`FamilyPolicyTable::anchored_families`** and
   **`RegexDetector::with_base_score`**; `gaze` re-exports `AmbiguityRecord`,
   `AmbiguityReason`, `LosingCandidate` and `DerivedFamilyAction`, the types
@@ -210,6 +217,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`postal.at_ch`, above).
 
 ### Changed
+- **One entity, one token: containment precedence** (solo todo #3740,
+  concept v2 approved 2026-09-23; breaking in 0.x). When one candidate
+  wholly contains a candidate of a different class, the container wins the
+  whole span as one token with its own class and action, unless its
+  evidence tier is below the contained candidate's (validator passed >
+  anchored or cue-structured match > plain regex or dictionary > learned
+  NER; ties go to the container). The rung sits after collision-family
+  policy and the mandatory-anchor rung and before the structured-containment
+  rung, which it generalises and which remains for the containers the guard
+  refuses. `IBAN PL56 0942 8981 7280 5663 2200 4500 BIC` (de-AT) is now
+  `IBAN <iban_1> BIC` instead of five tokens; a Luhn-valid card whose tail is
+  a German phone shape is one card token. Partial overlaps keep today's
+  rules (solo todo #3769). Measured on the 98,256-document IBAN enumeration
+  (3 locales): split IBANs 8,955 → 423, wrong-class IBAN tokens 11,196 →
+  2,706, leaked and false-positive bytes unchanged; 4 of 1,886 real holdout
+  documents change (`<credit_card_1><phone_1>` → `<credit_card_1>`); 0 of
+  1,024 negative documents change.
+- **Protection beats preservation: per-character residual coverage** (solo
+  todo #3740; breaking in 0.x). Residual admission is per original, not per
+  overlap component; a `preserve` winner no longer shields bytes a protected
+  class claimed (they leave as a fragment of the highest-ranked claimant with
+  `decided_by: protection_override`); adjacent fragments of one claimant
+  merge into one; and a fragment emits under its claimant's own action
+  (`tokenize`/`format_preserve` → class token, `redact` → one-way
+  `[REDACTED:<class>]` marker, `generalize` → placeholder). This closes the
+  hole where `custom:postal_code = preserve` shipped 20 raw IBAN bytes on
+  the letter above (8,295 raw bytes across 480 enumeration documents) and
+  where `custom:url = preserve` shipped an email inside the URL raw
+  (`https://mail.example.org/u/<Email_1>` now). The candidates a preserved
+  selection represents never override it, so an explicit
+  `custom:family:<name> = preserve` rule still leaves the ambiguous span raw.
+  Supersedes the interim "any protective action" admission from the
+  strictest-member-action change. See
+  [Residual coverage](docs/reference/redaction-classes.md#residual-coverage)
+  and [UPGRADE.md](UPGRADE.md).
+
 - **Audit rows of a policy-regex collision family name the members.** A
   loser row now carries the losing member's own class (it carried the
   winner's family class), and a family token's

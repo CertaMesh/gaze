@@ -2327,6 +2327,16 @@ pub enum ConflictTier {
     /// inside a custom-class structured span lost to the enclosing span, so a
     /// structured identifier is never split around a sub-token.
     StructuredContainment,
+    /// A candidate that wholly contains a candidate of another class won the
+    /// whole span as one token: its evidence tier (validator passed >
+    /// anchored or structural cue > plain regex or dictionary > learned NER)
+    /// is at least the contained candidate's, ties going to the container.
+    /// The contained candidate is recorded as a merged source.
+    ContainmentPrecedence,
+    /// A residual fragment replaced bytes inside a `preserve` selection
+    /// because a class the policy protects also claimed them: protection beat
+    /// preservation on exactly those bytes.
+    ProtectionOverride,
     /// Recognizer identifier decided the conflict.
     RecognizerId,
     /// Candidate was merged with another candidate.
@@ -2353,6 +2363,8 @@ impl ConflictTier {
             Self::CollisionPolicy => "collision_policy",
             Self::AnchoredContext => "anchored_context",
             Self::StructuredContainment => "structured_containment",
+            Self::ContainmentPrecedence => "containment_precedence",
+            Self::ProtectionOverride => "protection_override",
             Self::RecognizerId => "recognizer_id",
             Self::Merged => "merged",
             Self::Redact => "redact",
@@ -2374,6 +2386,8 @@ impl ConflictTier {
             "collision_policy" => Some(Self::CollisionPolicy),
             "anchored_context" => Some(Self::AnchoredContext),
             "structured_containment" => Some(Self::StructuredContainment),
+            "containment_precedence" => Some(Self::ContainmentPrecedence),
+            "protection_override" => Some(Self::ProtectionOverride),
             "recognizer_id" => Some(Self::RecognizerId),
             "merged" => Some(Self::Merged),
             "redact" => Some(Self::Redact),
@@ -3598,6 +3612,8 @@ mod redaction_logger_tests {
             ConflictTier::CollisionPolicy,
             ConflictTier::AnchoredContext,
             ConflictTier::StructuredContainment,
+            ConflictTier::ContainmentPrecedence,
+            ConflictTier::ProtectionOverride,
             ConflictTier::RecognizerId,
             ConflictTier::Merged,
             ConflictTier::Redact,

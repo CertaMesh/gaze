@@ -1062,9 +1062,10 @@ pattern = '''(?i)(?-u:\b)(?:https?://|www\.)[^\s]*[^\s.,;:!?)\]}>"']'''
 
 [recognizers.scoring]
 # Above the 0.70 heuristic floor: an explicit scheme or `www.` prefix is structural evidence,
-# not a guess. Priority stays below `email.global` (90) so an explicit address inside a URL
-# keeps its Email class rather than being absorbed; note that `PiiClass::Custom` sits at
-# class-priority 50 in the resolver, so Email wins containment regardless.
+# not a guess. Priority is not what decides an address inside a URL: the containment rungs
+# (`ConflictTier::ContainmentPrecedence`, then `StructuredContainment` for this plain regex
+# over a validated email) hand the URL the whole span as one token, and an email inside a
+# *preserved* URL still leaves as an `<Email_1>` fragment (residual coverage).
 base = 0.75
 priority = 85
 

@@ -752,6 +752,8 @@ mod tests {
             ConflictTier::CollisionPolicy,
             ConflictTier::AnchoredContext,
             ConflictTier::StructuredContainment,
+            ConflictTier::ContainmentPrecedence,
+            ConflictTier::ProtectionOverride,
             ConflictTier::RecognizerId,
             ConflictTier::Merged,
             ConflictTier::Redact,

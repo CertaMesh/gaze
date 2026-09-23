@@ -954,10 +954,11 @@ Two consequences of a derived action that is not `tokenize`:
   closed there with `UnsupportedActionVariant`, exactly as an explicit rule
   with that action on a member class already does. Nothing is emitted.
 - **Residual coverage** (the cells that cover a losing candidate's remaining
-  bytes beside an overlapping winner) admits evidence when every action in
-  the overlap component is protective, not only when it is `tokenize`. The
-  cells themselves still emit tokens; what they should emit under a
-  non-`tokenize` action is an open design question (todo 3740).
+  bytes beside an overlapping winner) admits each claimant on its own
+  resolved action, and a cell emits under that action: a derived `redact`
+  on the family class writes the one-way `[REDACTED:custom:family:<name>]`
+  marker over the losing member's remaining bytes. See
+  [Residual coverage](redaction-classes.md#residual-coverage).
 
 > **To preserve family tokens you must say so.** Because the derivation is
 > strictest-wins, the only way to leave an ambiguous span raw while a member
@@ -1003,15 +1004,19 @@ bundled family names are listed under
 > add the explicit family `preserve` rule above; nothing else changes for
 > policies with a protective default or an explicit family rule.
 
-> **A `preserve` rule on a container class fails open for the PII inside it.**
-> Overlap resolution runs before the action lookup, and a custom-class span that
-> wholly encloses a builtin-class (`email`, `name`, `organization`, `location`)
-> span keeps the slot (`ConflictTier::StructuredContainment`), so with
-> `custom:url = preserve` and `email = tokenize` an email inside a URL is
-> preserved raw along with the URL. Keep container-capable classes
-> (`custom:url`, `custom:security_token` from the opt-in `secrets` bundle, broad tenant recognizers) on a
-> protective action, or accept that everything inside them passes through;
-> a load-time guard is tracked as solo todo #3064.
+> **`preserve` keeps a class's characters unless the same characters are
+> also PII of a class you protect.** Overlap resolution runs before the
+> action lookup, and a span that wholly encloses a differently-classed span
+> keeps the slot (`ConflictTier::ContainmentPrecedence`, or
+> `StructuredContainment` for a custom container over a builtin sub-span),
+> so with `custom:url = preserve` and `email = tokenize` the URL is the
+> winner. Its bytes stay raw except the ones the email claimed: those leave
+> as one `<Email_1>` fragment inside the preserved URL, and the fragment's
+> audit row says `decided_by: protection_override`. The candidates a
+> preserved span *represents* never override it: an explicit
+> `custom:family:<name> = preserve` rule still leaves the ambiguous span raw
+> even though its member classes are protected. See
+> [Residual coverage](redaction-classes.md#residual-coverage).
 
 ### `[ner]` (optional)
 
@@ -1133,7 +1138,7 @@ once via `[ner]`, then act on the classes the model produces.
 | `"redact"`          | Replace the matched span with the literal string `[REDACTED]`. Not restorable — the original value is dropped from the session map. |
 | `"format_preserve"` | Replace with a fake value that preserves the surface shape (`email1.{session_hex}@gaze-fake.invalid` for emails; `{session_hex}:name_1`, `{session_hex}:location_1`, `{session_hex}:custom:order_id_1` for everything else). Restorable. |
 | `"generalize"`      | Replace with a bracketed class label: `[EMAIL]`, `[NAME]`, `[LOCATION]`, `[ORGANIZATION]`, or `[CUSTOM_NAME]` (uppercased custom name with underscores preserved). Restoration returns the label, not the original value. |
-| `"preserve"`        | Leave the matched span unchanged. The detection is still logged, but no replacement happens. |
+| `"preserve"`        | Leave the matched span unchanged, except for characters that a candidate of a protected class also claimed: those leave as a fragment under that class's own action (see [Residual coverage](redaction-classes.md#residual-coverage)). The detection is still logged. |
 
 `Tokenize`, `FormatPreserve`, `Redact`, and `Generalize` all increment the
 `stats.detections` counter in `gaze clean`'s stdout. `Preserve` does not.

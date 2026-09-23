@@ -182,12 +182,17 @@ fn pair_and_triple_use_existing_traced_live_staged_and_strict_calls() {
     }
 }
 
-/// Admission is "every action in the component protects its span", not
-/// "every action is `tokenize`": a stricter action on the winner or on the
-/// loser's own class must not drop coverage of the loser's remaining bytes
-/// (review 3746 finding 7). Admitted residual cells always emit tokens.
+/// Residual admission is per original (todo #3740): the loser
+/// (`custom:password`, action `b` through the default rule) is admitted
+/// whenever `b` protects, whatever the winner's action `a`. A `preserve`
+/// winner no longer shields the loser's bytes inside it: the cell then covers
+/// the loser's whole claim (`11..21`), records the override, and the winner
+/// keeps every other byte raw. A protective winner leaves only the remainder
+/// (`15..21`). The cell emits under `b` itself: a class token for `tokenize`
+/// and `format_preserve`, the one-way `[REDACTED:<class>]` marker for
+/// `redact`, the class placeholder for `generalize`.
 #[test]
-fn all_twenty_five_action_pairs_admit_only_both_protective() {
+fn all_twenty_five_action_pairs_admit_the_loser_under_its_own_action() {
     let actions = [
         Action::Tokenize,
         Action::Preserve,
@@ -234,18 +239,58 @@ fn all_twenty_five_action_pairs_admit_only_both_protective() {
                 &[crate::LocaleTag::Global],
             )
             .unwrap();
-            let admitted = a.is_protective() && b.is_protective();
-            assert_eq!(plan.cells.len(), usize::from(admitted), "{a:?}/{b:?}");
+            let admitted = b.is_protective();
+            let overrides = admitted && a == Action::Preserve;
+            let expected_cells = if !admitted {
+                Vec::new()
+            } else if overrides {
+                std::iter::once(11..21).collect::<Vec<_>>()
+            } else {
+                std::iter::once(15..21).collect::<Vec<_>>()
+            };
+            assert_eq!(
+                plan.cells.iter().map(|c| c.raw.clone()).collect::<Vec<_>>(),
+                expected_cells,
+                "{a:?}/{b:?}"
+            );
+            for cell in &plan.cells {
+                assert_eq!(cell.action, residual::fragment_action(b), "{a:?}/{b:?}");
+                assert_eq!(cell.overrides_preserve, overrides, "{a:?}/{b:?}");
+            }
             let session = Session::new(crate::Scope::Ephemeral).unwrap();
             let new = clean(&p, &session, RAW);
             p.residual_coverage = false;
             let old = clean(&p, &session, RAW);
             match (new, old) {
                 (Ok(new), Ok(old)) if admitted => {
-                    // The winner keeps its own action; the loser's remaining
-                    // bytes (` right"`, 15..21) leave as a token, never raw.
+                    // The loser's remaining bytes (` right"`) leave under the
+                    // loser's own action, never raw; the old engine shipped them.
                     assert!(!new.text.contains("right"), "{a:?}/{b:?}: {}", new.text);
                     assert!(old.text.contains("right"), "{a:?}/{b:?}: {}", old.text);
+                    // `left` leaves with the winner's replacement, or, inside a
+                    // preserved winner, with the override cell that covers it.
+                    assert!(!new.text.contains("left"), "{a:?}/{b:?}: {}", new.text);
+                    assert_eq!(
+                        old.text.contains("left"),
+                        overrides,
+                        "{a:?}/{b:?}: {}",
+                        old.text
+                    );
+                    let expected_shape = match b {
+                        Action::Redact => Some(crate::redaction_marker(&field())),
+                        Action::Generalize => Some("[PASSWORD]".to_string()),
+                        _ => None,
+                    };
+                    match expected_shape {
+                        Some(marker) => {
+                            assert!(new.text.contains(&marker), "{a:?}/{b:?}: {}", new.text)
+                        }
+                        None => assert!(
+                            new.text.contains(":Custom:password_"),
+                            "{a:?}/{b:?}: {}",
+                            new.text
+                        ),
+                    }
                     assert_eq!(
                         new.manifest
                             .segment()
@@ -253,9 +298,21 @@ fn all_twenty_five_action_pairs_admit_only_both_protective() {
                             .iter()
                             .map(|c| c.raw.clone())
                             .collect::<Vec<_>>(),
-                        vec![15..21],
+                        expected_cells,
                         "{a:?}/{b:?}"
                     );
+                    // Reversible on both sides: the fragment restores exactly.
+                    if matches!(
+                        a,
+                        Action::Tokenize | Action::FormatPreserve | Action::Preserve
+                    ) && matches!(b, Action::Tokenize | Action::FormatPreserve)
+                    {
+                        assert_eq!(
+                            session.restore_strict_text(&new.text).unwrap(),
+                            RAW,
+                            "{a:?}/{b:?}"
+                        );
+                    }
                 }
                 (Ok(new), Ok(old)) => {
                     assert_eq!(new.text, old.text, "{a:?}/{b:?}");
@@ -266,6 +323,102 @@ fn all_twenty_five_action_pairs_admit_only_both_protective() {
             }
         }
     }
+}
+
+/// The audit row of a cell that overrides a `preserve` winner says so
+/// (`decided_by: protection_override`); a cell beside a protective winner
+/// carries no tier. The row's action is the cell's own.
+#[test]
+fn override_cells_are_audited_as_protection_override() {
+    use crate::rule::{ClassRule, DefaultRule, RuleEntry};
+    struct Rows(Arc<std::sync::Mutex<Vec<RedactionEntry>>>);
+    impl RedactionLogger for Rows {
+        fn log(&self, entry: &RedactionEntry) -> std::result::Result<(), crate::RedactionLogError> {
+            self.0.lock().unwrap().push(entry.clone());
+            Ok(())
+        }
+    }
+    for (winner, loser, expected_tier) in [
+        (
+            Action::Preserve,
+            Action::Tokenize,
+            ConflictTier::ProtectionOverride,
+        ),
+        (
+            Action::Preserve,
+            Action::Redact,
+            ConflictTier::ProtectionOverride,
+        ),
+        (Action::Tokenize, Action::Tokenize, ConflictTier::None),
+        (Action::Redact, Action::Generalize, ConflictTier::None),
+    ] {
+        let rows = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut p = pipeline(pair(), true);
+        p.rules = vec![
+            RuleEntry::new(ClassRule::new(PiiClass::Name, winner)),
+            RuleEntry::new(DefaultRule::new(loser)),
+        ];
+        p.redaction_loggers.push(Arc::new(Rows(rows.clone())));
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        clean(&p, &session, RAW).unwrap();
+        let rows = rows.lock().unwrap();
+        let residual = rows
+            .iter()
+            .filter(|row| row.provenance_stage.as_deref() == Some("primary_pipeline.residual"))
+            .collect::<Vec<_>>();
+        assert_eq!(residual.len(), 1, "{winner:?}/{loser:?}");
+        assert_eq!(
+            residual[0].decided_by, expected_tier,
+            "{winner:?}/{loser:?}"
+        );
+        assert_eq!(
+            residual[0].action,
+            residual::fragment_action(loser),
+            "{winner:?}/{loser:?}"
+        );
+        assert_eq!(residual[0].class, field());
+        assert!(!residual[0].conflict_loser);
+    }
+}
+
+/// A `redact` residual fragment is a `[REDACTED:<class>]` marker gaze wrote
+/// and recorded, so a safety-net suspect wholly inside it is already
+/// protected, exactly like a marker the net's own redaction wrote (#623);
+/// otherwise a net re-flagging the fragment would act on the marker again.
+/// The control is the same text with no manifest record: a typed marker
+/// protects nothing.
+#[test]
+fn a_redact_residual_fragment_is_a_recorded_marker() {
+    use crate::rule::{ClassRule, DefaultRule, RuleEntry};
+    let mut p = pipeline(pair(), true);
+    p.rules = vec![
+        RuleEntry::new(ClassRule::new(PiiClass::Name, Action::Tokenize)),
+        RuleEntry::new(DefaultRule::new(Action::Redact)),
+    ];
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let output = clean(&p, &session, RAW).unwrap();
+    let marker = crate::redaction_marker(&field());
+    let start = output.text.find(&marker).expect("redact fragment written");
+    let suspect = LeakSuspect::new(
+        start + "[REDACTED:".len()..start + marker.len() - 1,
+        field(),
+        "probe.residual",
+        Some(1.0),
+        LeakKind::Uncovered,
+        "secret",
+        None,
+    );
+    let target = ProtectionTarget::Live(&session);
+    assert!(
+        suspect_is_already_protected(&target, &output, &suspect),
+        "a recorded residual marker protects the bytes inside it: {}",
+        output.text
+    );
+    let typed = CleanText {
+        text: output.text.clone(),
+        manifest: Ledger::default(),
+    };
+    assert!(!suspect_is_already_protected(&target, &typed, &suspect));
 }
 
 struct Unknown {
@@ -327,16 +480,10 @@ fn unknown_order_wrappers_nonmatches_and_clone_preserve_runtime_calls() {
         p.rules = rules.clone();
         let session = Session::new(crate::Scope::Ephemeral).unwrap();
         let output = clean(&p, &session, RAW).unwrap();
-        assert_eq!(
-            output.manifest.len(),
-            if mode == 1 {
-                2
-            } else if mode == 5 {
-                0
-            } else {
-                1
-            }
-        );
+        // Mode 5 preserves the Name winner and tokenizes the losing field:
+        // the field's claim leaves as one override fragment, so the manifest
+        // holds that fragment alone.
+        assert_eq!(output.manifest.len(), if mode == 1 { 2 } else { 1 });
         let invoked = calls.swap(0, std::sync::atomic::Ordering::SeqCst);
         p.residual_coverage = false;
         clean(&p.clone(), &session, RAW).unwrap();
@@ -495,6 +642,35 @@ fn actual_collision_bypass_and_conservative_original_fallback_are_distinct() {
         )),
     );
     let output = clean(&p, &session, "xxxxxxxx").unwrap();
+    assert_eq!(output.manifest[0].class, a);
+    // Admission is per original: alpha's own standalone view (the preserved
+    // family class) excludes alpha's evidence, but beta has no anchor, its
+    // view is its own class, and its remainder stays covered.
+    assert_eq!(output.manifest.segment().residuals[0].raw, 5..8);
+    // The excluded original is the one whose standalone view is preserved: with
+    // the anchor on beta instead, beta's remainder ships in the clear.
+    let mut swapped = Pipeline::builder()
+        .recognizer(Fixed(vec![
+            candidate(0..5, a.clone(), "synthetic.a"),
+            candidate(3..8, PiiClass::custom("beta").unwrap(), "synthetic.b"),
+        ]))
+        .register_collision(
+            "synthetic.a",
+            crate::CollisionMembership::new("document", "a", 10, None),
+        )
+        .register_collision(
+            "synthetic.b",
+            crate::CollisionMembership::new("document", "b", 20, Some("cue".into())),
+        )
+        .rule(crate::rule::ClassRule::new(
+            PiiClass::family("document"),
+            Action::Preserve,
+        ))
+        .rule(crate::rule::DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    swapped.residual_coverage = true;
+    let output = clean(&swapped, &session, "xxxxxxxx").unwrap();
     assert_eq!(output.manifest[0].class, a);
     assert!(output.manifest.segment().residuals.is_empty());
     // A family class that is never an actual fallback does not exclude the pair.
@@ -1377,14 +1553,15 @@ fn a_record_whose_two_origins_disagree_fails_closed() {
     }
 }
 
-/// Two adjacent residual cells can agree on representative, class and family and
-/// still cover different parent sets, so the parent set has to stay in the
-/// coalescing key. Arbitration here selects `11..15` and `35..45`, leaving the
-/// admitted union of `synthetic.wide` split into `15..25` (one parent) and
-/// `25..35` (two, once `synthetic.inner` becomes active). Merging them would
-/// hand one of the two ranges a parent list that is not true of it.
+/// Two adjacent residual cells of one representative, class and family merge
+/// into one fragment even where an inner candidate starts or ends, and the
+/// merged cell's parent list is the union. Arbitration here selects `11..15`
+/// and `35..45`; the admitted union of `synthetic.wide` is one run `15..35`,
+/// and it leaves as one token although `synthetic.inner` becomes active at
+/// `25` (todo #3740: one claimant, one fragment per uncovered run; splitting
+/// there turned an email inside a preserved URL into `<Email_1><Email_2>`).
 #[test]
-fn adjacent_cells_sharing_a_representative_keep_their_distinct_parent_sets() {
+fn adjacent_cells_of_one_representative_merge_across_an_inner_boundary() {
     let raw = "x".repeat(50);
     let input = vec![
         candidate(11..15, PiiClass::Name, "synthetic.left"),
@@ -1401,21 +1578,17 @@ fn adjacent_cells_sharing_a_representative_keep_their_distinct_parent_sets() {
             .iter()
             .map(|s| s.raw_span.clone())
             .collect::<Vec<_>>(),
-        vec![11..15, 15..25, 25..35, 35..45]
+        vec![11..15, 15..35, 35..45]
     );
     let cells = &output.manifest.segment().residuals;
     assert_eq!(
         cells.iter().map(|c| c.raw.clone()).collect::<Vec<_>>(),
-        vec![15..25, 25..35],
-        "a shared representative must not coalesce two different parent sets"
+        vec![15..35],
+        "one representative yields one fragment per uncovered run"
     );
-    assert_eq!(cells[0].raw.end, cells[1].raw.start);
-    assert_eq!(cells[0].representative, cells[1].representative);
-    assert_eq!(cells[0].class, cells[1].class);
-    assert_eq!(cells[0].family, cells[1].family);
-    assert_eq!(cells[0].parents.len(), 1);
-    assert_eq!(cells[1].parents.len(), 2);
-    assert_eq!(cells[1].parents[0], cells[0].parents[0]);
+    assert_eq!(cells[0].parents.len(), 2, "the parent list is the union");
+    assert_eq!(cells[0].parents[0], cells[0].representative);
+    assert!(!cells[0].overrides_preserve);
     assert_eq!(session.restore_strict_text(&output.text).unwrap(), raw);
 }
 

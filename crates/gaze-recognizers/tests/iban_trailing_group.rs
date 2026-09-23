@@ -637,18 +637,19 @@ fn label_glued_to_a_compact_iban_stays_outside_the_token() {
     }
 }
 
-/// A label glued to a SPACED German IBAN is only partly recovered, and this pins exactly how.
+/// A label glued to a SPACED German IBAN leaves as one IBAN token, and this pins why.
 ///
 /// `phone.national.de` opens with a no-capture branch that consumes a 22-character IBAN grouping
 /// so its phone branches never see `0532 0130` inside a German IBAN. That branch keeps its
 /// trailing `\b` (dropping it uncovered 7,212 bytes on digit-glued documents, solo todo #3764),
-/// so a glued label stops the consumption, the phone rule (priority 85) claims `0532 0130`, and
-/// the IBAN token is split around a phone token. The axis-1 property that must hold is that no
-/// IBAN byte leaves the process under a policy that tokenizes every claiming class: main left
-/// `DE89 3704 0044 … 00BIC` raw beside one phone token. The compact German form tokenizes whole
-/// (previous fixture).
+/// so a glued label stops the consumption and the phone rule (priority 85) still claims
+/// `0532 0130`. Containment precedence (todo #3740) then folds that claim into the validated
+/// IBAN that wholly contains it: one IBAN token, the phone a loser row. Before the rung the
+/// phone won the sub-run on rule priority and the IBAN was split around it; main before that
+/// left `DE89 3704 0044 … 00BIC` raw beside one phone token. The compact German form tokenizes
+/// whole (previous fixture); todo #3764 stays a rule-level note.
 #[test]
-fn label_glued_to_a_spaced_german_iban_leaves_no_byte_raw_but_is_fragmented() {
+fn label_glued_to_a_spaced_german_iban_is_one_iban_token() {
     let pipeline = pipeline_tokenizing_phone();
     let iban = "DE89 3704 0044 0532 0130 00";
     for (prefix, trailer) in [
@@ -680,9 +681,8 @@ fn label_glued_to_a_spaced_german_iban_leaves_no_byte_raw_but_is_fragmented() {
             shape_of(&cleaned)
         );
         assert!(
-            cleaned.contains(":Custom:phone_") && cleaned.matches(":Custom:iban_").count() == 2,
-            "this pins the fragmented shape <iban_1><phone_1><iban_2>; if the IBAN is now whole, \
-             todo #3764 is done and the fixture belongs in the glued-label test: {}",
+            !cleaned.contains(":Custom:phone_") && cleaned.matches(":Custom:iban_").count() == 1,
+            "the contained phone shape must fold into one IBAN token: {}",
             shape_of(&cleaned)
         );
     }

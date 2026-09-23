@@ -246,13 +246,24 @@ the first tier to produce a decision wins. The order is part of
    collision families.
 8. **`AnchoredContext`** — mandatory-anchor missing → family-level
    `Custom("family:<name>")` fallback emitted.
-9. **`StructuredContainment`** — a custom-class structured span that strictly
+9. **`ContainmentPrecedence`** — a span that wholly contains a
+   differently-classed span won the whole span as one token because its
+   evidence tier (validator passed > anchored or structural cue > plain regex
+   or dictionary > learned NER) is at least the contained candidate's; ties
+   go to the container. The contained candidate is recorded as a merged
+   source and its loser row carries this tier. Consulted after collision
+   policy and anchors and before structured containment.
+10. **`StructuredContainment`** — a custom-class structured span that strictly
    encloses a builtin-class (`Email`/`Name`/`Organization`/`Location`) span
-   keeps the slot; the enclosed span is recorded as a merged source. Consulted
-   after collision policy and anchors and before the generic ladder, so class
-   priority cannot split a URL, IBAN or credential around an NER sub-token.
-10. **`RecognizerId`** — final lexicographic tiebreak on recognizer id.
-11. **`Merged`** — adjacent same-class candidates merged into one span.
+   keeps the slot although the containment-precedence guard refused it (a
+   plain URL regex over a validated email); the enclosed span is recorded as
+   a merged source, so class priority cannot split a URL, IBAN or credential
+   around an NER sub-token.
+11. **`ProtectionOverride`** — a residual fragment's row: the fragment
+   replaced bytes inside a `preserve` selection because a class the policy
+   protects also claimed them. Never a winner or loser row.
+12. **`RecognizerId`** — final lexicographic tiebreak on recognizer id.
+13. **`Merged`** — adjacent same-class candidates merged into one span.
 
 SafetyNet modes layer on top of the resolver (after tokenization):
 
@@ -282,6 +293,8 @@ the `decided_by` column.
 | `collision_policy` | `ConflictTier::CollisionPolicy` | v0.7 |
 | `anchored_context` | `ConflictTier::AnchoredContext` | v0.7 |
 | `structured_containment` | `ConflictTier::StructuredContainment` | unreleased |
+| `containment_precedence` | `ConflictTier::ContainmentPrecedence` | unreleased |
+| `protection_override` | `ConflictTier::ProtectionOverride` | unreleased |
 | `recognizer_id` | `ConflictTier::RecognizerId` | v0.4 |
 | `merged` | `ConflictTier::Merged` | v0.4 |
 | `redact` | `ConflictTier::Redact` | v0.8 |
