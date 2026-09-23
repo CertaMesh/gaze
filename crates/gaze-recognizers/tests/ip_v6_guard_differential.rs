@@ -40,8 +40,11 @@ const NEW_SUFFIX_GUARD: &str = r"(?:$|[^\w:.]|\.(?:$|[^0-9]))";
 const BASE_PREFIX_GUARD: &str = r"(?:^|[^0-9a-f:.])";
 const BASE_SUFFIX_GUARD: &str = r"(?:$|[^0-9a-f:.]|\.(?:$|[^0-9]))";
 
-/// The pre-fix rule, rebuilt from the shipped one by restoring the hex-only guard classes.
-fn base_pattern() -> String {
+/// The shipped rule with either guard class swapped for another spelling.
+///
+/// Restoring both gives the pre-fix rule; restoring one gives a half-fix, which is what proves
+/// each guard edit carries its own weight.
+fn pattern_with(prefix_guard: &str, suffix_guard: &str) -> String {
     let shipped = shipped_pattern();
     assert_eq!(
         shipped.matches(NEW_PREFIX_GUARD).count(),
@@ -56,8 +59,16 @@ fn base_pattern() -> String {
          update this differential before trusting it"
     );
     shipped
-        .replace(NEW_PREFIX_GUARD, BASE_PREFIX_GUARD)
-        .replace(NEW_SUFFIX_GUARD, BASE_SUFFIX_GUARD)
+        .replace(NEW_PREFIX_GUARD, prefix_guard)
+        .replace(NEW_SUFFIX_GUARD, suffix_guard)
+}
+
+/// How many of `texts` the two rules disagree on.
+fn disagreements(left: &Regex, right: &Regex, texts: &[String]) -> usize {
+    texts
+        .iter()
+        .filter(|text| spans(left, text) != spans(right, text))
+        .count()
 }
 
 /// The capture-group-1 spans the rule emits, which is what the pipeline tokenizes.
@@ -134,7 +145,8 @@ fn is_identifier_char(c: Option<char>) -> bool {
 #[test]
 fn the_new_guard_is_a_strict_subset_that_loses_no_delimited_address() {
     let new_rule = Regex::new(&shipped_pattern()).expect("shipped ip.v6 compiles");
-    let base_rule = Regex::new(&base_pattern()).expect("reconstructed base ip.v6 compiles");
+    let base_rule = Regex::new(&pattern_with(BASE_PREFIX_GUARD, BASE_SUFFIX_GUARD))
+        .expect("reconstructed base ip.v6 compiles");
 
     let addresses = addresses();
     let prefixes: Vec<&str> = PREFIXES.iter().chain(WORDY_PREFIXES.iter()).copied().collect();
@@ -157,8 +169,6 @@ fn the_new_guard_is_a_strict_subset_that_loses_no_delimited_address() {
 
     let mut cases = 0usize;
     let mut divergences = 0usize;
-    let mut left_divergences = 0usize;
-    let mut right_divergences = 0usize;
     let mut widenings = Vec::new();
     let mut losses_outside_a_word = Vec::new();
     let mut delimited_cases = 0usize;
@@ -182,12 +192,6 @@ fn the_new_guard_is_a_strict_subset_that_loses_no_delimited_address() {
 
                 if base != new {
                     divergences += 1;
-                    if left_edge {
-                        left_divergences += 1;
-                    }
-                    if right_edge {
-                        right_divergences += 1;
-                    }
                     // Claim 1b: every divergence is identifier-adjacent.
                     if !left_edge && !right_edge {
                         losses_outside_a_word.push(text.clone());
@@ -222,11 +226,41 @@ fn the_new_guard_is_a_strict_subset_that_loses_no_delimited_address() {
         losses_outside_a_word.len(),
         &losses_outside_a_word[..losses_outside_a_word.len().min(5)]
     );
-    // Non-vacuity: the two rules must actually differ somewhere, or every assertion above is
-    // comparing a rule against itself and proves nothing.
+    // Non-vacuity, attributed to each guard rather than to the context it happened in. Compare
+    // the shipped rule against a half-fix that restored only ONE guard: if that half-fix behaves
+    // identically, that guard's edit changed nothing. Counting divergences by whether the
+    // context was left-wordy or right-wordy cannot see this, because a context is usually both,
+    // so a half-reverted rule keeps a large count on either side.
+    let wordy: Vec<String> = recognised
+        .iter()
+        .flat_map(|address| {
+            WORDY_PREFIXES.iter().flat_map(move |prefix| {
+                WORDY_SUFFIXES
+                    .iter()
+                    .map(move |suffix| format!("{prefix}{address}{suffix}"))
+            })
+        })
+        .collect();
+    let prefix_only_base = Regex::new(&pattern_with(BASE_PREFIX_GUARD, NEW_SUFFIX_GUARD))
+        .expect("prefix-only base compiles");
+    let suffix_only_base = Regex::new(&pattern_with(NEW_PREFIX_GUARD, BASE_SUFFIX_GUARD))
+        .expect("suffix-only base compiles");
+    let prefix_guard_effect = disagreements(&new_rule, &prefix_only_base, &wordy);
+    let suffix_guard_effect = disagreements(&new_rule, &suffix_only_base, &wordy);
+    assert!(
+        prefix_guard_effect > 100,
+        "restoring only the PREFIX guard changes {prefix_guard_effect} cases; that guard edit is \
+         doing nothing and this differential cannot see it"
+    );
+    assert!(
+        suffix_guard_effect > 100,
+        "restoring only the SUFFIX guard changes {suffix_guard_effect} cases; that guard edit is \
+         doing nothing and this differential cannot see it"
+    );
     assert!(
         divergences > 10_000,
-        "the reconstructed base rule behaves like the shipped one ({divergences} divergences);          this differential is measuring nothing"
+        "the reconstructed base rule behaves like the shipped one ({divergences} divergences); \
+         this differential is measuring nothing"
     );
     assert!(
         delimited_cases > 10_000,
@@ -235,9 +269,9 @@ fn the_new_guard_is_a_strict_subset_that_loses_no_delimited_address() {
 
     println!(
         "ip.v6 guard differential: {} address forms x {} prefixes x {} suffixes = {cases} cases; \
-         {divergences} divergences ({left_divergences} left-edge, {right_divergences} \
-         right-edge), all identifier-adjacent; {delimited_cases} delimited cases agree exactly; \
-         0 widenings; 0 recall losses.",
+         {divergences} divergences, all identifier-adjacent; {delimited_cases} delimited cases \
+         agree exactly; 0 widenings; 0 recall losses. Guard effect in identifier contexts: \
+         prefix {prefix_guard_effect}, suffix {suffix_guard_effect}.",
         recognised.len(),
         prefixes.len(),
         suffixes.len()
