@@ -13,9 +13,7 @@
 //! fire. That class is a strict subset of the old one, so the change can only ever remove
 //! matches, never add them.
 //!
-//! Two shapes below are pinned as they behave on the base rule, NOT as new behaviour:
-//! `http://[::1]:8080/` (the URL recognizer wins conflict resolution and the URL class is not
-//! tokenized here) and `Address:2001:db8::1` (a leading `:` was already excluded by the guard).
+//! The URL recognizer used to shield `http://[::1]:8080/`; the IPv6 fragment is now protected.
 //! A standalone `a::b` still tokenizes: with nothing on either side it is indistinguishable from
 //! the address it literally is, and refusing it would cost real recall.
 //!
@@ -95,15 +93,9 @@ fn assert_untouched(text: &str) {
 /// Asserts the whole address is gone and the surrounding text survives.
 fn assert_tokenized(text: &str, address: &str, surviving_context: &[&str]) {
     let cleaned = clean(text);
-    assert!(
-        !cleaned.contains(address),
-        "address in {text:?} survived in {cleaned:?}"
-    );
+    assert!(!cleaned.contains(address), "address survived cleaning");
     for fragment in surviving_context {
-        assert!(
-            cleaned.contains(fragment),
-            "context {fragment:?} should survive but is missing from {cleaned:?}"
-        );
+        assert!(cleaned.contains(fragment), "surrounding context changed");
     }
 }
 
@@ -168,10 +160,7 @@ fn bare_addresses_still_tokenize() {
         "2001:db8::1",
     ] {
         let cleaned = clean(address);
-        assert!(
-            !cleaned.contains(address),
-            "address must still tokenize, but survived as {cleaned:?}"
-        );
+        assert!(!cleaned.contains(address), "bare address survived cleaning");
     }
 }
 
@@ -226,9 +215,32 @@ fn a_standalone_all_hex_path_still_tokenizes() {
 }
 
 #[test]
-fn shapes_the_base_rule_already_left_alone_are_unchanged() {
-    // Not a regression from todo 3710: a leading `:` was already outside the guard class.
-    assert_untouched("Address:2001:db8::1");
+fn glued_cue_addresses_are_protected() {
+    for (text, address, context) in [
+        ("Address:2001:db8::1", "2001:db8::1", "Address:"),
+        ("IP:fe80::1", "fe80::1", "IP:"),
+        ("ipv6:2001:db8::a", "2001:db8::a", "ipv6:"),
+        ("host:2001:db8::1", "2001:db8::1", "host:"),
+        ("Adresse:2001:db8::1", "2001:db8::1", "Adresse:"),
+        ("{\"ip\":\"2001:db8::1\"}", "2001:db8::1", "{\"ip\":\""),
+    ] {
+        assert_tokenized(text, address, &[context]);
+    }
+}
+
+#[test]
+fn cue_words_followed_by_scope_separators_are_untouched() {
+    for path in [
+        "Foo::bar",
+        "std::fs::read",
+        "gaze::rule::resolve",
+        "Policy::default()",
+        "Address::new",
+        "IP::from",
+        "host::connect",
+    ] {
+        assert_untouched(path);
+    }
 }
 
 /// The URL recognizer owns `http://[::1]:8080/` and the policy preserves URLs by default, but

@@ -22,6 +22,7 @@
 
 use regex::Regex;
 use std::collections::BTreeSet;
+use std::net::Ipv6Addr;
 
 /// The `ip.v6` `pattern = '''...'''` body, read out of the shipped rulepack text.
 fn shipped_pattern() -> String {
@@ -284,4 +285,91 @@ fn the_new_guard_is_a_strict_subset_that_loses_no_delimited_address() {
         prefixes.len(),
         suffixes.len()
     );
+}
+
+#[test]
+fn cue_recovery_only_adds_parsed_addresses_after_explicit_cues() {
+    const CUE_PREFIX: &str = r"(?:\b(?:address|adresse|ipv6|ip|host|addr):|(?:^|[^\w:.]))";
+    let current = shipped_pattern();
+    assert_eq!(current.matches(CUE_PREFIX).count(), 1);
+    let old = Regex::new(&current.replace(CUE_PREFIX, NEW_PREFIX_GUARD))
+        .expect("pre-recovery rule compiles");
+    let new = Regex::new(&current).expect("current rule compiles");
+    let prefixes = [
+        "",
+        " ",
+        "Address:",
+        "ADDRESS:",
+        "Adresse:",
+        "IP:",
+        "ipv6:",
+        "host:",
+        "addr:",
+        "ip=",
+        "{\"ip\":\"",
+        "fooAddress:",
+        "_2001",
+        "foo:",
+        "std::",
+        "gaze::rule::",
+        "Policy::",
+        "Address::",
+        "IP::",
+        "host::",
+    ];
+    let suffixes = ["", " ", ".", ")", "\"", "/32", "_tail", ":next"];
+    let addresses: Vec<_> = addresses()
+        .into_iter()
+        .filter(|address| address.parse::<Ipv6Addr>().is_ok())
+        .collect();
+    let mut cases = 0usize;
+    let mut additions = 0usize;
+    let mut losses = 0usize;
+    let mut unexpected_additions = 0usize;
+
+    for address in &addresses {
+        for prefix in prefixes {
+            for suffix in suffixes {
+                let input = format!("{prefix}{address}{suffix}");
+                let before = spans(&old, &input);
+                let after = spans(&new, &input);
+                cases += 1;
+                losses += before.difference(&after).count();
+                for &(start, end) in after.difference(&before) {
+                    additions += 1;
+                    let cue = [
+                        "Address:", "ADDRESS:", "Adresse:", "IP:", "ipv6:", "host:", "addr:",
+                    ]
+                    .contains(&prefix);
+                    if !cue
+                        || start != prefix.len()
+                        || end != start + address.len()
+                        || input[start..end].parse::<Ipv6Addr>().is_err()
+                    {
+                        unexpected_additions += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert!(cases > 10_000);
+    assert!(additions > 100);
+    assert_eq!(losses, 0, "a formerly emitted IPv6 span was lost");
+    assert_eq!(
+        unexpected_additions, 0,
+        "cue recovery widened outside parsed cue addresses"
+    );
+
+    for path in [
+        "Foo::bar",
+        "std::fs::read",
+        "gaze::rule::resolve",
+        "Policy::default()",
+        "Address::new",
+        "IP::from",
+        "host::connect",
+    ] {
+        assert_eq!(spans(&new, path), spans(&old, path), "scope path changed");
+    }
+    println!("cue differential: {cases} cases; {additions} additions; {losses} losses; {unexpected_additions} unexpected additions");
 }
