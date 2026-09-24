@@ -25,7 +25,8 @@ use crate::commands::{
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
 use crate::pipeline::build::{
-    map_policy_error, resolve_pipeline, validate_ner_threshold, warn_uncovered_collision_families,
+    map_policy_error, preserve_fallback_warning, resolve_pipeline, validate_ner_threshold,
+    warn_uncovered_collision_families,
 };
 
 const CORE_EXTENDED_DEPRECATION: &str = "`--rulepack-bundled core-extended` is deprecated since v0.8.0; use `--rulepack-bundled core --locale=<lang>` for explicit activation";
@@ -182,6 +183,9 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     // path there is no output, and the notice must not corrupt the single-line
     // JSON error envelope on stderr (issue #360).
     warn_uncovered_collision_families(&effective_policy, &loaded_rulepacks, &locale_chain);
+    if let Some(warning) = preserve_fallback_warning(&effective_policy, &pipeline) {
+        eprintln!("{warning}");
+    }
     println!("{json}");
     Ok(())
 }

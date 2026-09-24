@@ -19,6 +19,11 @@ pub(crate) struct ResolvedPipeline {
     pub(crate) dictionaries: DictionaryBundle,
 }
 
+/// Diagnostic for a loaded policy whose fall-through action preserves detected values.
+pub(crate) fn preserve_fallback_warning(_policy: &Policy, _pipeline: &Pipeline) -> Option<String> {
+    None
+}
+
 /// [`ResolvedPipeline`] before `build()`, for a verb that layers recognizers on top.
 pub(crate) struct ResolvedPipelineBuilder {
     pub(crate) builder: PipelineBuilder,

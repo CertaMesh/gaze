@@ -18,7 +18,9 @@ use super::{
 };
 use crate::error::CliError;
 use crate::io::DEFAULT_MAX_BYTES;
-use crate::pipeline::build::{map_policy_error, resolve_pipeline, validate_ner_threshold};
+use crate::pipeline::build::{
+    map_policy_error, preserve_fallback_warning, resolve_pipeline, validate_ner_threshold,
+};
 use crate::pipeline::run::{
     clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
     map_safety_net_pipeline_error, maybe_register_safety_net, safety_net_policy,
@@ -95,6 +97,9 @@ pub(crate) struct Args {
 pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
     let shutdown = install_signal_flags()?;
     let mut daemon = Daemon::new(args)?;
+    if let Some(warning) = preserve_fallback_warning(&daemon.policy, &daemon.pipeline) {
+        eprintln!("{warning}");
+    }
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         for line in io::stdin().lock().lines() {
