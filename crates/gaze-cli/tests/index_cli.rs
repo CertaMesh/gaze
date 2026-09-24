@@ -1,10 +1,12 @@
 #![cfg(feature = "index")]
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use assert_cmd::Command;
+use gaze::Rulepack;
 use serial_test::file_serial;
 
 #[path = "support/token_assertions.rs"]
@@ -381,27 +383,216 @@ Support summary: Alice Mueller from Globex GmbH wrote from alice@example.invalid
     }
 }
 
-/// Ingest runs the same `core` floor as a policy-less `gaze clean`, so the structured
-/// identifiers NER never sees are tokenized before they reach the snippet that search prints.
-/// The fake output net reports nothing, so this pins the deterministic floor, not a net.
+/// Every emitted class in the policy-less `core` rulepack has a synthetic fixture here.
+/// IPv4 and IPv6 get separate rows because they use separate recognizers. The field-only
+/// case ID keeps each document searchable when the core floor is removed for mutation testing.
+/// The fake output net reports nothing, so only the deterministic floor can protect values.
 #[test]
 #[file_serial(gaze_subprocess)]
 fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
+    struct CoreCase {
+        class: &'static str,
+        line: &'static str,
+        raw: &'static str,
+        token: &'static str,
+    }
+
+    // Classes and active shapes: embedded/core.toml and docs/reference/redaction-classes.md.
+    // Validator-passing values come from the recognizer tests; all records are synthetic.
+    let cases = [
+        CoreCase {
+            class: "email",
+            line: "Contact alice@example.invalid",
+            raw: "alice@example.invalid",
+            token: ":Email_",
+        },
+        CoreCase {
+            class: "name",
+            line: "From: \"Ada Example\" <ada@example.invalid>",
+            raw: "Ada Example",
+            token: ":Name_",
+        },
+        CoreCase {
+            class: "phone",
+            line: "Phone +1-555-0100",
+            raw: "+1-555-0100",
+            token: ":Custom:phone_",
+        },
+        CoreCase {
+            class: "iban",
+            line: "IBAN AT61 1904 3002 3457 3201",
+            raw: "AT61 1904 3002 3457 3201",
+            token: ":Custom:iban_",
+        },
+        CoreCase {
+            class: "credit_card",
+            line: "Card 4111 1111 1111 1111",
+            raw: "4111 1111 1111 1111",
+            token: ":Custom:credit_card_",
+        },
+        CoreCase {
+            class: "ip_address/v4",
+            line: "Router IP 10.1.2.3",
+            raw: "10.1.2.3",
+            token: ":Custom:ip_address_",
+        },
+        CoreCase {
+            class: "ip_address/v6",
+            line: "Router IPv6 2001:db8::1",
+            raw: "2001:db8::1",
+            token: ":Custom:ip_address_",
+        },
+        CoreCase {
+            class: "eth_address",
+            line: "Wallet 0x52908400098527886E0F7030069857D2E4169EE7",
+            raw: "0x52908400098527886E0F7030069857D2E4169EE7",
+            token: ":Custom:eth_address_",
+        },
+        CoreCase {
+            class: "aadhaar",
+            line: "Aadhaar 2345 6789 0124",
+            raw: "2345 6789 0124",
+            token: ":Custom:aadhaar_",
+        },
+        CoreCase {
+            class: "nir",
+            line: "NIR 190010100100058",
+            raw: "190010100100058",
+            token: ":Custom:nir_",
+        },
+        CoreCase {
+            class: "steuer_id",
+            line: "Steuer-ID 48 954 371 207",
+            raw: "48 954 371 207",
+            token: ":Custom:steuer_id_",
+        },
+        CoreCase {
+            class: "vat_id",
+            line: "USt-IdNr DE294581776",
+            raw: "DE294581776",
+            token: ":Custom:vat_id_",
+        },
+        CoreCase {
+            class: "bsn",
+            line: "BSN 111222333",
+            raw: "111222333",
+            token: ":Custom:bsn_",
+        },
+        CoreCase {
+            class: "cpf",
+            line: "CPF 529.982.247-25",
+            raw: "529.982.247-25",
+            token: ":Custom:cpf_",
+        },
+        CoreCase {
+            class: "cnpj",
+            line: "CNPJ 04.252.011/0001-10",
+            raw: "04.252.011/0001-10",
+            token: ":Custom:cnpj_",
+        },
+        CoreCase {
+            class: "nhs_number",
+            line: "NHS number 943 476 5919",
+            raw: "943 476 5919",
+            token: ":Custom:nhs_number_",
+        },
+        CoreCase {
+            class: "ssn",
+            line: "SSN 123-45-6789",
+            raw: "123-45-6789",
+            token: ":Custom:ssn_",
+        },
+        CoreCase {
+            class: "nino",
+            line: "National Insurance Number AB123456C",
+            raw: "AB123456C",
+            token: ":Custom:nino_",
+        },
+        CoreCase {
+            class: "pan",
+            line: "PAN card ABCPA1234F",
+            raw: "ABCPA1234F",
+            token: ":Custom:pan_",
+        },
+        CoreCase {
+            class: "postal_code",
+            line: "Mailing code Z1Z 9Z9",
+            raw: "Z1Z 9Z9",
+            token: ":Custom:postal_code_",
+        },
+        CoreCase {
+            class: "url",
+            line: "Site https://example.invalid/orders",
+            raw: "https://example.invalid/orders",
+            token: ":Custom:url_",
+        },
+        CoreCase {
+            class: "tax_number",
+            line: "Tax number 123-456-789",
+            raw: "123-456-789",
+            token: ":Custom:tax_number_",
+        },
+        CoreCase {
+            class: "driver_license",
+            line: "Driver's license D1234567",
+            raw: "D1234567",
+            token: ":Custom:driver_license_",
+        },
+        CoreCase {
+            class: "national_id",
+            line: "National ID number AB123456",
+            raw: "AB123456",
+            token: ":Custom:national_id_",
+        },
+        CoreCase {
+            class: "passport",
+            line: "Passport ID A1234567",
+            raw: "A1234567",
+            token: ":Custom:passport_",
+        },
+        CoreCase {
+            class: "birth_date",
+            line: "DOB: 1990-02-03",
+            raw: "1990-02-03",
+            token: ":Custom:birth_date_",
+        },
+    ];
+
+    let core = Rulepack::parse_bundled(gaze_recognizers::embedded("core").expect("core bundle"))
+        .expect("parse core bundle");
+    let declared_classes = core
+        .recognizers
+        .iter()
+        .filter(|recognizer| recognizer.enabled)
+        .map(|recognizer| recognizer.class.to_canonical_str())
+        .collect::<BTreeSet<_>>();
+    let covered_classes = cases
+        .iter()
+        .map(|case| {
+            let class = case.class.split('/').next().expect("class label");
+            match class {
+                "email" | "name" => class.to_string(),
+                custom => format!("custom:{custom}"),
+            }
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        covered_classes, declared_classes,
+        "core index fixtures must cover every enabled core class"
+    );
+
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
     let index_env = index_ner(&temp);
     fs::create_dir_all(&corpus).expect("corpus dir");
-    fs::write(
-        corpus.join("identifiers.md"),
-        "\
-Alice Mueller wrote from alice@example.invalid about her refund.
-Card 4111 1111 1111 1111 was charged twice.
-IBAN AT61 1904 3002 3457 3201 is the refund target.
-Her router is at ip 10.1.2.3 and she can be reached on +43 1 234 5678.
-",
-    )
-    .expect("write identifiers");
+    for (number, case) in cases.iter().enumerate() {
+        fs::write(
+            corpus.join(format!("case-{number:02}.md")),
+            format!("Case ID: CASE-{number:02}\n{}\n", case.line),
+        )
+        .expect("write core case");
+    }
 
     let ingest = gaze_index_command(&index_env)
         .arg("ingest")
@@ -410,50 +601,42 @@ Her router is at ip 10.1.2.3 and she can be reached on +43 1 234 5678.
         .arg(&index)
         .output()
         .expect("run index ingest");
-    assert!(
-        ingest.status.success(),
-        "ingest failed: stderr={}",
-        String::from_utf8_lossy(&ingest.stderr)
-    );
+    assert!(ingest.status.success(), "core-case index ingest failed");
 
-    let search = gaze_index_command(&index_env)
-        .args(["search", "alice@example.invalid"])
-        .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
-        .arg(&index)
-        .output()
-        .expect("run index search");
+    let mut failures = Vec::new();
+    for (number, case) in cases.iter().enumerate() {
+        let search = gaze_index_command(&index_env)
+            .args(["search", &format!("CASE-{number:02}")])
+            .args([
+                "--class",
+                "custom:case_id",
+                "--domain",
+                DOMAIN,
+                "--index-path",
+            ])
+            .arg(&index)
+            .output()
+            .expect("run core-case index search");
+        if !search.status.success() {
+            failures.push(format!("{}: search failed", case.class));
+            continue;
+        }
+        let stdout = String::from_utf8(search.stdout).expect("utf8 stdout");
+        if !stdout.contains("doc: doc:") {
+            failures.push(format!("{}: no hit", case.class));
+        }
+        if !stdout.contains(case.token) {
+            failures.push(format!("{}: missing class token", case.class));
+        }
+        if without_tokens(&stdout).contains(case.raw) {
+            failures.push(format!("{}: raw value in search stdout", case.class));
+        }
+    }
     assert!(
-        search.status.success(),
-        "search failed: stderr={}",
-        String::from_utf8_lossy(&search.stderr)
+        failures.is_empty(),
+        "core index coverage failed: {}",
+        failures.join(", ")
     );
-
-    let stdout = String::from_utf8(search.stdout).expect("utf8 stdout");
-    assert!(stdout.contains("doc: doc:"), "expected a hit: {stdout}");
-    for token in [
-        ":Custom:credit_card_",
-        ":Custom:iban_",
-        ":Custom:ip_address_",
-        ":Custom:phone_",
-    ] {
-        assert!(
-            stdout.contains(token),
-            "search stdout lacks a {token} token: {stdout}"
-        );
-    }
-    for raw in [
-        "alice@example.invalid",
-        "Alice Mueller",
-        "4111 1111 1111 1111",
-        "AT61 1904 3002 3457 3201",
-        "10.1.2.3",
-        "+43 1 234 5678",
-    ] {
-        assert!(
-            !stdout.contains(raw),
-            "search stdout leaked raw fixture value {raw}: {stdout}"
-        );
-    }
 
     // Core classes are protected in the snippet, not searchable: an agent cannot probe the
     // index for a card number.
