@@ -1033,7 +1033,7 @@ threshold = 0.3
 | Field       | Type   | Required | Notes                                                          |
 |-------------|--------|----------|----------------------------------------------------------------|
 | `model_dir` | string | no       | Directory containing the ONNX model bundle. `~/` is expanded from `$HOME`. If absent, NER is silently disabled and the pipeline runs with regex detectors only (a `tracing::warn!` is logged). |
-| `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`). This is a single BCP47 string, not an array; use `[locale].active` for the rulepack locale fallback list. |
+| `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`). The Davlan backend stores and logs this hint but does not use it to filter documents. This is a single BCP47 string, not an array; use `[locale].active` for the rulepack locale fallback list. |
 | `threshold` | float  | no       | Confidence floor in the inclusive range `0.0..=1.0`. Defaults to `0.3`. `gaze clean --ner-threshold=<float>` overrides this value for one invocation. |
 
 If `model_dir` is set but the model fails to load (missing files, bad

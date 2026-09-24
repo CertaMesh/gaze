@@ -49,20 +49,31 @@ pub use regex::{NormalizerKind, RegexDetector};
 // drift-ack: core snapshot version0.5.3 matches the field rulepack; all detection fields are unchanged.
 // drift-ack: core 0.6.0 moves security_token.anchored and password.field into the opt-in
 // `secrets` bundle and drops username.field; the new secrets snapshot pins the moved rules.
+const EMBEDDED_RULEPACKS: &[(&str, &str)] = &[
+    ("core", include_str!("../embedded/core.toml")),
+    ("locale-de", include_str!("../embedded/locale-de.toml")),
+    ("locale-en", include_str!("../embedded/locale-en.toml")),
+    ("locale-br", include_str!("../embedded/locale-br.toml")),
+    ("locale-fr", include_str!("../embedded/locale-fr.toml")),
+    ("locale-in", include_str!("../embedded/locale-in.toml")),
+    ("locale-nl", include_str!("../embedded/locale-nl.toml")),
+    ("locale-uk", include_str!("../embedded/locale-uk.toml")),
+    // Credentials are opt-in, never part of setup's default activation.
+    ("secrets", include_str!("../embedded/secrets.toml")),
+];
+
+/// Canonical embedded names and contents. `core-extended` is an alias, not a second pack.
+pub fn embedded_rulepacks() -> impl Iterator<Item = (&'static str, &'static str)> {
+    EMBEDDED_RULEPACKS.iter().copied()
+}
+
 pub fn embedded(name: &str) -> Option<&'static str> {
-    match name {
-        "core" | "core-extended" => Some(include_str!("../embedded/core.toml")),
-        "locale-de" => Some(include_str!("../embedded/locale-de.toml")),
-        "locale-en" => Some(include_str!("../embedded/locale-en.toml")),
-        "locale-br" => Some(include_str!("../embedded/locale-br.toml")),
-        "locale-fr" => Some(include_str!("../embedded/locale-fr.toml")),
-        "locale-in" => Some(include_str!("../embedded/locale-in.toml")),
-        "locale-nl" => Some(include_str!("../embedded/locale-nl.toml")),
-        "locale-uk" => Some(include_str!("../embedded/locale-uk.toml")),
-        // Credentials are not PII: opt-in only, never part of a default activation.
-        "secrets" => Some(include_str!("../embedded/secrets.toml")),
-        _ => None,
-    }
+    let canonical = if name == "core-extended" {
+        "core"
+    } else {
+        name
+    };
+    embedded_rulepacks().find_map(|(id, content)| (id == canonical).then_some(content))
 }
 
 #[cfg(test)]

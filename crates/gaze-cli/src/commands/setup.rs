@@ -4,7 +4,7 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use clap::ValueEnum;
-use gaze::{CleanDocument, RawDocument, Session};
+use gaze::{CleanDocument, LocaleTag, RawDocument, Rulepack, Session};
 use gaze_model_setup::{install_ner_bundle, install_nym_bundle, InstallOutcome, SetupError};
 use sha2::{Digest, Sha256};
 
@@ -14,8 +14,7 @@ use crate::pipeline::build::resolve_pipeline;
 
 const DEFAULT_POLICY_FILE: &str = "gaze.toml";
 const OPF_UNPINNED_NOTICE: &str = "OPF safety-net is not pinned in this build; defaulting to NER.";
-const DOCTOR_INPUT: &str =
-    "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd."; // fixture-cited(crates/gaze-cli/src/commands/setup.rs:commands::setup::tests::non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes)
+const DOCTOR_INPUT: &str = "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd.\nPhone +1-555-0100\nIBAN AT61 1904 3002 3457 3201\nCard 4111 1111 1111 1111\nRouter IP 10.1.2.3"; // fixture-cited(crates/gaze-cli/tests/index_cli.rs:index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw)
 
 #[derive(Debug)]
 pub(crate) struct Args {
@@ -348,7 +347,7 @@ fn write_policy(policy_path: &Path, model_dir: &Path, force: bool) -> Result<(),
     }
 
     let model_dir = canonical_or_absolute(model_dir)?;
-    let policy = setup_policy_toml(&model_dir);
+    let policy = setup_policy_toml(&model_dir)?;
     fs::write(policy_path, policy).map_err(|err| {
         setup_error(format!(
             "cannot write policy `{}`: {err}",
@@ -357,50 +356,63 @@ fn write_policy(policy_path: &Path, model_dir: &Path, force: bool) -> Result<(),
     })
 }
 
-fn setup_policy_toml(model_dir: &Path) -> String {
+fn setup_policy_toml(model_dir: &Path) -> Result<String, CliError> {
     let model_dir = toml_basic_string(&model_dir.to_string_lossy());
-    format!(
+    let packs = gaze_recognizers::embedded_rulepacks()
+        .filter(|(name, _)| *name != "secrets")
+        .map(|(name, contents)| {
+            Rulepack::parse_bundled(contents)
+                .map(|pack| (name, pack))
+                .map_err(|err| setup_error(format!("invalid embedded rulepack {name}: {err}")))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let bundled = packs
+        .iter()
+        .map(|(name, _)| format!("\"{name}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut locales = vec![LocaleTag::EnUs];
+    for (_, pack) in &packs {
+        for locale in pack
+            .default_locales
+            .iter()
+            .chain(pack.recognizers.iter().flat_map(|r| &r.locales))
+        {
+            if *locale != LocaleTag::Global && !locales.contains(locale) {
+                locales.push(locale.clone());
+            }
+        }
+    }
+    // The locale chain claims overlapping spans in order. Keep en-US first for
+    // existing English behavior, then take the packs' declared locale order.
+    let active = locales
+        .iter()
+        .map(|locale| format!("\"{}\"", locale.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    // The Davlan NER locale option is metadata only; no locale hint lets the
+    // multilingual recognizer run on every document.
+    Ok(format!(
         r#"schema_version = "0.1.0"
 
 [session]
 scope = "conversation"
 
 [locale]
-active = ["en-US"]
+active = [{active}]
 
 [ner]
 model_dir = "{model_dir}"
-locale = "en-US"
 threshold = 0.3
 
 [policy.rulepacks]
-bundled = ["core"]
-
-[[rule]]
-kind = "class"
-class = "email"
-action = "tokenize"
-
-[[rule]]
-kind = "class"
-class = "name"
-action = "tokenize"
-
-[[rule]]
-kind = "class"
-class = "location"
-action = "generalize"
-
-[[rule]]
-kind = "class"
-class = "organization"
-action = "tokenize"
+bundled = [{bundled}]
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 "#
-    )
+    ))
 }
 
 fn doctor_check(policy_path: &Path) -> Result<String, CliError> {
@@ -432,10 +444,19 @@ fn doctor_check(policy_path: &Path) -> Result<String, CliError> {
         ));
     };
 
-    if !clean_text.contains(":Name_") || !clean_text.contains(":Email_") {
-        return Err(setup_error(format!(
-            "doctor did not tokenize expected synthetic Name and Email spans: {clean_text}"
-        )));
+    for token in [
+        ":Name_",
+        ":Email_",
+        ":Custom:phone_",
+        ":Custom:iban_",
+        ":Custom:credit_card_",
+        ":Custom:ip_address_",
+    ] {
+        if !clean_text.contains(token) {
+            return Err(setup_error(format!(
+                "doctor did not tokenize expected synthetic {token} span"
+            )));
+        }
     }
     Ok(clean_text)
 }
@@ -539,6 +560,7 @@ fn setup_error(detail: String) -> CliError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
     use tempfile::tempdir;
 
     #[cfg(unix)]
@@ -648,11 +670,50 @@ mod tests {
 
         let policy = fs::read_to_string(&policy_out).unwrap();
         assert!(policy.contains("[ner]"));
+        assert!(!policy.contains("locale = \"en-US\""));
         assert!(policy.contains(&toml_basic_string(&model_dir.to_string_lossy())));
 
         let clean_text = doctor_check(&policy_out).unwrap();
-        assert!(clean_text.contains(":Name_"), "{clean_text}");
-        assert!(clean_text.contains(":Email_"), "{clean_text}");
+        assert!(clean_text.contains(":Name_"));
+        assert!(clean_text.contains(":Email_"));
+    }
+
+    #[test]
+    fn generated_policy_registers_every_non_secret_bundled_recognizer() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        let policy_out = dir.path().join("policy.toml");
+        write_synthetic_ner_dir(&model_dir);
+        write_policy(&policy_out, &model_dir, false).unwrap();
+
+        let resolved = resolve_pipeline(
+            Some(&policy_out),
+            &CleanOverrides::default(),
+            &[],
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let actual = resolved
+            .pipeline
+            .registry()
+            .recognizer_ids()
+            .filter(|id| *id != "ner")
+            .collect::<BTreeSet<_>>();
+        let expected = gaze_recognizers::embedded_rulepacks()
+            .filter(|(name, _)| *name != "secrets")
+            .flat_map(|(_, contents)| {
+                Rulepack::parse_bundled(contents)
+                    .unwrap()
+                    .recognizers
+                    .into_iter()
+                    .filter(|recognizer| recognizer.enabled)
+                    .map(|recognizer| recognizer.id)
+            })
+            .collect::<BTreeSet<_>>();
+        let expected = expected.iter().map(String::as_str).collect::<BTreeSet<_>>();
+        assert_eq!(actual, expected);
     }
 
     #[test]
