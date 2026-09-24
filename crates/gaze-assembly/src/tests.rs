@@ -71,6 +71,31 @@ fn preloaded_nym_attachment_changes_the_built_pipeline() {
     assert_eq!(pipeline.safety_net_count(), before + 1);
 }
 
+#[test]
+fn safety_net_count_requires_exactly_one_added() {
+    assert!(require_net_added(2, 3, BuildError::NymNotAttached).is_ok());
+    assert!(matches!(
+        require_net_added(2, 2, BuildError::NymNotAttached),
+        Err(BuildError::NymNotAttached)
+    ));
+    assert!(matches!(
+        require_net_added(2, 1, BuildError::NymNotAttached),
+        Err(BuildError::NymNotAttached)
+    ));
+}
+
+#[test]
+fn safety_net_attachment_rejects_a_missing_increment() {
+    let pipeline = CorePipelineConfig::new()
+        .build()
+        .unwrap()
+        .pipeline()
+        .clone();
+    let result =
+        attach_safety_net_checked(pipeline, Ok::<_, BuildError>, BuildError::NymNotAttached);
+    assert!(matches!(result, Err(BuildError::NymNotAttached)));
+}
+
 fn embedded_rulepack(name: &str) -> Rulepack {
     Rulepack::load(gaze::RulepackSource::Embedded(
         gaze_recognizers::embedded(name).expect("embedded rulepack"),

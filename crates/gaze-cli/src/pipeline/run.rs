@@ -254,14 +254,11 @@ pub(crate) fn maybe_register_safety_net(
                 "--safety-net-registry cannot replace policy safety net nym".into(),
             ));
         }
-        let expected = pipeline.safety_net_count() + 1;
-        let pipeline = register_safety_net_registry(pipeline, options)?;
-        if pipeline.safety_net_count() != expected {
-            return Err(CliError::SafetyNetConfigDetail(
-                "selected safety net registry was not attached".into(),
-            ));
-        }
-        return Ok(pipeline);
+        return gaze_assembly::attach_safety_net_checked(
+            pipeline,
+            |pipeline| register_safety_net_registry(pipeline, options),
+            CliError::SafetyNetConfigDetail("selected safety net registry was not attached".into()),
+        );
     }
     let backends = selected_safety_nets(options, policy)?;
     if backends.is_empty() {
@@ -272,16 +269,16 @@ pub(crate) fn maybe_register_safety_net(
     }
     let mut pipeline = pipeline;
     for backend in backends {
-        let expected = pipeline.safety_net_count() + 1;
-        pipeline = match backend {
-            SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options)?,
-            SafetyNetBackend::Nym => register_nym(pipeline, options, policy)?,
-        };
-        if pipeline.safety_net_count() != expected {
-            return Err(CliError::SafetyNetConfigDetail(format!(
+        pipeline = gaze_assembly::attach_safety_net_checked(
+            pipeline,
+            |pipeline| match backend {
+                SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options),
+                SafetyNetBackend::Nym => register_nym(pipeline, options, policy),
+            },
+            CliError::SafetyNetConfigDetail(format!(
                 "selected safety net {backend:?} was not attached"
-            )));
-        }
+            )),
+        )?;
     }
     Ok(pipeline)
 }

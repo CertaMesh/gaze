@@ -146,12 +146,31 @@ fn attach_preloaded_safety_net<N: gaze::SafetyNet + 'static>(
     pipeline: Pipeline,
     net: N,
 ) -> Result<Pipeline, BuildError> {
-    let expected = pipeline.safety_net_count() + 1;
-    let pipeline = pipeline.with_safety_net(net);
-    if pipeline.safety_net_count() != expected {
-        return Err(BuildError::NymNotAttached);
-    }
+    attach_safety_net_checked(
+        pipeline,
+        |pipeline| Ok(pipeline.with_safety_net(net)),
+        BuildError::NymNotAttached,
+    )
+}
+
+/// Attach one safety net and fail closed if it does not increase the pipeline's count.
+/// The attachment closure owns registration so callers cannot omit the count check.
+pub fn attach_safety_net_checked<E>(
+    pipeline: Pipeline,
+    attach: impl FnOnce(Pipeline) -> Result<Pipeline, E>,
+    not_attached: E,
+) -> Result<Pipeline, E> {
+    let before = pipeline.safety_net_count();
+    let pipeline = attach(pipeline)?;
+    require_net_added(before, pipeline.safety_net_count(), not_attached)?;
     Ok(pipeline)
+}
+
+fn require_net_added<E>(before: usize, after: usize, not_attached: E) -> Result<(), E> {
+    if before.checked_add(1) != Some(after) {
+        return Err(not_attached);
+    }
+    Ok(())
 }
 
 /// A policy requesting Nym cannot silently lose its safety net in a build without the feature.
