@@ -26,7 +26,7 @@ fn reference_policy_example_loads_under_current_policy_loader() {
     assert!(policy.rules.iter().any(|rule| matches!(
         rule,
         RuleSpec::Default {
-            action: Action::Preserve
+            action: Action::Tokenize
         }
     )));
 }

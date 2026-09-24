@@ -80,6 +80,8 @@ directory is `$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl`, else
 `~/.local/share/gaze/models/davlan-mbert-ner-hrl`. The written policy's `[ner]`
 section points at it, and setup prints `For gaze index: export
 GAZE_NER_MODEL_DIR=<dir>`.
+The generated policy enables every bundled PII rulepack and its declared locales,
+tokenizes every detected class, and leaves the `secrets` pack opt-in.
 
 Releases up to v0.14.0 installed a different, unbenchmarked DistilBERT NER
 bundle as the `[ner]` model. Re-run `gaze setup` to get the benchmarked model.

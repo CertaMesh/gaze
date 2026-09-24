@@ -325,7 +325,7 @@ action = "tokenize"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 Run it:
@@ -844,7 +844,7 @@ action = "tokenize"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 | Field    | Type   | Required           | Notes                                            |
@@ -1017,7 +1017,7 @@ threshold = 0.3
 | Field       | Type   | Required | Notes                                                          |
 |-------------|--------|----------|----------------------------------------------------------------|
 | `model_dir` | string | no       | Directory containing the ONNX model bundle. `~/` is expanded from `$HOME`. If absent, NER is silently disabled and the pipeline runs with regex detectors only (a `tracing::warn!` is logged). |
-| `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`). This is a single BCP47 string, not an array; use `[locale].active` for the rulepack locale fallback list. |
+| `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`). The Davlan backend stores and logs this hint but does not use it to filter documents. This is a single BCP47 string, not an array; use `[locale].active` for the rulepack locale fallback list. |
 | `threshold` | float  | no       | Confidence floor in the inclusive range `0.0..=1.0`. Defaults to `0.3`. `gaze clean --ner-threshold=<float>` overrides this value for one invocation. |
 
 If `model_dir` is set but the model fails to load (missing files, bad
@@ -1193,7 +1193,7 @@ action = "redact"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 Input `Reach Alice at alice@example.invalid or +49 30 0000 0000` produces
@@ -1219,7 +1219,7 @@ action = "tokenize"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 `Order ORD-123456 is queued.` → `Order <{session_hex}:Custom:order_id_1> is queued.`
@@ -1247,7 +1247,7 @@ action = "format_preserve"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 `Mail alice@example.invalid` → `Mail email1.{session_hex}@gaze-fake.invalid`. Restoration returns
@@ -1313,6 +1313,8 @@ NER provides `name`, `location`, `organization` detections; regex
 detectors provide `email` and `custom:order_id`. Each class maps to a
 different action. Note that `organization = preserve` lets brand names
 through while `name = tokenize` swaps person names for restorable tokens.
+The `preserve` default sends every detected class without its own rule to the
+model raw.
 
 ## Troubleshooting
 
