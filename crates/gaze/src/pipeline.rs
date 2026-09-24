@@ -469,6 +469,11 @@ impl Pipeline {
         self
     }
 
+    /// Number of installed safety nets, including a nonempty model registry.
+    pub fn safety_net_count(&self) -> usize {
+        self.safety_nets_len()
+    }
+
     pub fn restore_with_telemetry(
         &self,
         session: &Session,

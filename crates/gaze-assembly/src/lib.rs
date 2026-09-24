@@ -138,7 +138,20 @@ pub fn attach_nym_safety_net(
     }
     let net = NymSafetyNet::new(config);
     net.preload().map_err(BuildError::NymBundle)?;
-    Ok(pipeline.with_safety_net(net))
+    attach_preloaded_safety_net(pipeline, net)
+}
+
+#[cfg(feature = "safety-net-nym")]
+fn attach_preloaded_safety_net<N: gaze::SafetyNet + 'static>(
+    pipeline: Pipeline,
+    net: N,
+) -> Result<Pipeline, BuildError> {
+    let expected = pipeline.safety_net_count() + 1;
+    let pipeline = pipeline.with_safety_net(net);
+    if pipeline.safety_net_count() != expected {
+        return Err(BuildError::NymNotAttached);
+    }
+    Ok(pipeline)
 }
 
 /// A policy requesting Nym cannot silently lose its safety net in a build without the feature.

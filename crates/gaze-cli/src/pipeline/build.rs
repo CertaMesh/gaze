@@ -260,6 +260,7 @@ fn map_build_error(err: gaze_assembly::BuildError) -> CliError {
         }
         err @ (gaze_assembly::BuildError::NymFeatureDisabled
         | gaze_assembly::BuildError::NymModelDirMissing
+        | gaze_assembly::BuildError::NymNotAttached
         | gaze_assembly::BuildError::NymBundle(_)) => {
             CliError::SafetyNetPolicyConfigDetail(err.to_string())
         }

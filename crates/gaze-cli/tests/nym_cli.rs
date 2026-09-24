@@ -122,6 +122,24 @@ fn command_line_none_replaces_policy_nym_with_notice() {
 }
 
 #[test]
+fn failed_override_keeps_stderr_as_one_json_error() {
+    let (_dir, policy) = policy("\n[safety_net]\nbackend = \"nym\"\n");
+    let out = clean(
+        &[
+            "--policy",
+            path_str(&policy),
+            "--safety-net",
+            "openai-filter",
+        ],
+        PLATE_PROSE,
+    );
+    assert_ne!(out.status.code(), Some(0));
+    assert!(out.stdout.is_empty());
+    assert!(stderr_json(&out).get("error").is_some());
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("notice:"));
+}
+
+#[test]
 fn none_disables_policy_nym_even_with_an_unused_model_path_flag() {
     let (_dir, policy) = policy("\n[safety_net]\nbackend = \"nym\"\n");
     let out = clean(

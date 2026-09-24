@@ -39,6 +39,38 @@ fn empty_policy() -> gaze::Policy {
     gaze::Policy::default()
 }
 
+#[cfg(feature = "safety-net-nym")]
+#[test]
+fn preloaded_nym_attachment_changes_the_built_pipeline() {
+    struct StubNet;
+    impl gaze::SafetyNet for StubNet {
+        fn id(&self) -> &str {
+            "stub-nym"
+        }
+
+        fn supported_locales(&self) -> &[LocaleTag] {
+            &[]
+        }
+
+        fn check(
+            &self,
+            _clean_text: &str,
+            _context: gaze::SafetyNetContext<'_>,
+        ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+            Ok(Vec::new())
+        }
+    }
+
+    let pipeline = CorePipelineConfig::new()
+        .build()
+        .unwrap()
+        .pipeline()
+        .clone();
+    let before = pipeline.safety_net_count();
+    let pipeline = attach_preloaded_safety_net(pipeline, StubNet).unwrap();
+    assert_eq!(pipeline.safety_net_count(), before + 1);
+}
+
 fn embedded_rulepack(name: &str) -> Rulepack {
     Rulepack::load(gaze::RulepackSource::Embedded(
         gaze_recognizers::embedded(name).expect("embedded rulepack"),

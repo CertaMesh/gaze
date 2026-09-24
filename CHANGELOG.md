@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `--safety-net-backend nym` now requires one explicit
+  `--safety-net nym` selection. Add `--safety-net nym` to existing commands
+  that used only the backend selector; the old form succeeded without
+  activating a safety net.
+
 ### Added
 
 - `[safety_net].backend = "nym"` activates Nym from a policy in both CLI and

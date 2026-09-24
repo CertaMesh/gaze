@@ -21,8 +21,8 @@ use crate::io::DEFAULT_MAX_BYTES;
 use crate::pipeline::build::{map_policy_error, resolve_pipeline, validate_ner_threshold};
 use crate::pipeline::run::{
     clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
-    map_safety_net_pipeline_error, maybe_register_safety_net, safety_net_policy,
-    validate_safety_net_tolerant_gate, CleanOptions,
+    map_safety_net_pipeline_error, maybe_register_safety_net, policy_nym_was_overridden,
+    safety_net_policy, validate_safety_net_tolerant_gate, CleanOptions,
 };
 use gaze::{
     Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, LocaleTag,
@@ -156,7 +156,6 @@ struct Daemon {
     policy: Policy,
     locale_chain: Vec<LocaleTag>,
     dictionaries: DictionaryBundle,
-    safety_net_active: bool,
     safety_net_mode: SafetyNetMode,
     safety_net_fallback: SafetyNetFallback,
     logger: Arc<DaemonLogger>,
@@ -199,17 +198,15 @@ impl Daemon {
         let loaded_policy = resolved.policy;
         let locale_chain = resolved.locale_chain;
         let dictionaries = resolved.dictionaries;
-        let (pipeline, safety_net_active) =
-            maybe_register_safety_net(resolved.pipeline, &options, &loaded_policy)?;
+        let pipeline = maybe_register_safety_net(resolved.pipeline, &options, &loaded_policy)?;
+        if policy_nym_was_overridden(&options, &loaded_policy) {
+            eprintln!("notice: command line disabled policy safety net nym");
+        }
         Ok(Self {
             pipeline,
             policy: loaded_policy,
             locale_chain: locale_chain.as_slice().to_vec(),
             dictionaries,
-            // Mirrors `run_clean`: the registry activates the Pass-3 safety net exactly
-            // as `--safety-net` does, so a registry-only daemon must map safety-net
-            // failures to their typed variant instead of a generic pipeline error.
-            safety_net_active,
             safety_net_mode: args.safety_net_limits.safety_net_mode,
             safety_net_fallback: args.safety_net_limits.safety_net_fallback,
             logger,
@@ -260,7 +257,7 @@ impl Daemon {
                 policy,
             )
             .map_err(|err| {
-                let cli_error = if self.safety_net_active {
+                let cli_error = if self.pipeline.safety_net_count() > 0 {
                     map_safety_net_pipeline_error(err)
                 } else {
                     CliError::Pipeline

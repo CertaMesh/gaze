@@ -74,9 +74,6 @@ fn selected_safety_nets(
                 "--safety-net none cannot be combined with another safety-net selection".into(),
             ));
         }
-        if policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym {
-            eprintln!("notice: command line disabled policy safety net nym");
-        }
         return Ok(Vec::new());
     }
     if options.safety_net_backend.is_some() && selected.len() != 1 {
@@ -107,14 +104,15 @@ fn selected_safety_nets(
             unique.push(backend);
         }
     }
-    let backends = unique;
-    if !selected.is_empty()
-        && policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym
-        && !backends.contains(&SafetyNetBackend::Nym)
-    {
-        eprintln!("notice: command line disabled policy safety net nym");
-    }
-    Ok(backends)
+    Ok(unique)
+}
+
+pub(crate) fn policy_nym_was_overridden(options: &CleanOptions<'_>, policy: &gaze::Policy) -> bool {
+    policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym
+        && !options.safety_net.is_empty()
+        && !selected_safety_nets(options, policy)
+            .expect("selection was validated during assembly")
+            .contains(&SafetyNetBackend::Nym)
 }
 
 pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
@@ -146,8 +144,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let loaded_rulepacks = resolved.rulepacks;
     let locale_chain = resolved.locale_chain;
     let dictionaries = resolved.dictionaries;
-    let (pipeline, safety_net_active) =
-        maybe_register_safety_net(resolved.pipeline, &options, &effective_policy)?;
+    let pipeline = maybe_register_safety_net(resolved.pipeline, &options, &effective_policy)?;
     validate_safety_net_tolerant_gate(options.safety_net_mode, options.safety_net_fallback)?;
     // Lowered once, here. The library owns the (mode, fallback) -> decision mapping; the CLI
     // reads it rather than re-deriving which flag is consulted when.
@@ -156,7 +153,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let session = Session::from_policy_with_ttl_override(&effective_policy, options.session_ttl)
         .map_err(|_| CliError::Pipeline)?;
 
-    let (clean_doc, leak_report) = if safety_net_active {
+    let (clean_doc, leak_report) = if pipeline.safety_net_count() > 0 {
         let (doc, _manifest, _report) = pipeline
             .clean_with_safety_net_policy_detect_context(
                 &session,
@@ -223,6 +220,9 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     // path there is no output, and the notice must not corrupt the single-line
     // JSON error envelope on stderr (issue #360).
     warn_uncovered_collision_families(&effective_policy, &loaded_rulepacks, &locale_chain);
+    if policy_nym_was_overridden(&options, &effective_policy) {
+        eprintln!("notice: command line disabled policy safety net nym");
+    }
     println!("{json}");
     Ok(())
 }
@@ -231,7 +231,7 @@ pub(crate) fn maybe_register_safety_net(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
     policy: &gaze::Policy,
-) -> std::result::Result<(gaze::Pipeline, bool), CliError> {
+) -> std::result::Result<gaze::Pipeline, CliError> {
     if options.safety_net_registry {
         if options.safety_net_backend.is_some() || !options.safety_net.is_empty() {
             return Err(CliError::SafetyNetUsageDetail(
@@ -254,23 +254,36 @@ pub(crate) fn maybe_register_safety_net(
                 "--safety-net-registry cannot replace policy safety net nym".into(),
             ));
         }
-        return register_safety_net_registry(pipeline, options).map(|pipeline| (pipeline, true));
+        let expected = pipeline.safety_net_count() + 1;
+        let pipeline = register_safety_net_registry(pipeline, options)?;
+        if pipeline.safety_net_count() != expected {
+            return Err(CliError::SafetyNetConfigDetail(
+                "selected safety net registry was not attached".into(),
+            ));
+        }
+        return Ok(pipeline);
     }
     let backends = selected_safety_nets(options, policy)?;
     if backends.is_empty() {
         if options.safety_net != [SafetyNetKind::None] {
             validate_no_backend_options(options)?;
         }
-        return Ok((pipeline, false));
+        return Ok(pipeline);
     }
     let mut pipeline = pipeline;
     for backend in backends {
+        let expected = pipeline.safety_net_count() + 1;
         pipeline = match backend {
             SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options)?,
             SafetyNetBackend::Nym => register_nym(pipeline, options, policy)?,
         };
+        if pipeline.safety_net_count() != expected {
+            return Err(CliError::SafetyNetConfigDetail(format!(
+                "selected safety net {backend:?} was not attached"
+            )));
+        }
     }
-    Ok((pipeline, true))
+    Ok(pipeline)
 }
 
 fn nym_registry_refusal() -> CliError {

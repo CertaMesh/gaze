@@ -65,6 +65,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      NYM_SMALL_INT8_BUNDLE_SHA256: 71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767
     steps:
       - name: Free disk space (ubuntu-latest preinstalled bloat removal)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
@@ -121,6 +123,43 @@ jobs:
         run: cargo test -p gaze-cli --features mcp --no-fail-fast
       - name: cargo test
         run: cargo test --workspace --all-features --no-fail-fast
+      - name: Cache pinned Nym bundle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/nym-small-int8
+          key: ${{ runner.os }}-nym-small-int8-${{ env.NYM_SMALL_INT8_BUNDLE_SHA256 }}
+      - name: Install and verify pinned Nym bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "$NYM_SMALL_INT8_BUNDLE_SHA256" crates/gaze-recognizers/src/safety_net/nym/artifacts.rs
+          bundle="$RUNNER_TEMP/nym-small-int8"
+          mkdir -p "$bundle"
+          chmod 700 "$bundle"
+          revision=4348999cd3c2e20c49615e9af7c6bbb45b64cd85
+          base="https://huggingface.co/Wismut/nym-pii-multilingual-small/resolve/$revision/int8"
+          for file in config.json model_int8.onnx tokenizer.json; do
+            if [[ ! -f "$bundle/$file" ]]; then
+              curl --fail --location --retry 3 --output "$bundle/$file" "$base/$file"
+            fi
+          done
+          printf '%s\n' \
+            '3f07065571e22bb73eba28ddb1fae4509c0cf703762e3bfa7a6ab2111cf7cb88  config.json' \
+            '139006aea2cbd8e709d322f056232570de54661f624143be4893aaa387190286  model_int8.onnx' \
+            'c299144e68dfec1dc536204a7ae3712710c5c6cade9269a83f5042250d47d8de  tokenizer.json' > "$bundle/SHA256SUMS"
+          printf '%s  %s\n' "$NYM_SMALL_INT8_BUNDLE_SHA256" "$bundle/SHA256SUMS" | sha256sum -c -
+          (cd "$bundle" && sha256sum -c SHA256SUMS)
+          chmod 600 "$bundle"/*
+      - name: Test live Nym policy attachment
+        shell: bash
+        env:
+          GAZE_NYM_MODEL_DIR: ${{ runner.temp }}/nym-small-int8
+        run: |
+          set -euo pipefail
+          for name in live_nym_net_tokenizes_a_plate_the_rules_miss policy_nym_model_dir_activates_live_bundle; do
+            cargo test -p gaze-cli --all-features --test nym_cli "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
+            grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
+          done
       - name: Verify synthetic bridge Python requirement
         run: python3 -c 'import sys; assert sys.version_info >= (3, 11), "Python >= 3.11 required"'
       - name: Build offline synthetic rmcp bridge

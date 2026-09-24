@@ -21,6 +21,8 @@ pub enum BuildError {
     NymFeatureDisabled,
     #[error("nym model_dir is missing; install with `gaze setup --safety-net nym`")]
     NymModelDirMissing,
+    #[error("nym safety net was not attached to the pipeline")]
+    NymNotAttached,
     #[error("nym bundle: {0}; install with `gaze setup --safety-net nym`")]
     NymBundle(#[source] gaze::SafetyNetError),
 }
