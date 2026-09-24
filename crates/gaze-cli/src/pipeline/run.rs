@@ -254,10 +254,10 @@ pub(crate) fn maybe_register_safety_net(
                 "--safety-net-registry cannot replace policy safety net nym".into(),
             ));
         }
-        return gaze_assembly::attach_safety_net_checked(
+        return attach_selected_safety_net(
             pipeline,
             |pipeline| register_safety_net_registry(pipeline, options),
-            CliError::SafetyNetConfigDetail("selected safety net registry was not attached".into()),
+            "selected safety net registry was not attached".into(),
         );
     }
     let backends = selected_safety_nets(options, policy)?;
@@ -269,18 +269,28 @@ pub(crate) fn maybe_register_safety_net(
     }
     let mut pipeline = pipeline;
     for backend in backends {
-        pipeline = gaze_assembly::attach_safety_net_checked(
+        pipeline = attach_selected_safety_net(
             pipeline,
             |pipeline| match backend {
                 SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options),
                 SafetyNetBackend::Nym => register_nym(pipeline, options, policy),
             },
-            CliError::SafetyNetConfigDetail(format!(
-                "selected safety net {backend:?} was not attached"
-            )),
+            format!("selected safety net {backend:?} was not attached"),
         )?;
     }
     Ok(pipeline)
+}
+
+fn attach_selected_safety_net(
+    pipeline: gaze::Pipeline,
+    attach: impl FnOnce(gaze::Pipeline) -> Result<gaze::Pipeline, CliError>,
+    missing_message: String,
+) -> Result<gaze::Pipeline, CliError> {
+    gaze_assembly::attach_safety_net_checked(
+        pipeline,
+        attach,
+        CliError::SafetyNetConfigDetail(missing_message),
+    )
 }
 
 fn nym_registry_refusal() -> CliError {
@@ -904,6 +914,7 @@ fn emit_safety_net_warning(variant: &'static str, count: usize) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::pipeline::build::resolve_ner_threshold;
     use gaze::Policy;
 
@@ -946,5 +957,20 @@ mod tests {
             resolve_ner_threshold(None, None),
             gaze::DEFAULT_NER_THRESHOLD
         );
+    }
+
+    #[test]
+    fn cli_selected_safety_net_rejects_missing_attachment() {
+        let pipeline = gaze_assembly::CorePipelineConfig::new()
+            .build()
+            .unwrap()
+            .pipeline()
+            .clone();
+        let result = attach_selected_safety_net(
+            pipeline,
+            Ok::<_, CliError>,
+            "selected safety net nym was not attached".into(),
+        );
+        assert!(matches!(result, Err(CliError::SafetyNetConfigDetail(_))));
     }
 }
