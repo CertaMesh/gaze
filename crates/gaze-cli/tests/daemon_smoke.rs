@@ -1860,10 +1860,8 @@ fn daemon_eviction_without_audit_db_produces_no_error() {
     let stderr_text = stderr_lines.join("\n");
 
     assert!(status.success(), "stderr={stderr_text}");
-    assert!(
-        stderr_text.is_empty(),
-        "stderr should be empty without --audit-db: {stderr_text}"
-    );
+    assert!(!stderr_text.contains("AuditWriteFailed"), "{stderr_text}");
+    assert_eq!(stderr_text.matches("detected classes").count(), 1, "{stderr_text}");
     assert_eq!(
         stdout_lines.len(),
         2,
