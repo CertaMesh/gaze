@@ -695,6 +695,17 @@ mod tests {
             None,
         )
         .unwrap();
+        let expected_packs = gaze_recognizers::embedded_rulepacks()
+            .map(|(name, _)| name)
+            .filter(|name| *name != "secrets")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            resolved.policy.rulepacks.bundled,
+            expected_packs
+                .iter()
+                .map(|name| (*name).to_string())
+                .collect::<Vec<_>>()
+        );
         let actual = resolved
             .pipeline
             .registry()
