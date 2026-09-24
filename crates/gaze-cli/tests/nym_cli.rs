@@ -122,6 +122,24 @@ fn command_line_none_replaces_policy_nym_with_notice() {
 }
 
 #[test]
+fn none_disables_policy_nym_even_with_an_unused_model_path_flag() {
+    let (_dir, policy) = policy("\n[safety_net]\nbackend = \"nym\"\n");
+    let out = clean(
+        &[
+            "--policy",
+            path_str(&policy),
+            "--safety-net",
+            "none",
+            "--nym-model-dir",
+            "/nonexistent/nym-bundle",
+        ],
+        PLATE_PROSE,
+    );
+    assert_eq!(out.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("disabled policy safety net nym"));
+}
+
+#[test]
 fn none_cannot_be_combined_with_another_safety_net() {
     let (_dir, policy) = policy("");
     let out = clean(
@@ -144,15 +162,21 @@ fn repeatable_safety_net_list_activates_nym() {
     let (_dir, policy) = policy("");
     let out = clean(
         &[
-            "--policy", path_str(&policy),
-            "--safety-net", "nym",
-            "--safety-net", "openai-filter",
+            "--policy",
+            path_str(&policy),
+            "--safety-net",
+            "nym",
+            "--safety-net",
+            "openai-filter",
         ],
         PLATE_PROSE,
     );
     assert_eq!(out.status.code(), Some(2));
     assert_eq!(stderr_json(&out)["error"], "SafetyNetConfig");
-    assert!(stderr_json(&out)["detail"].as_str().unwrap().contains("model_dir"));
+    assert!(stderr_json(&out)["detail"]
+        .as_str()
+        .unwrap()
+        .contains("model_dir"));
 }
 
 #[test]
@@ -305,7 +329,7 @@ fn nym_is_refused_through_the_registry() {
         ],
         PLATE_PROSE,
     );
-    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(out.status.code(), Some(3));
     assert!(String::from_utf8_lossy(&out.stderr).contains("--safety-net-registry"));
 }
 
@@ -316,7 +340,7 @@ fn nym_flags_without_a_net_are_refused() {
         &["--policy", path_str(&policy), "--nym-intra-threads", "2"],
         PLATE_PROSE,
     );
-    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(out.status.code(), Some(3));
     assert!(out.stdout.is_empty());
 }
 

@@ -4843,7 +4843,7 @@ fn t_safety_net_registry_rejects_legacy_backend_selector() {
     );
     assert_eq!(
         out.status.code(),
-        Some(3),
+        Some(2),
         "stderr={}",
         String::from_utf8_lossy(&out.stderr)
     );
@@ -4854,7 +4854,7 @@ fn t_safety_net_registry_rejects_legacy_backend_selector() {
         .to_string();
     let value: Value =
         serde_json::from_str(&stderr_line).expect("stderr is line-delimited JSON envelope");
-    assert_eq!(value["error"], "SafetyNetConfig");
+    assert_eq!(value["error"], "SafetyNetUsage");
 }
 
 /// Reproduces issue #360: a `preserve`-default policy that tokenizes

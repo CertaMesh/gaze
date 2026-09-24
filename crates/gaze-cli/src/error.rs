@@ -17,6 +17,8 @@ pub(crate) enum CliError {
         supported: &'static str,
     },
     SafetyNetConfigDetail(String),
+    /// Nym policy or bundle configuration errors are setup failures (exit 2).
+    SafetyNetPolicyConfigDetail(String),
     SafetyNetUsageDetail(String),
     SafetyNetFailure {
         variant: &'static str,
@@ -63,11 +65,11 @@ impl CliError {
             | Self::AuditPurgeIso8601 { .. }
             | Self::SetupDetail(_)
             | Self::SafetyNetArtifactMissing { .. }
-            | Self::SafetyNetConfigDetail(_)
+            | Self::SafetyNetPolicyConfigDetail(_)
             | Self::SafetyNetUsageDetail(_) => 2,
             #[cfg(feature = "index")]
             Self::IndexNerModelMissing(_) => 2,
-            Self::SafetyNetFailure { .. } => 3,
+            Self::SafetyNetConfigDetail(_) | Self::SafetyNetFailure { .. } => 3,
             Self::UnknownToken { .. }
             | Self::InvalidSignature
             | Self::InvalidBlobVersion
@@ -92,6 +94,7 @@ impl CliError {
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
             Self::PolicySchemaUnsupported { .. } => "PolicySchemaUnsupported",
             Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",
+            Self::SafetyNetPolicyConfigDetail(_) => "SafetyNetConfig",
             Self::SafetyNetUsageDetail(_) => "SafetyNetUsage",
             Self::SafetyNetFailure { .. } => "SafetyNet",
             Self::SetupDetail(_) => "Setup",
@@ -132,6 +135,7 @@ impl CliError {
             }
             Self::PolicyConfigDetail(detail)
             | Self::SafetyNetConfigDetail(detail)
+            | Self::SafetyNetPolicyConfigDetail(detail)
             | Self::SafetyNetUsageDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());

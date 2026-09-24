@@ -89,6 +89,18 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["test", "-p", "gaze-cli"],
     },
     MatrixCommand {
+        label: "cargo test -p gaze-cli --no-default-features --test nym_no_feature",
+        program: "cargo",
+        args: &[
+            "test",
+            "-p",
+            "gaze-cli",
+            "--no-default-features",
+            "--test",
+            "nym_no_feature",
+        ],
+    },
+    MatrixCommand {
         label: "cargo test -p gaze-cli --features mcp",
         program: "cargo",
         args: &["test", "-p", "gaze-cli", "--features", "mcp"],

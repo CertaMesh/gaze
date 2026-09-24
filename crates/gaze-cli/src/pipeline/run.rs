@@ -258,7 +258,9 @@ pub(crate) fn maybe_register_safety_net(
     }
     let backends = selected_safety_nets(options, policy)?;
     if backends.is_empty() {
-        validate_no_backend_options(options)?;
+        if options.safety_net != [SafetyNetKind::None] {
+            validate_no_backend_options(options)?;
+        }
         return Ok((pipeline, false));
     }
     let mut pipeline = pipeline;
@@ -300,7 +302,7 @@ fn register_nym(
                 path: format!("{path} (install via gaze setup --safety-net nym)"),
             }
         }
-        other => CliError::SafetyNetConfigDetail(other.to_string()),
+        other => CliError::SafetyNetPolicyConfigDetail(other.to_string()),
     })
 }
 
