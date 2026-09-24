@@ -320,6 +320,46 @@ action = "preserve"
     (dir, path)
 }
 
+#[cfg(feature = "safety-net-nym")]
+#[test]
+fn daemon_policy_nym_missing_bundle_refuses_startup() {
+    let (_dir, policy) = write_policy();
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&policy)
+        .unwrap()
+        .write_all(b"\n[safety_net]\nbackend = \"nym\"\n")
+        .unwrap();
+    let output = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args(["daemon", "--policy", policy.to_str().unwrap()])
+        .env_remove("GAZE_NYM_MODEL_DIR")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("gaze setup --safety-net nym"));
+}
+
+#[cfg(all(feature = "safety-net-nym", feature = "proxy"))]
+#[test]
+fn proxy_policy_nym_missing_bundle_refuses_startup() {
+    let (_dir, policy) = write_policy();
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&policy)
+        .unwrap()
+        .write_all(b"\n[safety_net]\nbackend = \"nym\"\n")
+        .unwrap();
+    let output = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args(["proxy", "serve", "--policy", policy.to_str().unwrap()])
+        .env_remove("GAZE_NYM_MODEL_DIR")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("gaze setup --safety-net nym"));
+}
+
 /// Drives `count` JSONL requests through one `gaze daemon` process, alternating
 /// between two session ids so per-session manifest isolation is exercised.
 ///

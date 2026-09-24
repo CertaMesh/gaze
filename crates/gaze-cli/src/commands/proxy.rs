@@ -216,11 +216,20 @@ fn build_pipeline(
             None,
             None,
         )?;
-        return Ok((
-            resolved.pipeline,
-            resolved.locale_chain,
-            resolved.dictionaries,
-        ));
+        let pipeline = if resolved.policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym {
+            let model_dir = std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from);
+            gaze_assembly::attach_nym_safety_net(
+                resolved.pipeline,
+                &resolved.policy,
+                model_dir.as_deref(),
+                None,
+                None,
+            )
+            .map_err(|err| CliError::SafetyNetConfigDetail(err.to_string()))?
+        } else {
+            resolved.pipeline
+        };
+        return Ok((pipeline, resolved.locale_chain, resolved.dictionaries));
     }
     let mut config = gaze_assembly::CorePipelineConfig::new();
     if rulepack != "core" {

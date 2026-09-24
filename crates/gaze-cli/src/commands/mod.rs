@@ -503,6 +503,7 @@ pub(crate) enum SafetyNetKind {
     OpenaiFilter,
     // Nym-small v3 int8, in process (opt-in).
     Nym,
+    None,
 }
 
 /// v0.8 forward-compatible backend selector.
@@ -515,15 +516,6 @@ pub(crate) enum SafetyNetBackend {
     OpenaiFilter,
     // Nym-small v3 int8, in process (opt-in).
     Nym,
-}
-
-impl From<SafetyNetKind> for SafetyNetBackend {
-    fn from(kind: SafetyNetKind) -> Self {
-        match kind {
-            SafetyNetKind::OpenaiFilter => Self::OpenaiFilter,
-            SafetyNetKind::Nym => Self::Nym,
-        }
-    }
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]

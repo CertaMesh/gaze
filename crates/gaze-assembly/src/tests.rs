@@ -59,6 +59,22 @@ fn build_pipeline_empty_inputs_returns_no_recognizers() {
 }
 
 #[test]
+fn policy_nym_missing_model_fails_closed_in_rust_assembly() {
+    let mut policy = policy();
+    policy.safety_net.backend = gaze::SafetyNetPolicyBackend::Nym;
+    let rulepack = embedded_rulepack("core");
+    let locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let err = match build_pipeline(&policy, &empty_context(), &[rulepack], &locales, None) {
+        Ok(_) => panic!("requested Nym must fail without a model"),
+        Err(err) => err,
+    };
+    #[cfg(feature = "safety-net-nym")]
+    assert!(matches!(err, BuildError::NymModelDirMissing));
+    #[cfg(not(feature = "safety-net-nym"))]
+    assert!(matches!(err, BuildError::NymFeatureDisabled));
+}
+
+#[test]
 fn build_pipeline_all_disabled_rulepack_returns_no_recognizers() {
     let policy = empty_policy();
     let rulepack = Rulepack::parse(

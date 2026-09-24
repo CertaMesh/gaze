@@ -59,7 +59,7 @@ fn nym_without_a_model_dir_is_a_config_error() {
         &["--policy", path_str(&policy), "--safety-net", "nym"],
         PLATE_PROSE,
     );
-    assert_eq!(out.status.code(), Some(3));
+    assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty());
     let stderr = stderr_json(&out);
     assert_eq!(stderr["error"], "SafetyNetConfig");
@@ -87,23 +87,191 @@ fn nym_with_an_incomplete_bundle_fails_before_loading() {
 }
 
 #[test]
-fn nym_policy_table_without_the_nym_net_fails_closed() {
+fn nym_policy_table_without_backend_does_not_activate() {
     let (_dir, policy) = policy(
         "\n[safety_net.nym]\nlabels = [\"LICENSE_PLATE\"]\nthreshold = { LICENSE_PLATE = 0.5 }\n",
     );
     let out = clean(&["--policy", path_str(&policy)], PLATE_PROSE);
-    assert_eq!(
-        out.status.code(),
-        Some(3),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert_eq!(out.status.code(), Some(0));
+    assert!(!out.stdout.is_empty());
+}
+
+#[test]
+fn policy_backend_nym_requires_a_bundle_without_cli_flags() {
+    let (_dir, policy) = policy("\n[safety_net]\nbackend = \"nym\"\n");
+    let out = clean(&["--policy", path_str(&policy)], PLATE_PROSE);
+    assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty());
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("[safety_net.nym] requires --safety-net nym"),
-        "{stderr}"
+    assert_eq!(stderr_json(&out)["error"], "SafetyNetConfig");
+    assert!(stderr_json(&out)["detail"]
+        .as_str()
+        .unwrap()
+        .contains("gaze setup --safety-net nym"));
+}
+
+#[test]
+fn command_line_none_replaces_policy_nym_with_notice() {
+    let (_dir, policy) = policy("\n[safety_net]\nbackend = \"nym\"\n");
+    let out = clean(
+        &["--policy", path_str(&policy), "--safety-net", "none"],
+        PLATE_PROSE,
     );
+    assert_eq!(out.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("disabled policy safety net nym"));
+    assert!(!out.stdout.is_empty());
+}
+
+#[test]
+fn none_cannot_be_combined_with_another_safety_net() {
+    let (_dir, policy) = policy("");
+    let out = clean(
+        &[
+            "--policy",
+            path_str(&policy),
+            "--safety-net",
+            "none",
+            "--safety-net",
+            "nym",
+        ],
+        PLATE_PROSE,
+    );
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stderr_json(&out)["error"], "SafetyNetUsage");
+}
+
+#[test]
+fn repeatable_safety_net_list_activates_nym() {
+    let (_dir, policy) = policy("");
+    let out = clean(
+        &[
+            "--policy", path_str(&policy),
+            "--safety-net", "nym",
+            "--safety-net", "openai-filter",
+        ],
+        PLATE_PROSE,
+    );
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stderr_json(&out)["error"], "SafetyNetConfig");
+    assert!(stderr_json(&out)["detail"].as_str().unwrap().contains("model_dir"));
+}
+
+#[test]
+fn backend_selector_requires_one_explicit_safety_net() {
+    let (_dir, policy) = policy("");
+    for values in [
+        vec!["--safety-net-backend", "nym"],
+        vec![
+            "--safety-net",
+            "nym",
+            "--safety-net",
+            "openai-filter",
+            "--safety-net-backend",
+            "nym",
+        ],
+    ] {
+        let mut args = vec!["--policy", path_str(&policy)];
+        args.extend(values);
+        let out = clean(&args, PLATE_PROSE);
+        assert_eq!(out.status.code(), Some(2));
+        assert_eq!(stderr_json(&out)["error"], "SafetyNetUsage");
+    }
+}
+
+#[test]
+fn policy_rejects_opf_activation_at_load() {
+    let (_dir, policy) = policy("\n[safety_net]\nbackend = \"openai-filter\"\n");
+    let out = clean(&["--policy", path_str(&policy)], PLATE_PROSE);
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stderr_json(&out)["error"], "PolicyConfig");
+    assert!(stderr_json(&out)["detail"]
+        .as_str()
+        .unwrap()
+        .contains("command-line only"));
+}
+
+#[test]
+fn policy_nym_digest_mismatch_is_config_error() {
+    let bundle = tempdir().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(bundle.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let checksum = bundle.path().join("SHA256SUMS");
+    for name in [
+        "SHA256SUMS",
+        "config.json",
+        "model_int8.onnx",
+        "tokenizer.json",
+    ] {
+        let file = bundle.path().join(name);
+        fs::write(&file, b"invalid bundle").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+    }
+    assert!(checksum.exists());
+    let (_dir, policy) = policy(&format!(
+        "\n[safety_net]\nbackend = \"nym\"\n[safety_net.nym]\nmodel_dir = {:?}\n",
+        bundle.path().to_str().unwrap()
+    ));
+    let out = clean(&["--policy", path_str(&policy)], PLATE_PROSE);
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stderr_json(&out)["error"], "SafetyNetConfig");
+    assert!(
+        stderr_json(&out)["detail"]
+            .as_str()
+            .unwrap()
+            .contains("integrity"),
+        "{:?}",
+        stderr_json(&out)
+    );
+}
+
+#[test]
+fn cli_model_dir_precedes_environment_and_policy() {
+    let dir = tempdir().unwrap();
+    let policy_dir = dir.path().join("policy-bundle");
+    let env_dir = dir.path().join("env-bundle");
+    let cli_dir = dir.path().join("cli-bundle");
+    let (_policy_dir, policy) = policy(&format!(
+        "\n[safety_net]\nbackend = \"nym\"\n[safety_net.nym]\nmodel_dir = {:?}\n",
+        policy_dir.to_str().unwrap()
+    ));
+    let run = |env_path: Option<&Path>, cli_path: Option<&Path>| {
+        let mut command = Command::cargo_bin("gaze").unwrap();
+        command.arg("clean").args(["--policy", path_str(&policy)]);
+        if let Some(path) = cli_path {
+            command.args(["--nym-model-dir", path_str(path)]);
+        }
+        if let Some(path) = env_path {
+            command.env("GAZE_NYM_MODEL_DIR", path);
+        } else {
+            command.env_remove("GAZE_NYM_MODEL_DIR");
+        }
+        command
+            .write_stdin(PLATE_PROSE.as_bytes().to_vec())
+            .output()
+            .unwrap()
+    };
+    for (env_path, cli_path, expected) in [
+        (
+            Some(env_dir.as_path()),
+            Some(cli_dir.as_path()),
+            "cli-bundle",
+        ),
+        (Some(env_dir.as_path()), None, "env-bundle"),
+        (None, None, "policy-bundle"),
+    ] {
+        let out = run(env_path, cli_path);
+        assert_eq!(out.status.code(), Some(2));
+        assert!(stderr_json(&out)["path"]
+            .as_str()
+            .unwrap()
+            .contains(expected));
+    }
 }
 
 #[test]
@@ -137,7 +305,7 @@ fn nym_is_refused_through_the_registry() {
         ],
         PLATE_PROSE,
     );
-    assert_eq!(out.status.code(), Some(3));
+    assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("--safety-net-registry"));
 }
 
@@ -148,7 +316,7 @@ fn nym_flags_without_a_net_are_refused() {
         &["--policy", path_str(&policy), "--nym-intra-threads", "2"],
         PLATE_PROSE,
     );
-    assert_eq!(out.status.code(), Some(3));
+    assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty());
 }
 
@@ -216,4 +384,19 @@ fn live_nym_net_tokenizes_a_plate_the_rules_miss() {
     let report = json["leak_report"].to_string();
     assert!(report.contains("nym-small-int8"), "{report}");
     assert!(report.contains("LICENSE_PLATE>=0.5"), "{report}");
+}
+
+#[test]
+#[ignore = "needs GAZE_NYM_MODEL_DIR pointing at the pinned bundle"]
+fn policy_nym_model_dir_activates_live_bundle() {
+    let model_dir = std::env::var("GAZE_NYM_MODEL_DIR").expect("GAZE_NYM_MODEL_DIR");
+    let (_dir, policy) = policy(&format!(
+        "\n[safety_net]\nbackend = \"nym\"\n[safety_net.nym]\nmodel_dir = {:?}\n",
+        model_dir
+    ));
+    let out = clean(&["--policy", path_str(&policy)], PLATE_PROSE);
+    assert_eq!(out.status.code(), Some(0));
+    let result: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(!result["clean_text"].as_str().unwrap().contains("M-AB"));
+    assert!(result["leak_report"].to_string().contains("nym-small-int8"));
 }

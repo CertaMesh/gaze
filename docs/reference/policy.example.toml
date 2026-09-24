@@ -18,6 +18,13 @@ active = ["en-US", "global"]
 bundled = ["core"]
 paths = []
 
+[safety_net]
+# Set to "nym" after installing the pinned bundle; "none" is the default.
+backend = "none"
+
+# [safety_net.nym]
+# model_dir = "/absolute/path/to/nym-small-int8"
+
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "synthetic_support_email"

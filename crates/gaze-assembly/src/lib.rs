@@ -32,6 +32,8 @@
 //! For custom recognizer topology, use [`gaze::Pipeline::builder`] directly.
 //!
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroUsize;
+use std::path::Path;
 
 use gaze::{
     ClassRule, ColumnRule, Context, DefaultRule, LocaleChain, PiiClass, Pipeline, PipelineBuilder,
@@ -77,10 +79,78 @@ pub fn build_pipeline(
     active_locales: &LocaleChain,
     ner_threshold: Option<f32>,
 ) -> Result<Pipeline, BuildError> {
-    Ok(
+    let pipeline =
         build_pipeline_builder(policy, context, rulepacks, active_locales, ner_threshold)?
-            .build()?,
-    )
+            .build()?;
+    if policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym {
+        attach_nym_safety_net(pipeline, policy, None, None, None)
+    } else {
+        Ok(pipeline)
+    }
+}
+
+/// Attach the Nym net with the same validation used by policy-driven Rust assembly and the CLI.
+/// `model_dir_override` takes precedence over the policy path; environment lookup belongs to
+/// the CLI caller, not to library assembly.
+#[cfg(feature = "safety-net-nym")]
+pub fn attach_nym_safety_net(
+    pipeline: Pipeline,
+    policy: &gaze::Policy,
+    model_dir_override: Option<&Path>,
+    max_input_bytes: Option<usize>,
+    intra_threads: Option<NonZeroUsize>,
+) -> Result<Pipeline, BuildError> {
+    use gaze_recognizers::safety_net::nym::{
+        verify_nym_bundle, NymConfig, NymSafetyNet, REQUIRED_NYM_SMALL_ARTIFACTS,
+    };
+
+    let model_dir = model_dir_override
+        .or(policy.safety_net.nym_model_dir.as_deref())
+        .ok_or(BuildError::NymModelDirMissing)?;
+    if !model_dir.exists() {
+        let name = model_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("model");
+        return Err(BuildError::NymBundle(
+            gaze::SafetyNetError::WeightsMissing {
+                path: format!("<missing:{name}>"),
+            },
+        ));
+    }
+    for name in REQUIRED_NYM_SMALL_ARTIFACTS {
+        if !model_dir.join(name).exists() {
+            return Err(BuildError::NymBundle(
+                gaze::SafetyNetError::WeightsMissing {
+                    path: format!("<missing:{name}>"),
+                },
+            ));
+        }
+    }
+    verify_nym_bundle(model_dir).map_err(BuildError::NymBundle)?;
+    let mut config = NymConfig::new(model_dir)
+        .with_operating_point(policy.safety_net.nym.clone().unwrap_or_default());
+    if let Some(bytes) = max_input_bytes {
+        config = config.with_max_input_bytes(bytes);
+    }
+    if let Some(threads) = intra_threads {
+        config = config.with_intra_threads(threads);
+    }
+    let net = NymSafetyNet::new(config);
+    net.preload().map_err(BuildError::NymBundle)?;
+    Ok(pipeline.with_safety_net(net))
+}
+
+/// A policy requesting Nym cannot silently lose its safety net in a build without the feature.
+#[cfg(not(feature = "safety-net-nym"))]
+pub fn attach_nym_safety_net(
+    _pipeline: Pipeline,
+    _policy: &gaze::Policy,
+    _model_dir_override: Option<&Path>,
+    _max_input_bytes: Option<usize>,
+    _intra_threads: Option<NonZeroUsize>,
+) -> Result<Pipeline, BuildError> {
+    Err(BuildError::NymFeatureDisabled)
 }
 
 /// [`build_pipeline`] without the final `build()`, for a caller that layers its own
