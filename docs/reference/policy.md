@@ -325,7 +325,7 @@ action = "tokenize"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 Run it:
@@ -860,7 +860,7 @@ action = "tokenize"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 | Field    | Type   | Required           | Notes                                            |
@@ -1209,7 +1209,7 @@ action = "redact"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 Input `Reach Alice at alice@example.invalid or +49 30 0000 0000` produces
@@ -1235,7 +1235,7 @@ action = "tokenize"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 `Order ORD-123456 is queued.` → `Order <{session_hex}:Custom:order_id_1> is queued.`
@@ -1263,7 +1263,7 @@ action = "format_preserve"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 `Mail alice@example.invalid` → `Mail email1.{session_hex}@gaze-fake.invalid`. Restoration returns
@@ -1329,6 +1329,8 @@ NER provides `name`, `location`, `organization` detections; regex
 detectors provide `email` and `custom:order_id`. Each class maps to a
 different action. Note that `organization = preserve` lets brand names
 through while `name = tokenize` swaps person names for restorable tokens.
+The `preserve` default sends every detected class without its own rule to the
+model raw.
 
 ## Troubleshooting
 
