@@ -1,10 +1,12 @@
 #![cfg(feature = "index")]
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use assert_cmd::Command;
+use gaze::Rulepack;
 use serial_test::file_serial;
 
 #[path = "support/token_assertions.rs"]
@@ -555,6 +557,29 @@ fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
             token: ":Custom:birth_date_",
         },
     ];
+
+    let core = Rulepack::parse_bundled(gaze_recognizers::embedded("core").expect("core bundle"))
+        .expect("parse core bundle");
+    let declared_classes = core
+        .recognizers
+        .iter()
+        .filter(|recognizer| recognizer.enabled)
+        .map(|recognizer| recognizer.class.to_canonical_str())
+        .collect::<BTreeSet<_>>();
+    let covered_classes = cases
+        .iter()
+        .map(|case| {
+            let class = case.class.split('/').next().expect("class label");
+            match class {
+                "email" | "name" => class.to_string(),
+                custom => format!("custom:{custom}"),
+            }
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        covered_classes, declared_classes,
+        "core index fixtures must cover every enabled core class"
+    );
 
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
