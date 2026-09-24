@@ -498,19 +498,6 @@ struct RawSourceSpec {
     license: Option<String>,
 }
 
-impl TryFrom<RawRulepack> for Rulepack {
-    type Error = RulepackError;
-
-    fn try_from(raw: RawRulepack) -> Result<Self, Self::Error> {
-        RawRulepackWithLint {
-            raw,
-            lint: RawRecognizerLintConfig::default(),
-            require_explicit_locale_basis: false,
-        }
-        .try_into()
-    }
-}
-
 impl TryFrom<RawRulepackWithLint> for Rulepack {
     type Error = RulepackError;
 
