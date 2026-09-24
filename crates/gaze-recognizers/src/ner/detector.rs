@@ -1,5 +1,5 @@
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use gaze_types::{Detection, Detector, RecognizerRuntimeError};
@@ -14,8 +14,6 @@ use super::types::{LabelMap, NerBackendKind, NerOptions, NerSpanResult};
 /// `NerDetector` instances with different backends may be stacked in the
 /// same `Pipeline`; span-conflict resolution picks winners across detectors.
 pub struct NerDetector {
-    #[allow(dead_code)]
-    pub(crate) model_dir: PathBuf,
     pub(crate) backend_kind: NerBackendKind,
     pub(crate) recognizer_version_id: String,
     pub(crate) locale: Option<String>,
@@ -26,7 +24,6 @@ pub struct NerDetector {
 impl fmt::Debug for NerDetector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NerDetector")
-            .field("model_dir", &self.model_dir)
             .field("backend_kind", &self.backend_kind)
             .field("recognizer_version_id", &self.recognizer_version_id)
             .field("locale", &self.locale)
@@ -67,7 +64,6 @@ impl NerDetector {
         );
 
         Ok(Self {
-            model_dir: model_dir_path,
             backend_kind,
             recognizer_version_id,
             locale: options.locale,

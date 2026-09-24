@@ -421,7 +421,6 @@ mod tests {
     fn corrupt_recognizer(invalid: f32) -> crate::ner::NerRecognizer {
         crate::ner::NerRecognizer {
             detector: NerDetector {
-                model_dir: std::path::PathBuf::new(),
                 backend_kind: crate::ner::NerBackendKind::Ort,
                 recognizer_version_id: "ner.synthetic.v1".into(),
                 locale: None,
