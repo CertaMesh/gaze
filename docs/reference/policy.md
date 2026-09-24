@@ -31,9 +31,12 @@ same default a policy file gets when it omits `[policy.rulepacks]`. It is the
 same detection surface as `--rulepack-bundled core`: every class `core`
 activates is tokenized, and a span with no class rule (a `--context-json`
 dictionary term, an NER span) is tokenized rather than preserved. The locale
-chain is `global` unless `--locale` says otherwise. `--rulepack-bundled` or
-`--rulepack-path` replace the `core` default, exactly as the matching
-`[policy.rulepacks]` keys do in a policy file. Write a policy when you need
+chain is `global` unless `--locale` says otherwise. `--rulepack-path` adds a
+custom pack while keeping `core`; a `[policy.rulepacks]` table with `paths`
+but no `bundled` key does the same. `--rulepack-bundled` replaces the bundled
+selection. Use `--rulepack-bundled=none` or an explicit `bundled = []` to run
+custom packs without `core`; Gaze prints a one-line stderr notice when the
+core floor is off. Write a policy when you need
 custom recognizers, dictionaries, or non-tokenize actions.
 
 ## CLI overrides for runtime knobs
@@ -54,7 +57,7 @@ CLI flag > policy.toml > Gaze default
 | `[ner].locale` | `--ner-locale <BCP47>` | Overrides the NER locale hint. TOML accepts one BCP47 string, not a list. Invalid tags fail closed with `PolicyConfig`. |
 | `[ner].threshold` | `--ner-threshold <FLOAT>` | Existing override for NER confidence threshold; must be `0.0..=1.0`. |
 | `[locale].active` | `--locale <BCP47,...>` | Existing override for the active locale fallback chain. |
-| `[policy.rulepacks].bundled` | `--rulepack-bundled <ID,...>` | Comma-separated and repeatable. Replaces TOML bundled rulepack IDs for the current run. |
+| `[policy.rulepacks].bundled` | `--rulepack-bundled <ID,...>` | Comma-separated and repeatable. Replaces TOML bundled rulepack IDs for the current run; `none` selects no bundled packs. Omission defaults to `core`, even when custom paths are set. |
 | `[policy.rulepacks].paths` | `--rulepack-path <PATH>` | Repeatable. Replaces TOML rulepack paths for the current run. |
 
 Example:
@@ -169,7 +172,7 @@ rulepacks and intentionally stay in TOML only, per the three-surfaces boundary.
 | `Policy.ner.locale` | BCP47 string | `--ner-locale` | `[ner].locale` | Absent; NER backend default | runtime knob | CLI/TOML/default parity required for per-run NER locale selection. `[ner].locale` is a single string, unlike `[locale].active`. |
 | `Policy.ner.threshold` | `f32` | `--ner-threshold` | `[ner].threshold` | `0.3` | runtime knob | CLI/TOML/default parity required for per-run NER sensitivity. |
 | `Policy.locale` | BCP47 list | `--locale` | `[locale].active` | Rulepack defaults, then system default chain | runtime knob | CLI/TOML/default parity required for per-run locale gating. |
-| `Policy.rulepacks.bundled` | string list | `--rulepack-bundled` | `[policy.rulepacks].bundled` | `["core"]` when `[policy.rulepacks]` is omitted | runtime knob | CLI/TOML/default parity required for per-run bundled rulepack selection. |
+| `Policy.rulepacks.bundled` | string list | `--rulepack-bundled` | `[policy.rulepacks].bundled` | `["core"]` when the table or its `bundled` key is omitted | runtime knob | Explicit `bundled = []` or CLI `none` disables bundled packs. |
 | `Policy.rulepacks.paths` | path list | `--rulepack-path` | `[policy.rulepacks].paths` | Empty | runtime knob | CLI/TOML/default parity required for per-run external rulepack selection. |
 | `Policy.detectors` | recognizer list | none | `[[policy.custom_recognizers]]` | Empty when custom recognizers are omitted | policy document | Recognizer definitions are TOML-only structural policy; drawer `e8b5c041` boundary; bulk authoring is better in TOML. |
 | `Policy.detectors[].kind` | enum | none | `[[policy.custom_recognizers]].kind` | Required | policy document | Recognizer type is part of TOML-only recognizer definition; drawer `e8b5c041` boundary, not a per-run CLI knob. |

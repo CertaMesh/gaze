@@ -5,6 +5,21 @@ workspace (the published cargo name; the library is imported as `gaze`).
 Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
+## Pending (unreleased): custom rulepack paths retain core detection
+
+**Action required if your policy sets `[policy.rulepacks].paths` but omits
+`bundled`, or you pass `gaze clean --rulepack-path` without
+`--rulepack-bundled`.** These configurations now load `core` alongside the
+custom pack. This closes a silent leak of core classes and can produce more
+tokens than before. Policies without a rulepack table still load `core`.
+
+To keep an intentional custom-only setup, set `bundled = []` in
+`[policy.rulepacks]` or pass `--rulepack-bundled=none` with your CLI custom
+path. Gaze emits one stderr notice after a successful build whenever the
+resolved bundled selection omits `core` and its `core-extended` alias, including
+selection of another bundled pack without a custom path.
+The omitted-key behavior dates to the v0.4.0 rulepack policy loader.
+
 ## Pending (unreleased): one entity, one token; protection beats preservation
 
 **Action required if you count manifest entries per entity, pin token

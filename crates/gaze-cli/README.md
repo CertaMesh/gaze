@@ -259,8 +259,8 @@ Flags:
 | `--ner-threshold <float>` | Override policy `[ner]` threshold. Must be between `0.0` and `1.0` inclusive. |
 | `--ner-model-dir <path>` | Override `[ner].model_dir` from policy. |
 | `--ner-locale <tag>` | Override `[ner].locale` from policy. |
-| `--rulepack-bundled <name[,name...]>` | Override `[policy.rulepacks].bundled`. Comma separated. `core-extended` is deprecated since v0.8.0; use `core --locale=<lang>` for explicit locale-gated activation. |
-| `--rulepack-path <path>` | Override `[policy.rulepacks].paths`. Repeatable. |
+| `--rulepack-bundled <name[,name...]>` | Override `[policy.rulepacks].bundled`. Comma separated. `none` disables bundled packs, matching TOML `bundled = []`. A successful run without `core` or its `core-extended` alias prints a core-floor-off notice. `core-extended` is deprecated since v0.8.0; use `core --locale=<lang>` for explicit locale-gated activation. |
+| `--rulepack-path <path>` | Override `[policy.rulepacks].paths`. Repeatable; keeps the default `core` bundle unless `--rulepack-bundled` overrides it. |
 | `--max-bytes <bytes>` | Stdin byte cap. Defaults to `10485760`. |
 | `--context-json <path>` | Typed context envelope with dictionaries, class map, and fields. |
 | `--audit-db <path>` | Optional SQLite redaction-log database path for metadata-only audit entries. |

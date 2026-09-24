@@ -497,7 +497,9 @@ pub(crate) fn clean_overrides_from_options(
         .transpose()?;
     let (rulepack_bundled, auto_activate_locale_gated) =
         normalize_rulepack_bundles(options.rulepack_bundled);
-    let rulepack_bundled = if rulepack_bundled.is_empty() {
+    let rulepack_bundled = if options.rulepack_bundled == ["none"] {
+        Some(Vec::new())
+    } else if rulepack_bundled.is_empty() {
         None
     } else {
         Some(rulepack_bundled)
