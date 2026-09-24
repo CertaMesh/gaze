@@ -14,7 +14,7 @@ use crate::pipeline::build::resolve_pipeline;
 
 const DEFAULT_POLICY_FILE: &str = "gaze.toml";
 const OPF_UNPINNED_NOTICE: &str = "OPF safety-net is not pinned in this build; defaulting to NER.";
-const DOCTOR_INPUT: &str = "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd.\nPhone +1-555-0100\nIBAN AT61 1904 3002 3457 3201\nCard 4111 1111 1111 1111\nRouter IP 10.1.2.3"; // fixture-cited(crates/gaze-cli/tests/index_cli.rs:index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw)
+const DOCTOR_INPUT: &str = "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd.\nPhone +1-555-0100\nIBAN AT61 1904 3002 3457 3201\nCard 4111 1111 1111 1111\nRouter IP 10.1.2.3"; // fixture-cited(crates/gaze-cli/src/commands/setup.rs:commands::setup::tests::generated_policy_tokenizes_with_clean_pipeline)
 
 #[derive(Debug)]
 pub(crate) struct Args {

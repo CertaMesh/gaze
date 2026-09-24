@@ -12,7 +12,6 @@ use token_assertions::without_tokens;
 
 // Validator-passing synthetic values are shared with the core CLI fixture
 // inventory in index_cli.rs. The class set below is checked against the packs.
-// fixture-cited(crates/gaze-cli/tests/index_cli.rs:index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw)
 const CASES: &[(&str, &str, &str)] = &[
     (
         "email",
