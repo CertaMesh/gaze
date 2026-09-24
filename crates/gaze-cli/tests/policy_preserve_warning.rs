@@ -1,6 +1,8 @@
 use std::fs;
 use std::io::Write;
+use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use tempfile::tempdir;
 
@@ -36,7 +38,12 @@ fn run_clean(rules: &str, input: &str) -> std::process::Output {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
     child.wait_with_output().unwrap()
 }
 
@@ -65,8 +72,21 @@ fn missing_default_warns_for_unruled_registered_class() {
 }
 
 #[test]
+fn class_rule_after_preserve_default_is_unreachable_and_warns() {
+    let output = run_clean(
+        "[[rule]]\nkind = \"default\"\naction = \"preserve\"\n\n[[rule]]\nkind = \"class\"\nclass = \"custom:beta\"\naction = \"tokenize\"\n",
+        "BETA-2",
+    );
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("custom:beta"));
+}
+
+#[test]
 fn protective_default_and_complete_class_rules_do_not_warn() {
-    let tokenize = run_clean("[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n", "BETA-2");
+    let tokenize = run_clean(
+        "[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n",
+        "BETA-2",
+    );
     assert!(tokenize.status.success());
     assert!(!String::from_utf8_lossy(&tokenize.stderr).contains("detected class"));
 
@@ -79,18 +99,67 @@ fn protective_default_and_complete_class_rules_do_not_warn() {
 }
 
 #[test]
+fn generalize_class_warns_that_restore_is_unavailable() {
+    let output = run_clean(
+        "[[rule]]\nkind = \"class\"\nclass = \"custom:alpha\"\naction = \"generalize\"\n\n[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n",
+        "ALPHA-1",
+    );
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("one-way (no restore token)"), "{stderr}");
+    assert!(stderr.contains("custom:alpha"), "{stderr}");
+}
+
+#[test]
+fn ner_model_classes_are_in_the_warning() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        format!(
+            "{DETECTORS}\n[ner]\nmodel_dir = \"__gaze_test_index_ner\"\n\n[[rule]]\nkind = \"default\"\naction = \"preserve\"\n"
+        ),
+    )
+    .unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_gaze"))
+        .args(["clean", "--policy", path.to_str().unwrap()])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"hello").unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("name"), "{stderr}");
+    assert!(stderr.contains("organization"), "{stderr}");
+}
+
+#[test]
 fn failed_clean_keeps_one_json_error_on_stderr() {
-    let output = run_clean("[[rule]]\nkind = \"default\"\naction = \"preserve\"\n", "");
     // Invalid safety-net configuration fails after policy assembly.
     let dir = tempdir().unwrap();
     let path = dir.path().join("policy.toml");
-    fs::write(&path, format!("{DETECTORS}\n[[rule]]\nkind = \"default\"\naction = \"preserve\"\n")).unwrap();
+    fs::write(
+        &path,
+        format!("{DETECTORS}\n[[rule]]\nkind = \"default\"\naction = \"preserve\"\n"),
+    )
+    .unwrap();
     let failed = Command::new(env!("CARGO_BIN_EXE_gaze"))
-        .args(["clean", "--policy", path.to_str().unwrap(), "--safety-net-registry"])
+        .args([
+            "clean",
+            "--policy",
+            path.to_str().unwrap(),
+            "--safety-net-registry",
+        ])
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    assert!(output.status.success());
     assert!(!failed.status.success());
     let stderr = String::from_utf8(failed.stderr).unwrap();
     let _: serde_json::Value = serde_json::from_str(&stderr).expect("one JSON error value");
@@ -100,7 +169,11 @@ fn failed_clean_keeps_one_json_error_on_stderr() {
 fn daemon_warns_once_for_multiple_requests() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("policy.toml");
-    fs::write(&path, format!("{DETECTORS}\n[[rule]]\nkind = \"default\"\naction = \"preserve\"\n")).unwrap();
+    fs::write(
+        &path,
+        format!("{DETECTORS}\n[[rule]]\nkind = \"default\"\naction = \"preserve\"\n"),
+    )
+    .unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_gaze"))
         .args(["daemon", "--policy", path.to_str().unwrap()])
         .stdin(Stdio::piped())
@@ -110,7 +183,64 @@ fn daemon_warns_once_for_multiple_requests() {
         .unwrap();
     child.stdin.take().unwrap().write_all(b"{\"session_id\":\"one\",\"text\":\"ALPHA-1\"}\n{\"session_id\":\"two\",\"text\":\"BETA-2\"}\n").unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert_eq!(stderr.matches("detected class").count(), 1, "{stderr}");
+}
+
+#[test]
+fn proxy_warns_only_after_a_successful_bind() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        format!("{DETECTORS}\n[[rule]]\nkind = \"default\"\naction = \"preserve\"\n"),
+    )
+    .unwrap();
+    let held = TcpListener::bind("127.0.0.1:0").unwrap();
+    let bind = held.local_addr().unwrap().to_string();
+    let failed = Command::new(env!("CARGO_BIN_EXE_gaze"))
+        .args([
+            "proxy",
+            "serve",
+            "--policy",
+            path.to_str().unwrap(),
+            "--bind",
+            &bind,
+        ])
+        .output()
+        .unwrap();
+    assert!(!failed.status.success());
+    let _: serde_json::Value =
+        serde_json::from_slice(&failed.stderr).expect("one JSON error value");
+    drop(held);
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_gaze"))
+        .args([
+            "proxy",
+            "serve",
+            "--policy",
+            path.to_str().unwrap(),
+            "--bind",
+            &bind,
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while TcpStream::connect(&bind).is_err() {
+        assert!(Instant::now() < deadline, "proxy did not bind");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    child.kill().unwrap();
+    let output = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(stderr.matches("detected classes").count(), 1, "{stderr}");
+    assert!(stderr.contains("custom:alpha"), "{stderr}");
+    assert!(stderr.contains("custom:beta"), "{stderr}");
 }

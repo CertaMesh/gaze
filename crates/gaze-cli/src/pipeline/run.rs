@@ -25,11 +25,11 @@ use crate::commands::{
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
 use crate::pipeline::build::{
-    map_policy_error, preserve_fallback_warning, resolve_pipeline, validate_ner_threshold,
+    map_policy_error, policy_warnings, resolve_pipeline, validate_ner_threshold,
     warn_uncovered_collision_families,
 };
 
-const CORE_EXTENDED_DEPRECATION: &str = "`--rulepack-bundled core-extended` is deprecated since v0.8.0; use `--rulepack-bundled core --locale=<lang>` for explicit activation";
+pub(crate) const CORE_EXTENDED_DEPRECATION: &str = "`--rulepack-bundled core-extended` is deprecated since v0.8.0; use `--rulepack-bundled core --locale=<lang>` for explicit activation";
 
 pub(crate) struct CleanOptions<'a> {
     pub(crate) policy: Option<&'a Path>,
@@ -183,7 +183,14 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     // path there is no output, and the notice must not corrupt the single-line
     // JSON error envelope on stderr (issue #360).
     warn_uncovered_collision_families(&effective_policy, &loaded_rulepacks, &locale_chain);
-    if let Some(warning) = preserve_fallback_warning(&effective_policy, &pipeline) {
+    if options
+        .rulepack_bundled
+        .iter()
+        .any(|bundle| bundle == "core-extended")
+    {
+        eprintln!("warning: {CORE_EXTENDED_DEPRECATION}");
+    }
+    for warning in policy_warnings(&effective_policy, &pipeline) {
         eprintln!("{warning}");
     }
     println!("{json}");
@@ -525,8 +532,6 @@ fn normalize_rulepack_bundles(raw: &[String]) -> (Vec<String>, bool) {
     for bundle in raw {
         if bundle == "core-extended" {
             auto_activate_locale_gated = true;
-            tracing::warn!("{CORE_EXTENDED_DEPRECATION}");
-            eprintln!("warning: {CORE_EXTENDED_DEPRECATION}");
             if !bundled.iter().any(|existing| existing == "core") {
                 bundled.push("core".to_string());
             }
