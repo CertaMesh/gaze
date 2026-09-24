@@ -45,4 +45,4 @@ action = "tokenize"
 
 [[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"

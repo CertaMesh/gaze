@@ -221,7 +221,7 @@ Prefer to wire the policy by hand instead of `gaze setup`? This guided path goes
 
 ### 1. First redact
 
-Write the smallest policy that drives the bundled `core` rulepack and tokenizes emails:
+Write the smallest policy that drives the bundled `core` rulepack and tokenizes every detected class:
 
 ```toml
 # quickstart-policy.toml
@@ -235,13 +235,8 @@ ttl_secs = 86400
 bundled = ["core"]
 
 [[rule]]
-kind = "class"
-class = "email"
-action = "tokenize"
-
-[[rule]]
 kind = "default"
-action = "preserve"
+action = "tokenize"
 ```
 
 Run `gaze clean` against it:
@@ -286,18 +281,13 @@ bash scripts/fetch/fetch-ner-model.sh
 
 The script verifies a release-pinned `SHA256SUMS.ner` and installs the artifact set into `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl` (pass a directory argument to override). No model is downloaded at `gaze clean` runtime — Gaze only consumes the on-disk bundle.
 
-Add the `[ner]` block to `quickstart-policy.toml` and a rule for the `name` class:
+Add the `[ner]` block to `quickstart-policy.toml`. The default rule already tokenizes detected names:
 
 ```toml
 [ner]
 model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
 locale = "de"
 threshold = 0.3
-
-[[rule]]
-kind = "class"
-class = "name"
-action = "tokenize"
 ```
 
 Re-run on free-prose German with a Name span the rule-based passes leave alone:

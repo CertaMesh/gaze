@@ -836,6 +836,11 @@ impl RecognizerRegistry {
         self.recognizers_by_id.get(id)
     }
 
+    /// IDs of recognizers admitted to this registry.
+    pub fn recognizer_ids(&self) -> impl Iterator<Item = &str> {
+        self.recognizers_by_id.keys().map(String::as_str)
+    }
+
     pub fn validators(&self) -> &HashMap<String, Arc<dyn Validator>> {
         &self.validators
     }

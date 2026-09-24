@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`gaze setup` policies now tokenize every detected class.** Generated policies
+  in v0.11.2–v0.14.0 preserved unmatched classes, allowing detected phone,
+  IBAN, payment card, and IP address values to pass through raw. The generated
+  policy now loads every bundled PII pack and its locales while keeping
+  `secrets` opt-in. Back up custom rules, then run `gaze setup --force` to
+  regenerate an existing policy. For a manual repair, set the `[[rule]]`
+  default action to `"tokenize"`, delete the old per-class rules (the
+  `location = generalize` rule emits a one-way marker), and enable the
+  additional bundled packs and locales.
+
 ### Added
 
 - **`ConflictTier::ContainmentPrecedence`** (audit string
