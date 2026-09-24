@@ -87,9 +87,13 @@ fn setup_cli_clean_tokenizes_every_bundled_class() {
 
     let policy = fs::read_to_string(&policy_path).unwrap();
     assert!(policy.contains("action = \"tokenize\""));
-    let declared = gaze_recognizers::embedded_rulepacks()
-        .filter(|(name, _)| *name != "secrets")
-        .flat_map(|(_, contents)| {
+    let generated = gaze::Policy::load_for_cli(&policy_path).unwrap();
+    let declared = generated
+        .rulepacks
+        .bundled
+        .iter()
+        .flat_map(|name| {
+            let contents = gaze_recognizers::embedded(name).unwrap();
             Rulepack::parse_bundled(contents)
                 .unwrap()
                 .recognizers
