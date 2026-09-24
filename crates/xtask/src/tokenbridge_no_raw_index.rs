@@ -1,3 +1,9 @@
+//! Pins TokenBridge's library invariant: emitted PII spans must not reach stored
+//! index or search snippets as raw values or current-session tokens. This fixture
+//! supplies its own email detector, so it does not check which detectors a CLI
+//! consumer registers. `gaze-cli`'s `index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw`
+//! integration test owns the policy-less core detector coverage.
+
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, Pipeline};
@@ -51,7 +57,9 @@ pub fn run(args: Args) -> Result<()> {
 
     inspect_store_and_search_results(&domain, store, &hit)?;
 
-    println!("tokenbridge_no_raw_index: passed");
+    println!(
+        "tokenbridge_no_raw_index: passed TokenBridge emitted-span library invariant; CLI core detector coverage is checked by index_cli"
+    );
     Ok(())
 }
 
