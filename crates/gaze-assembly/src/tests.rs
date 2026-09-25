@@ -39,6 +39,63 @@ fn empty_policy() -> gaze::Policy {
     gaze::Policy::default()
 }
 
+#[cfg(feature = "safety-net-nym")]
+#[test]
+fn preloaded_nym_attachment_changes_the_built_pipeline() {
+    struct StubNet;
+    impl gaze::SafetyNet for StubNet {
+        fn id(&self) -> &str {
+            "stub-nym"
+        }
+
+        fn supported_locales(&self) -> &[LocaleTag] {
+            &[]
+        }
+
+        fn check(
+            &self,
+            _clean_text: &str,
+            _context: gaze::SafetyNetContext<'_>,
+        ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+            Ok(Vec::new())
+        }
+    }
+
+    let pipeline = CorePipelineConfig::new()
+        .build()
+        .unwrap()
+        .pipeline()
+        .clone();
+    let before = pipeline.safety_net_count();
+    let pipeline = attach_preloaded_safety_net(pipeline, StubNet).unwrap();
+    assert_eq!(pipeline.safety_net_count(), before + 1);
+}
+
+#[test]
+fn safety_net_count_requires_exactly_one_added() {
+    assert!(require_net_added(2, 3, BuildError::NymNotAttached).is_ok());
+    assert!(matches!(
+        require_net_added(2, 2, BuildError::NymNotAttached),
+        Err(BuildError::NymNotAttached)
+    ));
+    assert!(matches!(
+        require_net_added(2, 1, BuildError::NymNotAttached),
+        Err(BuildError::NymNotAttached)
+    ));
+}
+
+#[test]
+fn safety_net_attachment_rejects_a_missing_increment() {
+    let pipeline = CorePipelineConfig::new()
+        .build()
+        .unwrap()
+        .pipeline()
+        .clone();
+    let result =
+        attach_safety_net_checked(pipeline, Ok::<_, BuildError>, BuildError::NymNotAttached);
+    assert!(matches!(result, Err(BuildError::NymNotAttached)));
+}
+
 fn embedded_rulepack(name: &str) -> Rulepack {
     Rulepack::load(gaze::RulepackSource::Embedded(
         gaze_recognizers::embedded(name).expect("embedded rulepack"),
@@ -56,6 +113,22 @@ fn build_pipeline_empty_inputs_returns_no_recognizers() {
     };
 
     assert!(matches!(err, BuildError::NoRecognizers));
+}
+
+#[test]
+fn policy_nym_missing_model_fails_closed_in_rust_assembly() {
+    let mut policy = policy();
+    policy.safety_net.backend = gaze::SafetyNetPolicyBackend::Nym;
+    let rulepack = embedded_rulepack("core");
+    let locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let err = match build_pipeline(&policy, &empty_context(), &[rulepack], &locales, None) {
+        Ok(_) => panic!("requested Nym must fail without a model"),
+        Err(err) => err,
+    };
+    #[cfg(feature = "safety-net-nym")]
+    assert!(matches!(err, BuildError::NymModelDirMissing));
+    #[cfg(not(feature = "safety-net-nym"))]
+    assert!(matches!(err, BuildError::NymFeatureDisabled));
 }
 
 #[test]

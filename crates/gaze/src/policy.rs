@@ -53,8 +53,7 @@ pub struct Policy {
     pub ner: Option<NerPolicy>,
     pub rulepacks: RulepackPolicy,
     pub locale: Option<Vec<LocaleTag>>,
-    /// Safety-net backend settings from `[safety_net.*]`. Declaring a backend here configures it;
-    /// it does not activate it.
+    /// Safety-net selection and settings from `[safety_net]`.
     pub safety_net: SafetyNetBackendsPolicy,
     /// Declared policy schema version (e.g. `"0.1.0"`).
     ///
@@ -86,9 +85,20 @@ impl Default for Policy {
 #[derive(Debug, Clone, Default, PartialEq)]
 #[non_exhaustive]
 pub struct SafetyNetBackendsPolicy {
+    /// Active safety net. An absent table and `backend = "none"` are equivalent.
+    pub backend: SafetyNetPolicyBackend,
     /// `[safety_net.nym]`: the Nym-small allowlist and per-label thresholds, validated at load.
     /// `None` when the table is absent (the backend then uses its op-B default).
     pub nym: Option<gaze_types::nym::NymOperatingPoint>,
+    /// Optional bundle location used when Nym is active.
+    pub nym_model_dir: Option<std::path::PathBuf>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SafetyNetPolicyBackend {
+    #[default]
+    None,
+    Nym,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -272,6 +282,10 @@ pub enum PolicyError {
     UnsupportedRuleKind(String),
     #[error("invalid [safety_net.nym]: {0}")]
     SafetyNetNym(#[source] gaze_types::nym::NymConfigError),
+    #[error("unsupported [safety_net].backend '{value}'; openai-filter is command-line only in this release")]
+    SafetyNetBackendUnknown { value: String },
+    #[error("[safety_net.nym].threshold requires labels")]
+    SafetyNetNymThresholdWithoutLabels,
     #[error("unsupported policy schema_version {found}; supported {supported}")]
     PolicySchemaUnsupported {
         found: String,
@@ -325,15 +339,20 @@ struct RawPolicy {
 #[serde(deny_unknown_fields)]
 struct RawSafetyNetTables {
     #[serde(default)]
+    backend: Option<String>,
+    #[serde(default)]
     nym: Option<RawNymPolicy>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawNymPolicy {
-    labels: Vec<String>,
+    #[serde(default)]
+    labels: Option<Vec<String>>,
     #[serde(default)]
     threshold: std::collections::BTreeMap<String, f32>,
+    #[serde(default)]
+    model_dir: Option<std::path::PathBuf>,
 }
 
 fn default_raw_schema_version() -> String {
@@ -471,18 +490,41 @@ impl TryFrom<RawPolicy> for Policy {
         }
 
         let locale = raw.locale.map(parse_locale_policy).transpose()?.flatten();
-        let safety_net = SafetyNetBackendsPolicy {
-            nym: raw
-                .safety_net
-                .and_then(|tables| tables.nym)
-                .map(|nym| {
-                    gaze_types::nym::NymOperatingPoint::from_labels_and_thresholds(
-                        &nym.labels,
-                        &nym.threshold,
-                    )
-                    .map_err(PolicyError::SafetyNetNym)
-                })
-                .transpose()?,
+        let safety_net = match raw.safety_net {
+            None => SafetyNetBackendsPolicy::default(),
+            Some(tables) => {
+                let backend = match tables.backend.as_deref().unwrap_or("none") {
+                    "none" => SafetyNetPolicyBackend::None,
+                    "nym" => SafetyNetPolicyBackend::Nym,
+                    value => {
+                        return Err(PolicyError::SafetyNetBackendUnknown {
+                            value: value.into(),
+                        })
+                    }
+                };
+                let nym_model_dir = tables.nym.as_ref().and_then(|nym| nym.model_dir.clone());
+                let nym = tables
+                    .nym
+                    .map(|nym| match nym.labels {
+                        Some(labels) => {
+                            gaze_types::nym::NymOperatingPoint::from_labels_and_thresholds(
+                                &labels,
+                                &nym.threshold,
+                            )
+                            .map_err(PolicyError::SafetyNetNym)
+                        }
+                        None if nym.threshold.is_empty() => {
+                            Ok(gaze_types::nym::NymOperatingPoint::default())
+                        }
+                        None => Err(PolicyError::SafetyNetNymThresholdWithoutLabels),
+                    })
+                    .transpose()?;
+                SafetyNetBackendsPolicy {
+                    backend,
+                    nym,
+                    nym_model_dir,
+                }
+            }
         };
 
         Ok(Self {
@@ -921,6 +963,41 @@ action = "tokenize"
             nym_policy("[safety_net.nym]\nlabels = []\nmodel = \"x\"\n"),
             Err(PolicyError::TomlParse(_))
         ));
+    }
+
+    #[test]
+    fn safety_net_backend_selects_nym_and_none_at_load() {
+        let active = nym_policy(
+            "[safety_net]\nbackend = \"nym\"\n[safety_net.nym]\nmodel_dir = \"/tmp/nym-bundle\"\n",
+        )
+        .unwrap();
+        assert_eq!(active.safety_net.backend, SafetyNetPolicyBackend::Nym);
+        assert_eq!(
+            active.safety_net.nym_model_dir.as_deref(),
+            Some(std::path::Path::new("/tmp/nym-bundle"))
+        );
+        assert_eq!(
+            active.safety_net.nym,
+            Some(gaze_types::nym::NymOperatingPoint::default())
+        );
+        assert_eq!(
+            nym_policy("[safety_net]\nbackend = \"none\"\n")
+                .unwrap()
+                .safety_net
+                .backend,
+            SafetyNetPolicyBackend::None
+        );
+        assert_eq!(
+            nym_policy("").unwrap().safety_net.backend,
+            SafetyNetPolicyBackend::None
+        );
+    }
+
+    #[test]
+    fn policy_rejects_openai_filter_backend_at_load() {
+        let err = nym_policy("[safety_net]\nbackend = \"openai-filter\"\n").unwrap_err();
+        assert!(matches!(err, PolicyError::SafetyNetBackendUnknown { .. }));
+        assert!(err.to_string().contains("command-line only"));
     }
 
     /// The Kiji DistilBERT net was removed: a policy that still configures it is refused at load

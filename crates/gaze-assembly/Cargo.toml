@@ -15,6 +15,9 @@ categories = ["text-processing"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+safety-net-nym = ["gaze-recognizers/safety-net-nym"]
+
 [dependencies]
 gaze = { path = "../gaze", version = "0.14.0", package = "gaze-pii" }
 gaze-recognizers = { path = "../gaze-recognizers", version = "0.14.0" }

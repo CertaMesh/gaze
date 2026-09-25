@@ -320,6 +320,107 @@ action = "preserve"
     (dir, path)
 }
 
+#[cfg(feature = "safety-net-nym")]
+#[test]
+fn daemon_policy_nym_missing_bundle_refuses_startup() {
+    let (_dir, policy) = write_policy();
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&policy)
+        .unwrap()
+        .write_all(b"\n[safety_net]\nbackend = \"nym\"\n")
+        .unwrap();
+    let output = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args(["daemon", "--policy", policy.to_str().unwrap()])
+        .env_remove("GAZE_NYM_MODEL_DIR")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("gaze setup --safety-net nym"));
+}
+
+#[cfg(all(feature = "safety-net-nym", feature = "proxy"))]
+#[test]
+fn proxy_policy_nym_missing_bundle_refuses_startup() {
+    let (_dir, policy) = write_policy();
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&policy)
+        .unwrap()
+        .write_all(b"\n[safety_net]\nbackend = \"nym\"\n")
+        .unwrap();
+    let output = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args(["proxy", "serve", "--policy", policy.to_str().unwrap()])
+        .env_remove("GAZE_NYM_MODEL_DIR")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("gaze setup --safety-net nym"));
+}
+
+#[cfg(all(feature = "safety-net-nym", feature = "proxy"))]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn proxy_start_policy_nym_missing_bundle_fails_before_daemon_launch() {
+    let (_dir, policy) = write_policy();
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&policy)
+        .unwrap()
+        .write_all(b"\n[safety_net]\nbackend = \"nym\"\n")
+        .unwrap();
+    let home = tempdir().unwrap();
+    let _guard = DaemonGuard {
+        home: home.path().to_path_buf(),
+    };
+    let output = gaze_with_home(home.path())
+        .args(["proxy", "start", "--policy", policy.to_str().unwrap()])
+        .env_remove("GAZE_NYM_MODEL_DIR")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(find_under(home.path(), "proxy.pid").is_none());
+}
+
+#[cfg(all(feature = "safety-net-nym", feature = "proxy"))]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn proxy_restart_keeps_running_daemon_when_policy_nym_bundle_is_missing() {
+    let (_dir, policy) = write_policy();
+    let home = tempdir().unwrap();
+    let _guard = DaemonGuard {
+        home: home.path().to_path_buf(),
+    };
+    let bind = unused_local_addr();
+    let started = gaze_with_home(home.path())
+        .args([
+            "proxy",
+            "start",
+            "--bind",
+            &bind.to_string(),
+            "--policy",
+            policy.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(started.status.success());
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&policy)
+        .unwrap()
+        .write_all(b"\n[safety_net]\nbackend = \"nym\"\n")
+        .unwrap();
+    let restarted = gaze_with_home(home.path())
+        .args(["proxy", "restart"])
+        .env_remove("GAZE_NYM_MODEL_DIR")
+        .output()
+        .unwrap();
+    assert_eq!(restarted.status.code(), Some(2));
+    assert!(TcpStream::connect(bind).is_ok());
+}
+
 /// Drives `count` JSONL requests through one `gaze daemon` process, alternating
 /// between two session ids so per-session manifest isolation is exercised.
 ///

@@ -39,6 +39,20 @@ value on stderr.
 
 ## Guides
 
+### Safety-net selection
+
+`gaze clean` and `gaze daemon` read `[safety_net].backend` from their policy.
+Use `--safety-net nym` or `--safety-net openai-filter` to replace that policy
+choice for one run. Repeat the flag to run both nets; their suspects are
+combined by the pipeline. `--safety-net none` disables all nets for one run
+and cannot be mixed with another value. Dropping a policy-enabled Nym prints
+one stderr notice. `--safety-net-backend` replaces exactly one explicit
+`--safety-net` value; it is a usage error with zero or multiple values.
+
+Nym model location precedence is `--nym-model-dir` > `GAZE_NYM_MODEL_DIR` >
+policy `[safety_net.nym].model_dir`. A missing or invalid bundle is a
+configuration error; install it with `gaze setup --safety-net nym`.
+
 ### `gaze proxy`
 
 `gaze proxy` is the multi-provider HTTP chokepoint daemon for SDK and agent

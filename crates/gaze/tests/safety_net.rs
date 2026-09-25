@@ -1161,6 +1161,23 @@ fn scan_safety_nets_does_not_mutate_session() {
 }
 
 #[test]
+fn stacked_safety_nets_union_suspects() {
+    let first = MockNet::new(Some(0..5), PiiClass::Name);
+    let second = MockNet::new(Some(6..12), PiiClass::Email);
+    let pipeline = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(first)
+        .register_safety_net(second)
+        .build()
+        .unwrap();
+    let result = pipeline
+        .scan_safety_nets(&session(), "first second", &[gaze::LocaleTag::Global])
+        .unwrap();
+    assert_eq!(result.nets_run, 2);
+    assert_eq!(result.report.stats.suspect_count, 2);
+}
+
+#[test]
 fn scan_safety_nets_structured_does_not_mutate_session() {
     let net = MockNet::new(Some(0.."alice@example.invalid".len()), PiiClass::Email)
         .with_field_path("profile.email");

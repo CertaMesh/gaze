@@ -398,20 +398,30 @@ preserve formatting, unwrap the content before passing it to the Gaze pipeline
 and re-wrap the clean output afterward. RegionHint-style envelope markers for
 `CodeBlock` and `Url` are deferred to v0.7.
 
-### `[safety_net.nym]`
+### `[safety_net]` and `[safety_net.nym]`
 
-Configures the opt-in Nym-small safety net
-([contract](../explanation/safety-net/safety-nets.md#nym-small-adapter-opt-in)).
-It does not activate the net: activation stays `gaze clean --safety-net nym`
-(or `--safety-net-backend nym`) plus `--nym-model-dir`.
+`backend = "nym"` activates the opt-in Nym-small safety net for CLI commands
+that load the policy and for Rust `gaze_assembly::build_pipeline`. An absent
+table or `backend = "none"` selects no safety net. Other values fail at policy
+load; `openai-filter` remains command-line only in this release. A Nym request
+without a usable, digest-verified bundle or the `safety-net-nym` feature fails
+closed. Install the bundle with `gaze setup --safety-net nym`.
 
 ```toml
+[safety_net]
+backend = "nym"
+
 [safety_net.nym]
+model_dir = "/absolute/path/to/nym-small-int8"
 labels = ["BUILDING_NUMBER", "DATE_OF_BIRTH", "LICENSE_PLATE", "USERNAME"]
 threshold = { BUILDING_NUMBER = 0.5, DATE_OF_BIRTH = 0.9, LICENSE_PLATE = 0.5, USERNAME = 0.5 }
 ```
 
-The example is op-B, the default when the table is absent.
+The labels and thresholds shown are op-B, also used when they are omitted.
+`model_dir` is optional in the policy. CLI path precedence is
+`--nym-model-dir` > `GAZE_NYM_MODEL_DIR` > policy `model_dir`; Rust assembly
+uses the policy path or an explicit override argument, without reading the
+environment.
 
 - `labels` is the allowlist. Only `BUILDING_NUMBER`, `DATE_OF_BIRTH`,
   `LICENSE_PLATE`, `TAX_ID`, `USERNAME` and `ZIP_CODE` have a Gaze class. Any
@@ -419,44 +429,18 @@ The example is op-B, the default when the table is absent.
   spelling that is not a Nym label, an empty list, or a repeated label.
 - `threshold` needs exactly one entry per listed label, each in `(0, 1]`. A
   missing threshold or a threshold for an unlisted label fails at load.
-- Unknown keys in the table fail at load.
-- A policy with `[safety_net.nym]` refuses to run unless the Nym net is the
-  active net, so it cannot silently configure a net that is not running.
+- Unknown keys in the table fail at load. A Nym settings table alone does not
+  activate the backend.
 
-### v0.6 safety-net activation surface
+### CLI safety-net overrides
 
-The v0.6 OpenAI Privacy Filter safety net is **not exposed through
-`policy.toml`** (the Nym backend's label table above configures, never
-activates). Activation happens via `gaze clean --safety-net=<kind>`
-plus the `--openai-filter-*` flags, or programmatically through
-`Pipeline::with_safety_net(...)` behind the `safety-net-openai` feature
-on `gaze-recognizers`.
-
-This is deliberate. The safety-net contract is observer-only and runs
-after the deterministic clean, so it is closer to a CLI/runtime concern
-than a recognizer policy. Adding a `[safety_net]` table would force a
-schema commitment before adopters have exercised the contract on
-production traffic.
-
-If a future minor release adds a TOML surface for safety nets, it must:
-
-- Gate by locale: a `locales = [...]` field that delegates to the same
-  closed `LocaleTag` matching used by recognizers, with strict
-  `LocaleTag::Other(_)` semantics.
-- Fail closed at policy load when a safety-net backend is unknown,
-  required parameters (command path, checkpoint) are missing, or the
-  feature flag (`safety-net-openai`) is not compiled in.
-- Reuse `SafetyNetMode::Strict` as the default so unconfigured deployments
-  cannot silently downgrade to tolerant behavior.
-- Keep the runtime CLI flag set as overrides — same precedence rule as
-  `[ner]` and `[locale]` blocks (CLI flag > policy.toml > Gaze default).
-
-Until that work lands, the only supported activation paths in v0.6 are
-the CLI flags documented in
-[`crates/gaze-cli/README.md`](../../crates/gaze-cli/README.md#safety-net) and
-the programmatic `Pipeline::with_safety_net` builder. The architecture
-contract is documented in
-[`docs/explanation/safety-net/safety-nets.md`](../explanation/safety-net/safety-nets.md).
+Repeat `--safety-net` to run more than one backend. Any command-line list
+replaces the policy choice for that run; dropping policy Nym prints a notice.
+`--safety-net none` disables all nets for one run and cannot be combined with
+another value. `--safety-net-backend` replaces exactly one command-line
+`--safety-net` value; with zero or multiple values it is a usage error.
+The locale-aware `--safety-net-registry` remains a separate CLI mode and
+cannot be combined with these selectors.
 
 ### v0.5.1 to v0.6 migration note
 

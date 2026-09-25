@@ -17,6 +17,14 @@ pub enum BuildError {
     },
     #[error("recognizer error: {0}")]
     Recognizer(gaze_recognizers::RecognizerError),
+    #[error("nym safety net requires the safety-net-nym feature; install with `gaze setup --safety-net nym`")]
+    NymFeatureDisabled,
+    #[error("nym model_dir is missing; install with `gaze setup --safety-net nym`")]
+    NymModelDirMissing,
+    #[error("nym safety net was not attached to the pipeline")]
+    NymNotAttached,
+    #[error("nym bundle: {0}; install with `gaze setup --safety-net nym`")]
+    NymBundle(#[source] gaze::SafetyNetError),
 }
 
 impl From<gaze_recognizers::RecognizerError> for BuildError {

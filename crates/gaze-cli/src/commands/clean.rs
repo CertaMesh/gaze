@@ -53,12 +53,11 @@ pub(crate) struct Args {
     /// Optional SQLite redaction-log database path.
     #[arg(long)]
     pub(crate) audit_db: Option<PathBuf>,
-    /// Optional observer-only privacy safety net.
+    /// Safety nets to run. Repeatable; "none" disables policy selection for this run.
     #[arg(long, value_enum)]
-    pub(crate) safety_net: Option<SafetyNetKind>,
+    pub(crate) safety_net: Vec<SafetyNetKind>,
     /// v0.8 backend selector. When set with
-    /// `--safety-net=<kind>`, this flag wins. Lets adopters swap the
-    /// Pass-3 backend without re-typing the legacy `--safety-net` value.
+    /// one `--safety-net=<kind>`, this flag replaces it. Cannot select from a list.
     #[arg(long, value_enum)]
     pub(crate) safety_net_backend: Option<SafetyNetBackend>,
     #[command(flatten)]
@@ -91,7 +90,7 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
         max_bytes: args.max_bytes,
         context_json: args.context_json.as_deref(),
         audit_db: args.audit_db.as_deref(),
-        safety_net: args.safety_net,
+        safety_net: &args.safety_net,
         safety_net_backend: args.safety_net_backend,
         safety_net_registry: args.safety_net_registry.safety_net_registry,
         safety_net_add: &args.safety_net_registry.safety_net_add,

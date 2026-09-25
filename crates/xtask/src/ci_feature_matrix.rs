@@ -89,6 +89,18 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["test", "-p", "gaze-cli"],
     },
     MatrixCommand {
+        label: "cargo test -p gaze-cli --no-default-features --test nym_no_feature",
+        program: "cargo",
+        args: &[
+            "test",
+            "-p",
+            "gaze-cli",
+            "--no-default-features",
+            "--test",
+            "nym_no_feature",
+        ],
+    },
+    MatrixCommand {
         label: "cargo test -p gaze-cli --features mcp",
         program: "cargo",
         args: &["test", "-p", "gaze-cli", "--features", "mcp"],
@@ -234,7 +246,14 @@ pub fn run() -> Result<()> {
         FEATURE_MATRIX.len()
     );
     for command in FEATURE_MATRIX {
-        run_command(*command)?;
+        if command.args.contains(&"nym_no_feature") {
+            run_command_requiring_output(
+                *command,
+                "test policy_nym_refuses_when_binary_lacks_feature ... ok",
+            )?;
+        } else {
+            run_command(*command)?;
+        }
     }
 
     println!("ci_feature_matrix: passed");

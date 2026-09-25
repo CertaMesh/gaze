@@ -20,7 +20,7 @@ Options:
       --ner-locale <NER_LOCALE>
           Override policy \[ner].locale
       --rulepack-bundled <RULEPACK_BUNDLED>
-          Override policy.rulepacks.bundled. Comma-separated and repeatable
+          Override policy.rulepacks.bundled. Comma-separated and repeatable; "none" disables all bundled packs
       --rulepack-path <RULEPACK_PATHS>
           Override policy.rulepacks.paths. Repeatable
       --max-bytes <MAX_BYTES>
@@ -30,9 +30,9 @@ Options:
       --audit-db <AUDIT_DB>
           Optional SQLite redaction-log database path
       --safety-net <SAFETY_NET>
-          Optional observer-only privacy safety net [possible values: openai-filter, nym]
+          Safety nets to run. Repeatable; "none" disables policy selection for this run [possible values: openai-filter, nym, none]
       --safety-net-backend <SAFETY_NET_BACKEND>
-          v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins. Lets adopters swap the Pass-3 backend without re-typing the legacy `--safety-net` value [possible values: openai-filter, nym]
+          v0.8 backend selector. When set with one `--safety-net=<kind>`, this flag replaces it. Cannot select from a list [possible values: openai-filter, nym]
       --safety-net-registry
           Enable locale-aware Pass-3 safety-net registry dispatch
       --safety-net-add <SAFETY_NET_ADD>
