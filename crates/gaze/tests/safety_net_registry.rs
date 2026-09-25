@@ -146,3 +146,47 @@ fn registry_scan_uses_stable_owned_tokens_and_real_clean_offsets() {
     assert_eq!(captured[0], captured[1]);
     assert!(captured[0].contains("<00000000:Email_1>"));
 }
+
+struct TokenStraddleModel;
+
+impl LocaleAwareModel for TokenStraddleModel {
+    fn name(&self) -> &str {
+        "token-straddle-model"
+    }
+
+    fn native_locales(&self) -> &[LocaleTag] {
+        &[LocaleTag::EnUs]
+    }
+
+    fn infer(&self, input: ModelInput, _hints: ModelHints) -> Result<Vec<ModelSpan>, ModelError> {
+        let start = input.text.find('<').unwrap();
+        Ok(vec![ModelSpan {
+            text: input.text[start..].to_string(),
+            byte_range: start..input.text.len(),
+            class: PiiClass::Name,
+            confidence: Some(0.91),
+            model_name: self.name().to_string(),
+        }])
+    }
+}
+
+#[test]
+fn registry_finding_is_clipped_to_exposed_bytes_after_an_owned_placeholder() {
+    let registry = LocaleAwareModelRegistry::from_backends(vec![Box::new(TokenStraddleModel)]);
+    let pipeline = Pipeline::builder()
+        .build()
+        .unwrap()
+        .with_safety_net_registry(registry);
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let token = session
+        .tokenize(&PiiClass::Email, "alice@example.invalid")
+        .unwrap();
+    let text = format!("{token} Schmidt");
+    let report = pipeline
+        .scan_safety_nets(&session, &text, &[LocaleTag::EnUs])
+        .unwrap()
+        .report;
+    assert_eq!(report.suspects.len(), 1);
+    assert_eq!(report.suspects[0].span, token.len()..text.len());
+    assert_eq!(report.suspects[0].score, Some(0.91));
+}

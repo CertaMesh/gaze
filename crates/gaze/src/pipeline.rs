@@ -1491,6 +1491,12 @@ impl Pipeline {
             }
         }
 
+        // The nets saw a scan view of real placeholders. Their findings may include the
+        // placeholder itself, but only bytes outside an owned placeholder can be acted on.
+        suspects = clip_suspects_to_placeholders(suspects, clean_text, manifest, |token| {
+            target.contains_token(token)
+        });
+
         // Observe acts on nothing, so only acting decisions say why a suspect will not be acted on.
         if !matches!(decision, SafetyNetDecision::Observe { .. }) {
             telemetry.extend(
@@ -4472,6 +4478,126 @@ impl PipelineBuilder {
 }
 
 #[cfg(feature = "bundled-recognizers")]
+/// Remove bytes already protected by this session before policy or fallback sees a finding.
+/// A straddling finding becomes one finding for each exposed gap, preserving its provenance.
+fn clip_suspects_to_placeholders(
+    suspects: Vec<LeakSuspect>,
+    clean_text: &str,
+    manifest: &Manifest,
+    is_owned: impl Fn(&str) -> bool,
+) -> Vec<LeakSuspect> {
+    let mut placeholders = manifest
+        .spans
+        .iter()
+        .filter(|emitted| {
+            clean_text
+                .get(emitted.clean_span.clone())
+                .is_some_and(&is_owned)
+        })
+        .map(|emitted| emitted.clean_span.clone())
+        .collect::<Vec<_>>();
+    placeholders.extend(
+        crate::token_shape::pattern()
+            .find_iter(clean_text)
+            .filter(|matched| is_owned(matched.as_str()))
+            .map(|matched| matched.range()),
+    );
+    placeholders.sort_by_key(|span| (span.start, span.end));
+
+    let mut clipped = Vec::new();
+    for suspect in suspects {
+        if suspect.span.start >= suspect.span.end || clean_text.get(suspect.span.clone()).is_none()
+        {
+            // Invalid output must retain the established fail-closed path.
+            clipped.push(suspect);
+            continue;
+        }
+        let overlaps = placeholders
+            .iter()
+            .any(|token| token.start < suspect.span.end && suspect.span.start < token.end);
+        if !overlaps {
+            clipped.push(suspect);
+            continue;
+        }
+        let mut cursor = suspect.span.start;
+        for token in &placeholders {
+            if token.end <= cursor {
+                continue;
+            }
+            if token.start >= suspect.span.end {
+                break;
+            }
+            if cursor < token.start {
+                let gap = cursor..token.start.min(suspect.span.end);
+                if let Some(kind) = manifest.diff_against(&gap, &suspect.class) {
+                    let mut fragment = suspect.clone();
+                    fragment.span = gap;
+                    fragment.kind = kind;
+                    clipped.push(fragment);
+                }
+            }
+            cursor = cursor.max(token.end);
+            if cursor >= suspect.span.end {
+                break;
+            }
+        }
+        if cursor < suspect.span.end {
+            let gap = cursor..suspect.span.end;
+            if let Some(kind) = manifest.diff_against(&gap, &suspect.class) {
+                let mut fragment = suspect;
+                fragment.span = gap;
+                fragment.kind = kind;
+                clipped.push(fragment);
+            }
+        }
+    }
+    clipped
+}
+
+#[cfg(test)]
+mod placeholder_clip_tests {
+    use super::*;
+
+    #[test]
+    fn drops_contained_and_splits_straddling_suspects_without_touching_literals() {
+        let token = "<deadbeef:Email_1>";
+        let text = format!("Dr. {token} Schmidt <cafefeed:Name_9>");
+        let start = text.find(token).unwrap();
+        let end = start + token.len();
+        let manifest = Manifest::from_spans(vec![EmittedTokenSpan::new(
+            start..end,
+            0..21,
+            PiiClass::Email,
+        )]);
+        let suspect = |span: Range<usize>| {
+            LeakSuspect::new(
+                span,
+                PiiClass::Name,
+                "fixture",
+                Some(0.87),
+                LeakKind::Uncovered,
+                "NAME",
+                None,
+            )
+        };
+        let rows = clip_suspects_to_placeholders(
+            vec![
+                suspect(start + 1..end - 1),
+                suspect(0..end + " Schmidt".len()),
+                suspect(text.find("<cafefeed").unwrap()..text.len()),
+            ],
+            &text,
+            &manifest,
+            |candidate| candidate == token,
+        );
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].span, 0..start);
+        assert_eq!(rows[1].span, end..end + " Schmidt".len());
+        assert_eq!(rows[2].span, text.find("<cafefeed").unwrap()..text.len());
+        assert!(rows.iter().all(|row| row.score == Some(0.87)));
+    }
+}
+
 fn model_span_to_suspect(
     span: ModelSpan,
     backend_name: &str,
@@ -5501,6 +5627,74 @@ mod tests {
     }
 
     struct ManifestMismatchSafetyNet;
+
+    struct TokenStraddleSafetyNet;
+
+    impl SafetyNet for TokenStraddleSafetyNet {
+        fn id(&self) -> &str {
+            "token-straddle.fixture"
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            clean_text: &str,
+            context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            let Some(start) = clean_text.find('<') else {
+                return Ok(Vec::new());
+            };
+            let end = clean_text.find(" Schmidt").map_or_else(
+                || clean_text[start..].find('>').map(|end| start + end + 1),
+                |_| Some(clean_text.len()),
+            );
+            let Some(end) = end else {
+                return Ok(Vec::new());
+            };
+            let span = start..end;
+            let Some(kind) = context.manifest.diff_against(&span, &PiiClass::Name) else {
+                return Ok(Vec::new());
+            };
+            Ok(vec![LeakSuspect::new(
+                span,
+                PiiClass::Name,
+                self.id(),
+                Some(0.9),
+                kind,
+                "NAME",
+                None,
+            )])
+        }
+    }
+
+    #[test]
+    fn a_straddling_net_finding_resolves_exposed_bytes_and_preserves_the_placeholder() {
+        let raw = "alice@example.invalid Schmidt";
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let pipeline = traced_email_pipeline(TokenStraddleSafetyNet);
+        let (document, manifest, report) = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text(raw.to_string()),
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+            )
+            .unwrap();
+        let CleanDocument::Text(clean) = document else {
+            panic!("text input must produce text");
+        };
+        assert_eq!(manifest.len(), 2);
+        assert!(!clean.contains("[REDACTED:"));
+        assert!(report
+            .suspects
+            .iter()
+            .all(|suspect| { suspect.span.start >= manifest[0].clean_span.end }));
+        assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), raw);
+    }
 
     impl SafetyNet for ManifestMismatchSafetyNet {
         fn id(&self) -> &str {
