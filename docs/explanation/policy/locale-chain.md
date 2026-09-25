@@ -1,4 +1,9 @@
-# Locale Chain
+# Locale chain
+
+The locale chain decides which document locales Gaze assumes, and so which
+recognizers run.
+
+## Resolution order
 
 Locale chain precedence: CLI > policy > rulepack default > system default.
 
@@ -7,6 +12,8 @@ is the highest-precedence operator override. If it is absent, the policy locale
 chain applies. If policy has no active locale, the rulepack `default_locales`
 apply. If no earlier layer supplies a locale, Gaze uses the system default
 `global`.
+
+## Document and format basis
 
 Recognizer eligibility then depends on `locale_basis`:
 
@@ -23,6 +30,8 @@ Recognizer eligibility then depends on `locale_basis`:
   join the document-basis candidates before the normal conflict resolver runs.
   `enabled` and `safety_tier` still apply.
 
+## Several locales in one chain
+
 Document-basis recognizers run class by class, one chain locale at a time, in
 chain order. An earlier locale wins per span, not per document: a later
 locale's candidate joins the pool only where it does not overlap a candidate
@@ -34,6 +43,8 @@ check uses candidates before validator veto, so an earlier-locale candidate
 that the veto later rejects still claims its span
 (`RecognizerRegistry::detect_candidate_pool` in `crates/gaze/src/registry.rs`).
 
+## Bundled format-basis identifiers
+
 Bundled rulepacks declare the basis explicitly for every recognizer. External
 and adopter rulepacks retain the legacy `document` behavior unless they opt in
 to `locale_basis = "format"`.
@@ -44,13 +55,15 @@ them. To restore the old output, disable the recognizer itself (for example,
 select an adopter rulepack copy with `enabled = false`); changing the locale is
 no longer a suppression mechanism.
 
+## Known gap: a synthetic global chain
+
 The mixed-basis implementation does not resolve todo #2411. A synthetic
 `[LocaleTag::Global]` chain is now correct for format-basis recognizers only; it
 still suppresses document-basis `name.*`, `phone.national.de`, both postal
 recognizers, and legacy/custom rulepacks. Direct/codec primary and residual
 passes therefore still need the shared `ProxyConfig::locale_chain`.
 
-## v0.7.x anchor and collision-family interaction
+## Anchors and collision families (v0.7.x)
 
 Locale packs can also provide mandatory-anchor cue buckets under
 `[locale.cues.<key>]`. Collision-family recognizers declare

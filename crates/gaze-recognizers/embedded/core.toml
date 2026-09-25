@@ -374,9 +374,12 @@ enabled = true
 locales = ["global"]
 locale_basis = "document"
 
+# The pattern takes a whole digit run; with the `luhn` validator the recognizer then finds
+# the card inside it (a CVV, an expiry or a number may touch it), see
+# `gaze_types::payment_card::scan_card_run`. Solo todo 3843.
 [recognizers.match]
 kind = "regex"
-pattern = '''\b\d(?:[\s-]?\d){12,18}\b'''
+pattern = '''\b\d(?:[\s-]?\d)*\b'''
 
 [recognizers.validator]
 kind = "luhn"

@@ -435,8 +435,7 @@ columns (§1.2, §2). The CLI surface emits a single-line stderr warning per
 suspect class when running `--safety-net-mode tolerant` or when the
 fallback hop fires; see `crates/gaze-cli/src/pipeline/run.rs:792-820`.
 Tolerant mode is gated behind `GAZE_ALLOW_TOLERANT=1` for production
-deployments (see [`safety-net-modes.md`](../explanation/safety-net/safety-net-modes.md)
-§3).
+deployments (see [`safety-net-modes.md`](../explanation/safety-net/safety-net-modes.md#why-tolerant-is-not-a-production-mode)).
 
 > **TODO (separate follow-up).** A `warn_once`-style counter for suspect-class
 > warnings is referenced in the task scoping but not yet exposed on a public

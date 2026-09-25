@@ -60,6 +60,10 @@ pub struct RegexDetector {
     /// letters only (`gaze_types::word_run_extends_identifier`). Set for `iban_mod97`, whose
     /// pattern carries no trailing `\b` so a compact IBAN glued to a label is still a candidate.
     identifier_run_boundary: bool,
+    /// Each match is a digit run that may hold a payment card among other digits
+    /// (`gaze_types::payment_card::scan_card_run`). Set for a `luhn` recognizer whose pattern is
+    /// `gaze_types::payment_card::CARD_RUN_PATTERN`, as `card.structural` is.
+    card_runs: bool,
 }
 
 impl RegexDetector {
@@ -100,6 +104,9 @@ impl RegexDetector {
         let regex = Regex::new(pattern).map_err(RecognizerError::InvalidRegex)?;
         let ascii_email_boundary = class == PiiClass::Email && source == "email.global";
         let identifier_run_boundary = validator_kind == Some(ValidatorKind::IbanMod97);
+        let card_runs = validator_kind == Some(ValidatorKind::Luhn)
+            && pattern == gaze_types::payment_card::CARD_RUN_PATTERN
+            && capture_groups.is_none();
 
         Ok(Self {
             regex,
@@ -119,6 +126,7 @@ impl RegexDetector {
             normalizer_kind,
             ascii_email_boundary,
             identifier_run_boundary,
+            card_runs,
         })
     }
 
@@ -149,10 +157,8 @@ impl RegexDetector {
 
 impl Detector for RegexDetector {
     fn detect(&self, input: &str) -> Vec<Detection> {
-        self.regex
-            .captures_iter(input)
-            .filter_map(|caps| self.span_from_captures(&caps))
-            .filter(|span| self.boundary_accepts(input, span))
+        self.spans(input, None)
+            .into_iter()
             .map(|span| Detection::new(span, self.class.clone(), self.source.clone()))
             .collect()
     }
@@ -170,16 +176,12 @@ impl Recognizer for RegexDetector {
     fn detect(
         &self,
         input: &str,
-        _ctx: &DetectContext<'_>,
+        ctx: &DetectContext<'_>,
     ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         Ok(self
-            .regex
-            .captures_iter(input)
-            .filter_map(|caps| {
-                let span = self.span_from_captures(&caps)?;
-                if !self.boundary_accepts(input, &span) {
-                    return None;
-                }
+            .spans(input, ctx.source_spans)
+            .into_iter()
+            .filter_map(|span| {
                 let matched = &input[span.clone()];
                 (!self.is_excluded(matched)).then_some((span, matched))
             })
@@ -224,6 +226,33 @@ impl Recognizer for RegexDetector {
 }
 
 impl RegexDetector {
+    /// The candidate spans in `input`: pattern matches that pass the boundary checks, or for a
+    /// card-run recognizer the cards in each run plus the Luhn-failing pattern windows that hold
+    /// none, so validator veto still records those.
+    fn spans(
+        &self,
+        input: &str,
+        source_spans: Option<&[(usize, usize)]>,
+    ) -> Vec<std::ops::Range<usize>> {
+        let matches = self
+            .regex
+            .captures_iter(input)
+            .filter_map(|caps| self.span_from_captures(&caps))
+            .filter(|span| self.boundary_accepts(input, span));
+        if !self.card_runs {
+            return matches.collect();
+        }
+        matches
+            .flat_map(|run| {
+                let scan = gaze_types::payment_card::scan_card_run(input, run, source_spans);
+                let mut spans = scan.cards;
+                spans.extend(scan.rejected);
+                spans.sort_by_key(|span| span.start);
+                spans
+            })
+            .collect()
+    }
+
     fn is_excluded(&self, matched: &str) -> bool {
         if self.exclusions.is_empty() {
             return false;

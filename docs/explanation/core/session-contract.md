@@ -1,15 +1,15 @@
-# Session Contract
+# Session contract
 
 A `Session` is the boundary of a pseudonym namespace in Gaze. The runtime contract below covers what `Session` and `Scope` guarantee, what they do not guarantee, and the common pitfall that triggered issue #275.
 
-## The Contract
+## What a Session guarantees
 
 - A `Session` is the pseudonym namespace boundary.
-- Each new `Session` starts with fresh per-class counters (`Person_1`, `Email_1`, etc.) and a fresh `session_hex` prefix.
+- Each new `Session` starts with fresh per-class counters (`Name_1`, `Email_1`, etc.) and a fresh `session_hex` prefix.
 - Two `Session`s never share counters or value-keyed lookups, regardless of `Scope` variant.
 - `Scope` variants choose *persistence*, not *isolation*.
 
-## `Scope` Variants
+## `Scope` variants
 
 | Variant | Use case | `export()` allowed |
 |---------|----------|--------------------|
@@ -17,12 +17,10 @@ A `Session` is the boundary of a pseudonym namespace in Gaze. The runtime contra
 | `Scope::Conversation(id)` | Keyed multi-turn LLM sessions that can be re-opened across process restarts, storage backend-dependent. | Yes |
 | `Scope::Persistent { ttl: Duration }` | Long-lived sessions across restarts. | Yes |
 
-## Common Pitfalls
-
-### Single Shared Session Across Conversations
+## Single shared session across conversations
 
 **Symptom:** the same email or person name in two adapter-side conversations
-produces the same pseudonym. Per-class counters (`Email_N`, `Person_N`) grow
+produces the same pseudonym. Per-class counters (`Email_N`, `Name_N`) grow
 monotonically across the entire app lifetime. Internal value-to-token maps grow
 without bound.
 
@@ -41,7 +39,7 @@ two contexts that should be independent share a `Session`, the pseudonym becomes
 a stable identifier across them, which is exactly the property an attacker
 correlating two logs would exploit.
 
-## Cross-References
+## See also
 
 - [`docs/explanation/daemon/daemon-mode.md`](../daemon/daemon-mode.md) for daemon-mode-specific `session_id` semantics.
 - [`docs/explanation/core/restore-boundary.md`](restore-boundary.md) for restore-side guarantees.

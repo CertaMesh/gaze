@@ -26,6 +26,7 @@ thiserror = { workspace = true }
 phonenumber = { version = "0.3.9", default-features = false, optional = true }
 
 [dev-dependencies]
+regex = "1"
 serde_json = { workspace = true }
 
 [features]

@@ -1,7 +1,9 @@
-# Xtask
+# Xtask repository gates
 
 `crates/xtask` is Gaze's internal gate runner. It is not published; it exists
 to make repository checks explicit and repeatable.
+
+## Run the gates
 
 Run gates from the workspace root:
 
@@ -47,7 +49,27 @@ The canonical active-gate roster is the "Active xtask gates" line in
 | `TokenbridgeNoRawIndex` | `cargo run -p xtask -- tokenbridge-no-raw-index` | Pins the TokenBridge library invariant for emitted spans. It builds its own email detector and checks that synthetic fixture PII cannot appear raw or as current-session tokens in stored or searched snippets. CLI detector coverage belongs to `index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw` in `crates/gaze-cli/tests/index_cli.rs`. |
 | `TokenbridgeEncryptedIndex` | `cargo run -p xtask -- tokenbridge-encrypted-index` | Runs the TokenBridge persistent-index behavioral test that saves a synthetic owner-side index, asserts the file is AEAD-sealed, and fails if raw PII or projection key material appears on disk. |
 
-## dylint_gate
+## Recursive-Potemkin discipline
+
+Every gate must invoke a behavioral test. A gate may check that a test exists,
+but the final proof must be a real `cargo test` invocation of behavior that
+would fail if the protected contract regressed.
+
+Do not write gates that only assert symbol presence, file presence, or string
+presence. Those checks can pass while the behavior is broken.
+
+The current helper shape is:
+
+- add one or more `BehavioralTest` entries with package, optional integration
+  test target, and exact test name
+- call `ensure_test_exists(test)` before running it
+- call `run_behavioral_test(test)` to execute the exact test
+
+This helper shape makes the gate recursive-Potemkin resistant: deleting or
+renaming the test fails during the list phase, and breaking the contract fails
+during the execution phase.
+
+## Dylint gate
 
 The `dylint_gate` command enforces the Phase D resolver-based audit isolation
 lint. It is CI-only in practice because local developer machines may not have
@@ -66,11 +88,17 @@ The UI suite covers 18 bypass classes, including macro call-site hygiene,
 `#[path]` modules, `include!()`, type positions, trait bounds, and clean
 controls. This lint is the source of truth for audit-sink protected-path isolation;
 the legacy `audit-metadata-only` syn walker was decommissioned in v0.5 Phase E.
-The architecture, toolchain pins, timings, and Phase E migration plan are documented in
-[`v0.5-dylint-audit-gate.md`](https://github.com/PIInuts/business/blob/main/research/v0.5-dylint-audit-gate.md)
-(hosted in `PIInuts/business:research/`).
+The architecture, toolchain pins, timings, and Phase E migration plan are
+recorded in a private research note that is not published with this
+repository; the lint crate in [`lint/dylint`](../../../lint/dylint) is the
+public source.
 
-## cargo_metadata_audit_isolation self-test
+## Rehearse a gate failure
+
+These gates each have a reviewer self-test: break the protected contract on a
+throwaway branch, confirm the gate fails, then revert.
+
+### cargo-metadata-audit-isolation
 
 The `cargo_metadata_audit_isolation` gate protects the crate boundary:
 `gaze-audit` owns the `rusqlite` sink, while `gaze` stays free of audit-sink
@@ -89,7 +117,7 @@ The gate walks normal dependency edges from `cargo metadata`; development
 dependencies are ignored so `gaze` contract tests can depend on `gaze-audit`
 without weakening the shipped default and no-default graphs.
 
-## bundle-tokenization-drift adversarial self-test
+### bundle-tokenization-drift
 
 Run the clean gate first:
 
@@ -106,7 +134,7 @@ Then rehearse failure on a throwaway branch or detached worktree:
 
 To intentionally update snapshots, run `cargo run -p xtask -- bundle-tokenization-drift --regenerate-baseline`, add or update a nearby `// drift-ack:` source/test comment, and add a `[bundle-tokenization-drift]` line naming each changed bundle under `[Unreleased]` `### Changed` in `CHANGELOG.md`. Then run `cargo run -p xtask -- bundle-tokenization-drift --verify-ack`.
 
-## tokenbridge-no-raw-index adversarial self-test
+### tokenbridge-no-raw-index
 
 Run the clean gate first:
 
@@ -125,7 +153,7 @@ The gate must exit non-zero and name the synthetic fixture value plus the
 stored/search output surface that leaked it. The positive path still runs the
 real TokenBridge ingest, index-store, and search-adapter flow.
 
-## tokenbridge-encrypted-index self-test
+### tokenbridge-encrypted-index
 
 Run the gate:
 
@@ -139,7 +167,7 @@ That test writes a real persistent owner-side index with `GAZE_INDEX_KEY`, then
 reads the raw `index.json` bytes and fails if the file lacks the AEAD magic or
 contains the synthetic raw values or generated projection key material.
 
-## fixture_citation_lint self-test + limitation
+### fixture-citation-lint and its limitation
 
 The fixture citation gate prevents production code from accumulating
 uncited fixture-shaped PII literals. It intentionally scans the same crate
@@ -161,26 +189,6 @@ Known limitation: the gate proves that the cited test exists. It does not prove
 that the test body still asserts the specific fixture literal. That deeper
 semantic tie is out of scope for the v0.4.6 S2 two-point lint gate and remains
 a code-review responsibility.
-
-## Recursive-Potemkin discipline
-
-Every gate must invoke a behavioral test. A gate may check that a test exists,
-but the final proof must be a real `cargo test` invocation of behavior that
-would fail if the protected contract regressed.
-
-Do not write gates that only assert symbol presence, file presence, or string
-presence. Those checks can pass while the behavior is broken.
-
-The current helper shape is:
-
-- add one or more `BehavioralTest` entries with package, optional integration
-  test target, and exact test name
-- call `ensure_test_exists(test)` before running it
-- call `run_behavioral_test(test)` to execute the exact test
-
-This helper shape makes the gate recursive-Potemkin resistant: deleting or
-renaming the test fails during the list phase, and breaking the contract fails
-during the execution phase.
 
 ## Adding a gate
 

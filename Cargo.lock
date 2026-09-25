@@ -1506,6 +1506,7 @@ name = "gaze-types"
 version = "0.15.0"
 dependencies = [
  "phonenumber",
+ "regex",
  "serde",
  "serde_json",
  "sha3",

@@ -1,4 +1,9 @@
-# P0-908 NER Fail-Closed Design
+# NER fails closed
+
+When a recognizer fails, Gaze stops outbound redaction instead of treating the
+failure as "no PII found". This page records that decision (tracked as P0-908),
+why it holds, and the two boundaries it depends on: the model output and
+long-input chunking.
 
 ## Decision
 
@@ -12,18 +17,7 @@ The shared `DetectError` type lives in `gaze-types`. NER backend runtime
 failures map to `DetectError::Backend`, registry aggregation returns `Result`,
 and the pipeline aborts outbound redaction on recognizer failure.
 
-## Blast Radius
-
-- `gaze-types`: `Recognizer::detect` becomes fallible and exposes `DetectError`.
-- `gaze`: `RecognizerRegistry::detect_all` and `detect_all_resolved` propagate
-  errors; `pipeline::Error` gains a recognizer-detection variant.
-- `gaze-recognizers`: regex, dictionary, anchored, and NER recognizers implement
-  the fallible contract. NER maps neither backend failure nor malformed
-  model output to an empty result (see Model Output Boundary).
-- `gaze-cli`, `gaze-assembly`, and `gaze-mcp-core`: consume the existing core
-  pipeline `Result`, so recognizer failures surface as core pipeline errors.
-
-## Fail-Closed Proof
+## Fail-closed proof
 
 Backend failure is no longer representable as an empty candidate list at the
 recognizer boundary. Registry detection short-circuits on `Err`, and pipeline
@@ -34,7 +28,7 @@ from leaving the pipeline.
 Long NER input is scanned through bounded overlapping chunks before backend
 execution; chunk failures are propagated as recognizer errors.
 
-## Model Output Boundary
+## Model output boundary
 
 The fallible contract above only holds if the backend actually reports a
 failure. Between the ONNX session and the BIO decode there is a second
@@ -66,7 +60,7 @@ all fall outside the document.
 The Nym-small safety-net decoder applies the same rule: a wrong logit length or
 a non-finite value is an error, not an `O`.
 
-## Long-Input Chunking Invariant
+## Long-input chunking invariant
 
 NER chunk windows are measured in the model tokenizer's real WordPiece token
 offsets, not whitespace words. The ORT backend uses a 480-token payload budget,
@@ -91,3 +85,14 @@ Residual risk remains for an entity longer than the overlap, especially long
 organization names or pathological fragmented input. Pass-3 SafetyNet should
 rescan the reassembled clean output as defense in depth for any boundary miss
 that tokenizer-window overlap cannot catch.
+
+## Blast radius
+
+- `gaze-types`: `Recognizer::detect` becomes fallible and exposes `DetectError`.
+- `gaze`: `RecognizerRegistry::detect_all` and `detect_all_resolved` propagate
+  errors; `pipeline::Error` gains a recognizer-detection variant.
+- `gaze-recognizers`: regex, dictionary, anchored, and NER recognizers implement
+  the fallible contract. NER maps neither backend failure nor malformed
+  model output to an empty result (see [Model output boundary](#model-output-boundary)).
+- `gaze-cli`, `gaze-assembly`, and `gaze-mcp-core`: consume the existing core
+  pipeline `Result`, so recognizer failures surface as core pipeline errors.

@@ -2,12 +2,14 @@
 
 The dashboard expands the local trusted computing base only when an adopter explicitly enables it.
 The default is absence: no dashboard entropy call, credential, listener, inspection consumer,
-process, store, or browser surface exists.
+process, store, or browser surface exists. This page covers what runs where once the dashboard
+is enabled, who may capture what, how purge and failure work, and what the dashboard cannot
+revoke or report.
 
 ## Process boundary
 
 The provider process retains only bounded, nonblocking inspection ingress, a dedicated non-request
-IPC writer/supervisor, a future registration-identity receipt, capped zeroizing in-flight frames,
+IPC writer/supervisor, a one-shot registration binding, capped zeroizing in-flight frames,
 and the killable child handle. Provider request, enforcement, and restoration paths never perform
 dashboard IPC writes, wait for dashboard work, join threads, terminate the child, or reap it.
 
@@ -28,14 +30,17 @@ revive a disabled registration.
 
 The pending consumer does not exist until the 59-byte pairing frame has been delivered and the
 matching 22-byte nonce acknowledgement has completed. Master composition can atomically install
-the pending consumer with the producer through gaze-inspection, but the returned activated handle
-exposes no registration identity. Dashboard activation therefore remains fail-closed. The minimal
-sound completion is an opaque identity receipt/match operation in gaze-inspection; descriptor
-equality, caller trust, and post-install wrappers cannot distinguish descriptor-equal registrations.
+the pending consumer with the producer through gaze-inspection. The activated handle itself
+exposes no registration identity, and descriptor equality, caller trust, and post-install
+wrappers cannot distinguish descriptor-equal registrations. Identity comes from gaze-inspection
+instead: the pending consumer is created together with a one-shot `InspectionConsumerBindingV1`,
+which the dashboard retains. `PendingDashboardActivation::commit` binds the activated consumer
+against that capability before any socket, writer, runtime, or admission side effect; a candidate
+from a different registration fails with `ActivationFailed`.
 
 ## Purge and fatal failure
 
-After that identity authority exists, purge is serialized:
+With the activated consumer bound to its exact registration, purge is serialized:
 
 1. close dashboard admission;
 2. drain and zeroize bounded ingress;
