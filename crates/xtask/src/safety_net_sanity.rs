@@ -60,7 +60,7 @@ fn suites() -> Vec<Suite> {
                 "resolve_followup_uses_the_residual_report_not_the_stale_primary_report",
                 "resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens",
                 "resolve_followup_does_not_act_on_stale_pre_resolve_spans",
-                "first_pass_refusal_redacts_only_the_actionable_suspect_and_audits_the_protected_one",
+                "first_pass_refusal_redacts_only_the_exposed_suspect",
                 "fallback_redaction_is_traced_as_fallback_redact",
             ],
         },
@@ -72,7 +72,7 @@ fn suites() -> Vec<Suite> {
             required_tests: &[
                 "missing_checkpoint_fails_closed_with_sanitized_error",
                 "uncovered_suspect_exits_three_in_strict_mode_without_stdout",
-                "class_mismatch_warns_and_reports_without_failing",
+                "class_mismatch_inside_owned_token_is_dropped",
                 "tolerant_uncovered_outputs_report_and_logs_audit_row",
                 "safety_net_audit_query_filters_structured_field_path",
             ],
