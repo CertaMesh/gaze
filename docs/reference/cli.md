@@ -132,7 +132,7 @@ Five-axis check:
 
 See [`docs/explanation/daemon/daemon-mode.md`](../explanation/daemon/daemon-mode.md) for the
 full contract. See
-[Daemon Adapter Quickstart](../how-to/daemon/run-daemon.md) for an
+[Run the daemon](../how-to/daemon/run-daemon.md) for an
 adopter quickstart.
 
 ## `gaze audit purge`
