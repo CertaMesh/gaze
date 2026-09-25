@@ -44,6 +44,11 @@ pub enum ProxyError {
     /// prevent, so the request is refused.
     #[error("adapter coverage contract is unproven on the legacy path")]
     UnprovenCoverage,
+    /// The request carried text the configured protection refused to forward.
+    ///
+    /// Carries the typed [`gaze::ProtectionError`] and suspect classes only, never the text.
+    #[error("request refused: {refusal}")]
+    Refused { refusal: gaze::BoundaryRefusal },
     #[error("pipeline failed")]
     Pipeline {
         #[source]
@@ -138,6 +143,8 @@ pub enum ProxyErrorCode {
     UpstreamProtocol,
     InspectionInternal,
     InvalidStateTransition,
+    /// Request protection refused a surface; the error carries the typed refusal.
+    ProtectionRefused,
 }
 
 impl ProxyErrorCode {
@@ -168,7 +175,7 @@ impl ProxyErrorCode {
             Self::RequestBodyLimitExceeded | Self::UpstreamPayloadTooLarge => {
                 StatusCode::PAYLOAD_TOO_LARGE
             }
-            Self::ControlWouldMutate | Self::OpaqueMediaUninspected => {
+            Self::ControlWouldMutate | Self::OpaqueMediaUninspected | Self::ProtectionRefused => {
                 StatusCode::UNPROCESSABLE_ENTITY
             }
             Self::ConnectTimeout | Self::RequestTimeout | Self::TotalTimeout => {
@@ -352,10 +359,11 @@ impl fmt::Debug for HeaderRejectionIdentifier {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum DirectProxyErrorIdentifier {
     Header(HeaderRejectionIdentifier),
     OpaqueCarrier(OpaqueCarrierLocation),
+    Refusal(gaze::BoundaryRefusal),
 }
 
 /// Sanitized direct-profile failure.
@@ -365,7 +373,7 @@ enum DirectProxyErrorIdentifier {
 ///
 /// This follows the field-path-only precedent established for [`ProxyError::UnsurfacedPii`] in
 /// #400: report the structural location that makes a rejection actionable, never the value.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct DirectProxyError {
     code: ProxyErrorCode,
     phase: ProxyErrorPhase,
@@ -403,6 +411,20 @@ impl DirectProxyError {
     pub(crate) fn with_opaque_carrier(mut self, opaque_carrier: OpaqueCarrierLocation) -> Self {
         self.identifier = Some(DirectProxyErrorIdentifier::OpaqueCarrier(opaque_carrier));
         self
+    }
+
+    pub(crate) fn with_refusal(mut self, refusal: gaze::BoundaryRefusal) -> Self {
+        self.identifier = Some(DirectProxyErrorIdentifier::Refusal(refusal));
+        self
+    }
+
+    /// Returns the typed protection refusal: closed variants and class names, never text.
+    #[must_use]
+    pub fn refusal(&self) -> Option<&gaze::BoundaryRefusal> {
+        match &self.identifier {
+            Some(DirectProxyErrorIdentifier::Refusal(refusal)) => Some(refusal),
+            _ => None,
+        }
     }
 
     #[must_use]

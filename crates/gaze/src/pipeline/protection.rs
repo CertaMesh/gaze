@@ -44,7 +44,148 @@ pub enum ProtectionError {
     Provenance,
 }
 
+impl ProtectionError {
+    /// The variant name, the stable spelling a boundary reports to its client.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::EmptyPrimary => "EmptyPrimary",
+            Self::UnsupportedCoverage => "UnsupportedCoverage",
+            Self::Primary => "Primary",
+            Self::SafetyNet => "SafetyNet",
+            Self::Residual => "Residual",
+            Self::Provenance => "Provenance",
+        }
+    }
+}
+
+/// Why an outbound boundary refused a text leaf: the typed [`ProtectionError`] plus the classes
+/// behind it. Safe to show a client: it carries no input bytes, only closed variants and class
+/// names from policy and net label mappings.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{error}")]
+#[non_exhaustive]
+pub struct BoundaryRefusal {
+    pub error: ProtectionError,
+    /// Set when the Resolve step's `Strict` fallback refused.
+    pub fallback_reason: Option<FallbackReason>,
+    /// Sorted and deduplicated. Admission names the suspect it rejected; a Resolve refusal
+    /// names every class the configured nets flagged in the leaf.
+    pub suspect_classes: Vec<PiiClass>,
+}
+
+impl BoundaryRefusal {
+    fn new(error: ProtectionError) -> Self {
+        Self {
+            error,
+            fallback_reason: None,
+            suspect_classes: Vec::new(),
+        }
+    }
+
+    fn residual(classes: impl IntoIterator<Item = PiiClass>) -> Self {
+        let mut suspect_classes = classes.into_iter().collect::<Vec<_>>();
+        suspect_classes.sort();
+        suspect_classes.dedup();
+        Self {
+            suspect_classes,
+            ..Self::new(ProtectionError::Residual)
+        }
+    }
+
+    fn from_resolve_error(error: Error, report: &LeakReport) -> Self {
+        match error {
+            Error::Protection(error) => Self::new(error),
+            Error::SafetyNetFallback(reason) => Self {
+                fallback_reason: Some(reason),
+                ..Self::residual(report.suspects.iter().map(|suspect| suspect.class.clone()))
+            },
+            Error::SafetyNet(_) | Error::SafetyNetSpanInvalid { .. } => {
+                Self::new(ProtectionError::SafetyNet)
+            }
+            _ => Self::new(ProtectionError::Primary),
+        }
+    }
+}
+
+impl From<ProtectionError> for BoundaryRefusal {
+    fn from(error: ProtectionError) -> Self {
+        Self::new(error)
+    }
+}
+
+/// The boundary's safety-net step: `gaze clean`'s Resolve, but with a `Strict` fallback. A
+/// boundary never deletes one-way, so whatever Resolve cannot tokenize is refused.
+const BOUNDARY_DECISION: SafetyNetDecision = SafetyNetDecision::Resolve {
+    on_residual: SafetyNetFallback::Strict,
+};
+
 impl Pipeline {
+    /// Protects a text leaf for an outbound boundary such as `gaze-proxy`: the primary pipeline,
+    /// then the configured safety nets through the same Resolve step `gaze clean` runs, so a
+    /// net-flagged span becomes a restorable token instead of a refusal.
+    ///
+    /// Anything Resolve cannot tokenize is refused (`Strict` fallback, never a one-way
+    /// deletion). This is not the admission proof: run [`Self::admit_boundary_text`] on the
+    /// final text before it leaves. With no nets configured the output is the primary output.
+    pub fn resolve_boundary_text(
+        &self,
+        session: &Session,
+        text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> std::result::Result<String, BoundaryRefusal> {
+        let mut target = ProtectionTarget::Live(session);
+        self.resolve_boundary_text_target(&mut target, text, locale_chain, dictionaries)
+    }
+
+    /// [`Self::resolve_boundary_text`] against staged transaction state; commits nothing.
+    pub fn resolve_boundary_text_transaction(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> std::result::Result<String, BoundaryRefusal> {
+        let mut target = ProtectionTarget::Staged(transaction);
+        self.resolve_boundary_text_target(&mut target, text, locale_chain, dictionaries)
+    }
+
+    fn resolve_boundary_text_target(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> std::result::Result<String, BoundaryRefusal> {
+        let mut report = LeakReport::default();
+        self.clean_text_target(
+            target,
+            text,
+            locale_chain,
+            dictionaries,
+            BOUNDARY_DECISION,
+            &mut report,
+        )
+        .map(|clean| clean.text)
+        .map_err(|error| BoundaryRefusal::from_resolve_error(error, &report))
+    }
+
+    /// [`Self::admit_safety_nets`] with the class of the rejected suspect in the error.
+    pub fn admit_boundary_text(
+        &self,
+        session: &Session,
+        text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> std::result::Result<(), BoundaryRefusal> {
+        self.admit_boundary_text_transaction(
+            &mut session.begin_transaction(),
+            text,
+            locale_chain,
+            dictionaries,
+        )
+    }
+
     /// Validates the actual primary graph and installed safety-net locale coverage.
     /// Call before staging a structured operation, including operations with no strings.
     pub fn validate_protection_context(
@@ -191,7 +332,7 @@ impl Pipeline {
                 Error::Protection(error) => error,
                 _ => ProtectionError::SafetyNet,
             })?;
-        reject_unprotected_suspects(&clean, manifest, report)?;
+        reject_unprotected_suspects(&clean, manifest, report).map_err(|refusal| refusal.error)?;
         Ok(clean)
     }
 
@@ -231,6 +372,19 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
     ) -> std::result::Result<(), ProtectionError> {
+        self.admit_boundary_text_transaction(transaction, text, locale_chain, dictionaries)
+            .map_err(|refusal| refusal.error)
+    }
+
+    /// [`Self::admit_safety_nets_transaction`] with the class of the rejected suspect in the
+    /// error.
+    pub fn admit_boundary_text_transaction(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> std::result::Result<(), BoundaryRefusal> {
         if self.safety_nets_len() == 0 {
             return Ok(());
         }
@@ -318,10 +472,10 @@ fn reject_unprotected_suspects(
     clean: &str,
     manifest: &Manifest,
     report: LeakReport,
-) -> std::result::Result<(), ProtectionError> {
+) -> std::result::Result<(), BoundaryRefusal> {
     for suspect in report.suspects {
         if suspect.span.start >= suspect.span.end || clean.get(suspect.span.clone()).is_none() {
-            return Err(ProtectionError::Residual);
+            return Err(BoundaryRefusal::residual([suspect.class]));
         }
         // Coverage is geometric: even a backend class disagreement entirely inside
         // verified token bytes cannot expose raw data. Any raw gap still rejects.
@@ -339,7 +493,7 @@ fn reject_unprotected_suspects(
             }
         }
         if cursor < suspect.span.end {
-            return Err(ProtectionError::Residual);
+            return Err(BoundaryRefusal::residual([suspect.class]));
         }
     }
     Ok(())

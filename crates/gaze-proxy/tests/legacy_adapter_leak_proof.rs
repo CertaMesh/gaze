@@ -922,10 +922,13 @@ fn unsurfaced_pii_error_discloses_the_field_path_but_never_the_value() {
 #[path = "support/route_net.rs"]
 mod route_net;
 
-// RED contract proposal: configured-net enforcement on surfaced request text.
-// Keep private until the route's policy compatibility decision and repair are reviewed.
+/// Configured-net enforcement on request text.
+///
+/// A surfaced marker the net flags is resolved into a token before admission, the same
+/// Resolve step `gaze clean` runs (todo 3847), so it is forwarded tokenized. An unsurfaced
+/// marker has no surface to tokenize and is refused. A net error refuses both.
 #[tokio::test]
-async fn configured_net_request_boundary_rejects_surfaced_and_unsurfaced_markers() {
+async fn configured_net_request_boundary_resolves_surfaced_and_rejects_unsurfaced_markers() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let mut observations = Vec::new();
     for error in [false, true] {
@@ -972,15 +975,24 @@ async fn configured_net_request_boundary_rejects_surfaced_and_unsurfaced_markers
             "unsurfaced control: {row:?}"
         );
     }
-    assert!(observations.iter().all(|row| !row.2 && row.3 == 0),
-        "(error, surfaced, accepted, provider calls, raw on wire, net marker hits): {observations:?}");
+    // A resolved surfaced marker is the only accepted row, and it never reaches the wire raw.
+    for row in &observations {
+        let resolved = !row.0 && row.1;
+        assert_eq!(
+            (row.2, row.3),
+            if resolved { (true, 1) } else { (false, 0) },
+            "(error, surfaced, accepted, provider calls, raw on wire, net marker hits): {observations:?}"
+        );
+        assert!(!row.4, "raw marker on the wire: {observations:?}");
+    }
 }
 
 #[path = "support/admission_net.rs"]
 mod admission_net;
 
 #[tokio::test]
-async fn admission_token_reflags_pass_but_malformed_spilling_and_error_reports_prevent_send() {
+async fn admission_token_reflags_and_resolvable_spills_pass_but_malformed_and_error_reports_prevent_send(
+) {
     use admission_net::{AdmissionNet, Mode};
     use std::sync::atomic::{AtomicUsize, Ordering};
     for mode in [Mode::Reflag, Mode::Malformed, Mode::Spill, Mode::Error] {
@@ -1012,12 +1024,10 @@ async fn admission_token_reflags_pass_but_malformed_spilling_and_error_reports_p
             }),
         )
         .await;
-        assert_eq!(
-            response.status().is_success(),
-            matches!(mode, Mode::Reflag),
-            "{mode:?}"
-        );
-        if matches!(mode, Mode::Reflag) {
+        // A spill covers raw bytes after the token; Resolve tokenizes them (todo 3847).
+        let accepted = matches!(mode, Mode::Reflag | Mode::Spill);
+        assert_eq!(response.status().is_success(), accepted, "{mode:?}");
+        if accepted {
             let body: Value = response.json().await.unwrap();
             assert_eq!(body["choices"][0]["message"]["content"], original);
         } else {
@@ -1025,13 +1035,15 @@ async fn admission_token_reflags_pass_but_malformed_spilling_and_error_reports_p
         }
         assert!(hits.load(Ordering::SeqCst) > 0);
         let forwarded = upstream.forwarded.lock().await;
-        assert_eq!(
-            forwarded.len(),
-            if matches!(mode, Mode::Reflag) { 1 } else { 0 }
-        );
+        assert_eq!(forwarded.len(), usize::from(accepted));
         assert!(forwarded
             .iter()
             .all(|body| !body.to_string().contains(EMAIL)));
+        if matches!(mode, Mode::Spill) {
+            assert!(forwarded
+                .iter()
+                .all(|body| !body.to_string().contains("tail")));
+        }
     }
 }
 
@@ -1123,4 +1135,135 @@ async fn regression_fallback_redaction_does_not_admit_an_unsurfaced_marker_to_th
         !returned.contains(MARKER),
         "the error must not echo the value"
     );
+}
+
+#[path = "support/date_net.rs"]
+mod date_net;
+
+fn date_net_pipeline(hits: Arc<std::sync::atomic::AtomicUsize>) -> Pipeline {
+    Pipeline::builder()
+        .detector(RegexDetector::emails().unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Tokenize))
+        .register_safety_net(date_net::DateNet { hits })
+        .build()
+        .unwrap()
+}
+
+async fn spawn_echo_openai(pipeline: Pipeline) -> (MockUpstream, ProxyServer) {
+    let upstream = spawn_upstream(|body| {
+        json!({
+            "id": "synthetic",
+            "choices": [{"message": {"role": "assistant", "content": body["messages"][0]["content"]}}]
+        })
+    })
+    .await;
+    let proxy = spawn_proxy(
+        Arc::new(OpenAiAdapter::new(upstream.base_url.clone())),
+        pipeline,
+    )
+    .await;
+    (upstream, proxy)
+}
+
+/// Todo 3847: under the `gaze setup` policy the proxy refused every dated prompt with
+/// `500 {"error":"Pipeline"}` while `gaze clean` tokenized the date. The net's finding is now
+/// resolved into a token before admission: the provider sees the token, the client sees the
+/// original bytes.
+#[tokio::test]
+async fn regression_3847_net_flagged_dates_are_tokenized_forwarded_and_restored() {
+    for original in [
+        format!("Invoice date {}.", date_net::ISO_DATE),
+        format!("born on {}.", date_net::WRITTEN_DATE),
+    ] {
+        let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (upstream, proxy) = spawn_echo_openai(date_net_pipeline(hits.clone())).await;
+        let response = post_json(
+            &proxy,
+            "/v1/chat/completions",
+            json!({"model": "synthetic", "messages": [{"role": "user", "content": original}]}),
+        )
+        .await;
+        let status = response.status();
+        let body = response.text().await.unwrap();
+        assert_eq!(status, StatusCode::OK, "{original}: {body}");
+        let body: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["choices"][0]["message"]["content"], original);
+        let forwarded = upstream.first_forwarded().await.to_string();
+        assert!(!forwarded.contains(date_net::ISO_DATE), "{forwarded}");
+        assert!(!forwarded.contains(date_net::WRITTEN_DATE), "{forwarded}");
+        assert!(forwarded.contains(":Custom:date_1>"), "{forwarded}");
+        assert!(hits.load(std::sync::atomic::Ordering::SeqCst) > 0);
+    }
+}
+
+#[path = "support/second_opinion_net.rs"]
+mod second_opinion_net;
+
+fn second_opinion_pipeline() -> Pipeline {
+    Pipeline::builder()
+        .detector(RegexDetector::emails().unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(second_opinion_net::SecondOpinionNet)
+        .build()
+        .unwrap()
+}
+
+/// Todo 3847 parity: the proxy forwards exactly what `gaze clean` / `gaze daemon` produce for
+/// the same text and policy (session hex aside), and restores the original in the response.
+#[tokio::test]
+async fn regression_3847_proxy_forwards_what_clean_produces() {
+    let reference = date_net_pipeline(Arc::default());
+    for original in date_net::PARITY_INPUTS {
+        let (upstream, proxy) = spawn_echo_openai(date_net_pipeline(Arc::default())).await;
+        let response = post_json(
+            &proxy,
+            "/v1/chat/completions",
+            json!({"model": "synthetic", "messages": [{"role": "user", "content": original}]}),
+        )
+        .await;
+        let status = response.status();
+        let body: Value = serde_json::from_str(&response.text().await.unwrap()).unwrap();
+        assert_eq!(status, StatusCode::OK, "{original}: {body}");
+        assert_eq!(body["choices"][0]["message"]["content"], *original);
+        let forwarded = upstream.first_forwarded().await;
+        let forwarded = forwarded["messages"][0]["content"].as_str().unwrap();
+        assert_eq!(
+            date_net::without_session_hex(forwarded),
+            date_net::clean_reference(&reference, original),
+            "{original}"
+        );
+    }
+}
+
+/// Todo 3847 (b): a refusal names its typed `ProtectionError` variant, the fallback reason and
+/// the suspect classes, never the flagged bytes, and nothing reaches the provider. The net's
+/// re-run finds a new suspect, so Resolve's `Strict` fallback refuses.
+#[tokio::test]
+async fn regression_3847_refusal_body_is_typed_and_carries_no_pii() {
+    let (upstream, proxy) = spawn_echo_openai(second_opinion_pipeline()).await;
+    let response = post_json(
+        &proxy,
+        "/v1/chat/completions",
+        json!({"model": "synthetic", "messages": [{"role": "user", "content": second_opinion_net::TEXT}]}),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = response.text().await.unwrap();
+    assert!(!body.contains("alpha"), "{body}");
+    assert!(!body.contains("beta"), "{body}");
+    let body: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        body,
+        json!({
+            "error": "Refused",
+            "refusal": {
+                "error": "Residual",
+                "fallback_reason": "residual_suspect",
+                "suspect_classes": ["name", "location"],
+            },
+        })
+    );
+    upstream.assert_nothing_forwarded().await;
 }

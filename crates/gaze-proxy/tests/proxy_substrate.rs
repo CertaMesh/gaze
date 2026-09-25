@@ -259,6 +259,10 @@ fn closed_errors_have_reviewed_statuses_and_sanitized_rendering() {
             ProxyErrorCode::InvalidStateTransition,
             StatusCode::INTERNAL_SERVER_ERROR,
         ),
+        (
+            ProxyErrorCode::ProtectionRefused,
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
     ];
 
     for (code, status) in cases {

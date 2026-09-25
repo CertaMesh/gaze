@@ -12,9 +12,9 @@ use axum::routing::get;
 use axum::Router;
 use futures_util::StreamExt;
 use gaze::{
-    token_shape, CleanDocument, CommittedSessionSnapshot, DictionaryBundle, EmittedTokenSpan,
-    LocaleTag, Pipeline, PrefixCacheWriteMode, RawDocument, Scope, Session, SessionTransaction,
-    SessionTransactionError,
+    token_shape, BoundaryRefusal, CleanDocument, CommittedSessionSnapshot, DictionaryBundle,
+    EmittedTokenSpan, LocaleTag, Pipeline, PrefixCacheWriteMode, RawDocument, Scope, Session,
+    SessionTransaction, SessionTransactionError,
 };
 use reqwest::{Client, ClientBuilder};
 use serde::de::{MapAccess, SeqAccess, Visitor};
@@ -1286,6 +1286,8 @@ struct PipelineRequestPseudonymizer<'pipeline, 'context, 'transaction, 'session>
     transaction: &'transaction mut SessionTransaction<'session>,
     locale_chain: &'context [LocaleTag],
     dictionaries: &'context DictionaryBundle,
+    /// Why protection refused, kept aside because the codec carries only a closed code.
+    refusal: Option<BoundaryRefusal>,
 }
 
 impl<'pipeline, 'context, 'transaction, 'session>
@@ -1302,28 +1304,31 @@ impl<'pipeline, 'context, 'transaction, 'session>
             transaction,
             locale_chain,
             dictionaries,
+            refusal: None,
         }
     }
 
+    /// Both prefix-cache modes rescan the complete input, so the mode changes nothing here.
     fn protect_unstaged_segment(
         &mut self,
         input: &str,
-        prefix_cache_write_mode: PrefixCacheWriteMode,
+        _prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
-        let clean = self
-            .pipeline
-            .pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
-                self.transaction,
-                RawDocument::Text(input.to_owned()),
-                self.locale_chain,
-                self.dictionaries,
-                prefix_cache_write_mode,
-            )
-            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
-        match clean {
-            CleanDocument::Text(text) => Ok(text),
-            _ => Err(CodecErrorCode::ProtectionFailedClosed),
-        }
+        // The same Resolve step `gaze clean` runs (todo 3847); admission follows on the leaf.
+        let result = self.pipeline.resolve_boundary_text_transaction(
+            self.transaction,
+            input,
+            self.locale_chain,
+            self.dictionaries,
+        );
+        self.refused(result)
+    }
+
+    fn refused<T>(&mut self, result: Result<T, BoundaryRefusal>) -> Result<T, CodecErrorCode> {
+        result.map_err(|refusal| {
+            self.refusal = Some(refusal);
+            CodecErrorCode::ProtectionFailedClosed
+        })
     }
 }
 
@@ -1338,14 +1343,13 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
         let output = self.protect_preserving_tokens(input, prefix_cache_write_mode)?;
-        self.pipeline
-            .admit_safety_nets_transaction(
-                self.transaction,
-                &output,
-                self.locale_chain,
-                self.dictionaries,
-            )
-            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let admitted = self.pipeline.admit_boundary_text_transaction(
+            self.transaction,
+            &output,
+            self.locale_chain,
+            self.dictionaries,
+        );
+        self.refused(admitted)?;
         Ok(output)
     }
 
@@ -1589,14 +1593,22 @@ fn prepare_and_commit_direct_request_with_hook(
                 dictionaries,
                 &mut transaction,
             );
-            let mut context =
-                RequestTransformContext::new(&mut pseudonymizer, WireFormat::Json, limits);
-            if provider_request_projection_selected {
-                context.request_inspection_projection();
-            }
-            codec
-                .protect_request(original_body, &mut context)
-                .map_err(map_codec_error)?
+            let protected = {
+                let mut context =
+                    RequestTransformContext::new(&mut pseudonymizer, WireFormat::Json, limits);
+                if provider_request_projection_selected {
+                    context.request_inspection_projection();
+                }
+                codec.protect_request(original_body, &mut context)
+            };
+            protected.map_err(|error| match pseudonymizer.refusal.take() {
+                Some(refusal) if error.code() == CodecErrorCode::ProtectionFailedClosed => {
+                    ProxyErrorCode::ProtectionRefused
+                        .error(ProxyErrorPhase::RequestTransform)
+                        .with_refusal(refusal)
+                }
+                _ => map_codec_error(error),
+            })?
         };
         let request = DirectRequest::from_proved(
             endpoint.clone(),
@@ -2630,6 +2642,25 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
     }
 }
 
+/// The client-facing and logged shape of a protection refusal: the typed `ProtectionError`
+/// variant, the fallback reason, and the suspect classes. Never any request text.
+fn refusal_json(refusal: &BoundaryRefusal) -> Value {
+    serde_json::json!({
+        "error": refusal.error.as_str(),
+        "fallback_reason": refusal.fallback_reason.map(|reason| reason.as_str()),
+        "suspect_classes": refusal
+            .suspect_classes
+            .iter()
+            .map(gaze::PiiClass::to_canonical_str)
+            .collect::<Vec<_>>(),
+    })
+}
+
+/// A refusal is an adopter-visible decision, so it goes to the proxy log (stderr) as one line.
+fn log_refusal(refusal: &BoundaryRefusal) {
+    eprintln!("gaze-proxy: request refused: {}", refusal_json(refusal));
+}
+
 fn direct_error_response(error: DirectProxyError) -> Response {
     let mut error_body = serde_json::json!({
         "type": "api_error",
@@ -2642,6 +2673,10 @@ fn direct_error_response(error: DirectProxyError) -> Response {
             "name": name,
             "reason": reason.as_str(),
         });
+    }
+    if let Some(refusal) = error.refusal() {
+        log_refusal(refusal);
+        error_body["refusal"] = refusal_json(refusal);
     }
     if let Some(carrier) = error.opaque_carrier() {
         error_body["carrier"] = serde_json::json!({
@@ -2766,7 +2801,8 @@ const CARRIER_SUBTREE_KEYS: &[&str] = &[
 /// Redacts every surface an adapter claims and returns the field paths it covered.
 ///
 /// The returned set is the authorization input for [`residual_scan_request`]: a position the
-/// adapter surfaced has passed primary policy and configured-net admission. Primary preserve
+/// adapter surfaced has passed primary policy, the configured nets' Resolve step, and
+/// configured-net admission. Primary preserve
 /// remains allowed unless a configured net reports an unprotected suspect. Other positions
 /// require the separate residual scan.
 ///
@@ -2784,23 +2820,16 @@ fn redact_surfaces(
 ) -> Result<RedactedSurfaces, ProxyError> {
     let mut redacted = RedactedSurfaces::default();
     for surface in surfaces {
-        let clean = pipeline
-            .pseudonymize_with_detect_context(
-                session,
-                RawDocument::Text(surface.text.clone()),
-                locale_chain,
-                dictionaries,
-            )
-            .map_err(|source| ProxyError::Pipeline { source })?;
-        if let CleanDocument::Text(text) = clean {
-            pipeline
-                .admit_safety_nets(session, &text, locale_chain, dictionaries)
-                .map_err(|source| ProxyError::Pipeline {
-                    source: source.into(),
-                })?;
-            collect_json_spelled_tokens(surface.text, &text, &mut redacted.json_spelled_tokens);
-            *surface.text = text;
-        }
+        // The same Resolve step `gaze clean` runs, so a net-flagged date becomes a token here
+        // instead of a refusal at admission (todo 3847). Admission stays the final gate.
+        let text = pipeline
+            .resolve_boundary_text(session, surface.text, locale_chain, dictionaries)
+            .map_err(|refusal| ProxyError::Refused { refusal })?;
+        pipeline
+            .admit_boundary_text(session, &text, locale_chain, dictionaries)
+            .map_err(|refusal| ProxyError::Refused { refusal })?;
+        collect_json_spelled_tokens(surface.text, &text, &mut redacted.json_spelled_tokens);
+        *surface.text = text;
         redacted.field_paths.insert(surface.field_path);
     }
     Ok(redacted)
@@ -3151,13 +3180,19 @@ fn proxy_error_response(err: ProxyError) -> Response {
         ProxyError::AdapterNotFound { .. } => StatusCode::NOT_FOUND,
         ProxyError::BodyTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
         ProxyError::InvalidJson { .. } => StatusCode::BAD_REQUEST,
-        ProxyError::UnsurfacedPii { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+        ProxyError::UnsurfacedPii { .. } | ProxyError::Refused { .. } => {
+            StatusCode::UNPROCESSABLE_ENTITY
+        }
         ProxyError::UpstreamUnreachable { .. } => StatusCode::BAD_GATEWAY,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "error": proxy_error_name(&err),
     });
+    if let ProxyError::Refused { refusal } = &err {
+        log_refusal(refusal);
+        body["refusal"] = refusal_json(refusal);
+    }
     (
         status,
         [(
@@ -3178,6 +3213,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::SsePartialFrame { .. } => "SsePartialFrame",
         ProxyError::UnsurfacedPii { .. } => "UnsurfacedPii",
         ProxyError::UnprovenCoverage => "UnprovenCoverage",
+        ProxyError::Refused { .. } => "Refused",
         ProxyError::Pipeline { .. } => "Pipeline",
         ProxyError::Server { .. } => "Server",
         ProxyError::DaemonAlreadyRunning { .. } => "DaemonAlreadyRunning",

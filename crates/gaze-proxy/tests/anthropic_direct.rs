@@ -1533,9 +1533,10 @@ fn route_net_pipeline(error: bool, hits: Arc<AtomicUsize>) -> Pipeline {
         .unwrap()
 }
 
-// RED contract proposal, not an assertion that today's primary-only API promises this.
+/// A surfaced marker the net flags is resolved into a token before admission, the same
+/// Resolve step `gaze clean` runs (todo 3847). A net error still refuses before provider I/O.
 #[tokio::test]
-async fn configured_net_direct_request_rejects_before_provider_io() {
+async fn configured_net_direct_request_resolves_or_rejects_before_provider_io() {
     let mut observations = Vec::new();
     for error in [false, true] {
         let upstream = spawn_upstream_with_provider_text("benign").await;
@@ -1570,8 +1571,18 @@ async fn configured_net_direct_request_rejects_before_provider_io() {
             hits.load(Ordering::SeqCst),
         ));
     }
-    assert!(observations.iter().all(|row| !row.1 && row.2 == 0 && row.3 == 0),
-        "(error, accepted, provider connections, provider calls, raw on wire, net marker hits): {observations:?}");
+    for row in &observations {
+        let resolved = !row.0;
+        assert_eq!(
+            (row.1, row.3),
+            if resolved { (true, 1) } else { (false, 0) },
+            "(error, accepted, provider connections, provider calls, raw on wire, net marker hits): {observations:?}"
+        );
+        if !resolved {
+            assert_eq!(row.2, 0, "{observations:?}");
+        }
+        assert!(!row.4, "raw marker on the wire: {observations:?}");
+    }
 }
 
 #[tokio::test]
@@ -1602,7 +1613,8 @@ async fn configured_net_direct_response_rejects_after_one_provider_call() {
 mod admission_net;
 
 #[tokio::test]
-async fn admission_reflags_restore_and_reuse_tokens_but_bad_reports_never_send() {
+async fn admission_reflags_and_resolvable_spills_restore_and_reuse_tokens_but_bad_reports_never_send(
+) {
     use admission_net::{AdmissionNet, Mode};
     for mode in [Mode::Reflag, Mode::Malformed, Mode::Spill, Mode::Error] {
         let upstream = spawn_upstream().await;
@@ -1641,12 +1653,10 @@ async fn admission_reflags_restore_and_reuse_tokens_but_bad_reports_never_send()
                 .send()
                 .await
                 .unwrap();
-            assert_eq!(
-                response.status().is_success(),
-                matches!(mode, Mode::Reflag),
-                "{mode:?}"
-            );
-            if matches!(mode, Mode::Reflag) {
+            // A spill covers raw bytes after the token; Resolve tokenizes them (todo 3847).
+            let accepted = matches!(mode, Mode::Reflag | Mode::Spill);
+            assert_eq!(response.status().is_success(), accepted, "{mode:?}");
+            if accepted {
                 let body: Value = response.json().await.unwrap();
                 assert_eq!(body["content"][0]["text"], original);
                 let captures = upstream.captures.lock().await;
@@ -1654,6 +1664,9 @@ async fn admission_reflags_restore_and_reuse_tokens_but_bad_reports_never_send()
                     serde_json::from_slice(&captures.last().unwrap().body).unwrap();
                 let protected = captured["messages"][0]["content"].clone();
                 assert!(!protected.to_string().contains(EMAIL));
+                if matches!(mode, Mode::Spill) {
+                    assert!(!protected.to_string().contains("tail"), "{protected}");
+                }
                 if let Some(previous) = previous {
                     assert_eq!(protected, previous);
                 }
@@ -1666,11 +1679,9 @@ async fn admission_reflags_restore_and_reuse_tokens_but_bad_reports_never_send()
         }
         assert!(hits.load(Ordering::SeqCst) > 0);
         let captures = upstream.captures.lock().await;
-        assert_eq!(
-            captures.len(),
-            if matches!(mode, Mode::Reflag) { 2 } else { 0 }
-        );
-        if !matches!(mode, Mode::Reflag) {
+        let accepted = matches!(mode, Mode::Reflag | Mode::Spill);
+        assert_eq!(captures.len(), if accepted { 2 } else { 0 });
+        if !accepted {
             assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
         }
     }
@@ -1785,4 +1796,151 @@ async fn regression_fallback_redaction_does_not_admit_provider_origin_pii() {
             );
         }
     }
+}
+
+#[path = "support/date_net.rs"]
+mod date_net;
+
+/// Todo 3847 on the codec path: a net-flagged date is tokenized before admission, forwarded
+/// as a token, and restored in the response, instead of refusing the request.
+#[tokio::test]
+async fn regression_3847_direct_net_flagged_dates_are_tokenized_forwarded_and_restored() {
+    for original in [
+        format!("Invoice date {}.", date_net::ISO_DATE),
+        format!("born on {}.", date_net::WRITTEN_DATE),
+    ] {
+        let upstream = spawn_upstream().await;
+        let hits = Arc::new(AtomicUsize::new(0));
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Tokenize))
+            .register_safety_net(date_net::DateNet { hits: hits.clone() })
+            .build()
+            .unwrap();
+        let proxy = spawn_proxy_with_observability(
+            AnthropicAdapter::new(upstream.origin.clone()),
+            pipeline,
+            DictionaryBundle::default(),
+            None,
+            None,
+        )
+        .await;
+        let mut request = sdk_request(false);
+        request["messages"][0]["content"] = json!(original);
+        let response = sdk_client_request(&Client::new(), &proxy, false)
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = response.text().await.unwrap();
+        assert!(status.is_success(), "{original}: {status} {body}");
+        let body: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["content"][0]["text"], original);
+        let captures = upstream.captures.lock().await;
+        assert_eq!(captures.len(), 1);
+        let forwarded = String::from_utf8_lossy(&captures[0].body);
+        assert!(!forwarded.contains(date_net::ISO_DATE), "{forwarded}");
+        assert!(!forwarded.contains(date_net::WRITTEN_DATE), "{forwarded}");
+        assert!(forwarded.contains(":Custom:date_1>"), "{forwarded}");
+        assert!(hits.load(Ordering::SeqCst) > 0);
+    }
+}
+
+/// Todo 3847 parity on the codec path: the proxy forwards exactly what `gaze clean` /
+/// `gaze daemon` produce for the same text and policy (session hex aside).
+#[tokio::test]
+async fn regression_3847_direct_proxy_forwards_what_clean_produces() {
+    let pipeline = || {
+        Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Tokenize))
+            .register_safety_net(date_net::DateNet {
+                hits: Arc::default(),
+            })
+            .build()
+            .unwrap()
+    };
+    let reference = pipeline();
+    for original in date_net::PARITY_INPUTS {
+        let upstream = spawn_upstream().await;
+        let proxy = spawn_proxy_with_observability(
+            AnthropicAdapter::new(upstream.origin.clone()),
+            pipeline(),
+            DictionaryBundle::default(),
+            None,
+            None,
+        )
+        .await;
+        let mut request = sdk_request(false);
+        request["messages"][0]["content"] = json!(original);
+        let response = sdk_client_request(&Client::new(), &proxy, false)
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let body: Value = serde_json::from_str(&response.text().await.unwrap()).unwrap();
+        assert!(status.is_success(), "{original}: {body}");
+        assert_eq!(body["content"][0]["text"], *original);
+        let captures = upstream.captures.lock().await;
+        let forwarded: Value = serde_json::from_slice(&captures[0].body).unwrap();
+        assert_eq!(
+            date_net::without_session_hex(forwarded["messages"][0]["content"].as_str().unwrap()),
+            date_net::clean_reference(&reference, original),
+            "{original}"
+        );
+    }
+}
+
+#[path = "support/second_opinion_net.rs"]
+mod second_opinion_net;
+
+fn second_opinion_pipeline() -> Pipeline {
+    Pipeline::builder()
+        .detector(RegexDetector::emails().unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(second_opinion_net::SecondOpinionNet)
+        .build()
+        .unwrap()
+}
+
+/// Todo 3847 (b) on the codec path: the refusal names the typed `ProtectionError` variant, the
+/// fallback reason and the suspect classes, never the flagged bytes.
+#[tokio::test]
+async fn regression_3847_direct_refusal_body_is_typed_and_carries_no_pii() {
+    let upstream = spawn_upstream().await;
+    let proxy = spawn_proxy_with_observability(
+        AnthropicAdapter::new(upstream.origin.clone()),
+        second_opinion_pipeline(),
+        DictionaryBundle::default(),
+        None,
+        None,
+    )
+    .await;
+    let mut request = sdk_request(false);
+    request["messages"][0]["content"] = json!(second_opinion_net::TEXT);
+    let response = sdk_client_request(&Client::new(), &proxy, false)
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = response.text().await.unwrap();
+    assert!(!body.contains("alpha"), "{body}");
+    assert!(!body.contains("beta"), "{body}");
+    let body: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body["error"]["code"], "ProtectionRefused", "{body}");
+    assert_eq!(
+        body["error"]["refusal"],
+        json!({
+            "error": "Residual",
+            "fallback_reason": "residual_suspect",
+            "suspect_classes": ["name", "location"],
+        })
+    );
+    assert_eq!(upstream.captures.lock().await.len(), 0);
 }

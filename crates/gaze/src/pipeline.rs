@@ -3,7 +3,7 @@ mod protection;
 use occurrence::{Batch, Ledger, Occurrence, Origin, Relation};
 mod recovery;
 mod residual;
-pub use protection::{ProtectionContext, ProtectionError};
+pub use protection::{BoundaryRefusal, ProtectionContext, ProtectionError};
 
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -715,32 +715,14 @@ impl Pipeline {
                 Ok((CleanDocument::Structured(clean), Vec::new(), report))
             }
             RawDocument::Text(text) => {
-                let mut clean = self.redact_text_with_manifest(
+                let mut report = LeakReport::default();
+                let clean = self.clean_text_target(
                     target,
                     &text,
-                    None,
-                    DocumentKind::Text,
                     locale_chain,
                     dictionaries,
-                )?;
-                let mut report = self.run_safety_nets(
-                    target,
-                    &clean.text,
-                    clean.manifest.projection(),
-                    DocumentKind::Text,
-                    locale_chain,
-                    None,
                     decision,
-                )?;
-                self.apply_safety_net_policy(
-                    target,
-                    &mut clean,
                     &mut report,
-                    DocumentKind::Text,
-                    locale_chain,
-                    None,
-                    decision,
-                    None,
                 )?;
                 Ok((
                     CleanDocument::Text(clean.text),
@@ -750,6 +732,49 @@ impl Pipeline {
             }
             _ => Err(Error::UnsupportedRawDocumentVariant),
         }
+    }
+
+    /// The text clean path: primary pipeline, configured nets, then the safety-net decision.
+    ///
+    /// `report` is written before the decision runs, so it still names the suspects when the
+    /// decision refuses. [`Self::resolve_boundary_text_target`] reads it for that reason.
+    fn clean_text_target(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        decision: SafetyNetDecision,
+        report: &mut LeakReport,
+    ) -> Result<CleanText> {
+        let mut clean = self.redact_text_with_manifest(
+            target,
+            text,
+            None,
+            DocumentKind::Text,
+            locale_chain,
+            dictionaries,
+        )?;
+        *report = self.run_safety_nets(
+            target,
+            &clean.text,
+            clean.manifest.projection(),
+            DocumentKind::Text,
+            locale_chain,
+            None,
+            decision,
+        )?;
+        self.apply_safety_net_policy(
+            target,
+            &mut clean,
+            report,
+            DocumentKind::Text,
+            locale_chain,
+            None,
+            decision,
+            None,
+        )?;
+        Ok(clean)
     }
 
     #[doc(hidden)]
@@ -1686,7 +1711,7 @@ impl Pipeline {
                     }
                 };
                 if let Some(reason) = reason {
-                    let (acted_on, terminal_provenance) = {
+                    let (acted_on, terminal_provenance, fallback) = {
                         // Neither producer of `reason` audits its protected suspects: both return
                         // the moment they find an actionable one. Classify once here, so the
                         // protected ones get their `Preserve` row and the fallback is handed only
@@ -1715,7 +1740,7 @@ impl Pipeline {
                             } else {
                                 None
                             };
-                        self.apply_safety_net_fallback(
+                        let fallback = self.apply_safety_net_fallback(
                             target,
                             clean,
                             &actionable,
@@ -1724,8 +1749,8 @@ impl Pipeline {
                             on_residual,
                             reason,
                             protection_trace.as_deref_mut(),
-                        )?;
-                        (acted_on, terminal_provenance)
+                        );
+                        (acted_on, terminal_provenance, fallback)
                     };
                     // A residual found by the post-resolution re-run is absent from the primary
                     // report the caller receives. Surfacing it matters beyond tidiness: a boundary
@@ -1736,6 +1761,9 @@ impl Pipeline {
                     if residual_report.is_some() {
                         report.extend(LeakReport::from_parts(acted_on, Vec::new()));
                     }
+                    // Propagated only now, so a `Strict` refusal still leaves the report naming
+                    // what it refused: a boundary reports the refused classes from it.
+                    fallback?;
                     if let Some((provenance, promise)) = terminal_provenance {
                         self.admit_terminal_output(
                             target,

@@ -54,5 +54,6 @@ zeroize = "1"
 [dev-dependencies]
 gaze = { path = "../gaze", version = "0.15.0", package = "gaze-pii", features = ["test-support"] }
 gaze-recognizers = { path = "../gaze-recognizers", version = "0.15.0" }
+regex = "1"
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
