@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-25
+
+v0.15.0 makes the policy that `gaze setup` writes protect every detected class
+and turns the Nym safety net on in it by default, while keeping Gaze's
+contract: fail closed, preserve reversibility, and keep PII out of
+agent-visible surfaces. The curated summary below leads; the full entries
+follow in Keep a Changelog form.
+
+**Security.** Policies written by `gaze setup` in v0.11.2 through v0.14.0 set
+the default rule to `preserve`, so detected phone numbers, IBANs, payment card
+numbers and IP addresses left the process raw with a success exit. The
+generated policy now tokenizes by default (PR #635). **Remediation:** back up
+any custom rules in the existing policy, then run `gaze setup --force` to
+regenerate it; the manual repair is in the Security entry below. `gaze clean`,
+`gaze daemon` and `gaze proxy` now warn on stderr when a loaded policy sends a
+detected class through raw, whether by an explicit `preserve` default or an
+omitted default, and name reachable one-way `generalize` rules (PR #641).
+Existing policies stay valid. Other shipped leaks closed in this release are
+listed under Fixed with their affected version ranges: `gaze clean` without
+`--policy` ran an email-only pipeline (v0.3.0–v0.14.0, PR #618), `gaze index`
+ran without the `core` floor (v0.11.0–v0.14.0, PR #620), and several IBAN and
+collision-family shapes shipped raw (PRs #622, #624, #626, #627, #628).
+
+**Highlights.**
+
+- **Nym on by default in `gaze setup`** (PR #642). Setup installs the
+  SHA-pinned Nym-small bundle, writes an activating policy, and proves in the
+  doctor check that Nym catches a synthetic plate. It prints the model card
+  licence (MIT), the pinned upstream revision, the open training-data licence
+  review, and the opt-out: `gaze setup --safety-net none`. OPF stays opt-in.
+- **A policy can activate a safety net** (PR #636). `[safety_net] backend =
+  "nym"` turns Nym on for both the CLI and `gaze-assembly`;
+  `[safety_net.nym] model_dir` locates the bundle. `--safety-net` is
+  repeatable, so nets stack for one run and replace the policy's selection;
+  `--safety-net none` disables them for one run with a notice.
+- **The setup policy loads every bundled PII rulepack except `secrets`**, plus
+  the locales those packs declare, with `en-US` first (PR #635). API keys and
+  tokens stay opt-in through `secrets`.
+- **The benchmark scores the exact setup policy** (PR #643). The scorecard
+  harness builds its pipeline through the same policy resolution as
+  `gaze clean --policy`, and an equivalence check proves the two agree.
+- **One entity, one token** (PR #628): a candidate that wholly contains
+  another class's candidate wins the whole span, and a `preserve` winner no
+  longer shields bytes a protected class claimed.
+- **The Kiji DistilBERT safety net is removed** (PR #612): it recovered 1,831
+  leaked gold bytes for +169,657 false-positive bytes on the 2026-09-16
+  leaderboard.
+
+**Breaking changes** (each has a full entry and migration below; see also
+[UPGRADE.md](UPGRADE.md)):
+
+- `gaze setup --safety-net ner` is removed; use `--safety-net none` for the
+  former NER-only policy (PR #642).
+- `--safety-net-backend nym` needs one explicit `--safety-net nym` (PR #636).
+- `gaze setup` installs the pinned Davlan mBERT NER model; re-run it (PR #612).
+- `gaze index ingest` requires the pinned NER model through `--ner-model-dir`
+  or `GAZE_NER_MODEL_DIR` (PR #612).
+- Credential recognizers moved from `core` to the opt-in `secrets` rulepack;
+  `username.field` is removed (PR #607).
+- The Kiji safety net, its flags, features, environment variables and API are
+  removed (PR #612).
+- Custom rulepack paths keep the `core` floor unless `bundled = []` or
+  `--rulepack-bundled=none` (PR #632).
+- Containment precedence and per-character residual coverage change the token
+  stream (PR #628).
+- A collision-family token takes the strictest member action instead of the
+  `default` rule (PR #624).
+- The safety net writes a one-way `[REDACTED:<class>]` marker instead of
+  deleting bytes (PR #623).
+- `gaze-mcp-rmcp`, `gaze-mcp-bridge` and `gaze-document` move to rmcp 2.x
+  (PR #616).
+
+**Performance.**
+<!-- PHASE2: latency disclosure from the release commit, measured with
+scripts/bench/cli-latency.py on a quiet host, with its hardware line. State the
+rules+NER slowdown against v0.14.0 in ABSOLUTE ms per document (median and p95,
+e.g. "28 → 40 ms median"), the added cost of Nym, and one-shot `gaze clean`
+versus warm `gaze daemon`. v0.16 is the performance release. Do not invent
+numbers. -->
+
+**Benchmark.**
+<!-- PHASE2: v0.15.0 release benchmark numbers from
+docs/reference/benchmarks/scorecard-v0.15.0.json (exact setup policy, and
+setup policy + Nym), with Refused and leaked-on-all-processed columns next to
+the same-document-set numbers, linked to the script and hardware line. -->
+
 ### Security
 
 - **`gaze setup` policies now tokenize every detected class.** Generated policies
@@ -19,20 +105,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `location = generalize` rule emits a one-way marker), and enable the
   additional bundled packs and locales.
 
-### Changed
-
-- **Breaking:** `gaze setup --safety-net ner` is removed. Use `--safety-net none`
-  for the former NER-only policy. `gaze setup` now installs Nym by default and
-  writes an activating policy with the pinned model path. OPF remains opt-in
-  and can be stacked by the printed command. The doctor proves Nym catches a
-  synthetic plate; setup prints the model card MIT licence, pinned upstream
-  revision, open training-data licence review, and opt-out.
-
-- **Breaking:** `--safety-net-backend nym` now requires one explicit
-  `--safety-net nym` selection. Add `--safety-net nym` to existing commands
-  that used only the backend selector; the old form succeeded without
-  activating a safety net.
-
 ### Added
 
 - **Policy fall-through warnings in `gaze clean`, `gaze daemon`, and `gaze proxy`.**
@@ -41,6 +113,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raw. It also identifies reachable per-class `generalize` rules as one-way.
   Existing policies remain valid; back up custom rules and run
   `gaze setup --force`, or set the default action to `"tokenize"`.
+- **The scorecard harness benchmarks the exact `gaze setup` policy** (PR #643).
+  A policy-file config builds the benchmark pipeline from a policy TOML through
+  the same resolution `gaze clean --policy` uses, now shared as
+  `gaze_assembly::{resolve_policy_inputs, ResolvedPolicyInputs}`.
+  `scripts/bench/check_policy_equivalence.py` proves the release binary and
+  the benchmark agree document by document and refuses an empty or truncated
+  sample; a model-free six-case sample runs in CI. Scorecards record the
+  policy file SHA-256 and the model bundle pins. `Candidate` (non-exhaustive)
+  gained `source_recognizer_ids`, so protection traces carry each original
+  recognizer id and a custom id containing `+` is no longer split.
 - `[safety_net].backend = "nym"` activates Nym from a policy in both CLI and
   `gaze-assembly`; `[safety_net.nym].model_dir` supplies its optional bundle
   location. `gaze-assembly/safety-net-nym` forwards the backend feature.
@@ -254,6 +336,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`postal.at_ch`, above).
 
 ### Changed
+
+- **Breaking:** `gaze setup --safety-net ner` is removed. Use `--safety-net none`
+  for the former NER-only policy. `gaze setup` now installs Nym by default and
+  writes an activating policy with the pinned model path. OPF remains opt-in
+  and can be stacked by the printed command. The doctor proves Nym catches a
+  synthetic plate; setup prints the model card MIT licence, pinned upstream
+  revision, open training-data licence review, and opt-out.
+
+- **Breaking:** `--safety-net-backend nym` now requires one explicit
+  `--safety-net nym` selection. Add `--safety-net nym` to existing commands
+  that used only the backend selector; the old form succeeded without
+  activating a safety net.
+
 - **Custom rulepack paths keep the `core` detection floor by default** (solo
   todo #3712; breaking in 0.x). Since the v0.4.0 rulepack policy loader, a
   `[policy.rulepacks]` table with `paths` but no `bundled` key silently selected
@@ -415,7 +510,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its measured rule-floor byte recall was 0.9 % of 1,034 gold bytes. Nothing
   emits `custom:username` any more. See UPGRADE.md.
 
-  Measured on the v0.15.0 release run (per-label report for `9a3a788`): the
+  <!-- PHASE2: re-source these per-label figures from the v0.15.0 release
+  scorecard's per-label report, or drop them; no in-repo artifact backs 9a3a788. -->
+  Measured on a pre-release benchmark run at `9a3a788` (per-label report): the
   rule-floor byte recall of these rules was `PASSWORD` 0.0 %, `USERNAME` 0.9 %
   and `SECURITYTOKEN` 70.6 %. Under the v2 scored-label contract `PASSWORD` and
   `SECURITYTOKEN` are unscored, so leaked PII bytes do not move; `USERNAME`
@@ -520,9 +617,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING: the Kiji DistilBERT safety net is removed.** On the
   2,910-document benchmark (2026-09-16 safety-net leaderboard) it recovered
   1,831 leaked gold bytes under scored-label contract v2 for +169,657
-  false-positive bytes, an action precision of 2.5%. No safety net runs by
-  default now; the shipped default is the bundled rules plus the pinned Davlan
-  mBERT NER model (benchmark arm `pass2-ner`). The `SafetyNet` trait, the
+  false-positive bytes, an action precision of 2.5%. No safety net runs
+  without a policy that selects one; the rules plus the pinned Davlan mBERT NER
+  model are benchmark arm `pass2-ner`, and the policy `gaze setup` writes in
+  this release adds Nym (see Changed). The `SafetyNet` trait, the
   `resolve` / `redact` / `strict` modes and fallback ladder, terminal
   admission, and the sub-word guard stay; the OpenAI Privacy Filter and
   Nym-small nets use them. Removed surface:

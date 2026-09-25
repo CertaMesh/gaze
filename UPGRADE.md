@@ -5,7 +5,66 @@ workspace (the published cargo name; the library is imported as `gaze`).
 Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
-## Pending (unreleased): custom rulepack paths retain core detection
+## v0.14.x → v0.15.0
+
+### TL;DR
+
+1. **Regenerate your `gaze setup` policy.** Policies written by v0.11.2
+   through v0.14.0 preserve detected phone numbers, IBANs, payment cards and
+   IP addresses raw. Back up any custom rules, run `gaze setup --force`, then
+   re-add them. The new policy tokenizes by default, loads every bundled PII
+   rulepack except `secrets`, uses the Davlan NER model, and turns Nym on.
+2. **Re-ingest every `gaze index`** and pass it the NER model
+   (`--ner-model-dir` or `GAZE_NER_MODEL_DIR`).
+3. **Load `secrets`** if you relied on Gaze to tokenize API keys, tokens or
+   passwords.
+4. **Expect more, and differently shaped, tokens.** Containment precedence,
+   per-character residual coverage, the strictest-member family action and the
+   `core` floor under custom rulepack paths all protect bytes that used to
+   pass through raw. Manifests written by v0.14.x still restore.
+
+### Security fix: `gaze setup` policies tokenize every detected class
+
+**Action required if you ran `gaze setup` on v0.11.2 through v0.14.0.** The
+policy it wrote set `default` to `preserve`, so every detected class without
+its own rule, including phone numbers, IBANs, payment card numbers and IP
+addresses, left the process raw with a success exit.
+
+- **Regenerate.** Back up any custom rules in the policy, run
+  `gaze setup --force`, then re-add the custom rules.
+- **Or repair by hand.** Set the `kind = "default"` rule's action to
+  `"tokenize"`, delete the old per-class rules (the old
+  `location = generalize` rule emits a one-way marker), and add the other
+  bundled packs and their locales to `[policy.rulepacks]` and `[locale]`.
+- **Watch stderr.** `gaze clean`, `gaze daemon` and `gaze proxy` now name any
+  detected class a loaded policy still sends through raw, and any reachable
+  one-way `generalize` rule. The warning does not change output or exit code.
+
+### `gaze setup` turns on Nym; safety-net flags changed
+
+**Action required if you script `gaze setup` or `--safety-net-backend`.**
+
+- `gaze setup` installs the SHA-pinned Nym-small bundle and writes
+  `[safety_net] backend = "nym"` with `[safety_net.nym] model_dir`. Pass
+  `gaze setup --safety-net none` for a policy without a net.
+  `--safety-net ner` is removed; `none` is its replacement.
+- `--safety-net-backend nym` now needs one explicit `--safety-net nym`. The
+  old backend-only form succeeded without activating any net.
+- `--safety-net` is repeatable. Values given on the command line stack and
+  replace the policy's selection for that run; `--safety-net none` disables
+  every net for one run and prints a notice.
+- A policy without `[safety_net]` still runs no net. `[safety_net.nym]` alone
+  configures Nym but does not activate it.
+
+### `gaze-mcp-rmcp`, `gaze-mcp-bridge` and `gaze-document` move to rmcp 2.x
+
+**Action required if you name rmcp types next to these crates.** Upgrade your
+own rmcp dependency to 2.x with them; rmcp's `ContentBlock` replaces `Content`
+and `RawContent`. MSRV stays 1.89. Bridge ingress now refuses non-text content
+variants and any text-block or `annotations` field it does not redact
+(`unsupported_content_field`).
+
+### Custom rulepack paths retain core detection
 
 **Action required if your policy sets `[policy.rulepacks].paths` but omits
 `bundled`, or you pass `gaze clean --rulepack-path` without
@@ -20,7 +79,7 @@ resolved bundled selection omits `core` and its `core-extended` alias, including
 selection of another bundled pack without a custom path.
 The omitted-key behavior dates to the v0.4.0 rulepack policy loader.
 
-## Pending (unreleased): one entity, one token; protection beats preservation
+### One entity, one token; protection beats preservation
 
 **Action required if you count manifest entries per entity, pin token
 shapes for nested identifiers, or rely on `preserve` shielding every byte
@@ -59,7 +118,7 @@ of a span.** Two resolver changes from solo todo #3740, both breaking in
 Manifests written before this change still restore. `redact` and
 `generalize` fragments are one-way, like whole spans under those actions.
 
-## Pending (unreleased): policy regex collision families protect their family token
+### Policy regex collision families protect their family token
 
 **Action required only if your policy declares
 `[policy.custom_recognizers.collision]` on a `kind = "regex"` recognizer and
@@ -103,7 +162,7 @@ because every family token took the default rule.
 
 Manifests, tokens and restore are unchanged.
 
-## Pending (unreleased): the safety net redacts with a marker instead of deleting
+### The safety net redacts with a marker instead of deleting
 
 **Action required if your clean output goes anywhere that assumed redaction
 removed bytes.** This affects everyone on the shipped default policy, because
@@ -148,14 +207,14 @@ redacted has not changed. What is written in their place has.
    every consumer, including the index. The exact class is unchanged in the
    audit row.
 
-## Pending (unreleased): the Kiji DistilBERT safety net is removed
+### The Kiji DistilBERT safety net is removed
 
 **Action required if you ran `gaze setup`, use `gaze index`, or selected the
 Kiji net.** The Kiji DistilBERT safety net is gone. On the 2,910-document
 benchmark it recovered 1,831 leaked gold bytes (scored-label contract v2) for
-+169,657 false-positive bytes, a 2.5% action precision. No safety net runs by
-default now. The full removed surface is in the
-[CHANGELOG](CHANGELOG.md#unreleased).
++169,657 false-positive bytes, a 2.5% action precision. No safety net runs
+without a policy that selects one; the policy `gaze setup` writes selects Nym. The full removed surface is in the
+[CHANGELOG](CHANGELOG.md#0150---2026-09-25).
 
 1. **Re-run `gaze setup`.** Earlier `gaze setup` runs installed the Kiji
    distilbert-NER bundle as the primary `[ner]` model in the policy they wrote.
@@ -194,7 +253,7 @@ default now. The full removed surface is in the
 Manifests written before this change still restore. Only which spans get
 detected differs.
 
-## Pending (unreleased): collision-family tokens take the strictest member action
+### Collision-family tokens take the strictest member action
 
 **Action required only if you relied on a family token falling to a `preserve`
 default, or run `redact` / `generalize` / `format_preserve` member rules behind
@@ -243,7 +302,7 @@ verbatim. Full contract:
 Manifests written before this change still restore. Only which action an
 ambiguous span takes differs.
 
-## Pending security fix: `gaze clean` without `--policy` runs `core`
+### Security fix: `gaze clean` without `--policy` runs `core`
 
 Through v0.14.0, `gaze clean` with no `--policy` and no rulepack flag ran an
 email-only stub, so cards, IBANs, IPs and the other `core` classes passed
@@ -261,7 +320,7 @@ through raw. It now runs the bundled `core` rulepack, the same as
 - **Older releases:** pass `--rulepack-bundled core`, or a policy, to get the
   protected default.
 
-## Pending security fix: `gaze index ingest` runs `core`
+### Security fix: `gaze index ingest` runs `core`
 
 From v0.11.0 through v0.14.0, `gaze index ingest` detected only emails,
 `Label: value` fields and NER names and organizations. Cards, IBANs, IPs,
@@ -280,7 +339,7 @@ policy-less `gaze clean`.
 - **Older releases:** there is no workaround flag. Do not hand their search
   output to an agent for documents that contain structured identifiers.
 
-## Pending security fix: prefix reuse disabled
+### Security fix: prefix reuse disabled
 
 `enable_prefix_cache()` and `PipelineOptimizationConfig::with_prefix_cache(true)`
 remain source-compatible but no longer skip detection or retain raw prefixes.
@@ -292,7 +351,7 @@ inputs and update audit consumers to expect actual recognizer/rule rows instead
 of `prefix_cache` provenance. Token mappings and manifest restoration retain their
 normal behavior. See [the safety rationale](docs/explanation/pipeline/tier4-pipeline-gating.md).
 
-## Pending: credential recognizers move to the opt-in `secrets` rulepack
+### Credential recognizers move to the opt-in `secrets` rulepack
 
 **Action required if you rely on Gaze to tokenize credentials.** Credentials
 are not PII, so the `core` rulepack (0.6.0) no longer detects them:
@@ -320,6 +379,8 @@ restore contract are unchanged, only which spans get detected differs. Policy
 rules that name `custom:security_token`, `custom:password` or
 `custom:username` still parse; without `secrets` loaded the first two simply
 never match.
+
+---
 
 ## How this file is organized
 
