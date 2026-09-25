@@ -46,6 +46,10 @@ impl OrtBackend {
 }
 
 impl NerBackend for OrtBackend {
+    fn possible_classes(&self) -> Vec<gaze_types::PiiClass> {
+        self.labels.0.values().cloned().collect()
+    }
+
     fn chunk_ranges(&self, input: &str) -> Result<Vec<Range<usize>>, NerRuntimeError> {
         tokenized_chunk_ranges(&self.tokenizer, input)
     }

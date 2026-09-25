@@ -1,8 +1,9 @@
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 
 use gaze::{
-    Action, DictionaryBundle, LocaleChain, LocaleTag, Pipeline, PipelineBuilder, Policy,
+    Action, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline, PipelineBuilder, Policy,
     PolicyError, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
     RulepackSource, SessionPolicy, SessionScope, TypedContext,
 };
@@ -16,6 +17,89 @@ pub(crate) struct ResolvedPipeline {
     pub(crate) rulepacks: Vec<Rulepack>,
     pub(crate) locale_chain: LocaleChain,
     pub(crate) dictionaries: DictionaryBundle,
+}
+
+/// Diagnostic for a loaded policy whose fall-through action preserves detected values.
+pub(crate) fn policy_warnings(policy: &Policy, pipeline: &Pipeline) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if !policy
+        .rulepacks
+        .bundled
+        .iter()
+        .any(|id| matches!(id.as_str(), "core" | "core-extended"))
+    {
+        warnings.push("notice: core rulepack floor is off".to_string());
+    }
+    let mut classes: BTreeSet<PiiClass> = pipeline
+        .registry()
+        .recognizer_ids()
+        .filter_map(|id| pipeline.registry().recognizer(id))
+        .flat_map(|recognizer| recognizer.possible_classes())
+        .collect();
+    classes.extend(
+        pipeline
+            .registry()
+            .family_policy()
+            .families()
+            .map(PiiClass::family),
+    );
+    let mut unruled = Vec::new();
+    let mut generalized = Vec::new();
+    for class in classes {
+        let first_action = first_policy_action(policy, &class);
+        if let Some(family) = class.as_family_name() {
+            if !matches!(first_action, Some((true, _))) {
+                let own = first_action.map_or(Action::Preserve, |(_, action)| action);
+                let derived = pipeline
+                    .registry()
+                    .family_member_classes(family)
+                    .into_iter()
+                    .map(|member| {
+                        first_policy_action(policy, &member)
+                            .map_or(Action::Preserve, |(_, action)| action)
+                    })
+                    .chain(std::iter::once(own))
+                    .max_by_key(|action| action.strictness_rank())
+                    .unwrap_or(own);
+                if derived == Action::Preserve {
+                    unruled.push(class.to_canonical_str());
+                }
+                continue;
+            }
+        }
+        match first_action {
+            Some((true, Action::Generalize)) => generalized.push(class.to_canonical_str()),
+            Some((false, Action::Preserve)) | None => unruled.push(class.to_canonical_str()),
+            _ => {}
+        }
+    }
+
+    if !unruled.is_empty() {
+        warnings.push(format!(
+            "warning: policy preserves {} detected class{} without a reachable class rule: {}; values can reach the model raw. Back up custom rules, then run gaze setup --force, or set the default action to \"tokenize\".",
+            unruled.len(),
+            if unruled.len() == 1 { "" } else { "es" },
+            unruled.join(", ")
+        ));
+    }
+    if !generalized.is_empty() {
+        warnings.push(format!(
+            "warning: class generalize is one-way (no restore token) for: {}.",
+            generalized.join(", ")
+        ));
+    }
+    warnings
+}
+
+fn first_policy_action(policy: &Policy, class: &PiiClass) -> Option<(bool, Action)> {
+    policy.rules.iter().find_map(|rule| match rule {
+        RuleSpec::Class {
+            class: named,
+            action,
+        } if named == class => Some((true, *action)),
+        RuleSpec::Default { action } => Some((false, *action)),
+        _ => None,
+    })
 }
 
 /// [`ResolvedPipeline`] before `build()`, for a verb that layers recognizers on top.
@@ -48,15 +132,6 @@ pub(crate) fn resolve_pipeline(
         context.as_ref(),
     )?;
     let pipeline = resolved.builder.build().map_err(map_pipeline_error)?;
-    if !resolved
-        .policy
-        .rulepacks
-        .bundled
-        .iter()
-        .any(|id| matches!(id.as_str(), "core" | "core-extended"))
-    {
-        eprintln!("notice: core rulepack floor is off");
-    }
     let pipeline = match logger {
         Some(logger) => pipeline.with_redaction_logger(ArcLogger(logger)),
         None => pipeline,
@@ -255,9 +330,10 @@ fn map_build_error(err: gaze_assembly::BuildError) -> CliError {
 /// Emit a stderr notice for each collision-family fallback class the policy
 /// shows intent about without naming reachably (see
 /// [`gaze_assembly::uncovered_collision_family_classes`]). The span does not
-/// leak: the family token takes the strictest action among its member classes'
-/// rules and the default. The notice tells the adopter which class the token
-/// will carry and how to set its action explicitly.
+/// necessarily stay protected: it takes the strictest action among its member
+/// classes' rules and the default, which can still be `preserve`. The separate
+/// policy diagnostic names raw family classes. This notice tells the adopter
+/// which class the token will carry and how to set its action explicitly.
 pub(crate) fn warn_uncovered_collision_families(
     policy: &Policy,
     rulepacks: &[Rulepack],

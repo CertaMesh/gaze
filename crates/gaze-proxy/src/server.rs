@@ -1747,11 +1747,21 @@ pub struct AdapterSnapshot {
 
 /// Bind the configured address and serve until cancelled or the server fails.
 pub async fn serve(config: ProxyConfig, pipeline: Arc<Pipeline>) -> Result<(), ProxyError> {
+    serve_with_ready(config, pipeline, || {}).await
+}
+
+/// Invoke `ready` only after configuration validation and a successful bind.
+pub async fn serve_with_ready(
+    config: ProxyConfig,
+    pipeline: Arc<Pipeline>,
+    ready: impl FnOnce(),
+) -> Result<(), ProxyError> {
     let bind = config.bind;
     let app = build_app(config, pipeline)?;
     let listener = TcpListener::bind(bind)
         .await
         .map_err(|source| ProxyError::Server { source })?;
+    ready();
     serve_app(listener, app).await
 }
 

@@ -241,6 +241,17 @@ impl FamilyPolicyTable {
             .collect()
     }
 
+    /// Names of families whose registered recognizers can emit a family token.
+    pub fn families(&self) -> impl Iterator<Item = &str> {
+        let family_index = match &self.inner {
+            FamilyPolicyTableInner::Populated { family_index, .. } => Some(family_index),
+            FamilyPolicyTableInner::Empty => None,
+        };
+        family_index
+            .into_iter()
+            .flat_map(|families| families.keys().map(String::as_str))
+    }
+
     pub(crate) fn precedence_tie_family(&self, a: &str, b: &str) -> Option<&str> {
         let ma = self.membership(a)?;
         let mb = self.membership(b)?;

@@ -37,6 +37,10 @@ impl NerBackend for TestSupportBackend {
 }
 
 impl NerBackend for IndexFixtureBackend {
+    fn possible_classes(&self) -> Vec<PiiClass> {
+        vec![PiiClass::Name, PiiClass::Organization]
+    }
+
     fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         const TARGETS: &[(&str, PiiClass)] = &[
             ("Dr. Schmidt", PiiClass::Name),

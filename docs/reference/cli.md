@@ -29,6 +29,14 @@ For exit codes and stderr error JSON, see
 [Exit codes](../../crates/gaze-cli/README.md#exit-codes) in the crate README.
 For policy schema details, see [`docs/reference/policy.md`](policy.md).
 
+`gaze clean`, `gaze daemon`, and `gaze proxy serve` warn on stderr once per
+process after successful processing or startup if a loaded policy lets
+registered detection classes fall through to `preserve`. The warning names
+the classes and a repair path. `gaze proxy start` and `restart` write the child
+process warning to the proxy stderr log. Gaze also warns when a reachable
+per-class `generalize` rule creates a one-way value. Errors still use one JSON
+value on stderr.
+
 ## Guides
 
 ### Safety-net selection
