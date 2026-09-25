@@ -445,7 +445,9 @@ pub enum SurfaceSyntax {
     Text,
     /// A serialized JSON document, such as tool-call `arguments`. A token can only stand inside
     /// one of its string literals, so restore JSON-escapes the raw value; a verbatim `"`, `\`,
-    /// or control character would break the document or silently change the parsed value.
+    /// or control character would break the document or silently change the parsed value. A
+    /// value that was itself captured inside a JSON string literal is already escaped and is
+    /// written as it is.
     Json,
     /// Model-authored response text: [`Self::Json`] when the request asked for JSON output
     /// ([`ProviderAdapter::requests_json_output`]), [`Self::Text`] otherwise.

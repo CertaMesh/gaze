@@ -69,6 +69,18 @@ locale_basis = "format"
 kind = "regex"
 pattern = '''(?m)^Share: (\S+)$'''
 capture_groups = [1]
+
+[[recognizers]]
+id = "adopter.customer_name"
+safety_tier = "safe_default"
+class = "custom:customer_name"
+enabled = true
+locales = ["global"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''\bRobert \S+ Smith\b'''
 "#;
 
 fn user_text() -> String {
@@ -425,6 +437,65 @@ async fn openai_chat_tool_call_arguments_do_not_silently_rewrite_a_backslash_pat
         parsed["share"].as_str(),
         Some(RAW_SHARE),
         "the agent would act on a different path: {arguments:?}"
+    );
+}
+
+/// A tool result is usually JSON text, so a value captured there is stored in its JSON-escaped
+/// spelling (`\"`, and `\u00fc` from a Python `json.dumps` with the default `ensure_ascii`).
+/// Echoed into tool-call arguments it is already valid string content; escaping it again
+/// would hand the agent a backslash that was never in the customer record.
+#[tokio::test]
+async fn openai_chat_value_from_a_json_tool_result_restores_into_arguments_unchanged() {
+    const TOOL_RESULT: &str =
+        r#"{"customer": "Robert \"Bob\" Smith", "contact": "Robert M\u00fcller Smith"}"#;
+    let upstream = spawn_upstream(|request, _| {
+        let serialized = request.to_string();
+        let names: Vec<&str> = token_shape::find_tokens(&serialized)
+            .filter(|token| token.contains("customer_name"))
+            .collect();
+        assert_eq!(
+            names.len(),
+            2,
+            "two customer names tokenized in {serialized}"
+        );
+        let arguments = json!({"customer": names[0], "contact": names[1]}).to_string();
+        let body = chat_completion(json!({
+            "role": "assistant",
+            "content": null,
+            "tool_calls": [{
+                "id": "call_2",
+                "type": "function",
+                "function": {"name": "send_letter", "arguments": arguments}
+            }]
+        }));
+        ("application/json", body)
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+
+    let request = json!({
+        "model": "gpt-test",
+        "messages": [
+            {"role": "user", "content": user_text()},
+            {"role": "assistant", "tool_calls": [{
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "lookup_customer", "arguments": "{\"id\":7}"}
+            }]},
+            {"role": "tool", "tool_call_id": "call_1", "content": TOOL_RESULT}
+        ]
+    });
+    let body = post_legacy(&proxy, "/v1/chat/completions", request).await;
+    let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
+    let arguments = response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+        .as_str()
+        .expect("arguments stay a string");
+    let parsed: Value = serde_json::from_str(arguments)
+        .unwrap_or_else(|error| panic!("restored arguments do not parse ({error}): {arguments:?}"));
+    assert_eq!(parsed["customer"], "Robert \"Bob\" Smith", "{arguments:?}");
+    assert_eq!(
+        parsed["contact"], "Robert M\u{fc}ller Smith",
+        "{arguments:?}"
     );
 }
 

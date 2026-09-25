@@ -31,7 +31,10 @@ writes a raw value back:
   would break the document or change the value the agent parses. The escape
   does not depend on where the literal's quotes are, so it stays correct when a
   streamed fragment carries the token and a neighbouring SSE event carries the
-  quotes.
+  quotes. The one exception is a value the request carried inside a JSON string
+  literal, such as a field of a JSON tool result. The manifest stores that value
+  in its escaped spelling (`\"`, `\u00fc`), so restore writes it into a JSON
+  document as it is. The legacy session records which tokens those are.
 - `ModelOutput`: answer text. It restores as `Json` when
   `requests_json_output` is true and as `Text` otherwise. OpenAI reads
   `response_format.type` (Chat Completions) or `text.format.type` (Responses)

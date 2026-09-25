@@ -20,9 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Some values still parsed but changed silently: the UNC path
   `\\fileserver\new_hires` decoded as `\fileserver`, a newline, and `ew_hires`.
   Restore now JSON-escapes raw values in these fields and writes plain text byte
-  for byte as before. The Anthropic Messages codec and Gemini
-  `functionCall.args` were already exact and are pinned by the same end-to-end
-  suite (todo #3837).
+  for byte as before. A value captured inside a JSON string of the request, such
+  as a field of a JSON tool result, is already escaped in the manifest. It is
+  still written into these fields as it is, so it is not escaped twice. The
+  Anthropic Messages codec and Gemini `functionCall.args` were already exact and
+  are pinned by the same end-to-end suite (todo #3837).
 
 - Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
   surrogate prefix derived from the placeholder shape after removing the random
