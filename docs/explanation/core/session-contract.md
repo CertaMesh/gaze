@@ -5,7 +5,7 @@ A `Session` is the boundary of a pseudonym namespace in Gaze. The runtime contra
 ## The Contract
 
 - A `Session` is the pseudonym namespace boundary.
-- Each new `Session` starts with fresh per-class counters (`Person_1`, `Email_1`, etc.) and a fresh `session_hex` prefix.
+- Each new `Session` starts with fresh per-class counters (`Name_1`, `Email_1`, etc.) and a fresh `session_hex` prefix.
 - Two `Session`s never share counters or value-keyed lookups, regardless of `Scope` variant.
 - `Scope` variants choose *persistence*, not *isolation*.
 
@@ -22,7 +22,7 @@ A `Session` is the boundary of a pseudonym namespace in Gaze. The runtime contra
 ### Single Shared Session Across Conversations
 
 **Symptom:** the same email or person name in two adapter-side conversations
-produces the same pseudonym. Per-class counters (`Email_N`, `Person_N`) grow
+produces the same pseudonym. Per-class counters (`Email_N`, `Name_N`) grow
 monotonically across the entire app lifetime. Internal value-to-token maps grow
 without bound.
 
