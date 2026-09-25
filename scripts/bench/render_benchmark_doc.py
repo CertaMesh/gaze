@@ -556,6 +556,7 @@ def history_entry_from_scorecard(
     scorecard_sha256: str,
     provisional: bool = False,
     note: str = "",
+    shipped_arm: str = SHIPPED_DEFAULT_ARM,
 ) -> dict[str, Any]:
     """Project one schema-v4 scorecard onto the fields the document prints."""
     if not VERSION_RE.match(version):
@@ -625,9 +626,9 @@ def history_entry_from_scorecard(
     }
 
     model_bundles = _require_model_bundles(provenance, "scorecard runner_provenance")
-    if SHIPPED_DEFAULT_ARM not in arms:
+    if shipped_arm not in arms:
         raise RenderError(
-            f"scorecard has no run for the shipped default arm {SHIPPED_DEFAULT_ARM}"
+            f"scorecard has no run for the shipped default arm {shipped_arm}"
         )
     contract = _scored_label_contract(scorecard)
     has_gold_gap = any("gold_gap" in block for block in arms.values())
@@ -635,7 +636,7 @@ def history_entry_from_scorecard(
         raise RenderError(
             "a gold_gap diagnostic belongs to scored-label contract v3 and only there"
         )
-    default_run = next(run for run in runs if run["config"] == SHIPPED_DEFAULT_ARM)
+    default_run = next(run for run in runs if run["config"] == shipped_arm)
     validator_recall = validator_recall_from_run(default_run)
 
     return {
@@ -666,7 +667,7 @@ def history_entry_from_scorecard(
         # Absent means contract v1 (every corpus label scored), which keeps
         # the rows recorded before contracts existed byte-identical.
         **({"scored_label_contract": contract} if contract is not None else {}),
-        "shipped_default_arm": SHIPPED_DEFAULT_ARM,
+        "shipped_default_arm": shipped_arm,
         "arms": arms,
         # Absent on rows measured before the gold-validity split, so those rows
         # and the document they render stay byte-identical.
@@ -882,6 +883,10 @@ def render_history(history: Mapping[str, Any]) -> str:
             "| --- | --- | --- | --- | --- | ---: |\n"
             "| *none yet* | — | — | — | — | — |"
         )
+    # Rows that record their own shipped arm were appended with the refusal-aware
+    # layout. A history of legacy rows alone keeps the original table byte for byte.
+    if any("shipped_default_arm" in entry for entry in releases):
+        return render_history_with_refusals(releases)
     latest_default_arm = shipped_default_arm(releases[-1])
     lines = [
         "| Release | Measured | Commit | Machine | Scorecard | "
@@ -895,15 +900,79 @@ def render_history(history: Mapping[str, Any]) -> str:
         surviving = _fmt("int", entry["arms"][default_arm]["surviving_pii_utf8_bytes"])
         if default_arm != latest_default_arm:
             surviving += f" (`{default_arm}`)"
-        version = entry["version"]
-        if entry.get("provisional"):
-            version += " *(provisional)*"
-        if entry.get("scored_label_contract"):
-            version += f" · {contract_label(entry)}"
         lines.append(
-            f"| {version} | {entry['date']} | `{entry['commit'][:7]}` | "
+            f"| {_history_version_cell(entry)} | {entry['date']} | `{entry['commit'][:7]}` | "
             f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "
             f"{surviving} |"
+        )
+    return "\n".join(lines)
+
+
+def _history_version_cell(entry: Mapping[str, Any]) -> str:
+    version = entry["version"]
+    if entry.get("provisional"):
+        version += " *(provisional)*"
+    if entry.get("scored_label_contract"):
+        version += f" · {contract_label(entry)}"
+    return version
+
+
+def common_set_surviving_bytes(releases: Sequence[Mapping[str, Any]]) -> list[int]:
+    """Each row's surviving bytes on the documents every row's shipped arm processed.
+
+    Aggregate scorecards carry no per-document leak bytes, so the common set is
+    computable only when it is the whole population: every row evaluated the
+    same corpus and population and no shipped arm refused a document. Anything
+    else is refused rather than approximated, because a refusing setup looks
+    better on a table that silently drops the documents it refused.
+    """
+    corpora = {
+        (
+            entry["dataset"]["integrity"]["sha256"],
+            entry["dataset"]["evaluated_population"]["documents"],
+        )
+        for entry in releases
+    }
+    if len(corpora) != 1:
+        raise RenderError(
+            "release rows measured different corpora or populations; the "
+            "common-document-set column needs one shared population"
+        )
+    refused = [
+        entry["version"]
+        for entry in releases
+        if entry["arms"][shipped_default_arm(entry)]["failed_closed_documents"]
+    ]
+    if refused:
+        raise RenderError(
+            f"{', '.join(refused)}: the shipped arm refused documents, so the "
+            "common-document-set leak needs per-document data this history lacks"
+        )
+    return [
+        entry["arms"][shipped_default_arm(entry)]["surviving_pii_utf8_bytes"]
+        for entry in releases
+    ]
+
+
+def render_history_with_refusals(releases: Sequence[Mapping[str, Any]]) -> str:
+    common = common_set_surviving_bytes(releases)
+    lines = [
+        "| Release | Measured | Commit | Machine | Scorecard | Shipped arm | "
+        "Refused ↓ | Leaked PII bytes, all processed ↓ | "
+        "Leaked PII bytes, common documents ↓ | False-positive bytes ↔ | "
+        "Restore exact ↑ | clean p95 ms ↓ |",
+        "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for entry, common_bytes in zip(releases, common):
+        default_arm = shipped_default_arm(entry)
+        arm = entry["arms"][default_arm]
+        lines.append(
+            f"| {_history_version_cell(entry)} | {entry['date']} | `{entry['commit'][:7]}` | "
+            f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "
+            f"`{default_arm}` | {_fmt('int', arm['failed_closed_documents'])} | "
+            f"{_fmt('int', arm['surviving_pii_utf8_bytes'])} | {_fmt('int', common_bytes)} | "
+            f"{_fmt('int', arm['false_positive_utf8_bytes'])} | "
+            f"{_fmt('pct', arm['restore_exact_rate'])} | {_fmt('ms', arm['clean_ms_p95'])} |"
         )
     return "\n".join(lines)
 
@@ -979,6 +1048,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="mark the row as not measured on the released tree",
     )
     parser.add_argument("--note", default="", help="caveat shown with the row")
+    parser.add_argument(
+        "--shipped-default-arm",
+        default=SHIPPED_DEFAULT_ARM,
+        help=(
+            "scorecard config the release shipped as its default; a release "
+            "benchmarked through --policy records `policy-file`"
+        ),
+    )
     return parser
 
 
@@ -1018,6 +1095,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 scorecard_sha256=_sha256(scorecard_path),
                 provisional=args.provisional,
                 note=args.note,
+                shipped_arm=args.shipped_default_arm,
             )
             history["releases"].append(entry)
             history["releases"].sort(key=lambda item: version_sort_key(item["version"]))

@@ -534,10 +534,10 @@ class ShippedDefaultArmTest(unittest.TestCase):
         value["releases"].append(newer)
         render.validate_history(value)
         history_block = render.render_history(value)
-        # The old row reports the Kiji bytes it shipped, named because the arm
-        # differs from the latest default; the new row reports pass2-ner.
-        self.assertIn(f"25,179 (`{self.KIJI}`)", history_block)
-        self.assertIn("| 20,000 |", history_block)
+        # A recorded-arm row switches to the refusal-aware layout, where each
+        # row names the arm it shipped and reports that arm's bytes.
+        self.assertIn(f"| `{self.KIJI}` | 0 | 25,179 | 25,179 |", history_block)
+        self.assertIn("| `pass2-ner` | 0 | 20,000 | 20,000 |", history_block)
         current = render.render_current_release(value)
         self.assertIn("`pass2-ner` **(shipped default)**", current)
         self.assertNotIn(f"`{self.KIJI}` **(shipped default)**", current)
@@ -570,6 +570,133 @@ class ShippedDefaultArmTest(unittest.TestCase):
                 scorecard_filename="scorecard-v0.15.0.json",
                 scorecard_sha256="0" * 64,
             )
+
+
+class RefusalAwareHistoryTest(unittest.TestCase):
+    """v0.15.0 ships the `gaze setup` policy, benchmarked as the `policy-file` arm.
+
+    Rows appended with a recorded shipped arm render Refused, leaked bytes on
+    every processed document, leaked bytes on the common document set, false
+    positives, exact restores and latency. Legacy rows alone keep the original
+    table byte for byte.
+    """
+
+    KIJI = ShippedDefaultArmTest.KIJI
+
+    def policy_scorecard(self, refused: int = 0) -> dict:
+        value = scorecard()
+        run = _arm(3)
+        run["config"] = "policy-file"
+        run["pipeline_availability"]["failed_closed_documents"] = refused
+        value["runs"] = [run]
+        return value
+
+    def policy_entry(self, refused: int = 0) -> dict:
+        return render.history_entry_from_scorecard(
+            self.policy_scorecard(refused),
+            version="v0.15.0",
+            machine="Test host, 1 core, 1 GB",
+            scorecard_filename="scorecard-v0.15.0.json",
+            scorecard_sha256="0" * 64,
+            shipped_arm="policy-file",
+        )
+
+    def mixed(self, refused: int = 0) -> dict:
+        value = history_of(ShippedDefaultArmTest.legacy_kiji_row(self))
+        value["releases"].append(self.policy_entry(refused))
+        render.validate_history(value)
+        return value
+
+    def test_policy_file_arm_is_recorded_and_rendered_as_the_default(self):
+        row = self.policy_entry()
+        self.assertEqual(row["shipped_default_arm"], "policy-file")
+        current = render.render_current_release(self.mixed())
+        self.assertIn("`policy-file` **(shipped default)**", current)
+
+    def test_scorecard_without_the_named_arm_is_refused(self):
+        with self.assertRaisesRegex(render.RenderError, "no run for the shipped default arm"):
+            render.history_entry_from_scorecard(
+                scorecard(),
+                version="v0.15.0",
+                machine="Test host, 1 core, 1 GB",
+                scorecard_filename="scorecard-v0.15.0.json",
+                scorecard_sha256="0" * 64,
+                shipped_arm="policy-file",
+            )
+
+    def test_history_renders_every_refusal_aware_column(self):
+        block = render.render_history(self.mixed())
+        lines = block.splitlines()
+        self.assertEqual(
+            lines[0],
+            "| Release | Measured | Commit | Machine | Scorecard | Shipped arm | "
+            "Refused ↓ | Leaked PII bytes, all processed ↓ | "
+            "Leaked PII bytes, common documents ↓ | False-positive bytes ↔ | "
+            "Restore exact ↑ | clean p95 ms ↓ |",
+        )
+        self.assertTrue(
+            lines[2].endswith(
+                f"| `{self.KIJI}` | 0 | 25,179 | 25,179 | 5,424 | 100.0000% | 5.07 |"
+            ),
+            lines[2],
+        )
+        # _arm(3): leaked 93,850 - 3,000; false positive 5,423 + 3; p95 4.07 + 3.
+        self.assertTrue(
+            lines[3].endswith(
+                "| `policy-file` | 0 | 90,850 | 90,850 | 5,426 | 100.0000% | 7.07 |"
+            ),
+            lines[3],
+        )
+
+    def test_each_column_reads_its_own_field(self):
+        value = self.mixed()
+        arm = value["releases"][1]["arms"]["policy-file"]
+        arm["false_positive_utf8_bytes"] = 111
+        arm["restore_exact_rate"] = 0.5
+        arm["clean_ms_p95"] = 9.5
+        arm["surviving_pii_utf8_bytes"] = 222
+        row = render.render_history(value).splitlines()[3]
+        self.assertTrue(
+            row.endswith("| `policy-file` | 0 | 222 | 222 | 111 | 50.0000% | 9.50 |"), row
+        )
+
+    def test_a_refusing_shipped_arm_blocks_the_common_set_column(self):
+        with self.assertRaisesRegex(render.RenderError, "refused documents"):
+            render.render_history(self.mixed(refused=71))
+
+    def test_rows_on_different_populations_block_the_common_set_column(self):
+        value = self.mixed()
+        value["releases"][1]["dataset"]["evaluated_population"]["documents"] = 2909
+        with self.assertRaisesRegex(render.RenderError, "one shared population"):
+            render.render_history(value)
+
+    def test_legacy_rows_alone_keep_the_original_table(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        self.assertTrue(all("shipped_default_arm" not in r for r in committed["releases"]))
+        block = render.render_history(committed)
+        self.assertTrue(block.startswith(
+            "| Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |\n"
+        ))
+        self.assertNotIn("Refused", block)
+
+    def test_cli_records_the_shipped_arm_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc, hist = root / "README.md", root / "release-history.json"
+            doc.write_text(DOC, encoding="utf-8")
+            render.write_history(hist, render.empty_history())
+            card = root / "scorecard-v0.15.0.json"
+            card.write_text(json.dumps(self.policy_scorecard()), encoding="utf-8")
+            argv = [
+                "--doc", str(doc), "--history", str(hist), "--append-history",
+                "--scorecard", str(card), "--version", "v0.15.0",
+                "--machine", "Test host, 1 core, 1 GB",
+                "--shipped-default-arm", "policy-file",
+            ]
+            self.assertEqual(render.main(argv), 0)
+            stored = json.loads(hist.read_text(encoding="utf-8"))
+            self.assertEqual(stored["releases"][0]["shipped_default_arm"], "policy-file")
+            self.assertIn("| `policy-file` | 0 | 90,850 | 90,850 |", doc.read_text(encoding="utf-8"))
 
 
 class CommittedDocumentTest(unittest.TestCase):
