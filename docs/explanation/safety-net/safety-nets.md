@@ -25,15 +25,7 @@ Validator-backed self-validation is handled earlier by the deterministic
 [`validator-veto`](../detection/validator-veto.md) stage. Safety nets do not veto candidates
 and do not participate in conflict resolution.
 
-## Benchmark
-
-The committed safety-net matrix populates direct-detector and observer-residual
-cells for the OpenAI Privacy Filter against the 150-fixture coverage-loop
-corpus. Full numbers, pins, and caveats are in
-[`docs/reference/benchmarks/README.md`](../../reference/benchmarks/README.md#safety-net-matrix);
-the original v0.9 report is archived at the `v0.13.0` tag as
-[v0.9 safety-net benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-safety-net-benchmark.md).
-The Nym-small measurements are in [Measured](#measured).
+## How a safety net fits the pipeline
 
 This document describes the safety-net contract introduced in v0.6 through
 PR #91. The first shipped backend is the OpenAI Privacy Filter
@@ -97,37 +89,35 @@ can land without changing the trait shape or audit schema.
    └─────────────────────────────────────────────────────────────────┘
 ```
 
-## `gaze index`
+## Observer-only contract
 
-`gaze index ingest` detects prose names and organizations with the pinned Davlan
-NER bundle (`--ner-model-dir` or `GAZE_NER_MODEL_DIR`), not with a safety net.
-A net there is optional and checks ingest output under `--on-residual`.
-`gaze index search` always needs an output net: TokenBridge scans every snippet
-before it is shown and denies a search when no net ran, so the CLI refuses
-up front with a typed `SafetyNetConfig` error. Both remaining nets satisfy it:
-`--safety-net openai-filter` (with `--opf-command` and `--opf-checkpoint`) or
-`--safety-net nym` (with `--nym-model-dir`).
+The *backend* is observer-only; the *pipeline* may still act on what it reports.
+A `SafetyNet` can never rewrite bytes itself — the trait has no return channel
+for replacement text and no mutable handle to the manifest, by construction —
+but the `SafetyNetPolicy` the caller passes decides what the deterministic core
+does with the resulting `LeakReport`: nothing (`Strict`, `Tolerant`), replace the
+suspect spans with a one-way marker (`Redact`), or tokenize them reversibly and re-run
+(`Resolve`). The policy-less entry points below use
+`SafetyNetPolicy::default()`, which is `Resolve` + `Redact` — the shipped
+production default since v0.8.1. Pass an explicit `Strict` policy to
+`Pipeline::clean_with_safety_net_policy_detect_context`, or use
+`Pipeline::scan_safety_nets`, when you want report-only behaviour. Mode catalog
+and the full lowering table:
+[`safety-net-modes.md`](safety-net-modes.md#the-fallback-applies-only-under-resolve).
 
-## Locale-Aware Registry Dispatch
+The pipeline calls
+`Pipeline::clean_with_safety_net_detect_context`, which:
 
-`Pipeline::with_safety_net(single_backend)` remains the compatibility path. For deployments with language-specific safety nets, `Pipeline::with_safety_net_registry(LocaleAwareModelRegistry)` activates locale-aware Pass-3 dispatch instead. The registry resolves one backend per clean segment using the existing four-tier order: exact locale, parent language, `Global`, then fail-closed.
+1. Runs the deterministic detection-and-redaction pipeline.
+2. Records the emitted token spans into a `Manifest`.
+3. Iterates the registered safety nets after a successful clean. Each
+   backend receives the clean text and the immutable manifest snapshot.
+4. Returns `(CleanDocument, LeakReport)` to the caller.
 
-The v1 dispatch contract is first-match wins. If a tier resolves multiple backends, Gaze invokes only the first registered backend and records that resolved backend id on the safety-net audit row. Multi-backend aggregation is intentionally left as follow-up work so the audit trail stays simple and deterministic.
-
-CLI registry activation is explicit:
-
-```sh
-gaze clean \
-  --policy quickstart-policy.toml \
-  --locale de-DE \
-  --safety-net-registry \
-  --safety-net-add openai-filter \
-  --opf-command /opt/opf/bin/opf \
-  --opf-checkpoint ~/.local/share/gaze/models/opf \
-  --opf-locales de-DE,de-AT
-```
-
-`--safety-net-registry` cannot be combined with `--safety-net-backend`; the registry is the backend selector in that mode. The only registry-capable backend is `openai-filter`; `nym` is deliberately not registry-capable (see [Audit](#audit)).
+The bytes on `CleanDocument` are produced exclusively by the deterministic
+core. A safety net cannot rewrite, append to, or veto the clean text: under an
+enforcing policy it is still the core's tokenizer and redactor that mutate the
+document, driven by the report, never the backend.
 
 ## North-star fit
 
@@ -188,35 +178,10 @@ score, the `LeakKind` produced by manifest correlation, the validated
 `raw_label`, and an optional `field_path`. Raw payload bytes never appear on
 this struct.
 
-### Observer-only contract
+## What the pipeline does with a suspect
 
-The *backend* is observer-only; the *pipeline* may still act on what it reports.
-A `SafetyNet` can never rewrite bytes itself — the trait has no return channel
-for replacement text and no mutable handle to the manifest, by construction —
-but the `SafetyNetPolicy` the caller passes decides what the deterministic core
-does with the resulting `LeakReport`: nothing (`Strict`, `Tolerant`), replace the
-suspect spans with a one-way marker (`Redact`), or tokenize them reversibly and re-run
-(`Resolve`). The policy-less entry points below use
-`SafetyNetPolicy::default()`, which is `Resolve` + `Redact` — the shipped
-production default since v0.8.1. Pass an explicit `Strict` policy to
-`Pipeline::clean_with_safety_net_policy_detect_context`, or use
-`Pipeline::scan_safety_nets`, when you want report-only behaviour. Mode catalog
-and the full lowering table:
-[`safety-net-modes.md`](safety-net-modes.md#the-fallback-applies-only-under-resolve).
-
-The pipeline calls
-`Pipeline::clean_with_safety_net_detect_context`, which:
-
-1. Runs the deterministic detection-and-redaction pipeline.
-2. Records the emitted token spans into a `Manifest`.
-3. Iterates the registered safety nets after a successful clean. Each
-   backend receives the clean text and the immutable manifest snapshot.
-4. Returns `(CleanDocument, LeakReport)` to the caller.
-
-The bytes on `CleanDocument` are produced exclusively by the deterministic
-core. A safety net cannot rewrite, append to, or veto the clean text: under an
-enforcing policy it is still the core's tokenizer and redactor that mutate the
-document, driven by the report, never the backend.
+Under an enforcing mode the pipeline acts on the report. These rules decide how; the
+mode catalog is in [safety-net modes](safety-net-modes.md).
 
 ### The redaction marker
 
@@ -383,7 +348,7 @@ in `Redact` mode that suspect ships raw, with its `Preserve` audit row and
 and the document is refused. Earlier releases tokenized or deleted the flagged
 part of the word instead.
 
-### Locale gating
+## Locale gating
 
 Each `SafetyNet` declares `supported_locales`. When the session-level locale
 chain does not intersect the backend's supported locales, the orchestrator
@@ -395,7 +360,28 @@ backend. Skip telemetry is bytes-free and is recorded against the same
 prefix; this matches the locale-chain semantics described in
 [`docs/explanation/policy/locale-chain.md`](../policy/locale-chain.md).
 
-### Closed error variant set
+## Locale-aware registry dispatch
+
+`Pipeline::with_safety_net(single_backend)` remains the compatibility path. For deployments with language-specific safety nets, `Pipeline::with_safety_net_registry(LocaleAwareModelRegistry)` activates locale-aware Pass-3 dispatch instead. The registry resolves one backend per clean segment using the existing four-tier order: exact locale, parent language, `Global`, then fail-closed.
+
+The v1 dispatch contract is first-match wins. If a tier resolves multiple backends, Gaze invokes only the first registered backend and records that resolved backend id on the safety-net audit row. Multi-backend aggregation is intentionally left as follow-up work so the audit trail stays simple and deterministic.
+
+CLI registry activation is explicit:
+
+```sh
+gaze clean \
+  --policy quickstart-policy.toml \
+  --locale de-DE \
+  --safety-net-registry \
+  --safety-net-add openai-filter \
+  --opf-command /opt/opf/bin/opf \
+  --opf-checkpoint ~/.local/share/gaze/models/opf \
+  --opf-locales de-DE,de-AT
+```
+
+`--safety-net-registry` cannot be combined with `--safety-net-backend`; the registry is the backend selector in that mode. The only registry-capable backend is `openai-filter`; `nym` is deliberately not registry-capable (see [Audit](#audit)).
+
+## Closed error variant set
 
 [`SafetyNetError`](../../../crates/gaze-types/src/lib.rs) is an exhaustive,
 serde-stable enum:
@@ -413,186 +399,68 @@ The CLI maps each variant to a stable `SafetyNetFailure` exit-3 sub-variant
 so adopters can branch on `Unavailable` versus `Timeout` versus
 `InvalidOutput` without parsing free-form text.
 
-## OpenAI Privacy Filter adapter
+## Structured-document per-field behavior
 
-The first shipped backend is the
-[`OpenAiFilterSafetyNet`](../../../crates/gaze-recognizers/src/safety_net/openai_filter/mod.rs).
-It calls the official `openai/privacy-filter` CLI as a subprocess.
+`Pipeline::clean_with_safety_net_detect_context` traverses
+`RawDocument::Structured` field by field. For each scalar string field it:
 
-### Command choice
+1. Cleans the field through the deterministic pipeline.
+2. Builds a per-field `Manifest` from the emitted token spans.
+3. Runs each registered safety net with `field_path = Some(<JSONPath>)`.
+4. Aggregates the per-field reports into the run-level `LeakReport`.
 
-Gaze binds to the **official** `openai/privacy-filter` repository. Adopters
-must install `opf` from a pinned upstream Git revision or an official release
-tarball. The official CLI was chosen over the `chiefautism/privacy-parser`
-fork because it documents pipe input, exposes a stable JSON schema, and
-publishes a reproducible Git history. The fork could be re-evaluated if a
-later review confirms native byte spans and the absence of PII-bearing JSON
-fields, but it is not the v0.6 default.
+This means a class mismatch detected on `$.user.email` is reported with
+that field path, and the FP-adjudication query
+`gaze audit safety-net query --field-path '$.user.email'` can isolate
+it. Locale-skip telemetry is also recorded per field when the session-level
+locale chain does not match.
 
-The adapter always invokes `opf --format json --output-mode typed`. Output
-mode `typed` is the only accepted shape; other modes are not parsed.
+### The structured path is observer-only, and says so
 
-### Whole-text input
+**A structured document accepts only an observer policy.** Passing
+`SafetyNetMode::Redact` or `SafetyNetMode::Resolve` with a
+`RawDocument::Structured` returns
+`Error::UnsupportedSafetyNetModeForStructured` before any field is
+tokenized. The traversal above has no enforcement stage: it cleans each
+leaf, runs the nets over the result, and reports. Accepting an enforcing
+policy and quietly performing observation would be the worst of both — the
+caller is told `Ok`, and the suspect bytes are still in the document.
+Failing closed is the axis-1 answer.
 
-Piped stdin is not one input for the stock CLI: `opf` reads it line by line,
-skips blank lines, and prints one JSON result per line with offsets relative
-to that line. After the configured arguments (and `--checkpoint`), the adapter
-therefore always appends:
+Use `SafetyNetMode::Strict` (reject at your boundary when the report is
+non-empty) or `SafetyNetMode::Tolerant`, via
+`Pipeline::clean_with_safety_net_policy_detect_context`, or
+`Pipeline::scan_safety_nets_structured` for a read-only pass over an
+already-clean document. Note that the policy-less
+`Pipeline::clean_with_safety_net*` entry points default to `Resolve`
+(`SafetyNetPolicy::default()`), so they are text-only in practice.
 
-```text
---no-print-color-coded-text --text-file /dev/stdin
-```
+Enforcement for structured documents is not implemented rather than
+forbidden: per-field enforcement is a coherent future feature (each leaf
+carries its own manifest, so a leaf could be resolved or redacted in
+isolation). Until it exists, the contract says so out loud.
 
-The text still travels over the stdin pipe and is never written to disk. The
-colour flag stops the ANSI section `opf` otherwise prints after the JSON.
-`opf` reads the file in Python text mode, so `\r\n` and a lone `\r` each become
-one `\n` character in the offsets it returns; the adapter maps those offsets
-back to UTF-8 byte offsets in the exact clean text it sent.
+### One walker
 
-The adapter accepts a result only if it is exactly one JSON object whose echoed
-`text` equals the text `opf` should have read. A second document, a missing
-`text`, or any other `text` (a line, a trimmed or rewritten input) is
-`InvalidOutput`, so offsets relative to some other text can never be applied.
-Empty clean text returns no spans without starting `opf`.
+All three structured traversals — pseudonymize, clean-and-scan, and
+scan-only — are the single `walk_structured` in
+`crates/gaze/src/pipeline.rs`, parameterized by a `LeafOp`. They were three
+near-identical copies and had already drifted. What the op varies is
+documented on `LeafOp` itself: empty-string skipping, whether scalar leaves
+are scanned, whether the document is rebuilt, and the root field-path
+prefix.
 
-A wrapper command configured instead of `opf` must accept these arguments and
-echo the analysed text. Windows has no `/dev/stdin`: there only the colour flag
-is appended, `opf` still splits lines, and the echo check refuses multi-line
-text rather than mis-mapping it.
+The integration coverage lives in
+`crates/gaze/tests/safety_net.rs`:
+`structured_safety_net_traverses_nested_fields_and_preserves_shape`,
+`structured_walk_has_nested_parity_across_every_leaf_op`, and
+`structured_documents_do_not_silently_observe_when_enforcement_is_requested`.
 
-### Subprocess configuration
+## Backends
 
-[`SubprocessOpenAiFilterConfig`](../../../crates/gaze-recognizers/src/safety_net/openai_filter/backend/subprocess.rs)
-is a builder with the following defaults:
-
-- `timeout`: 5 seconds. Configurable via `--safety-net-timeout-ms`.
-- `max_input_bytes`: 1 MiB. Configurable via `--safety-net-input-limit-bytes`.
-- `max_stdout_bytes`: 4 MiB.
-- `capture_stderr`: `false`. Stderr is routed to `Stdio::null()` by default.
-- Decoding params: `format=json`, `output_mode=typed`. Operating-point flags
-  add `min_score` and `operating_point` entries.
-
-`SubprocessOpenAiFilterConfig::from_env()` reads `GAZE_OPENAI_FILTER_OPF` so
-adopters can pin the install path centrally.
-
-### PII-bearing upstream JSON fields are stripped at the boundary
-
-Upstream OPF emits per-span `text` and `placeholder` fields that carry the
-literal source bytes. These are private deserialization details inside the
-adapter:
-
-- `PrivateOpfSpan` and `PrivatePiiString` are private structs in the
-  adapter module. The crate root re-exports the public trait shape and the
-  config builder, but never the private structs themselves.
-- `PrivatePiiString::Debug` writes `<private-opf-field>` instead of the raw
-  contents.
-- `PrivatePiiString::Drop` clears the underlying string buffer when the
-  span is dropped.
-- After `serde_json::from_str` returns, the adapter calls
-  `PrivateOpfSpan::into_raw_span`, which produces a `RawSpan` containing
-  only `start`, `end`, `label`, and `score`. The per-span `text` and
-  `placeholder` fields are never deserialized, so their contents are skipped
-  by the parser and never held in memory.
-- The top-level `text` echo is held in a `PrivatePiiString`, compared with
-  the text the adapter sent, and scrubbed on drop. `redacted_text` is never
-  deserialized.
-
-After this projection, no part of Gaze that consumes safety-net output sees
-upstream raw bytes. The adversarial regression
-`safety_net_correlates_raw_spans_with_manifest_without_source_text` covers
-this invariant.
-
-### Stderr discipline
-
-By default `child.stderr` is `Stdio::null()`, so verbose backend logs cannot
-race with the JSON adapter or appear in operator logs. Adopters who need
-diagnostics can enable `SubprocessOpenAiFilterConfig::with_stderr_diagnostics(true)`,
-which:
-
-1. Captures a stderr prefix in a bounded buffer of at most 256 bytes and
-   drains/discards the rest to EOF so a verbose child cannot block its pipe.
-   Diagnostic overflow alone does not fail inference. An incomplete trailing
-   token is discarded back to the last captured ASCII whitespace before
-   redaction. Arbitrary Unicode bytes and control bytes are not evidence of
-   a complete raw token; a partial email or phone token could evade the sanitizer.
-2. Maps non-printable bytes to spaces.
-3. Sanitizes whitespace-separated tokens with the same redactor used for
-   error messages: any token containing `@` or seven or more ASCII digits
-   is replaced with `<redacted>`. This catches the most common email and
-   phone shapes that backends might log.
-4. Truncates sanitized output to the 256-byte cap, including a
-   `[truncated]` marker when capture or display was shortened.
-
-Stdout still has
-a hard byte cap: overflow, I/O errors, invalid model output, and timeouts remain
-errors. Diagnostics stay disabled by default. The heuristic redactor does not
-provide general PII-detection completeness.
-
-The `verbose_stderr_is_stripped_and_capped` test locks both the cap and the
-sanitization rule.
-
-### Subprocess timeout and resource isolation
-
-Both subprocess adapters provide cancellable pipe I/O on Unix and Windows.
-Windows uses exclusively owned parent pipes with nonblocking writes and
-availability-bounded reads; see [Windows pipe ownership](windows-subprocess-io.md).
-Targets that are neither Unix nor Windows currently have no adapter and return
-`ModelUnavailable` before spawn. This describes this implementation, not a claim
-that those targets cannot support subprocesses. In-process backends are unaffected.
-
-The subprocess runner enforces a single deadline that covers stdin write,
-stdout read, stderr read, and child wait. Parent pipe ends are nonblocking,
-with cancellation checked between I/O operations and at most 5 ms of idle
-polling delay (plus OS scheduling). On timeout or worker failure the adapter:
-
-1. Signals cancellation to all pipe workers.
-2. Sends `SIGKILL` (`Child::kill`) and reaps the direct child via `wait` to
-   prevent zombies.
-3. Joins every worker, closing all parent pipe ends without waiting for EOF
-   from descendants. Descendant processes themselves are not killed.
-4. Returns the original failure; for a deadline, `SafetyNetError::Runtime`
-   with the message
-   `"opf subprocess timed out and was killed"`. The CLI maps this branch to
-   exit-code `3` with `variant = "Timeout"`.
-
-Success still requires completed stdin, stdout/stderr EOF, and successful
-direct-child exit. A descendant keeping a pipe open produces a timeout, never
-partial successful output. Cleanup is cooperative, not a hard real-time
-guarantee against OS scheduling delays or an uninterruptible child wait.
-
-Initialization failures are cached in a `OnceLock<Result<Arc<_>, Arc<_>>>`
-so deterministic problems (missing checkpoint, malformed config) are not
-retried on every safety-net check. This is the explicit fix for "retry storm
-on every clean" and is locked by `empty_command_failure_is_cached`.
-
-### Checkpoint and cache permission verification
-
-`SubprocessOpenAiFilterBackend::new` runs path-safety checks before any
-spawn:
-
-- The `opf` command path must be a regular file (not a symlink) when an
-  absolute path is supplied. Bare command names are accepted so adopters
-  can rely on `PATH` resolution when the host is hardened.
-- `--openai-filter-checkpoint` must exist; missing files produce
-  `WeightsMissing { path: "<missing:<filename>>" }`. The path is sanitized
-  to the file basename so logs cannot leak operator directory layout.
-- Checkpoint files and directories must be owned by the current uid, must
-  not be symlinks, and must not be group/world writable on Unix. Directories
-  must be mode `0700`. Windows enforces non-symlink + readonly ACL.
-- The optional cache directory is created mode `0700` if it does not exist
-  and is then verified by the same recursive walk.
-
-The `group_writable_checkpoint_file_fails_closed` test pins the perm rule.
-
-### Class mapping
-
-`map_openai_label` accepts the closed set `private_person`,
-`private_address`, `private_email`, `private_phone`, `private_url`,
-`private_date`, `account_number`, `secret`. Unknown labels return
-`SafetyNetError::InvalidOutput`. The mapping into Gaze's `PiiClass` lives
-in [`class_map.rs`](../../../crates/gaze-recognizers/src/safety_net/openai_filter/class_map.rs);
-the `class-map-override-safety` xtask gate runs the
-`all_official_labels_map_exactly_to_gaze_classes` test on every PR.
+Two backends ship: the [OpenAI Privacy Filter adapter](opf-adapter.md), an opt-in
+`opf` subprocess with its own page, and the Nym-small adapter below, which
+`gaze setup` enables.
 
 ## Nym-small adapter
 
@@ -757,62 +625,59 @@ source and pinned revision, and gives `gaze setup --safety-net none` as the
 opt-out. Gaze does not vendor the weights; setup fetches the pinned revision
 from the upstream repository.
 
-## Structured-document per-field behavior
+## Safety nets in `gaze index`
 
-`Pipeline::clean_with_safety_net_detect_context` traverses
-`RawDocument::Structured` field by field. For each scalar string field it:
+`gaze index ingest` detects prose names and organizations with the pinned Davlan
+NER bundle (`--ner-model-dir` or `GAZE_NER_MODEL_DIR`), not with a safety net.
+A net there is optional and checks ingest output under `--on-residual`.
+`gaze index search` always needs an output net: TokenBridge scans every snippet
+before it is shown and denies a search when no net ran, so the CLI refuses
+up front with a typed `SafetyNetConfig` error. Both remaining nets satisfy it:
+`--safety-net openai-filter` (with `--opf-command` and `--opf-checkpoint`) or
+`--safety-net nym` (with `--nym-model-dir`).
 
-1. Cleans the field through the deterministic pipeline.
-2. Builds a per-field `Manifest` from the emitted token spans.
-3. Runs each registered safety net with `field_path = Some(<JSONPath>)`.
-4. Aggregates the per-field reports into the run-level `LeakReport`.
+## Activation surface
 
-This means a class mismatch detected on `$.user.email` is reported with
-that field path, and the FP-adjudication query
-`gaze audit safety-net query --field-path '$.user.email'` can isolate
-it. Locale-skip telemetry is also recorded per field when the session-level
-locale chain does not match.
+`[safety_net].backend = "nym"` activates Nym for policy-driven assembly in
+Rust and for CLI verbs that load the policy. `[safety_net.nym]` configures its
+bundle location, allowlist and thresholds. An absent table or `backend =
+"none"` runs no net. OpenAI Privacy Filter can only be selected on the
+command line in this release. A missing feature or invalid bundle fails
+closed before input is processed.
 
-### The structured path is observer-only, and says so
+The minimum CLI form is:
 
-**A structured document accepts only an observer policy.** Passing
-`SafetyNetMode::Redact` or `SafetyNetMode::Resolve` with a
-`RawDocument::Structured` returns
-`Error::UnsupportedSafetyNetModeForStructured` before any field is
-tokenized. The traversal above has no enforcement stage: it cleans each
-leaf, runs the nets over the result, and reports. Accepting an enforcing
-policy and quietly performing observation would be the worst of both — the
-caller is told `Ok`, and the suspect bytes are still in the document.
-Failing closed is the axis-1 answer.
+```sh
+gaze clean \
+  --policy=policy.toml \
+  --safety-net=openai-filter \
+  --openai-filter-command=/opt/opf/bin/opf \
+  --openai-filter-checkpoint=/opt/opf/checkpoint \
+  --safety-net-mode=strict
+```
 
-Use `SafetyNetMode::Strict` (reject at your boundary when the report is
-non-empty) or `SafetyNetMode::Tolerant`, via
-`Pipeline::clean_with_safety_net_policy_detect_context`, or
-`Pipeline::scan_safety_nets_structured` for a read-only pass over an
-already-clean document. Note that the policy-less
-`Pipeline::clean_with_safety_net*` entry points default to `Resolve`
-(`SafetyNetPolicy::default()`), so they are text-only in practice.
+Programmatic adopters call `Pipeline::with_safety_net(OpenAiFilterSafetyNet::new(config))`
+behind the `safety-net` feature on `gaze` and `safety-net-openai` on
+`gaze-recognizers`. Both features are off by default; the safety-net code
+path is excluded from the default `cargo build` graph.
 
-Enforcement for structured documents is not implemented rather than
-forbidden: per-field enforcement is a coherent future feature (each leaf
-carries its own manifest, so a leaf could be resolved or redacted in
-isolation). Until it exists, the contract says so out loud.
+For policy-driven Rust assembly, enable `gaze-assembly/safety-net-nym` and
+call `build_pipeline`. The CLI calls the same Nym attachment code. Its
+repeatable `--safety-net` values replace policy selection; `none` disables
+all nets for one run, with a notice if policy Nym was active. Multiple selected
+nets run and the pipeline unions their suspects. Bundle paths resolve from
+CLI flag, then environment, then policy; library assembly reads only the
+policy path unless given an explicit override.
 
-### One walker
+## Benchmark
 
-All three structured traversals — pseudonymize, clean-and-scan, and
-scan-only — are the single `walk_structured` in
-`crates/gaze/src/pipeline.rs`, parameterized by a `LeafOp`. They were three
-near-identical copies and had already drifted. What the op varies is
-documented on `LeafOp` itself: empty-string skipping, whether scalar leaves
-are scanned, whether the document is rebuilt, and the root field-path
-prefix.
-
-The integration coverage lives in
-`crates/gaze/tests/safety_net.rs`:
-`structured_safety_net_traverses_nested_fields_and_preserves_shape`,
-`structured_walk_has_nested_parity_across_every_leaf_op`, and
-`structured_documents_do_not_silently_observe_when_enforcement_is_requested`.
+The committed safety-net matrix populates direct-detector and observer-residual
+cells for the OpenAI Privacy Filter against the 150-fixture coverage-loop
+corpus. Full numbers, pins, and caveats are in
+[`docs/reference/benchmarks/README.md`](../../reference/benchmarks/README.md#safety-net-matrix);
+the original v0.9 report is archived at the `v0.13.0` tag as
+[v0.9 safety-net benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-safety-net-benchmark.md).
+The Nym-small measurements are in [Measured](#measured).
 
 ## Replay hash
 
@@ -904,39 +769,6 @@ Run the xtask gate manually before shared-branch pushes; the gate is **not**
 scheduled nightly in v0.6 and the live-model nightly workflow is deferred —
 see the "Future work" section below.
 
-## Activation surface
-
-`[safety_net].backend = "nym"` activates Nym for policy-driven assembly in
-Rust and for CLI verbs that load the policy. `[safety_net.nym]` configures its
-bundle location, allowlist and thresholds. An absent table or `backend =
-"none"` runs no net. OpenAI Privacy Filter can only be selected on the
-command line in this release. A missing feature or invalid bundle fails
-closed before input is processed.
-
-The minimum CLI form is:
-
-```sh
-gaze clean \
-  --policy=policy.toml \
-  --safety-net=openai-filter \
-  --openai-filter-command=/opt/opf/bin/opf \
-  --openai-filter-checkpoint=/opt/opf/checkpoint \
-  --safety-net-mode=strict
-```
-
-Programmatic adopters call `Pipeline::with_safety_net(OpenAiFilterSafetyNet::new(config))`
-behind the `safety-net` feature on `gaze` and `safety-net-openai` on
-`gaze-recognizers`. Both features are off by default; the safety-net code
-path is excluded from the default `cargo build` graph.
-
-For policy-driven Rust assembly, enable `gaze-assembly/safety-net-nym` and
-call `build_pipeline`. The CLI calls the same Nym attachment code. Its
-repeatable `--safety-net` values replace policy selection; `none` disables
-all nets for one run, with a notice if policy Nym was active. Multiple selected
-nets run and the pipeline unions their suspects. Bundle paths resolve from
-CLI flag, then environment, then policy; library assembly reads only the
-policy path unless given an explicit override.
-
 ## Future work (deferred to a post-v0.6.0 release)
 
 The following items are filed for a release after v0.6.0 and intentionally
@@ -978,3 +810,5 @@ Cross-references:
   `class-map-override-safety` gates.
 - [`AGENTS.md`](../../../AGENTS.md#project-north-star) —
   the five-axis north star that the safety-net contract is checked against.
+- [OpenAI Privacy Filter adapter](opf-adapter.md) — the subprocess backend.
+- [Safety-net modes](safety-net-modes.md) — what the pipeline does with a suspect under each mode.

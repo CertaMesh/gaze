@@ -38,8 +38,11 @@ axis in practice.
 
 ## Safety nets
 
-- **[Safety nets](safety-net/safety-nets.md)** — the Pass-3 observer-only check that runs against already-tokenized output without touching the manifest.
+- **[Safety nets](safety-net/safety-nets.md)** — the Pass-3 observer-only check that runs against already-tokenized output without touching the manifest, and the Nym-small backend.
 - **[Safety-net modes](safety-net/safety-net-modes.md)** — resolve, redact, and fallback modes and their typed fallback reasons.
+- **[OpenAI Privacy Filter adapter](safety-net/opf-adapter.md)** — the opt-in `opf` subprocess backend.
+- **[Windows subprocess pipe ownership](safety-net/windows-subprocess-io.md)** — how the subprocess adapter owns its pipes on Windows.
+- **[Safety-net modes: v0.8 design record](safety-net/safety-net-modes-design.md)** — the historical proposal behind the modes, kept for its reasoning.
 
 ## Pipeline
 
