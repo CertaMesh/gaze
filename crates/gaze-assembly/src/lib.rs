@@ -46,6 +46,7 @@ mod detector_wiring;
 mod error;
 mod locale;
 mod ner;
+mod policy_inputs;
 mod registration;
 mod template;
 
@@ -59,12 +60,12 @@ pub use defaults::CorePipelineConfig;
 pub use error::BuildError;
 pub use locale::locale_gated_activation_locales;
 pub(crate) use locale::{merged_locale_vocab, register_anchor_cue_bundles};
+pub use policy_inputs::{resolve_policy_inputs, ResolvedPolicyInputs};
 
 /// Assemble a pipeline from a loaded [`gaze::Policy`], matching the CLI code path.
 ///
-/// Use this when you load a policy file programmatically and want to mirror the
-/// exact assembly the `gaze` binary uses, including locale chain resolution and
-/// rulepack loading.
+/// Resolve rulepacks, dictionaries, locales, and NER settings with
+/// [`resolve_policy_inputs`] first to mirror `gaze clean --policy`.
 ///
 /// Fails closed with [`BuildError::NoRecognizers`] when nothing was actually
 /// registered: policy detectors, rulepack recognizers admitted by the

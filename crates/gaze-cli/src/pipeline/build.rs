@@ -2,10 +2,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use gaze::{
-    dictionary_bundle_from_context, Action, DictionaryBundle, LocaleChain, LocaleTag, Pipeline,
-    PipelineBuilder, Policy, PolicyError, RawMatch, RedactionEntry, RedactionLogError,
-    RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackDict, RulepackSource,
-    SessionPolicy, SessionScope, TypedContext, DEFAULT_NER_THRESHOLD,
+    Action, DictionaryBundle, LocaleChain, LocaleTag, Pipeline, PipelineBuilder, Policy,
+    PolicyError, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
+    RulepackSource, SessionPolicy, SessionScope, TypedContext,
 };
 
 use crate::clean_overrides::CleanOverrides;
@@ -92,43 +91,29 @@ pub(crate) fn resolve_pipeline_builder(
             "no detectors or rulepacks configured".to_string(),
         ));
     }
-    let rulepacks = load_rulepacks(&policy).map_err(map_pipeline_error)?;
-
-    let context_bundle = context
-        .map(dictionary_bundle_from_context)
-        .unwrap_or_default();
-    let rulepack_dictionaries =
-        dictionary_terms_from_rulepacks(&rulepacks).map_err(map_pipeline_error)?;
-    let mut policy_dictionaries = policy.dictionaries.clone();
-    policy_dictionaries.extend(rulepack_dictionaries);
-    let policy_bundle = DictionaryBundle::from_rulepack_terms(&policy_dictionaries);
-    let dictionaries = DictionaryBundle::merge(policy_bundle, context_bundle);
-
-    let mut rulepack_default_locales = merged_rulepack_default_locales(&rulepacks);
-    if policy.rulepacks.auto_activate_locale_gated {
-        for locale in gaze_assembly::locale_gated_activation_locales(&rulepacks) {
-            if !rulepack_default_locales.contains(&locale) {
-                rulepack_default_locales.push(locale);
-            }
-        }
-    }
     let cli_locales = parse_cli_locales(cli_locales)?;
-    let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(
+    let inputs = gaze_assembly::resolve_policy_inputs(
+        &policy,
+        context,
         cli_locales.as_deref(),
-        policy.locale.as_deref(),
-        Some(&rulepack_default_locales),
-    );
-    let ner_threshold = resolve_ner_threshold(cli_ner_threshold, Some(&policy));
+        cli_ner_threshold,
+    )
+    .map_err(map_build_error)?;
 
-    let builder =
-        pipeline_builder_from_policy(&policy, &rulepacks, context, &locale_chain, ner_threshold)?;
+    let builder = pipeline_builder_from_policy(
+        &policy,
+        &inputs.rulepacks,
+        context,
+        &inputs.locale_chain,
+        inputs.ner_threshold,
+    )?;
 
     Ok(ResolvedPipelineBuilder {
         builder,
         policy,
-        rulepacks,
-        locale_chain,
-        dictionaries,
+        rulepacks: inputs.rulepacks,
+        locale_chain: inputs.locale_chain,
+        dictionaries: inputs.dictionaries,
     })
 }
 
@@ -298,102 +283,6 @@ pub(crate) fn validate_ner_threshold(threshold: f32) -> std::result::Result<f32,
     } else {
         Err(PolicyError::NerThresholdOutOfRange { value: threshold })
     }
-}
-
-pub(crate) fn resolve_ner_threshold(cli_threshold: Option<f32>, policy: Option<&Policy>) -> f32 {
-    cli_threshold
-        .or_else(|| policy.and_then(|policy| policy.ner.as_ref().map(|ner| ner.threshold)))
-        .unwrap_or(DEFAULT_NER_THRESHOLD)
-}
-
-pub(crate) fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
-    let mut rulepacks = Vec::new();
-    for bundled in &policy.rulepacks.bundled {
-        let contents = load_embedded_rulepack_contents(bundled)?;
-        rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
-    }
-    for path in &policy.rulepacks.paths {
-        rulepacks.push(Rulepack::load(RulepackSource::Path(path.clone()))?);
-    }
-    Ok(rulepacks)
-}
-
-fn load_embedded_rulepack_contents(id: &str) -> GazeResult<&'static str> {
-    gaze_recognizers::embedded(id).ok_or_else(|| {
-        gaze::Error::Policy(PolicyError::BundledRulepackUnknown {
-            value: id.to_string(),
-        })
-    })
-}
-
-pub(crate) fn dictionary_terms_from_rulepacks(
-    rulepacks: &[Rulepack],
-) -> GazeResult<Vec<RulepackDict>> {
-    let mut dictionaries = Vec::new();
-    for rulepack in rulepacks {
-        for recognizer in &rulepack.recognizers {
-            let RawMatch::Dictionary {
-                terms,
-                terms_file,
-                terms_from_context,
-                case_sensitive,
-            } = &recognizer.matcher
-            else {
-                continue;
-            };
-            if terms_from_context.is_some() {
-                continue;
-            }
-            let mut all_terms = terms.clone();
-            if let Some(path) = terms_file {
-                let file = std::fs::read_to_string(path).map_err(|err| {
-                    gaze::Error::Policy(PolicyError::BadDictionary {
-                        name: recognizer.id.clone(),
-                        reason: format!("failed to read terms_file: {err}"),
-                    })
-                })?;
-                all_terms.extend(
-                    file.lines()
-                        .map(str::trim)
-                        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                        .map(str::to_string),
-                );
-            }
-            if all_terms.is_empty() {
-                return Err(gaze::Error::Policy(PolicyError::BadDictionary {
-                    name: recognizer.id.clone(),
-                    reason: "dictionary matcher requires terms, terms_file, or terms_from_context"
-                        .to_string(),
-                }));
-            }
-            if !case_sensitive && all_terms.iter().any(|term| !term.is_ascii()) {
-                return Err(gaze::Error::Policy(PolicyError::BadDictionary {
-                    name: recognizer.id.clone(),
-                    reason:
-                        "unicode dictionary insensitive matching unsupported in v0.4.0, use case_sensitive = true"
-                            .to_string(),
-                }));
-            }
-            dictionaries.push(RulepackDict::new(
-                recognizer.id.clone(),
-                all_terms,
-                *case_sensitive,
-            ));
-        }
-    }
-    Ok(dictionaries)
-}
-
-pub(crate) fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<LocaleTag> {
-    let mut locales = Vec::new();
-    for rulepack in rulepacks {
-        for locale in &rulepack.default_locales {
-            if !locales.iter().any(|existing| existing == locale) {
-                locales.push(locale.clone());
-            }
-        }
-    }
-    locales
 }
 
 /// Adapter that lets `PipelineBuilder::redaction_logger` (which takes ownership

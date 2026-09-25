@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use gaze::{
-    Action, CleanDocument, Context, EmittedTokenSpan, FallbackReason, GazeLocalProtectionTraceItem,
-    LeakKind, LeakReportStats, LocaleChain, LocaleTag, NerPolicy, PiiClass, Pipeline, RuleSpec,
-    Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
-    Scope, Session,
+    Action, CleanDocument, Context, DictionaryBundle, EmittedTokenSpan, FallbackReason,
+    GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleChain, LocaleTag, NerPolicy,
+    PiiClass, Pipeline, RuleSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback,
+    SafetyNetMode, SafetyNetPolicy, Scope, Session,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ const BENCHMARK_ACTIVE_LOCALES: &[LocaleTag] = &[
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BenchConfig {
+    PolicyFile,
     RuleFloorCore,
     RuleFloorExtended,
     Pass2Ner,
@@ -40,6 +41,7 @@ enum BenchConfig {
 impl BenchConfig {
     fn name(self) -> &'static str {
         match self {
+            Self::PolicyFile => "policy-file",
             Self::RuleFloorCore => "rule-floor-core",
             Self::RuleFloorExtended => "rule-floor-extended",
             Self::Pass2Ner => "pass2-ner",
@@ -70,6 +72,12 @@ struct NerSettings {
     model_dir: PathBuf,
     locale: Option<String>,
     threshold: f32,
+}
+
+struct PolicyRun {
+    pipeline: Pipeline,
+    locale_chain: LocaleChain,
+    dictionaries: DictionaryBundle,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -192,7 +200,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = parse_config()?;
     let stdin = io::stdin();
     let mut stdout = io::BufWriter::new(io::stdout().lock());
-    let full = build_pipeline(config)?;
+    let policy_run = if config == BenchConfig::PolicyFile {
+        Some(build_policy_run()?)
+    } else {
+        None
+    };
+    let benchmark_pipeline = if policy_run.is_none() {
+        Some(build_pipeline(config)?)
+    } else {
+        None
+    };
+    let full = policy_run
+        .as_ref()
+        .map(|run| &run.pipeline)
+        .or(benchmark_pipeline.as_ref())
+        .expect("one pipeline is built");
 
     for line in stdin.lock().lines() {
         let line = line?;
@@ -200,7 +222,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let request: Request = serde_json::from_str(&line)?;
-        match handle_request(config, &full, request)? {
+        match handle_request_with_policy(config, full, request, policy_run.as_ref())? {
             Outcome::Success(response) => {
                 serde_json::to_writer(&mut stdout, &response)?;
                 stdout.write_all(b"\n")?;
@@ -220,16 +242,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
 fn handle_request(
     config: BenchConfig,
     full: &Pipeline,
     request: Request,
 ) -> Result<Outcome, Box<dyn std::error::Error>> {
-    let locale_chain = request
+    handle_request_with_policy(config, full, request, None)
+}
+
+fn handle_request_with_policy(
+    config: BenchConfig,
+    full: &Pipeline,
+    request: Request,
+    policy_run: Option<&PolicyRun>,
+) -> Result<Outcome, Box<dyn std::error::Error>> {
+    let request_locales = request
         .locale_chain
         .iter()
         .map(|locale| LocaleTag::parse(locale))
         .collect::<Result<Vec<_>, _>>()?;
+    let locale_chain = policy_run
+        .map(|run| run.locale_chain.as_slice())
+        .unwrap_or(&request_locales);
+    let empty_dictionaries = DictionaryBundle::default();
+    let dictionaries = policy_run
+        .map(|run| &run.dictionaries)
+        .unwrap_or(&empty_dictionaries);
     let session_hex = session_hex_for_fixture(&request.fixture_id);
     let raw_text = request.text;
     let session = Session::new_with_session_hex_for_tests(Scope::Ephemeral, session_hex)?;
@@ -237,8 +276,8 @@ fn handle_request(
     let clean_result = full.clean_text_with_safety_net_policy_detect_context_and_protection_trace(
         &session,
         &raw_text,
-        &locale_chain,
-        &Default::default(),
+        locale_chain,
+        dictionaries,
         safety_net_policy(config),
     );
     let clean_ms = clean_start.elapsed().as_secs_f64() * 1000.0;
@@ -274,35 +313,37 @@ fn handle_request(
         phase_execution_mask: restore_telemetry.phase_execution_mask,
     };
 
-    let (post_policy_safety_net_stats, post_policy_scan_ms) = if matches!(
-        config,
-        BenchConfig::FullStackOpfResolve
-            | BenchConfig::FullStackNymResolve
-            | BenchConfig::FullStackNymRedact
-    ) {
-        let post_policy_scan_start = Instant::now();
-        let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
-            Ok(result) => result,
-            Err(error) => {
-                emit_invalid_output_diagnostic("post_policy_scan", &error);
-                let reason = pipeline_failure_reason(&error)
-                    .ok_or("unclassified post-policy pipeline error variant")?;
-                return Ok(Outcome::PipelineError {
-                    fixture_id: request.fixture_id,
-                    stage: "post_policy_scan",
-                    reason,
-                    total_ms: clean_ms,
-                });
-            }
+    let (post_policy_safety_net_stats, post_policy_scan_ms) =
+        if matches!(
+            config,
+            BenchConfig::FullStackOpfResolve
+                | BenchConfig::FullStackNymResolve
+                | BenchConfig::FullStackNymRedact
+        ) || (config == BenchConfig::PolicyFile && full.safety_net_count() > 0)
+        {
+            let post_policy_scan_start = Instant::now();
+            let post_policy = match full.scan_safety_nets(&session, &clean_text, locale_chain) {
+                Ok(result) => result,
+                Err(error) => {
+                    emit_invalid_output_diagnostic("post_policy_scan", &error);
+                    let reason = pipeline_failure_reason(&error)
+                        .ok_or("unclassified post-policy pipeline error variant")?;
+                    return Ok(Outcome::PipelineError {
+                        fixture_id: request.fixture_id,
+                        stage: "post_policy_scan",
+                        reason,
+                        total_ms: clean_ms,
+                    });
+                }
+            };
+            let post_policy_scan_ms = post_policy_scan_start.elapsed().as_secs_f64() * 1000.0;
+            (
+                Some(SafetyNetStats::from(&post_policy.report.stats)),
+                Some(post_policy_scan_ms),
+            )
+        } else {
+            (None, None)
         };
-        let post_policy_scan_ms = post_policy_scan_start.elapsed().as_secs_f64() * 1000.0;
-        (
-            Some(SafetyNetStats::from(&post_policy.report.stats)),
-            Some(post_policy_scan_ms),
-        )
-    } else {
-        (None, None)
-    };
 
     let manifest_spans = serialize_manifest(manifest);
     let final_protection_trace = serialize_final_protection_trace(final_protection_trace);
@@ -634,6 +675,7 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
         if arg == "--config" {
             let value = args.next().ok_or("--config requires a value")?;
             config = match value.as_str() {
+                "policy-file" => BenchConfig::PolicyFile,
                 "rule-floor-core" => BenchConfig::RuleFloorCore,
                 "rule-floor-extended" => BenchConfig::RuleFloorExtended,
                 "pass2-ner" => BenchConfig::Pass2Ner,
@@ -656,6 +698,7 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
     };
     let mut pipeline = assemble_rule_floor(config, ner)?;
     match config {
+        BenchConfig::PolicyFile => unreachable!("policy-file uses build_policy_run"),
         BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended | BenchConfig::Pass2Ner => {}
         BenchConfig::FullStackOpfResolve => {
             pipeline = register_opf(pipeline).map_err(|source| {
@@ -683,6 +726,25 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
         }
     }
     Ok(pipeline)
+}
+
+fn build_policy_run() -> Result<PolicyRun, Box<dyn std::error::Error>> {
+    let path =
+        std::env::var_os("GAZE_BENCH_POLICY").ok_or("policy-file requires GAZE_BENCH_POLICY")?;
+    let policy = gaze::Policy::load_for_cli(std::path::Path::new(&path))?;
+    let inputs = gaze_assembly::resolve_policy_inputs(&policy, None, None, None)?;
+    let pipeline = gaze_assembly::build_pipeline(
+        &policy,
+        &empty_context(),
+        &inputs.rulepacks,
+        &inputs.locale_chain,
+        Some(inputs.ner_threshold),
+    )?;
+    Ok(PolicyRun {
+        pipeline,
+        locale_chain: inputs.locale_chain,
+        dictionaries: inputs.dictionaries,
+    })
 }
 
 fn ner_settings_from_env() -> Result<NerSettings, BenchmarkBuildError> {
@@ -859,6 +921,7 @@ fn register_opf(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Err
     Err("compile with gaze-recognizers feature safety-net-openai".into())
 }
 
+#[cfg(feature = "safety-net-openai")]
 fn benchmark_subprocess_timeout() -> Result<std::time::Duration, Box<dyn std::error::Error>> {
     let seconds = match std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS") {
         Ok(value) => value.parse::<u64>()?,
@@ -881,6 +944,9 @@ fn leak_kind_name(kind: &LeakKind) -> &'static str {
 }
 
 fn safety_net_policy(config: BenchConfig) -> SafetyNetPolicy {
+    if config == BenchConfig::PolicyFile {
+        return SafetyNetPolicy::default();
+    }
     if config == BenchConfig::FullStackNymRedact {
         return SafetyNetPolicy::new(SafetyNetMode::Redact, SafetyNetFallback::Redact);
     }

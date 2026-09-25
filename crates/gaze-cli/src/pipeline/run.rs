@@ -915,8 +915,13 @@ fn emit_safety_net_warning(variant: &'static str, count: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pipeline::build::resolve_ner_threshold;
     use gaze::Policy;
+
+    fn resolved_ner_threshold(policy: &Policy, override_value: Option<f32>) -> f32 {
+        gaze_assembly::resolve_policy_inputs(policy, None, None, override_value)
+            .expect("resolve policy inputs")
+            .ner_threshold
+    }
 
     fn policy_with_ner_threshold(threshold: f32) -> Policy {
         let mut session = gaze::SessionPolicy::default();
@@ -943,7 +948,7 @@ mod tests {
     fn t_cli_ner_threshold_overrides_policy_value() {
         let policy = policy_with_ner_threshold(0.5);
 
-        let threshold = resolve_ner_threshold(Some(0.3), Some(&policy));
+        let threshold = resolved_ner_threshold(&policy, Some(0.3));
 
         assert_eq!(threshold, 0.3);
     }
@@ -952,9 +957,9 @@ mod tests {
     fn cli_ner_threshold_uses_policy_then_default() {
         let policy = policy_with_ner_threshold(0.5);
 
-        assert_eq!(resolve_ner_threshold(None, Some(&policy)), 0.5);
+        assert_eq!(resolved_ner_threshold(&policy, None), 0.5);
         assert_eq!(
-            resolve_ner_threshold(None, None),
+            resolved_ner_threshold(&Policy::default(), None),
             gaze::DEFAULT_NER_THRESHOLD
         );
     }
