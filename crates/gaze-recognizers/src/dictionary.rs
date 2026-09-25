@@ -178,6 +178,11 @@ impl Recognizer for DictionaryRecognizer {
     fn locale_basis(&self) -> LocaleBasis {
         self.locale_basis
     }
+
+    // `detect` reads only `ctx.dictionaries`, which is the same bundle at every chain step.
+    fn detect_is_locale_invariant(&self) -> bool {
+        true
+    }
 }
 
 fn is_token_boundary_match(input: &str, start: usize, end: usize) -> bool {

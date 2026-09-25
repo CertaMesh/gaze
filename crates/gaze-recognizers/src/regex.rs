@@ -216,6 +216,11 @@ impl Recognizer for RegexDetector {
     fn locale_basis(&self) -> LocaleBasis {
         self.locale_basis
     }
+
+    // `detect` ignores its context: the pattern and its filters are fixed at build time.
+    fn detect_is_locale_invariant(&self) -> bool {
+        true
+    }
 }
 
 impl RegexDetector {

@@ -84,4 +84,9 @@ impl Recognizer for NerRecognizer {
     fn token_family(&self) -> &str {
         "counter"
     }
+
+    // Inference reads only the input, so the registry may reuse it across locale-chain steps.
+    fn detect_is_locale_invariant(&self) -> bool {
+        true
+    }
 }
