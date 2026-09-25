@@ -106,10 +106,11 @@ reaches a model outside the manifest contract is a critical defect, so the mode
 exists only for development work where you own both the input and the output
 and send neither to a model.
 
-The CLI guards it. `--safety-net-mode tolerant` and `--safety-net-fallback
-tolerant` both require the environment variable `GAZE_ALLOW_TOLERANT=1`;
+The CLI guards it. `--safety-net-mode tolerant` and
+`--safety-net-fallback tolerant` both require the environment variable
+`GAZE_ALLOW_TOLERANT=1`;
 without it the CLI fails with the `TolerantModeDisabled` safety-net variant.
-When a tolerant path is actually reachable and the run has a suspect, the CLI
+When a tolerant path is reachable and the run has a suspect, the CLI
 prints to stderr:
 
 ```text
@@ -137,8 +138,8 @@ database is configured.
 ## Restore and the redaction marker
 
 The marker is not a token. `gaze restore` returns it unchanged, and those bytes
-cannot be recovered; this is the one place where Gaze gives up reversibility,
-and it does so visibly. Every token Gaze emitted still restores. Marker format
+cannot be recovered. This is the one place where Gaze gives up reversibility,
+and the marker records the class of what was removed. Every token Gaze emitted still restores. Marker format
 and rules: [the redaction marker](safety-nets.md#the-redaction-marker).
 
 ## Structured documents
