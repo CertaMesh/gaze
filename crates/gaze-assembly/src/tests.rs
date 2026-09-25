@@ -2015,7 +2015,10 @@ const NO_CUE_LUHN_BBAN_IBAN: &str = "Überweisung DE24 9635 8749 2586 6121 02";
 const TRAILING_NUMBER_IBANS: [&str; 3] = [
     "Bitte überweisen auf FO14 5878 0013 4155 73 1234",
     "Bitte überweisen auf GL07 3135 5673 6936 21 1234",
-    "Bitte überweisen auf SA77 3476 4281 2318 7317 7425 1234",
+    // Its digit run holds no Luhn-valid card layout window. `SA77 … 7425` did
+    // (`4281 2318 7317 7425`), which since todo 3843 makes it the Luhn-valid BBAN
+    // case: the settled narrow IBAN token.
+    "Bitte überweisen auf SA50 3476 4281 2318 7317 7426 1234",
 ];
 const FAMILY_TOKEN_MARKER: &str = ":Custom:family:payment-card-or-iban_";
 /// No cue, long IBAN: under de-DE `phone.national.de` wins a sub-run on rule

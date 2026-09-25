@@ -2,6 +2,7 @@
 
 pub mod inspection;
 pub mod nym;
+pub mod payment_card;
 pub mod redaction_marker;
 
 use std::cell::Cell;
@@ -850,16 +851,21 @@ fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
     }
 }
 
-fn luhn_check(input: &str) -> bool {
+/// The one Luhn check: the `luhn` validator and [`payment_card::scan_card_run`] both call it.
+/// It checks the ASCII digits. Whitespace (any Unicode `White_Space`, as the card patterns'
+/// `\s`), `-` and non-ASCII digits (which the card patterns' `\d` matches but no card number is
+/// written in) are skipped; any other character fails the check, and so does an ASCII digit count
+/// outside 13 to 19. Fullwidth digits reach it already folded to ASCII by normalization.
+pub(crate) fn luhn_check(input: &str) -> bool {
     let mut digits = Vec::new();
-    for byte in input.bytes() {
-        if byte.is_ascii_whitespace() || byte == b'-' {
+    for ch in input.chars() {
+        if ch.is_whitespace() || ch == '-' || (ch.is_numeric() && !ch.is_ascii_digit()) {
             continue;
         }
-        if !byte.is_ascii_digit() {
+        if !ch.is_ascii_digit() {
             return false;
         }
-        digits.push(byte - b'0');
+        digits.push(ch as u8 - b'0');
     }
     if !(13..=19).contains(&digits.len()) {
         return false;
@@ -4101,6 +4107,11 @@ pub struct DetectContext<'a> {
     pub fields: &'a (),
     /// Whether a recognizer degraded due to unavailable optional capability.
     pub degraded: Cell<bool>,
+    /// For each byte of the detection input, the byte range of the caller's source text it
+    /// came from, when the input is a normalized view of that text. A recognizer may read it to
+    /// see breaks normalization hid (a dropped ZERO WIDTH JOINER, fullwidth digits next to
+    /// ASCII); `card.structural` does. `None` when the input is the source text itself.
+    pub source_spans: Option<&'a [(usize, usize)]>,
 }
 
 impl<'a> DetectContext<'a> {
@@ -4111,7 +4122,14 @@ impl<'a> DetectContext<'a> {
             dictionaries,
             fields: &(),
             degraded: Cell::new(false),
+            source_spans: None,
         }
+    }
+
+    /// Records the source span of every input byte; see [`DetectContext::source_spans`].
+    pub fn with_source_spans(mut self, source_spans: &'a [(usize, usize)]) -> Self {
+        self.source_spans = Some(source_spans);
+        self
     }
 }
 

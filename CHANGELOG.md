@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **A payment card with digits touching it is now tokenized before the text
+  reaches the model.** Every release up to and including v0.15.0 sent the
+  card raw when a CVV or expiry followed it (for a card number `CARD`:
+  `Karte CARD 123`, `CARD 12 28`, a fullwidth `１２３`), when a number
+  preceded it (`Nr 7 CARD`, `2024 CARD`, `Order 5678 CARD paid`,
+  `Nr 12345 CARD`), or when normalization glued more digits onto it (a
+  fullwidth group or a dropped ZERO WIDTH JOINER), with no policy and under
+  the `gaze setup` policy alike. `card.structural` took the greedy 13-19 digit
+  run and ran Luhn on it once. It now takes the whole digit run
+  (`\b\d(?:[\s-]?\d)*\b`) and finds the card inside it. Every window the old
+  pattern matched that passes Luhn, and every group-aligned window printed in
+  a card layout (compact 13-19, 4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4) that passes
+  Luhn, is a card candidate; overlapping candidates are tokenized as one span
+  covering their union. The digits cannot tell which of two overlapping
+  Luhn-valid windows is the card (`0 CARD` passes Luhn both as the
+  17-digit window and as `CARD`; a random number before a card makes such a
+  window about one time in ten), so the token fails closed and covers both.
+  Groups end at separators and, through the new `DetectContext::source_spans`,
+  where normalization hid a break; validator veto accepts a union span that
+  still holds a card. The restore-boundary DLP check runs the same code
+  (`gaze_types::payment_card::scan_card_run`), so both directions agree; on
+  the #652 review probe (440,000 texts) it reports every card it reported
+  before, plus 13,953 texts with a card it missed. Every 1- to 4-digit number
+  written before a 16-digit, 19-digit, Amex or Diners card (separated, glued by
+  a ZERO WIDTH JOINER, or in fullwidth digits; 133,320 cases) now leaves no
+  card digit raw on either path. On 5,000 generated texts per family (forward
+  path, no policy), cards with touching digits went from 1,799 to 4,423 fully
+  tokenized; amounts, timestamps, phone numbers, compact long IDs and year or
+  order prefixes without a card are unchanged. Valid IBANs stay fully
+  tokenized and restore exactly, but the token class can change: about one
+  BBAN in ten holds a Luhn-valid 4-4-4-4 window, and that card candidate
+  inside the IBAN now settles the family to the narrow `custom:iban` token
+  (the #619 settled-narrow rule) instead of the family-level
+  `family:payment-card-or-iban` token. On 20,000 generated mod-97-valid
+  IBANs, `custom:iban` went from 1,219 to 2,601 and the family token from
+  18,781 to 17,399 (audit rows change with them), so a policy that acts on
+  `custom:iban` differently from the family class now applies to about 7 %
+  more IBANs. The cost, taken
+  deliberately (leak safety over false positives), is more card tokens on
+  Luhn-passing windows in longer grouped runs: random 13-19 digit groupings
+  481 to 489 texts, a Luhn-invalid 4-4-4-4 with a 2-4 digit tail 346 to 503,
+  and grouped IDs of five to ten 4-digit groups 748 to 1,840 texts (14,896 to
+  39,395 card-token bytes). Every such token restores exactly. The no-OPF
+  scorecard (2,910 documents) is unchanged: its card gold fails Luhn. The
+  `luhn` validator now also skips any Unicode whitespace and non-ASCII
+  digits, as the restore check already did. (solo todo 3843)
+  This fixes the v0.15.0 Known limitation "A payment card next to other
+  digits can reach the model untokenized".
+- **The restore-boundary DLP check (PR #652, v0.15.0) now scans the whole
+  digit run.** As shipped in v0.15.0, its retry only looked inside the first
+  19 digits of the run, so a card after a separated number of four or more
+  digits (`2024 CARD`, `Order 5678 CARD`), any number before
+  a 19-digit card, and a glued tail of four or more digits still passed
+  unreported. It now runs the card scan described above.
+
 ## [0.15.0] - 2026-09-25
 
 v0.15.0 makes the policy that `gaze setup` writes protect every detected class

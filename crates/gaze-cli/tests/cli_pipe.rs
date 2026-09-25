@@ -5386,7 +5386,10 @@ fn clean_member_only_policy_tokenizes_trailing_number_family_tokens() {
     for (index, input) in [
         "Bitte überweisen auf FO14 5878 0013 4155 73 1234",
         "Bitte überweisen auf GL07 3135 5673 6936 21 1234",
-        "Bitte überweisen auf SA77 3476 4281 2318 7317 7425 1234",
+        // Its digit run holds no Luhn-valid card layout window. `SA77 … 7425` did
+        // (`4281 2318 7317 7425`), which since todo 3843 makes it the Luhn-valid BBAN
+        // case: the settled narrow IBAN token.
+        "Bitte überweisen auf SA50 3476 4281 2318 7317 7426 1234",
     ]
     .iter()
     .enumerate()

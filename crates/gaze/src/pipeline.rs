@@ -978,7 +978,7 @@ impl Pipeline {
     ) -> Result<CleanText> {
         let normalized = normalize(text);
         let spans = &normalized.spans;
-        let ctx = DetectContext::new(locale_chain, dictionaries);
+        let ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
