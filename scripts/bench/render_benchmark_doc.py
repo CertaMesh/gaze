@@ -253,6 +253,17 @@ def _axis_max(values: Sequence[float]) -> int:
     return int(math.ceil(peak * 1.1 / step) * step)
 
 
+def _leak_pct_label(label: str, arm: Mapping[str, Any]) -> str:
+    """Append the arm's leak rate to a chart axis label, e.g. `v0.15.0 (15.0%)`.
+
+    GitHub's Mermaid renderer shows no data labels on xychart-beta, so the
+    percentage rides in the category label. It is the history row's own
+    `leak_rate` (leaked / gold bytes under the row's label contract), never a
+    number computed or typed here.
+    """
+    return f"{label} ({float(arm['leak_rate']) * 100:.1f}%)"
+
+
 def _mermaid_labels(labels: Sequence[str]) -> str:
     return "[" + ", ".join(f'"{label}"' for label in labels) + "]"
 
@@ -823,6 +834,8 @@ def render_validator_recall(entry: Mapping[str, Any]) -> list[str]:
 def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
     """(label, leaked bytes) for the latest release against the one before it.
 
+    Each label ends with that arm's leak rate, e.g. `v0.15.0 default (15.0%)`.
+
     The latest release's default comes first, then the previous release's
     default, then every other measured arm by leaked bytes. The previous
     release joins only when it was scored on the same corpus under the same
@@ -848,18 +861,30 @@ def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
         )
         bars.append(
             (
-                f"{row['version']} default",
+                _leak_pct_label(f"{row['version']} default", row["arms"][default_arm]),
                 row["arms"][default_arm]["surviving_pii_utf8_bytes"],
             )
         )
         for arm in others:
             bars.append(
                 (
-                    f"{row['version']} {ARM_CHART_LABELS.get(arm, arm)}",
+                    _leak_pct_label(
+                        f"{row['version']} {ARM_CHART_LABELS.get(arm, arm)}",
+                        row["arms"][arm],
+                    ),
                     row["arms"][arm]["surviving_pii_utf8_bytes"],
                 )
             )
     return bars
+
+
+def _leak_rate_caption(entry: Mapping[str, Any]) -> str:
+    """Explain the axis-label percentage once, next to the chart it labels."""
+    gold = entry["arms"][shipped_default_arm(entry)]["gold_pii_utf8_bytes"]
+    return (
+        "The percentage in each label is the leak rate: leaked bytes out of "
+        f"{_fmt('int', gold)} gold PII bytes."
+    )
 
 
 def _comparison_chart(history: Mapping[str, Any]) -> list[str]:
@@ -868,7 +893,9 @@ def _comparison_chart(history: Mapping[str, Any]) -> list[str]:
     values = [value for _, value in bars]
     return [
         "```mermaid",
-        "xychart-beta",
+        # Horizontal: the labels carry the leak rate and outgrow a vertical
+        # bar's slot at GitHub's ~800 px content width.
+        "xychart-beta horizontal",
         f'    title "Leaked PII bytes, {contract_label(latest)} - lower is better"',
         f"    x-axis {_mermaid_labels([label for label, _ in bars])}",
         f'    y-axis "Leaked PII bytes" 0 --> {_axis_max(values)}',
@@ -879,7 +906,7 @@ def _comparison_chart(history: Mapping[str, Any]) -> list[str]:
 
 def shipped_default_trend(
     history: Mapping[str, Any], field: str
-) -> list[tuple[str, int]]:
+) -> list[tuple[str, Any]]:
     """(version, value) of each release's OWN shipped default arm.
 
     Keyed per row, not by the latest default: the default changed between
@@ -897,19 +924,33 @@ def shipped_default_trend(
     ]
 
 
-#: Trend charts: (history field, chart title, y-axis title).
-TREND_CHARTS: tuple[tuple[str, str, str], ...] = (
+#: Trend charts: (history field, chart title, y-axis title, leak rate in the
+#: x-axis labels). The leaked line carries each release's leak rate; the
+#: false-positive line stays in bytes.
+TREND_CHARTS: tuple[tuple[str, str, str, bool], ...] = (
     (
         "surviving_pii_utf8_bytes",
         "Leaked PII bytes, shipped default",
         "Leaked PII bytes (lower is better)",
+        True,
     ),
     (
         "false_positive_utf8_bytes",
         "False-positive bytes, shipped default",
         "False-positive bytes (lower is less over-redaction)",
+        False,
     ),
 )
+
+
+def shipped_default_trend_labels(
+    history: Mapping[str, Any], with_leak_rate: bool
+) -> list[str]:
+    """x-axis labels for the trend charts, aligned with `shipped_default_trend`."""
+    return [
+        _leak_pct_label(version, {"leak_rate": rate}) if with_leak_rate else version
+        for version, rate in shipped_default_trend(history, "leak_rate")
+    ]
 
 
 def render_charts(history: Mapping[str, Any]) -> str:
@@ -924,7 +965,8 @@ def render_charts(history: Mapping[str, Any]) -> str:
         f"**Leaked PII bytes — {entry['version']} against the previous release.** "
         f"Lower is better; the goal is zero. Scored under {contract_label(entry)}; "
         "every bar is a measured arm in "
-        "[`release-history.json`](release-history.json).",
+        "[`release-history.json`](release-history.json). "
+        f"{_leak_rate_caption(entry)}",
         "",
         *_comparison_chart(history),
     ]
@@ -957,15 +999,16 @@ def render_charts(history: Mapping[str, Any]) -> str:
             ]
         )
         return "\n".join(lines)
-    for field, title, axis in TREND_CHARTS:
+    for field, title, axis, with_leak_rate in TREND_CHARTS:
         trend = shipped_default_trend(history, field)
+        labels = shipped_default_trend_labels(history, with_leak_rate)
         lines.extend(
             [
                 "",
                 "```mermaid",
                 "xychart-beta",
                 f'    title "{title} - {contract_label(entry)}"',
-                f"    x-axis {_mermaid_labels([version for version, _ in trend])}",
+                f"    x-axis {_mermaid_labels(labels)}",
                 f'    y-axis "{axis}" 0 --> '
                 f"{_axis_max([value for _, value in trend])}",
                 f"    line [{', '.join(str(int(value)) for _, value in trend)}]",
@@ -984,7 +1027,8 @@ def render_readme_chart(history: Mapping[str, Any]) -> str:
         [
             f"Leaked PII bytes per setup, {contract_label(entry)}, lower is better "
             "(generated from "
-            "[`release-history.json`](docs/reference/benchmarks/release-history.json)):",
+            "[`release-history.json`](docs/reference/benchmarks/release-history.json)). "
+            f"{_leak_rate_caption(entry)}",
             "",
             *_comparison_chart(history),
         ]

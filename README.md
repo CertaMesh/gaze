@@ -29,12 +29,12 @@ The [v0.15.0 release benchmark](docs/reference/benchmarks/README.md#current-rele
 
 <!-- BEGIN GENERATED: readme-chart -->
 
-Leaked PII bytes per setup, scored labels v1, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json)):
+Leaked PII bytes per setup, scored labels v1, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json)). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
 
 ```mermaid
-xychart-beta
+xychart-beta horizontal
     title "Leaked PII bytes, scored labels v1 - lower is better"
-    x-axis ["v0.15.0 default", "v0.14.0 default", "v0.14.0 rules + NER", "v0.14.0 rules only"]
+    x-axis ["v0.15.0 default (15.0%)", "v0.14.0 default (19.3%)", "v0.14.0 rules + NER (20.7%)", "v0.14.0 rules only (72.0%)"]
     y-axis "Leaked PII bytes" 0 --> 104000
     bar [19556, 25179, 27000, 93850]
 ```

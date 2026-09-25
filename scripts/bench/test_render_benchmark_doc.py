@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -97,6 +98,11 @@ def scorecard(revision: str = "a" * 40, dirty: bool = False) -> dict:
             ],
         },
     }
+
+
+def pct(rate: float) -> str:
+    """A leak rate as the chart labels print it: percent, one decimal."""
+    return f"{round(rate * 100, 1):.1f}%"
 
 
 def entry(version: str = "v0.14.0", **kwargs) -> dict:
@@ -525,7 +531,7 @@ class ShippedDefaultArmTest(unittest.TestCase):
         rendered = render.apply_blocks(DOC, value)
         self.assertIn(f"`{self.KIJI}` **(shipped default)**", rendered)
         self.assertNotIn("`pass2-ner` **(shipped default)**", rendered)
-        self.assertIn('x-axis ["v0.14.0 default", ', rendered)
+        self.assertIn('x-axis ["v0.14.0 default (', rendered)
         self.assertIn("| 25,179 |", rendered)
 
     def test_mixed_history_keeps_each_rows_own_default(self):
@@ -728,7 +734,16 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         policy = value["releases"][1]["arms"]["policy-file"]
         charts = render.render_charts(value)
         self.assertNotIn("One measured release so far", charts)
-        self.assertEqual(charts.count('x-axis ["v0.14.0", "v0.15.0"]'), 2)
+        kiji_rate = value["releases"][0]["arms"][self.KIJI]["leak_rate"]
+        self.assertEqual(
+            charts.count(
+                f'x-axis ["v0.14.0 ({pct(kiji_rate)})", '
+                f'"v0.15.0 ({pct(policy["leak_rate"])})"]'
+            ),
+            1,
+        )
+        # The false-positive chart stays in bytes: bare version labels.
+        self.assertEqual(charts.count('x-axis ["v0.14.0", "v0.15.0"]'), 1)
         self.assertIn(
             f"line [25179, {policy['surviving_pii_utf8_bytes']}]", charts
         )
@@ -758,19 +773,18 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         committed = render.load_history(render.DEFAULT_HISTORY)
         rows = {row["version"]: row for row in committed["releases"]}
         old = rows["v0.14.0"]["arms"]
+        new = rows["v0.15.0"]["arms"]["policy-file"]
+
+        def bar(label, arm):
+            return (f"{label} ({pct(arm['leak_rate'])})", arm["surviving_pii_utf8_bytes"])
+
         self.assertEqual(
             render.comparison_bars(committed),
             [
-                (
-                    "v0.15.0 default",
-                    rows["v0.15.0"]["arms"]["policy-file"]["surviving_pii_utf8_bytes"],
-                ),
-                ("v0.14.0 default", old[self.KIJI]["surviving_pii_utf8_bytes"]),
-                ("v0.14.0 rules + NER", old["pass2-ner"]["surviving_pii_utf8_bytes"]),
-                (
-                    "v0.14.0 rules only",
-                    old["rule-floor-extended"]["surviving_pii_utf8_bytes"],
-                ),
+                bar("v0.15.0 default", new),
+                bar("v0.14.0 default", old[self.KIJI]),
+                bar("v0.14.0 rules + NER", old["pass2-ner"]),
+                bar("v0.14.0 rules only", old["rule-floor-extended"]),
             ],
         )
 
@@ -783,7 +797,8 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             "excluded_labels": [],
         }
         labels = [label for label, _ in render.comparison_bars(value)]
-        self.assertEqual(labels, ["v0.15.0 default"])
+        rate = value["releases"][1]["arms"]["policy-file"]["leak_rate"]
+        self.assertEqual(labels, [f"v0.15.0 default ({pct(rate)})"])
         charts = render.render_charts(value)
         self.assertIn("1 row(s) under another contract", charts)
         self.assertIn("One measured release so far (1 point)", charts)
@@ -792,7 +807,53 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         value = self.mixed()
         value["releases"][0]["dataset"]["integrity"]["sha256"] = "2" * 64
         labels = [label for label, _ in render.comparison_bars(value)]
-        self.assertEqual(labels, ["v0.15.0 default"])
+        rate = value["releases"][1]["arms"]["policy-file"]["leak_rate"]
+        self.assertEqual(labels, [f"v0.15.0 default ({pct(rate)})"])
+
+    def test_committed_chart_labels_carry_each_bars_leak_rate(self):
+        """Every x-axis label in both committed files ends with the leak rate
+        of the arm it names, read from the history (and consistent with
+        leaked / gold bytes), rounded to one decimal."""
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        rows = {row["version"]: row for row in committed["releases"]}
+        old, new = rows["v0.14.0"]["arms"], rows["v0.15.0"]["arms"]
+        arms = {
+            "v0.15.0 default": new["policy-file"],
+            "v0.14.0 default": old[self.KIJI],
+            "v0.14.0 rules + NER": old["pass2-ner"],
+            "v0.14.0 rules only": old["rule-floor-extended"],
+            "v0.14.0": old[self.KIJI],
+            "v0.15.0": new["policy-file"],
+        }
+        for arm in arms.values():
+            self.assertEqual(
+                round(arm["leak_rate"] * 100, 1),
+                round(
+                    arm["surviving_pii_utf8_bytes"] / arm["gold_pii_utf8_bytes"] * 100, 1
+                ),
+            )
+        label_re = re.compile(r'^"(.+) \((\d+\.\d)%\)"$')
+        for path, expected_axes in (
+            (render.DEFAULT_README, 1),
+            (render.DEFAULT_DOC, 2),  # comparison chart + leaked trend
+        ):
+            text = path.read_text(encoding="utf-8")
+            axes = [
+                line.strip()[len("x-axis ") :]
+                for line in text.splitlines()
+                if line.strip().startswith("x-axis ")
+            ]
+            labelled = [axis for axis in axes if "%" in axis]
+            self.assertEqual(len(labelled), expected_axes, path)
+            for axis in labelled:
+                labels = [f'"{item}"' for item in json.loads(axis)]
+                self.assertGreaterEqual(len(labels), 2, axis)
+                for label in labels:
+                    with self.subTest(path=path.name, label=label):
+                        match = label_re.match(label)
+                        self.assertIsNotNone(match, label)
+                        name, shown = match.group(1), float(match.group(2))
+                        self.assertEqual(shown, round(arms[name]["leak_rate"] * 100, 1))
 
     def test_root_readme_chart_matches_the_readme_table(self):
         """The hand-written README table and the generated chart show one set of numbers."""

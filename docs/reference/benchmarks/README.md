@@ -333,12 +333,12 @@ Validator-backed labels on `policy-file`. Gold that fails its own checksum stays
 
 <!-- BEGIN GENERATED: charts -->
 
-**Leaked PII bytes — v0.15.0 against the previous release.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json).
+**Leaked PII bytes — v0.15.0 against the previous release.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
 
 ```mermaid
-xychart-beta
+xychart-beta horizontal
     title "Leaked PII bytes, scored labels v1 - lower is better"
-    x-axis ["v0.15.0 default", "v0.14.0 default", "v0.14.0 rules + NER", "v0.14.0 rules only"]
+    x-axis ["v0.15.0 default (15.0%)", "v0.14.0 default (19.3%)", "v0.14.0 rules + NER (20.7%)", "v0.14.0 rules only (72.0%)"]
     y-axis "Leaked PII bytes" 0 --> 104000
     bar [19556, 25179, 27000, 93850]
 ```
@@ -348,7 +348,7 @@ xychart-beta
 ```mermaid
 xychart-beta
     title "Leaked PII bytes, shipped default - scored labels v1"
-    x-axis ["v0.14.0", "v0.15.0"]
+    x-axis ["v0.14.0 (19.3%)", "v0.15.0 (15.0%)"]
     y-axis "Leaked PII bytes (lower is better)" 0 --> 28000
     line [25179, 19556]
 ```
