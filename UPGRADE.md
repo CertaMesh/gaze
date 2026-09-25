@@ -90,9 +90,9 @@ of a span.** Two resolver changes from solo todo #3740, both breaking in
    whole span as one token** (`ConflictTier::ContainmentPrecedence`), unless
    it is less certain than what it would swallow (validator passed > anchored
    or cue-structured match > plain regex or dictionary > learned NER; ties go
-   to the container). `IBAN PL56 0942 8981 7280 5663 2200 4500 BIC` is one
-   `<iban_1>` where it used to be `<iban_1><phone_1><iban_2><iban_3>
-   <postal_code_1>`; a card number whose tail is a phone shape is one card
+   to the container). `IBAN PL56 0942 … 4500 BIC` (a spaced Polish IBAN) is one
+   `<iban_n>` where it used to be `<iban_n><phone_n><iban_m><iban_k>
+   <postal_code_n>`; a card number whose tail is a phone shape is one card
    token; a cue-less IBAN over a phone shape is one family token. Fewer
    manifest entries, never more; leaked bytes are unchanged or lower on every
    measured corpus. Partial overlaps are unchanged. A learned NER span or a
