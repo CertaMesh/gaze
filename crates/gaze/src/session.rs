@@ -3114,6 +3114,66 @@ mod tests {
     }
 
     #[test]
+    fn restore_dlp_flags_a_luhn_valid_run_through_its_tail() {
+        // REVIEW 658 F2: every 1- to 3-digit tail after a 4-4-4-4 card. Where the whole run
+        // passes Luhn too, the 17- to 19-digit window and the card start on the same byte, and
+        // the flagged span must reach the end of the tail.
+        let luhn = |digits: &str| {
+            let sum: u32 = digits
+                .bytes()
+                .rev()
+                .enumerate()
+                .map(|(index, byte)| {
+                    let value = u32::from(byte - b'0') * if index % 2 == 1 { 2 } else { 1 };
+                    if value > 9 {
+                        value - 9
+                    } else {
+                        value
+                    }
+                })
+                .sum();
+            sum.is_multiple_of(10)
+        };
+        let card_class = PiiClass::custom("credit_card").expect("valid custom class");
+        let card = "4111 1111 1111 1111";
+        let mut whole_run_cards = 0usize;
+        let mut unflagged = Vec::new();
+        for width in 1..=3usize {
+            for number in 0..10usize.pow(width as u32) {
+                let tail = format!("{number:0width$}");
+                let text = format!("Karte {card} {tail} ok");
+                let start = "Karte ".len();
+                let whole_run = luhn(&format!("4111111111111111{tail}"));
+                whole_run_cards += usize::from(whole_run);
+                let must_flag = if whole_run {
+                    card.len() + 1 + tail.len()
+                } else {
+                    card.len()
+                };
+                let findings = structural_findings(&text);
+                let raw_digit = text[start..start + must_flag]
+                    .char_indices()
+                    .filter(|(_, ch)| ch.is_ascii_digit())
+                    .any(|(at, _)| {
+                        !findings.iter().any(|finding| {
+                            finding.class == card_class && finding.location.contains(&(start + at))
+                        })
+                    });
+                if raw_digit {
+                    unflagged.push(text);
+                }
+            }
+        }
+        assert!(whole_run_cards > 100, "{whole_run_cards}");
+        assert!(
+            unflagged.is_empty(),
+            "{} runs left a digit unflagged, e.g. {:?}",
+            unflagged.len(),
+            &unflagged[..unflagged.len().min(12)]
+        );
+    }
+
+    #[test]
     fn restore_dlp_zs_grouped_manifest_value_is_a_bypass_not_fresh_pii() {
         let iban = PiiClass::custom("iban").expect("valid custom class");
         let card = PiiClass::custom("credit_card").expect("valid custom class");

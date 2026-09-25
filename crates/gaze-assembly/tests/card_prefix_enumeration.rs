@@ -43,6 +43,89 @@ fn cases() -> Vec<(String, std::ops::Range<usize>)> {
     cases
 }
 
+fn luhn(digits: &str) -> bool {
+    let sum: u32 = digits
+        .bytes()
+        .rev()
+        .enumerate()
+        .map(|(index, byte)| {
+            let value = u32::from(byte - b'0') * if index % 2 == 1 { 2 } else { 1 };
+            if value > 9 {
+                value - 9
+            } else {
+                value
+            }
+        })
+        .sum();
+    sum.is_multiple_of(10)
+}
+
+#[test]
+fn a_luhn_valid_run_is_tokenized_through_its_tail() {
+    // REVIEW 658 F2: every 1- to 3-digit tail after a 4-4-4-4 card. Where the whole run passes
+    // Luhn too, the 17- to 19-digit window and the card start on the same byte, and the token
+    // must reach the end of the tail.
+    let pipeline = gaze_assembly::CorePipelineConfig::new()
+        .build()
+        .expect("core pipeline")
+        .into_pipeline();
+    let card_class = PiiClass::custom("credit_card").expect("valid class");
+    let card = "4111 1111 1111 1111";
+    let mut document = String::new();
+    let mut expected = Vec::new();
+    for width in 1..=3usize {
+        for number in 0..10usize.pow(width as u32) {
+            let tail = format!("{number:0width$}");
+            let start = document.len() + "Karte ".len();
+            let must_cover = if luhn(&format!("4111111111111111{tail}")) {
+                card.len() + 1 + tail.len()
+            } else {
+                card.len()
+            };
+            expected.push(start..start + must_cover);
+            document.push_str(&format!("Karte {card} {tail} ok\n"));
+        }
+    }
+    let whole_run_cards = expected
+        .iter()
+        .filter(|range| range.len() > card.len())
+        .count();
+    assert!(whole_run_cards > 100, "{whole_run_cards}");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let (_, manifest, _) = pipeline
+        .clean_with_safety_net(
+            &session,
+            RawDocument::Text(document.clone()),
+            &[LocaleTag::Global],
+        )
+        .expect("clean");
+    let covered: Vec<_> = manifest
+        .iter()
+        .filter(|span| span.class == card_class)
+        .map(|span| span.raw_span.clone())
+        .collect();
+    let raw: Vec<_> = expected
+        .iter()
+        .filter(|range| {
+            document[(*range).clone()]
+                .char_indices()
+                .filter(|(_, ch)| ch.is_ascii_digit())
+                .any(|(at, _)| {
+                    !covered
+                        .iter()
+                        .any(|span| span.contains(&(range.start + at)))
+                })
+        })
+        .map(|range| document[range.clone()].to_string())
+        .collect();
+    assert!(
+        raw.is_empty(),
+        "{} runs left a digit raw, e.g. {:?}",
+        raw.len(),
+        &raw[..raw.len().min(12)]
+    );
+}
+
 #[test]
 fn no_card_digit_survives_any_prefix() {
     let pipeline = gaze_assembly::CorePipelineConfig::new()

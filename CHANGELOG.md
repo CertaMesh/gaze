@@ -91,8 +91,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a ZERO WIDTH JOINER, or in fullwidth digits; 133,320 cases) now leaves no
   card digit raw on either path. On 5,000 generated texts per family (forward
   path, no policy), cards with touching digits went from 1,799 to 4,423 fully
-  tokenized; amounts, timestamps, phone numbers, IBANs, compact long IDs and
-  year or order prefixes without a card are unchanged. The cost, taken
+  tokenized; amounts, timestamps, phone numbers, compact long IDs and year or
+  order prefixes without a card are unchanged. Valid IBANs stay fully
+  tokenized and restore exactly, but the token class can change: about one
+  BBAN in ten holds a Luhn-valid 4-4-4-4 window, and that card candidate
+  inside the IBAN now settles the family to the narrow `custom:iban` token
+  (the #619 settled-narrow rule) instead of the family-level
+  `family:payment-card-or-iban` token. On 20,000 generated mod-97-valid
+  IBANs, `custom:iban` went from 1,219 to 2,601 and the family token from
+  18,781 to 17,399 (audit rows change with them), so a policy that acts on
+  `custom:iban` differently from the family class now applies to about 7 %
+  more IBANs. The cost, taken
   deliberately (leak safety over false positives), is more card tokens on
   Luhn-passing windows in longer grouped runs: random 13-19 digit groupings
   481 to 489 texts, a Luhn-invalid 4-4-4-4 with a 2-4 digit tail 346 to 503,

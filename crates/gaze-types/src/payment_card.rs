@@ -50,8 +50,11 @@ pub struct CardRunScan {
 ///
 /// A random digit run passes Luhn one time in ten, so every extra window costs precision. The
 /// retry never splits inside a group, and the layout filter keeps grouped amounts, timestamps
-/// and phone numbers (groups of 3, 2 or 8 digits) out. Each window holds at most five groups,
-/// so the work is linear in the run length and a long run needs no length cap.
+/// and phone numbers (groups of 3, 2 or 8 digits) out. A pattern window holds at most 19 digits
+/// and a layout window at most five groups, so there are O(n) windows in a run of n bytes; the
+/// union sorts them (O(n log n)) and the rejected windows are matched against the cards in one
+/// sorted walk. A long run needs no length cap (pinned by
+/// `scan_work_grows_linearly_with_the_run`).
 ///
 /// A group ends at a whitespace or `-` separator and, when `source_spans` is given, wherever the
 /// source text breaks between two digits: at a character normalization dropped (ZWJ, ZWNJ) and
@@ -95,15 +98,30 @@ pub fn scan_card_run(
         }
     }
 
-    let mut scan = CardRunScan {
-        cards: union_of_overlapping(candidates),
-        rejected: Vec::new(),
-    };
-    scan.rejected = failed
+    let cards = union_of_overlapping(candidates);
+    let rejected = without_overlap(failed, &cards);
+    CardRunScan { cards, rejected }
+}
+
+/// The `windows` that overlap no card. Both lists are sorted by start and the cards do not
+/// overlap each other, so one forward walk decides every window: cards that end at or before a
+/// window's start cannot overlap it or any later window.
+fn without_overlap(windows: Vec<Range<usize>>, cards: &[Range<usize>]) -> Vec<Range<usize>> {
+    let mut next_card = 0;
+    windows
         .into_iter()
-        .filter(|window| !scan.cards.iter().any(|card| overlaps(card, window)))
-        .collect();
-    scan
+        .filter(|window| {
+            while cards
+                .get(next_card)
+                .is_some_and(|card| card.end <= window.start)
+            {
+                next_card += 1;
+            }
+            !cards
+                .get(next_card)
+                .is_some_and(|card| overlaps(card, window))
+        })
+        .collect()
 }
 
 /// True when `text[span]`, read as one digit run, holds a card by [`scan_card_run`]: the check
@@ -301,6 +319,73 @@ mod tests {
         assert_eq!(
             cards("x 0\u{200D}4111 1111 1111 1111 x"),
             ["0\u{200D}4111 1111 1111 1111"]
+        );
+        // REVIEW 658 F2: the 18-digit pattern window and the 4-4-4-4 card start on the same
+        // byte and both pass Luhn; the union must keep the longer end, or ` 00` ships raw.
+        assert_eq!(
+            cards("Karte 4111 1111 1111 1111 00 ok"),
+            ["4111 1111 1111 1111 00"]
+        );
+    }
+
+    /// One run of `groups` random 4-digit groups (a fixed LCG, so both sizes see the same kind
+    /// of text): about one 4-4-4-4 window in ten passes Luhn, so cards and rejected windows are
+    /// both dense.
+    fn random_grouped_run(groups: usize) -> String {
+        let mut state = 0x658_u64;
+        let mut text = String::with_capacity(groups * 5);
+        for index in 0..groups {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            if index > 0 {
+                text.push(' ');
+            }
+            text.push_str(&format!("{:04}", (state >> 33) % 10_000));
+        }
+        text
+    }
+
+    #[test]
+    fn rejected_windows_match_the_plain_overlap_definition() {
+        // The sorted walk in `without_overlap` must equal "overlaps no card".
+        let text = random_grouped_run(20_000);
+        let scan = scan_card_run(&text, 0..text.len(), None);
+        let all_failed: Vec<_> = pattern_windows(&text, 0)
+            .into_iter()
+            .filter(|window| !crate::luhn_check(&text[window.clone()]))
+            .collect();
+        let expected: Vec<_> = all_failed
+            .into_iter()
+            .filter(|window| !scan.cards.iter().any(|card| overlaps(card, window)))
+            .collect();
+        assert!(!scan.cards.is_empty() && !expected.is_empty());
+        assert_eq!(scan.rejected, expected);
+    }
+
+    #[test]
+    fn scan_work_grows_linearly_with_the_run() {
+        // REVIEW 658 F1: matching rejected windows against every card made the scan quadratic
+        // (1 MB 195 ms, 4 MB 2.9 s in release). Linear work takes about 4x as long for 4x the
+        // text; quadratic takes 16x. The bound is generous against host noise: best of three
+        // runs each, and the 2 MB run may take up to 10x the 0.5 MB run.
+        let small = random_grouped_run(100_000);
+        let large = random_grouped_run(400_000);
+        let best = |text: &str| {
+            (0..3)
+                .map(|_| {
+                    let started = std::time::Instant::now();
+                    let scan = scan_card_run(text, 0..text.len(), None);
+                    assert!(!scan.cards.is_empty());
+                    started.elapsed()
+                })
+                .min()
+                .expect("three runs")
+        };
+        let (small_time, large_time) = (best(&small), best(&large));
+        assert!(
+            large_time < small_time * 10,
+            "0.5 MB {small_time:?}, 2 MB {large_time:?}"
         );
     }
 
