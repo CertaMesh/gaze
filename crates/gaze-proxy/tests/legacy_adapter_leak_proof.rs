@@ -1267,3 +1267,80 @@ async fn regression_3847_refusal_body_is_typed_and_carries_no_pii() {
     );
     upstream.assert_nothing_forwarded().await;
 }
+
+#[path = "support/stderr_child.rs"]
+mod stderr_child;
+
+/// Child of `regression_3847_refusal_log_line_is_exactly_the_typed_refusal`: one refused
+/// request, so its process stderr holds exactly what the proxy logs for a refusal.
+#[tokio::test]
+#[ignore = "child process of regression_3847_refusal_log_line_is_exactly_the_typed_refusal"]
+async fn refusal_log_child() {
+    let (upstream, proxy) = spawn_echo_openai(second_opinion_pipeline()).await;
+    let response = post_json(
+        &proxy,
+        "/v1/chat/completions",
+        json!({"model": "synthetic", "messages": [{"role": "user", "content": second_opinion_net::TEXT}]}),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    upstream.assert_nothing_forwarded().await;
+}
+
+/// Todo 3847 (b): the proxy log carries the refusal's reason and never the text. The whole
+/// stderr of a refused request is one line, byte for byte.
+#[test]
+fn regression_3847_refusal_log_line_is_exactly_the_typed_refusal() {
+    assert_eq!(
+        stderr_child::stderr_of("refusal_log_child"),
+        "gaze-proxy: request refused: \
+         {\"error\":\"Residual\",\"fallback_reason\":\"residual_suspect\",\
+         \"suspect_classes\":[\"name\",\"location\"]}\n"
+    );
+}
+
+#[path = "support/late_date_net.rs"]
+mod late_date_net;
+
+fn late_date_pipeline() -> Pipeline {
+    Pipeline::builder()
+        .detector(RegexDetector::emails().unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Tokenize))
+        .register_safety_net(late_date_net::LateDateNet)
+        .build()
+        .unwrap()
+}
+
+/// PR #660 review repro (`user jweber84 born 1984-03-12`, real Nym): the proxy runs the
+/// Resolve step of `gaze clean --safety-net-fallback strict`, not clean's default `redact`
+/// fallback. When the net's re-run flags something new, clean tokenizes it in a second
+/// reversible batch; the proxy refuses. Pinned so that closing this gap is a deliberate change.
+#[tokio::test]
+async fn regression_3847_late_net_finding_is_refused_where_clean_default_tokenizes() {
+    assert_eq!(
+        date_net::clean_reference(&late_date_pipeline(), late_date_net::TEXT),
+        "user <SESSION:Custom:username_1> born <SESSION:Custom:date_1>"
+    );
+    let (upstream, proxy) = spawn_echo_openai(late_date_pipeline()).await;
+    let response = post_json(
+        &proxy,
+        "/v1/chat/completions",
+        json!({"model": "synthetic", "messages": [{"role": "user", "content": late_date_net::TEXT}]}),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: Value = serde_json::from_str(&response.text().await.unwrap()).unwrap();
+    assert_eq!(
+        body,
+        json!({
+            "error": "Refused",
+            "refusal": {
+                "error": "Residual",
+                "fallback_reason": "residual_suspect",
+                "suspect_classes": ["custom:date", "custom:username"],
+            },
+        })
+    );
+    upstream.assert_nothing_forwarded().await;
+}

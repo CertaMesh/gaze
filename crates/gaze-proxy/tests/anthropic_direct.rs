@@ -1944,3 +1944,89 @@ async fn regression_3847_direct_refusal_body_is_typed_and_carries_no_pii() {
     );
     assert_eq!(upstream.captures.lock().await.len(), 0);
 }
+
+#[path = "support/stderr_child.rs"]
+mod stderr_child;
+
+/// Child of `regression_3847_direct_refusal_log_line_is_exactly_the_typed_refusal`: one refused
+/// request, so its process stderr holds exactly what the proxy logs for a refusal.
+#[tokio::test]
+#[ignore = "child process of regression_3847_direct_refusal_log_line_is_exactly_the_typed_refusal"]
+async fn direct_refusal_log_child() {
+    let upstream = spawn_upstream().await;
+    let proxy = spawn_proxy_with_observability(
+        AnthropicAdapter::new(upstream.origin.clone()),
+        second_opinion_pipeline(),
+        DictionaryBundle::default(),
+        None,
+        None,
+    )
+    .await;
+    let mut request = sdk_request(false);
+    request["messages"][0]["content"] = json!(second_opinion_net::TEXT);
+    let response = sdk_client_request(&Client::new(), &proxy, false)
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(upstream.captures.lock().await.len(), 0);
+}
+
+/// Todo 3847 (b) on the codec path: the proxy log carries the refusal's reason and never the
+/// text. The whole stderr of a refused request is one line, byte for byte.
+#[test]
+fn regression_3847_direct_refusal_log_line_is_exactly_the_typed_refusal() {
+    assert_eq!(
+        stderr_child::stderr_of("direct_refusal_log_child"),
+        "gaze-proxy: request refused: \
+         {\"error\":\"Residual\",\"fallback_reason\":\"residual_suspect\",\
+         \"suspect_classes\":[\"name\",\"location\"]}\n"
+    );
+}
+
+#[path = "support/late_date_net.rs"]
+mod late_date_net;
+
+/// PR #660 review repro on the codec path: the proxy runs the Resolve step of
+/// `gaze clean --safety-net-fallback strict`, so a finding only the net's re-run makes is
+/// refused, where clean's default `redact` fallback tokenizes it. Pinned so that closing this
+/// gap is a deliberate change.
+#[tokio::test]
+async fn regression_3847_direct_late_net_finding_is_refused() {
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().unwrap())
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Tokenize))
+        .register_safety_net(late_date_net::LateDateNet)
+        .build()
+        .unwrap();
+    let upstream = spawn_upstream().await;
+    let proxy = spawn_proxy_with_observability(
+        AnthropicAdapter::new(upstream.origin.clone()),
+        pipeline,
+        DictionaryBundle::default(),
+        None,
+        None,
+    )
+    .await;
+    let mut request = sdk_request(false);
+    request["messages"][0]["content"] = json!(late_date_net::TEXT);
+    let response = sdk_client_request(&Client::new(), &proxy, false)
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: Value = serde_json::from_str(&response.text().await.unwrap()).unwrap();
+    assert_eq!(body["error"]["code"], "ProtectionRefused", "{body}");
+    assert_eq!(
+        body["error"]["refusal"],
+        json!({
+            "error": "Residual",
+            "fallback_reason": "residual_suspect",
+            "suspect_classes": ["custom:date", "custom:username"],
+        })
+    );
+    assert_eq!(upstream.captures.lock().await.len(), 0);
+}
