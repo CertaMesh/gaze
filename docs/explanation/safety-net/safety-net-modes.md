@@ -250,8 +250,8 @@ Each emits a `decided_by: Fallback` audit row with the corresponding `FallbackRe
 
 > **Implemented behaviour (v0.9).** §6.2 and §6.3 below have been rewritten to describe what the
 > runtime actually does; §6.1 and §6.4-§6.6 remain the original design with corrections noted
-> inline. What shipped is narrower than the design in one respect: **the fallback is consulted
-> only under `resolve`.** `SafetyNetPolicy::decision()` in `crates/gaze/src/pipeline.rs` is the single,
+> inline. What shipped is narrower than the design in one respect, and the difference matters
+> for fail-closed behaviour: **the fallback is consulted only under `resolve`.** `SafetyNetPolicy::decision()` in `crates/gaze/src/pipeline.rs` is the single,
 > total lowering of the `(mode, fallback)` pair, and it is what every runtime arm reads:
 >
 > | `--safety-net-mode` | `--safety-net-fallback` | `SafetyNetDecision`          | runtime behaviour |

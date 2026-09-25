@@ -38,7 +38,7 @@ execution; chunk failures are propagated as recognizer errors.
 
 The fallible contract above only holds if the backend actually reports a
 failure. Between the ONNX session and the BIO decode there is a second
-boundary, the raw output tensor, and a malformed tensor there must not be read
+boundary (the raw output tensor), and a malformed tensor there must not be read
 as "this document contains no PII".
 
 `OrtBackend::detect` funnels every model result through one validation

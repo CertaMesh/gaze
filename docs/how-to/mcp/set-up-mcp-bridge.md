@@ -168,5 +168,5 @@ gaze mcp bridge --config gaze.mcp.toml --session-dir ./.gaze/local-bridge-sessio
 ```
 
 The bridge writes its audit metadata under the same MCP manifest directory used
-by `gaze mcp serve`; it records paths and policy decisions, not raw argument or
-result payloads.
+by `gaze mcp serve`; that metadata records paths and policy decisions, not raw
+argument or result payloads.

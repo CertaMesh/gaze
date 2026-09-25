@@ -229,7 +229,8 @@ Pseudonymisation reduces re-identification risk; it does not eliminate it. Adopt
 
 ## 11. Dual-use and misuse risks
 
-Privacy tooling can be misused. These are the ways a careless deployment goes wrong:
+Privacy tooling can be misused. Naming the common ways a careless deployment
+goes wrong is part of using Gaze responsibly:
 
 - **Hiding identity from the human reviewer, not just from the model.** If you pseudonymise so aggressively that the eventual authorised human cannot exercise accountable judgement, you may produce GDPR-clean LLM traffic but poor downstream decisions. Restore only the minimum value necessary, only for authorised users, and only where needed (see [§5](#5-the-restore-authorisation-boundary)); blanket restoration as a default display mode is not supported by data-protection-by-default.
 - **Using pseudonymisation as a substitute for lawful basis.** Pseudonymisation is a *technical measure*, not an [Art. 6 lawful basis](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/lawful-basis/a-guide-to-lawful-basis/). If you have no lawful basis to process the personal data, pseudonymising it does not create one.
