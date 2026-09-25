@@ -9,7 +9,7 @@ Throughout, claims about Gaze's behaviour are grounded in the project's architec
 
 If Gaze is used on personal data, adopters should ensure their [privacy notice](https://ec.europa.eu/newsroom/article29/item-detail.cfm?item_id=622227) explains **the purpose of tokenisation, the legal basis, recipients and processors, international transfers, retention logic, and how [data-subject rights](https://www.edpb.europa.eu/our-work-tools/our-documents/guidelines/guidelines-012022-data-subject-rights-right-access_en) can be exercised**.
 
-### How to read this document
+## How to read this document
 
 | Section | Question it helps you answer |
 |---|---|

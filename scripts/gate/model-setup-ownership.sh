@@ -35,7 +35,7 @@ bundle_files=(SHA256SUMS model.onnx tokenizer.json tokenizer_config.json config.
 
 # The shipped installer downloads the source-pinned bundle and performs its real verification.
 cargo run --locked -p gaze-cli --features setup -- setup --non-interactive \
-  --safety-net ner --model-dir "$GAZE_MODEL_SETUP_OWNED_MODEL_DIR" \
+  --safety-net none --model-dir "$GAZE_MODEL_SETUP_OWNED_MODEL_DIR" \
   --policy-out "$fixture_root/policy.toml"
 (
   cd "$GAZE_MODEL_SETUP_OWNED_MODEL_DIR"

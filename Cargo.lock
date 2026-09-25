@@ -1196,7 +1196,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-assembly"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "gaze-pii",
  "gaze-recognizers",
@@ -1208,7 +1208,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-audit"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "gaze-types",
  "rusqlite",
@@ -1221,7 +1221,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-cli"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -1259,7 +1259,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-document"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "ab_glyph",
  "async-trait",
@@ -1283,7 +1283,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-inspection"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "gaze-types",
  "serde",
@@ -1295,7 +1295,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-mcp-bridge"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1323,7 +1323,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-mcp-core"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "gaze-assembly",
@@ -1343,7 +1343,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-mcp-rmcp"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1359,7 +1359,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-model-setup"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "gaze-recognizers",
  "libc",
@@ -1370,7 +1370,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-pii"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1401,7 +1401,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-proxy"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1439,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-proxy-dashboard"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "base64 0.22.1",
  "gaze-inspection",
@@ -1457,7 +1457,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-recognizers"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "aho-corasick",
  "criterion",
@@ -1485,7 +1485,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-token-bridge"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "chacha20poly1305",
@@ -1502,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-types"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "phonenumber",
  "regex",

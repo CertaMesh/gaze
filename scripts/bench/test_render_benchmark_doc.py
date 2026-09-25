@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -97,6 +98,11 @@ def scorecard(revision: str = "a" * 40, dirty: bool = False) -> dict:
             ],
         },
     }
+
+
+def pct(rate: float) -> str:
+    """A leak rate as the chart labels print it: percent, one decimal."""
+    return f"{round(rate * 100, 1):.1f}%"
 
 
 def entry(version: str = "v0.14.0", **kwargs) -> dict:
@@ -310,13 +316,14 @@ class RowCountTest(unittest.TestCase):
     def test_one_row_renders_the_bar_chart_but_not_the_trend(self):
         rendered = render.apply_blocks(DOC, history("v0.14.0"))
         self.assertEqual(rendered.count("xychart-beta"), 1)
-        self.assertIn("The trend chart renders from two releases onward", rendered)
+        self.assertIn("The trend charts render from two releases onward", rendered)
 
-    def test_two_and_three_rows_render_both_charts(self):
+    def test_two_and_three_rows_render_the_bar_and_both_trend_charts(self):
         for versions in (("v0.13.0", "v0.14.0"), ("v0.12.0", "v0.13.0", "v0.14.0")):
             with self.subTest(rows=len(versions)):
                 rendered = render.apply_blocks(DOC, history(*versions))
-                self.assertEqual(rendered.count("xychart-beta"), 2)
+                # Comparison bar, leaked-bytes trend, false-positive trend.
+                self.assertEqual(rendered.count("xychart-beta"), 3)
                 for version in versions:
                     self.assertIn(version, rendered)
 
@@ -524,7 +531,7 @@ class ShippedDefaultArmTest(unittest.TestCase):
         rendered = render.apply_blocks(DOC, value)
         self.assertIn(f"`{self.KIJI}` **(shipped default)**", rendered)
         self.assertNotIn("`pass2-ner` **(shipped default)**", rendered)
-        self.assertIn(f"**Trend across releases — `{self.KIJI}`.**", rendered)
+        self.assertIn('x-axis ["v0.14.0 default (', rendered)
         self.assertIn("| 25,179 |", rendered)
 
     def test_mixed_history_keeps_each_rows_own_default(self):
@@ -534,10 +541,10 @@ class ShippedDefaultArmTest(unittest.TestCase):
         value["releases"].append(newer)
         render.validate_history(value)
         history_block = render.render_history(value)
-        # The old row reports the Kiji bytes it shipped, named because the arm
-        # differs from the latest default; the new row reports pass2-ner.
-        self.assertIn(f"25,179 (`{self.KIJI}`)", history_block)
-        self.assertIn("| 20,000 |", history_block)
+        # A recorded-arm row switches to the refusal-aware layout, where each
+        # row names the arm it shipped and reports that arm's bytes.
+        self.assertIn(f"| `{self.KIJI}` | 0 | 25,179 | 25,179 |", history_block)
+        self.assertIn("| `pass2-ner` | 0 | 20,000 | 20,000 |", history_block)
         current = render.render_current_release(value)
         self.assertIn("`pass2-ner` **(shipped default)**", current)
         self.assertNotIn(f"`{self.KIJI}` **(shipped default)**", current)
@@ -572,11 +579,323 @@ class ShippedDefaultArmTest(unittest.TestCase):
             )
 
 
+class RefusalAwareHistoryTest(unittest.TestCase):
+    """v0.15.0 ships the `gaze setup` policy, benchmarked as the `policy-file` arm.
+
+    Rows appended with a recorded shipped arm render Refused, leaked bytes on
+    every processed document, leaked bytes on the common document set, false
+    positives, exact restores and latency. Legacy rows alone keep the original
+    table byte for byte.
+    """
+
+    KIJI = ShippedDefaultArmTest.KIJI
+
+    def policy_scorecard(self, refused: int = 0) -> dict:
+        value = scorecard()
+        run = _arm(3)
+        run["config"] = "policy-file"
+        run["pipeline_availability"]["failed_closed_documents"] = refused
+        value["runs"] = [run]
+        return value
+
+    def policy_entry(self, refused: int = 0) -> dict:
+        return render.history_entry_from_scorecard(
+            self.policy_scorecard(refused),
+            version="v0.15.0",
+            machine="Test host, 1 core, 1 GB",
+            scorecard_filename="scorecard-v0.15.0.json",
+            scorecard_sha256="0" * 64,
+            shipped_arm="policy-file",
+        )
+
+    def mixed(self, refused: int = 0) -> dict:
+        value = history_of(ShippedDefaultArmTest.legacy_kiji_row(self))
+        value["releases"].append(self.policy_entry(refused))
+        render.validate_history(value)
+        return value
+
+    def test_policy_file_arm_is_recorded_and_rendered_as_the_default(self):
+        row = self.policy_entry()
+        self.assertEqual(row["shipped_default_arm"], "policy-file")
+        current = render.render_current_release(self.mixed())
+        self.assertIn("`policy-file` **(shipped default)**", current)
+
+    def test_scorecard_without_the_named_arm_is_refused(self):
+        with self.assertRaisesRegex(render.RenderError, "no run for the shipped default arm"):
+            render.history_entry_from_scorecard(
+                scorecard(),
+                version="v0.15.0",
+                machine="Test host, 1 core, 1 GB",
+                scorecard_filename="scorecard-v0.15.0.json",
+                scorecard_sha256="0" * 64,
+                shipped_arm="policy-file",
+            )
+
+    def test_history_renders_every_refusal_aware_column(self):
+        block = render.render_history(self.mixed())
+        lines = block.splitlines()
+        self.assertEqual(
+            lines[0],
+            "| Release | Measured | Commit | Machine | Scorecard | Shipped arm | "
+            "Refused ↓ | Leaked PII bytes, all processed ↓ | "
+            "Leaked PII bytes, common documents ↓ | False-positive bytes ↔ | "
+            "Restore exact ↑ | clean p95 ms ↓ |",
+        )
+        self.assertTrue(
+            lines[2].endswith(
+                f"| `{self.KIJI}` | 0 | 25,179 | 25,179 | 5,424 | 100.0000% | 5.07 |"
+            ),
+            lines[2],
+        )
+        # _arm(3): leaked 93,850 - 3,000; false positive 5,423 + 3; p95 4.07 + 3.
+        self.assertTrue(
+            lines[3].endswith(
+                "| `policy-file` | 0 | 90,850 | 90,850 | 5,426 | 100.0000% | 7.07 |"
+            ),
+            lines[3],
+        )
+
+    def test_each_column_reads_its_own_field(self):
+        value = self.mixed()
+        arm = value["releases"][1]["arms"]["policy-file"]
+        arm["false_positive_utf8_bytes"] = 111
+        arm["restore_exact_rate"] = 0.5
+        arm["clean_ms_p95"] = 9.5
+        arm["surviving_pii_utf8_bytes"] = 222
+        row = render.render_history(value).splitlines()[3]
+        self.assertTrue(
+            row.endswith("| `policy-file` | 0 | 222 | 222 | 111 | 50.0000% | 9.50 |"), row
+        )
+
+    def test_a_refusing_shipped_arm_blocks_the_common_set_column(self):
+        with self.assertRaisesRegex(render.RenderError, "refused documents"):
+            render.render_history(self.mixed(refused=71))
+
+    def test_rows_on_different_populations_block_the_common_set_column(self):
+        value = self.mixed()
+        value["releases"][1]["dataset"]["evaluated_population"]["documents"] = 2909
+        with self.assertRaisesRegex(render.RenderError, "one shared population"):
+            render.render_history(value)
+
+    def test_legacy_rows_alone_keep_the_original_table(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        committed["releases"] = [
+            r for r in committed["releases"] if "shipped_default_arm" not in r
+        ]
+        self.assertEqual([r["version"] for r in committed["releases"]], ["v0.14.0"])
+        block = render.render_history(committed)
+        self.assertTrue(block.startswith(
+            "| Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |\n"
+        ))
+        self.assertNotIn("Refused", block)
+
+    def test_cli_records_the_shipped_arm_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc, hist = root / "README.md", root / "release-history.json"
+            doc.write_text(DOC, encoding="utf-8")
+            render.write_history(hist, render.empty_history())
+            card = root / "scorecard-v0.15.0.json"
+            card.write_text(json.dumps(self.policy_scorecard()), encoding="utf-8")
+            argv = [
+                "--doc", str(doc), "--history", str(hist), "--append-history",
+                "--scorecard", str(card), "--version", "v0.15.0",
+                "--machine", "Test host, 1 core, 1 GB",
+                "--shipped-default-arm", "policy-file",
+            ]
+            self.assertEqual(render.main(argv), 0)
+            stored = json.loads(hist.read_text(encoding="utf-8"))
+            self.assertEqual(stored["releases"][0]["shipped_default_arm"], "policy-file")
+            self.assertIn("| `policy-file` | 0 | 90,850 | 90,850 |", doc.read_text(encoding="utf-8"))
+
+
 class CommittedDocumentTest(unittest.TestCase):
     """The document committed in this repo must already be in sync."""
 
     def test_committed_document_is_in_sync(self):
         self.assertEqual(render.main(["--check"]), 0)
+
+
+class ShippedDefaultChartsTest(unittest.TestCase):
+    """Charts follow each release's OWN shipped default, not the latest one.
+
+    v0.14.0 shipped `full-stack-kiji-resolve` and never measured `policy-file`,
+    v0.15.0's default. Keying the trend on the latest default dropped v0.14.0
+    and left a one-point "trend" although two releases were measured.
+    """
+
+    KIJI = ShippedDefaultArmTest.KIJI
+
+    def mixed(self) -> dict:
+        return RefusalAwareHistoryTest.mixed(RefusalAwareHistoryTest())
+
+    def test_two_releases_with_different_defaults_render_two_points(self):
+        value = self.mixed()
+        policy = value["releases"][1]["arms"]["policy-file"]
+        charts = render.render_charts(value)
+        self.assertNotIn("One measured release so far", charts)
+        kiji_rate = value["releases"][0]["arms"][self.KIJI]["leak_rate"]
+        self.assertEqual(
+            charts.count(
+                f'x-axis ["v0.14.0 ({pct(kiji_rate)})", '
+                f'"v0.15.0 ({pct(policy["leak_rate"])})"]'
+            ),
+            1,
+        )
+        # The false-positive chart stays in bytes: bare version labels.
+        self.assertEqual(charts.count('x-axis ["v0.14.0", "v0.15.0"]'), 1)
+        self.assertIn(
+            f"line [25179, {policy['surviving_pii_utf8_bytes']}]", charts
+        )
+        kiji_fp = value["releases"][0]["arms"][self.KIJI]["false_positive_utf8_bytes"]
+        self.assertIn(f"line [{kiji_fp}, {policy['false_positive_utf8_bytes']}]", charts)
+
+    def test_committed_history_trend_has_both_releases(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        rows = {row["version"]: row for row in committed["releases"]}
+        # Read each row's default arm by name, not through the resolver under test.
+        expected = [
+            ("v0.14.0", rows["v0.14.0"]["arms"][self.KIJI]["surviving_pii_utf8_bytes"]),
+            (
+                "v0.15.0",
+                rows["v0.15.0"]["arms"][rows["v0.15.0"]["shipped_default_arm"]][
+                    "surviving_pii_utf8_bytes"
+                ],
+            ),
+        ]
+        self.assertEqual(
+            render.shipped_default_trend(committed, "surviving_pii_utf8_bytes"), expected
+        )
+        charts = render.render_charts(committed)
+        self.assertIn(f"line [{expected[0][1]}, {expected[1][1]}]", charts)
+
+    def test_comparison_bars_on_committed_history(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        rows = {row["version"]: row for row in committed["releases"]}
+        old = rows["v0.14.0"]["arms"]
+        new = rows["v0.15.0"]["arms"]["policy-file"]
+
+        def bar(label, arm):
+            return (f"{label} ({pct(arm['leak_rate'])})", arm["surviving_pii_utf8_bytes"])
+
+        self.assertEqual(
+            render.comparison_bars(committed),
+            [
+                bar("v0.15.0 default", new),
+                bar("v0.14.0 default", old[self.KIJI]),
+                bar("v0.14.0 rules + NER", old["pass2-ner"]),
+                bar("v0.14.0 rules only", old["rule-floor-extended"]),
+            ],
+        )
+
+    def test_previous_release_under_another_contract_leaves_the_comparison(self):
+        value = self.mixed()
+        value["releases"][1]["scored_label_contract"] = {
+            "id": "scored-labels-v2",
+            "version": 2,
+            "file_sha256": "1" * 64,
+            "excluded_labels": [],
+        }
+        labels = [label for label, _ in render.comparison_bars(value)]
+        rate = value["releases"][1]["arms"]["policy-file"]["leak_rate"]
+        self.assertEqual(labels, [f"v0.15.0 default ({pct(rate)})"])
+        charts = render.render_charts(value)
+        self.assertIn("1 row(s) under another contract", charts)
+        self.assertIn("One measured release so far (1 point)", charts)
+
+    def test_previous_release_on_another_corpus_leaves_the_comparison(self):
+        value = self.mixed()
+        value["releases"][0]["dataset"]["integrity"]["sha256"] = "2" * 64
+        labels = [label for label, _ in render.comparison_bars(value)]
+        rate = value["releases"][1]["arms"]["policy-file"]["leak_rate"]
+        self.assertEqual(labels, [f"v0.15.0 default ({pct(rate)})"])
+
+    def test_committed_chart_labels_carry_each_bars_leak_rate(self):
+        """Every x-axis label in both committed files ends with the leak rate
+        of the arm it names, read from the history (and consistent with
+        leaked / gold bytes), rounded to one decimal."""
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        rows = {row["version"]: row for row in committed["releases"]}
+        old, new = rows["v0.14.0"]["arms"], rows["v0.15.0"]["arms"]
+        arms = {
+            "v0.15.0 default": new["policy-file"],
+            "v0.14.0 default": old[self.KIJI],
+            "v0.14.0 rules + NER": old["pass2-ner"],
+            "v0.14.0 rules only": old["rule-floor-extended"],
+            "v0.14.0": old[self.KIJI],
+            "v0.15.0": new["policy-file"],
+        }
+        for arm in arms.values():
+            self.assertEqual(
+                round(arm["leak_rate"] * 100, 1),
+                round(
+                    arm["surviving_pii_utf8_bytes"] / arm["gold_pii_utf8_bytes"] * 100, 1
+                ),
+            )
+        label_re = re.compile(r'^"(.+) \((\d+\.\d)%\)"$')
+        for path, expected_axes in (
+            (render.DEFAULT_README, 1),
+            (render.DEFAULT_DOC, 2),  # comparison chart + leaked trend
+        ):
+            text = path.read_text(encoding="utf-8")
+            axes = [
+                line.strip()[len("x-axis ") :]
+                for line in text.splitlines()
+                if line.strip().startswith("x-axis ")
+            ]
+            labelled = [axis for axis in axes if "%" in axis]
+            self.assertEqual(len(labelled), expected_axes, path)
+            for axis in labelled:
+                labels = [f'"{item}"' for item in json.loads(axis)]
+                self.assertGreaterEqual(len(labels), 2, axis)
+                for label in labels:
+                    with self.subTest(path=path.name, label=label):
+                        match = label_re.match(label)
+                        self.assertIsNotNone(match, label)
+                        name, shown = match.group(1), float(match.group(2))
+                        self.assertEqual(shown, round(arms[name]["leak_rate"] * 100, 1))
+
+    def test_root_readme_chart_matches_the_readme_table(self):
+        """The hand-written README table and the generated chart show one set of numbers."""
+        readme = render.DEFAULT_README.read_text(encoding="utf-8")
+        section = readme.split("## How good is it", 1)[1].split("\n## ", 1)[0]
+        table = [
+            line
+            for line in section.splitlines()
+            if line.startswith("| ") and not line.startswith("| Setup")
+        ]
+        leaked = [
+            int(line.split("|")[3].strip().strip("*").split(" ")[0].replace(",", ""))
+            for line in table
+        ]
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        self.assertEqual(leaked, [value for _, value in render.comparison_bars(committed)])
+        self.assertIn(render.begin_marker("readme-chart"), section)
+
+    def test_check_fails_when_the_readme_chart_drifts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc, readme, hist = root / "doc.md", root / "README.md", root / "h.json"
+            doc.write_text(DOC, encoding="utf-8")
+            readme.write_text(
+                "# Gaze\n\n<!-- BEGIN GENERATED: readme-chart -->\n"
+                "<!-- END GENERATED: readme-chart -->\n",
+                encoding="utf-8",
+            )
+            value = self.mixed()
+            render.write_history(hist, value)
+            for row in value["releases"]:
+                (root / row["scorecard"]).write_text("{}", encoding="utf-8")
+            argv = ["--doc", str(doc), "--history", str(hist), "--readme", str(readme)]
+            self.assertEqual(render.main(argv), 0)
+            # The v0.14.0 Kiji default is the second bar, after v0.15.0's.
+            self.assertIn(", 25179, ", readme.read_text(encoding="utf-8"))
+            self.assertEqual(render.main(argv + ["--check"]), 0)
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(", 25179, ", ", 25178, "),
+                encoding="utf-8",
+            )
+            self.assertEqual(render.main(argv + ["--check"]), 1)
 
 
 class VersionOrderTest(unittest.TestCase):

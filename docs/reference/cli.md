@@ -26,6 +26,8 @@ Every verb below is defined by the clap `Subcommand` enum in
 | `gaze mcp serve` | Run the stdio MCP server exposing agent-tier document tools. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
 | `gaze proxy` | Run or manage the multi-provider HTTP chokepoint daemon. See [guide](#gaze-proxy) and [crate README](../../crates/gaze-proxy/README.md). | built into the default release binary since v0.8.1 |
 
+## Warnings and exit codes
+
 For exit codes and stderr error JSON, see
 [Exit codes](../../crates/gaze-cli/README.md#exit-codes) in the crate README.
 For policy schema details, see [`docs/reference/policy.md`](policy.md).
@@ -38,9 +40,7 @@ process warning to the proxy stderr log. Gaze also warns when a reachable
 per-class `generalize` rule creates a one-way value. Errors still use one JSON
 value on stderr.
 
-## Guides
-
-### `gaze setup`
+## `gaze setup`
 
 `gaze setup` installs and verifies the pinned Davlan NER and Nym bundles, writes
 `gaze.toml` with `[safety_net].backend = "nym"` and an absolute
@@ -52,7 +52,7 @@ Setup prints the model card MIT licence, pinned upstream source and revision,
 the open [licence review](../explanation/safety-net/safety-nets.md#licence-review-open),
 and the `gaze setup --safety-net none` opt-out.
 
-### Safety-net selection
+## Safety-net selection
 
 `gaze clean` and `gaze daemon` read `[safety_net].backend` from their policy.
 Use `--safety-net nym` or `--safety-net openai-filter` to replace that policy
@@ -66,179 +66,14 @@ Nym model location precedence is `--nym-model-dir` > `GAZE_NYM_MODEL_DIR` >
 policy `[safety_net.nym].model_dir`. A missing or invalid bundle is a
 configuration error; install it with `gaze setup`.
 
-### `gaze proxy`
-
-`gaze proxy` is the multi-provider HTTP chokepoint daemon for SDK and agent
-traffic that authenticates with provider API keys. It preserves each provider's
-native request and response shape while redacting request PII, restoring
-owner-visible response text, and accumulating SSE streams and tool-call JSON
-arguments chunk-by-chunk before the text crosses the model boundary. The proxy
-is built into the default release binary as of v0.8.1.
-
-```sh
-gaze proxy start --policy ./policy.toml
-gaze proxy status
-gaze proxy logs --follow
-gaze proxy restart
-gaze proxy stop
-```
-
-Supported management verbs are `serve`, `start`, `stop`, `status`, `logs`, and
-`restart`. `install-launchd` and `install-systemd-user` are present as opt-in
-supervisor hooks, but currently return a typed message directing adopters to
-`gaze proxy start` / `gaze proxy stop`.
-
-The provider adapters claim these API-key-authenticated endpoints:
-
-- OpenAI: `POST /v1/chat/completions`
-- Anthropic: `POST /v1/messages`
-- Gemini: `POST /v1beta/models/*:{generateContent,streamGenerateContent}`
-
-Consumer subscription tiers such as ChatGPT Plus, Claude.ai, and Gemini
-Advanced use cookie-authenticated web endpoints and are out of scope for this
-proxy.
-
-| Option | Purpose |
-|--------|---------|
-| `--bind <addr>` | Listener address. Default for `serve`: `127.0.0.1:8787`; `start` uses the persisted config unless overridden. |
-| `--policy <path>` | Optional policy TOML. When omitted, the built-in core rulepack is used. |
-| `--rulepack <name>` | Bundled rulepack name. Default for `serve`: `core`; `start` persists the override. |
-| `--session-ttl <duration>` | In-memory session retention such as `30m`, `10s`, or `1h`. Default for `serve`: `30m`. |
-| `--upstream-openai <url>` | OpenAI upstream. Default: `https://api.openai.com`. |
-| `--upstream-anthropic <url>` | Anthropic upstream. Default: `https://api.anthropic.com`. |
-| `--upstream-gemini <url>` | Gemini upstream. Default: `https://generativelanguage.googleapis.com`. |
-| `--force` | For `stop` / `restart`, send the hard stop after the bounded wait. |
-| `--timeout <duration>` | Stop / restart wait before force. Default: `10s`. |
-
-#### Dashboard flags (opt-in, `dashboard` cargo feature)
-
-`serve` and `start` accept the dashboard opt-in flags when the binary is built
-with the default-off `dashboard` cargo feature. `--dashboard` launches an
-isolated, memory-only inspection dashboard as a killable child process before
-provider traffic starts. Enabling it expands the local trusted computing
-base: captured payloads become visible to the paired browser session.
-
-| Option | Purpose |
-|--------|---------|
-| `--dashboard` | Launch the dashboard child; the capture baseline is always ProviderVisible plus safe metadata. |
-| `--dashboard-capture-owner-raw` + `--dashboard-acknowledge-owner-raw-risk` | Independently opt into OwnerRaw capture. The capture flag without its acknowledgement — or the acknowledgement without the flag — disables only the dashboard before provider startup. |
-| `--dashboard-capture-owner-restored` + `--dashboard-acknowledge-owner-restored-risk` | Independently opt into OwnerRestored capture under the same pairing rule. Capturing both owner domains requires both acknowledgements. |
-| `--dashboard-bind <ipv4:0>` | Literal loopback address with port 0. Default: a fresh CSPRNG-selected `127.0.0.0/8` literal per launch. Configuring a fixed literal prints an origin-reuse warning. |
-| `--dashboard-ttl <duration>` | Retention TTL. Default `5m`; crate hard ceiling one hour. |
-| `--dashboard-max-events <n>` | Retained logical-event cap. Default 64; crate hard ceiling 1024. |
-| `--dashboard-max-bytes <n>` | Retained byte cap. Default 4 MiB; crate hard ceiling 64 MiB. |
-| `--dashboard-pairing-fd <fd>` | Inherited FIFO descriptor for noninteractive pairing-token delivery. Descriptors 0/1/2, terminals and other character devices, regular files, directories, sockets, and unwritable descriptors are rejected. |
-
-Pairing prints exactly one `http://<origin>/` line and one
-`GazeDashboardV1 <token>` authorization line to the controlling terminal (or
-the validated pairing descriptor), never to stdout, stderr, or a log file.
-On Linux, the launcher that supplies `--dashboard-pairing-fd` must hold (or
-promptly open) the read end of the pairing FIFO; otherwise `gaze proxy serve`
-blocks in the write-only open before provider startup.
-Any flag-validation or activation failure — including a missing controlling
-terminal without a pairing descriptor — prints one sanitized
-`gaze dashboard disabled: <reason>` line, and the proxy starts or continues
-without any capture. `start` relays the dashboard flags verbatim to the
-daemon serve process; `restart` does not, because dashboard activation
-is per-invocation and never persisted into the daemon config. The dashboard
-child requires verified no-crash-dump readiness (`RLIMIT_CORE=0`), which
-currently limits successful activation to non-macOS Unix hosts; on other
-hosts the dashboard disables itself and the proxy continues.
-
-See [Run the local dashboard](../how-to/dashboard/run-local-dashboard.md) and
-the [dashboard trust boundary](../explanation/dashboard/trust-boundary.md).
-
-SafetyNet activation follows the normal policy and CLI behavior: use policy
-configuration for the deterministic floor and activate observer-only safety-net
-backends with the same `safety_tier` posture used by the pipeline. Locale
-coverage comes from the policy, merged bundled rulepack defaults, and active
-locale chain.
-
-See [`docs/explanation/proxy/proxy-runtime.md`](../explanation/proxy/proxy-runtime.md) for
-the adapter and daemon contract. See
-[`crates/gaze-proxy/README.md`](../../crates/gaze-proxy/README.md) for the crate
-README.
-
-### `gaze mcp install / doctor / serve`
-
-`gaze mcp install`, `gaze mcp doctor`, and `gaze mcp serve` surface the MCP
-chokepoint for adopters whose agent hosts already speak MCP. `install` writes a
-supported client config that points at the absolute `current_exe()` path with
-`["mcp", "serve"]`, then creates or updates an idempotent marker-fenced
-`AGENTS.md` guidance section. `doctor` checks runtime dependencies, client
-config, manifest storage, and the AGENTS.md marker. `serve` runs the stdio MCP
-server and exposes the agent-tier `gaze_read_file` and `gaze_read_text` tool
-implementations.
-
-```sh
-cargo install gaze-cli --features mcp,document
-gaze mcp install --client=claude-code
-gaze mcp doctor
-gaze mcp serve
-```
-
-The CLI verbs require the `mcp` feature. Document tools require the `document`
-feature as well, because the tool implementations live in `gaze-document`.
-
-| Option | Purpose |
-|--------|---------|
-| `install --client <client>` | Supported values: `claude-code`, `claude-desktop`, `cursor`, `all`. |
-| `install --agents-md <path>` | AGENTS.md path to create or update. Default: `./AGENTS.md`. |
-| `install --dry-run` | Print the planned install summary without writing files. |
-| `install --skip-agents-md` | Update client config only. |
-| `doctor --agents-md <path>` | AGENTS.md path to inspect. Default: `./AGENTS.md`. |
-| `doctor --strict` | Exit non-zero when any warning is present. |
-| `doctor --json` | Emit machine-readable diagnostic JSON. |
-| `serve --manifest-dir <path>` | Directory where MCP call manifest records are written. |
-| `serve --max-file-size <bytes>` | Maximum file size accepted by `gaze_read_file`. |
-
-`gaze_read_text` accepts already-extracted text. `gaze_read_file` accepts a
-PNG, JPG, or PDF path and returns safe content through the same
-`PiiEnvelope::dispatch` ordering as custom tools. Responses include
-`clean_markdown`, `manifest_id`, and `file_metadata` so the agent can use the
-safe Markdown while the owner retains restore material.
-
-See [`docs/explanation/mcp/mcp-runtime.md`](../explanation/mcp/mcp-runtime.md) for the
-runtime contract.
-
-### `gaze audit safety-net query`
-
-`gaze audit safety-net query` prints filtered TSV rows from the
-`safety_net_log` table. It is the SafetyNet companion to the redaction-log audit
-query verbs: the deterministic redaction audit table records emitted token
-metadata, while `safety_net_log` records observer-only leak suspects after the
-clean text and manifest already exist.
-
-```sh
-gaze audit safety-net query --audit-db .gaze/audit.sqlite --leak-kind uncovered --mapped-class email
-```
-
-| Option | Purpose |
-|--------|---------|
-| `--audit-db <path>` | SQLite redaction-log database path. |
-| `--leak-kind <kind>` | Filter by typed leak classification. |
-| `--raw-label <label>` | Filter by backend-native label. |
-| `--mapped-class <class>` | Filter by mapped Gaze PII class. |
-| `--field-path <path>` | Filter by structured field path. |
-| `--from <iso8601>` | Include rows created at or after this timestamp. |
-| `--to <iso8601>` | Include rows created at or before this timestamp. |
-
-The leak-kind filter corresponds to the closed `LeakKind` set:
-`Uncovered`, `PartialBleed`, and `ClassMismatch`. The TSV values are the
-lowercase wire forms `uncovered`, `partial_bleed`, and `class_mismatch`.
-
-See
-[`crates/gaze-cli/README.md#audit-safety-net-query`](../../crates/gaze-cli/README.md#audit-safety-net-query)
-for the crate README reference.
-
-### `gaze daemon`
+## `gaze daemon`
 
 `gaze daemon` is a long-lived **stdio server** for adapters that need repeated
 low-latency redaction without paying binary startup and model-load cost on every
 request. It is a stdio server in the LSP / MCP tradition: a foreground child
 process that owns stdin/stdout for line-delimited JSON, not a Unix daemon in the
-strict sense. The subcommand verb is preserved through v0.9.x; a `gaze serve`
-alias lands in v0.10. See the [Terminology note in `daemon-mode.md`](../explanation/daemon/daemon-mode.md)
+strict sense. The subcommand verb is `gaze daemon`; there is no `gaze serve`
+alias. See the [Terminology note in `daemon-mode.md`](../explanation/daemon/daemon-mode.md)
 for the full framing.
 
 The wire format is one JSON request per stdin line and one JSON response per
@@ -297,10 +132,10 @@ Five-axis check:
 
 See [`docs/explanation/daemon/daemon-mode.md`](../explanation/daemon/daemon-mode.md) for the
 full contract. See
-[Daemon Adapter Quickstart](../how-to/daemon/run-daemon.md) for an
+[Run the daemon](../how-to/daemon/run-daemon.md) for an
 adopter quickstart.
 
-### `gaze audit purge`
+## `gaze audit purge`
 
 `gaze audit purge` manually removes redaction-log metadata rows older than an
 ISO 8601 UTC timestamp. It never touches session manifests and does not run in
@@ -328,7 +163,44 @@ input:
 {"error":"AuditPurgeIso8601","exit":2,"input":"not-iso8601"}
 ```
 
-### `gaze document clean`
+## `gaze audit safety-net query`
+
+`gaze audit safety-net query` prints filtered TSV rows from the
+`safety_net_log` table. It is the SafetyNet companion to the redaction-log audit
+query verbs: the deterministic redaction audit table records emitted token
+metadata, while `safety_net_log` records observer-only leak suspects after the
+clean text and manifest already exist.
+
+```sh
+gaze audit safety-net query --audit-db .gaze/audit.sqlite --leak-kind uncovered --mapped-class email
+```
+
+| Option | Purpose |
+|--------|---------|
+| `--audit-db <path>` | SQLite redaction-log database path. |
+| `--leak-kind <kind>` | Filter by typed leak classification. |
+| `--raw-label <label>` | Filter by backend-native label. |
+| `--mapped-class <class>` | Filter by mapped Gaze PII class. |
+| `--field-path <path>` | Filter by structured field path. |
+| `--from <iso8601>` | Include rows created at or after this timestamp. |
+| `--to <iso8601>` | Include rows created at or before this timestamp. |
+
+The leak-kind filter corresponds to the closed `LeakKind` set:
+`Uncovered`, `PartialBleed`, and `ClassMismatch`. The TSV values are the
+lowercase wire forms `uncovered`, `partial_bleed`, and `class_mismatch`.
+
+See
+[`crates/gaze-cli/README.md#audit-safety-net-query`](../../crates/gaze-cli/README.md#audit-safety-net-query)
+for the crate README reference.
+
+## Legacy audit databases
+
+Audit databases written before v0.4.4 lack a `created_at` column. Unfiltered
+`gaze audit query` calls still surface those rows. Filtered queries that use
+`--from` or `--to` omit NULL `created_at` rows by SQL semantics; drop the time
+filter to access legacy rows.
+
+## `gaze document clean`
 
 `gaze document clean` is the OSS document ingestion verb. It OCRs the input
 through Tesseract, redacts the recognized text through the standard Gaze
@@ -361,9 +233,137 @@ The supported inputs are `.png`, `.jpg`, `.jpeg`, and single-page `.pdf`. The
 `BundleReport` schema is versioned via `bundle_version = 2`. See the
 `gaze-document` crate for the full bundle contract.
 
-### Legacy audit databases
+## `gaze mcp install / doctor / serve`
 
-Audit databases written before v0.4.4 lack a `created_at` column. Unfiltered
-`gaze audit query` calls still surface those rows. Filtered queries that use
-`--from` or `--to` omit NULL `created_at` rows by SQL semantics; drop the time
-filter to access legacy rows.
+`gaze mcp install`, `gaze mcp doctor`, and `gaze mcp serve` surface the MCP
+chokepoint for adopters whose agent hosts already speak MCP. `install` writes a
+supported client config that points at the absolute `current_exe()` path with
+`["mcp", "serve"]`, then creates or updates an idempotent marker-fenced
+`AGENTS.md` guidance section. `doctor` checks runtime dependencies, client
+config, manifest storage, and the AGENTS.md marker. `serve` runs the stdio MCP
+server and exposes the agent-tier `gaze_read_file` and `gaze_read_text` tool
+implementations.
+
+```sh
+cargo install gaze-cli --features mcp,document
+gaze mcp install --client=claude-code
+gaze mcp doctor
+gaze mcp serve
+```
+
+The CLI verbs require the `mcp` feature. Document tools require the `document`
+feature as well, because the tool implementations live in `gaze-document`.
+
+| Option | Purpose |
+|--------|---------|
+| `install --client <client>` | Supported values: `claude-code`, `claude-desktop`, `cursor`, `all`. |
+| `install --agents-md <path>` | AGENTS.md path to create or update. Default: `./AGENTS.md`. |
+| `install --dry-run` | Print the planned install summary without writing files. |
+| `install --skip-agents-md` | Update client config only. |
+| `doctor --agents-md <path>` | AGENTS.md path to inspect. Default: `./AGENTS.md`. |
+| `doctor --strict` | Exit non-zero when any warning is present. |
+| `doctor --json` | Emit machine-readable diagnostic JSON. |
+| `serve --manifest-dir <path>` | Directory where MCP call manifest records are written. |
+| `serve --max-file-size <bytes>` | Maximum file size accepted by `gaze_read_file`. |
+
+`gaze_read_text` accepts already-extracted text. `gaze_read_file` accepts a
+PNG, JPG, or PDF path and returns safe content through the same
+`PiiEnvelope::dispatch` ordering as custom tools. Responses include
+`clean_markdown`, `manifest_id`, and `file_metadata` so the agent can use the
+safe Markdown while the owner retains restore material.
+
+See [`docs/explanation/mcp/mcp-runtime.md`](../explanation/mcp/mcp-runtime.md) for the
+runtime contract.
+
+## `gaze proxy`
+
+`gaze proxy` is the multi-provider HTTP chokepoint daemon for SDK and agent
+traffic that authenticates with provider API keys. It preserves each provider's
+native request and response shape while redacting request PII, restoring
+owner-visible response text, and accumulating SSE streams and tool-call JSON
+arguments chunk-by-chunk before the text crosses the model boundary. The proxy
+is built into the default release binary as of v0.8.1.
+
+```sh
+gaze proxy start --policy ./policy.toml
+gaze proxy status
+gaze proxy logs --follow
+gaze proxy restart
+gaze proxy stop
+```
+
+Supported management verbs are `serve`, `start`, `stop`, `status`, `logs`, and
+`restart`. `install-launchd` and `install-systemd-user` are present as opt-in
+supervisor hooks, but currently return a typed message directing adopters to
+`gaze proxy start` / `gaze proxy stop`.
+
+The provider adapters claim these API-key-authenticated endpoints:
+
+- OpenAI: `POST /v1/chat/completions`
+- Anthropic: `POST /v1/messages`
+- Gemini: `POST /v1beta/models/*:{generateContent,streamGenerateContent}`
+
+Consumer subscription tiers such as ChatGPT Plus, Claude.ai, and Gemini
+Advanced use cookie-authenticated web endpoints and are out of scope for this
+proxy.
+
+| Option | Purpose |
+|--------|---------|
+| `--bind <addr>` | Listener address. Default for `serve`: `127.0.0.1:8787`; `start` uses the persisted config unless overridden. |
+| `--policy <path>` | Optional policy TOML. When omitted, the built-in core rulepack is used. |
+| `--rulepack <name>` | Bundled rulepack name. Default for `serve`: `core`; `start` persists the override. |
+| `--session-ttl <duration>` | In-memory session retention such as `30m`, `10s`, or `1h`. Default for `serve`: `30m`. |
+| `--upstream-openai <url>` | OpenAI upstream. Default: `https://api.openai.com`. |
+| `--upstream-anthropic <url>` | Anthropic upstream. Default: `https://api.anthropic.com`. |
+| `--upstream-gemini <url>` | Gemini upstream. Default: `https://generativelanguage.googleapis.com`. |
+| `--force` | For `stop` / `restart`, send the hard stop after the bounded wait. |
+| `--timeout <duration>` | Stop / restart wait before force. Default: `10s`. |
+
+### Dashboard flags (opt-in, `dashboard` cargo feature)
+
+`serve` and `start` accept the dashboard opt-in flags when the binary is built
+with the default-off `dashboard` cargo feature. `--dashboard` launches an
+isolated, memory-only inspection dashboard as a killable child process before
+provider traffic starts. Enabling it expands the local trusted computing
+base: captured payloads become visible to the paired browser session.
+
+| Option | Purpose |
+|--------|---------|
+| `--dashboard` | Launch the dashboard child; the capture baseline is always ProviderVisible plus safe metadata. |
+| `--dashboard-capture-owner-raw` + `--dashboard-acknowledge-owner-raw-risk` | Independently opt into OwnerRaw capture. The capture flag without its acknowledgement — or the acknowledgement without the flag — disables only the dashboard before provider startup. |
+| `--dashboard-capture-owner-restored` + `--dashboard-acknowledge-owner-restored-risk` | Independently opt into OwnerRestored capture under the same pairing rule. Capturing both owner domains requires both acknowledgements. |
+| `--dashboard-bind <ipv4:0>` | Literal loopback address with port 0. Default: a fresh CSPRNG-selected `127.0.0.0/8` literal per launch. Configuring a fixed literal prints an origin-reuse warning. |
+| `--dashboard-ttl <duration>` | Retention TTL. Default `5m`; crate hard ceiling one hour. |
+| `--dashboard-max-events <n>` | Retained logical-event cap. Default 64; crate hard ceiling 1024. |
+| `--dashboard-max-bytes <n>` | Retained byte cap. Default 4 MiB; crate hard ceiling 64 MiB. |
+| `--dashboard-pairing-fd <fd>` | Inherited FIFO descriptor for noninteractive pairing-token delivery. Descriptors 0/1/2, terminals and other character devices, regular files, directories, sockets, and unwritable descriptors are rejected. |
+
+Pairing prints exactly one `http://<origin>/` line and one
+`GazeDashboardV1 <token>` authorization line to the controlling terminal (or
+the validated pairing descriptor), never to stdout, stderr, or a log file.
+On Linux, the launcher that supplies `--dashboard-pairing-fd` must hold (or
+promptly open) the read end of the pairing FIFO; otherwise `gaze proxy serve`
+blocks in the write-only open before provider startup.
+Any flag-validation or activation failure — including a missing controlling
+terminal without a pairing descriptor — prints one sanitized
+`gaze dashboard disabled: <reason>` line, and the proxy starts or continues
+without any capture. `start` relays the dashboard flags verbatim to the
+daemon serve process; `restart` does not, because dashboard activation
+is per-invocation and never persisted into the daemon config. The dashboard
+child requires verified no-crash-dump readiness (`RLIMIT_CORE=0`), which
+currently limits successful activation to non-macOS Unix hosts; on other
+hosts the dashboard disables itself and the proxy continues.
+
+See [Run the local dashboard](../how-to/dashboard/run-local-dashboard.md) and
+the [dashboard trust boundary](../explanation/dashboard/trust-boundary.md).
+
+SafetyNet activation follows the normal policy and CLI behavior: use policy
+configuration for the deterministic floor and activate observer-only safety-net
+backends with the same `safety_tier` posture used by the pipeline. Locale
+coverage comes from the policy, merged bundled rulepack defaults, and active
+locale chain.
+
+See [`docs/explanation/proxy/proxy-runtime.md`](../explanation/proxy/proxy-runtime.md) for
+the adapter and daemon contract. See
+[`crates/gaze-proxy/README.md`](../../crates/gaze-proxy/README.md) for the crate
+README.

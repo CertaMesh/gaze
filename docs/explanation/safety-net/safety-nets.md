@@ -89,6 +89,8 @@ can land without changing the trait shape or audit schema.
    │     ─ Span outside every token       → "Uncovered" suspect      │
    │     ─ Span overlaps partial token    → "PartialBleed" suspect   │
    │     ─ Span overlaps wrong class      → "ClassMismatch" suspect  │
+   │       (unowned tokens only; findings inside owned               │
+   │        placeholders are dropped before any action)              │
    │                                                                 │
    │   Result: leak_report attached to JSON output. Manifest         │
    │   UNCHANGED. Restore UNAFFECTED. (Axis 2 reversibility intact.) │
@@ -634,7 +636,7 @@ never be enabled, and none is folded into a generic class such as `Name`.
 | `ZIP_CODE` | `custom:postal_code` | off |
 
 The allowlist and thresholds are policy data (`[safety_net.nym]`, see
-[policy reference](../../reference/policy.md#safety_netnym)). Without the table
+[policy reference](../../reference/policy.md#safety_net-and-safety_netnym)). Without the table
 the backend uses op-B, the operating point measured in the probe below. An
 unknown label, a label without a Gaze class, a label without a threshold, a
 threshold for a label that is not enabled, or a threshold outside `(0, 1]` fails

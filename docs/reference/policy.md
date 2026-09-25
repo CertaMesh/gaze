@@ -5,7 +5,8 @@ build its detection-and-redaction pipeline. It declares which detectors run,
 which PII classes they emit, and what action the pipeline takes when each class
 is found.
 
-This document describes the schema as shipped in v0.4.0-rc.1. The canonical
+This document describes the current policy schema (`schema_version = "0.1.0"`;
+see [Policy schema versioning](#policy-schema-versioning)). The canonical
 parser lives at [`crates/gaze/src/policy.rs`](../../crates/gaze/src/policy.rs);
 the CLI wiring (argument parsing, context envelope assembly, policy-error
 mapping) is in [`crates/gaze-cli/src/main.rs`](../../crates/gaze-cli/src/main.rs).
@@ -13,6 +14,11 @@ Recognizer backends (regex, dictionary, NER) live in
 [`crates/gaze-recognizers`](../../crates/gaze-recognizers). For version history,
 including shipped CLI and host-integration changes, see
 [`CHANGELOG.md`](../../CHANGELOG.md).
+
+The page runs from use to detail: how `gaze clean` loads a policy, a minimal
+working example, PII classes, the schema table by table, detector authoring,
+CLI overrides, and troubleshooting. Versioning, migration notes, and known
+limits come last.
 
 ## What `policy.toml` is for
 
@@ -39,166 +45,57 @@ custom packs without `core`; Gaze prints a one-line stderr notice when the
 core floor is off. Write a policy when you need
 custom recognizers, dictionaries, or non-tokenize actions.
 
-## CLI overrides for runtime knobs
+## Minimal working example
 
-`policy.toml` is the durable source of truth. `gaze clean` also exposes
-runtime-only overrides for knobs operators commonly vary between invocations.
-Resolution is always:
-
-```text
-CLI flag > policy.toml > Gaze default
-```
-
-| Policy field | CLI flag | Notes |
-|--------------|----------|-------|
-| `[session].scope` | `--session-scope <ephemeral|conversation|persistent>` | Overrides session lifetime for the current clean run. `ephemeral` keeps export-forbidden semantics, so pipe-mode clean exits `Pipeline` if a session blob would be required. |
-| `[session].ttl_secs` | `--session-ttl <SECONDS>` | Existing override for persistent session TTL. |
-| `[ner].model_dir` | `--ner-model-dir <PATH>` | Overrides the NER model directory. If neither CLI nor TOML sets a model directory, no NER detector is registered. |
-| `[ner].locale` | `--ner-locale <BCP47>` | Overrides the NER locale hint. TOML accepts one BCP47 string, not a list. Invalid tags fail closed with `PolicyConfig`. |
-| `[ner].threshold` | `--ner-threshold <FLOAT>` | Existing override for NER confidence threshold; must be `0.0..=1.0`. |
-| `[locale].active` | `--locale <BCP47,...>` | Existing override for the active locale fallback chain. |
-| `[policy.rulepacks].bundled` | `--rulepack-bundled <ID,...>` | Comma-separated and repeatable. Replaces TOML bundled rulepack IDs for the current run; `none` selects no bundled packs. Omission defaults to `core`, even when custom paths are set. |
-| `[policy.rulepacks].paths` | `--rulepack-path <PATH>` | Repeatable. Replaces TOML rulepack paths for the current run. |
-
-Example:
-
-```sh
-gaze clean \
-  --policy=policy.toml \
-  --session-scope=conversation \
-  --ner-model-dir="$HOME/.local/share/gaze/models/davlan-mbert-ner-hrl" \
-  --ner-locale=de \
-  --rulepack-bundled=core,locale-de \
-  --rulepack-path=./workspace-rulepack.toml
-```
-
-If `policy.toml` sets `[session].scope = "persistent"` and the command passes
-`--session-scope=conversation`, the exported `session_blob` records a
-conversation-scoped session. If neither source mentions `[ner].model_dir`, Gaze
-keeps NER disabled rather than registering a placeholder detector.
-
-Policy-document fields have no CLI override by design. Examples include
-recognizer definitions (`[[policy.custom_recognizers]]`), rule definitions
-(`[[rule]]`), rulepack internals, and policy-document metadata. Those fields
-define the auditable contract; changing them requires changing the policy or
-rulepack document itself.
-
-## Policy schema versioning
-
-Every `policy.toml` declares the schema it was authored against:
+`minimal.toml`:
 
 ```toml
-schema_version = "0.1.0"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "tokenize"
 ```
 
-The loader checks the `major.minor` prefix against
-[`SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR`](../../crates/gaze/src/policy.rs) (currently
-`"0.1."`). A mismatch fails closed at load time with a typed envelope:
+Run it:
 
-```json
-{"error":"PolicySchemaUnsupported","exit":2,"found":"0.2.0","supported":"0.1."}
+```console
+$ echo "Email alice@example.invalid now" | gaze clean --policy=minimal.toml
+{"clean_text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
 ```
 
-The envelope is intentionally distinct from `PolicyConfig` so adopters
-upgrading the gaze binary across a contract break see the version mismatch
-directly, rather than chasing a generic policy-load error that shadows the
-real cause. It mirrors the rulepack-side version gate in
-[`crates/gaze/src/rulepack.rs`](../../crates/gaze/src/rulepack.rs).
+Add `--audit-db=redaction.sqlite` to persist the metadata-only SQLite
+redaction log for the invocation. Dictionary rows use
+`dictionary:{name}[#term_index]` source labels so an operator can trace which
+configured term fired without storing raw PII.
 
-### Soft default for pre-versioned policies
+Rust adopters should import the concrete SQLite sink and audit-query API from
+`gaze-audit` directly:
 
-Policies written before the field was introduced (any 0.6.x / 0.7.x policy
-shipped before the `schema_version` field landed) omit `schema_version`. The
-loader soft-defaults the missing field to
-[`DEFAULT_POLICY_SCHEMA_VERSION`](../../crates/gaze/src/policy.rs) (currently
-`"0.1.0"`) so existing deployments continue to load on the binary upgrade
-that introduces the field. New policies should declare `schema_version =
-"0.1.0"` explicitly so a future `0.2.0` migration can detect them.
+```rust
+use gaze_audit::SqliteLogger;
+```
 
-### Migration log
+The v0.5 `gaze` audit feature shim has been removed in v0.6. Paths such as
+`gaze::SqliteLogger` no longer compile; `gaze::RedactionLogger` remains a
+supported facade re-export for the trait, whose canonical home is
+`gaze_types::RedactionLogger`.
 
-Each entry below names a contract break that requires bumping
-`schema_version`. Adopters should consult the migration log when upgrading
-across the named gaze release boundary.
-
-#### `[ner]` block changes (0.6.x → 0.7.x)
-
-The 0.7.0 release tightened the `[ner]` block: `threshold` is now parsed as a
-required-typed field (0.6.x accepted any numeric coercion) and `model_dir`
-relative paths resolve against the policy file rather than the process CWD.
-A policy authored against 0.6.x that uses an unusual `threshold` literal or a
-relative `model_dir` may load against 0.7.x in unexpected ways.
-
-The recommended migration is:
-
-- Quote the threshold as a TOML float (`threshold = 0.3`, not `0.3 `).
-- Express `[ner].model_dir` as an absolute path, or move the policy file to
-  the directory the model is co-located with.
-- Stamp `schema_version = "0.1.0"` on the policy so a future contract break
-  surfaces the typed `PolicySchemaUnsupported` error instead of a generic
-  load failure.
-
-This entry exists because the Pulseflow Laravel demo
-(`CertaMesh/business/dogfooding/pulseflow-demo-2026-05-13`) lost ~30 minutes
-of debugging time to silent `[ner]` schema drift between 0.6.6 and 0.7.1.
-
-## Bundled rulepack version drift
-
-Bundled rulepacks in
-[`crates/gaze-recognizers/embedded`](../../crates/gaze-recognizers/embedded) are
-release artifacts. Their `rulepack_version` tracks the `gaze-recognizers` crate
-version unless a deliberate desync rule is documented before the release ships.
-
-A deliberate desync rule must name the affected bundled rulepack IDs, explain
-why the rulepack contract differs from the crate release, and state when the
-versions converge again. Undocumented drift is a release defect because it
-weakens the audit trail for which recognizer contract shipped with a given
-crate.
-
-## Configuration surfaces - three-surfaces parity table
-
-This table audits every current `policy.toml` field accepted by
-[`Policy::load`](../../crates/gaze/src/policy.rs). Runtime knobs are scalar,
-enum, or path values that can reasonably vary for one `gaze clean` execution;
-they must have a CLI flag, TOML field, and documented default or required
-state. Policy-document fields define recognizers, rules, dictionaries, or
-rulepacks and intentionally stay in TOML only, per the three-surfaces boundary.
-
-| Policy field | Type | CLI flag | TOML | Default | Class | Rationale |
-|---|---|---|---|---|---|---|
-| `Policy.session.scope` | enum | `--session-scope` | `[session].scope` | Required in TOML; policy-less CLI uses `persistent` | runtime knob | CLI/TOML/default parity required for per-run session behavior. |
-| `Policy.session.ttl_secs` | `u64` | `--session-ttl` | `[session].ttl_secs` | Required for `persistent`; policy-less CLI uses `86400` | runtime knob | CLI/TOML/default parity required for per-run session lifetime. |
-| `Policy.ner.model_dir` | path | `--ner-model-dir` | `[ner].model_dir` | Absent; NER disabled unless configured | runtime knob | CLI/TOML/default parity required for per-run NER backend selection. |
-| `Policy.ner.locale` | BCP47 string | `--ner-locale` | `[ner].locale` | Absent; NER backend default | runtime knob | CLI/TOML/default parity required for per-run NER locale selection. `[ner].locale` is a single string, unlike `[locale].active`. |
-| `Policy.ner.threshold` | `f32` | `--ner-threshold` | `[ner].threshold` | `0.3` | runtime knob | CLI/TOML/default parity required for per-run NER sensitivity. |
-| `Policy.locale` | BCP47 list | `--locale` | `[locale].active` | Rulepack defaults, then system default chain | runtime knob | CLI/TOML/default parity required for per-run locale gating. |
-| `Policy.rulepacks.bundled` | string list | `--rulepack-bundled` | `[policy.rulepacks].bundled` | `["core"]` when the table or its `bundled` key is omitted | runtime knob | Explicit `bundled = []` or CLI `none` disables bundled packs. |
-| `Policy.rulepacks.paths` | path list | `--rulepack-path` | `[policy.rulepacks].paths` | Empty | runtime knob | CLI/TOML/default parity required for per-run external rulepack selection. |
-| `Policy.detectors` | recognizer list | none | `[[policy.custom_recognizers]]` | Empty when custom recognizers are omitted | policy document | Recognizer definitions are TOML-only structural policy; drawer `e8b5c041` boundary; bulk authoring is better in TOML. |
-| `Policy.detectors[].kind` | enum | none | `[[policy.custom_recognizers]].kind` | Required | policy document | Recognizer type is part of TOML-only recognizer definition; drawer `e8b5c041` boundary, not a per-run CLI knob. |
-| `Policy.detectors[].name` | string | none | `[[policy.custom_recognizers]].name` | Required | policy document | Recognizer identity is audit-relevant structural policy; drawer `e8b5c041` boundary keeps it in TOML. |
-| `Policy.detectors[].pattern` | regex string | none | `[[policy.custom_recognizers]].pattern` | Required for regex recognizers | policy document | Regex authoring needs reviewable TOML structure; drawer `e8b5c041` boundary, not shell-flag input. |
-| `Policy.detectors[].class` | class string | none | `[[policy.custom_recognizers]].class` | Required | policy document | Class mapping is recognizer policy data; drawer `e8b5c041` boundary keeps auditable mappings in TOML. |
-| `Policy.detectors[].dictionary_name` | string | none | `[[policy.custom_recognizers]].dictionary` or `.terms_from_context` | Recognizer name | policy document | Dictionary binding is adopter-defined recognizer policy; drawers `e8b5c041` and `eac549ae`, TOML-only. |
-| `Policy.detectors[].case_sensitive` | bool | none | `[[policy.custom_recognizers]].case_sensitive` | `false` | policy document | Per-recognizer dictionary behavior belongs with the recognizer definition; drawer `e8b5c041`, not a runtime knob. |
-| `Policy.detectors[].token_family` | string | none | `[[policy.custom_recognizers]].token_family` | `"counter"` | policy document | Token-family choice is part of restorable recognizer policy; drawer `e8b5c041`, TOML-only for auditability. |
-| `Policy.dictionaries` | dictionary list | none | `[[policy.custom_recognizers]].terms`, `.terms_file`, `.terms_from_context` | Empty unless dictionary recognizers define terms | policy document | Term-list authoring is adopter-defined policy data; drawer `eac549ae`; bulk authoring belongs in TOML or files. |
-| `Policy.dictionaries[].terms` | string list | none | `[[policy.custom_recognizers]].terms` | Required for inline dictionary recognizers without `terms_file` or `terms_from_context` | policy document | Inline terms are adopter-defined dictionary data; drawer `eac549ae`; TOML is safer than CLI list entry. |
-| `Policy.dictionaries[].terms_file` | path | none | `[[policy.custom_recognizers]].terms_file` | Absent | policy document | Dictionary file references are policy data; drawer `eac549ae`; TOML keeps reviewable data-source provenance. |
-| `Policy.dictionaries[].terms_from_context` | string | none | `[[policy.custom_recognizers]].terms_from_context` | Absent | policy document | Context dictionary binding is adopter-defined policy; drawer `eac549ae`, not a global runtime flag. |
-| `Policy.rules` | rule list | none | `[[rule]]` | At least one rule required | policy document | Class and column action mapping is TOML-only structural policy; bulk authoring is better in TOML. |
-| `Policy.rules[].kind` | enum | none | `[[rule]].kind` | Required | policy document | Rule kind selects structural policy shape (`class` or `column`); TOML-only to preserve auditability. |
-| `Policy.rules[].action` | enum | none | `[[rule]].action` | Required | policy document | Rule action is policy contract data, not a per-run override; TOML keeps restore behavior auditable. |
-| `Policy.rules[].class` | class string | none | `[[rule]].class` | Required for `kind = "class"` | policy document | Class rule mapping (`[[rule]] class = "...", action = "..."`) is TOML-only structural data. |
-| `Policy.rules[].column` | string | none | `[[rule]].column` | Required for `kind = "column"`; rejected by CLI mode | policy document | Column rules require file-shaped policy context and are rejected by CLI mode, so no CLI flag is exposed. |
-| `Policy.detectors` legacy surface | recognizer list | none | `[[detector]]` | Unsupported in v0.4; migrate to `[[policy.custom_recognizers]]` | explicitly deferred: retired compatibility surface | Retired compatibility surface remains documented only to explain migration; no CLI flag should revive it. |
-
-Runtime-knob verification is covered by the CLI integration suite:
-`s1_three_surfaces_flags_are_exposed_and_bundled_ids_unchanged` checks the
-complete flag set, while focused tests cover symmetric failure and observed
-behavior for session scope, session TTL, NER threshold/model/locale, active
-locale, bundled rulepacks, and rulepack paths. The audit found no runtime
-policy field missing a CLI flag.
+This is the same fixture the CLI integration suite uses
+(`crates/gaze/tests/cli_pipe.rs::t16_clean_with_policy_tokenizes_email`).
 
 ## Classes
 
@@ -303,159 +200,6 @@ For universal categories (phone numbers, IBAN, IP addresses), check whether a
 current or planned core rulepack already covers the class before defining your
 own.
 
-## Minimal working example
-
-`minimal.toml`:
-
-```toml
-[session]
-scope = "persistent"
-ttl_secs = 86400
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
-
-[[rule]]
-kind = "class"
-class = "email"
-action = "tokenize"
-
-[[rule]]
-kind = "default"
-action = "tokenize"
-```
-
-Run it:
-
-```console
-$ echo "Email alice@example.invalid now" | gaze clean --policy=minimal.toml
-{"clean_text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
-```
-
-Add `--audit-db=redaction.sqlite` to persist the metadata-only SQLite
-redaction log for the invocation. Dictionary rows use
-`dictionary:{name}[#term_index]` source labels so an operator can trace which
-configured term fired without storing raw PII.
-
-Rust adopters should import the concrete SQLite sink and audit-query API from
-`gaze-audit` directly:
-
-```rust
-use gaze_audit::SqliteLogger;
-```
-
-The v0.5 `gaze` audit feature shim has been removed in v0.6. Paths such as
-`gaze::SqliteLogger` no longer compile; `gaze::RedactionLogger` remains a
-supported facade re-export for the trait, whose canonical home is
-`gaze_types::RedactionLogger`.
-
-This is the same fixture the CLI integration suite uses
-(`crates/gaze/tests/cli_pipe.rs::t16_clean_with_policy_tokenizes_email`).
-
-## Known limits - NER and prompt shape
-
-NER is not a region parser. A model that catches names in natural prose can
-miss the same bytes in agent prompt preambles, email headers, forwarded-message
-blocks, and auto-generated footers because those regions do not look like the
-training prose the model learned. v0.6 keeps NER as a useful free-text layer,
-but adds a deterministic `anchored_match` recognizer kind for cue-anchored
-structural contexts that commonly appear in agent workflows.
-
-`anchored_match` has a closed primitive surface:
-
-- `boundary` controls what may follow the extracted span.
-- `name_shape` is currently `person_name`.
-- `cue_position` says whether the name appears before or after the cue.
-- `right_window_chars` bounds how far the recognizer may search after a cue.
-
-The cue text itself is intentionally data-driven. Bundled locale rulepacks
-define open cue buckets:
-
-- `forward_markers` for forwarded-message headers.
-- `agent_recipient_cues` for agent reply/draft preambles.
-- `footer_cues` for generated sender/footer lines.
-
-The default v0.6 posture is conservative: structural recognizers catch the
-documented GH#24 leak shapes while the open cue surface is held by the
-`p6_anchored_match_false_positive_budget_stays_within_limit` regression test.
-The v0.6 synthesis matrix explicitly leaves these classes out of scope:
-
-- Subject-line and `Re:` text such as `Re: Order 12345 - Status update from Alice Example`.
-- Unanchored scheduling prose such as `Schedule a call with Alice next Tuesday`.
-- Markdown code-block exclusion. `anchored_match` and email-header recognizers
-  still fire inside fenced code blocks in v0.6.
-- URL exclusion. Cue-like text inside URLs is not region-filtered in v0.6.
-- Additional `name_shape` variants beyond `person_name`.
-- Per-region NER thresholding. `[ner].threshold` is global to the NER
-  recognizer invocation, not separately tunable for email headers, prompt
-  preambles, footers, or body prose.
-
-If an integration wraps raw email content in markdown code fences only to
-preserve formatting, unwrap the content before passing it to the Gaze pipeline
-and re-wrap the clean output afterward. RegionHint-style envelope markers for
-`CodeBlock` and `Url` are deferred to v0.7.
-
-### `[safety_net]` and `[safety_net.nym]`
-
-`backend = "nym"` activates the opt-in Nym-small safety net for CLI commands
-that load the policy and for Rust `gaze_assembly::build_pipeline`. An absent
-table or `backend = "none"` selects no safety net. Other values fail at policy
-load; `openai-filter` remains command-line only in this release. A Nym request
-without a usable, digest-verified bundle or the `safety-net-nym` feature fails
-closed. Install the bundle with `gaze setup --safety-net nym`.
-
-```toml
-[safety_net]
-backend = "nym"
-
-[safety_net.nym]
-model_dir = "/absolute/path/to/nym-small-int8"
-labels = ["BUILDING_NUMBER", "DATE_OF_BIRTH", "LICENSE_PLATE", "USERNAME"]
-threshold = { BUILDING_NUMBER = 0.5, DATE_OF_BIRTH = 0.9, LICENSE_PLATE = 0.5, USERNAME = 0.5 }
-```
-
-The labels and thresholds shown are op-B, also used when they are omitted.
-`model_dir` is optional in the policy. CLI path precedence is
-`--nym-model-dir` > `GAZE_NYM_MODEL_DIR` > policy `model_dir`; Rust assembly
-uses the policy path or an explicit override argument, without reading the
-environment.
-
-- `labels` is the allowlist. Only `BUILDING_NUMBER`, `DATE_OF_BIRTH`,
-  `LICENSE_PLATE`, `TAX_ID`, `USERNAME` and `ZIP_CODE` have a Gaze class. Any
-  other of the 40 Nym labels (for example `GIVEN_NAME`) fails at load, as does a
-  spelling that is not a Nym label, an empty list, or a repeated label.
-- `threshold` needs exactly one entry per listed label, each in `(0, 1]`. A
-  missing threshold or a threshold for an unlisted label fails at load.
-- Unknown keys in the table fail at load. A Nym settings table alone does not
-  activate the backend.
-
-### CLI safety-net overrides
-
-Repeat `--safety-net` to run more than one backend. Any command-line list
-replaces the policy choice for that run; dropping policy Nym prints a notice.
-`--safety-net none` disables all nets for one run and cannot be combined with
-another value. `--safety-net-backend` replaces exactly one command-line
-`--safety-net` value; with zero or multiple values it is a usage error.
-The locale-aware `--safety-net-registry` remains a separate CLI mode and
-cannot be combined with these selectors.
-
-### v0.5.1 to v0.6 migration note
-
-Adopters using the bundled rulepacks should load `core` plus the relevant
-locale bundle. A German workflow that sets `[locale].active = ["de-DE"]` and
-loads `["core", "locale-de"]` gets cue-anchored detection for forwarded-message
-markers, agent-recipient preambles, and auto-footers without editing existing
-custom recognizers. Mixed German/English prompt templates can load
-`["core", "locale-de", "locale-en"]`.
-
-Per-tenant cue strings belong in policy data, not code. Ship a custom rulepack
-that adds entries to `forward_markers`, `agent_recipient_cues`, or
-`footer_cues`. Keep cue additions narrow and add local regression fixtures
-before broadening a bucket.
-
 ## Schema reference
 
 TOML tables use closed schemas unless explicitly documented otherwise — any key
@@ -479,6 +223,34 @@ ttl_secs = 86400       # required when scope = "persistent"; optional otherwise
 > Resolved in v0.3.1: `gaze clean` now constructs its session from
 > `[session]`. `--session-ttl` is an explicit CLI override for persistent
 > session TTL; when the flag is omitted, `ttl_secs` from policy is used.
+
+#### Session scope and TTL
+
+`[session]` declares the session contract the policy expects. `gaze clean`
+exports a `SensitiveSnapshot` (the `session_blob` field of stdout) so that
+`gaze restore` can rebuild the token↔value map later.
+
+- `scope = "ephemeral"` — *not usable from the CLI*. The library refuses to
+  export ephemeral sessions (`Error::ExportForbidden`); a CLI invocation
+  with this scope would be unable to emit `session_blob`.
+- `scope = "conversation"` — reserved for library callers that scope
+  sessions to a specific conversation id; the CLI does not surface this
+  today.
+- `scope = "persistent"` — the only scope `gaze clean` produces. Requires
+  `ttl_secs > 0`.
+
+The `--session-ttl=<secs>` CLI flag overrides the policy TTL for persistent
+sessions. If the flag is omitted, `gaze clean` uses `[session].ttl_secs`;
+a policy-less run falls back to `86400`.
+
+The `--ner-threshold=<float>` CLI flag overrides `[ner].threshold` for one
+`gaze clean` invocation. Precedence is CLI flag, then policy TOML, then the
+default `0.3`. Values outside `0.0..=1.0` fail closed as `PolicyConfig`.
+
+TTL enforcement on `gaze restore`: when the imported snapshot's `issued_at +
+ttl_secs` has passed, restore fails with **exit `3` `BlobExpired`**. (The
+`issued_at` field landed in v0.3.0-rc.2 — older blobs predating the field
+treat the TTL as bypassed for forward-compatibility.)
 
 ### `[policy.rulepacks]`
 
@@ -1016,6 +788,21 @@ bundled family names are listed under
 > even though its member classes are protected. See
 > [Residual coverage](redaction-classes.md#residual-coverage).
 
+### Rule actions
+
+| `action` value      | What it does                                                                                                       |
+|---------------------|--------------------------------------------------------------------------------------------------------------------|
+| `"tokenize"`        | Replace the matched span with an angle-bracketed counter-family token (`<{session_hex}:Email_1>`, `<{session_hex}:Name_2>`, `<{session_hex}:Custom:order_id_3>`, …). Restorable via the session blob. |
+| `"redact"`          | Replace the matched span with the literal string `[REDACTED]`. Not restorable — the original value is dropped from the session map. |
+| `"format_preserve"` | Replace with a fake value that preserves the surface shape (`email1.{session_hex}@gaze-fake.invalid` for emails; `{session_hex}:name_1`, `{session_hex}:location_1`, `{session_hex}:custom:order_id_1` for everything else). Restorable. |
+| `"generalize"`      | Replace with a bracketed class label: `[EMAIL]`, `[NAME]`, `[LOCATION]`, `[ORGANIZATION]`, or `[CUSTOM_NAME]` (uppercased custom name with underscores preserved). Restoration returns the label, not the original value. |
+| `"preserve"`        | Leave the matched span unchanged, except for characters that a candidate of a protected class also claimed: those leave as a fragment under that class's own action (see [Residual coverage](redaction-classes.md#residual-coverage)). The detection is still logged. |
+
+`Tokenize`, `FormatPreserve`, `Redact`, and `Generalize` all increment the
+`stats.detections` counter in `gaze clean`'s stdout. `Preserve` does not.
+
+There is no `"passthrough"` action — the closest equivalent is `"preserve"`.
+
 ### `[ner]` (optional)
 
 ```toml
@@ -1044,6 +831,40 @@ downloaded from `onnx/model_int8.onnx` and verified against the repository-root
 [`crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json`](../../crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json);
 the canonical copy-paste policy block is
 [`crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml`](../../crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml).
+
+### `[safety_net]` and `[safety_net.nym]`
+
+`backend = "nym"` activates the opt-in Nym-small safety net for CLI commands
+that load the policy and for Rust `gaze_assembly::build_pipeline`. An absent
+table or `backend = "none"` selects no safety net. Other values fail at policy
+load; `openai-filter` remains command-line only in this release. A Nym request
+without a usable, digest-verified bundle or the `safety-net-nym` feature fails
+closed. Install the bundle with `gaze setup --safety-net nym`.
+
+```toml
+[safety_net]
+backend = "nym"
+
+[safety_net.nym]
+model_dir = "/absolute/path/to/nym-small-int8"
+labels = ["BUILDING_NUMBER", "DATE_OF_BIRTH", "LICENSE_PLATE", "USERNAME"]
+threshold = { BUILDING_NUMBER = 0.5, DATE_OF_BIRTH = 0.9, LICENSE_PLATE = 0.5, USERNAME = 0.5 }
+```
+
+The labels and thresholds shown are op-B, also used when they are omitted.
+`model_dir` is optional in the policy. CLI path precedence is
+`--nym-model-dir` > `GAZE_NYM_MODEL_DIR` > policy `model_dir`; Rust assembly
+uses the policy path or an explicit override argument, without reading the
+environment.
+
+- `labels` is the allowlist. Only `BUILDING_NUMBER`, `DATE_OF_BIRTH`,
+  `LICENSE_PLATE`, `TAX_ID`, `USERNAME` and `ZIP_CODE` have a Gaze class. Any
+  other of the 40 Nym labels (for example `GIVEN_NAME`) fails at load, as does a
+  spelling that is not a Nym label, an empty list, or a repeated label.
+- `threshold` needs exactly one entry per listed label, each in `(0, 1]`. A
+  missing threshold or a threshold for an unlisted label fails at load.
+- Unknown keys in the table fail at load. A Nym settings table alone does not
+  activate the backend.
 
 ## Detectors
 
@@ -1107,11 +928,14 @@ only, never next to the symbol.
 `Policy::load` compiles the pattern, so a malformed regex fails fast with
 `PolicyConfig` and never reaches `gaze clean`'s stdin read.
 
-Detection order matters when spans overlap: longer spans win first, then
-declaration order, then earlier start position (see
-[`pipeline.rs::select_winners`](../../crates/gaze/src/pipeline.rs)). This is
-why the document above stresses "rules are evaluated in declaration order"
-— the same applies to detectors when they fight over the same bytes.
+Detection order matters when spans overlap. After validator veto,
+collision-family precedence, mandatory-anchor context, containment
+precedence, and structured containment, the generic tiers decide: class priority > rule priority > score >
+span length > lexicographically smaller recognizer id (`compare_base_ladder` in
+[`crates/gaze/src/resolver.rs`](../../crates/gaze/src/resolver.rs)).
+Declaration order does not break a tie between recognizers. See
+[Full conflict-resolution order](redaction-classes.md#full-conflict-resolution-order)
+for every step.
 
 ### NER (`[ner]` block)
 
@@ -1128,204 +952,104 @@ maps `DATE` to `"drop"` to preserve Gaze's no-default-on date posture. Map
 emitted classes to actions via `kind = "class"` rules — declare detector-side
 once via `[ner]`, then act on the classes the model produces.
 
-## Rule actions
+## CLI overrides for runtime knobs
 
-| `action` value      | What it does                                                                                                       |
-|---------------------|--------------------------------------------------------------------------------------------------------------------|
-| `"tokenize"`        | Replace the matched span with an angle-bracketed counter-family token (`<{session_hex}:Email_1>`, `<{session_hex}:Name_2>`, `<{session_hex}:Custom:order_id_3>`, …). Restorable via the session blob. |
-| `"redact"`          | Replace the matched span with the literal string `[REDACTED]`. Not restorable — the original value is dropped from the session map. |
-| `"format_preserve"` | Replace with a fake value that preserves the surface shape (`email1.{session_hex}@gaze-fake.invalid` for emails; `{session_hex}:name_1`, `{session_hex}:location_1`, `{session_hex}:custom:order_id_1` for everything else). Restorable. |
-| `"generalize"`      | Replace with a bracketed class label: `[EMAIL]`, `[NAME]`, `[LOCATION]`, `[ORGANIZATION]`, or `[CUSTOM_NAME]` (uppercased custom name with underscores preserved). Restoration returns the label, not the original value. |
-| `"preserve"`        | Leave the matched span unchanged, except for characters that a candidate of a protected class also claimed: those leave as a fragment under that class's own action (see [Residual coverage](redaction-classes.md#residual-coverage)). The detection is still logged. |
+`policy.toml` is the durable source of truth. `gaze clean` also exposes
+runtime-only overrides for knobs operators commonly vary between invocations.
+Resolution is always:
 
-`Tokenize`, `FormatPreserve`, `Redact`, and `Generalize` all increment the
-`stats.detections` counter in `gaze clean`'s stdout. `Preserve` does not.
-
-There is no `"passthrough"` action — the closest equivalent is `"preserve"`.
-
-## Session scope and TTL
-
-`[session]` declares the session contract the policy expects. `gaze clean`
-exports a `SensitiveSnapshot` (the `session_blob` field of stdout) so that
-`gaze restore` can rebuild the token↔value map later.
-
-- `scope = "ephemeral"` — *not usable from the CLI*. The library refuses to
-  export ephemeral sessions (`Error::ExportForbidden`); a CLI invocation
-  with this scope would be unable to emit `session_blob`.
-- `scope = "conversation"` — reserved for library callers that scope
-  sessions to a specific conversation id; the CLI does not surface this
-  today.
-- `scope = "persistent"` — the only scope `gaze clean` produces. Requires
-  `ttl_secs > 0`.
-
-The `--session-ttl=<secs>` CLI flag overrides the policy TTL for persistent
-sessions. If the flag is omitted, `gaze clean` uses `[session].ttl_secs`;
-a policy-less run falls back to `86400`.
-
-The `--ner-threshold=<float>` CLI flag overrides `[ner].threshold` for one
-`gaze clean` invocation. Precedence is CLI flag, then policy TOML, then the
-default `0.3`. Values outside `0.0..=1.0` fail closed as `PolicyConfig`.
-
-TTL enforcement on `gaze restore`: when the imported snapshot's `issued_at +
-ttl_secs` has passed, restore fails with **exit `3` `BlobExpired`**. (The
-`issued_at` field landed in v0.3.0-rc.2 — older blobs predating the field
-treat the TTL as bypassed for forward-compatibility.)
-
-## Full worked examples
-
-### Example A — Tokenize emails, redact phone numbers
-
-```toml
-[session]
-scope = "persistent"
-ttl_secs = 86400
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "phones_de"
-pattern = '\+49[ \-]?\d{2,4}[ \-]?\d{3,8}'
-class = "custom:phone_de"
-
-[[rule]]
-kind = "class"
-class = "email"
-action = "tokenize"
-
-[[rule]]
-kind = "class"
-class = "custom:phone_de"
-action = "redact"
-
-[[rule]]
-kind = "default"
-action = "tokenize"
+```text
+CLI flag > policy.toml > Gaze default
 ```
 
-Input `Reach Alice at alice@example.invalid or +49 30 0000 0000` produces
-`Reach Alice at <{session_hex}:Email_1> or [REDACTED]`.
+| Policy field | CLI flag | Notes |
+|--------------|----------|-------|
+| `[session].scope` | `--session-scope <ephemeral|conversation|persistent>` | Overrides session lifetime for the current clean run. `ephemeral` keeps export-forbidden semantics, so pipe-mode clean exits `Pipeline` if a session blob would be required. |
+| `[session].ttl_secs` | `--session-ttl <SECONDS>` | Existing override for persistent session TTL. |
+| `[ner].model_dir` | `--ner-model-dir <PATH>` | Overrides the NER model directory. If neither CLI nor TOML sets a model directory, no NER detector is registered. |
+| `[ner].locale` | `--ner-locale <BCP47>` | Overrides the NER locale hint. TOML accepts one BCP47 string, not a list. Invalid tags fail closed with `PolicyConfig`. |
+| `[ner].threshold` | `--ner-threshold <FLOAT>` | Existing override for NER confidence threshold; must be `0.0..=1.0`. |
+| `[locale].active` | `--locale <BCP47,...>` | Existing override for the active locale fallback chain. |
+| `[policy.rulepacks].bundled` | `--rulepack-bundled <ID,...>` | Comma-separated and repeatable. Replaces TOML bundled rulepack IDs for the current run; `none` selects no bundled packs. Omission defaults to `core`, even when custom paths are set. |
+| `[policy.rulepacks].paths` | `--rulepack-path <PATH>` | Repeatable. Replaces TOML rulepack paths for the current run. |
 
-### Example B — Custom class for tenant order IDs
+Example:
 
-```toml
-[session]
-scope = "persistent"
-ttl_secs = 86400
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "order_ids"
-pattern = '\bORD-\d{6}\b'
-class = "custom:order_id"
-
-[[rule]]
-kind = "class"
-class = "custom:order_id"
-action = "tokenize"
-
-[[rule]]
-kind = "default"
-action = "tokenize"
+```sh
+gaze clean \
+  --policy=policy.toml \
+  --session-scope=conversation \
+  --ner-model-dir="$HOME/.local/share/gaze/models/davlan-mbert-ner-hrl" \
+  --ner-locale=de \
+  --rulepack-bundled=core,locale-de \
+  --rulepack-path=./workspace-rulepack.toml
 ```
 
-`Order ORD-123456 is queued.` → `Order <{session_hex}:Custom:order_id_1> is queued.`
+If `policy.toml` sets `[session].scope = "persistent"` and the command passes
+`--session-scope=conversation`, the exported `session_blob` records a
+conversation-scoped session. If neither source mentions `[ner].model_dir`, Gaze
+keeps NER disabled rather than registering a placeholder detector.
 
-### Example C — Format-preserving emails for downstream parsers
+Policy-document fields have no CLI override by design. Examples include
+recognizer definitions (`[[policy.custom_recognizers]]`), rule definitions
+(`[[rule]]`), rulepack internals, and policy-document metadata. Those fields
+define the auditable contract; changing them requires changing the policy or
+rulepack document itself.
 
-When a downstream LLM or parser expects emails to look like emails, use
-`format_preserve` so the surface shape survives redaction.
+### CLI safety-net overrides
 
-```toml
-[session]
-scope = "persistent"
-ttl_secs = 86400
+Repeat `--safety-net` to run more than one backend. Any command-line list
+replaces the policy choice for that run; dropping policy Nym prints a notice.
+`--safety-net none` disables all nets for one run and cannot be combined with
+another value. `--safety-net-backend` replaces exactly one command-line
+`--safety-net` value; with zero or multiple values it is a usage error.
+The locale-aware `--safety-net-registry` remains a separate CLI mode and
+cannot be combined with these selectors.
 
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
+### Configuration surfaces - three-surfaces parity table
 
-[[rule]]
-kind = "class"
-class = "email"
-action = "format_preserve"
+This table audits every current `policy.toml` field accepted by
+[`Policy::load`](../../crates/gaze/src/policy.rs). Runtime knobs are scalar,
+enum, or path values that can reasonably vary for one `gaze clean` execution;
+they must have a CLI flag, TOML field, and documented default or required
+state. Policy-document fields define recognizers, rules, dictionaries, or
+rulepacks and intentionally stay in TOML only, per the three-surfaces boundary.
 
-[[rule]]
-kind = "default"
-action = "tokenize"
-```
+| Policy field | Type | CLI flag | TOML | Default | Class | Rationale |
+|---|---|---|---|---|---|---|
+| `Policy.session.scope` | enum | `--session-scope` | `[session].scope` | Required in TOML; policy-less CLI uses `persistent` | runtime knob | CLI/TOML/default parity required for per-run session behavior. |
+| `Policy.session.ttl_secs` | `u64` | `--session-ttl` | `[session].ttl_secs` | Required for `persistent`; policy-less CLI uses `86400` | runtime knob | CLI/TOML/default parity required for per-run session lifetime. |
+| `Policy.ner.model_dir` | path | `--ner-model-dir` | `[ner].model_dir` | Absent; NER disabled unless configured | runtime knob | CLI/TOML/default parity required for per-run NER backend selection. |
+| `Policy.ner.locale` | BCP47 string | `--ner-locale` | `[ner].locale` | Absent; NER backend default | runtime knob | CLI/TOML/default parity required for per-run NER locale selection. `[ner].locale` is a single string, unlike `[locale].active`. |
+| `Policy.ner.threshold` | `f32` | `--ner-threshold` | `[ner].threshold` | `0.3` | runtime knob | CLI/TOML/default parity required for per-run NER sensitivity. |
+| `Policy.locale` | BCP47 list | `--locale` | `[locale].active` | Rulepack defaults, then system default chain | runtime knob | CLI/TOML/default parity required for per-run locale gating. |
+| `Policy.rulepacks.bundled` | string list | `--rulepack-bundled` | `[policy.rulepacks].bundled` | `["core"]` when the table or its `bundled` key is omitted | runtime knob | Explicit `bundled = []` or CLI `none` disables bundled packs. |
+| `Policy.rulepacks.paths` | path list | `--rulepack-path` | `[policy.rulepacks].paths` | Empty | runtime knob | CLI/TOML/default parity required for per-run external rulepack selection. |
+| `Policy.detectors` | recognizer list | none | `[[policy.custom_recognizers]]` | Empty when custom recognizers are omitted | policy document | Recognizer definitions are TOML-only structural policy; drawer `e8b5c041` boundary; bulk authoring is better in TOML. |
+| `Policy.detectors[].kind` | enum | none | `[[policy.custom_recognizers]].kind` | Required | policy document | Recognizer type is part of TOML-only recognizer definition; drawer `e8b5c041` boundary, not a per-run CLI knob. |
+| `Policy.detectors[].name` | string | none | `[[policy.custom_recognizers]].name` | Required | policy document | Recognizer identity is audit-relevant structural policy; drawer `e8b5c041` boundary keeps it in TOML. |
+| `Policy.detectors[].pattern` | regex string | none | `[[policy.custom_recognizers]].pattern` | Required for regex recognizers | policy document | Regex authoring needs reviewable TOML structure; drawer `e8b5c041` boundary, not shell-flag input. |
+| `Policy.detectors[].class` | class string | none | `[[policy.custom_recognizers]].class` | Required | policy document | Class mapping is recognizer policy data; drawer `e8b5c041` boundary keeps auditable mappings in TOML. |
+| `Policy.detectors[].dictionary_name` | string | none | `[[policy.custom_recognizers]].dictionary` or `.terms_from_context` | Recognizer name | policy document | Dictionary binding is adopter-defined recognizer policy; drawers `e8b5c041` and `eac549ae`, TOML-only. |
+| `Policy.detectors[].case_sensitive` | bool | none | `[[policy.custom_recognizers]].case_sensitive` | `false` | policy document | Per-recognizer dictionary behavior belongs with the recognizer definition; drawer `e8b5c041`, not a runtime knob. |
+| `Policy.detectors[].token_family` | string | none | `[[policy.custom_recognizers]].token_family` | `"counter"` | policy document | Token-family choice is part of restorable recognizer policy; drawer `e8b5c041`, TOML-only for auditability. |
+| `Policy.dictionaries` | dictionary list | none | `[[policy.custom_recognizers]].terms`, `.terms_file`, `.terms_from_context` | Empty unless dictionary recognizers define terms | policy document | Term-list authoring is adopter-defined policy data; drawer `eac549ae`; bulk authoring belongs in TOML or files. |
+| `Policy.dictionaries[].terms` | string list | none | `[[policy.custom_recognizers]].terms` | Required for inline dictionary recognizers without `terms_file` or `terms_from_context` | policy document | Inline terms are adopter-defined dictionary data; drawer `eac549ae`; TOML is safer than CLI list entry. |
+| `Policy.dictionaries[].terms_file` | path | none | `[[policy.custom_recognizers]].terms_file` | Absent | policy document | Dictionary file references are policy data; drawer `eac549ae`; TOML keeps reviewable data-source provenance. |
+| `Policy.dictionaries[].terms_from_context` | string | none | `[[policy.custom_recognizers]].terms_from_context` | Absent | policy document | Context dictionary binding is adopter-defined policy; drawer `eac549ae`, not a global runtime flag. |
+| `Policy.rules` | rule list | none | `[[rule]]` | At least one rule required | policy document | Class and column action mapping is TOML-only structural policy; bulk authoring is better in TOML. |
+| `Policy.rules[].kind` | enum | none | `[[rule]].kind` | Required | policy document | Rule kind selects structural policy shape (`class` or `column`); TOML-only to preserve auditability. |
+| `Policy.rules[].action` | enum | none | `[[rule]].action` | Required | policy document | Rule action is policy contract data, not a per-run override; TOML keeps restore behavior auditable. |
+| `Policy.rules[].class` | class string | none | `[[rule]].class` | Required for `kind = "class"` | policy document | Class rule mapping (`[[rule]] class = "...", action = "..."`) is TOML-only structural data. |
+| `Policy.rules[].column` | string | none | `[[rule]].column` | Required for `kind = "column"`; rejected by CLI mode | policy document | Column rules require file-shaped policy context and are rejected by CLI mode, so no CLI flag is exposed. |
+| `Policy.detectors` legacy surface | recognizer list | none | `[[detector]]` | Unsupported in v0.4; migrate to `[[policy.custom_recognizers]]` | explicitly deferred: retired compatibility surface | Retired compatibility surface remains documented only to explain migration; no CLI flag should revive it. |
 
-`Mail alice@example.invalid` → `Mail email1.{session_hex}@gaze-fake.invalid`. Restoration returns
-the real address.
-
-### Example D — Mixed regex + NER + custom class
-
-The canonical NER subset of this example lives in
-[`crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml`](../../crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml).
-
-```toml
-[session]
-scope = "persistent"
-ttl_secs = 86400
-
-[ner]
-model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
-locale = "de"
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
-
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "order_ids"
-pattern = '\bORD-\d{6}\b'
-class = "custom:order_id"
-
-[[rule]]
-kind = "class"
-class = "email"
-action = "tokenize"
-
-[[rule]]
-kind = "class"
-class = "name"
-action = "tokenize"
-
-[[rule]]
-kind = "class"
-class = "location"
-action = "generalize"
-
-[[rule]]
-kind = "class"
-class = "organization"
-action = "preserve"
-
-[[rule]]
-kind = "class"
-class = "custom:order_id"
-action = "redact"
-
-[[rule]]
-kind = "default"
-action = "preserve"
-```
-
-NER provides `name`, `location`, `organization` detections; regex
-detectors provide `email` and `custom:order_id`. Each class maps to a
-different action. Note that `organization = preserve` lets brand names
-through while `name = tokenize` swaps person names for restorable tokens.
-The `preserve` default sends every detected class without its own rule to the
-model raw.
+Runtime-knob verification is covered by the CLI integration suite:
+`s1_three_surfaces_flags_are_exposed_and_bundled_ids_unchanged` checks the
+complete flag set, while focused tests cover symmetric failure and observed
+behavior for session scope, session TTL, NER threshold/model/locale, active
+locale, bundled rulepacks, and rulepack paths. The audit found no runtime
+policy field missing a CLI flag.
 
 ## Troubleshooting
 
@@ -1347,13 +1071,139 @@ and is summarised here.
 | `{"error":"PolicyConfig","exit":2}`     | `NerLoad`                  | 2    | `[ner] model_dir` resolves but the model bundle is missing or corrupt. Verify the install path against the README. |
 | `{"error":"PolicyConfig","exit":2,"detail":"column rules not supported in CLI mode"}` | `UnsupportedRuleKind` | 2 | `gaze clean` received a policy containing `kind = "column"`. Use library structured input for column rules. |
 
-## See also
+## Full worked examples
 
-- [`CHANGELOG.md`](../../CHANGELOG.md) — version history, including shipped CLI
-  and host-integration changes.
-- [`README.md`](../../README.md) — what Gaze is, benchmark summary, quickstart, install.
-- [`crates/gaze/src/policy.rs`](../../crates/gaze/src/policy.rs) — canonical
-  parser; the source of truth for every field on this page.
+Four complete policies (tokenize emails and redact phone numbers, a tenant
+order-ID class, format-preserving emails, and mixed regex + NER + custom
+classes) live in [Write a policy: worked examples](../how-to/policy/policy-examples.md).
+
+## Policy schema versioning
+
+Every `policy.toml` declares the schema it was authored against:
+
+```toml
+schema_version = "0.1.0"
+```
+
+The loader checks the `major.minor` prefix against
+[`SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR`](../../crates/gaze/src/policy.rs) (currently
+`"0.1."`). A mismatch fails closed at load time with a typed envelope:
+
+```json
+{"error":"PolicySchemaUnsupported","exit":2,"found":"0.2.0","supported":"0.1."}
+```
+
+The envelope is intentionally distinct from `PolicyConfig` so adopters
+upgrading the gaze binary across a contract break see the version mismatch
+directly, rather than chasing a generic policy-load error that shadows the
+real cause. It mirrors the rulepack-side version gate in
+[`crates/gaze/src/rulepack.rs`](../../crates/gaze/src/rulepack.rs).
+
+### Soft default for pre-versioned policies
+
+Policies written before the field was introduced (any 0.6.x / 0.7.x policy
+shipped before the `schema_version` field landed) omit `schema_version`. The
+loader soft-defaults the missing field to
+[`DEFAULT_POLICY_SCHEMA_VERSION`](../../crates/gaze/src/policy.rs) (currently
+`"0.1.0"`) so existing deployments continue to load on the binary upgrade
+that introduces the field. New policies should declare `schema_version =
+"0.1.0"` explicitly so a future `0.2.0` migration can detect them.
+
+### Migration log
+
+Each entry below names a contract break that requires bumping
+`schema_version`. Adopters should consult the migration log when upgrading
+across the named gaze release boundary.
+
+#### `[ner]` block changes (0.6.x → 0.7.x)
+
+The 0.7.0 release tightened the `[ner]` block: `threshold` is now parsed as a
+required-typed field (0.6.x accepted any numeric coercion) and `model_dir`
+relative paths resolve against the policy file rather than the process CWD.
+A policy authored against 0.6.x that uses an unusual `threshold` literal or a
+relative `model_dir` may load against 0.7.x in unexpected ways.
+
+The recommended migration is:
+
+- Quote the threshold as a TOML float (`threshold = 0.3`, not `0.3 `).
+- Express `[ner].model_dir` as an absolute path, or move the policy file to
+  the directory the model is co-located with.
+- Stamp `schema_version = "0.1.0"` on the policy so a future contract break
+  surfaces the typed `PolicySchemaUnsupported` error instead of a generic
+  load failure.
+
+This entry exists because the Pulseflow Laravel demo lost ~30 minutes
+of debugging time to silent `[ner]` schema drift between 0.6.6 and 0.7.1.
+
+## Bundled rulepack version drift
+
+Bundled rulepacks in
+[`crates/gaze-recognizers/embedded`](../../crates/gaze-recognizers/embedded) are
+release artifacts. Their `rulepack_version` tracks the `gaze-recognizers` crate
+version unless a deliberate desync rule is documented before the release ships.
+
+A deliberate desync rule must name the affected bundled rulepack IDs, explain
+why the rulepack contract differs from the crate release, and state when the
+versions converge again. Undocumented drift is a release defect because it
+weakens the audit trail for which recognizer contract shipped with a given
+crate.
+
+## Known limits - NER and prompt shape
+
+NER is not a region parser. A model that catches names in natural prose can
+miss the same bytes in agent prompt preambles, email headers, forwarded-message
+blocks, and auto-generated footers because those regions do not look like the
+training prose the model learned. v0.6 keeps NER as a useful free-text layer,
+but adds a deterministic `anchored_match` recognizer kind for cue-anchored
+structural contexts that commonly appear in agent workflows.
+
+`anchored_match` has a closed primitive surface:
+
+- `boundary` controls what may follow the extracted span.
+- `name_shape` is currently `person_name`.
+- `cue_position` says whether the name appears before or after the cue.
+- `right_window_chars` bounds how far the recognizer may search after a cue.
+
+The cue text itself is intentionally data-driven. Bundled locale rulepacks
+define open cue buckets:
+
+- `forward_markers` for forwarded-message headers.
+- `agent_recipient_cues` for agent reply/draft preambles.
+- `footer_cues` for generated sender/footer lines.
+
+The default v0.6 posture is conservative: structural recognizers catch the
+documented GH#24 leak shapes while the open cue surface is held by the
+`p6_anchored_match_false_positive_budget_stays_within_limit` regression test.
+The v0.6 synthesis matrix explicitly leaves these classes out of scope:
+
+- Subject-line and `Re:` text such as `Re: Order 12345 - Status update from Alice Example`.
+- Unanchored scheduling prose such as `Schedule a call with Alice next Tuesday`.
+- Markdown code-block exclusion. `anchored_match` and email-header recognizers
+  still fire inside fenced code blocks in v0.6.
+- URL exclusion. Cue-like text inside URLs is not region-filtered in v0.6.
+- Additional `name_shape` variants beyond `person_name`.
+- Per-region NER thresholding. `[ner].threshold` is global to the NER
+  recognizer invocation, not separately tunable for email headers, prompt
+  preambles, footers, or body prose.
+
+If an integration wraps raw email content in markdown code fences only to
+preserve formatting, unwrap the content before passing it to the Gaze pipeline
+and re-wrap the clean output afterward. RegionHint-style envelope markers for
+`CodeBlock` and `Url` are deferred to v0.7.
+
+### v0.5.1 to v0.6 migration note
+
+Adopters using the bundled rulepacks should load `core` plus the relevant
+locale bundle. A German workflow that sets `[locale].active = ["de-DE"]` and
+loads `["core", "locale-de"]` gets cue-anchored detection for forwarded-message
+markers, agent-recipient preambles, and auto-footers without editing existing
+custom recognizers. Mixed German/English prompt templates can load
+`["core", "locale-de", "locale-en"]`.
+
+Per-tenant cue strings belong in policy data, not code. Ship a custom rulepack
+that adds entries to `forward_markers`, `agent_recipient_cues`, or
+`footer_cues`. Keep cue additions narrow and add local regression fixtures
+before broadening a bucket.
 
 ## Known spec drift
 
@@ -1381,3 +1231,11 @@ engineering board:
    pass names embedded in prompt boilerplate or RFC822 email headers.
    Workarounds (wrap with a dictionary recognizer, tighten locale gating
    via `[ner] locale`) and roadmap in GitHub issue #24.
+
+## See also
+
+- [`CHANGELOG.md`](../../CHANGELOG.md) — version history, including shipped CLI
+  and host-integration changes.
+- [`README.md`](../../README.md) — what Gaze is, benchmark summary, quickstart, install.
+- [`crates/gaze/src/policy.rs`](../../crates/gaze/src/policy.rs) — canonical
+  parser; the source of truth for every field on this page.

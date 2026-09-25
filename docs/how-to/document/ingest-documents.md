@@ -1,10 +1,10 @@
-# Gaze Document Workflow
+# Ingest documents into a SafeBundle
 
 This page is an adopter setup guide for `gaze document clean`, the OSS document
 ingestion path. For the extension contract, see
 [`docs/explanation/document/document-extension.md`](../../explanation/document/document-extension.md).
 
-## When To Use
+## When to use document ingestion
 
 Use `gaze document clean` when the input is a PNG, JPG, or PDF and you need a
 bundle that is safe to hand to an agent workspace:
@@ -54,7 +54,7 @@ sudo apt-get install tesseract-ocr
 For PDFs, install a pdfium shared library and make it visible to the runtime
 with your platform's dynamic-library path.
 
-## Spawn The Verb
+## Run `gaze document clean`
 
 Run OCR plus Gaze redaction:
 
@@ -82,7 +82,7 @@ safe-bundle/
     manifest.json
 ```
 
-## SafeBundle Anatomy
+## Read the SafeBundle
 
 `agent/clean.md` contains Markdown with PII replaced by reversible Gaze tokens.
 It is the file to provide to the agent or model-facing workflow.
@@ -108,7 +108,7 @@ Important top-level field:
 - `low_confidence_threshold`: threshold used to set each page's
   `low_confidence` value. The default is `0.65`.
 
-## Layout Report V2 Features
+### Layout report v2 features
 
 - Vector-PDF fallback: selectable text is extracted directly when the PDF page
   provides it.
@@ -119,7 +119,18 @@ Important top-level field:
 - Deskew preprocessing: raster input is normalized before OCR so Tesseract sees
   a more stable page image.
 
-## `OcrBackend` Trait
+## Restore cleaned output
+
+After an agent or model works with `clean.md`, pass the owner-retained
+`manifest.json` plus the model output to the standard Gaze restore path. The
+manifest is the authority for rehydration; do not ask the model to infer
+original values from tokens.
+
+The exact restore API depends on the embedding surface. CLI users should follow
+the restore contract in
+[`crates/gaze-cli/README.md#restore`](../../../crates/gaze-cli/README.md#restore).
+
+## Plug in another OCR backend with `OcrBackend`
 
 `OcrBackend` is the narrow second-party extension point for OCR drivers:
 
@@ -135,18 +146,7 @@ image bytes and return flat spans with bounding boxes and optional confidence.
 Magic-byte validation is mandatory before bytes are accepted as PNG, JPEG, or
 TIFF image input; unsupported payloads fail closed before OCR.
 
-## Restore Round-Trip
-
-After an agent or model works with `clean.md`, pass the owner-retained
-`manifest.json` plus the model output to the standard Gaze restore path. The
-manifest is the authority for rehydration; do not ask the model to infer
-original values from tokens.
-
-The exact restore API depends on the embedding surface. CLI users should follow
-the restore contract in
-[`crates/gaze-cli/README.md#restore`](../../../crates/gaze-cli/README.md#restore).
-
-## Five-Axis Pitch
+## How document ingestion meets the five axes
 
 - Reliability: OCR output is normalized before redaction, and low-confidence
   pages are surfaced for downstream routing. The agent and owner output
@@ -160,7 +160,7 @@ the restore contract in
 - Adopter ergonomics: one CLI verb turns PNG, JPG, or PDF input into a split
   SafeBundle, with `--out` preserving the one-flag workflow.
 
-## Next Steps
+## Next steps
 
 - [`docs/explanation/document/document-extension.md`](../../explanation/document/document-extension.md)
   — document extension contract and bundle boundary.

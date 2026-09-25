@@ -7,6 +7,22 @@ contract (§11). The machine-readable per-assertion record is
 [`crates/gaze-proxy-dashboard/browser-tests/evidence/state-ledger.json`](../../../crates/gaze-proxy-dashboard/browser-tests/evidence/state-ledger.json),
 regenerated on every run of the browser contract.
 
+## How to reproduce
+
+```console
+cd crates/gaze-proxy-dashboard/browser-tests
+npm install
+npx playwright install chromium
+npx playwright test                # 44 states + security/lifecycle suites
+node visual-audit.mjs              # quantitative rendered audit (geometry/contrast)
+node serve.mjs                     # keep the fixture server up for manual review
+```
+
+Screenshots are human evidence, never pixel goldens; they are written outside
+the repository (`GAZE_VISUAL_EVIDENCE_DIR`, defaulting to the OS temp dir) and
+referenced by file name in the state ledger. They contain synthetic fixture
+data only.
+
 ## Run identity
 
 - Implementer/verifier: visual/frontend worker, Solo process 4593
@@ -23,22 +39,6 @@ regenerated on every run of the browser contract.
 - Result: **63/63 automated tests pass** — the 44 matrix states plus 19
   security/lifecycle/accessibility suites (see "Post-review corrections"
   below for the four regression tests added after review).
-
-## How to reproduce
-
-```console
-cd crates/gaze-proxy-dashboard/browser-tests
-npm install
-npx playwright install chromium
-npx playwright test                # 44 states + security/lifecycle suites
-node visual-audit.mjs              # quantitative rendered audit (geometry/contrast)
-node serve.mjs                     # keep the fixture server up for manual review
-```
-
-Screenshots are human evidence, never pixel goldens; they are written outside
-the repository (`GAZE_VISUAL_EVIDENCE_DIR`, defaulting to the OS temp dir) and
-referenced by file name in the state ledger. They contain synthetic fixture
-data only.
 
 ## Viewports
 

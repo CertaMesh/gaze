@@ -287,17 +287,19 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: current-release -->
 
-**v0.14.0** — measured on the released tree.
+**v0.15.0** — measured on the released tree.
+
+> `policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.0 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`. Latency was measured on a shared host; see the CHANGELOG for quiet-host latency.
 
 | Provenance | Value |
 | --- | --- |
-| Release | `v0.14.0` |
-| Commit | `f66a3f2b86691956c596a53273635188971f59e8` |
-| Measured | 2026-09-11 |
+| Release | `v0.15.0` |
+| Commit | `6fcba31a63ec240e6c22e82a21c3fe41fc0f6b2f` |
+| Measured | 2026-09-25 |
 | Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) |
 | Harness | [`scripts/bench/run_no_opf_benchmark.py`](../../../scripts/bench/run_no_opf_benchmark.py) |
-| Scorecard | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) |
-| Scorecard sha256 | `364f6643ffa6e7a5793ee2924ddfe0b834ce0cebe2a4b223fa3689456d686c81` |
+| Scorecard | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) |
+| Scorecard sha256 | `596cc0c3c22fc3d40e60063b83792cbd7c5beb0922a2d4517f09d740c2b4d031` |
 | Corpus | `DataikuNLP/kiji-pii-training-data+gaze` @ `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1` |
 | Corpus sha256 | `11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2` |
 | Corpus component `dataiku` | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
@@ -307,13 +309,21 @@ Two consequences worth stating plainly:
 | Seed | `20260710` |
 | NER threshold | `0.3` |
 | Model bundle `davlan-mbert-ner-hrl-onnx` | `7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16` |
-| Model bundle `kiji-distilbert` | `c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f` |
+| Model bundle `nym-small-int8` | `71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767` |
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `rule-floor-extended` | 130,282 | 93,850 | 72.0360% | 5,423 | 0.870434 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 3.97 |
-| `pass2-ner` | 130,282 | 27,000 | 20.7243% | 28,030 | 0.786539 | 40.4467% | 100.0000% | 100.0000% | 100.0000% | 0 | 76.44 |
-| `full-stack-kiji-resolve` **(shipped default)** | 130,282 | 25,179 | 19.3265% | 168,276 | 0.384459 | 40.6186% | 78.4192% | 100.0000% | 100.0000% | 0 | 195.86 |
+| `policy-file` **(shipped default)** | 130,282 | 19,556 | 15.0105% | 30,073 | 0.786412 | 50.4124% | 100.0000% | 100.0000% | 100.0000% | 0 | 124.23 |
+
+Validator-backed labels on `policy-file`. Gold that fails its own checksum stays scored gold: the two leaked-bytes columns split the surviving bytes above, they do not replace them. Shape recall is what a shape-only match (validator ignored) would cover.
+
+| Label | Validator | Gold | Gold failing its validator | Validator-backed recall | Shape recall | Leaked bytes, valid gold | Leaked bytes, invalid gold |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `CREDITCARDNUMBER` | luhn | 126 | 96 | 0.238095 | 0.785714 | 0 | 1,396 |
+| `EMAIL` | email_rfc | 375 | 0 | 0.994667 | 0.994667 | 19 | 0 |
+| `IBAN` | iban_mod97 | 207 | 67 | 0.004831 | 0.227053 | 0 | 1,580 |
+| `PHONENUMBER` | e164_phone, e164_phone_national_de, e164_phone_national_us | 359 | 41 | 0.754875 | 0.908078 | 526 | 454 |
+| `TAXNUM` | de_steuer_id_mod1110 | 212 | 210 | 0.000000 | 0.047170 | 28 | 1,822 |
 
 <!-- END GENERATED: current-release -->
 
@@ -323,19 +333,33 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: charts -->
 
-**Surviving PII bytes per arm — v0.14.0.** Lower is better; the goal is zero.
+**Leaked PII bytes — v0.15.0 against the previous release.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
+
+```mermaid
+xychart-beta horizontal
+    title "Leaked PII bytes, scored labels v1 - lower is better"
+    x-axis ["v0.15.0 default (15.0%)", "v0.14.0 default (19.3%)", "v0.14.0 rules + NER (20.7%)", "v0.14.0 rules only (72.0%)"]
+    y-axis "Leaked PII bytes" 0 --> 104000
+    bar [19556, 25179, 27000, 93850]
+```
+
+**Trend across releases — each release's shipped default.** Scored under scored labels v1. The shipped arm changes between releases; the history table names it per row.
 
 ```mermaid
 xychart-beta
-    title "Surviving PII bytes per arm - v0.14.0"
-    x-axis ["rule-floor-extended", "pass2-ner", "full-stack-kiji-resolve"]
-    y-axis "Surviving PII bytes (lower is better)" 0 --> 104000
-    bar [93850, 27000, 25179]
+    title "Leaked PII bytes, shipped default - scored labels v1"
+    x-axis ["v0.14.0 (19.3%)", "v0.15.0 (15.0%)"]
+    y-axis "Leaked PII bytes (lower is better)" 0 --> 28000
+    line [25179, 19556]
 ```
 
-**Trend across releases — `full-stack-kiji-resolve`.**
-
-> One measured release so far (1 point). The trend chart renders from two releases onward.
+```mermaid
+xychart-beta
+    title "False-positive bytes, shipped default - scored labels v1"
+    x-axis ["v0.14.0", "v0.15.0"]
+    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 190000
+    line [168276, 30073]
+```
 
 <!-- END GENERATED: charts -->
 
@@ -349,9 +373,10 @@ machine-readable evidence.
 
 <!-- BEGIN GENERATED: history -->
 
-| Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |
-| --- | --- | --- | --- | --- | ---: |
-| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | 25,179 |
+| Release | Measured | Commit | Machine | Scorecard | Shipped arm | Refused ↓ | Leaked PII bytes, all processed ↓ | Leaked PII bytes, common documents ↓ | False-positive bytes ↔ | Restore exact ↑ | clean p95 ms ↓ |
+| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | `full-stack-kiji-resolve` | 0 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
+| v0.15.0 | 2026-09-25 | `6fcba31` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | `policy-file` | 0 | 19,556 | 19,556 | 30,073 | 100.0000% | 124.23 |
 
 <!-- END GENERATED: history -->
 

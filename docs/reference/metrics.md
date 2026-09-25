@@ -1,37 +1,58 @@
 # Gaze metrics catalog
 
-> **SSOT (Single Source of Truth)** for every observable surface Gaze exposes
-> to adopters: audit-log columns, conflict tiers, SafetyNet benchmark snapshot
-> fields, recognizer registry surfaces, pipeline counters, SafeBundle JSON
-> fields, MCP chokepoint context, and CLI exit codes.
->
-> **North-star fit:** axis 4 (trust-by-evidence — every emitted token must
-> trace to a typed metric) and axis 5 (adopter ergonomics — SRE / compliance
-> teams need one place to wire queries, dashboards, and alerts). See
-> [`AGENTS.md`](../../AGENTS.md) for the five axes and [`ARCHITECTURE.md`](../../ARCHITECTURE.md)
-> for the crate map.
->
-> **Status guarantees.** Every metric in this catalog declares one of:
-> - **Closed enum** — string set is closed and exhaustively listed in code;
->   safe to switch on in alert rules.
-> - **`#[non_exhaustive]` enum** — adopters must match with a wildcard for
->   forward compatibility; the *current* variant set is listed but additive
->   changes can land in any minor release.
-> - **Free string** — no API guarantee on the value space; do not pattern-match
->   in alert rules; safe for grouping and display only.
-> - **Internal-only** — not exported on a public surface; subject to change
->   without notice.
->
-> **Where metrics surface.** Each row points to the on-disk / on-wire surface
-> the adopter actually reads: a column in the `redaction_log` SQLite table,
-> a JSON field in `gaze clean` stdout, a JSON field in `report.json`, etc.
-> Internal-only metrics are flagged as such — they exist in source for
-> traceability but are not part of the public contract.
+**SSOT (Single Source of Truth)** for every observable surface Gaze exposes
+to adopters: audit-log columns, conflict tiers, SafetyNet benchmark snapshot
+fields, recognizer registry surfaces, pipeline counters, SafeBundle JSON
+fields, MCP chokepoint context, and CLI exit codes.
+
+**North-star fit:** axis 4 (trust-by-evidence — every emitted token must
+trace to a typed metric) and axis 5 (adopter ergonomics — SRE / compliance
+teams need one place to wire queries, dashboards, and alerts). See
+[`AGENTS.md`](../../AGENTS.md) for the five axes and [`ARCHITECTURE.md`](../../ARCHITECTURE.md)
+for the crate map.
 
 This document is intentionally a *catalog* — it lists, points to source, and
 declares stability. The *behavior* of each metric is documented in the
 architecture deep-dives linked per family. If you find a metric in code that
 is not in this catalog, file a follow-up todo against the metrics-SSOT track.
+
+## How to read this catalog
+
+**Status guarantees.** Every metric in this catalog declares one of:
+- **Closed enum** — string set is closed and exhaustively listed in code;
+  safe to switch on in alert rules.
+- **`#[non_exhaustive]` enum** — adopters must match with a wildcard for
+  forward compatibility; the *current* variant set is listed but additive
+  changes can land in any minor release.
+- **Free string** — no API guarantee on the value space; do not pattern-match
+  in alert rules; safe for grouping and display only.
+- **Internal-only** — not exported on a public surface; subject to change
+  without notice.
+
+**Where metrics surface.** Each row points to the on-disk / on-wire surface
+the adopter actually reads: a column in the `redaction_log` SQLite table,
+a JSON field in `gaze clean` stdout, a JSON field in `report.json`, etc.
+Internal-only metrics are flagged as such — they exist in source for
+traceability but are not part of the public contract.
+
+### Versioning posture
+
+`gaze-types` value contracts are `#[non_exhaustive]` across the board.
+Adopters must:
+
+- Match every closed enum with a wildcard arm (`_ => …`).
+- Stay forward-compatible with all `#[non_exhaustive]` structs (do not destructure
+  positionally; use named field patterns plus `..`).
+- Treat free-string columns as opaque grouping keys, not as enum values
+  for alert rules. Switch on canonical `Closed`-enum columns (`action`,
+  `document_kind`, `decided_by`, `validator_fail_reason`,
+  `fallback_triggered`, `ambiguity_record.reason`) — those have the
+  Axis 4 stability guarantee.
+
+When a column or field is added to a metric in this catalog, update the
+"Landed" cell and bump the version note in [`CHANGELOG.md`](../../CHANGELOG.md).
+This document is the single source of truth — divergence between metrics.md
+and source is a docs bug.
 
 ## Table of contents
 
@@ -43,6 +64,8 @@ is not in this catalog, file a follow-up todo against the metrics-SSOT track.
 6. [SafeBundle / `BundleReport` (`gaze-document`)](#6-safebundle--bundlereport-gaze-document)
 7. [MCP chokepoint observability (`gaze-mcp-core`)](#7-mcp-chokepoint-observability-gaze-mcp-core)
 8. [CLI exit codes (`gaze-cli`)](#8-cli-exit-codes-gaze-cli)
+9. [Restore telemetry](#restore-telemetry)
+10. [See also](#see-also)
 
 ## 1. Audit-row fields (`gaze-audit`)
 
@@ -830,7 +853,7 @@ Audit queries project missing columns as NULL; writers add the nullable column
 without backfilling historical rows. Rust callers constructing `AuditLogRow`
 literals must supply the new optional field. Snapshot payload versions are unchanged.
 
-## Companion architecture docs
+## See also
 
 - [`docs/explanation/detection/ambiguity-side-channel.md`](../explanation/detection/ambiguity-side-channel.md) — `ambiguity_record`, `validator_fail_reason`, `collision_*` schema.
 - [`docs/explanation/detection/validator-veto.md`](../explanation/detection/validator-veto.md) — `ConflictTier::ValidatorVeto` semantics.
@@ -842,23 +865,4 @@ literals must supply the new optional field. Snapshot payload versions are uncha
 - [`docs/explanation/mcp/mcp-runtime.md`](../explanation/mcp/mcp-runtime.md) — `ToolCtx` seal, dispatch ordering, manifest persistence.
 - [`docs/explanation/document/document-extension.md`](../explanation/document/document-extension.md) — signed snapshot envelope.
 - [`docs/explanation/policy/locale-chain.md`](../explanation/policy/locale-chain.md) — 4-tier locale resolution.
-- [`docs/explanation/detection/feedback-loop.md`](../explanation/detection/feedback-loop.md) — resolve-mode promotion plumbing.
-
-## Versioning posture
-
-`gaze-types` value contracts are `#[non_exhaustive]` across the board.
-Adopters must:
-
-- Match every closed enum with a wildcard arm (`_ => …`).
-- Stay forward-compatible with all `#[non_exhaustive]` structs (do not destructure
-  positionally; use named field patterns plus `..`).
-- Treat free-string columns as opaque grouping keys, not as enum values
-  for alert rules. Switch on canonical `Closed`-enum columns (`action`,
-  `document_kind`, `decided_by`, `validator_fail_reason`,
-  `fallback_triggered`, `ambiguity_record.reason`) — those have the
-  Axis 4 stability guarantee.
-
-When a column or field is added to a metric in this catalog, update the
-"Landed" cell and bump the version note in [`CHANGELOG.md`](../../CHANGELOG.md).
-This document is the single source of truth — divergence between metrics.md
-and source is a docs bug.
+- [`docs/explanation/detection/feedback-loop.md`](../explanation/detection/feedback-loop.md) — synthetic, deterministic regression harness for recognizer coverage.

@@ -21,7 +21,7 @@ The docs in this repository are plain Markdown and follow conventions that work 
 
 ## Dashboard UI
 
-The opt-in `gaze proxy --dashboard` inspection dashboard is the first end-user UI surface in the core repository. It targets **WCAG 2.2 AA conformance**; its verification protocol, 44-state visual matrix, and committed evidence live in [Dashboard accessibility and visual verification](dashboard/accessibility-and-visual-verification.md), with the browser-facing security posture in [Dashboard browser security](dashboard/browser-security.md).
+The opt-in `gaze proxy serve --dashboard` inspection dashboard is the first end-user UI surface in the core repository. It targets **WCAG 2.2 AA conformance**; its verification protocol, 44-state visual matrix, and committed evidence live in [Dashboard accessibility and visual verification](dashboard/accessibility-and-visual-verification.md), with the browser-facing security posture in [Dashboard browser security](dashboard/browser-security.md).
 
 ## Future UI surfaces
 

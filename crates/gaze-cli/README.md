@@ -21,7 +21,7 @@ raw input or backtraces into caller logs.
 Install from crates.io:
 
 ```console
-$ cargo install gaze-cli --version 0.14.0
+$ cargo install gaze-cli --version 0.15.0
 ```
 
 Build from the workspace root:
@@ -140,7 +140,7 @@ The `mcp` feature embeds the rmcp stdio server into the `gaze` binary and
 registers `gaze-document` tools:
 
 ```console
-$ cargo install gaze-cli --version 0.14.0 --features mcp
+$ cargo install gaze-cli --version 0.15.0 --features mcp
 $ gaze mcp install --client=claude-code
 $ gaze mcp doctor
 ```
@@ -412,6 +412,8 @@ would exit `3` with the JSON error
 `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout would
 be empty. `ClassMismatch` suspects always warn but never fail strict mode,
 because the manifest still tokenized the bytes — only the class disagrees.
+They arise only for tokens that fail the ownership check; findings inside a
+placeholder the session owns are dropped before any action.
 The default mode in v0.8.x+ is `resolve` with a `redact` fallback (see the
 flag table above and the
 [mode catalog](../../docs/explanation/safety-net/safety-net-modes.md)). The

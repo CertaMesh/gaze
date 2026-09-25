@@ -18,18 +18,32 @@ The same boundary applies to tool-call arguments in agent frameworks: the JSON t
 
 ## How good is it
 
-<!-- PHASE2: v0.15.0 numbers -->
-The [v0.14.0 release benchmark](docs/reference/benchmarks/README.md#current-release) scored 2,910 synthetic documents holding 130,282 bytes of annotated PII. "Leaked" counts PII bytes that would still reach the model; the goal is zero.
+The [v0.15.0 release benchmark](docs/reference/benchmarks/README.md#current-release) ran the exact policy `gaze setup` writes over 2,910 synthetic documents holding 130,282 bytes of annotated PII. "Leaked" counts PII bytes that would still reach the model; the goal is zero.
 
 | Setup | Refused | Leaked, all processed docs | Leaked, common set | False-positive bytes | Exact restores |
 |---|---:|---:|---:|---:|---:|
-| Rules only | 0 | 93,850 (72.0%) | 93,850 (72.0%) | 5,423 | 100.0% |
-| Rules + NER | 0 | 27,000 (20.7%) | 27,000 (20.7%) | 28,030 | 100.0% |
+| **v0.15.0 default: `gaze setup` policy (rules + NER + Nym net)** | 0 | **19,556 (15.0%)** | 19,556 (15.0%) | 30,073 | 100.0% |
 | v0.14.0 default: rules + NER + Kiji net | 0 | 25,179 (19.3%) | 25,179 (19.3%) | 168,276 | 78.4% |
+| v0.14.0 rules + NER, no net | 0 | 27,000 (20.7%) | 27,000 (20.7%) | 28,030 | 100.0% |
+| v0.14.0 rules only | 0 | 93,850 (72.0%) | 93,850 (72.0%) | 5,423 | 100.0% |
 
-No arm refused a document, so all 2,910 processed documents are also the common set. The Kiji safety net has since been removed. Its 78.4% exact-restore rate comes from its one-way `redact` fallback, not from restore failures. v0.15 makes Nym the `gaze setup` safety net; its release row will replace this table.
+<!-- BEGIN GENERATED: readme-chart -->
 
-**Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw).
+Leaked PII bytes per setup, scored labels v1, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json)). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
+
+```mermaid
+xychart-beta horizontal
+    title "Leaked PII bytes, scored labels v1 - lower is better"
+    x-axis ["v0.15.0 default (15.0%)", "v0.14.0 default (19.3%)", "v0.14.0 rules + NER (20.7%)", "v0.14.0 rules only (72.0%)"]
+    y-axis "Leaked PII bytes" 0 --> 104000
+    bar [19556, 25179, 27000, 93850]
+```
+
+<!-- END GENERATED: readme-chart -->
+
+Neither default refused a document, so all 2,910 processed documents are also the common set. The v0.15.0 default leaks 22% fewer PII bytes than v0.14.0's, with 82% fewer false-positive bytes, and every document restores exactly. The removed Kiji net's 78.4% exact-restore rate came from its one-way `redact` fallback, not from restore failures. All rows use scored-label contract v1, which scores every corpus label; under contract v2 (PASSWORD and SECURITYTOKEN out of contract, gold 123,621 B) the same v0.15.0 run leaks 13,319 B (10.77%).
+
+**Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw). A payment card written directly next to a CVV, an expiry date or other digits can also pass untokenized; a fix is in progress.
 
 Methods, the full scorecard, and how to reproduce every number: [benchmarks](docs/reference/benchmarks/README.md).
 
@@ -54,7 +68,7 @@ The full walkthrough, with a real support ticket and the safety-net modes: [How 
 Install the CLI, write the default policy, then clean and restore a synthetic contact:
 
 ```sh
-cargo install --git https://github.com/CertaMesh/gaze.git gaze-cli
+cargo install gaze-cli --version 0.15.0
 gaze setup
 printf '%s' 'From: Ada Example <ada@example.invalid>' | gaze clean --policy gaze.toml > clean.json
 jq -r .clean_text clean.json
@@ -84,13 +98,11 @@ From: Ada Example <ada@example.invalid>
 
 ## Install
 
-Install the current source version for the Nym-on setup flow:
+Install the CLI from crates.io:
 
 ```sh
-cargo install --git https://github.com/CertaMesh/gaze.git gaze-cli
+cargo install gaze-cli --version 0.15.0
 ```
-
-The published `0.14.0` CLI still uses the old setup default; release prep will update the crates.io instructions.
 
 Or build from source (latest `main`, or to enable extra features):
 

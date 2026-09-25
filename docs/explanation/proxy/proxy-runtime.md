@@ -25,9 +25,9 @@ writes a raw value back:
 
 - `Text`: the raw value is written byte for byte.
 - `Json`: the surface is a serialized JSON document, such as
-  `tool_calls[].function.arguments` or a Responses `function_call` item's
-  `arguments`. A token can only stand inside one of its string literals, so
-  restore JSON-escapes the raw value. A verbatim `"`, `\`, or control character
+  `tool_calls[].function.arguments` or a Responses `function_call` or
+  `mcp_call` item's `arguments`. A token can only stand inside one of its
+  string literals, so restore JSON-escapes the raw value. A verbatim `"`, `\`, or control character
   would break the document or change the value the agent parses. The escape
   does not depend on where the literal's quotes are, so it stays correct when a
   streamed fragment carries the token and a neighbouring SSE event carries the
@@ -35,6 +35,9 @@ writes a raw value back:
   literal, such as a field of a JSON tool result. The manifest stores that value
   in its escaped spelling (`\"`, `\u00fc`), so restore writes it into a JSON
   document as it is. The legacy session records which tokens those are.
+  Known limit: the manifest keeps only that escaped spelling, so the same value
+  restores into a `Text` destination with its escapes (`\"`, `\u00fc`), not
+  decoded. Recording the spelling per token is planned for v0.16.
 - `ModelOutput`: answer text. It restores as `Json` when
   `requests_json_output` is true and as `Text` otherwise. OpenAI reads
   `response_format.type` (Chat Completions) or `text.format.type` (Responses)

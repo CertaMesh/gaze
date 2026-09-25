@@ -1,7 +1,18 @@
 # Run the local dashboard
 
-The dashboard is an explicit adopter composition. Do not construct any dashboard object on the
+This guide is for Rust adopters who embed the opt-in inspection dashboard in their own proxy
+host. The dashboard is an explicit adopter composition. Do not construct any dashboard object on the
 default/off path.
+
+The `gaze` CLI runs this whole sequence for you with `gaze proxy serve --dashboard` (see the
+[dashboard flags](../../reference/cli.md#dashboard-flags-opt-in-dashboard-cargo-feature)).
+
+## Prerequisites
+
+The current child implementation requires Unix-domain sockets and a reviewed Unix resource-limit
+API that can set and verify both core-dump limits at zero. Darwin is explicitly unsupported and
+returns `NoDumpUnavailable` before binding, token generation, or sensitive IPC acceptance. No
+macOS crash-artifact suppression is claimed. There is no in-process or thread-only fallback.
 
 ## 1. Select immutable startup capture
 
@@ -45,14 +56,13 @@ Consume PairedDashboard::into_pending_activation() to receive:
 - one provider-neutral PendingInspectionConsumerV1;
 - the exact immutable DashboardCaptureDescriptorV1.
 
-Pass the pending consumer and the producer half to the one atomic gaze-inspection installation
-operation. On the current API, do not start provider traffic: `ActivatedInspectionConsumerV1`
-does not expose an unforgeable identity that the pending dashboard half can match. Consequently,
-`PendingDashboardActivation::commit` disables the handle, tears down the child, and returns
-`ActivationFailed`.
-
-Activation requires a new opaque registration receipt/match operation in gaze-inspection plus its
-compile-fail/UI tests. Do not substitute descriptor equality, a caller assertion, a generic
+Pass the pending consumer and the `DashboardCaptureDescriptorV1` to the one atomic
+gaze-inspection installation operation (`gaze_proxy::install_proxy_inspection_v1` for the
+proxy). It returns the proxy producer and the `ActivatedInspectionConsumerV1`. Pass the
+activated consumer to `PendingDashboardActivation::commit`, which
+binds it against the one-shot binding retained by `into_pending_activation` before any socket,
+writer, runtime, or admission side effect. A consumer from any other registration fails with
+`ActivationFailed`. Do not substitute descriptor equality, a caller assertion, a generic
 closure, or a wrapper created after installation.
 
 Do not expose or retain another sink, choose an epoch, inject a loose control object, or start
@@ -61,17 +71,9 @@ consumer and fully terminate/reap the dashboard child before continuing provider
 
 ## 5. Operate and stop
 
-After the gaze-inspection identity API exists, use `DashboardControl::purge` for reusable
-registration-bound purge. `rotate_pairing_secret` requires a
+Use `DashboardControl::purge` for reusable registration-bound purge. `rotate_pairing_secret` requires a
 fresh acknowledged delivery and invalidates the previous authentication generation. The shutdown operation is
 one-way and returns only after disable, zeroization, termination, and reap.
 
 Treat DashboardStatus::Disabled as a dashboard-only failure. Do not retry capture in the same
 launch and do not alter the provider enforcement result.
-
-## Environment prerequisites
-
-The current child implementation requires Unix-domain sockets and a reviewed Unix resource-limit
-API that can set and verify both core-dump limits at zero. Darwin is explicitly unsupported and
-returns `NoDumpUnavailable` before binding, token generation, or sensitive IPC acceptance. No
-macOS crash-artifact suppression is claimed. There is no in-process or thread-only fallback.
