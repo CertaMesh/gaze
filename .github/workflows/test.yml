@@ -67,7 +67,6 @@ jobs:
     timeout-minutes: 180
     env:
       NYM_SMALL_INT8_BUNDLE_SHA256: 71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767
-      XDG_DATA_HOME: ${{ runner.temp }}
     steps:
       - name: Free disk space (ubuntu-latest preinstalled bloat removal)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
@@ -131,6 +130,8 @@ jobs:
           key: ${{ runner.os }}-nym-small-int8-${{ env.NYM_SMALL_INT8_BUNDLE_SHA256 }}
       - name: Install and verify pinned Nym bundle
         shell: bash
+        env:
+          XDG_DATA_HOME: ${{ runner.temp }}
         run: |
           set -euo pipefail
           grep -Fq "$NYM_SMALL_INT8_BUNDLE_SHA256" crates/gaze-recognizers/src/safety_net/nym/artifacts.rs
