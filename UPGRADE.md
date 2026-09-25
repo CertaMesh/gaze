@@ -214,7 +214,7 @@ Kiji net.** The Kiji DistilBERT safety net is gone. On the 2,910-document
 benchmark it recovered 1,831 leaked gold bytes (scored-label contract v2) for
 +169,657 false-positive bytes, a 2.5% action precision. No safety net runs
 without a policy that selects one; the policy `gaze setup` writes selects Nym. The full removed surface is in the
-[CHANGELOG](CHANGELOG.md#0150---2026-09-25).
+[0.15.0 CHANGELOG section](CHANGELOG.md).
 
 1. **Re-run `gaze setup`.** Earlier `gaze setup` runs installed the Kiji
    distilbert-NER bundle as the primary `[ner]` model in the policy they wrote.

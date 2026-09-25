@@ -299,7 +299,7 @@ the same-document-set numbers, linked to the script and hardware line. -->
   Measured on the rule-floor arm over the 1,886-document holdout: gold ZIP byte
   recall rises from 30.8% to 59.7%, recovering **1,567 gold bytes**; per locale,
   `en-CA` 97.1%, `en-GB` 96.9%, `en-IE` 87.9%. Precision cost is one false
-  positive across all 1,886 documents (an uppercase `AA9 9AA` token in lowercase
+  positive across all 1,886 documents (an uppercase letter-letter-digit, digit-letter-letter token in lowercase
   prose, whose outward code is a real assigned UK district) and **zero across all
   1,024 committed A4 negative documents**. The bundle tokenization drift snapshot
   is unchanged: none of the three patterns match the drift corpus.
@@ -321,7 +321,7 @@ the same-document-set numbers, linked to the script and hardware line. -->
     between the two halves. `[ ]?` matched U+0020 only, so a postcode pasted out
     of a PDF or rendered HTML leaked in full — the same failure class as the
     `ssn.us` NBSP regression.
-  * `postal.gb` covers the `GIR 0AA` Girobank pseudo-postcode and restricts the
+  * `postal.gb` covers the Girobank pseudo-postcode (`GIR`, then `0AA`) and restricts the
     inward code to the official Royal Mail alphabet (never `C I K M O V`), which
     also drops matches overlapping a different gold label from 3 to 1. The AREA
     letters stay wide: encoding the official `Q V X` / `I J Z` exclusions was
@@ -367,13 +367,13 @@ the same-document-set numbers, linked to the script and hardware line. -->
   NER; ties go to the container). The rung sits after collision-family
   policy and the mandatory-anchor rung and before the structured-containment
   rung, which it generalises and which remains for the containers the guard
-  refuses. `IBAN PL56 0942 8981 7280 5663 2200 4500 BIC` (de-AT) is now
-  `IBAN <iban_1> BIC` instead of five tokens; a Luhn-valid card whose tail is
+  refuses. `IBAN PL56 0942 … 4500 BIC` (a spaced Polish IBAN, de-AT) is now
+  `IBAN <iban_n> BIC` instead of five tokens; a Luhn-valid card whose tail is
   a German phone shape is one card token. Partial overlaps keep today's
   rules (solo todo #3769). Measured on the 98,256-document IBAN enumeration
   (3 locales): split IBANs 8,955 → 423, wrong-class IBAN tokens 11,196 →
   2,706, leaked and false-positive bytes unchanged; 4 of 1,886 real holdout
-  documents change (`<credit_card_1><phone_1>` → `<credit_card_1>`); 0 of
+  documents change (`<credit_card_n><phone_n>` → `<credit_card_n>`); 0 of
   1,024 negative documents change.
 - **Protection beats preservation: per-character residual coverage** (solo
   todo #3740; breaking in 0.x). Residual admission is per original, not per
@@ -386,7 +386,7 @@ the same-document-set numbers, linked to the script and hardware line. -->
   hole where `custom:postal_code = preserve` shipped 20 raw IBAN bytes on
   the letter above (8,295 raw bytes across 480 enumeration documents) and
   where `custom:url = preserve` shipped an email inside the URL raw
-  (`https://mail.example.org/u/<Email_1>` now). The candidates a preserved
+  (the URL now carries an email token in place of the address). The candidates a preserved
   selection represents never override it, so an explicit
   `custom:family:<name> = preserve` rule still leaves the ambiguous span raw.
   Supersedes the interim "any protective action" admission from the
@@ -665,13 +665,13 @@ the same-document-set numbers, linked to the script and hardware line. -->
   recognizer now accepts a fully parsed address immediately after `Address:`,
   `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` (case-insensitively at every
   locale). The existing word guard remains
-  in force, so Rust and C++ `::` paths, including `Address::new`, stay untouched.
+  in force, so Rust and C++ double-colon paths, including `Address::new`, stay untouched.
   The identifier-glued form `_2001:db8::1` remains outside this cue rule
   (solo todo #3762).
 
 - **Security: a compact IBAN glued to the next word shipped raw.**
-  `IBAN AT611904300234573201BIC` and the dense footer
-  `IBAN:AT611904300234573201BIC:BKAUATWW` cleaned to themselves with
+  `IBAN AT6119…3201BIC` and the dense footer `IBAN:AT6119…3201BIC:BKAUATWW`
+  (a compact Austrian IBAN, elided here) cleaned to themselves with
   `detections: 0`, an empty leak report and a success exit, in every release
   from v0.4.3-rc.1 (#48) through v0.14.0 and on main after #622. The
   `iban.structural` pattern ended in `\b`, so a candidate immediately followed
@@ -687,11 +687,11 @@ the same-document-set numbers, linked to the script and hardware line. -->
   holds a digit or an underscore. `RegexDetector` applies it to every
   `iban_mod97`-validated recognizer, and the pattern's trailing `\b` is gone.
   One shape is recovered only in part: a label glued to a SPACED German IBAN
-  (`IBAN DE89 3704 0044 0532 0130 00BIC`) is now a candidate, but
+  (`IBAN DE89 3704 … 0130 00BIC`, the German example IBAN) is now a candidate, but
   `phone.national.de` (priority 85) still wins the `0532 0130` sub-run, because
   its 22-character IBAN-consuming branch ends in `\b` and stops consuming at the
   glued label. Under a policy that tokenizes `custom:phone` every byte is
-  covered (`<iban_1><phone_1><iban_2>`, where main left 18 bytes raw beside one
+  covered (`<iban_n><phone_n><iban_m>`, where main left 18 bytes raw beside one
   phone token); under a phone-preserving policy it stays raw as on main.
   Dropping that `\b` too was measured and rejected: it makes the branch consume
   the first 22 characters of every longer spaced IBAN, which repairs 1,866
@@ -749,8 +749,8 @@ the same-document-set numbers, linked to the script and hardware line. -->
   cue is in range or a Luhn-valid card run collides with the IBAN) resolved its
   action by its own class, which member-only policies never name, so it fell to
   a `preserve` default and the whole IBAN left the process with a success exit
-  (`Überweisung DE89 3704 0044 0532 0130 00`; `Bitte überweisen auf FO14 5878
-  0013 4155 73 1234`). Documented as a footgun with a stderr warning since
+  (`Überweisung DE89 3704 … 0130 00`; `Bitte überweisen auf FO14 5878 …
+  1234`, IBANs elided here). Documented as a footgun with a stderr warning since
   v0.11; the north star does not let protection depend on reading a warning.
   The action is now derived from the member rules (see Changed), through the
   one resolver every surface shares (`gaze clean`, `gaze daemon`, proxy, MCP,
@@ -780,10 +780,12 @@ the same-document-set numbers, linked to the script and hardware line. -->
   (`provenance_stage = "primary_pipeline.residual"`). Found by the review of
   the derivation change; the fix and the derivation ship together, so no
   release carries the regression.
-- **Precision: `ip.v6` tokenized Rust and C++ `::` paths mid-identifier.**
-  `::` shorthand makes a great many path segments legal IPv6 addresses: `::a`
-  in `CleanOverrides::apply_to`, `::defa` in `Policy::default()`, `d::f` in
-  `std::fs::read`, and a bare `::` wherever a path has no hex on either side.
+- **Precision: `ip.v6` tokenized Rust and C++ double-colon paths mid-identifier.**
+  The double-colon shorthand makes a great many path segments legal IPv6
+  addresses: the colons plus `a` inside `CleanOverrides::apply_to`, the colons
+  plus `defa` inside `Policy::default()`, `d`, the colons and `f` inside
+  `std::fs::read`, and the bare colon pair wherever a path has no hex on either
+  side.
   The `ipv6_parse` validator accepts every one of them, because they really are
   RFC 4291 addresses. The rule's guard class excluded hex digits only, so any
   other identifier character satisfied it and the candidate fired inside the
@@ -796,8 +798,8 @@ the same-document-set numbers, linked to the script and hardware line. -->
   whole address lost in a context whose delimiters are not identifier
   characters. Across this repository's own `docs/**/*.md` the class drops from
   176 matches (616 bytes) to 6 (47 bytes), of which five are IPv4 loopbacks and
-  one is a literal `::` example. A standalone all-hex path with no context
-  either side (`a::b`) is still read as the address it is. No detection is
+  one is a literal double-colon example. A standalone all-hex path with no context
+  either side (two hex letters joined by a double colon) is still read as the address it is. No detection is
   added; this is a precision fix, not a leak fix.
 
 - **Security: an IBAN followed by an upper-case word could match nothing at
@@ -818,9 +820,9 @@ the same-document-set numbers, linked to the script and hardware line. -->
   `iban_mod97`, which gates on the country's registry length, so validator veto
   dropped it. `IBAN … BIC: …` is the standard European invoice and
   e-mail footer layout, so this fired on ordinary documents:
-  `IBAN AT61 1904 3002 3457 3201 BIC: BKAUATWW` cleaned to
-  `IBAN AT61 <…:Custom:credit_card_1> BIC: BKAUATWW`, and
-  `IBAN BE62 6589 3795 9627 SWIFT GEBABEBB` cleaned to itself. The pattern now
+  `IBAN AT61 1904 … 3201 BIC: BKAUATWW` (a spaced Austrian IBAN, elided here)
+  cleaned to `IBAN AT61 <…:Custom:credit_card_n> BIC: BKAUATWW`, and
+  `IBAN BE62 … 9627 SWIFT GEBABEBB` (Belgian) cleaned to itself. The pattern now
   carries one alternation branch per ISO 13616 registry length, with exact
   repetition counts only, so the candidate stops at the country's real IBAN
   length. This is a strict narrowing that costs no recall: every candidate the
@@ -886,7 +888,7 @@ the same-document-set numbers, linked to the script and hardware line. -->
   cue in range, became the `family:payment-card-or-iban` token.
   - Axis 1: under a policy that tokenizes `custom:iban` and
     `custom:credit_card` with a preserve default and no family rule,
-    `Zahlung an AT61 1904 3002 3457 3201 Kontoinhaber Max` shipped the IBAN
+    `Zahlung an AT61 1904 … 3201 Kontoinhaber Max` (IBAN elided here) shipped the IBAN
     raw (reproduced on main with a custom recognizer as the unrelated overlap,
     and with `postal.at_ch` from #613).
   - Axis 4: the IBAN's class depended on whether an unrelated overlap existed.
@@ -957,7 +959,7 @@ the same-document-set numbers, linked to the script and hardware line. -->
   defect since at least v0.14.0: the shared Kiji decoder (ORT, tract, candle)
   merged BIO labels per WordPiece, so the pinned English model's piece-level
   firings on German text became suspects such as `G`/`em`/`ä` and the resolve
-  path emitted `<Name_14>wort` for `Passwort` and three adjacent name tokens for
+  path emitted `<Name_n>wort` for `Passwort` and three adjacent name tokens for
   `IBAN`. On the 80 explorer documents, 732 of 961 safety-net tokens were
   mid-word on v0.14.0 and 749 of 977 on 9a3a788. Spans are now assembled from
   whole words: any labelled piece labels its word, so byte coverage is a
