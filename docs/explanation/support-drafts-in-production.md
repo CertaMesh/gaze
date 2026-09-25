@@ -2,6 +2,8 @@
 
 [`CertaMesh/gaze-ghostwriter`](https://github.com/CertaMesh/gaze-ghostwriter) is a Laravel package that watches a support inbox over IMAP and drafts replies with an LLM. The application does the data lookup. Gaze pseudonymizes the resulting context. The LLM only composes prose.
 
+## The loop, step by step
+
 ```text
 1. Customer email arrives via IMAP:
    "Hi Support, I'm Alice Schmidt, order #INV-2026-04-1872,

@@ -19,7 +19,7 @@ The redact ↔ restore contract that everything else protects.
 - **[Session contract](core/session-contract.md)** — the isolation boundary a `Session`
   owns, snapshot/import rules, and the common pitfalls.
 
-## Detection & conflict resolution
+## Detection and conflict resolution
 
 How Gaze decides what is PII and what wins when recognizers disagree — the trust-by-evidence
 axis in practice.
