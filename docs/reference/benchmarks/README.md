@@ -68,15 +68,16 @@ Every release scorecard runs the same two configurations:
 | Arm | What it is |
 | --- | --- |
 | `rule-floor-extended` | the shipped deterministic recognizers alone |
-| `pass2-ner` | **the shipped default**: that floor plus the pinned Davlan mBERT `NerRecognizer` (threshold `0.3` by default), with no safety net |
+| `pass2-ner` | that floor plus the pinned Davlan mBERT `NerRecognizer` (threshold `0.3` by default), with no safety net |
 
-Two opt-in arms run a safety net under the shipped `Resolve`/`Redact` policy,
+Two additional arms run a safety net under the shipped `Resolve`/`Redact` policy,
 with exact-restore checks, manifest-integrity checks, and a post-policy
 SafetyNet scan. `full-stack-opf-resolve` exercises the OpenAI Privacy Filter. It
 is excluded from the default run because it needs a separately installed
 verified 2.6 GB checkpoint and a warmed daemon, and it has a measured
 fail-closed invalid-output rate. `full-stack-nym-resolve` exercises the in-process
-Nym-small net and needs its pinned bundle.
+Nym-small net and needs its pinned bundle. The v0.15 `gaze setup` default is
+rules plus NER plus Nym; its measurement lands with the v0.15 release row.
 
 Warm per-document latency of the Nym arm is measured by
 [`scripts/bench/nym-warm-latency.py`](../../../scripts/bench/nym-warm-latency.py)
@@ -507,8 +508,8 @@ The Kiji DistilBERT safety net, which earlier leaderboard rounds validated as
 the int8 in-process default, was removed after the 2026-09-16 safety-net
 leaderboard. On the 2,910-document benchmark it recovered 1,831 leaked gold
 bytes (scored-label contract v2) for +169,657 false-positive bytes, a 2.5%
-action precision. No safety net runs by default now; the shipped default is
-`pass2-ner`. The Kiji leaderboard rows and the Kiji int8, ORT, tract, and
+action precision. At removal, the default was `pass2-ner`; `gaze setup` now
+enables Nym. The Kiji leaderboard rows and the Kiji int8, ORT, tract, and
 candle runtime measurements are readable at the
 [`v0.14.0` tag](https://github.com/CertaMesh/gaze/blob/v0.14.0/docs/reference/benchmarks/README.md#ner-model-leaderboard).
 

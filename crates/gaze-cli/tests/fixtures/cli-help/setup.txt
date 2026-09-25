@@ -6,9 +6,9 @@ Usage: gaze setup [OPTIONS]
 
 Options:
       --safety-net <SAFETY_NET>
-          Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available; nym downloads and verifies the pinned Nym-small int8 bundle
+          Safety-net setup path. Defaults to Nym; `none` keeps NER only; `opf` adds a verified OPF checkpoint for explicit stacked use
           
-          [possible values: ner, opf, nym]
+          [possible values: none, opf, nym]
 
       --policy-out <POLICY_OUT>
           Policy TOML output path. Defaults to ./gaze.toml
