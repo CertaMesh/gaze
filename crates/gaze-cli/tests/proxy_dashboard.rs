@@ -17,6 +17,7 @@
 use std::io::Read;
 use std::net::{SocketAddr, TcpListener};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
 #[path = "support/proxy_health.rs"]
@@ -38,10 +39,25 @@ struct ServeProbe {
     child: Child,
     stderr: std::sync::mpsc::Receiver<String>,
     addr: SocketAddr,
+    // Declared last so it is released only after `Drop` has stopped the child.
+    _one_at_a_time: MutexGuard<'static, ()>,
 }
+
+/// Runs one provider at a time. Each probe reserves a port, frees it for the
+/// provider, and polls it until the provider serves. With several probes
+/// polling at once, one probe's outgoing connection can take another's freed
+/// port, so that provider's bind fails ("http server failed", exit 7), or two
+/// polling sockets pair up and `connect` succeeds with nothing listening. A
+/// 1 s slow-startup probe produced both failures.
+static ONE_PROVIDER_AT_A_TIME: Mutex<()> = Mutex::new(());
 
 impl ServeProbe {
     fn spawn(dashboard_flags: &[&str]) -> Self {
+        // A test that panicked while holding the lock poisons it; the lock
+        // still serializes, so take it anyway.
+        let one_at_a_time = ONE_PROVIDER_AT_A_TIME
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let addr = TcpListener::bind("127.0.0.1:0")
             .and_then(|listener| listener.local_addr())
             .expect("reserve a loopback port");
@@ -83,6 +99,7 @@ impl ServeProbe {
             child,
             stderr: receiver,
             addr,
+            _one_at_a_time: one_at_a_time,
         }
     }
 
@@ -91,9 +108,11 @@ impl ServeProbe {
     fn assert_provider_serving(&mut self) {
         while !proxy_answers_health(self.addr) {
             if let Some(status) = self.child.try_wait().expect("try_wait") {
+                // The provider has exited, so its stderr is at EOF.
+                let stderr: Vec<String> = self.stderr.iter().collect();
                 panic!(
                     "provider process exited ({status}); dashboard failure must leave the \
-                     provider running"
+                     provider running: {stderr:?}"
                 );
             }
             std::thread::sleep(Duration::from_millis(20));
