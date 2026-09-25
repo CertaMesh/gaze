@@ -22,15 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   On the 2,910-document scored-labels-v2 Nym/NER replay with fresh random
   sessions, three pre-fix runs leaked 14,071–14,088 bytes (mean 14,078),
   produced 28,645–28,676 false-positive bytes (mean 28,659), and restored
-  2,909–2,910 documents exactly. The selected shape-derived hex mapping was
-  scored again from the implementation branch:
+  2,909–2,910 documents exactly. Each variant passed a 60-document replay
+  across five fresh CLI sessions. The selected shape-derived hex mapping was
+  scored again after merging main with identical results:
 
-  | Scan prefix | Leaked bytes | False-positive bytes | Exact restores | Redaction actions | Post-policy suspects |
-  |---|---:|---:|---:|---:|---:|
-  | `00000000` | 14,116 | 28,638 | 2,907 | 4 | 0 |
-  | `xxxxxxxx` | 14,706 | 28,598 | 2,909 | 1 | 0 |
-  | No prefix, mapped offsets | 14,471 | 28,642 | 2,910 | 0 | 0 |
-  | Shape-derived hex (selected) | 13,991 | 28,652 | 2,910 | 0 | 0 |
+  | Scan prefix | Unstable documents / 60 | Leaked bytes | False-positive bytes | Exact restores | Redaction actions | Post-policy suspects |
+  |---|---:|---:|---:|---:|---:|---:|
+  | `00000000` | 0 | 14,116 | 28,638 | 2,907 | 4 | 0 |
+  | `xxxxxxxx` | 0 | 14,706 | 28,598 | 2,909 | 1 | 0 |
+  | No prefix, mapped offsets | 0 | 14,471 | 28,642 | 2,910 | 0 | 0 |
+  | Shape-derived hex (selected) | 0 | 13,991 | 28,652 | 2,910 | 0 | 0 |
 
 ### Security
 
