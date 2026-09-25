@@ -144,7 +144,11 @@ fn registry_scan_uses_stable_owned_tokens_and_real_clean_offsets() {
     let captured = inputs.lock().unwrap();
     assert_eq!(captured.len(), 2);
     assert_eq!(captured[0], captured[1]);
-    assert!(captured[0].contains("<00000000:Email_1>"));
+    assert!(captured[0].contains(":Email_1>"));
+    let prefix_start = captured[0].find('<').unwrap() + 1;
+    assert!(captured[0][prefix_start..prefix_start + 8]
+        .bytes()
+        .all(|byte| byte.is_ascii_hexdigit()));
 }
 
 struct TokenStraddleModel;

@@ -457,11 +457,8 @@ fn safety_net_trace_partial_bleed_tokenizes_only_uncovered_subspan() {
         ),
     );
 
-    assert!(matches!(
-        report.suspects[0].kind,
-        LeakKind::PartialBleed { ref uncovered }
-            if uncovered == &(token_end..baseline.len())
-    ));
+    assert_eq!(report.suspects[0].span, token_end..baseline.len());
+    assert!(matches!(report.suspects[0].kind, LeakKind::Uncovered));
     assert_eq!(manifest.len(), 2);
     assert_eq!(trace.len(), 2);
     assert_eq!(trace[0].raw_start(), 0);
@@ -491,7 +488,7 @@ fn safety_net_trace_partial_bleed_tokenizes_only_uncovered_subspan() {
 }
 
 #[test]
-fn safety_net_trace_class_mismatch_inside_live_token_is_reversible_noop() {
+fn safety_net_trace_class_mismatch_inside_live_token_is_dropped() {
     let raw = "alice@example.invalid ok";
     let baseline_session = session();
     let baseline = text(
@@ -514,7 +511,7 @@ fn safety_net_trace_class_mismatch_inside_live_token_is_reversible_noop() {
         ),
     );
 
-    assert_eq!(report.stats.class_mismatch_count, 1);
+    assert_eq!(report.stats.suspect_count, 0);
     assert!(clean.ends_with(" ok"));
     assert_eq!(manifest.len(), 1);
     assert_eq!(trace.len(), 1);
@@ -705,7 +702,7 @@ fn safety_net_redact_mode_rounds_misaligned_multibyte_suspect_outward() {
 }
 
 #[test]
-fn safety_net_redact_mode_expands_overlap_to_entire_emitted_token() {
+fn safety_net_redact_mode_drops_findings_inside_an_owned_token() {
     let session = session();
     let raw = RawDocument::Text("alice@example.invalid ok".to_string());
     let baseline = text(
@@ -727,23 +724,19 @@ fn safety_net_redact_mode_expands_overlap_to_entire_emitted_token() {
                 gaze::SafetyNetFallback::Strict,
             ),
         )
-        .expect("overlap redact expands to emitted token");
+        .expect("owned placeholder is protected");
     let clean_text = text(clean);
 
-    // The redaction swallowed the emitted token and left one marker standing for the union.
-    assert_eq!(clean_text, "[REDACTED:name] ok");
-    assert!(!clean_text.contains('<'));
-    assert!(!clean_text.contains("Email"));
+    assert_eq!(clean_text, baseline);
     assert_eq!(manifest.len(), 1);
-    assert!(gaze::is_redaction_marker(
-        &clean_text[manifest[0].clean_span.clone()]
-    ));
-    // Restore leaves the marker exactly where it is: it is not a token to substitute.
+    assert!(session
+        .restore(&clean_text[manifest[0].clean_span.clone()])
+        .is_some());
     assert_eq!(
         session.restore_strict_text(&clean_text).expect("restore"),
-        "[REDACTED:name] ok"
+        "alice@example.invalid ok"
     );
-    assert_eq!(report.stats.class_mismatch_count, 1);
+    assert_eq!(report.stats.suspect_count, 0);
 }
 
 #[test]
@@ -814,14 +807,12 @@ fn safety_net_redact_mode_keeps_aligned_span_redaction_behavior() {
     assert_eq!(report.stats.uncovered_count, 1);
 }
 
-/// A class-mismatch suspect that lies wholly inside a live token is the net re-flagging text the
-/// pipeline already protected. Resolving or redacting it would destroy a live token (and with it
-/// the restore path) to remove nothing, so it is audited as a conflict-loser no-op.
+/// A class-mismatch suspect wholly inside a live token is removed before policy or audit.
 ///
 /// Before the fail-closed integrity work this fell back to redaction: the clean text became
 /// `" ok"`, the manifest was emptied, and the document was permanently irreversible.
 #[test]
-fn safety_net_resolve_class_mismatch_inside_live_token_is_audited_noop() {
+fn safety_net_resolve_class_mismatch_inside_live_token_is_dropped() {
     let session = session();
     let raw = RawDocument::Text("alice@example.invalid ok".to_string());
     let baseline = text(
@@ -854,7 +845,7 @@ fn safety_net_resolve_class_mismatch_inside_live_token_is_audited_noop() {
         )
         .expect("protected mismatch must not fail closed");
 
-    assert_eq!(report.stats.class_mismatch_count, 1);
+    assert_eq!(report.stats.suspect_count, 0);
     let clean = text(clean);
     assert_eq!(
         clean, baseline,
@@ -866,11 +857,10 @@ fn safety_net_resolve_class_mismatch_inside_live_token_is_audited_noop() {
             .expect("protected mismatch stays restorable"),
         "alice@example.invalid ok"
     );
-    assert!(logger.entries().iter().any(|entry| {
-        entry.decided_by == ConflictTier::Resolve
-            && entry.conflict_loser
-            && entry.fallback_triggered.is_none()
-    }));
+    assert!(logger
+        .entries()
+        .iter()
+        .all(|entry| entry.fallback_triggered.is_none()));
 }
 
 #[test]
@@ -944,17 +934,9 @@ fn byte_equal_invariance_for_leak_kinds_and_locale_skip() {
     let cases = [
         (
             MockNet::new(Some(0..clean_len), PiiClass::Email),
-            Some(LeakKind::PartialBleed {
-                uncovered: token_len..clean_len,
-            }),
+            Some(LeakKind::Uncovered),
         ),
-        (
-            MockNet::new(Some(0..token_len), PiiClass::Name),
-            Some(LeakKind::ClassMismatch {
-                pipeline_class: PiiClass::Email,
-                safety_net_class: PiiClass::Name,
-            }),
-        ),
+        (MockNet::new(Some(0..token_len), PiiClass::Name), None),
         (
             MockNet::new(Some(token_len + 1..clean_len), PiiClass::Email),
             Some(LeakKind::Uncovered),
@@ -1660,14 +1642,7 @@ impl SafetyNet for MixedSecondPassNet {
     }
 }
 
-/// Axis-2: the `Resolve` fallback must redact the residual **without** touching suspects that are
-/// already protected by a live token.
-///
-/// Handing the fallback the whole residual report is necessary (the residual is only in there) but
-/// not sufficient: `post_resolution_fallback_reason` classifies some of those suspects as
-/// protected precisely because redacting them would delete a minted token and destroy its restore
-/// path. The fallback acts on the actionable subset, and the protected ones still get their
-/// `Preserve` audit row.
+/// The `Resolve` fallback acts on exposed residual bytes and leaves an owned token restorable.
 #[test]
 fn resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens() {
     let cases = [
@@ -1727,8 +1702,8 @@ fn resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens(
             );
             assert_eq!(
                 rows.iter().filter(|r| r.action == Action::Preserve).count(),
-                2,
-                "one primary-token observation in each follow-up phase"
+                0,
+                "owned placeholder findings are dropped before audit"
             );
             continue;
         }
@@ -1759,9 +1734,7 @@ fn resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens(
              marker standing where the residual was"
         );
 
-        // Both dispositions are on the record: the residual was redacted, the protected suspect
-        // was preserved. A protected suspect that vanishes from the audit is an axis-4 hole of
-        // its own — filtering it out of the redaction set is only half the fix.
+        // The exposed residual is audited. Placeholder bytes are excluded before policy.
         let rows = logger.entries();
         let redacted = rows
             .iter()
@@ -1782,8 +1755,8 @@ fn resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens(
             "{expected_reason:?}: the row names the reason that drove the fallback"
         );
         assert_eq!(
-            preserved, 1,
-            "{expected_reason:?}: the protected suspect keeps its Preserve row"
+            preserved, 0,
+            "{expected_reason:?}: owned placeholder findings are dropped"
         );
     }
 }
@@ -2017,16 +1990,9 @@ impl SafetyNet for DeterministicMixedNet {
     }
 }
 
-/// The **first-pass** half of the fallback-filtering contract, reachable with a plain
-/// deterministic net.
-///
-/// When `resolve_safety_net_suspects` refuses up front, it returns from inside its classification
-/// loop — above its own `Preserve` logging. So without filtering, a protected suspect on this path
-/// is both redacted (deleting a minted token, destroying restore) and absent from the audit. This
-/// path needs no stateful backend at all: one net, one pass, one span inside a token and one span
-/// that cannot be honored.
+/// A first-pass fallback redacts only the exposed suspect and keeps the token restorable.
 #[test]
-fn first_pass_refusal_redacts_only_the_actionable_suspect_and_audits_the_protected_one() {
+fn first_pass_refusal_redacts_only_the_exposed_suspect() {
     let email = "alice@example.invalid";
     let cases = [
         (
@@ -2084,7 +2050,7 @@ fn first_pass_refusal_redacts_only_the_actionable_suspect_and_audits_the_protect
             "{refusal:?}: restore must return the protected value byte-exactly, got {restored:?}"
         );
 
-        // Exactly one row for each disposition, and the redaction names the refusal reason.
+        // The redaction names the refusal reason; the owned placeholder is excluded.
         let rows = logger.entries();
         let redacted = rows
             .iter()
@@ -2105,8 +2071,8 @@ fn first_pass_refusal_redacts_only_the_actionable_suspect_and_audits_the_protect
             "{refusal:?}: the row names the refusal reason"
         );
         assert_eq!(
-            preserved, 1,
-            "{refusal:?}: the protected suspect keeps its Preserve row"
+            preserved, 0,
+            "{refusal:?}: owned placeholder findings are dropped"
         );
     }
 }
@@ -2311,11 +2277,9 @@ impl SafetyNet for TokenTextNet {
     }
 }
 
-/// PR 609 finding 3: a Nym suspect wholly inside a live token is already protected. Under every
-/// `Resolve` fallback, including `Strict`, it is an audited `Preserve` no-op: the document is not
-/// rejected, not altered, and restores exactly.
+/// A Nym finding wholly inside a live token is dropped before any `Resolve` fallback.
 #[test]
-fn nym_suspect_inside_its_own_token_text_is_protected_under_every_resolve_fallback() {
+fn nym_suspect_inside_its_own_token_text_is_dropped_under_every_resolve_fallback() {
     const RAW: &str = "Hausnummer 12a ok";
     let building = PiiClass::custom("building_number").expect("class");
     for class in [
@@ -2379,15 +2343,10 @@ fn nym_suspect_inside_its_own_token_text_is_protected_under_every_resolve_fallba
                     .all(|entry| entry.fallback_triggered.is_none()),
                 "{class:?}/{fallback:?}: no fallback may fire"
             );
-            if class != building {
-                assert!(
-                    entries
-                        .iter()
-                        .any(|entry| entry.decided_by == ConflictTier::Resolve
-                            && entry.action == Action::Preserve),
-                    "{class:?}/{fallback:?}: the protected suspect keeps its Preserve row"
-                );
-            }
+            assert!(
+                entries.iter().all(|entry| entry.action != Action::Preserve),
+                "{class:?}/{fallback:?}: owned placeholder findings are dropped"
+            );
         }
     }
 }

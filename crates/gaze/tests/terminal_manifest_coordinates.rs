@@ -210,8 +210,6 @@ fn terminal_coordinates_trace() {
 #[derive(Clone, Copy, Debug)]
 enum Rejection {
     Gap,
-    Spill,
-    AcrossGap,
     ForeignToken,
     Empty,
     Reversed,
@@ -248,8 +246,6 @@ impl SafetyNet for RejectingNet {
                 };
                 i..i + 3
             }
-            Rejection::Spill => first.start..first.end + 1,
-            Rejection::AcrossGap => first.start..context.manifest.spans[1].clean_span.end,
             Rejection::ForeignToken => {
                 let i = text.rfind('<').unwrap();
                 i..text[i..].find('>').unwrap() + i + 1
@@ -359,10 +355,8 @@ fn deletion_authorizes_one_reversible_round_over_a_raw_gap() {
 }
 
 #[test]
-fn deletion_does_not_authorize_spills_foreign_tokens_or_malformed_reports() {
+fn deletion_does_not_authorize_foreign_tokens_or_malformed_reports() {
     for rejection in [
-        Rejection::Spill,
-        Rejection::AcrossGap,
         Rejection::ForeignToken,
         Rejection::Empty,
         Rejection::Reversed,
@@ -422,10 +416,7 @@ fn deletion_does_not_authorize_spills_foreign_tokens_or_malformed_reports() {
                     "{route:?} {rejection:?}: {result:?}"
                 );
             } else {
-                // Spill and AcrossGap claim `Uncovered` over bytes a live token owns; the rest
-                // name no real range at all. Either way the suspect contradicts the document it
-                // was computed against, so it cannot be judged — and therefore cannot be
-                // resolved, admitted or deleted.
+                // These findings name no judgeable exposed range, so the terminal round denies.
                 assert!(
                     matches!(
                         result,

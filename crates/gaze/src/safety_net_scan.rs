@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::ops::Range;
 
 use gaze_types::Manifest;
+use sha2::{Digest, Sha256};
 
 use crate::pipeline::{Error, Result};
 
@@ -68,6 +69,14 @@ fn replace_session_hex(
     let bytes = stable.get_or_insert_with(|| clean_text.as_bytes().to_vec());
     let start = token_start + offset;
     bytes[start..start + 8].copy_from_slice(b"00000000");
+    // Hash only the placeholder shape after removing session entropy. This
+    // keeps the model view stable without deriving the prefix from raw PII.
+    let mut hasher = Sha256::new();
+    hasher.update(b"gaze-safety-net-token-v3\0");
+    hasher.update(&bytes[token_start..token_start + token.len()]);
+    let digest = hasher.finalize();
+    let surrogate = hex::encode(&digest[..4]);
+    bytes[start..start + 8].copy_from_slice(surrogate.as_bytes());
 }
 
 fn session_hex_offset(token: &str) -> Option<usize> {
@@ -114,10 +123,25 @@ mod tests {
             })
             .collect();
         let scan = SafetyNetScanText::new(&text, &Manifest::from_spans(spans), |_| false).unwrap();
+        let prefixes = tokens
+            .iter()
+            .map(|token| {
+                let single = SafetyNetScanText::new(token, &Manifest::default(), |candidate| {
+                    candidate == *token
+                })
+                .unwrap();
+                let offset = session_hex_offset(token).unwrap();
+                single.text()[offset..offset + 8].to_owned()
+            })
+            .collect::<Vec<_>>();
         assert_eq!(
             scan.text(),
-            "<00000000:Name_1> 🦊 email2.00000000@gaze-fake.invalid 🦊 00000000:custom:tenant_3"
+            format!(
+                "<{}:Name_1> 🦊 email2.{}@gaze-fake.invalid 🦊 {}:custom:tenant_3",
+                prefixes[0], prefixes[1], prefixes[2]
+            )
         );
+        assert!(prefixes.iter().all(|prefix| prefix != "00000000"));
         assert_eq!(scan.text().len(), text.len());
     }
 

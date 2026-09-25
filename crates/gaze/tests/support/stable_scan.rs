@@ -1,3 +1,5 @@
+use sha2::{Digest, Sha256};
+
 /// Test expectation for the fixed-width session prefix presented to safety nets.
 pub fn stable_scan(text: &str) -> String {
     let mut bytes = text.as_bytes().to_vec();
@@ -13,8 +15,14 @@ pub fn stable_scan(text: &str) -> String {
             None
         };
         if let Some(offset) = offset {
-            bytes[matched.start() + offset..matched.start() + offset + 8]
-                .copy_from_slice(b"00000000");
+            let start = matched.start() + offset;
+            bytes[start..start + 8].copy_from_slice(b"00000000");
+            let mut hasher = Sha256::new();
+            hasher.update(b"gaze-safety-net-token-v3\0");
+            hasher.update(&bytes[matched.start()..matched.end()]);
+            let digest = hasher.finalize();
+            let surrogate = hex::encode(&digest[..4]);
+            bytes[start..start + 8].copy_from_slice(surrogate.as_bytes());
         }
     }
     String::from_utf8(bytes).unwrap()

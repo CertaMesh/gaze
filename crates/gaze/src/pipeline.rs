@@ -5488,13 +5488,14 @@ mod tests {
         };
         scan([0xde, 0xad, 0xbe, 0xef]);
         scan([0xca, 0xfe, 0xfe, 0xed]);
-        assert_eq!(
-            *seen.lock().unwrap(),
-            vec![
-                "<00000000:Email_1> <cafefeed:Name_9> Dr. Schmidt",
-                "<00000000:Email_1> <cafefeed:Name_9> Dr. Schmidt",
-            ]
-        );
+        let captured = seen.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        assert_eq!(captured[0], captured[1]);
+        assert!(captured[0].contains(":Email_1> <cafefeed:Name_9> Dr. Schmidt"));
+        assert_ne!(&captured[0][1..9], "deadbeef");
+        assert!(captured[0][1..9]
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit()));
     }
 
     impl SafetyNet for MarkerSafetyNet {
