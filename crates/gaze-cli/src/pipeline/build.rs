@@ -31,23 +31,43 @@ pub(crate) fn policy_warnings(policy: &Policy, pipeline: &Pipeline) -> Vec<Strin
     {
         warnings.push("notice: core rulepack floor is off".to_string());
     }
-    let classes: BTreeSet<PiiClass> = pipeline
+    let mut classes: BTreeSet<PiiClass> = pipeline
         .registry()
         .recognizer_ids()
         .filter_map(|id| pipeline.registry().recognizer(id))
         .flat_map(|recognizer| recognizer.possible_classes())
         .collect();
+    classes.extend(
+        pipeline
+            .registry()
+            .family_policy()
+            .families()
+            .map(PiiClass::family),
+    );
     let mut unruled = Vec::new();
     let mut generalized = Vec::new();
     for class in classes {
-        let first_action = policy.rules.iter().find_map(|rule| match rule {
-            RuleSpec::Class {
-                class: named,
-                action,
-            } if named == &class => Some((true, *action)),
-            RuleSpec::Default { action } => Some((false, *action)),
-            _ => None,
-        });
+        let first_action = first_policy_action(policy, &class);
+        if let Some(family) = class.as_family_name() {
+            if !matches!(first_action, Some((true, _))) {
+                let own = first_action.map_or(Action::Preserve, |(_, action)| action);
+                let derived = pipeline
+                    .registry()
+                    .family_member_classes(family)
+                    .into_iter()
+                    .map(|member| {
+                        first_policy_action(policy, &member)
+                            .map_or(Action::Preserve, |(_, action)| action)
+                    })
+                    .chain(std::iter::once(own))
+                    .max_by_key(|action| action.strictness_rank())
+                    .unwrap_or(own);
+                if derived == Action::Preserve {
+                    unruled.push(class.to_canonical_str());
+                }
+                continue;
+            }
+        }
         match first_action {
             Some((true, Action::Generalize)) => generalized.push(class.to_canonical_str()),
             Some((false, Action::Preserve)) | None => unruled.push(class.to_canonical_str()),
@@ -70,6 +90,17 @@ pub(crate) fn policy_warnings(policy: &Policy, pipeline: &Pipeline) -> Vec<Strin
         ));
     }
     warnings
+}
+
+fn first_policy_action(policy: &Policy, class: &PiiClass) -> Option<(bool, Action)> {
+    policy.rules.iter().find_map(|rule| match rule {
+        RuleSpec::Class {
+            class: named,
+            action,
+        } if named == class => Some((true, *action)),
+        RuleSpec::Default { action } => Some((false, *action)),
+        _ => None,
+    })
 }
 
 /// [`ResolvedPipeline`] before `build()`, for a verb that layers recognizers on top.
@@ -308,9 +339,10 @@ fn map_build_error(err: gaze_assembly::BuildError) -> CliError {
 /// Emit a stderr notice for each collision-family fallback class the policy
 /// shows intent about without naming reachably (see
 /// [`gaze_assembly::uncovered_collision_family_classes`]). The span does not
-/// leak: the family token takes the strictest action among its member classes'
-/// rules and the default. The notice tells the adopter which class the token
-/// will carry and how to set its action explicitly.
+/// necessarily stay protected: it takes the strictest action among its member
+/// classes' rules and the default, which can still be `preserve`. The separate
+/// policy diagnostic names raw family classes. This notice tells the adopter
+/// which class the token will carry and how to set its action explicitly.
 pub(crate) fn warn_uncovered_collision_families(
     policy: &Policy,
     rulepacks: &[Rulepack],

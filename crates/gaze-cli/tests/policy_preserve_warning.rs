@@ -1,8 +1,7 @@
 use std::fs;
-use std::io::Write;
-use std::net::{TcpListener, TcpStream};
+use std::io::{BufRead, Read, Write};
+use std::net::TcpListener;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
 use tempfile::tempdir;
 
@@ -28,9 +27,13 @@ class = "custom:beta"
 "#;
 
 fn run_clean(rules: &str, input: &str) -> std::process::Output {
+    run_clean_with_policy(&format!("{DETECTORS}\n{rules}"), input)
+}
+
+fn run_clean_with_policy(policy: &str, input: &str) -> std::process::Output {
     let dir = tempdir().unwrap();
     let path = dir.path().join("policy.toml");
-    fs::write(&path, format!("{DETECTORS}\n{rules}")).unwrap();
+    fs::write(&path, policy).unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_gaze"))
         .args(["clean", "--policy", path.to_str().unwrap()])
         .stdin(Stdio::piped())
@@ -45,6 +48,71 @@ fn run_clean(rules: &str, input: &str) -> std::process::Output {
         .write_all(input.as_bytes())
         .unwrap();
     child.wait_with_output().unwrap()
+}
+
+#[test]
+fn raw_family_fallback_is_named_after_all_recognizer_classes_are_ruled() {
+    const INPUT: &str = "Überweisung DE89 3704 0044 0532 0130 00";
+    const BASE: &str = "[session]\nscope = \"persistent\"\nttl_secs = 86400\n\n[policy.rulepacks]\nbundled = [\"core\", \"locale-de\"]\n\n[locale]\nactive = [\"de-DE\"]\n";
+    const DEFAULT: &str = "[[rule]]\nkind = \"default\"\naction = \"preserve\"\n";
+    const FAMILY: &str = "custom:family:payment-card-or-iban";
+
+    let initial = run_clean_with_policy(&format!("{BASE}\n{DEFAULT}"), INPUT);
+    assert!(
+        initial.status.success(),
+        "{}",
+        String::from_utf8_lossy(&initial.stderr)
+    );
+    let initial_stderr = String::from_utf8(initial.stderr).unwrap();
+    let warning = initial_stderr
+        .lines()
+        .find(|line| line.contains("detected classes without a reachable class rule:"))
+        .expect("preserve diagnostic");
+    let listed = warning
+        .split_once("class rule: ")
+        .unwrap()
+        .1
+        .split_once("; values can reach")
+        .unwrap()
+        .0;
+    assert!(listed.split(", ").any(|class| class == FAMILY), "{warning}");
+
+    let class_rules = listed
+        .split(", ")
+        .filter(|class| *class != FAMILY)
+        .map(|class| {
+            format!("[[rule]]\nkind = \"class\"\nclass = \"{class}\"\naction = \"preserve\"\n")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let preserving = run_clean_with_policy(&format!("{BASE}\n{class_rules}\n{DEFAULT}"), INPUT);
+    assert!(
+        preserving.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preserving.stderr)
+    );
+    let clean: serde_json::Value = serde_json::from_slice(&preserving.stdout).unwrap();
+    assert_eq!(clean["clean_text"], INPUT);
+    let stderr = String::from_utf8(preserving.stderr).unwrap();
+    assert!(
+        stderr.contains(&format!("class rule: {FAMILY}; values can reach")),
+        "{stderr}"
+    );
+
+    let tokenizing_rules = class_rules.replace("action = \"preserve\"", "action = \"tokenize\"");
+    let protected = run_clean_with_policy(&format!("{BASE}\n{tokenizing_rules}\n{DEFAULT}"), INPUT);
+    assert!(
+        protected.status.success(),
+        "{}",
+        String::from_utf8_lossy(&protected.stderr)
+    );
+    let clean: serde_json::Value = serde_json::from_slice(&protected.stdout).unwrap();
+    assert_ne!(clean["clean_text"], INPUT);
+    let protected_stderr = String::from_utf8(protected.stderr).unwrap();
+    assert!(
+        !protected_stderr.contains("class rule: custom:family:"),
+        "{protected_stderr}"
+    );
 }
 
 #[test]
@@ -232,14 +300,24 @@ fn proxy_warns_only_after_a_successful_bind() {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while TcpStream::connect(&bind).is_err() {
-        assert!(Instant::now() < deadline, "proxy did not bind");
-        std::thread::sleep(Duration::from_millis(20));
+    let mut stderr_reader = std::io::BufReader::new(child.stderr.take().unwrap());
+    let mut ready_output = String::new();
+    loop {
+        let mut line = String::new();
+        assert_ne!(
+            stderr_reader.read_line(&mut line).unwrap(),
+            0,
+            "proxy exited before readiness: {ready_output}"
+        );
+        ready_output.push_str(&line);
+        if line.contains("detected classes") {
+            break;
+        }
     }
     child.kill().unwrap();
-    let output = child.wait_with_output().unwrap();
-    let stderr = String::from_utf8(output.stderr).unwrap();
+    let _ = child.wait().unwrap();
+    stderr_reader.read_to_string(&mut ready_output).unwrap();
+    let stderr = ready_output;
     assert_eq!(stderr.matches("detected classes").count(), 1, "{stderr}");
     assert!(stderr.contains("custom:alpha"), "{stderr}");
     assert!(stderr.contains("custom:beta"), "{stderr}");
