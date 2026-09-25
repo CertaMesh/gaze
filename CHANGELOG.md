@@ -7,60 +7,176 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Performance
+## [0.15.0] - 2026-09-25
 
-- NER now runs once per document instead of once per locale-chain step. Since the
-  per-span locale fall-through, the registry called every document-basis recognizer at
-  every chain step, so the 15-step `gaze setup` chain ran the same NER inference 15
-  times per document and the two-step rules+NER chain ran it twice. Recognizers whose
-  output ignores the step locale (NER, regex, anchored-match, dictionary) now declare it
-  through the new `Recognizer::detect_is_locale_invariant` method (default `false`), and
-  the registry reuses their first result at later steps. Per-span claiming is unchanged,
-  and clean text, manifests, and audit rows are byte-identical. Custom recognizers keep
-  one call per step unless they opt in.
+v0.15.0 makes the policy that `gaze setup` writes protect every detected class
+and turns the Nym safety net on in it by default, while keeping Gaze's
+contract: fail closed, preserve reversibility, and keep PII out of
+agent-visible surfaces. The curated summary below leads; the full entries
+follow in Keep a Changelog form.
 
-### Fixed
+**Security.** Policies written by `gaze setup` in v0.11.2 through v0.14.0 set
+the default rule to `preserve`, so detected phone numbers, IBANs, payment card
+numbers and IP addresses left the process raw with a success exit. The
+generated policy now tokenizes by default (PR #635). **Remediation:** back up
+any custom rules in the existing policy, then run `gaze setup --force` to
+regenerate it; the manual repair is in the Security entry below. `gaze clean`,
+`gaze daemon` and `gaze proxy` now warn on stderr when a loaded policy sends a
+detected class through raw, whether by an explicit `preserve` default or an
+omitted default, and name reachable one-way `generalize` rules (PR #641).
+Existing policies stay valid. Other shipped leaks closed in this release each
+have an entry under Security or Fixed, which names the affected releases where
+the history proves them. Among them: `gaze clean` without `--policy` ran an
+email-only pipeline (v0.3.0–v0.14.0, PR #618); `gaze index` ran without the
+`core` floor (v0.11.0–v0.14.0, PR #620); `gaze proxy` never ran a configured
+safety net on request text (v0.13.0–v0.14.0, PR #585) and forwarded raw bytes
+after a safety-net fallback deletion (v0.13.0–v0.14.0, PR #593); the opt-in
+prefix cache could return raw PII from a stale decision (v0.9.0–v0.14.0,
+PR #579); a Resolve+Redact fallback deletion could leave newly detectable raw
+text behind (v0.8.1–v0.14.0, PR #584); several IBAN and collision-family
+shapes shipped raw (PRs #622, #624, #626, #627, #628); and so did national IDs
+under JSON keys and `key=value` log fields and identifiers grouped with
+non-breaking spaces, in every release through v0.14.0 (PR #647).
 
-- **`gaze-proxy` restores raw values into JSON documents as valid JSON.** The
-  legacy OpenAI and Gemini adapters pasted raw values verbatim into answer
-  fields that hold serialized JSON: Chat Completions
-  `tool_calls[].function.arguments`, Responses `function_call` `arguments`,
-  and JSON-mode answer text. JSON mode means OpenAI `json_object` or
-  `json_schema`, or Gemini `responseMimeType: application/json`. Streaming
-  deltas had the same problem. A value holding `"`, `\`, or a control
-  character made the agent's tool call or structured answer fail to parse.
-  Some values still parsed but changed silently: the UNC path
-  `\\fileserver\new_hires` decoded as `\fileserver`, a newline, and `ew_hires`.
-  Restore now JSON-escapes raw values in these fields and writes plain text byte
-  for byte as before. A value captured inside a JSON string of the request, such
-  as a field of a JSON tool result, is already escaped in the manifest. It is
-  still written into these fields as it is, so it is not escaped twice. The
-  Anthropic Messages codec and Gemini `functionCall.args` were already exact and
-  are pinned by the same end-to-end suite (todo #3837).
+**Highlights.**
 
-- Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
-  surrogate prefix derived from the placeholder shape after removing the random
-  session hex. Nym, OPF, and registry backends no longer change detections
-  when a fresh session chooses a different random prefix. The scan view
-  preserves byte offsets; observable clean output and restore mappings retain
-  the original token bytes. Findings wholly inside a verified placeholder are
-  discarded; findings that cross one are clipped to exposed bytes before
-  policy or fallback can act, so fallback cannot replace an owned placeholder
-  with a one-way redaction marker.
+- **Nym on by default in `gaze setup`** (PR #642). Setup installs the
+  SHA-pinned Nym-small bundle, writes an activating policy, and proves in the
+  doctor check that Nym catches a synthetic plate. It prints the model card
+  licence (MIT), the pinned upstream revision, the open training-data licence
+  review, and the opt-out: `gaze setup --safety-net none`. OPF stays opt-in.
+- **A policy can activate a safety net** (PR #636). `[safety_net] backend =
+  "nym"` turns Nym on for both the CLI and `gaze-assembly`;
+  `[safety_net.nym] model_dir` locates the bundle. `--safety-net` is
+  repeatable, so nets stack for one run and replace the policy's selection;
+  `--safety-net none` disables them for one run with a notice.
+- **The setup policy loads every bundled PII rulepack except `secrets`**, plus
+  the locales those packs declare, with `en-US` first (PR #635). API keys and
+  tokens stay opt-in through `secrets`.
+- **The benchmark scores the exact setup policy** (PR #643). The scorecard
+  harness builds its pipeline through the same policy resolution as
+  `gaze clean --policy`, and an equivalence check proves the two agree.
+- **One entity, one token** (PR #628): a candidate that wholly contains
+  another class's candidate wins the whole span, and a `preserve` winner no
+  longer shields bytes a protected class claimed.
+- **The Kiji DistilBERT safety net is removed** (PR #612): it recovered 1,831
+  leaked gold bytes for +169,657 false-positive bytes on the 2026-09-16
+  leaderboard.
 
-  On the 2,910-document scored-labels-v2 Nym/NER replay with fresh random
-  sessions, three pre-fix runs leaked 14,071–14,088 bytes (mean 14,078),
-  produced 28,645–28,676 false-positive bytes (mean 28,659), and restored
-  2,909–2,910 documents exactly. Each variant passed a 60-document replay
-  across five fresh CLI sessions. The selected shape-derived hex mapping was
-  scored again after merging main with identical results:
+**Breaking changes** (each has a full entry and migration below; see also
+[UPGRADE.md](UPGRADE.md)):
 
-  | Scan prefix | Unstable documents / 60 | Leaked bytes | False-positive bytes | Exact restores | Redaction actions | Post-policy suspects |
-  |---|---:|---:|---:|---:|---:|---:|
-  | `00000000` | 0 | 14,116 | 28,638 | 2,907 | 4 | 0 |
-  | `xxxxxxxx` | 0 | 14,706 | 28,598 | 2,909 | 1 | 0 |
-  | No prefix, mapped offsets | 0 | 14,471 | 28,642 | 2,910 | 0 | 0 |
-  | Shape-derived hex (selected) | 0 | 13,991 | 28,652 | 2,910 | 0 | 0 |
+- `gaze setup --safety-net ner` is removed; use `--safety-net none` for the
+  former NER-only policy (PR #642).
+- `--safety-net-backend nym` needs one explicit `--safety-net nym` (PR #636).
+- `gaze setup` installs the pinned Davlan mBERT NER model; re-run it (PR #612).
+- `gaze index ingest` requires the pinned NER model through `--ner-model-dir`
+  or `GAZE_NER_MODEL_DIR` (PR #612).
+- Credential recognizers moved from `core` to the opt-in `secrets` rulepack;
+  `username.field` is removed (PR #607).
+- The Kiji safety net, its flags, features, environment variables and API are
+  removed (PR #612).
+- Custom rulepack paths keep the `core` floor unless `bundled = []` or
+  `--rulepack-bundled=none` (PR #632).
+- Containment precedence and per-character residual coverage change the token
+  stream (PR #628).
+- A collision-family token takes the strictest member action instead of the
+  `default` rule (PR #624).
+- The safety net writes a one-way `[REDACTED:<class>]` marker instead of
+  deleting bytes (PR #623).
+- `gaze-mcp-rmcp`, `gaze-mcp-bridge` and `gaze-document` move to rmcp 2.x
+  (PR #616).
+- `gaze_document::extract::pdf::rasterize_first_page` is removed; use
+  `extract_pages` (PR #650).
+- Custom `gaze-proxy` adapters that build `PiiSurface` values must set the new
+  `syntax` field (PR #656).
+- A policy with `schema_version = "0.1"` no longer loads; write `"0.1.0"`. The
+  `PolicySchemaUnsupported` error's `supported` field now reads `"0.1."`
+  (PR #576).
+- `gaze-mcp-bridge` caps its session cache at `session.max_sessions` (default
+  1,000) and refuses a new session at the cap when none can be evicted
+  (PR #578).
+- `gaze-token-bridge` fingerprints of custom entities that contain repeated or
+  non-space whitespace change; re-ingest them (PR #553).
+- `gaze proxy` runs configured safety nets on request text, so a request in
+  which a net finds raw text outside the tokens, or a net that errors, now
+  refuses the request before it reaches the provider (PR #585).
+
+**Known limitations.** One detection gap and two `gaze proxy` restore gaps
+ship in this release:
+
+- **A payment card next to other digits can reach the model untokenized**
+  (solo todo #3843). A card followed by a separated CVV or expiry
+  (`4111 1111 1111 1111 123`) or preceded by other digits fails the Luhn check
+  as one run, so the forward path does not tokenize it. The restore-boundary
+  check reports the same shape in model output (PR #652). A fix is in progress
+  (PR #658) and lands after this release.
+
+The two restore gaps fail toward pseudonymized or escaped output, never toward
+a leak, and both are planned for v0.16:
+
+- **A token split across streaming events is not restored** on the legacy
+  OpenAI chat and Gemini streaming paths (solo todo #3841). The proxy restores
+  each server-sent event on its own, and upstream streams usually split a Gaze
+  token over several events, so the client can receive the placeholder instead
+  of the original value in streamed text and tool-call arguments. Non-streaming
+  responses and the Anthropic path, which accumulates per content block, are
+  not affected.
+- **The Anthropic path can restore a JSON-escaped spelling** (solo todo #3842).
+  When a value was captured inside a JSON string in a text block, the manifest
+  holds its escaped source spelling, so restoring it into `tool_use.input` or
+  into plain text keeps the escapes: a literal backslash before a quote, or a
+  `\u` escape in place of a non-ASCII letter. The legacy adapters handle
+  JSON-destination restores correctly as of PR #656.
+
+**Performance.**
+Measured with [`scripts/bench/cli-latency.py`](scripts/bench/cli-latency.py)
+on the release code (built at `6fcba31a`) over 30 benchmark documents after one
+warm-up, on a quiet MacBook Pro (Apple M5 Max, 18 cores, 64 GB, macOS 26.5; 1-minute
+load 1.74 at start, no other build or benchmark running, one ONNX Runtime
+thread). Evidence:
+[`latency-v0.15.0.json`](docs/reference/benchmarks/latency-v0.15.0.json).
+
+| Pipeline, warm per document | Median | p95 |
+|---|---:|---:|
+| v0.14.0 rules + NER | 28.4 ms | 40.7 ms |
+| v0.15.0 rules + NER | 19.9 ms | 33.1 ms |
+| v0.15.0 `gaze setup` policy, no net (`--safety-net none`) | 20.3 ms | 33.2 ms |
+| v0.15.0 `gaze setup` policy with Nym (the default) | 69.8 ms | 139.8 ms |
+
+Rules + NER got faster than v0.14.0 because NER now runs once per document
+(PR #653); without that change the setup policy's 15-step locale chain ran NER
+15 times. Nym adds about 50 ms per document at the median and raises peak
+memory from about 590 MiB to about 1,050 MiB. One-shot `gaze clean` pays process
+start and model load on every call: 772 ms per document for the setup policy
+and 2,149 ms with Nym. A warm `gaze daemon` answers in 21.3 ms and 69.0 ms,
+after a first cold request of 762 ms and 2,120 ms. Latency grows with text
+length: in a 10-turn `gaze daemon` conversation that re-sends the history, a
+4.2 KB turn took 185 ms without a net and 1,022 ms with Nym. v0.16 is the
+performance release.
+
+**Benchmark.**
+Measured on the release commit with
+[`scripts/bench/run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py)
+(`full` profile, seed 20260710, scored-label contract v1) on the same 2,910
+documents and 130,282 gold PII bytes as v0.14.0, on a MacBook Pro (Apple M5
+Max, 18 cores, 64 GB, macOS 26.5). The arm is the exact policy
+`gaze setup --non-interactive` writes, Nym on
+([`scorecard-v0.15.0.json`](docs/reference/benchmarks/scorecard-v0.15.0.json)).
+
+| Setup | Refused | Leaked, all processed docs | Leaked, common set | False-positive bytes | Exact restores |
+|---|---:|---:|---:|---:|---:|
+| v0.15.0 `gaze setup` policy (rules + NER + Nym) | 0 | 19,556 (15.0%) | 19,556 (15.0%) | 30,073 | 2,910 / 2,910 |
+| v0.14.0 default (rules + NER + Kiji) | 0 | 25,179 (19.3%) | 25,179 (19.3%) | 168,276 | 2,282 / 2,910 |
+
+Neither setup refused a document, so the common set is all 2,910. Leaked PII
+bytes fell 22.3% and false-positive bytes 82.1%. Both rows use scored-label
+contract v1, which scores every corpus label. Under scored-label contract v2
+(PASSWORD and SECURITYTOKEN out of contract, gold 123,621 B) the same run
+leaks 13,319 B (10.77%): the same release code (`6fcba31a`), policy (SHA-256
+`f909a23a…`), seed and host, rerun with `--scored-labels
+docs/reference/benchmarks/scored-labels-v2.json`. That v2 scorecard is not
+committed; the v1 row stays the version's benchmark figure.
 
 ### Security
 
@@ -81,19 +197,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   run and also passed unreported, in ASCII text too. The check now retries the
   group-aligned sub-runs printed in a card layout (compact, 4-4-4-4,
   4-4-4-4-3, 4-6-5, 4-6-4) and reports the card at its exact offsets. Other
-  ASCII input scans unchanged.
+  ASCII input scans unchanged (PR #652).
 
 - **National IDs in tool-call JSON and `key=value` logs are now tokenized.**
   Every release up to and including v0.14.0 matched cue-anchored identifiers
   (BSN, Steuer-ID, CPF, CNPJ, NHS, SSN, NINO, PAN, Aadhaar, NIR, VAT ID,
   passport, national ID, driver licence, tax number) only in prose such as
-  `BSN: 111222333`. A JSON key (`{"bsn":"111222333"}`), a log field
-  (`bsn=111222333`) or a snake, camel or kebab key (`steuer_id`, `steuerId`,
+  `BSN: <9 digits>`. A JSON key (`{"bsn":"<9 digits>"}`), a log field
+  (`bsn=<9 digits>`) or a snake, camel or kebab key (`steuer_id`, `steuerId`,
   `nhs_number`, `customer_ssn`) passed the value through raw, including on the
   `gaze proxy` tool-call argument path. The `core` rulepack patterns now accept
   quoted, single-quoted and escaped JSON keys, `=` and `:` log forms, and those
   key spellings. A camelCase prefix before the cue (`customerSsn`) is not yet
-  matched. (solo todo #3818)
+  matched, and CSV header-to-column association is not covered: a CSV column
+  headed `bsn` with bare values is not tokenized by this change (PR #647,
+  solo todo #3818; CSV is solo todo #3829).
 - **Identifiers grouped with non-breaking or thin spaces are now tokenized.**
   Every release up to and including v0.14.0 missed IBANs, payment cards,
   Steuer-IDs and other grouped identifiers whose groups were separated by
@@ -103,7 +221,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   separator, so each value shipped raw; an NBSP-grouped Steuer-ID leaked its
   first two digits next to a `phone` token. Detection now reads every Unicode space
   separator as an ASCII space; tokens, manifests and restore keep the original
-  bytes. (solo todo #3819)
+  bytes (PR #647, solo todo #3819).
 - **`gaze setup` policies now tokenize every detected class.** Generated policies
   in v0.11.2–v0.14.0 preserved unmatched classes, allowing detected phone,
   IBAN, payment card, and IP address values to pass through raw. The generated
@@ -113,28 +231,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default action to `"tokenize"`, delete the old per-class rules (the
   `location = generalize` rule emits a one-way marker), and enable the
   additional bundled packs and locales.
-
-### Changed
-
-- **Breaking (custom `gaze-proxy` adapters):** `PiiSurface` has a new
-  `syntax: SurfaceSyntax` field (`Text`, `Json`, or `ModelOutput`). Restore uses
-  it to choose the escaping for each surface. `ProviderAdapter` has a new
-  provided method, `requests_json_output(request)`, which defaults to `false`.
-  If an adapter builds `PiiSurface` values directly, set `syntax:
-  SurfaceSyntax::Text` to keep the previous verbatim restore. Use `Json` for
-  fields that hold serialized JSON.
-
-- **Breaking:** `gaze setup --safety-net ner` is removed. Use `--safety-net none`
-  for the former NER-only policy. `gaze setup` now installs Nym by default and
-  writes an activating policy with the pinned model path. OPF remains opt-in
-  and can be stacked by the printed command. The doctor proves Nym catches a
-  synthetic plate; setup prints the model card MIT licence, pinned upstream
-  revision, open training-data licence review, and opt-out.
-
-- **Breaking:** `--safety-net-backend nym` now requires one explicit
-  `--safety-net nym` selection. Add `--safety-net nym` to existing commands
-  that used only the backend selector; the old form succeeded without
-  activating a safety net.
+- **rustls 0.23.45 and rustls-webpki 0.103.15.** The lockfile moves rustls from
+  0.23.40 to 0.23.45 for RUSTSEC-2026-0285 (TLS 1.3 handshake messages were
+  accepted across encryption-level boundaries; the advisory does not let a
+  network attacker alter or complete an authenticated handshake), and
+  rustls-webpki from 0.103.13 to 0.103.15, which the new rustls requires.
+  `gaze-proxy`, `gaze-model-setup` and the `gaze` CLI link rustls (PR #580).
 
 ### Added
 
@@ -144,6 +246,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raw. It also identifies reachable per-class `generalize` rules as one-way.
   Existing policies remain valid; back up custom rules and run
   `gaze setup --force`, or set the default action to `"tokenize"`.
+- **The scorecard harness benchmarks the exact `gaze setup` policy** (PR #643).
+  A policy-file config builds the benchmark pipeline from a policy TOML through
+  the same resolution `gaze clean --policy` uses, now shared as
+  `gaze_assembly::{resolve_policy_inputs, ResolvedPolicyInputs}`.
+  `scripts/bench/check_policy_equivalence.py` proves the release binary and
+  the benchmark agree document by document and refuses an empty or truncated
+  sample; a model-free six-case sample runs in CI. Scorecards record the
+  policy file SHA-256 and the model bundle pins. `Candidate` (non-exhaustive)
+  gained `source_recognizer_ids`, so protection traces carry each original
+  recognizer id and a custom id containing `+` is no longer split.
 - `[safety_net].backend = "nym"` activates Nym from a policy in both CLI and
   `gaze-assembly`; `[safety_net.nym].model_dir` supplies its optional bundle
   location. `gaze-assembly/safety-net-nym` forwards the backend feature.
@@ -235,9 +347,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     population it removes 6,154 leaked gold bytes under scored-label contract v2
     (20,727 to 14,573) for 526 false-positive bytes, action precision 0.891,
     one one-way deletion, 2,909 of 2,910 exact restores; timings provisional.
-  - Open before any default change: an address-context guard for room and seat
-    numbers, a quiet-host latency measurement, and a licence review of the
-    Wikipedia-derived (CC-BY-SA) training data.
+  - Three items were open before any default change; this release turns Nym on
+    in the `gaze setup` policy with each one stated. The address-context guard
+    for room and seat numbers is still a documented known gap. The licence
+    review of the Wikipedia-derived (CC-BY-SA) training data is still open, and
+    setup's notice names it. Latency was measured quietly for rules plus NER
+    with and without Nym; the release numbers for the setup policy are in the
+    Performance summary above. See
+    [Known gaps and open review items](docs/explanation/safety-net/safety-nets.md#known-gaps-and-open-review-items).
 
 - **Anchored four-digit postal codes for Austria and Switzerland**
   (`postal.at_ch`). Four-digit codes in `de-AT` and `de-CH` documents had no
@@ -320,7 +437,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Measured on the rule-floor arm over the 1,886-document holdout: gold ZIP byte
   recall rises from 30.8% to 59.7%, recovering **1,567 gold bytes**; per locale,
   `en-CA` 97.1%, `en-GB` 96.9%, `en-IE` 87.9%. Precision cost is one false
-  positive across all 1,886 documents (an uppercase `AA9 9AA` token in lowercase
+  positive across all 1,886 documents (an uppercase letter-letter-digit, digit-letter-letter token in lowercase
   prose, whose outward code is a real assigned UK district) and **zero across all
   1,024 committed A4 negative documents**. The bundle tokenization drift snapshot
   is unchanged: none of the three patterns match the drift corpus.
@@ -342,7 +459,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     between the two halves. `[ ]?` matched U+0020 only, so a postcode pasted out
     of a PDF or rendered HTML leaked in full — the same failure class as the
     `ssn.us` NBSP regression.
-  * `postal.gb` covers the `GIR 0AA` Girobank pseudo-postcode and restricts the
+  * `postal.gb` covers the Girobank pseudo-postcode (`GIR`, then `0AA`) and restricts the
     inward code to the official Royal Mail alphabet (never `C I K M O V`), which
     also drops matches overlapping a different gold label from 3 to 1. The AREA
     letters stay wide: encoding the official `Q V X` / `I J Z` exclusions was
@@ -356,7 +473,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   corpus, so it requires an anchor; `de-AT` / `de-CH` now have one
   (`postal.at_ch`, above).
 
+- **`birth_date.cue` in `core`** (`custom:birth_date`, every locale): a date of
+  birth in a field record (`date of birth:`, `birth date:`, `birthdate:`,
+  `DOB:`, `Geburtsdatum:`, with `:` or `=` at line start) or after `born on` /
+  `geboren am`, in ISO, `DD.MM.YYYY` or slash form. The same change recovers a
+  whole candidate that an explicit-field rule suppressed and then lost to a
+  later rival, so its bytes are tokenized instead of left raw (PR #589).
+- **`gaze-mcp-core` untrusted-invocation request mode.**
+  `RequestMode::UntrustedInvocation`, `PiiEnvelope::dispatch_request` and
+  `ToolCtx::invocation_args()` let an opted-in tool receive its execution
+  arguments unchanged while the envelope audits a fixed omission marker and
+  still protects the response. Both entry points reject a descriptor whose
+  mode does not match before authorization or audit, and the new mode refuses
+  operator response bypass. `request_mode` is not serialized, so wire metadata
+  cannot opt in. `BeginCallContext.args_audit` is new: `None` for existing
+  calls, a versioned constant for the new mode, which hosts that adopt it must
+  persist. `SessionTransaction::restore_strict_text_bounded` checks the exact
+  expanded UTF-8 size against a limit before it reserves output, then
+  substitutes once without detecting, minting mappings or committing
+  (PR #590).
+- **`gaze::DetectError` at the crate root**, so an out-of-crate `Recognizer`
+  implementation can name its error type without `gaze::registry` or a direct
+  `gaze-types` dependency. The `gaze::registry` docs carry a complete
+  out-of-crate example (PR #601).
+- **`gaze-mcp-bridge` bounds its session cache** with `session.max_sessions`
+  (default 1,000; `0` is a config error, also through
+  `BridgeSessionStore::from_config`). At the cap a file store persists the
+  least recently used inactive session before evicting it; an ephemeral store
+  refuses the new session. A session that any caller still holds, even through
+  a weak handle, is never evicted: admission fails with
+  `BridgeError::LimitExceeded`, and a persistence failure with
+  `BridgeError::SessionStore` (PR #578).
+- **`Pipeline::admit_safety_nets` and `admit_safety_nets_transaction`** run
+  every configured safety net over already pseudonymized text, with token
+  coverage built from the session's owned values. `gaze proxy` uses them at
+  request admission (PR #585).
+
 ### Changed
+
+- **Breaking (custom `gaze-proxy` adapters):** `PiiSurface` has a new
+  `syntax: SurfaceSyntax` field (`Text`, `Json`, or `ModelOutput`). Restore uses
+  it to choose the escaping for each surface. `ProviderAdapter` has a new
+  provided method, `requests_json_output(request)`, which defaults to `false`.
+  If an adapter builds `PiiSurface` values directly, set `syntax:
+  SurfaceSyntax::Text` to keep the previous verbatim restore. Use `Json` for
+  fields that hold serialized JSON (PR #656).
+
+- **Breaking:** `gaze setup --safety-net ner` is removed. Use `--safety-net none`
+  for the former NER-only policy. `gaze setup` now installs Nym by default and
+  writes an activating policy with the pinned model path. OPF remains opt-in
+  and can be stacked by the printed command. The doctor proves Nym catches a
+  synthetic plate; setup prints the model card MIT licence, pinned upstream
+  revision, open training-data licence review, and opt-out.
+
+- **Breaking:** `--safety-net-backend nym` now requires one explicit
+  `--safety-net nym` selection. Add `--safety-net nym` to existing commands
+  that used only the backend selector; the old form succeeded without
+  activating a safety net.
+
 - **Custom rulepack paths keep the `core` detection floor by default** (solo
   todo #3712; breaking in 0.x). Since the v0.4.0 rulepack policy loader, a
   `[policy.rulepacks]` table with `paths` but no `bundled` key silently selected
@@ -375,13 +549,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   NER; ties go to the container). The rung sits after collision-family
   policy and the mandatory-anchor rung and before the structured-containment
   rung, which it generalises and which remains for the containers the guard
-  refuses. `IBAN PL56 0942 8981 7280 5663 2200 4500 BIC` (de-AT) is now
-  `IBAN <iban_1> BIC` instead of five tokens; a Luhn-valid card whose tail is
+  refuses. `IBAN PL56 0942 … 4500 BIC` (a spaced Polish IBAN, de-AT) is now
+  `IBAN <iban_n> BIC` instead of five tokens; a Luhn-valid card whose tail is
   a German phone shape is one card token. Partial overlaps keep today's
   rules (solo todo #3769). Measured on the 98,256-document IBAN enumeration
   (3 locales): split IBANs 8,955 → 423, wrong-class IBAN tokens 11,196 →
   2,706, leaked and false-positive bytes unchanged; 4 of 1,886 real holdout
-  documents change (`<credit_card_1><phone_1>` → `<credit_card_1>`); 0 of
+  documents change (`<credit_card_n><phone_n>` → `<credit_card_n>`); 0 of
   1,024 negative documents change.
 - **Protection beats preservation: per-character residual coverage** (solo
   todo #3740; breaking in 0.x). Residual admission is per original, not per
@@ -394,7 +568,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hole where `custom:postal_code = preserve` shipped 20 raw IBAN bytes on
   the letter above (8,295 raw bytes across 480 enumeration documents) and
   where `custom:url = preserve` shipped an email inside the URL raw
-  (`https://mail.example.org/u/<Email_1>` now). The candidates a preserved
+  (the URL now carries an email token in place of the address). The candidates a preserved
   selection represents never override it, so an explicit
   `custom:family:<name> = preserve` rule still leaves the ambiguous span raw.
   Supersedes the interim "any protective action" admission from the
@@ -518,11 +692,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its measured rule-floor byte recall was 0.9 % of 1,034 gold bytes. Nothing
   emits `custom:username` any more. See UPGRADE.md.
 
-  Measured on the v0.15.0 release run (per-label report for `9a3a788`): the
-  rule-floor byte recall of these rules was `PASSWORD` 0.0 %, `USERNAME` 0.9 %
-  and `SECURITYTOKEN` 70.6 %. Under the v2 scored-label contract `PASSWORD` and
-  `SECURITYTOKEN` are unscored, so leaked PII bytes do not move; `USERNAME`
-  stays scored and loses at most about 9 bytes of rule coverage.
+  The v0.15.0 release benchmark shows what that means for a setup policy,
+  which does not load `secrets` (`scorecard-v0.15.0.json`,
+  `per_label_recall`, scored-label contract v1): 2,020 of 2,322 `PASSWORD`
+  gold bytes, 4,220 of 4,342 `SECURITYTOKEN` bytes and 72 of 1,034 `USERNAME`
+  bytes stay raw. Load `secrets` when credentials must be tokenized.
 
 - [bundle-tokenization-drift] The `core` snapshot records rulepack version 0.6.0 and the extended drift corpus hash; its detection entries are unchanged, which proves the new credential fixture lines stay inert under `core`.
 
@@ -617,15 +791,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IndexEntity` and no posting. Fragment raw bytes no longer reach the
   persistent index. Documented consequence: a residual fragment is **protected
   but unsearchable**. Whole entities remain searchable exactly as before.
+- **Breaking: the policy schema gate matches `0.1.` instead of `0.1`.** The
+  old prefix also accepted `0.10.0` and any later two-digit minor. Now `0.1.x`
+  loads, and `0.10.0`, `0.2.0` and a bare `"0.1"` fail closed with
+  `PolicySchemaUnsupported`, whose `supported` field reads `"0.1."`. Policies
+  written by `gaze setup` already say `"0.1.0"`; change a hand-written
+  `schema_version = "0.1"` to `"0.1.0"` (PR #576).
+- **The prefix cache no longer skips detection.** `enable_prefix_cache()`,
+  `PipelineOptimizationConfig::with_prefix_cache(true)` and both
+  `PrefixCacheWriteMode` values stay source-compatible, but every input is now
+  rescanned in full under its current field, locale, dictionaries, recognizers
+  and rules, and no prefix is stored. Adopters who enabled it lose its speedup
+  on growing inputs and should budget full-scan latency. Audit rows carry the
+  real recognizer and rule decisions instead of `prefix_cache` provenance, and
+  the test-support prefix counters return zero. The leak this closes is under
+  Fixed (PR #579).
+- **Locale chains fall through per span, not per document.** A class's rules
+  at a later chain locale used to switch off for the whole document as soon as
+  an earlier locale produced any candidate of that class. Now a later locale's
+  candidate joins where no earlier-locale candidate of the same class overlaps
+  it, so the earlier locale still wins per span. Under `[global, de-DE]`, a
+  document with an international mobile number and a national Berlin number
+  now tokenizes both instead of only the first, which switched
+  `phone.national.de` off. Expect more tokens under multi-locale chains
+  (PR #614).
+- **Safety-net Resolve plans more before it falls back.** A truthful
+  `PartialBleed` report with raw text on both sides of an owned token used to
+  pick `OverlapConflict` and the configured fallback; every gap in the report
+  is now planned against the original manifest without retokenizing owned
+  entries (PR #588). Under Resolve+Redact a successful first resolve followed
+  by actionable raw gaps gets one more complete reversible batch before any
+  deletion, so residual bytes can become tokens instead of being deleted. A
+  text policy runs at most four safety-net sweeps per call. Malformed
+  follow-up metadata (invalid classes, ranges or UTF-8, a false gap claim,
+  inconsistent coordinates) now refuses the document before any effect, and a
+  later failure can leave the extra mappings and audit attempts in place
+  (PR #591). The terminal behaviour after a fallback is described in the
+  entry above.
+- **Malformed primary geometry is refused.** Invalid or overlapping raw
+  mappings from the primary pass now return `InvalidOutput` before policy,
+  audit or token allocation, a new refusal for output that used to be accepted
+  (PR #589).
+- **`gaze-token-bridge` collapses internal whitespace in custom entities**
+  before the HMAC projection, as its canonicalization contract documents:
+  `Case  123` and `Case 123` now share a fingerprint. Re-ingest custom entities
+  that contain repeated or non-space whitespace (PR #553).
+- **`gaze mcp serve` writes terminal outcomes to `{call_id}.terminal.json`.**
+  The start record `{call_id}.json` is no longer overwritten, so principal,
+  tool, external session, redacted arguments and start time survive success
+  and failure and join on `call_id` (PR #582).
+- **Dictionary terms stop at hyphenated identifiers.** A hyphen counts as a
+  connector only when an identifier character sits on its other side, so a
+  term no longer matches one part of `AAA-BBB`, while `-AAA` and `AAA-` still
+  match. A dictionary that relied on partial matches inside hyphenated words
+  must list the full form (PR #568).
+- **Byte-adjacent NER entities of one class stay separate.** Two entities that
+  touch without sharing a byte used to merge into one pseudonym; each now gets
+  its own, and overlapping chunk results still merge (PR #564).
+- **`gaze daemon` reports failed eviction audit writes on stderr** as JSON with
+  the session's generated `audit_session_id`, the eviction reason and a closed
+  `Sqlite`/`Backend`/`Unknown` detail code, instead of dropping them silently.
+  The caller's session ID and backend error text are never printed (PR #570).
 
 ### Removed
 
 - **BREAKING: the Kiji DistilBERT safety net is removed.** On the
   2,910-document benchmark (2026-09-16 safety-net leaderboard) it recovered
   1,831 leaked gold bytes under scored-label contract v2 for +169,657
-  false-positive bytes, an action precision of 2.5%. No safety net runs by
-  default now; the shipped default is the bundled rules plus the pinned Davlan
-  mBERT NER model (benchmark arm `pass2-ner`). The `SafetyNet` trait, the
+  false-positive bytes, an action precision of 2.5%. No safety net runs
+  without a policy that selects one; the rules plus the pinned Davlan mBERT NER
+  model are benchmark arm `pass2-ner`, and the policy `gaze setup` writes in
+  this release adds Nym (see Changed). The `SafetyNet` trait, the
   `resolve` / `redact` / `strict` modes and fallback ladder, terminal
   admission, and the sub-word guard stay; the OpenAI Privacy Filter and
   Nym-small nets use them. Removed surface:
@@ -664,19 +900,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy it wrote. `gaze index ingest` now requires `--ner-model-dir` or
   `GAZE_NER_MODEL_DIR` (see Changed).
 
+- **BREAKING (`gaze-document`, `pdf-input` feature):
+  `gaze_document::extract::pdf::rasterize_first_page` is removed** (PR #650).
+  It has had no callers since layout report v2 (#219) moved PDF ingestion to
+  `extract_pages`. Use `extract_pages(path, PdfRasterConfig::new())`, which
+  returns one `PdfPagePayload` per page: `VectorText` for pages with
+  selectable text and `Raster(RasterizedPage)` for image-only pages. It has no
+  single-page mode and does not rasterize pages that have selectable text.
+
 ### Fixed
+
+- **`gaze-proxy` restores raw values into JSON documents as valid JSON.** The
+  legacy OpenAI and Gemini adapters pasted raw values verbatim into answer
+  fields that hold serialized JSON: Chat Completions
+  `tool_calls[].function.arguments`, Responses `function_call` and `mcp_call`
+  `arguments`, and JSON-mode answer text. JSON mode means OpenAI `json_object` or
+  `json_schema`, or Gemini `responseMimeType: application/json`. Streaming
+  deltas had the same problem. A value holding `"`, `\`, or a control
+  character made the agent's tool call or structured answer fail to parse.
+  Some values still parsed but changed silently: the UNC path
+  `\\fileserver\new_hires` decoded as `\fileserver`, a newline, and `ew_hires`.
+  Restore now JSON-escapes raw values in these fields and writes plain text byte
+  for byte as before. A value captured inside a JSON string of the request, such
+  as a field of a JSON tool result, is already escaped in the manifest. It is
+  still written into these fields as it is, so it is not escaped twice. The
+  Anthropic Messages codec and Gemini `functionCall.args` were already exact and
+  are pinned by the same end-to-end suite (PR #656, solo todo #3837).
+
+- Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
+  surrogate prefix derived from the placeholder shape after removing the random
+  session hex. Nym, OPF, and registry backends no longer change detections
+  when a fresh session chooses a different random prefix. The scan view
+  preserves byte offsets; observable clean output and restore mappings retain
+  the original token bytes. Findings wholly inside a verified placeholder are
+  discarded; findings that cross one are clipped to exposed bytes before
+  policy or fallback can act, so fallback cannot replace an owned placeholder
+  with a one-way redaction marker (PR #644).
+
+  On the 2,910-document scored-labels-v2 Nym/NER replay with fresh random
+  sessions, three pre-fix runs leaked 14,071–14,088 bytes (mean 14,078),
+  produced 28,645–28,676 false-positive bytes (mean 28,659), and restored
+  2,909–2,910 documents exactly. Each variant passed a 60-document replay
+  across five fresh CLI sessions. The selected shape-derived hex mapping was
+  scored again after merging main with identical results:
+
+  | Scan prefix | Unstable documents / 60 | Leaked bytes | False-positive bytes | Exact restores | Redaction actions | Post-policy suspects |
+  |---|---:|---:|---:|---:|---:|---:|
+  | `00000000` | 0 | 14,116 | 28,638 | 2,907 | 4 | 0 |
+  | `xxxxxxxx` | 0 | 14,706 | 28,598 | 2,909 | 1 | 0 |
+  | No prefix, mapped offsets | 0 | 14,471 | 28,642 | 2,910 | 0 | 0 |
+  | Shape-derived hex (selected) | 0 | 13,991 | 28,652 | 2,910 | 0 | 0 |
 
 - **IPv6 after a glued address cue no longer ships raw.** The `core` `ip.v6`
   recognizer now accepts a fully parsed address immediately after `Address:`,
   `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` (case-insensitively at every
   locale). The existing word guard remains
-  in force, so Rust and C++ `::` paths, including `Address::new`, stay untouched.
+  in force, so Rust and C++ double-colon paths, including `Address::new`, stay untouched.
   The identifier-glued form `_2001:db8::1` remains outside this cue rule
   (solo todo #3762).
 
 - **Security: a compact IBAN glued to the next word shipped raw.**
-  `IBAN AT611904300234573201BIC` and the dense footer
-  `IBAN:AT611904300234573201BIC:BKAUATWW` cleaned to themselves with
+  `IBAN AT6119…3201BIC` and the dense footer `IBAN:AT6119…3201BIC:BKAUATWW`
+  (a compact Austrian IBAN, elided here) cleaned to themselves with
   `detections: 0`, an empty leak report and a success exit, in every release
   from v0.4.3-rc.1 (#48) through v0.14.0 and on main after #622. The
   `iban.structural` pattern ended in `\b`, so a candidate immediately followed
@@ -692,11 +977,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   holds a digit or an underscore. `RegexDetector` applies it to every
   `iban_mod97`-validated recognizer, and the pattern's trailing `\b` is gone.
   One shape is recovered only in part: a label glued to a SPACED German IBAN
-  (`IBAN DE89 3704 0044 0532 0130 00BIC`) is now a candidate, but
+  (`IBAN DE89 3704 … 0130 00BIC`, the German example IBAN) is now a candidate, but
   `phone.national.de` (priority 85) still wins the `0532 0130` sub-run, because
   its 22-character IBAN-consuming branch ends in `\b` and stops consuming at the
   glued label. Under a policy that tokenizes `custom:phone` every byte is
-  covered (`<iban_1><phone_1><iban_2>`, where main left 18 bytes raw beside one
+  covered (`<iban_n><phone_n><iban_m>`, where main left 18 bytes raw beside one
   phone token); under a phone-preserving policy it stays raw as on main.
   Dropping that `\b` too was measured and rejected: it makes the branch consume
   the first 22 characters of every longer spaced IBAN, which repairs 1,866
@@ -754,8 +1039,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cue is in range or a Luhn-valid card run collides with the IBAN) resolved its
   action by its own class, which member-only policies never name, so it fell to
   a `preserve` default and the whole IBAN left the process with a success exit
-  (`Überweisung DE89 3704 0044 0532 0130 00`; `Bitte überweisen auf FO14 5878
-  0013 4155 73 1234`). Documented as a footgun with a stderr warning since
+  (`Überweisung DE89 3704 … 0130 00`; `Bitte überweisen auf FO14 5878 …
+  1234`, IBANs elided here). Documented as a footgun with a stderr warning since
   v0.11; the north star does not let protection depend on reading a warning.
   The action is now derived from the member rules (see Changed), through the
   one resolver every surface shares (`gaze clean`, `gaze daemon`, proxy, MCP,
@@ -785,10 +1070,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`provenance_stage = "primary_pipeline.residual"`). Found by the review of
   the derivation change; the fix and the derivation ship together, so no
   release carries the regression.
-- **Precision: `ip.v6` tokenized Rust and C++ `::` paths mid-identifier.**
-  `::` shorthand makes a great many path segments legal IPv6 addresses: `::a`
-  in `CleanOverrides::apply_to`, `::defa` in `Policy::default()`, `d::f` in
-  `std::fs::read`, and a bare `::` wherever a path has no hex on either side.
+- **Precision: `ip.v6` tokenized Rust and C++ double-colon paths mid-identifier.**
+  The double-colon shorthand makes a great many path segments legal IPv6
+  addresses: the colons plus `a` inside `CleanOverrides::apply_to`, the colons
+  plus `defa` inside `Policy::default()`, `d`, the colons and `f` inside
+  `std::fs::read`, and the bare colon pair wherever a path has no hex on either
+  side.
   The `ipv6_parse` validator accepts every one of them, because they really are
   RFC 4291 addresses. The rule's guard class excluded hex digits only, so any
   other identifier character satisfied it and the candidate fired inside the
@@ -801,8 +1088,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole address lost in a context whose delimiters are not identifier
   characters. Across this repository's own `docs/**/*.md` the class drops from
   176 matches (616 bytes) to 6 (47 bytes), of which five are IPv4 loopbacks and
-  one is a literal `::` example. A standalone all-hex path with no context
-  either side (`a::b`) is still read as the address it is. No detection is
+  one is a literal double-colon example. A standalone all-hex path with no context
+  either side (two hex letters joined by a double colon) is still read as the address it is. No detection is
   added; this is a precision fix, not a leak fix.
 
 - **Security: an IBAN followed by an upper-case word could match nothing at
@@ -823,9 +1110,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `iban_mod97`, which gates on the country's registry length, so validator veto
   dropped it. `IBAN … BIC: …` is the standard European invoice and
   e-mail footer layout, so this fired on ordinary documents:
-  `IBAN AT61 1904 3002 3457 3201 BIC: BKAUATWW` cleaned to
-  `IBAN AT61 <…:Custom:credit_card_1> BIC: BKAUATWW`, and
-  `IBAN BE62 6589 3795 9627 SWIFT GEBABEBB` cleaned to itself. The pattern now
+  `IBAN AT61 1904 … 3201 BIC: BKAUATWW` (a spaced Austrian IBAN, elided here)
+  cleaned to `IBAN AT61 <…:Custom:credit_card_n> BIC: BKAUATWW`, and
+  `IBAN BE62 … 9627 SWIFT GEBABEBB` (Belgian) cleaned to itself. The pattern now
   carries one alternation branch per ISO 13616 registry length, with exact
   repetition counts only, so the candidate stops at the country's real IBAN
   length. This is a strict narrowing that costs no recall: every candidate the
@@ -891,7 +1178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cue in range, became the `family:payment-card-or-iban` token.
   - Axis 1: under a policy that tokenizes `custom:iban` and
     `custom:credit_card` with a preserve default and no family rule,
-    `Zahlung an AT61 1904 3002 3457 3201 Kontoinhaber Max` shipped the IBAN
+    `Zahlung an AT61 1904 … 3201 Kontoinhaber Max` (IBAN elided here) shipped the IBAN
     raw (reproduced on main with a custom recognizer as the unrelated overlap,
     and with `postal.at_ch` from #613).
   - Axis 4: the IBAN's class depended on whether an unrelated overlap existed.
@@ -962,7 +1249,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   defect since at least v0.14.0: the shared Kiji decoder (ORT, tract, candle)
   merged BIO labels per WordPiece, so the pinned English model's piece-level
   firings on German text became suspects such as `G`/`em`/`ä` and the resolve
-  path emitted `<Name_14>wort` for `Passwort` and three adjacent name tokens for
+  path emitted `<Name_n>wort` for `Passwort` and three adjacent name tokens for
   `IBAN`. On the 80 explorer documents, 732 of 961 safety-net tokens were
   mid-word on v0.14.0 and 749 of 977 on 9a3a788. Spans are now assembled from
   whole words: any labelled piece labels its word, so byte coverage is a
@@ -991,6 +1278,135 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sessions also reject empty custom classes constructed directly through the
   enum before changing session state. Valid session tokens continue to
   round-trip through the token bridge's strict parser (#507).
+- **Security: the opt-in prefix cache could return raw PII.** Affected v0.9.0,
+  where the cache shipped (PR #252), through v0.14.0, when the prefix cache
+  was enabled. A repeated or extended input replayed stored detection
+  decisions, so after a locale, dictionary, custom rule, custom recognizer or
+  pipeline policy change, or when an appended suffix completed a value
+  (`alice@` growing into a full address), bytes the current configuration
+  protects left the process raw. Every input is now rescanned in full; the
+  cost is under Changed (PR #579).
+- **Security: `gaze proxy` never ran a configured safety net on request
+  text.** Affected v0.13.0, the first release whose proxy accepts a safety
+  net, through v0.14.0. Surfaced request text reached the Anthropic and OpenAI
+  providers after primary pseudonymization alone, so a residual only a net
+  would catch was forwarded raw. Requests now pass safety-net admission after
+  primary pseudonymization and before the provider call: a raw gap, a
+  malformed suspect or a net error refuses the request, and a net that
+  re-flags text inside an owned token is allowed. Admission ignores observer
+  skip optimizations and runs every backend the locale chain selects, which
+  adds inference time to each request. Responses and proxies without a net
+  are unchanged (PR #585).
+- **Security: `gaze proxy` forwarded raw bytes after a safety-net fallback
+  deletion.** Affected v0.13.0 through v0.14.0. Both residual checks read only
+  the surviving manifest entries, and a Redact fallback deletion leaves no
+  entry, so a net-only span the fallback deleted looked like "no PII" while
+  the checks still held the original bytes; the request, or a buffered JSON or
+  SSE response, went out with `Ok`. Both checks now fail closed when a fallback deletion
+  leaves them nothing to check (PR #593).
+- **Security: a Resolve+Redact fallback deletion could leave newly detectable
+  raw text.** Affected v0.8.1, where the fallback modes shipped (PR #223),
+  through v0.14.0. Resolve could tokenize a suspect, delete a follow-up
+  residual through the Redact fallback and return `Ok` without scanning the
+  changed text, so raw text the deletion exposed shipped. A terminal scan now
+  checks the final output, and malformed registry spans are refused before
+  manifest correlation could drop them; how that scan admits and refuses is
+  described under Changed (PR #584, PR #586).
+- **Security: strict protection ran only the first chain locale's safety
+  net.** Affected v0.13.0, where strict protection shipped, through v0.14.0.
+  Under `[en-US, de-DE]` a benign global fallback ran for English and the
+  German-only net was skipped, so an IBAN-shaped residual came back unchanged,
+  and validation made the same first-locale choice and accepted the
+  configuration. Validation and dispatch now resolve backends over the whole
+  chain, and a chain locale with no covering backend is refused at validation
+  time. Observer mode keeps first-match selection (PR #574).
+- **Security: `--rulepack-path` without `--policy` preserved the classes its
+  rulepacks detected.** Affected at least v0.4.5, where the synthesized
+  policy's class rules first shipped, through v0.14.0; earlier releases were
+  not checked. The synthesized policy generated tokenize rules only from
+  bundled rulepacks, so custom PII found by a path rulepack left raw. Every
+  bundled and path rulepack now contributes its classes (PR #545).
+- **Security: a skipped optional-cue recognizer could hand a collision family
+  to a `preserve` rule.** Affected v0.7.1, where collision families shipped,
+  through v0.14.0. Collision metadata was registered before the recognizer was
+  built, so an optional cue recognizer that was then skipped still lowered a
+  live variant's precedence and the wrong `preserve` variant won. Metadata is now
+  registered only after construction succeeds (PR #558).
+- **Security: `gaze proxy` could return restored PII in a carrier assembled
+  across Anthropic text blocks.** Affected v0.13.0, where the carrier guard
+  shipped, through v0.14.0. The guard checked each text block on its own; it
+  now also checks the joined restored text in JSON, NDJSON and SSE responses
+  before residual validation (PR #544).
+- **Security: OCR email repair closed only the first gap in a multi-label
+  domain.** Affected v0.9.0, where the repair shipped, through v0.14.0.
+  `user@mail. corp. example. invalid` left the address tail outside
+  detection in `gaze document clean`; the repair now repeats until no gap is
+  left (PR #565).
+- **`gaze proxy` no longer copies upstream response headers on the legacy
+  path.** Cookies, hop-by-hop headers and infrastructure metadata from the
+  provider reached the client. The response is rebuilt with only the canonical
+  JSON or SSE content type for the transformed body (PR #549).
+- **`gaze proxy` pseudonymizes structured Responses API message text.**
+  `input_text` and `output_text` parts inside message content were not
+  surfaced, so the residual scan refused requests that contained PII there
+  (PR #548).
+- **Known session tokens restore after a leading word character.**
+  `rec_<prefix>:name_1` restores to `rec_` plus the value instead of failing
+  strict restore with `UnknownToken`; a known family token no longer swallows
+  a longer unknown one (PR #581). Family namespace tokens also round-trip in
+  prose restore, matched as a whole rather than at their tail (PR #552).
+- **`gaze_read_file` accepts ordinary filenames** such as `scan_1.png`; token
+  syntax in the path is validated by the central session scanner and malformed,
+  nested, foreign and legacy placeholders still fail closed (PR #571).
+- **`gaze index search` without `--class` searches every class the index
+  domain declares**, so indexed organizations and custom entities are found;
+  an explicitly disallowed class is still refused (PR #569).
+- **Verbose safety-net subprocess diagnostics no longer abort inference.** A
+  healthy OPF child that wrote more than 256 bytes to stderr with diagnostics
+  on used to fail; the adapter keeps a bounded prefix and drains the rest, and
+  the shared redactor no longer shows an unfinished raw token at the cut. On
+  Windows the adapter uses non-blocking pipe writes and reads only available
+  bytes, with diagnostics on or off (PR #580).
+- **Pipeline and resolver fixes:** an empty optional model registry no longer
+  raises a coverage error at runtime when custom nets run (PR #561); an inline
+  TOML comment after `strict_locale_overlap = true` no longer disables the
+  strict check (PR #562); name spans with a trailing particle after multibyte
+  whitespace no longer panic (PR #563); regex exclusions match regardless of
+  ASCII case (PR #567); family-level candidates keep earlier losing
+  recognizers in their audit provenance (PR #566).
+- **Audit fixes:** `gaze audit` JSONL export carries all seven restore
+  telemetry fields (PR #555); ingress-blocked `gaze-mcp-bridge` results are
+  audited as `Blocked` with the deciding rule instead of `Allowed` (PR #554);
+  `BundleReport.clean_char_count` counts the final `clean.md`, header and
+  trailing newline included (PR #556).
+- **Concurrency and lifecycle fixes:** concurrent `gaze-mcp-core` dispatches
+  with unchanged argument mappings no longer conflict (PR #546); `gaze proxy`
+  daemon cleanup deletes a pidfile only if it still is the file it locked, and
+  reports lock I/O errors (PR #572); the proxy dashboard accepts normal browser
+  navigation headers (PR #547), keeps browser purge notifications on their own
+  socket (PR #550), stays up when idle (PR #551), and waits for the child's
+  ready message before pairing completes (PR #592).
+
+### Performance
+
+- NER now runs once per document instead of once per locale-chain step. Since the
+  per-span locale fall-through, the registry called every document-basis recognizer at
+  every chain step, so the 15-step `gaze setup` chain ran the same NER inference 15
+  times per document and the two-step rules+NER chain ran it twice. Recognizers whose
+  output ignores the step locale (NER, regex, anchored-match, dictionary) now declare it
+  through the new `Recognizer::detect_is_locale_invariant` method (default `false`), and
+  the registry reuses their first result at later steps. Per-span claiming is unchanged,
+  and clean text, manifests, and audit rows are byte-identical. Custom recognizers keep
+  one call per step unless they opt in (PR #653). Measured latency is in the
+  Performance summary at the top of this section.
+- NER chunk planning borrows the tokenizer when truncation is already off
+  instead of cloning it and its WordPiece vocabulary on every call; configured
+  truncation keeps the clone. Output is unchanged (PR #587).
+- The occurrence ledger's origin-agreement guard runs once per record instead
+  of once per segment, which was quadratic in the number of carried tokens on
+  the restore-boundary protection paths. The guard also runs on a ledger with
+  no segments, where it used to be skipped; no production path reached that
+  case (PR #602).
 
 ## [0.14.0] - 2026-09-11
 
