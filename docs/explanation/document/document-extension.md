@@ -26,6 +26,12 @@ newtypes plus path validation.
 
 ## File Shapes
 
+The shipped writer emits three of these files: `clean.md`, `manifest.json`,
+and `report.json` (`CLEAN_MARKDOWN_FILE`, `MANIFEST_FILE`, and `REPORT_FILE` in
+`crates/gaze-document/src/bundle/mod.rs`). `layout.json` and
+`preview-redacted.png` belong to the `DocumentExtension` envelope below, which
+hashes them; the shipped bundle does not write them.
+
 ### clean.md
 
 `clean.md` is UTF-8 clean text containing Gaze tokens only. It has no
