@@ -1105,11 +1105,14 @@ only, never next to the symbol.
 `Policy::load` compiles the pattern, so a malformed regex fails fast with
 `PolicyConfig` and never reaches `gaze clean`'s stdin read.
 
-Detection order matters when spans overlap: longer spans win first, then
-declaration order, then earlier start position (see
-[`pipeline.rs::select_winners`](../../crates/gaze/src/pipeline.rs)). This is
-why the document above stresses "rules are evaluated in declaration order"
-— the same applies to detectors when they fight over the same bytes.
+Detection order matters when spans overlap. After validator veto,
+collision-family precedence, mandatory-anchor context, and containment
+precedence, the generic tiers decide: class priority > rule priority > score >
+span length > lexicographically smaller recognizer id (`compare_base_ladder` in
+[`crates/gaze/src/resolver.rs`](../../crates/gaze/src/resolver.rs)).
+Declaration order does not break a tie between recognizers. See
+[Full conflict-resolution order](redaction-classes.md#full-conflict-resolution-order)
+for every step.
 
 ### NER (`[ner]` block)
 
