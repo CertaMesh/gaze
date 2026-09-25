@@ -85,9 +85,18 @@ with non-breaking spaces (PR #647).
 - Custom `gaze-proxy` adapters that build `PiiSurface` values must set the new
   `syntax` field (PR #656).
 
-**Known limitations.** Two `gaze proxy` restore gaps ship in this release.
-Both fail toward pseudonymized or escaped output, never toward a leak, and
-both are planned for v0.16:
+**Known limitations.** One detection gap and two `gaze proxy` restore gaps
+ship in this release:
+
+- **A payment card next to other digits can reach the model untokenized**
+  (solo todo #3843). A card followed by a separated CVV or expiry
+  (`4111 1111 1111 1111 123`) or preceded by other digits fails the Luhn check
+  as one run, so the forward path does not tokenize it. The restore-boundary
+  check reports the same shape in model output (PR #652). A fix is in progress
+  (PR #658) and lands after this release.
+
+The two restore gaps fail toward pseudonymized or escaped output, never toward
+a leak, and both are planned for v0.16:
 
 - **A token split across streaming events is not restored** on the legacy
   OpenAI chat and Gemini streaming paths (solo todo #3841). The proxy restores
