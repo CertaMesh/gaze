@@ -131,15 +131,15 @@ base: captured payloads become visible to the paired browser session.
 
 Pairing prints exactly one `http://<origin>/` line and one
 `GazeDashboardV1 <token>` authorization line to the controlling terminal (or
-the validated pairing descriptor) — never to stdout, stderr, or a log file.
+the validated pairing descriptor), never to stdout, stderr, or a log file.
 On Linux, the launcher that supplies `--dashboard-pairing-fd` must hold (or
-promptly open) the read end of the pairing FIFO — otherwise `gaze proxy serve`
+promptly open) the read end of the pairing FIFO; otherwise `gaze proxy serve`
 blocks in the write-only open before provider startup.
 Any flag-validation or activation failure — including a missing controlling
 terminal without a pairing descriptor — prints one sanitized
 `gaze dashboard disabled: <reason>` line, and the proxy starts or continues
 without any capture. `start` relays the dashboard flags verbatim to the
-daemon serve process; `restart` intentionally does not — dashboard activation
+daemon serve process; `restart` does not, because dashboard activation
 is per-invocation and never persisted into the daemon config. The dashboard
 child requires verified no-crash-dump readiness (`RLIMIT_CORE=0`), which
 currently limits successful activation to non-macOS Unix hosts; on other

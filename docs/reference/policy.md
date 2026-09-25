@@ -1086,8 +1086,8 @@ pattern = '\b(?:[$€£]\s?\d[\d.,]*|\d[\d.,]*\s?(?:€|£|EUR|USD|GBP))\b'
   so `\b` works as expected.
 
 For a redaction policy this fails **open**: the amount silently stays in the
-clean text. This is standard Rust `regex` (and PCRE, and RE2) `\b` semantics —
-not a Gaze behavior — and it has been stable across every Gaze release
+clean text. This is standard Rust `regex` (and PCRE, and RE2) `\b` semantics,
+not a Gaze behavior, and it has been stable across every Gaze release
 (verified 0.5.x through 0.11.x, byte-identical outputs; see issue #361).
 Because Rust `regex` has no look-around, you cannot emulate a one-sided
 boundary with `(?<!...)`/`(?!...)`. Instead, apply `\b` only to the edges that
