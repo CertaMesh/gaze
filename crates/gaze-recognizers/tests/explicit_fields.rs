@@ -805,7 +805,10 @@ fn configured_fake_net_sees_final_fields_and_stage_errors_publish_nothing() {
                     tx.restore_strict_text(&clean).unwrap(),
                     "password: synthetic"
                 );
-                assert_eq!(seen.lock().unwrap().as_slice(), &[clean]);
+                let token = tx.tokens().into_iter().next().unwrap();
+                let stable_token = token.replacen(&token[1..9], "00000000", 1);
+                let expected_scan = clean.replacen(&token, &stable_token, 1);
+                assert_eq!(seen.lock().unwrap().as_slice(), &[expected_scan]);
             }
             NetResponse::Residual => {
                 assert!(matches!(result, Err(gaze::ProtectionError::Residual)))

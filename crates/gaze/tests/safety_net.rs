@@ -11,6 +11,10 @@ use gaze::{
     Session, Value,
 };
 
+#[path = "support/stable_scan.rs"]
+mod stable_scan;
+use stable_scan::stable_scan;
+
 /// The manifest holds exactly `expected` entries and every one of them is a redaction marker.
 ///
 /// These sites used to assert `manifest.is_empty()`, because deleting recorded nothing. Asserting
@@ -1010,7 +1014,7 @@ fn safety_net_error_fails_closed_after_observing_byte_equal_clean_text() {
         gaze::Error::SafetyNet(SafetyNetError::Runtime { .. })
     ));
     let seen = seen.lock().unwrap();
-    assert_eq!(seen[0].clean_text, baseline);
+    assert_eq!(seen[0].clean_text, stable_scan(&baseline));
     assert_eq!(
         seen[0].manifest[0].clean_span,
         0..baseline.find(" ok").unwrap()

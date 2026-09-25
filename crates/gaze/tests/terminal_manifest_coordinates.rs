@@ -3,6 +3,10 @@ use std::sync::{Arc, Mutex};
 
 use gaze::*;
 
+#[path = "support/stable_scan.rs"]
+mod stable_scan;
+use stable_scan::stable_scan;
+
 struct OrderingNet(Arc<Mutex<Vec<String>>>);
 
 impl SafetyNet for OrderingNet {
@@ -177,8 +181,12 @@ fn prove_ordering(route: Route) {
         let scans = seen.lock().unwrap();
         assert_eq!(scans.len(), 3, "exactly one terminal scan, no retry");
         assert_eq!(scans[0], raw);
-        assert_eq!(scans[1].replace("barrier ", &marker), text);
-        assert_eq!(scans[2], text, "terminal scan must not mutate");
+        assert_eq!(scans[1].replace("barrier ", &marker), stable_scan(&text));
+        assert_eq!(
+            scans[2],
+            stable_scan(&text),
+            "terminal scan must not mutate"
+        );
         drop(transaction);
         if matches!(route, Route::Staged) {
             assert!(session.tokens().is_empty());

@@ -7,6 +7,10 @@ use gaze::{
     SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, Session,
 };
 
+#[path = "support/stable_scan.rs"]
+mod stable_scan;
+use stable_scan::{emitted_text, stable_scan};
+
 const RAW: &str = "pré alice@example.invalid 尾";
 
 struct Primary;
@@ -91,14 +95,14 @@ fn truthful_first_gap_resolves_both_sides_and_restores_original_bytes() {
     }
     let before = seen.lock().unwrap()[0].clone();
     assert_eq!(
-        &clean[manifest[1].clean_span.clone()],
+        stable_scan(&clean[manifest[1].clean_span.clone()]),
         &before[5..before.len() - 4]
     );
     assert!(
         matches!(report.suspects[0].kind, gaze::LeakKind::PartialBleed { ref uncovered } if *uncovered == (0..5))
     );
     assert_eq!(seen.lock().unwrap().len(), 2);
-    assert_eq!(seen.lock().unwrap()[1], clean);
+    assert_eq!(seen.lock().unwrap()[1], stable_scan(&clean));
 }
 
 #[derive(Clone)]
@@ -266,7 +270,7 @@ fn multiple_tokens_utf8_trace_and_metadata_audit_match_original_geometry() {
     );
     assert_eq!(
         session
-            .restore_strict_text(&seen.lock().unwrap()[0].0)
+            .restore_strict_text(&emitted_text(&seen.lock().unwrap()[0].0, &session.tokens()))
             .unwrap(),
         raw
     );
@@ -391,7 +395,7 @@ fn primary_format_preserve_is_owned_and_can_resolve_multiple_gaps() {
             assert!(session.contains_token(primary));
             assert_eq!(session.restore_strict_text(&text).unwrap(), RAW);
         }
-        assert!(seen.lock().unwrap()[0].contains(primary));
+        assert!(seen.lock().unwrap()[0].contains(&stable_scan(primary)));
         assert_eq!(seen.lock().unwrap().len(), 2);
     }
 }
@@ -444,13 +448,13 @@ fn compatibility_wrong_first_gap_preserves_exact_old_fallback_outputs() {
             if redacted {
                 // The trailing four bytes are replaced by exactly one whole marker, not cut.
                 let kept = &before[..before.len() - 4];
-                assert!(text.starts_with(kept), "{text:?}");
+                assert!(stable_scan(&text).starts_with(kept), "{text:?}");
                 assert!(
                     gaze::is_redaction_marker(&text[kept.len()..]),
                     "expected one marker after {kept:?}, got {text:?}"
                 );
             } else {
-                assert_eq!(text, before);
+                assert_eq!(stable_scan(&text), before);
             }
             assert_eq!(
                 session.restore_strict_text(&text).unwrap(),
@@ -572,7 +576,10 @@ fn compatibility_explicit_redact_still_deletes_only_the_reported_first_gap() {
     };
     let marker = gaze::redaction_marker(&gaze::PiiClass::Email);
     // Only the reported first gap is redacted, and it becomes one marker standing for 0..5.
-    assert_eq!(text, format!("{marker}{}", &seen.lock().unwrap()[0][5..]));
+    assert_eq!(
+        stable_scan(&text),
+        format!("{marker}{}", &seen.lock().unwrap()[0][5..])
+    );
     assert_eq!(spans.len(), 2);
     assert_eq!(spans[0].raw_span, 0..5);
     assert_eq!(spans[1].raw_span, 5..26);
@@ -703,9 +710,12 @@ fn post_multigap_net_errors_malformed_and_raw_residuals_stay_enforcing_and_stage
             assert_eq!(seen.lock().unwrap().len(), 2);
             assert_eq!(
                 if staged {
-                    tx.restore_strict_text(&seen.lock().unwrap()[1].0)
+                    tx.restore_strict_text(&emitted_text(&seen.lock().unwrap()[1].0, &tx.tokens()))
                 } else {
-                    session.restore_strict_text(&seen.lock().unwrap()[1].0)
+                    session.restore_strict_text(&emitted_text(
+                        &seen.lock().unwrap()[1].0,
+                        &session.tokens(),
+                    ))
                 }
                 .unwrap(),
                 raw

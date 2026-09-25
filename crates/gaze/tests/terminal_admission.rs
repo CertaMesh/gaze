@@ -11,6 +11,10 @@ use gaze::*;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+#[path = "support/stable_scan.rs"]
+mod stable_scan;
+use stable_scan::stable_scan;
+
 type Step = (
     String,
     std::result::Result<Vec<LeakSuspect>, SafetyNetError>,
@@ -33,8 +37,9 @@ impl SafetyNet for Script {
     ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
         let (expected, result) = self.0.lock().unwrap().pop_front().expect("no extra sweep");
         assert_eq!(
-            text, expected,
-            "each sweep must inspect its actual phase output"
+            text,
+            stable_scan(&expected),
+            "each sweep must inspect its actual phase output through the stable scan view"
         );
         result
     }

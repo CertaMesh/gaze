@@ -16,8 +16,9 @@ hex in each manifest-owned or session-verified placeholder with `00000000`.
 The replacement has
 the same byte length, so model spans map exactly to the real clean text and
 retain their manifest coverage, partial-bleed, and class-mismatch meaning.
-The observable clean text, manifest, audit rows, and restore input keep the
-original token bytes. Unowned token-shaped text is untouched.
+The observable clean text, manifest, and restore input keep the original token
+bytes. Auditing keeps its existing schema and records the resulting safety-net
+decisions. Unowned token-shaped text is untouched.
 
 Validator-backed self-validation is handled earlier by the deterministic
 [`validator-veto`](../detection/validator-veto.md) stage. Safety nets do not veto candidates

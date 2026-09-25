@@ -1392,9 +1392,9 @@ impl Pipeline {
             .with_dictionaries(dictionaries);
             let mut reported = net.check(scan.text(), context)?;
             for suspect in &mut reported {
-                suspect.span = scan.to_clean_range(suspect.span.clone())?;
+                suspect.span = scan.to_clean_range(suspect.span.clone());
                 if let LeakKind::PartialBleed { uncovered } = &mut suspect.kind {
-                    *uncovered = scan.to_clean_range(uncovered.clone())?;
+                    *uncovered = scan.to_clean_range(uncovered.clone());
                 }
             }
             if let Some(path) = field_path {
@@ -1480,7 +1480,7 @@ impl Pipeline {
                             }
                         }
                         let mut span = span;
-                        span.byte_range = scan.to_clean_range(span.byte_range)?;
+                        span.byte_range = scan.to_clean_range(span.byte_range);
                         if let Some(suspect) =
                             model_span_to_suspect(span, model.name(), manifest, field_path)
                         {

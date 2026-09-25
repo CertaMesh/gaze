@@ -51,18 +51,8 @@ impl<'a> SafetyNetScanText<'a> {
     }
 
     /// The exact offset map is the identity.
-    pub(crate) fn to_clean_range(&self, range: Range<usize>) -> Result<Range<usize>> {
-        if range.start >= range.end
-            || !self.text.is_char_boundary(range.start)
-            || !self.text.is_char_boundary(range.end)
-        {
-            return Err(Error::SafetyNetSpanInvalid {
-                start: range.start,
-                end: range.end,
-                text_len: self.text.len(),
-            });
-        }
-        Ok(range)
+    pub(crate) fn to_clean_range(&self, range: Range<usize>) -> Range<usize> {
+        range
     }
 }
 
@@ -150,7 +140,7 @@ mod tests {
                 prop_assert_eq!(scan.text().is_char_boundary(index), text.is_char_boundary(index));
                 if text.is_char_boundary(index) && index < text.len() {
                     let next = text[index..].chars().next().unwrap().len_utf8() + index;
-                    prop_assert_eq!(scan.to_clean_range(index..next).unwrap(), index..next);
+                    prop_assert_eq!(scan.to_clean_range(index..next), index..next);
                 }
             }
         }
