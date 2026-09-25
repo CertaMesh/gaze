@@ -1,4 +1,4 @@
-# Manual policy setup
+# Set up a policy by hand
 
 Prefer to wire the policy by hand instead of `gaze setup`? This guided path goes from zero PII configuration to a working clean run, with optional NER and the observer-only SafetyNet layered on top. Each step is copy-paste-able against the current `gaze` CLI. (For the one-command path, see [Quickstart](../../README.md#quickstart) in the project README.)
 

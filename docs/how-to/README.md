@@ -12,15 +12,19 @@ schemas, see the [reference](../reference/README.md).
 - **[Audit and restore](audit-and-restore.md)** — write, query, export, and purge the
   metadata audit log, and how manifest-first restore works.
 
+## Policy
+
+- **[Write custom recognizers](policy/custom-recognizers.md)** — add tenant-specific PII
+  classes (order IDs, song names, artist names) with policy rules and recognizers.
+- **[Set up a policy by hand](manual-policy.md)** — go from zero configuration to a working
+  `gaze clean` run without `gaze setup`, then add NER and a safety net.
+- **[Write a policy: worked examples](policy/policy-examples.md)** — four complete
+  `policy.toml` files with their input and output.
+
 ## Proxy
 
 - **[Set up the proxy](proxy/set-up-proxy.md)** — route OpenAI, Anthropic, or Gemini SDK
   traffic through Gaze's API-key HTTP chokepoint so PII is tokenized in flight.
-
-## Dashboard
-
-- **[Run the local dashboard](dashboard/run-local-dashboard.md)** — pair the opt-in,
-  memory-only inspection dashboard child with a running `gaze proxy serve`.
 
 ## MCP
 
@@ -39,10 +43,11 @@ schemas, see the [reference](../reference/README.md).
 - **[Ingest documents](document/ingest-documents.md)** — turn PNG/JPG/PDF input into a
   redacted `SafeBundle` (clean Markdown + manifest + report) via OCR.
 
-## Policy
+## Dashboard
 
-- **[Write custom recognizers](policy/custom-recognizers.md)** — add tenant-specific PII
-  classes (order IDs, song names, artist names) with policy rules and recognizers.
+- **[Run the local dashboard](dashboard/run-local-dashboard.md)** — embed the opt-in,
+  memory-only inspection dashboard in a Rust proxy host. From the CLI, use
+  `gaze proxy serve --dashboard`.
 
 ## Compliance
 
