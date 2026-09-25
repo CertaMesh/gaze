@@ -33,8 +33,10 @@ For a minimal policy, start with the same deterministic floor you use for
 [session]
 scope = "ephemeral"
 
-[rules]
-emails = "tokenize"
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
 ```
 
 ## Start The Proxy
