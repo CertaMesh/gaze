@@ -14,8 +14,7 @@ use crate::error::CliError;
 use crate::pipeline::build::resolve_pipeline;
 
 const DEFAULT_POLICY_FILE: &str = "gaze.toml";
-const OPF_UNPINNED_NOTICE: &str =
-    "OPF safety-net is not pinned in this build; the policy still enables Nym.";
+const OPF_UNAVAILABLE: &str = "OPF requires the `safety-net-openai` feature and a pinned checkpoint bundle in this build. Reinstall with `cargo install gaze-cli --features safety-net-openai` when a pinned bundle is available, or run `gaze setup` for the default Nym safety net.";
 const DOCTOR_INPUT: &str = "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd.\nPhone +1-555-0100\nIBAN AT61 1904 3002 3457 3201\nCard 4111 1111 1111 1111\nRouter IP 10.1.2.3"; // fixture-cited(crates/gaze-cli/src/commands/setup.rs:commands::setup::tests::generated_policy_tokenizes_with_clean_pipeline)
 const DOCTOR_NYM_INPUT: &str = "Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt."; // fixture-cited(crates/gaze-cli/tests/nym_cli.rs:live_nym_net_tokenizes_a_plate_the_rules_miss)
 
@@ -53,7 +52,6 @@ struct SetupSummary {
     policy_path: PathBuf,
     model_status: ModelInstallStatus,
     doctor_clean_text: String,
-    opf_notice: Option<String>,
     opf_checkpoint: Option<PathBuf>,
     nym_model_dir: Option<(PathBuf, ModelInstallStatus)>,
 }
@@ -72,7 +70,6 @@ struct OpfSetup<'a> {
 
 #[derive(Debug)]
 struct ResolvedSetupSafetyNet {
-    opf_notice: Option<String>,
     opf_checkpoint: Option<PathBuf>,
     nym_model_dir: Option<(PathBuf, ModelInstallStatus)>,
 }
@@ -83,7 +80,7 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
 
     let (model_dir, model_status) = install_ner_model(args.model_dir)?;
 
-    write_policy(
+    let doctor_clean_text = write_verified_policy(
         &policy_path,
         &model_dir,
         resolved_safety_net
@@ -91,15 +88,14 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
             .as_ref()
             .map(|(path, _)| path.as_path()),
         args.force,
+        doctor_check,
     )?;
-    let doctor_clean_text = doctor_check(&policy_path)?;
 
     Ok(SetupSummary {
         model_dir,
         policy_path,
         model_status,
         doctor_clean_text,
-        opf_notice: resolved_safety_net.opf_notice,
         opf_checkpoint: resolved_safety_net.opf_checkpoint,
         nym_model_dir: resolved_safety_net.nym_model_dir,
     })
@@ -136,7 +132,6 @@ fn resolve_safety_net(
 
     match choice {
         SetupSafetyNet::None => Ok(ResolvedSetupSafetyNet {
-            opf_notice: None,
             opf_checkpoint: None,
             nym_model_dir: None,
         }),
@@ -164,7 +159,6 @@ fn resolve_nym_safety_net(
         InstallOutcome::Installed { model_dir } => (model_dir, ModelInstallStatus::Downloaded),
     };
     Ok(ResolvedSetupSafetyNet {
-        opf_notice: None,
         opf_checkpoint: None,
         nym_model_dir: Some(installed),
     })
@@ -199,11 +193,7 @@ fn default_opf_setup() -> OpfSetup<'static> {
 
 fn resolve_opf_safety_net(opf_setup: OpfSetup<'_>) -> Result<ResolvedSetupSafetyNet, CliError> {
     if opf_setup.pin.bundle_sha256.is_none() {
-        return Ok(ResolvedSetupSafetyNet {
-            opf_notice: Some(OPF_UNPINNED_NOTICE.to_string()),
-            opf_checkpoint: None,
-            nym_model_dir: None,
-        });
+        return Err(setup_error(OPF_UNAVAILABLE.to_string()));
     }
 
     let checkpoint_dir = match opf_setup.checkpoint_dir {
@@ -219,7 +209,6 @@ fn resolve_opf_safety_net(opf_setup: OpfSetup<'_>) -> Result<ResolvedSetupSafety
     })?;
 
     Ok(ResolvedSetupSafetyNet {
-        opf_notice: None,
         opf_checkpoint: Some(canonical_or_absolute(&checkpoint_dir)?),
         nym_model_dir: None,
     })
@@ -354,7 +343,7 @@ fn write_policy(
     model_dir: &Path,
     nym_model_dir: Option<&Path>,
     force: bool,
-) -> Result<(), CliError> {
+) -> Result<tempfile::NamedTempFile, CliError> {
     if policy_path.exists() && !force {
         return Err(setup_error(format!(
             "policy `{}` already exists; pass --force to overwrite",
@@ -373,12 +362,52 @@ fn write_policy(
     let model_dir = canonical_or_absolute(model_dir)?;
     let nym_model_dir = nym_model_dir.map(canonical_or_absolute).transpose()?;
     let policy = setup_policy_toml(&model_dir, nym_model_dir.as_deref())?;
-    fs::write(policy_path, policy).map_err(|err| {
+    let parent = policy_path
+        .parent()
+        .ok_or_else(|| setup_error("policy has no parent directory".to_string()))?;
+    let mut staged = tempfile::NamedTempFile::new_in(parent).map_err(|err| {
         setup_error(format!(
-            "cannot write policy `{}`: {err}",
+            "cannot stage policy beside `{}`: {err}",
             policy_path.display()
         ))
-    })
+    })?;
+    staged.write_all(policy.as_bytes()).map_err(|err| {
+        setup_error(format!(
+            "cannot write staged policy for `{}`: {err}",
+            policy_path.display()
+        ))
+    })?;
+    staged.flush().map_err(|err| {
+        setup_error(format!(
+            "cannot flush staged policy for `{}`: {err}",
+            policy_path.display()
+        ))
+    })?;
+    Ok(staged)
+}
+
+fn write_verified_policy(
+    policy_path: &Path,
+    model_dir: &Path,
+    nym_model_dir: Option<&Path>,
+    force: bool,
+    doctor: impl FnOnce(&Path) -> Result<String, CliError>,
+) -> Result<String, CliError> {
+    let staged = write_policy(policy_path, model_dir, nym_model_dir, force)?;
+    let clean_text = doctor(staged.path())?;
+    let published = if force {
+        staged.persist(policy_path)
+    } else {
+        staged.persist_noclobber(policy_path)
+    };
+    published.map_err(|err| {
+        setup_error(format!(
+            "cannot publish verified policy `{}`: {}",
+            policy_path.display(),
+            err.error
+        ))
+    })?;
+    Ok(clean_text)
 }
 
 fn setup_policy_toml(model_dir: &Path, nym_model_dir: Option<&Path>) -> Result<String, CliError> {
@@ -536,9 +565,6 @@ fn verify_doctor_nym(
 }
 
 fn print_summary(summary: &SetupSummary) {
-    if let Some(notice) = &summary.opf_notice {
-        println!("{notice}");
-    }
     if let Some(opf_checkpoint) = &summary.opf_checkpoint {
         println!("OPF checkpoint verified {}", opf_checkpoint.display());
     }
@@ -744,7 +770,10 @@ mod tests {
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
         write_synthetic_ner_dir(&model_dir);
-        write_policy(&policy_out, &model_dir, None, false).unwrap();
+        write_policy(&policy_out, &model_dir, None, false)
+            .unwrap()
+            .persist(&policy_out)
+            .unwrap();
 
         let policy = fs::read_to_string(&policy_out).unwrap();
         assert!(policy.contains("[ner]"));
@@ -784,7 +813,10 @@ mod tests {
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
         write_synthetic_ner_dir(&model_dir);
-        write_policy(&policy_out, &model_dir, None, false).unwrap();
+        write_policy(&policy_out, &model_dir, None, false)
+            .unwrap()
+            .persist(&policy_out)
+            .unwrap();
 
         let resolved = resolve_pipeline(
             Some(&policy_out),
@@ -867,21 +899,20 @@ mod tests {
     }
 
     #[test]
-    fn opf_request_reports_unpinned_bundle() {
+    fn opf_request_rejects_unpinned_bundle() {
         let dir = tempdir().unwrap();
         let checkpoint_dir = dir.path().join("missing-opf");
 
-        let resolved = resolve_opf_safety_net(OpfSetup {
+        let err = resolve_opf_safety_net(OpfSetup {
             pin: OpfBundlePin {
                 bundle_sha256: None,
                 required_artifacts: &[],
             },
             checkpoint_dir: Some(&checkpoint_dir),
         })
-        .unwrap();
+        .unwrap_err();
 
-        assert_eq!(resolved.opf_notice.as_deref(), Some(OPF_UNPINNED_NOTICE));
-        assert_eq!(resolved.opf_checkpoint, None);
+        assert!(matches!(err, CliError::SetupDetail(detail) if detail == OPF_UNAVAILABLE));
     }
 
     #[test]
@@ -983,11 +1014,63 @@ mod tests {
         .unwrap();
 
         let checkpoint_dir = checkpoint_dir.canonicalize().unwrap();
-        assert_eq!(resolved.opf_notice, None);
         assert_eq!(
             resolved.opf_checkpoint.as_deref(),
             Some(checkpoint_dir.as_path())
         );
+    }
+
+    #[test]
+    fn failing_doctor_never_publishes_or_replaces_policy() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("ner");
+        fs::create_dir_all(&model_dir).unwrap();
+        let policy_path = dir.path().join("policy.toml");
+        let old_policy = b"existing valid policy bytes\n";
+
+        for existing in [false, true] {
+            if existing {
+                fs::write(&policy_path, old_policy).unwrap();
+            }
+            let err = write_verified_policy(&policy_path, &model_dir, None, existing, |staged| {
+                assert_ne!(staged, policy_path);
+                assert!(fs::read_to_string(staged).unwrap().contains("[ner]"));
+                Err(setup_error("doctor rejected staged policy".to_string()))
+            })
+            .unwrap_err();
+            assert!(
+                matches!(err, CliError::SetupDetail(detail) if detail == "doctor rejected staged policy")
+            );
+            if existing {
+                assert_eq!(fs::read(&policy_path).unwrap(), old_policy);
+            } else {
+                assert!(!policy_path.exists());
+            }
+            assert_eq!(
+                fs::read_dir(dir.path()).unwrap().count(),
+                1 + usize::from(existing)
+            );
+        }
+    }
+
+    #[test]
+    fn passing_doctor_publishes_staged_policy_over_existing_file() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("ner");
+        fs::create_dir_all(&model_dir).unwrap();
+        let policy_path = dir.path().join("policy.toml");
+        fs::write(&policy_path, b"old policy\n").unwrap();
+
+        let clean = write_verified_policy(&policy_path, &model_dir, None, true, |staged| {
+            assert_eq!(fs::read(&policy_path).unwrap(), b"old policy\n");
+            assert!(fs::read_to_string(staged).unwrap().contains("[ner]"));
+            Ok("doctor passed".to_string())
+        })
+        .unwrap();
+
+        assert_eq!(clean, "doctor passed");
+        assert!(fs::read_to_string(&policy_path).unwrap().contains("[ner]"));
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
     }
 
     #[test]

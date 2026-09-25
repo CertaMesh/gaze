@@ -228,3 +228,39 @@ fn setup_rejects_removed_ner_choice_with_migration() {
     assert!(output.stdout.is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("--safety-net none"));
 }
+
+#[cfg(not(feature = "safety-net-openai"))]
+#[test]
+fn setup_rejects_opf_without_feature_and_leaves_policy_untouched() {
+    let dir = tempfile::tempdir().unwrap();
+    let policy_path = dir.path().join("gaze.toml");
+    let old_policy = b"existing policy bytes\n";
+    for existing in [false, true] {
+        if existing {
+            fs::write(&policy_path, old_policy).unwrap();
+        }
+        let output = Command::cargo_bin("gaze")
+            .unwrap()
+            .args([
+                "setup",
+                "--non-interactive",
+                "--safety-net",
+                "opf",
+                "--policy-out",
+            ])
+            .arg(&policy_path)
+            .arg("--force")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("cargo install gaze-cli --features safety-net-openai"));
+        assert!(stderr.contains("run `gaze setup`"));
+        if existing {
+            assert_eq!(fs::read(&policy_path).unwrap(), old_policy);
+        } else {
+            assert!(!policy_path.exists());
+        }
+    }
+}
