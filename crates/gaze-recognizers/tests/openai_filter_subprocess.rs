@@ -693,7 +693,7 @@ printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97}]'
 fn overflowing_pipes_still_kill_and_reap_child() {
     // Caps retries so sustained overload fails with a diagnosis instead of
     // spinning until the CI job timeout.
-    const MAX_ATTEMPTS: u32 = 3;
+    const MAX_ATTEMPTS: u32 = 4;
     for stdout_overflow in [false, true] {
         for attempt in 1..=MAX_ATTEMPTS {
             let dir = tempfile::tempdir().unwrap();
@@ -715,11 +715,13 @@ while :; do {output}; done
             let command = script("opf-lifecycle", &body).unwrap();
             let config = SubprocessOpenAiFilterConfig::new(command);
             // The byte cap, not the deadline, must end the overflow run, so that
-            // run gets the generous budget and startup cannot win the race.
+            // run gets the generous budget and startup cannot win the race. The
+            // deadline run doubles its deadline after an attempt whose shell
+            // never started (5, 10, 20, 40s).
             let timeout = if stdout_overflow {
                 test_subprocess_timeout()
             } else {
-                Duration::from_secs(5)
+                Duration::from_secs(5) * 2_u32.pow(attempt - 1)
             };
             let started = std::time::Instant::now();
             let error = SubprocessOpenAiFilterBackend::new(
@@ -736,12 +738,14 @@ while :; do {output}; done
             };
             let elapsed = started.elapsed();
             // `infer` reaped the child before returning, so the pidfile is final:
-            // missing means the deadline killed the shell before it started.
+            // missing means the deadline killed the shell before it got past
+            // startup and `cat`.
             let Some(pid) = read_pidfile(&pidfile) else {
                 assert!(
                     !stdout_overflow && attempt < MAX_ATTEMPTS,
-                    "child never started (stdout_overflow={stdout_overflow}, \
-                 attempt {attempt}/{MAX_ATTEMPTS}): {message}"
+                    "child never started within {timeout:?} \
+                     (stdout_overflow={stdout_overflow}, attempt {attempt}/{MAX_ATTEMPTS}): \
+                     {message}"
                 );
                 continue;
             };
