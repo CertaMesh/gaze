@@ -36,16 +36,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **The restore-boundary DLP check now flags NBSP-grouped and fullwidth IBANs
-  and cards.** This deterministic outbound check scans restored model output for
-  structural identifiers the manifest did not authorize. It used its own
-  patterns on the raw text, and the IBAN pattern accepted only an ASCII space
-  between groups, so `GB82\u00A0WEST\u00A0…` (NBSP, NARROW NBSP, THIN SPACE or
-  any other Unicode space separator) or a card written in fullwidth digits
-  passed unreported. The scan now runs on the same normalized view as detection
-  and maps findings back to exact raw byte offsets. A manifest value and its
-  echo now compare equal whatever separator either side used, so a
+  and cards, and cards with digits touching them.** This deterministic outbound
+  check scans model output at the restore boundary (before tokens are
+  restored) for structural identifiers the manifest did not authorize. It used
+  its own patterns on the raw text, and the IBAN pattern accepted only an ASCII
+  space between groups, so `GB82\u00A0WEST\u00A0…` (NBSP, NARROW NBSP, THIN
+  SPACE or any other Unicode space separator) or a card written in fullwidth
+  digits passed unreported. The scan now runs on the same normalized view as
+  detection and maps findings back to exact raw byte offsets. A manifest value
+  and its echo now compare equal whatever separator either side used, so a
   Zs-grouped echo of a manifest value reports `ManifestBypass`, not
-  `FreshPiiDetected`. ASCII input scans unchanged.
+  `FreshPiiDetected`. A card followed by a CVV or expiry
+  (`4111 1111 1111 1111 123`), preceded by another number, or joined to more
+  digits by a fullwidth group or a dropped ZERO WIDTH JOINER failed Luhn as one
+  run and also passed unreported, in ASCII text too. The check now retries the
+  group-aligned sub-runs printed in a card layout (compact, 4-4-4-4,
+  4-4-4-4-3, 4-6-5, 4-6-4) and reports the card at its exact offsets. Other
+  ASCII input scans unchanged.
 
 - **National IDs in tool-call JSON and `key=value` logs are now tokenized.**
   Every release up to and including v0.14.0 matched cue-anchored identifiers

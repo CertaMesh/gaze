@@ -1580,20 +1580,20 @@ fn restore_boundary_events(
         .collect()
 }
 
-/// Outbound DLP scan of restored text: flags structural identifiers the manifest did not
-/// authorize. The patterns run on the same normalized detection view as the pipeline
-/// (`crate::normalize`), so a Zs-grouped (NBSP, NARROW NBSP, THIN SPACE, ...) or fullwidth
-/// IBAN or card is found exactly as its ASCII form is (solo todo #3827). `location` and `raw`
-/// are mapped back to the caller's original bytes; `canonical` comes from the normalized view,
-/// so it equals the canonical form of the same value in the manifest whatever separator
-/// either side used.
+/// Outbound DLP scan of model output at the restore boundary, before tokens are restored:
+/// flags structural identifiers the manifest did not authorize. The patterns run on the same
+/// normalized detection view as the pipeline (`crate::normalize`), so a Zs-grouped (NBSP,
+/// NARROW NBSP, THIN SPACE, ...) or fullwidth IBAN or card is found exactly as its ASCII form
+/// is (solo todo #3827). `location` and `raw` are mapped back to the caller's original bytes;
+/// `canonical` comes from the normalized view, so it equals the canonical form of the same
+/// value in the manifest whatever separator either side used.
 fn structural_findings(text: &str) -> Vec<StructuralFinding> {
     let view = crate::normalize::normalize(text);
     let mut findings = Vec::new();
     collect_email_findings(&view.text, &mut findings);
     collect_phone_findings(&view.text, &mut findings);
     collect_iban_findings(&view.text, &mut findings);
-    collect_credit_card_findings(&view.text, &mut findings);
+    collect_credit_card_findings(&view, &mut findings);
     collect_api_key_findings(&view.text, &mut findings);
     for finding in &mut findings {
         // Regex matches are non-empty and inside the view, so the mapping cannot fail; if it
@@ -1671,20 +1671,108 @@ fn collect_iban_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
     }
 }
 
-fn collect_credit_card_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
-    for matched in card_pattern().find_iter(text) {
-        let raw = matched.as_str();
-        let canonical = ascii_digits(raw);
-        if !luhn_check(&canonical) {
+fn collect_credit_card_findings(
+    view: &crate::normalize::NormalizedText,
+    findings: &mut Vec<StructuralFinding>,
+) {
+    for matched in card_pattern().find_iter(&view.text) {
+        let Some(location) = luhn_valid_card_run(view, matched.range()) else {
             continue;
-        }
+        };
+        let raw = &view.text[location.clone()];
         findings.push(StructuralFinding {
             class: PiiClass::custom("credit_card").expect("valid custom class"),
             raw: raw.to_string(),
-            canonical,
-            location: matched.range(),
+            canonical: ascii_digits(raw),
+            location,
         });
     }
+}
+
+/// The Luhn-valid card inside a `card_pattern` match, as a range of the normalized view.
+///
+/// The greedy match wins when it passes Luhn. When it fails, digits touching the card may have
+/// pushed the run past it: a CVV or expiry after it, a number before it, or digits that
+/// normalization joined on (a fullwidth group, a dropped ZERO WIDTH JOINER). The retry then
+/// tries every group-aligned sub-run written in a card layout (see `is_card_layout`) and keeps
+/// the longest one that passes Luhn (13 to 19 digits; on a tie, the leftmost).
+///
+/// A random digit run passes Luhn one time in ten, so every extra candidate costs precision.
+/// The retry never splits inside a group, and the layout filter keeps grouped amounts,
+/// timestamps and phone numbers (groups of 3, 2 or 8 digits) at the greedy rate.
+fn luhn_valid_card_run(
+    view: &crate::normalize::NormalizedText,
+    matched: Range<usize>,
+) -> Option<Range<usize>> {
+    if luhn_check(&ascii_digits(&view.text[matched.clone()])) {
+        return Some(matched);
+    }
+    let groups = card_digit_groups(view, matched);
+    let widths: Vec<usize> = groups
+        .iter()
+        .map(|group| view.text[group.clone()].chars().count())
+        .collect();
+    let mut best: Option<(usize, Range<usize>)> = None;
+    for first in 0..groups.len() {
+        for last in first..groups.len() {
+            if first == 0 && last + 1 == groups.len() {
+                continue;
+            }
+            if !is_card_layout(&widths[first..=last]) {
+                continue;
+            }
+            let candidate = groups[first].start..groups[last].end;
+            let canonical = ascii_digits(&view.text[candidate.clone()]);
+            if luhn_check(&canonical)
+                && best
+                    .as_ref()
+                    .is_none_or(|(digits, _)| canonical.len() > *digits)
+            {
+                best = Some((canonical.len(), candidate));
+            }
+        }
+    }
+    best.map(|(_, range)| range)
+}
+
+/// The group widths a card number is printed in: compact (13 to 19 digits), 4-4-4-4, the
+/// 19-digit 4-4-4-4-3, and the Amex and Diners 4-6-5 and 4-6-4.
+fn is_card_layout(widths: &[usize]) -> bool {
+    matches!(
+        widths,
+        [13..=19] | [4, 4, 4, 4] | [4, 4, 4, 4, 3] | [4, 6, 5] | [4, 6, 4]
+    )
+}
+
+/// Split a `card_pattern` match into digit groups (ranges of the normalized view). A group ends
+/// at a `[\s-]` separator and wherever the raw text breaks between two digits: at a character
+/// normalization dropped (ZWJ, ZWNJ), and where the raw digits change width (fullwidth next to
+/// ASCII).
+fn card_digit_groups(
+    view: &crate::normalize::NormalizedText,
+    matched: Range<usize>,
+) -> Vec<Range<usize>> {
+    let mut groups: Vec<Range<usize>> = Vec::new();
+    let mut previous_digit: Option<usize> = None;
+    for (offset, ch) in view.text[matched.clone()].char_indices() {
+        let at = matched.start + offset;
+        if ch.is_whitespace() || ch == '-' {
+            previous_digit = None;
+            continue;
+        }
+        let (start, end) = view.spans[at];
+        let joins_previous = previous_digit.is_some_and(|previous| {
+            let (previous_start, previous_end) = view.spans[previous];
+            (previous_start, previous_end) == (start, end)
+                || (previous_end == start && previous_end - previous_start == end - start)
+        });
+        match groups.last_mut() {
+            Some(group) if joins_previous => group.end = at + ch.len_utf8(),
+            _ => groups.push(at..at + ch.len_utf8()),
+        }
+        previous_digit = Some(at);
+    }
+    groups
 }
 
 fn collect_api_key_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
@@ -2948,6 +3036,58 @@ mod tests {
             assert_eq!(findings[0].location, 2..2 + value.len(), "{class}");
             assert_eq!(findings[0].raw, value, "{class}");
             assert_eq!(findings[0].canonical, canonical, "{class}");
+        }
+    }
+
+    #[test]
+    fn restore_dlp_flags_a_card_that_touching_digits_push_past_luhn() {
+        // The greedy digit run fails Luhn because a CVV, an expiry, a leading number or digits
+        // joined on by normalization (fullwidth, a dropped ZWJ, a fullwidth hyphen) extend it.
+        // The group-aligned retry still finds the card, at its exact raw offsets.
+        for (text, card) in [
+            ("Karte 4111 1111 1111 1111 123 (CVV)", "4111 1111 1111 1111"),
+            ("Karte 4111 1111 1111 1111 12 28", "4111 1111 1111 1111"),
+            ("Karte 4111 1111 1111 1111 １２３", "4111 1111 1111 1111"),
+            (
+                "Karte ４１１１ １１１１ １１１１ １１１１ １２３",
+                "４１１１ １１１１ １１１１ １１１１",
+            ),
+            (
+                "Karte 4111 1111 1111 1111\u{200D}123",
+                "4111 1111 1111 1111",
+            ),
+            ("Karte 4111 1111 1111 1111１２３", "4111 1111 1111 1111"),
+            ("Karte 4111 1111 1111 1111－123", "4111 1111 1111 1111"),
+            (
+                "Karte 4111\u{00A0}1111\u{00A0}1111\u{00A0}1111\u{00A0}123",
+                "4111\u{00A0}1111\u{00A0}1111\u{00A0}1111",
+            ),
+            ("Nr 7 4111 1111 1111 1111", "4111 1111 1111 1111"),
+        ] {
+            let start = text.find(card).expect("fixture contains the card");
+            let findings = structural_findings(text);
+            assert_eq!(findings.len(), 1, "{text:?}: {findings:?}");
+            assert_eq!(
+                findings[0].class,
+                PiiClass::custom("credit_card").expect("valid custom class"),
+                "{text:?}"
+            );
+            assert_eq!(findings[0].location, start..start + card.len(), "{text:?}");
+            assert_eq!(findings[0].raw, card, "{text:?}");
+            assert_eq!(findings[0].canonical, "4111111111111111", "{text:?}");
+        }
+
+        // Precision: the retry never splits inside a group (plain ASCII digits run onto the card
+        // give no group boundary), and it only accepts a sub-run in a card layout. Each amount
+        // and timestamp below fails Luhn as a whole but holds a Luhn-valid 13- or 14-digit
+        // group-aligned sub-run (`5 573 835 698 185`, `2018 10 21 06 23 06`).
+        for benign in [
+            "Karte 4111 1111 1111 1111123",
+            "Montant : 5 573 835 698 185 105 €",
+            "log 2018 10 21 06 23 06 560 ok",
+        ] {
+            let findings = structural_findings(benign);
+            assert!(findings.is_empty(), "{benign:?}: {findings:?}");
         }
     }
 
