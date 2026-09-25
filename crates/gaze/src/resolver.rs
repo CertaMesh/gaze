@@ -226,7 +226,7 @@ impl CandidatePool {
                 }
                 Arbitration::Family(tie) => {
                     resolved[index].members.extend(candidate.members);
-                    resolved[index].candidate = tie;
+                    resolved[index].candidate = *tie;
                     resolved[index].settlement = Settlement::CollisionPolicy;
                     removal = Some(ConflictTier::CollisionPolicy);
                     PairOutcome::Family
@@ -338,7 +338,7 @@ enum Arbitration {
     Merge,
     /// Precedence tie inside one collision family: emit the family-level
     /// candidate in place of both rivals.
-    Family(Candidate),
+    Family(Box<Candidate>),
     /// `candidate` replaces `existing`; the tier names what decided it.
     CandidateWins(ConflictTier),
     /// `existing` keeps the slot; the tier names the rung that separated the
@@ -357,7 +357,7 @@ fn arbitrate(
     // ladder: two equal-precedence variants collapse into one family token even
     // when they share a class.
     if let Some(tie) = family_tie_candidate(candidate, existing, policy) {
-        return Arbitration::Family(tie);
+        return Arbitration::Family(Box::new(tie));
     }
     if overlap == Overlap::Exact && existing.class == candidate.class {
         return Arbitration::Merge;
