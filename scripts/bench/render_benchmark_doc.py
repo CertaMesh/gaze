@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Render the generated sections of docs/reference/benchmarks/README.md.
 
+The root README's leaked-bytes chart is a generated block too, rendered from the
+same history whenever the committed history is the input.
+
 Two jobs, deliberately split so CI never needs the benchmark corpus:
 
 ``--append-history``
@@ -33,6 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCH_DIR = REPO_ROOT / "docs" / "reference" / "benchmarks"
 DEFAULT_DOC = BENCH_DIR / "README.md"
 DEFAULT_HISTORY = BENCH_DIR / "release-history.json"
+DEFAULT_README = REPO_ROOT / "README.md"
 
 HISTORY_SCHEMA_VERSION = 1
 SCORECARD_SCHEMA_VERSION = 4
@@ -107,6 +111,18 @@ GOLD_GAP_COLUMNS: tuple[tuple[str, str, str], ...] = (
 )
 
 BLOCK_NAMES = ("current-release", "charts", "history")
+README_BLOCK_NAMES = ("readme-chart",)
+
+#: Plain-English chart labels for the arms a released row can carry. The table
+#: keeps the arm ids; a chart axis has no room for them. Unknown arms fall back
+#: to their id, so a new arm still renders.
+ARM_CHART_LABELS: dict[str, str] = {
+    "rule-floor-extended": "rules only",
+    "pass2-ner": "rules + NER",
+    "full-stack-kiji-resolve": "rules + NER + Kiji",
+    "full-stack-nym-resolve": "rules + NER + Nym",
+    "policy-file": "gaze setup policy",
+}
 
 
 class RenderError(Exception):
@@ -804,6 +820,98 @@ def render_validator_recall(entry: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
+    """(label, leaked bytes) for the latest release against the one before it.
+
+    The latest release's default comes first, then the previous release's
+    default, then every other measured arm by leaked bytes. The previous
+    release joins only when it was scored on the same corpus under the same
+    label contract; otherwise a contract or corpus change would read as a leak
+    change.
+    """
+    releases = history["releases"]
+    latest = releases[-1]
+    rows = [latest]
+    if len(releases) > 1:
+        previous = releases[-2]
+        if _contract_key(previous) == _contract_key(latest) and (
+            previous["dataset"]["integrity"]["sha256"]
+            == latest["dataset"]["integrity"]["sha256"]
+        ):
+            rows.append(previous)
+    bars: list[tuple[str, int]] = []
+    for row in rows:
+        default_arm = shipped_default_arm(row)
+        others = sorted(
+            (arm for arm in row["arms"] if arm != default_arm),
+            key=lambda arm: row["arms"][arm]["surviving_pii_utf8_bytes"],
+        )
+        bars.append(
+            (
+                f"{row['version']} default",
+                row["arms"][default_arm]["surviving_pii_utf8_bytes"],
+            )
+        )
+        for arm in others:
+            bars.append(
+                (
+                    f"{row['version']} {ARM_CHART_LABELS.get(arm, arm)}",
+                    row["arms"][arm]["surviving_pii_utf8_bytes"],
+                )
+            )
+    return bars
+
+
+def _comparison_chart(history: Mapping[str, Any]) -> list[str]:
+    bars = comparison_bars(history)
+    latest = history["releases"][-1]
+    values = [value for _, value in bars]
+    return [
+        "```mermaid",
+        "xychart-beta",
+        f'    title "Leaked PII bytes, {contract_label(latest)} - lower is better"',
+        f"    x-axis {_mermaid_labels([label for label, _ in bars])}",
+        f'    y-axis "Leaked PII bytes" 0 --> {_axis_max(values)}',
+        f"    bar [{', '.join(str(int(value)) for value in values)}]",
+        "```",
+    ]
+
+
+def shipped_default_trend(
+    history: Mapping[str, Any], field: str
+) -> list[tuple[str, int]]:
+    """(version, value) of each release's OWN shipped default arm.
+
+    Keyed per row, not by the latest default: the default changed between
+    releases, and a row that never measured today's default arm still shipped
+    one. Only rows under the latest row's label contract are kept, because one
+    line across two contracts would show a change in what counts as gold as a
+    change in leaks.
+    """
+    releases = history["releases"]
+    latest_contract = _contract_key(releases[-1])
+    return [
+        (item["version"], item["arms"][shipped_default_arm(item)][field])
+        for item in releases
+        if _contract_key(item) == latest_contract
+    ]
+
+
+#: Trend charts: (history field, chart title, y-axis title).
+TREND_CHARTS: tuple[tuple[str, str, str], ...] = (
+    (
+        "surviving_pii_utf8_bytes",
+        "Leaked PII bytes, shipped default",
+        "Leaked PII bytes (lower is better)",
+    ),
+    (
+        "false_positive_utf8_bytes",
+        "False-positive bytes, shipped default",
+        "False-positive bytes (lower is less over-redaction)",
+    ),
+)
+
+
 def render_charts(history: Mapping[str, Any]) -> str:
     releases = history["releases"]
     if not releases:
@@ -812,66 +920,75 @@ def render_charts(history: Mapping[str, Any]) -> str:
             "[`release-history.json`](release-history.json)."
         )
     entry = releases[-1]
-    arms = list(entry["arms"].items())
-    surviving = [block["surviving_pii_utf8_bytes"] for _, block in arms]
-
     lines = [
-        f"**Surviving PII bytes per arm — {entry['version']}.** Lower is better; "
-        "the goal is zero.",
+        f"**Leaked PII bytes — {entry['version']} against the previous release.** "
+        f"Lower is better; the goal is zero. Scored under {contract_label(entry)}; "
+        "every bar is a measured arm in "
+        "[`release-history.json`](release-history.json).",
         "",
-        "```mermaid",
-        "xychart-beta",
-        f'    title "Surviving PII bytes per arm - {entry["version"]}"',
-        f"    x-axis {_mermaid_labels([arm for arm, _ in arms])}",
-        f'    y-axis "Surviving PII bytes (lower is better)" 0 --> {_axis_max(surviving)}',
-        f"    bar [{', '.join(str(int(value)) for value in surviving)}]",
-        "```",
+        *_comparison_chart(history),
     ]
 
-    default_arm = shipped_default_arm(entry)
-    # One line across two contracts would show a change in what counts as gold
-    # as a change in leaks, so the trend keeps only the latest row's contract.
-    latest_contract = _contract_key(entry)
-    measured = [item for item in releases if default_arm in item["arms"]]
-    trend = [
-        (item["version"], item["arms"][default_arm]["surviving_pii_utf8_bytes"])
-        for item in measured
-        if _contract_key(item) == latest_contract
-    ]
-    lines.extend(["", f"**Trend across releases — `{default_arm}`.**"])
-    if len(trend) < len(measured):
+    trend_rows = shipped_default_trend(history, TREND_CHARTS[0][0])
+    lines.extend(
+        [
+            "",
+            "**Trend across releases — each release's shipped default.** "
+            f"Scored under {contract_label(entry)}. The shipped arm changes "
+            "between releases; the history table names it per row.",
+        ]
+    )
+    if len(trend_rows) < len(releases):
         lines.extend(
             [
                 "",
                 f"> Only rows measured under {contract_label(entry)} are on "
-                "this line; "
-                f"{len(measured) - len(trend)} row(s) under another contract are "
+                "these lines; "
+                f"{len(releases) - len(trend_rows)} row(s) under another contract are "
                 "in the history table.",
             ]
         )
-    if len(trend) < 2:
+    if len(trend_rows) < 2:
         lines.extend(
             [
                 "",
-                f"> One measured release so far ({len(trend)} point). The trend "
-                "chart renders from two releases onward.",
+                f"> One measured release so far ({len(trend_rows)} point). The trend "
+                "charts render from two releases onward.",
             ]
         )
         return "\n".join(lines)
-    lines.extend(
+    for field, title, axis in TREND_CHARTS:
+        trend = shipped_default_trend(history, field)
+        lines.extend(
+            [
+                "",
+                "```mermaid",
+                "xychart-beta",
+                f'    title "{title} - {contract_label(entry)}"',
+                f"    x-axis {_mermaid_labels([version for version, _ in trend])}",
+                f'    y-axis "{axis}" 0 --> '
+                f"{_axis_max([value for _, value in trend])}",
+                f"    line [{', '.join(str(int(value)) for _, value in trend)}]",
+                "```",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def render_readme_chart(history: Mapping[str, Any]) -> str:
+    releases = history["releases"]
+    if not releases:
+        return "> The chart renders once a release has been measured."
+    entry = releases[-1]
+    return "\n".join(
         [
+            f"Leaked PII bytes per setup, {contract_label(entry)}, lower is better "
+            "(generated from "
+            "[`release-history.json`](docs/reference/benchmarks/release-history.json)):",
             "",
-            "```mermaid",
-            "xychart-beta",
-            f'    title "Surviving PII bytes on {default_arm} across releases"',
-            f"    x-axis {_mermaid_labels([version for version, _ in trend])}",
-            '    y-axis "Surviving PII bytes (lower is better)" 0 --> '
-            f"{_axis_max([value for _, value in trend])}",
-            f"    line [{', '.join(str(int(value)) for _, value in trend)}]",
-            "```",
+            *_comparison_chart(history),
         ]
     )
-    return "\n".join(lines)
 
 
 def render_history(history: Mapping[str, Any]) -> str:
@@ -981,6 +1098,7 @@ RENDERERS = {
     "current-release": render_current_release,
     "charts": render_charts,
     "history": render_history,
+    "readme-chart": render_readme_chart,
 }
 
 
@@ -992,9 +1110,13 @@ def end_marker(name: str) -> str:
     return f"<!-- END GENERATED: {name} -->"
 
 
-def apply_blocks(document: str, history: Mapping[str, Any]) -> str:
+def apply_blocks(
+    document: str,
+    history: Mapping[str, Any],
+    names: Sequence[str] = BLOCK_NAMES,
+) -> str:
     """Replace each generated block in place, leaving all prose untouched."""
-    for name in BLOCK_NAMES:
+    for name in names:
         begin, end = begin_marker(name), end_marker(name)
         start = document.find(begin)
         stop = document.find(end)
@@ -1014,6 +1136,14 @@ def apply_blocks(document: str, history: Mapping[str, Any]) -> str:
 # --------------------------------------------------------------------------
 
 
+def _display(path: Path) -> str:
+    """Repo-relative when possible: both targets are named README.md."""
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return path.name
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -1022,6 +1152,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--doc", type=Path, default=DEFAULT_DOC)
     parser.add_argument("--history", type=Path, default=DEFAULT_HISTORY)
+    parser.add_argument(
+        "--readme",
+        type=Path,
+        help=(
+            "root README carrying the readme-chart block. Defaults to the repo "
+            "README when --history is the committed history, since that is the "
+            "history the README's numbers come from; otherwise no README is touched."
+        ),
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -1110,22 +1249,35 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "committed; the machine-readable evidence must stay in the tree"
                 )
 
-        original = args.doc.read_text(encoding="utf-8")
-        rendered = apply_blocks(original, history)
+        readme = args.readme
+        if readme is None and args.history.resolve() == DEFAULT_HISTORY.resolve():
+            readme = DEFAULT_README
+        targets = [(args.doc, BLOCK_NAMES)]
+        if readme is not None:
+            targets.append((readme, README_BLOCK_NAMES))
+        outputs = []
+        for path, names in targets:
+            original = path.read_text(encoding="utf-8")
+            outputs.append((path, original, apply_blocks(original, history, names)))
 
         if args.check:
-            if rendered != original:
+            drifted = [path for path, original, rendered in outputs if rendered != original]
+            for path in drifted:
                 sys.stderr.write(
-                    f"{args.doc} is out of sync with {args.history}.\n"
+                    f"{path} is out of sync with {args.history}.\n"
                     "Re-run scripts/bench/render_benchmark_doc.py and commit the result.\n"
                 )
+            if drifted:
                 return 1
-            print(f"render_benchmark_doc: {args.doc.name} is in sync")
+            for path, _, _ in outputs:
+                print(f"render_benchmark_doc: {_display(path)} is in sync")
             return 0
 
-        args.doc.write_text(rendered, encoding="utf-8")
+        for path, _, rendered in outputs:
+            path.write_text(rendered, encoding="utf-8")
         print(
-            f"render_benchmark_doc: wrote {args.doc.name} "
+            "render_benchmark_doc: wrote "
+            f"{', '.join(_display(path) for path, _, _ in outputs)} "
             f"({len(history['releases'])} release rows)"
         )
         return 0

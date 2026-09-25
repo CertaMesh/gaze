@@ -310,13 +310,14 @@ class RowCountTest(unittest.TestCase):
     def test_one_row_renders_the_bar_chart_but_not_the_trend(self):
         rendered = render.apply_blocks(DOC, history("v0.14.0"))
         self.assertEqual(rendered.count("xychart-beta"), 1)
-        self.assertIn("The trend chart renders from two releases onward", rendered)
+        self.assertIn("The trend charts render from two releases onward", rendered)
 
-    def test_two_and_three_rows_render_both_charts(self):
+    def test_two_and_three_rows_render_the_bar_and_both_trend_charts(self):
         for versions in (("v0.13.0", "v0.14.0"), ("v0.12.0", "v0.13.0", "v0.14.0")):
             with self.subTest(rows=len(versions)):
                 rendered = render.apply_blocks(DOC, history(*versions))
-                self.assertEqual(rendered.count("xychart-beta"), 2)
+                # Comparison bar, leaked-bytes trend, false-positive trend.
+                self.assertEqual(rendered.count("xychart-beta"), 3)
                 for version in versions:
                     self.assertIn(version, rendered)
 
@@ -524,7 +525,7 @@ class ShippedDefaultArmTest(unittest.TestCase):
         rendered = render.apply_blocks(DOC, value)
         self.assertIn(f"`{self.KIJI}` **(shipped default)**", rendered)
         self.assertNotIn("`pass2-ner` **(shipped default)**", rendered)
-        self.assertIn(f"**Trend across releases — `{self.KIJI}`.**", rendered)
+        self.assertIn('x-axis ["v0.14.0 default", ', rendered)
         self.assertIn("| 25,179 |", rendered)
 
     def test_mixed_history_keeps_each_rows_own_default(self):
@@ -707,6 +708,133 @@ class CommittedDocumentTest(unittest.TestCase):
 
     def test_committed_document_is_in_sync(self):
         self.assertEqual(render.main(["--check"]), 0)
+
+
+class ShippedDefaultChartsTest(unittest.TestCase):
+    """Charts follow each release's OWN shipped default, not the latest one.
+
+    v0.14.0 shipped `full-stack-kiji-resolve` and never measured `policy-file`,
+    v0.15.0's default. Keying the trend on the latest default dropped v0.14.0
+    and left a one-point "trend" although two releases were measured.
+    """
+
+    KIJI = ShippedDefaultArmTest.KIJI
+
+    def mixed(self) -> dict:
+        return RefusalAwareHistoryTest.mixed(RefusalAwareHistoryTest())
+
+    def test_two_releases_with_different_defaults_render_two_points(self):
+        value = self.mixed()
+        policy = value["releases"][1]["arms"]["policy-file"]
+        charts = render.render_charts(value)
+        self.assertNotIn("One measured release so far", charts)
+        self.assertEqual(charts.count('x-axis ["v0.14.0", "v0.15.0"]'), 2)
+        self.assertIn(
+            f"line [25179, {policy['surviving_pii_utf8_bytes']}]", charts
+        )
+        kiji_fp = value["releases"][0]["arms"][self.KIJI]["false_positive_utf8_bytes"]
+        self.assertIn(f"line [{kiji_fp}, {policy['false_positive_utf8_bytes']}]", charts)
+
+    def test_committed_history_trend_has_both_releases(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        rows = {row["version"]: row for row in committed["releases"]}
+        # Read each row's default arm by name, not through the resolver under test.
+        expected = [
+            ("v0.14.0", rows["v0.14.0"]["arms"][self.KIJI]["surviving_pii_utf8_bytes"]),
+            (
+                "v0.15.0",
+                rows["v0.15.0"]["arms"][rows["v0.15.0"]["shipped_default_arm"]][
+                    "surviving_pii_utf8_bytes"
+                ],
+            ),
+        ]
+        self.assertEqual(
+            render.shipped_default_trend(committed, "surviving_pii_utf8_bytes"), expected
+        )
+        charts = render.render_charts(committed)
+        self.assertIn(f"line [{expected[0][1]}, {expected[1][1]}]", charts)
+
+    def test_comparison_bars_on_committed_history(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        rows = {row["version"]: row for row in committed["releases"]}
+        old = rows["v0.14.0"]["arms"]
+        self.assertEqual(
+            render.comparison_bars(committed),
+            [
+                (
+                    "v0.15.0 default",
+                    rows["v0.15.0"]["arms"]["policy-file"]["surviving_pii_utf8_bytes"],
+                ),
+                ("v0.14.0 default", old[self.KIJI]["surviving_pii_utf8_bytes"]),
+                ("v0.14.0 rules + NER", old["pass2-ner"]["surviving_pii_utf8_bytes"]),
+                (
+                    "v0.14.0 rules only",
+                    old["rule-floor-extended"]["surviving_pii_utf8_bytes"],
+                ),
+            ],
+        )
+
+    def test_previous_release_under_another_contract_leaves_the_comparison(self):
+        value = self.mixed()
+        value["releases"][1]["scored_label_contract"] = {
+            "id": "scored-labels-v2",
+            "version": 2,
+            "file_sha256": "1" * 64,
+            "excluded_labels": [],
+        }
+        labels = [label for label, _ in render.comparison_bars(value)]
+        self.assertEqual(labels, ["v0.15.0 default"])
+        charts = render.render_charts(value)
+        self.assertIn("1 row(s) under another contract", charts)
+        self.assertIn("One measured release so far (1 point)", charts)
+
+    def test_previous_release_on_another_corpus_leaves_the_comparison(self):
+        value = self.mixed()
+        value["releases"][0]["dataset"]["integrity"]["sha256"] = "2" * 64
+        labels = [label for label, _ in render.comparison_bars(value)]
+        self.assertEqual(labels, ["v0.15.0 default"])
+
+    def test_root_readme_chart_matches_the_readme_table(self):
+        """The hand-written README table and the generated chart show one set of numbers."""
+        readme = render.DEFAULT_README.read_text(encoding="utf-8")
+        section = readme.split("## How good is it", 1)[1].split("\n## ", 1)[0]
+        table = [
+            line
+            for line in section.splitlines()
+            if line.startswith("| ") and not line.startswith("| Setup")
+        ]
+        leaked = [
+            int(line.split("|")[3].strip().strip("*").split(" ")[0].replace(",", ""))
+            for line in table
+        ]
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        self.assertEqual(leaked, [value for _, value in render.comparison_bars(committed)])
+        self.assertIn(render.begin_marker("readme-chart"), section)
+
+    def test_check_fails_when_the_readme_chart_drifts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc, readme, hist = root / "doc.md", root / "README.md", root / "h.json"
+            doc.write_text(DOC, encoding="utf-8")
+            readme.write_text(
+                "# Gaze\n\n<!-- BEGIN GENERATED: readme-chart -->\n"
+                "<!-- END GENERATED: readme-chart -->\n",
+                encoding="utf-8",
+            )
+            value = self.mixed()
+            render.write_history(hist, value)
+            for row in value["releases"]:
+                (root / row["scorecard"]).write_text("{}", encoding="utf-8")
+            argv = ["--doc", str(doc), "--history", str(hist), "--readme", str(readme)]
+            self.assertEqual(render.main(argv), 0)
+            # The v0.14.0 Kiji default is the second bar, after v0.15.0's.
+            self.assertIn(", 25179, ", readme.read_text(encoding="utf-8"))
+            self.assertEqual(render.main(argv + ["--check"]), 0)
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(", 25179, ", ", 25178, "),
+                encoding="utf-8",
+            )
+            self.assertEqual(render.main(argv + ["--check"]), 1)
 
 
 class VersionOrderTest(unittest.TestCase):

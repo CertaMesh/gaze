@@ -333,19 +333,33 @@ Validator-backed labels on `policy-file`. Gold that fails its own checksum stays
 
 <!-- BEGIN GENERATED: charts -->
 
-**Surviving PII bytes per arm — v0.15.0.** Lower is better; the goal is zero.
+**Leaked PII bytes — v0.15.0 against the previous release.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json).
 
 ```mermaid
 xychart-beta
-    title "Surviving PII bytes per arm - v0.15.0"
-    x-axis ["policy-file"]
-    y-axis "Surviving PII bytes (lower is better)" 0 --> 22000
-    bar [19556]
+    title "Leaked PII bytes, scored labels v1 - lower is better"
+    x-axis ["v0.15.0 default", "v0.14.0 default", "v0.14.0 rules + NER", "v0.14.0 rules only"]
+    y-axis "Leaked PII bytes" 0 --> 104000
+    bar [19556, 25179, 27000, 93850]
 ```
 
-**Trend across releases — `policy-file`.**
+**Trend across releases — each release's shipped default.** Scored under scored labels v1. The shipped arm changes between releases; the history table names it per row.
 
-> One measured release so far (1 point). The trend chart renders from two releases onward.
+```mermaid
+xychart-beta
+    title "Leaked PII bytes, shipped default - scored labels v1"
+    x-axis ["v0.14.0", "v0.15.0"]
+    y-axis "Leaked PII bytes (lower is better)" 0 --> 28000
+    line [25179, 19556]
+```
+
+```mermaid
+xychart-beta
+    title "False-positive bytes, shipped default - scored labels v1"
+    x-axis ["v0.14.0", "v0.15.0"]
+    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 190000
+    line [168276, 30073]
+```
 
 <!-- END GENERATED: charts -->
 
