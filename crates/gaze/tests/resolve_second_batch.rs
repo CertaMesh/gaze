@@ -3,6 +3,10 @@ use gaze::*;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+#[path = "support/stable_scan.rs"]
+mod stable_scan;
+use stable_scan::stable_scan;
+
 type Step = (
     String,
     std::result::Result<Vec<LeakSuspect>, SafetyNetError>,
@@ -22,8 +26,9 @@ impl SafetyNet for Script {
     ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
         let (expected, result) = self.0.lock().unwrap().pop_front().expect("no extra sweep");
         assert_eq!(
-            text, expected,
-            "each sweep must inspect its actual phase output"
+            text,
+            stable_scan(&expected),
+            "each sweep must inspect its actual phase output through the stable scan view"
         );
         result
     }
@@ -653,7 +658,10 @@ fn second_batch_terminal_registry_malformed_spans_are_enforced_before_conversion
             _: ModelHints,
         ) -> std::result::Result<Vec<ModelSpan>, ModelError> {
             let mut inputs = self.inputs.lock().unwrap();
-            assert_eq!(input.text, inputs.pop_front().expect("four sweeps only"));
+            assert_eq!(
+                input.text,
+                stable_scan(&inputs.pop_front().expect("four sweeps only"))
+            );
             if !inputs.is_empty() {
                 return Ok(vec![]);
             }

@@ -7,6 +7,10 @@ use gaze::{
     SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, Session,
 };
 
+#[path = "support/stable_scan.rs"]
+mod stable_scan;
+use stable_scan::{emitted_text, stable_scan};
+
 const RAW: &str = "pré alice@example.invalid 尾";
 
 struct Primary;
@@ -91,14 +95,18 @@ fn truthful_first_gap_resolves_both_sides_and_restores_original_bytes() {
     }
     let before = seen.lock().unwrap()[0].clone();
     assert_eq!(
-        &clean[manifest[1].clean_span.clone()],
+        stable_scan(&clean[manifest[1].clean_span.clone()]),
         &before[5..before.len() - 4]
     );
-    assert!(
-        matches!(report.suspects[0].kind, gaze::LeakKind::PartialBleed { ref uncovered } if *uncovered == (0..5))
-    );
+    assert_eq!(report.suspects.len(), 2);
+    assert_eq!(report.suspects[0].span, 0..5);
+    assert_eq!(report.suspects[1].span, before.len() - 4..before.len());
+    assert!(report
+        .suspects
+        .iter()
+        .all(|suspect| matches!(suspect.kind, gaze::LeakKind::Uncovered)));
     assert_eq!(seen.lock().unwrap().len(), 2);
-    assert_eq!(seen.lock().unwrap()[1], clean);
+    assert_eq!(seen.lock().unwrap()[1], stable_scan(&clean));
 }
 
 #[derive(Clone)]
@@ -266,7 +274,7 @@ fn multiple_tokens_utf8_trace_and_metadata_audit_match_original_geometry() {
     );
     assert_eq!(
         session
-            .restore_strict_text(&seen.lock().unwrap()[0].0)
+            .restore_strict_text(&emitted_text(&seen.lock().unwrap()[0].0, &session.tokens()))
             .unwrap(),
         raw
     );
@@ -391,13 +399,13 @@ fn primary_format_preserve_is_owned_and_can_resolve_multiple_gaps() {
             assert!(session.contains_token(primary));
             assert_eq!(session.restore_strict_text(&text).unwrap(), RAW);
         }
-        assert!(seen.lock().unwrap()[0].contains(primary));
+        assert!(seen.lock().unwrap()[0].contains(&stable_scan(primary)));
         assert_eq!(seen.lock().unwrap().len(), 2);
     }
 }
 
 #[test]
-fn compatibility_wrong_first_gap_preserves_exact_old_fallback_outputs() {
+fn stale_first_gap_kind_is_recomputed_after_placeholder_clipping() {
     for fallback in [
         SafetyNetFallback::Strict,
         SafetyNetFallback::Tolerant,
@@ -426,62 +434,18 @@ fn compatibility_wrong_first_gap_preserves_exact_old_fallback_outputs() {
             &DictionaryBundle::default(),
             SafetyNetPolicy::new(SafetyNetMode::Resolve, fallback),
         );
-        if matches!(fallback, SafetyNetFallback::Strict) {
-            assert!(matches!(
-                result,
-                Err(gaze::Error::SafetyNetFallback(
-                    gaze::FallbackReason::OverlapConflict
-                ))
-            ));
-        } else {
-            let (CleanDocument::Text(text), spans, _) = result.unwrap() else {
-                panic!("text")
-            };
-            let redacted = matches!(fallback, SafetyNetFallback::Redact);
-            // Redact adds one marker entry beside the token; tolerant ships the bytes.
-            assert_eq!(spans.len(), if redacted { 2 } else { 1 });
-            let before = seen.lock().unwrap()[0].0.clone();
-            if redacted {
-                // The trailing four bytes are replaced by exactly one whole marker, not cut.
-                let kept = &before[..before.len() - 4];
-                assert!(text.starts_with(kept), "{text:?}");
-                assert!(
-                    gaze::is_redaction_marker(&text[kept.len()..]),
-                    "expected one marker after {kept:?}, got {text:?}"
-                );
-            } else {
-                assert_eq!(text, before);
-            }
-            assert_eq!(
-                session.restore_strict_text(&text).unwrap(),
-                if redacted {
-                    // One-way: the marker survives restore; the bytes it replaced do not.
-                    format!("{}{}", &RAW[..26], &text[before.len() - 4..])
-                } else {
-                    RAW.to_string()
-                }
-            );
-        }
-        assert_eq!(session.tokens().len(), 1);
+        let (CleanDocument::Text(text), spans, report) = result.unwrap() else {
+            panic!("text")
+        };
+        assert_eq!(spans.len(), 3);
+        assert_eq!(report.suspects.len(), 2);
+        assert_eq!(session.restore_strict_text(&text).unwrap(), RAW);
+        assert_eq!(session.tokens().len(), 3);
         let entries = logs.lock().unwrap();
         assert!(!entries
             .iter()
-            .any(|e| e.decided_by == gaze::ConflictTier::Resolve && e.action == Action::Tokenize));
-        assert_eq!(
-            entries
-                .iter()
-                .filter(|e| e.decided_by == gaze::ConflictTier::Fallback)
-                .count(),
-            1
-        );
-        assert_eq!(
-            seen.lock().unwrap().len(),
-            if matches!(fallback, SafetyNetFallback::Redact) {
-                2
-            } else {
-                1
-            }
-        );
+            .any(|e| e.decided_by == gaze::ConflictTier::Fallback));
+        assert_eq!(seen.lock().unwrap().len(), 2);
     }
 }
 
@@ -548,7 +512,7 @@ fn compatibility_primary_nonowned_replacements_keep_old_outputs() {
 }
 
 #[test]
-fn compatibility_explicit_redact_still_deletes_only_the_reported_first_gap() {
+fn explicit_redact_covers_both_exposed_gaps_but_preserves_token() {
     let seen = Arc::new(Mutex::new(vec![]));
     let pipeline = Pipeline::builder()
         .detector(Primary)
@@ -571,20 +535,25 @@ fn compatibility_explicit_redact_still_deletes_only_the_reported_first_gap() {
         panic!("text")
     };
     let marker = gaze::redaction_marker(&gaze::PiiClass::Email);
-    // Only the reported first gap is redacted, and it becomes one marker standing for 0..5.
-    assert_eq!(text, format!("{marker}{}", &seen.lock().unwrap()[0][5..]));
-    assert_eq!(spans.len(), 2);
+    let before = seen.lock().unwrap()[0].clone();
+    // Both exposed gaps are redacted. The owned token between them remains restorable.
+    assert_eq!(
+        stable_scan(&text),
+        format!("{marker}{}{marker}", &before[5..before.len() - 4])
+    );
+    assert_eq!(spans.len(), 3);
     assert_eq!(spans[0].raw_span, 0..5);
     assert_eq!(spans[1].raw_span, 5..26);
+    assert_eq!(spans[2].raw_span, 26..30);
     assert_eq!(
         session.restore_strict_text(&text).unwrap(),
-        format!("{marker}{}", &RAW[5..])
+        format!("{marker}{}{marker}", &RAW[5..26])
     );
     assert_eq!(seen.lock().unwrap().len(), 1);
 }
 
 #[test]
-fn full_parent_mixed_class_reflags_keep_strict_tolerant_redact_fallbacks() {
+fn full_parent_mixed_class_findings_resolve_only_exposed_gaps() {
     for fallback in [
         SafetyNetFallback::Strict,
         SafetyNetFallback::Tolerant,
@@ -611,42 +580,16 @@ fn full_parent_mixed_class_reflags_keep_strict_tolerant_redact_fallbacks() {
             &DictionaryBundle::default(),
             SafetyNetPolicy::new(SafetyNetMode::Resolve, fallback),
         );
-        match fallback {
-            SafetyNetFallback::Strict => assert!(matches!(
-                result,
-                Err(gaze::Error::SafetyNetFallback(
-                    gaze::FallbackReason::OverlapConflict
-                ))
-            )),
-            SafetyNetFallback::Tolerant => {
-                let (CleanDocument::Text(text), spans, _) = result.unwrap() else {
-                    panic!("text")
-                };
-                assert_eq!(spans.len(), 3);
-                assert_eq!(session.restore_strict_text(&text).unwrap(), RAW);
-            }
-            SafetyNetFallback::Redact => {
-                let (CleanDocument::Text(text), spans, _) = result.unwrap() else {
-                    panic!("text")
-                };
-                // The whole document was redacted. It used to become the empty string, which a
-                // reader could not tell from an empty input; it is now one marker standing for
-                // every original byte.
-                assert!(gaze::is_redaction_marker(&text), "{text:?}");
-                assert_eq!(spans.len(), 1);
-                assert_eq!(spans[0].raw_span, 0..RAW.len());
-                assert_eq!(seen.lock().unwrap()[2].0, text);
-            }
-            _ => unreachable!(),
-        }
-        assert_eq!(
-            seen.lock().unwrap().len(),
-            if matches!(fallback, SafetyNetFallback::Redact) {
-                3
-            } else {
-                2
-            }
-        );
+        let (CleanDocument::Text(text), spans, report) = result.unwrap() else {
+            panic!("text")
+        };
+        assert_eq!(spans.len(), 3);
+        assert_eq!(report.suspects.len(), 2);
+        assert_eq!(spans[0].class, PiiClass::Name);
+        assert_eq!(spans[1].class, PiiClass::Email);
+        assert_eq!(spans[2].class, PiiClass::Name);
+        assert_eq!(session.restore_strict_text(&text).unwrap(), RAW);
+        assert_eq!(seen.lock().unwrap().len(), 2);
     }
 }
 
@@ -703,9 +646,12 @@ fn post_multigap_net_errors_malformed_and_raw_residuals_stay_enforcing_and_stage
             assert_eq!(seen.lock().unwrap().len(), 2);
             assert_eq!(
                 if staged {
-                    tx.restore_strict_text(&seen.lock().unwrap()[1].0)
+                    tx.restore_strict_text(&emitted_text(&seen.lock().unwrap()[1].0, &tx.tokens()))
                 } else {
-                    session.restore_strict_text(&seen.lock().unwrap()[1].0)
+                    session.restore_strict_text(&emitted_text(
+                        &seen.lock().unwrap()[1].0,
+                        &session.tokens(),
+                    ))
                 }
                 .unwrap(),
                 raw

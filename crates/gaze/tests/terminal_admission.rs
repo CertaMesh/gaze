@@ -11,6 +11,10 @@ use gaze::*;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+#[path = "support/stable_scan.rs"]
+mod stable_scan;
+use stable_scan::stable_scan;
+
 type Step = (
     String,
     std::result::Result<Vec<LeakSuspect>, SafetyNetError>,
@@ -33,8 +37,9 @@ impl SafetyNet for Script {
     ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
         let (expected, result) = self.0.lock().unwrap().pop_front().expect("no extra sweep");
         assert_eq!(
-            text, expected,
-            "each sweep must inspect its actual phase output"
+            text,
+            stable_scan(&expected),
+            "each sweep must inspect its actual phase output through the stable scan view"
         );
         result
     }
@@ -471,31 +476,24 @@ fn a_refused_terminal_round_denies_without_deleting() {
     );
 }
 
-/// A terminal suspect whose own coverage claim contradicts the manifest, or that carries a token
-/// shape this pipeline never minted, cannot be judged — so it is neither resolved nor shipped.
+/// A terminal suspect whose class-mismatch claim contradicts the manifest cannot be judged.
 #[test]
-fn an_unjudgeable_terminal_suspect_denies() {
+fn a_contradictory_terminal_class_mismatch_denies() {
     let doc = Doc::new();
     let mut mismatch = uncovered(doc.delta_span.clone());
     mismatch.kind = LeakKind::ClassMismatch {
         pipeline_class: PiiClass::Email,
         safety_net_class: PiiClass::Name,
     };
-    for (suspect, expected) in [
-        // Claims to cover nothing the manifest covers, while spanning a live token.
-        (
-            uncovered(0..doc.alpha.len() + 6),
-            FallbackReason::ResidualSuspect,
+    let h = doc.harness(vec![(doc.terminal.clone(), Ok(vec![mismatch]))]);
+    assert!(
+        matches!(
+            doc.run(&h),
+            Err(Error::SafetyNetFallback(FallbackReason::OverlapConflict))
         ),
-        (mismatch, FallbackReason::OverlapConflict),
-    ] {
-        let h = doc.harness(vec![(doc.terminal.clone(), Ok(vec![suspect]))]);
-        assert!(
-            matches!(doc.run(&h), Err(Error::SafetyNetFallback(reason)) if reason == expected),
-            "an unjudgeable terminal suspect must fail closed"
-        );
-        assert!(h.drained());
-    }
+        "a contradictory terminal claim must fail closed"
+    );
+    assert!(h.drained());
 }
 
 /// The fallback's audit row says it redacted a span, and part of that span is still in the

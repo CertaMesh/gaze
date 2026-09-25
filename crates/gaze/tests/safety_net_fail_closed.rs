@@ -250,12 +250,9 @@ fn overlapping_resolutions_under_redact_fallback_still_deliver_a_document() {
     );
 }
 
-/// A suspect claiming `Uncovered` while overlapping a live token contradicts the manifest.
-///
-/// Resolving it would tokenize across an existing token. The suspect/manifest agreement gate
-/// rejects it instead of trusting the net's coverage claim.
+/// A straddling finding is clipped to exposed bytes, leaving the live token restorable.
 #[test]
-fn uncovered_suspect_overlapping_a_live_token_fails_closed_with_overlap_conflict() {
+fn uncovered_suspect_overlapping_a_live_token_resolves_exposed_bytes() {
     let raw = format!("{EMAIL} tail");
     let clean_len = primary_clean(detected(0..EMAIL.len()), &raw).len();
     // The net claims the WHOLE clean document is uncovered — a claim the manifest contradicts,
@@ -266,11 +263,13 @@ fn uncovered_suspect_overlapping_a_live_token_fails_closed_with_overlap_conflict
     );
     let session = Session::new(Scope::Ephemeral).expect("session");
 
-    expect_fallback(
-        run(&pipeline, &session, &raw, SafetyNetFallback::Strict),
-        FallbackReason::OverlapConflict,
-        "uncovered suspect overlapping a live token",
-    );
+    let (clean, manifest, report) =
+        run(&pipeline, &session, &raw, SafetyNetFallback::Strict).expect("resolve exposed tail");
+    let clean = text(clean);
+    assert_eq!(manifest.len(), 2);
+    assert_eq!(report.suspects.len(), 1);
+    assert_eq!(report.suspects[0].kind, LeakKind::Uncovered);
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
 }
 
 /// Overlap detection is only correct on sorted plans.

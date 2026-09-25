@@ -280,7 +280,11 @@ fn handle_request_with_policy(
         None => session_hex_for_fixture(&request.fixture_id),
     };
     let raw_text = request.text;
-    let session = Session::new_with_session_hex_for_tests(Scope::Ephemeral, session_hex)?;
+    let session = if std::env::var_os("GAZE_BENCH_RANDOM_SESSION").is_some() {
+        Session::new(Scope::Ephemeral)?
+    } else {
+        Session::new_with_session_hex_for_tests(Scope::Ephemeral, session_hex)?
+    };
     let clean_start = Instant::now();
     let clean_result = full.clean_text_with_safety_net_policy_detect_context_and_protection_trace(
         &session,

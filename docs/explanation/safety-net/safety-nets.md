@@ -11,6 +11,16 @@ Nym-small adapter by default; `gaze setup --safety-net none` opts out. The OpenA
 Privacy Filter subprocess adapter remains opt-in (`--safety-net openai-filter`). CLI flags and setup:
 [`crates/gaze-cli/README.md`](../../../crates/gaze-cli/README.md#safety-net).
 
+Before a net scans clean text, Gaze replaces the random eight-character session
+hex in each manifest-owned or session-verified placeholder with a stable
+eight-character hex digest of the placeholder shape. The replacement has the
+same byte length, so model spans map exactly to the real clean text. Findings
+wholly inside a verified placeholder are dropped; crossing findings are clipped
+to exposed bytes before policy or fallback acts.
+The observable clean text, manifest, and restore input keep the original token
+bytes. Auditing keeps its existing schema and records the resulting safety-net
+decisions. Unowned token-shaped text is untouched.
+
 Validator-backed self-validation is handled earlier by the deterministic
 [`validator-veto`](../detection/validator-veto.md) stage. Safety nets do not veto candidates
 and do not participate in conflict resolution.
@@ -346,8 +356,8 @@ between two letters or digits is a model firing on part of a word (`Pass` in
 `Passwort`). Tokenizing or deleting it protects nothing whole and hands the
 agent a mangled word, so under `Resolve` and `Redact` no stage acts on it: not
 the first pass, the second batch, the terminal round, `Redact` mode or the
-`Redact` fallback. Its bytes stay, it gets the same `Preserve` audit row as a
-suspect inside a live token, it stays in the returned report, and a
+`Redact` fallback. Its bytes stay, it gets a `Preserve` audit row, it stays
+in the returned report, and a
 `LeakReportTelemetry::UnactionableSubword` row (CLI JSON kind
 `UnactionableSubword`) carries its net, class and offsets. `Observe` modes are
 unchanged.
@@ -706,12 +716,15 @@ to a rule token of that class resolved against it; with their own classes 42
 more spans tokenize. Timings from that run are provisional (shared host under
 load) and are not a latency claim.
 
-Every residual suspect a post-policy re-scan reports sits inside a Gaze token:
-the model reads token text such as `Custom:building_number` as a building
-number. A suspect inside a live token is never acted on, so bytes and restore
-are unaffected, under every `Resolve` fallback including `strict`
-(`nym_suspect_inside_its_own_token_text_is_protected_under_every_resolve_fallback`).
-Masking token text before the net reads it is a follow-up (todo 3681). A first
+The model can read token text such as `Custom:building_number` as a building
+number. Findings wholly inside an owned placeholder are dropped before policy;
+straddling findings retain only exposed bytes. A suspect inside a live token
+is never acted on, so bytes and restore are unaffected under every `Resolve`
+fallback, including `strict`
+(`nym_suspect_inside_its_own_token_text_is_dropped_under_every_resolve_fallback`).
+The eight-byte session prefix is replaced with a stable hex digest of the
+placeholder shape before inference; emitted tokens and byte offsets stay
+unchanged. Hiding the remaining token text is a follow-up (todo 3681). A first
 attempt replaced every manifest token with same-length spaces before inference
 and was measured and not shipped: it removed the token-text flags, but the
 model lost the tokens as context and bought 18 % fewer leaked bytes (v2 6,154

@@ -94,7 +94,7 @@ fn precomputed_email_report(span: Range<usize>) -> LeakReport {
 }
 
 #[test]
-fn precomputed_report_drives_byte_equal_text_invariance() {
+fn precomputed_placeholder_report_is_dropped_without_changing_output() {
     let session = session();
     let raw = RawDocument::Text("alice@example.invalid ok".to_string());
     let baseline = text(
@@ -110,8 +110,8 @@ fn precomputed_report_drives_byte_equal_text_invariance() {
         .expect("safety-net clean");
 
     assert_eq!(text(clean), baseline);
-    assert_eq!(actual_report.stats, report.stats);
-    assert_eq!(actual_report.suspects, report.suspects);
+    assert_eq!(actual_report.stats.suspect_count, 0);
+    assert!(actual_report.suspects.is_empty());
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn field_path_reports_drive_structured_tests() {
 }
 
 #[test]
-fn raw_suspects_are_correlated_with_manifest_deterministically() {
+fn raw_suspects_inside_owned_token_are_dropped_deterministically() {
     let session = session();
     let raw = RawDocument::Text("alice@example.invalid ok".to_string());
     let baseline = text(
@@ -176,11 +176,8 @@ fn raw_suspects_are_correlated_with_manifest_deterministically() {
     assert_eq!(text(clean), baseline);
     assert_eq!(first.suspects, second.suspects);
     assert_eq!(first.stats, second.stats);
-    assert_eq!(first.stats.suspect_count, 1);
-    assert!(matches!(
-        first.suspects[0].kind,
-        LeakKind::ClassMismatch { .. }
-    ));
+    assert_eq!(first.stats.suspect_count, 0);
+    assert!(first.suspects.is_empty());
 }
 
 #[test]

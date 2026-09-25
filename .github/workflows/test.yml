@@ -158,7 +158,7 @@ jobs:
           GAZE_NYM_MODEL_DIR: ${{ runner.temp }}/gaze/models/nym-small-int8
         run: |
           set -euo pipefail
-          for name in live_nym_net_tokenizes_a_plate_the_rules_miss policy_nym_model_dir_activates_live_bundle; do
+          for name in live_nym_net_tokenizes_a_plate_the_rules_miss policy_nym_model_dir_activates_live_bundle live_nym_suspects_ignore_random_session_hex; do
             cargo test -p gaze-cli --all-features --test nym_cli "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
             grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
           done

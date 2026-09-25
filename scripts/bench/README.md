@@ -48,6 +48,10 @@ A/B built on it. The runner removes OPF environment variables and
 passes no OPF command, checkpoint, or daemon socket, even if the invoking shell
 defines them.
 
+The `clean_for_bench` producer derives a repeatable session prefix from each
+fixture ID by default. Set `GAZE_BENCH_RANDOM_SESSION=1` when measuring the
+effect of fresh random prefixes; record that setting with the scorecard.
+
 Planning estimates on a modern laptop are roughly 2–10 minutes for the default
 256-document quick profile and 30–120 minutes per measured full repetition.
 Thermals, CPU runtime, and filesystem cache state can move those estimates
