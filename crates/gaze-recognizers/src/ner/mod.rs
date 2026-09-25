@@ -63,7 +63,6 @@ mod tests {
     fn recognizer_with_spans(spans: Vec<NerSpanResult>) -> NerRecognizer {
         NerRecognizer {
             detector: NerDetector {
-                model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
                 recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: None,
@@ -615,7 +614,6 @@ mod tests {
 
         let recognizer = NerRecognizer {
             detector: NerDetector {
-                model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
                 recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: None,
@@ -662,7 +660,6 @@ mod tests {
 
         let recognizer = NerRecognizer {
             detector: NerDetector {
-                model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
                 recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: None,
@@ -690,7 +687,6 @@ mod tests {
     fn ner_recognizer_chunks_long_input_and_offsets_spans() {
         let recognizer = NerRecognizer {
             detector: NerDetector {
-                model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
                 recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: None,
@@ -721,7 +717,6 @@ mod tests {
     fn ner_overlap_merges_duplicate_spans_once() {
         let recognizer = NerRecognizer {
             detector: NerDetector {
-                model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
                 recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: None,
@@ -753,7 +748,6 @@ mod tests {
 
         let recognizer = NerRecognizer {
             detector: NerDetector {
-                model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
                 recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: None,
@@ -805,7 +799,6 @@ mod tests {
         });
         let default_threshold = NerRecognizer {
             detector: NerDetector {
-                model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
                 recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: Some("de".to_string()),
@@ -815,7 +808,6 @@ mod tests {
         };
         let stricter_threshold = NerRecognizer {
             detector: NerDetector {
-                model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
                 recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: Some("de".to_string()),
