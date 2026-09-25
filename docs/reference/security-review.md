@@ -93,6 +93,6 @@ These claims are security-relevant but are not yet proven by a named test.
 
 ## Threat Model
 
-See [`gaze-threat-model.md`](https://github.com/PIInuts/business/blob/main/research/gaze-threat-model.md)
-(hosted in `PIInuts/business:research/`) for trust boundaries, adversary model,
-and broader attack-surface notes.
+The full threat model (trust boundaries, adversary model, and broader
+attack-surface notes) lives in a private research repository and is not
+published. Report a suspected vulnerability through [`SECURITY.md`](../../SECURITY.md).
