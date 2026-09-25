@@ -16,6 +16,10 @@ use tempfile::tempdir;
 mod token_assertions;
 use token_assertions::without_tokens;
 
+#[path = "support/proxy_health.rs"]
+mod proxy_health;
+use proxy_health::proxy_answers_health;
+
 const PARITY_INPUT: &str = "id ES-TEST-123456 track Sonnenlied";
 
 fn write_cross_verb_parity_policy() -> (tempfile::TempDir, std::path::PathBuf) {
@@ -141,14 +145,14 @@ impl Drop for ChildGuard {
     }
 }
 
-/// Waits until `addr` accepts connections. There is no deadline: these tests
-/// never assert how fast a server starts (user ruling 2026-09-16). Instead
-/// `exited` reports why the server can no longer come up, so a dead server
-/// fails the test at once rather than hanging it.
-fn wait_until_listening(addr: SocketAddr, mut exited: impl FnMut() -> Option<String>) {
-    while TcpStream::connect(addr).is_err() {
+/// Waits until the proxy at `addr` answers its health check. There is no
+/// deadline: these tests never assert how fast a server starts (user ruling
+/// 2026-09-16). Instead `exited` reports why the server can no longer come up,
+/// so a dead server fails the test at once rather than hanging it.
+fn wait_until_serving(addr: SocketAddr, mut exited: impl FnMut() -> Option<String>) {
+    while !proxy_answers_health(addr) {
         if let Some(reason) = exited() {
-            panic!("server for {addr} exited before listening: {reason}");
+            panic!("server for {addr} exited before serving: {reason}");
         }
         thread::sleep(Duration::from_millis(20));
     }
@@ -199,7 +203,7 @@ fn direct_proxy_body(policy: &std::path::Path) -> String {
         .spawn()
         .unwrap();
     let mut child = ChildGuard(child);
-    wait_until_listening(proxy_addr, || child_exited(&mut child.0));
+    wait_until_serving(proxy_addr, || child_exited(&mut child.0));
 
     let request_body = json!({
         "model": "claude-test",
@@ -421,7 +425,7 @@ fn proxy_restart_keeps_running_daemon_when_policy_nym_bundle_is_missing() {
     // `proxy start` returns before the daemon binds; wait for it so the final
     // connect proves the restart kept it serving.
     let pid = started_daemon_pid(&started);
-    wait_until_listening(bind, || daemon_exited(pid, home.path()));
+    wait_until_serving(bind, || daemon_exited(pid, home.path()));
     fs::OpenOptions::new()
         .append(true)
         .open(&policy)
@@ -814,7 +818,7 @@ fn started_daemon_pid(start: &Output) -> u32 {
         .unwrap_or_else(|| panic!("`proxy start` printed no daemon pid: {stdout}"))
 }
 
-/// Liveness probe for [`wait_until_listening`]: the detached daemon is not our
+/// Liveness probe for [`wait_until_serving`]: the detached daemon is not our
 /// child, so probe the pid `proxy start` reported ([`started_daemon_pid`]) with
 /// `kill -0`. `start` has exited, so a dead daemon is reaped rather than left a
 /// zombie that `kill -0` would still count as alive.
@@ -900,7 +904,7 @@ fn daemonized_proxy_body(policy: &Path) -> String {
     );
 
     let pid = started_daemon_pid(&start);
-    wait_until_listening(proxy_addr, || daemon_exited(pid, home.path()));
+    wait_until_serving(proxy_addr, || daemon_exited(pid, home.path()));
 
     let request_body = json!({
         "model": "claude-test",

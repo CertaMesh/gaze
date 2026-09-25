@@ -15,9 +15,13 @@
 #![cfg(all(feature = "dashboard", unix))]
 
 use std::io::Read;
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
+
+#[path = "support/proxy_health.rs"]
+mod proxy_health;
+use proxy_health::proxy_answers_health;
 
 fn gaze_binary() -> Command {
     Command::new(assert_cmd::cargo::cargo_bin("gaze"))
@@ -25,10 +29,11 @@ fn gaze_binary() -> Command {
 
 /// Drives `gaze proxy serve` without asserting how fast it starts (user ruling
 /// 2026-09-16). The CLI prints every dashboard decision line before the
-/// provider binds, so a provider that accepts connections has already
-/// written all of them. Each test therefore waits only for the bind (failing
-/// fast if the provider exits), then stops the provider and checks its whole
-/// stderr: a missing line fails at once instead of hanging on a live provider.
+/// provider binds, so a provider that answers its health check has already
+/// written all of them. Each test therefore waits only for that answer
+/// (failing fast if the provider exits), then stops the provider and checks
+/// its whole stderr: a missing line fails at once instead of hanging on a live
+/// provider.
 struct ServeProbe {
     child: Child,
     stderr: std::sync::mpsc::Receiver<String>,
@@ -55,7 +60,12 @@ impl ServeProbe {
             let mut pending = String::new();
             loop {
                 match stderr_pipe.read(&mut buffer) {
-                    Ok(0) | Err(_) => break,
+                    Ok(0) | Err(_) => {
+                        if !pending.is_empty() {
+                            let _ = sender.send(pending);
+                        }
+                        break;
+                    }
                     Ok(n) => {
                         pending.push_str(&String::from_utf8_lossy(&buffer[..n]));
                         while let Some(newline) = pending.find('\n') {
@@ -76,10 +86,10 @@ impl ServeProbe {
         }
     }
 
-    /// Proves the provider is serving: waits until it accepts a connection,
-    /// failing as soon as it exits instead of after a fixed sleep.
+    /// Proves the provider is serving: waits until it answers its health
+    /// check, failing as soon as it exits instead of after a fixed sleep.
     fn assert_provider_serving(&mut self) {
-        while TcpStream::connect(self.addr).is_err() {
+        while !proxy_answers_health(self.addr) {
             if let Some(status) = self.child.try_wait().expect("try_wait") {
                 panic!(
                     "provider process exited ({status}); dashboard failure must leave the \
@@ -94,7 +104,7 @@ impl ServeProbe {
         );
     }
 
-    /// Stops a provider that `assert_provider_serving` saw listening and
+    /// Stops a provider that `assert_provider_serving` saw serving and
     /// returns its stderr read to EOF. Every dashboard line precedes the bind,
     /// so the stream is final: a line's presence or absence is a real result,
     /// not a timing window.
