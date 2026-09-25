@@ -111,7 +111,7 @@ The fallback (`--safety-net-fallback`) can be `redact` (default), `strict`, or `
 Three commands from zero to protecting a synthetic contact:
 
 ```sh
-cargo install --git https://github.com/CertaMesh/gaze.git gaze-cli
+cargo install gaze-cli --version 0.15.0
 gaze setup
 printf '%s' 'From: Ada Example <ada@example.invalid>' | gaze clean --policy gaze.toml | jq -r .clean_text
 ```
@@ -195,13 +195,11 @@ CLI surface (`gaze clean`, `gaze restore`, audit, policy TOML): [Quickstart](#qu
 
 ## Install
 
-Install the current source version for the Nym-on setup flow:
+Install the CLI from crates.io:
 
 ```sh
-cargo install --git https://github.com/CertaMesh/gaze.git gaze-cli
+cargo install gaze-cli --version 0.15.0
 ```
-
-The published `0.14.0` CLI still uses the old setup default; release prep will update the crates.io instructions.
 
 Or build from source (latest `main`, or to enable extra features):
 
