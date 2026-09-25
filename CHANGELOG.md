@@ -28,7 +28,9 @@ Existing policies stay valid. Other shipped leaks closed in this release are
 listed under Fixed with their affected version ranges: `gaze clean` without
 `--policy` ran an email-only pipeline (v0.3.0–v0.14.0, PR #618), `gaze index`
 ran without the `core` floor (v0.11.0–v0.14.0, PR #620), and several IBAN and
-collision-family shapes shipped raw (PRs #622, #624, #626, #627, #628).
+collision-family shapes shipped raw (PRs #622, #624, #626, #627, #628), as did
+national IDs under JSON keys and `key=value` log fields and identifiers grouped
+with non-breaking spaces (PR #647).
 
 **Highlights.**
 
@@ -78,6 +80,8 @@ collision-family shapes shipped raw (PRs #622, #624, #626, #627, #628).
   deleting bytes (PR #623).
 - `gaze-mcp-rmcp`, `gaze-mcp-bridge` and `gaze-document` move to rmcp 2.x
   (PR #616).
+- `gaze_document::extract::pdf::rasterize_first_page` is removed; use
+  `extract_pages` (PR #650).
 
 **Performance.**
 <!-- PHASE2: latency disclosure from the release commit, measured with
@@ -99,13 +103,15 @@ the same-document-set numbers, linked to the script and hardware line. -->
   Every release up to and including v0.14.0 matched cue-anchored identifiers
   (BSN, Steuer-ID, CPF, CNPJ, NHS, SSN, NINO, PAN, Aadhaar, NIR, VAT ID,
   passport, national ID, driver licence, tax number) only in prose such as
-  `BSN: 111222333`. A JSON key (`{"bsn":"111222333"}`), a log field
-  (`bsn=111222333`) or a snake, camel or kebab key (`steuer_id`, `steuerId`,
+  `BSN: <9 digits>`. A JSON key (`{"bsn":"<9 digits>"}`), a log field
+  (`bsn=<9 digits>`) or a snake, camel or kebab key (`steuer_id`, `steuerId`,
   `nhs_number`, `customer_ssn`) passed the value through raw, including on the
   `gaze proxy` tool-call argument path. The `core` rulepack patterns now accept
   quoted, single-quoted and escaped JSON keys, `=` and `:` log forms, and those
   key spellings. A camelCase prefix before the cue (`customerSsn`) is not yet
-  matched. (solo todo #3818)
+  matched, and CSV header-to-column association is not covered: a CSV column
+  headed `bsn` with bare values is not tokenized by this change (PR #647,
+  solo todo #3818; CSV is solo todo #3829).
 - **Identifiers grouped with non-breaking or thin spaces are now tokenized.**
   Every release up to and including v0.14.0 missed IBANs, payment cards,
   Steuer-IDs and other grouped identifiers whose groups were separated by
@@ -115,7 +121,7 @@ the same-document-set numbers, linked to the script and hardware line. -->
   separator, so each value shipped raw; an NBSP-grouped Steuer-ID leaked its
   first two digits next to a `phone` token. Detection now reads every Unicode space
   separator as an ASCII space; tokens, manifests and restore keep the original
-  bytes. (solo todo #3819)
+  bytes (PR #647, solo todo #3819).
 - **`gaze setup` policies now tokenize every detected class.** Generated policies
   in v0.11.2–v0.14.0 preserved unmatched classes, allowing detected phone,
   IBAN, payment card, and IP address values to pass through raw. The generated
@@ -685,6 +691,14 @@ the same-document-set numbers, linked to the script and hardware line. -->
   policy it wrote. `gaze index ingest` now requires `--ner-model-dir` or
   `GAZE_NER_MODEL_DIR` (see Changed).
 
+- **BREAKING (`gaze-document`, `pdf-input` feature):
+  `gaze_document::extract::pdf::rasterize_first_page` is removed** (PR #650).
+  It has had no callers since layout report v2 (#219) moved PDF ingestion to
+  `extract_pages`. Use `extract_pages(path, PdfRasterConfig::new())`, which
+  returns one `PdfPagePayload` per page: `VectorText` for pages with
+  selectable text and `Raster(RasterizedPage)` for image-only pages. It has no
+  single-page mode and does not rasterize pages that have selectable text.
+
 ### Fixed
 
 - Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
@@ -695,7 +709,7 @@ the same-document-set numbers, linked to the script and hardware line. -->
   the original token bytes. Findings wholly inside a verified placeholder are
   discarded; findings that cross one are clipped to exposed bytes before
   policy or fallback can act, so fallback cannot replace an owned placeholder
-  with a one-way redaction marker.
+  with a one-way redaction marker (PR #644).
 
   On the 2,910-document scored-labels-v2 Nym/NER replay with fresh random
   sessions, three pre-fix runs leaked 14,071–14,088 bytes (mean 14,078),
@@ -1049,7 +1063,8 @@ the same-document-set numbers, linked to the script and hardware line. -->
   through the new `Recognizer::detect_is_locale_invariant` method (default `false`), and
   the registry reuses their first result at later steps. Per-span claiming is unchanged,
   and clean text, manifests, and audit rows are byte-identical. Custom recognizers keep
-  one call per step unless they opt in.
+  one call per step unless they opt in (PR #653). Measured latency is in the
+  Performance summary at the top of this section.
 
 ## [0.14.0] - 2026-09-11
 
