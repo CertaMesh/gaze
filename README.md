@@ -18,18 +18,18 @@ The same boundary applies to tool-call arguments in agent frameworks: the JSON t
 
 ## How good is it
 
-<!-- PHASE2: v0.15.0 numbers -->
-The [v0.14.0 release benchmark](docs/reference/benchmarks/README.md#current-release) scored 2,910 synthetic documents holding 130,282 bytes of annotated PII. "Leaked" counts PII bytes that would still reach the model; the goal is zero.
+The [v0.15.0 release benchmark](docs/reference/benchmarks/README.md#current-release) ran the exact policy `gaze setup` writes over 2,910 synthetic documents holding 130,282 bytes of annotated PII. "Leaked" counts PII bytes that would still reach the model; the goal is zero.
 
 | Setup | Refused | Leaked, all processed docs | Leaked, common set | False-positive bytes | Exact restores |
 |---|---:|---:|---:|---:|---:|
-| Rules only | 0 | 93,850 (72.0%) | 93,850 (72.0%) | 5,423 | 100.0% |
-| Rules + NER | 0 | 27,000 (20.7%) | 27,000 (20.7%) | 28,030 | 100.0% |
+| **v0.15.0 default: `gaze setup` policy (rules + NER + Nym net)** | 0 | **19,556 (15.0%)** | 19,556 (15.0%) | 30,073 | 100.0% |
 | v0.14.0 default: rules + NER + Kiji net | 0 | 25,179 (19.3%) | 25,179 (19.3%) | 168,276 | 78.4% |
+| v0.14.0 rules + NER, no net | 0 | 27,000 (20.7%) | 27,000 (20.7%) | 28,030 | 100.0% |
+| v0.14.0 rules only | 0 | 93,850 (72.0%) | 93,850 (72.0%) | 5,423 | 100.0% |
 
-No arm refused a document, so all 2,910 processed documents are also the common set. The Kiji safety net has since been removed. Its 78.4% exact-restore rate comes from its one-way `redact` fallback, not from restore failures. v0.15 makes Nym the `gaze setup` safety net; its release row will replace this table.
+Neither default refused a document, so all 2,910 processed documents are also the common set. The v0.15.0 default leaks 22% fewer PII bytes than v0.14.0's, with 82% fewer false-positive bytes, and every document restores exactly. The removed Kiji net's 78.4% exact-restore rate came from its one-way `redact` fallback, not from restore failures.
 
-**Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw).
+**Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw). A payment card written directly next to a CVV, an expiry date or other digits can also pass untokenized; a fix is in progress.
 
 Methods, the full scorecard, and how to reproduce every number: [benchmarks](docs/reference/benchmarks/README.md).
 

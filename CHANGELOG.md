@@ -113,18 +113,47 @@ a leak, and both are planned for v0.16:
   JSON-destination restores correctly as of PR #656.
 
 **Performance.**
-<!-- PHASE2: latency disclosure from the release commit, measured with
-scripts/bench/cli-latency.py on a quiet host, with its hardware line. State the
-rules+NER slowdown against v0.14.0 in ABSOLUTE ms per document (median and p95,
-e.g. "28 → 40 ms median"), the added cost of Nym, and one-shot `gaze clean`
-versus warm `gaze daemon`. v0.16 is the performance release. Do not invent
-numbers. -->
+Measured with [`scripts/bench/cli-latency.py`](scripts/bench/cli-latency.py)
+on the release code (built at `6fcba31a`) over 30 benchmark documents after one
+warm-up, on a quiet MacBook Pro (Apple M5 Max, 18 cores, 64 GB, macOS 26.5; 1-minute
+load 1.74 at start, no other build or benchmark running, one ONNX Runtime
+thread). Evidence:
+[`latency-v0.15.0.json`](docs/reference/benchmarks/latency-v0.15.0.json).
+
+| Pipeline, warm per document | Median | p95 |
+|---|---:|---:|
+| v0.14.0 rules + NER | 28.4 ms | 40.7 ms |
+| v0.15.0 rules + NER | 19.9 ms | 33.1 ms |
+| v0.15.0 `gaze setup` policy, no net (`--safety-net none`) | 20.3 ms | 33.2 ms |
+| v0.15.0 `gaze setup` policy with Nym (the default) | 69.8 ms | 139.8 ms |
+
+Rules + NER got faster than v0.14.0 because NER now runs once per document
+(PR #653); without that change the setup policy's 15-step locale chain ran NER
+15 times. Nym adds about 50 ms per document at the median and raises peak
+memory from about 590 MiB to about 1,050 MiB. One-shot `gaze clean` pays process
+start and model load on every call: 772 ms per document for the setup policy
+and 2,149 ms with Nym. A warm `gaze daemon` answers in 21.3 ms and 69.0 ms,
+after a first cold request of 762 ms and 2,120 ms. Latency grows with text
+length: in a 10-turn `gaze daemon` conversation that re-sends the history, a
+4.2 KB turn took 185 ms without a net and 1,022 ms with Nym. v0.16 is the
+performance release.
 
 **Benchmark.**
-<!-- PHASE2: v0.15.0 release benchmark numbers from
-docs/reference/benchmarks/scorecard-v0.15.0.json (exact setup policy, and
-setup policy + Nym), with Refused and leaked-on-all-processed columns next to
-the same-document-set numbers, linked to the script and hardware line. -->
+Measured on the release commit with
+[`scripts/bench/run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py)
+(`full` profile, seed 20260710, scored-label contract v1) on the same 2,910
+documents and 130,282 gold PII bytes as v0.14.0, on a MacBook Pro (Apple M5
+Max, 18 cores, 64 GB, macOS 26.5). The arm is the exact policy
+`gaze setup --non-interactive` writes, Nym on
+([`scorecard-v0.15.0.json`](docs/reference/benchmarks/scorecard-v0.15.0.json)).
+
+| Setup | Refused | Leaked, all processed docs | Leaked, common set | False-positive bytes | Exact restores |
+|---|---:|---:|---:|---:|---:|
+| v0.15.0 `gaze setup` policy (rules + NER + Nym) | 0 | 19,556 (15.0%) | 19,556 (15.0%) | 30,073 | 2,910 / 2,910 |
+| v0.14.0 default (rules + NER + Kiji) | 0 | 25,179 (19.3%) | 25,179 (19.3%) | 168,276 | 2,282 / 2,910 |
+
+Neither setup refused a document, so the common set is all 2,910. Leaked PII
+bytes fell 22.3% and false-positive bytes 82.1%.
 
 ### Security
 
@@ -598,13 +627,11 @@ the same-document-set numbers, linked to the script and hardware line. -->
   its measured rule-floor byte recall was 0.9 % of 1,034 gold bytes. Nothing
   emits `custom:username` any more. See UPGRADE.md.
 
-  <!-- PHASE2: re-source these per-label figures from the v0.15.0 release
-  scorecard's per-label report, or drop them; no in-repo artifact backs 9a3a788. -->
-  Measured on a pre-release benchmark run at `9a3a788` (per-label report): the
-  rule-floor byte recall of these rules was `PASSWORD` 0.0 %, `USERNAME` 0.9 %
-  and `SECURITYTOKEN` 70.6 %. Under the v2 scored-label contract `PASSWORD` and
-  `SECURITYTOKEN` are unscored, so leaked PII bytes do not move; `USERNAME`
-  stays scored and loses at most about 9 bytes of rule coverage.
+  The v0.15.0 release benchmark shows what that means for a setup policy,
+  which does not load `secrets` (`scorecard-v0.15.0.json`,
+  `per_label_recall`, scored-label contract v1): 2,020 of 2,322 `PASSWORD`
+  gold bytes, 4,220 of 4,342 `SECURITYTOKEN` bytes and 72 of 1,034 `USERNAME`
+  bytes stay raw. Load `secrets` when credentials must be tokenized.
 
 - [bundle-tokenization-drift] The `core` snapshot records rulepack version 0.6.0 and the extended drift corpus hash; its detection entries are unchanged, which proves the new credential fixture lines stay inert under `core`.
 
