@@ -842,7 +842,7 @@ literals must supply the new optional field. Snapshot payload versions are uncha
 - [`docs/explanation/mcp/mcp-runtime.md`](../explanation/mcp/mcp-runtime.md) — `ToolCtx` seal, dispatch ordering, manifest persistence.
 - [`docs/explanation/document/document-extension.md`](../explanation/document/document-extension.md) — signed snapshot envelope.
 - [`docs/explanation/policy/locale-chain.md`](../explanation/policy/locale-chain.md) — 4-tier locale resolution.
-- [`docs/explanation/detection/feedback-loop.md`](../explanation/detection/feedback-loop.md) — resolve-mode promotion plumbing.
+- [`docs/explanation/detection/feedback-loop.md`](../explanation/detection/feedback-loop.md) — synthetic, deterministic regression harness for recognizer coverage.
 
 ## Versioning posture
 
