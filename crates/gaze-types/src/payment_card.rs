@@ -22,7 +22,9 @@ pub const CARD_RUN_PATTERN: &str = r"\b\d(?:[\s-]?\d)*\b";
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct CardRunScan {
-    /// Card numbers, as byte ranges of the text, in text order. They never overlap.
+    /// Card numbers, as byte ranges of the text, in text order. They never overlap. Where
+    /// Luhn-valid windows overlap, the range is their union, so it may hold digits around the
+    /// card.
     pub cards: Vec<Range<usize>>,
     /// The windows the card pattern `\b\d(?:[\s-]?\d){12,18}\b` matches in the run that fail
     /// Luhn and overlap no card, in text order. The forward recognizer emits them unchanged so
@@ -32,11 +34,19 @@ pub struct CardRunScan {
 
 /// The card numbers in `text[run]`, a match of [`CARD_RUN_PATTERN`].
 ///
-/// 1. Every window the card pattern `\b\d(?:[\s-]?\d){12,18}\b` matches (greedy, left to right)
-///    that passes Luhn is a card, whatever its grouping. This is the scan before the retry.
-/// 2. In the rest of the run, every group-aligned window written in a card layout (compact 13 to
-///    19 digits, 4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4) that passes Luhn is a candidate. The longest
-///    wins, the leftmost on a tie, then the next longest that overlaps nothing taken.
+/// Two kinds of window are card candidates when they pass Luhn:
+///
+/// 1. every window the card pattern `\b\d(?:[\s-]?\d){12,18}\b` matches (greedy, left to
+///    right), whatever its grouping: the scan before the retry;
+/// 2. every group-aligned window written in a card layout (compact 13 to 19 digits, 4-4-4-4,
+///    4-4-4-4-3, 4-6-5, 4-6-4).
+///
+/// Overlapping candidates become one card spanning their union. Which of two overlapping
+/// Luhn-valid windows is the card cannot be told from the digits (`0 4111 1111 1111 1111` passes
+/// Luhn as a 17-digit window and as the 16-digit card; a random prefix makes such a window one
+/// time in ten), so the scan fails closed and covers both: no digit of a Luhn-valid candidate is
+/// left out. Every card found before the retry, and every card a single best window would find,
+/// lies inside a union.
 ///
 /// A random digit run passes Luhn one time in ten, so every extra window costs precision. The
 /// retry never splits inside a group, and the layout filter keeps grouped amounts, timestamps
@@ -58,11 +68,11 @@ pub fn scan_card_run(
     let Some(run_text) = text.get(run.clone()) else {
         return CardRunScan::default();
     };
-    let mut scan = CardRunScan::default();
+    let mut candidates = Vec::new();
     let mut failed = Vec::new();
     for window in pattern_windows(run_text, run.start) {
         if crate::luhn_check(&text[window.clone()]) {
-            scan.cards.push(window);
+            candidates.push(window);
         } else {
             failed.push(window);
         }
@@ -73,7 +83,6 @@ pub fn scan_card_run(
         .iter()
         .map(|group| text[group.clone()].chars().count())
         .collect();
-    let mut windows = Vec::new();
     for first in 0..groups.len() {
         for last in first..groups.len().min(first + MAX_LAYOUT_GROUPS) {
             if !is_card_layout(&widths[first..=last]) {
@@ -81,23 +90,41 @@ pub fn scan_card_run(
             }
             let window = groups[first].start..groups[last].end;
             if crate::luhn_check(&text[window.clone()]) {
-                windows.push((widths[first..=last].iter().sum::<usize>(), window));
+                candidates.push(window);
             }
         }
     }
-    // Longest first; the sort is stable, so equal lengths stay leftmost first.
-    windows.sort_by_key(|(digits, _)| std::cmp::Reverse(*digits));
-    for (_, window) in windows {
-        if !scan.cards.iter().any(|card| overlaps(card, &window)) {
-            scan.cards.push(window);
-        }
-    }
-    scan.cards.sort_by_key(|card| card.start);
+
+    let mut scan = CardRunScan {
+        cards: union_of_overlapping(candidates),
+        rejected: Vec::new(),
+    };
     scan.rejected = failed
         .into_iter()
         .filter(|window| !scan.cards.iter().any(|card| overlaps(card, window)))
         .collect();
     scan
+}
+
+/// True when `text[span]`, read as one digit run, holds a card by [`scan_card_run`]: the check
+/// validator veto applies to a `card.structural` candidate, whose span may be the union of
+/// overlapping Luhn-valid windows and so fail Luhn as a whole. `source_spans` is as for
+/// [`scan_card_run`].
+pub fn holds_card(text: &str, span: Range<usize>, source_spans: Option<&[(usize, usize)]>) -> bool {
+    !scan_card_run(text, span, source_spans).cards.is_empty()
+}
+
+/// Sort `windows` and merge every chain of overlapping ones into one range.
+fn union_of_overlapping(mut windows: Vec<Range<usize>>) -> Vec<Range<usize>> {
+    windows.sort_by_key(|window| window.start);
+    let mut merged: Vec<Range<usize>> = Vec::new();
+    for window in windows {
+        match merged.last_mut() {
+            Some(last) if window.start < last.end => last.end = last.end.max(window.end),
+            _ => merged.push(window),
+        }
+    }
+    merged
 }
 
 /// The most groups a card layout in [`is_card_layout`] has.
@@ -260,6 +287,28 @@ mod tests {
             cards("Ref 12 4111 1111 1111 1111 003 45 ok"),
             ["4111 1111 1111 1111 003"]
         );
+    }
+
+    #[test]
+    fn overlapping_luhn_valid_windows_become_one_card() {
+        // Solo todo 3843 round 2: `0 4111 1111 1111 1111` passes Luhn as the pattern window
+        // (a leading zero keeps the checksum), so does the 16-digit card and so does the 19-digit
+        // card after it. None may win alone: the union leaves no digit of any of them out.
+        assert_eq!(
+            cards("x 0 4111 1111 1111 1111 003 x"),
+            ["0 4111 1111 1111 1111 003"]
+        );
+        assert_eq!(
+            cards("x 0\u{200D}4111 1111 1111 1111 x"),
+            ["0\u{200D}4111 1111 1111 1111"]
+        );
+    }
+
+    #[test]
+    fn a_union_span_still_holds_a_card() {
+        let text = "x 0 4111 1111 1111 1111 003 x";
+        assert!(holds_card(text, 2..27, None));
+        assert!(!holds_card("x 4012 8888 8888 1882 x", 2..21, None));
     }
 
     #[test]

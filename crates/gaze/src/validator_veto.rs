@@ -1,4 +1,4 @@
-use gaze_types::{Candidate, ValidatorFailReason, ValidatorOutcome};
+use gaze_types::{Candidate, ValidatorFailReason, ValidatorKind, ValidatorOutcome};
 
 use crate::registry::RecognizerRegistry;
 
@@ -13,6 +13,7 @@ pub fn apply(
     candidates: Vec<Candidate>,
     registry: &RecognizerRegistry,
     input: &str,
+    source_spans: Option<&[(usize, usize)]>,
 ) -> (Vec<Candidate>, Vec<VetoedCandidate>) {
     let mut kept = Vec::with_capacity(candidates.len());
     let mut vetoed = Vec::new();
@@ -31,7 +32,25 @@ pub fn apply(
             continue;
         };
 
-        match kind.validate(raw) {
+        // A `luhn` candidate may be the union of overlapping Luhn-valid windows of one digit run
+        // (`gaze_types::payment_card::scan_card_run`), which fails Luhn as a whole. It passes
+        // when the run still holds a card; a span holding none fails exactly as before.
+        let outcome = match kind.validate(raw) {
+            ValidatorOutcome::Fail { .. }
+                if kind == ValidatorKind::Luhn
+                    && gaze_types::payment_card::holds_card(
+                        input,
+                        candidate.span.clone(),
+                        source_spans,
+                    ) =>
+            {
+                ValidatorOutcome::Pass {
+                    canonical_form: Some(raw.to_string()),
+                }
+            }
+            outcome => outcome,
+        };
+        match outcome {
             ValidatorOutcome::Pass { canonical_form } => {
                 if candidate.canonical_form.is_none() {
                     candidate.canonical_form = canonical_form;

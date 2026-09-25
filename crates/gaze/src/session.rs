@@ -3047,6 +3047,73 @@ mod tests {
     }
 
     #[test]
+    fn restore_dlp_leaves_no_card_digit_unflagged_after_any_prefix() {
+        // Solo todo 3843 round 2: every 1- to 4-digit number before a card, separated, glued by
+        // a ZERO WIDTH JOINER, or glued in fullwidth. A prefix whose window passes Luhn by
+        // chance must not leave any card digit outside the flagged span.
+        let fullwidth = |text: &str| -> String {
+            text.chars()
+                .map(|ch| match ch {
+                    '0'..='9' => char::from_u32(ch as u32 + 0xFEE0).expect("fullwidth"),
+                    _ => ch,
+                })
+                .collect()
+        };
+        let card_class = PiiClass::custom("credit_card").expect("valid custom class");
+        let mut cases = 0usize;
+        let mut unflagged = Vec::new();
+        let mut by_shape = std::collections::BTreeMap::<String, usize>::new();
+        for width in 1..=4usize {
+            for number in 0..10usize.pow(width as u32) {
+                let digits = format!("{number:0width$}");
+                for prefix in [
+                    format!("{digits} "),
+                    format!("{digits}\u{200D}"),
+                    fullwidth(&digits),
+                ] {
+                    for card in [
+                        "4111 1111 1111 1111",
+                        "3782 822463 10005",
+                        "3056 930902 5904",
+                        "4111 1111 1111 1111 003",
+                    ] {
+                        cases += 1;
+                        let text = format!("Karte {prefix}{card} ok");
+                        let start = "Karte ".len() + prefix.len();
+                        let findings = structural_findings(&text);
+                        let raw_digit = card
+                            .char_indices()
+                            .filter(|(_, ch)| ch.is_ascii_digit())
+                            .any(|(at, _)| {
+                                !findings.iter().any(|finding| {
+                                    finding.class == card_class
+                                        && finding.location.contains(&(start + at))
+                                })
+                            });
+                        if raw_digit {
+                            let join = if prefix.ends_with(' ') {
+                                "space"
+                            } else if prefix.ends_with('\u{200D}') {
+                                "zwj"
+                            } else {
+                                "fullwidth"
+                            };
+                            *by_shape.entry(format!("{card}/{join}")).or_default() += 1;
+                            unflagged.push(text);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            unflagged.is_empty(),
+            "{} of {cases} prefixed cards left a digit unflagged ({by_shape:?}), e.g. {:?}",
+            unflagged.len(),
+            &unflagged[..unflagged.len().min(12)]
+        );
+    }
+
+    #[test]
     fn restore_dlp_zs_grouped_manifest_value_is_a_bypass_not_fresh_pii() {
         let iban = PiiClass::custom("iban").expect("valid custom class");
         let card = PiiClass::custom("credit_card").expect("valid custom class");
