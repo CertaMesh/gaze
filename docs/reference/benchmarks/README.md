@@ -68,15 +68,16 @@ Every release scorecard runs the same two configurations:
 | Arm | What it is |
 | --- | --- |
 | `rule-floor-extended` | the shipped deterministic recognizers alone |
-| `pass2-ner` | **the shipped default**: that floor plus the pinned Davlan mBERT `NerRecognizer` (threshold `0.3` by default), with no safety net |
+| `pass2-ner` | that floor plus the pinned Davlan mBERT `NerRecognizer` (threshold `0.3` by default), with no safety net |
 
-Two opt-in arms run a safety net under the shipped `Resolve`/`Redact` policy,
+Two additional arms run a safety net under the shipped `Resolve`/`Redact` policy,
 with exact-restore checks, manifest-integrity checks, and a post-policy
 SafetyNet scan. `full-stack-opf-resolve` exercises the OpenAI Privacy Filter. It
 is excluded from the default run because it needs a separately installed
 verified 2.6 GB checkpoint and a warmed daemon, and it has a measured
 fail-closed invalid-output rate. `full-stack-nym-resolve` exercises the in-process
-Nym-small net and needs its pinned bundle.
+Nym-small net and needs its pinned bundle. The v0.15 `gaze setup` default is
+rules plus NER plus Nym; its measurement lands with the v0.15 release row.
 
 Warm per-document latency of the Nym arm is measured by
 [`scripts/bench/nym-warm-latency.py`](../../../scripts/bench/nym-warm-latency.py)

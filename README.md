@@ -73,7 +73,7 @@ What this run gets wrong, stated plainly:
 
 The same boundary applies to tool-call arguments in agent frameworks: the JSON the model fills in carries placeholders, and Gaze restores them before your tool runs ([how it fits your stack](docs/explanation/how-gaze-works.md#how-it-fits-your-stack)).
 
-On the 2,910-document scored-label contract v2 benchmark, rules, NER, and Nym left **14,044 of 123,621 PII bytes (11.4%)** raw, with **0 refusals**; the goal is zero ([benchmark methods and evidence](docs/reference/benchmarks/README.md#safety-net-matrix)). Release prep will refresh this with the exact generated setup policy. The support-ticket policy and commands: [reproduce this example](docs/explanation/how-gaze-works.md#reproduce-this-example).
+The [v0.14.0 release benchmark](docs/reference/benchmarks/README.md#current-release) measured rules plus NER, without a safety net, under scored-label contract v1: **27,000 of 130,282 PII bytes (20.7243%)** survived. The goal is zero. v0.15 turns Nym on by default in `gaze setup`; its release benchmark will replace this number using the exact generated setup policy ([release prep runner, PR #643](https://github.com/CertaMesh/gaze/pull/643)). The support-ticket policy and commands: [reproduce this example](docs/explanation/how-gaze-works.md#reproduce-this-example).
 
 ## Seven steps
 
