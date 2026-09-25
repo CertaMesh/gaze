@@ -179,7 +179,7 @@ dictionary recognizer and tokenizes `ORD-789012` as `Custom:order_id`. See the
 [policy reference](../reference/policy.md#policycustom_recognizers) for
 `terms_from_context`, standalone context dictionaries, and the full schema.
 
-## Common errors
+## Troubleshooting common errors
 
 | Error | Cause | Fix |
 |-------|-------|-----|

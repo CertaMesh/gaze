@@ -1,10 +1,10 @@
-# Gaze MCP Adapter Quickstart
+# Set up the MCP adapter
 
 This page is an adopter setup guide for `gaze mcp`, the stdio MCP surface that
 routes supported tool reads through the Gaze chokepoint. For the full runtime
 contract, see [`docs/explanation/mcp/mcp-runtime.md`](../../explanation/mcp/mcp-runtime.md).
 
-## When To Use
+## When to use the MCP adapter
 
 Use `gaze mcp` when your agent host already speaks MCP and you want Gaze to
 provide a chokepoint tool surface for potentially sensitive file or text reads.
@@ -26,7 +26,7 @@ Install from the repository with both MCP and document tools enabled:
 cargo install --path crates/gaze-cli --features mcp,document
 ```
 
-## One-Command Install
+## Install into an MCP client
 
 Install into Claude Code project config:
 
@@ -93,7 +93,7 @@ Use `--skip-agents-md` when you only want to update the client config:
 gaze mcp install --client=claude-code --skip-agents-md
 ```
 
-## Diagnostics
+## Check the install
 
 Run doctor after install:
 
@@ -123,7 +123,7 @@ Check a non-default AGENTS.md path:
 gaze mcp doctor --agents-md ./AGENTS.md
 ```
 
-## Run Standalone
+## Run the server standalone
 
 Run the stdio server directly:
 
@@ -143,7 +143,7 @@ Cap file input size for `gaze_read_file`:
 gaze mcp serve --max-file-size 26214400
 ```
 
-## Tools Exposed
+## Tools the server exposes
 
 `gaze_read_text` accepts already-extracted text and returns safe Markdown plus
 manifest metadata. Use it when the caller already has the text payload.
@@ -175,7 +175,7 @@ The response includes `{ clean_markdown, manifest_id, file_metadata }`. Preserve
 `manifest_id` for authorized restore flows; do not ask the model to infer the
 original values from tokens.
 
-## Five-Axis Pitch
+## How the MCP adapter meets the five axes
 
 - Reliability: tool calls pass through `PiiEnvelope::dispatch` before content
   reaches the model-facing response.
@@ -188,7 +188,7 @@ original values from tokens.
 - Adopter ergonomics: `install`, `doctor`, and `serve` cover setup,
   diagnostics, and standalone operation.
 
-## Next Steps
+## Next steps
 
 - [`docs/explanation/mcp/mcp-runtime.md`](../../explanation/mcp/mcp-runtime.md) — full
   MCP runtime contract.
