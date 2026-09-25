@@ -83,6 +83,24 @@ with non-breaking spaces (PR #647).
 - `gaze_document::extract::pdf::rasterize_first_page` is removed; use
   `extract_pages` (PR #650).
 
+**Known limitations.** Two `gaze proxy` restore gaps ship in this release.
+Both fail toward pseudonymized or escaped output, never toward a leak, and
+both are planned for v0.16:
+
+- **A token split across streaming events is not restored** on the legacy
+  OpenAI chat and Gemini streaming paths (solo todo #3841). The proxy restores
+  each server-sent event on its own, and upstream streams usually split a Gaze
+  token over several events, so the client can receive the placeholder instead
+  of the original value in streamed text and tool-call arguments. Non-streaming
+  responses and the Anthropic path, which accumulates per content block, are
+  not affected.
+- **The Anthropic path can restore a JSON-escaped spelling** (solo todo #3842).
+  When a value was captured inside a JSON string in a text block, the manifest
+  holds its escaped source spelling, so restoring it into `tool_use.input` or
+  into plain text keeps the escapes: a literal backslash before a quote, or a
+  `\u` escape in place of a non-ASCII letter. The legacy adapters handle
+  JSON-destination restores correctly as of PR #656.
+
 **Performance.**
 <!-- PHASE2: latency disclosure from the release commit, measured with
 scripts/bench/cli-latency.py on a quiet host, with its hardware line. State the
