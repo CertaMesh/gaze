@@ -19,7 +19,7 @@ schemas, see the [reference](../reference/README.md).
 - **[Set up a policy by hand](manual-policy.md)** — go from zero configuration to a working
   `gaze clean` run without `gaze setup`, then add NER and a safety net.
 - **[Write a policy: worked examples](policy/policy-examples.md)** — four complete
-  `policy.toml` files with their input and output.
+  `policy.toml` files to copy, three with sample input and output.
 
 ## Proxy
 

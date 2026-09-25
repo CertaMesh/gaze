@@ -1,7 +1,7 @@
 # Write a policy: worked examples
 
-Each example below is a complete `policy.toml` you can copy, with the input it
-was written for and the output `gaze clean` produces. For every field and
+Each example below is a complete `policy.toml` you can copy. Examples A to C
+also show an input and the output `gaze clean` produces. For every field and
 action, see the [policy reference](../../reference/policy.md).
 
 ## Example A — Tokenize emails, redact phone numbers
