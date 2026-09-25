@@ -742,6 +742,11 @@ source and pinned revision, and gives `gaze setup --safety-net none` as the
 opt-out. Gaze does not vendor the weights; setup fetches the pinned revision
 from the upstream repository.
 
+### Replacement candidates
+
+Which lighter models are worth testing in place of OPF, and the bars they
+must clear, is recorded in [Safety-net candidates](safety-net-candidates.md).
+
 ## Structured-document per-field behavior
 
 `Pipeline::clean_with_safety_net_detect_context` traverses

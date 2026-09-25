@@ -38,6 +38,7 @@ axis in practice.
 
 - **[Safety nets](safety-net/safety-nets.md)** — the Pass-3 observer-only check that runs against already-tokenized output without touching the manifest.
 - **[Safety-net modes](safety-net/safety-net-modes.md)** — resolve, redact, and fallback modes and their typed fallback reasons.
+- **[Safety-net candidates](safety-net/safety-net-candidates.md)** — research record: which lighter models to test as an OPF replacement, in what order, and the bars they must clear.
 
 ## Pipeline
 
