@@ -806,7 +806,13 @@ fn configured_fake_net_sees_final_fields_and_stage_errors_publish_nothing() {
                     "password: synthetic"
                 );
                 let token = tx.tokens().into_iter().next().unwrap();
-                let stable_token = token.replacen(&token[1..9], "00000000", 1);
+                use sha2::{Digest, Sha256};
+                let canonical = token.replacen(&token[1..9], "00000000", 1);
+                let mut hasher = Sha256::new();
+                hasher.update(b"gaze-safety-net-token-v3\0");
+                hasher.update(canonical.as_bytes());
+                let prefix = hex::encode(&hasher.finalize()[..4]);
+                let stable_token = token.replacen(&token[1..9], &prefix, 1);
                 let expected_scan = clean.replacen(&token, &stable_token, 1);
                 assert_eq!(seen.lock().unwrap().as_slice(), &[expected_scan]);
             }
