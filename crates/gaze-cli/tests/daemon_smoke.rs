@@ -420,7 +420,8 @@ fn proxy_restart_keeps_running_daemon_when_policy_nym_bundle_is_missing() {
     assert!(started.status.success());
     // `proxy start` returns before the daemon binds; wait for it so the final
     // connect proves the restart kept it serving.
-    wait_until_listening(bind, || daemon_exited(home.path()));
+    let pid = started_daemon_pid(&started);
+    wait_until_listening(bind, || daemon_exited(pid, home.path()));
     fs::OpenOptions::new()
         .append(true)
         .open(&policy)
@@ -799,17 +800,31 @@ fn daemon_pid(home: &Path) -> Option<u32> {
     text.lines().next()?.trim().parse().ok()
 }
 
+/// The daemon pid a successful `gaze proxy start` printed
+/// (`gaze-proxy started (pid=N, …)`). `start` knows it at spawn, so it is never
+/// missing. The pidfile is not: `start` creates it empty and the daemon fills
+/// it only once it runs, so reading that for liveness would put back a startup
+/// deadline (`start` returns after its 250 ms `confirm_started` window).
+fn started_daemon_pid(start: &Output) -> u32 {
+    let stdout = String::from_utf8_lossy(&start.stdout);
+    stdout
+        .split_once("gaze-proxy started (pid=")
+        .and_then(|(_, rest)| rest.split_once(','))
+        .and_then(|(pid, _)| pid.parse().ok())
+        .unwrap_or_else(|| panic!("`proxy start` printed no daemon pid: {stdout}"))
+}
+
 /// Liveness probe for [`wait_until_listening`]: the detached daemon is not our
-/// child, so check its pidfile pid with `kill -0`.
-fn daemon_exited(home: &Path) -> Option<String> {
-    let alive = daemon_pid(home).is_some_and(|pid| {
-        Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .stderr(Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
-    });
-    (!alive).then(|| format!("daemon is not running{}", daemon_log_tail(home)))
+/// child, so probe the pid `proxy start` reported ([`started_daemon_pid`]) with
+/// `kill -0`. `start` has exited, so a dead daemon is reaped rather than left a
+/// zombie that `kill -0` would still count as alive.
+fn daemon_exited(pid: u32, home: &Path) -> Option<String> {
+    let alive = Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success());
+    (!alive).then(|| format!("daemon pid {pid} is not running{}", daemon_log_tail(home)))
 }
 
 /// Stops the detached daemon however the test ended, so a failed assertion
@@ -884,7 +899,8 @@ fn daemonized_proxy_body(policy: &Path) -> String {
         "daemon state escaped the redirected HOME"
     );
 
-    wait_until_listening(proxy_addr, || daemon_exited(home.path()));
+    let pid = started_daemon_pid(&start);
+    wait_until_listening(proxy_addr, || daemon_exited(pid, home.path()));
 
     let request_body = json!({
         "model": "claude-test",
@@ -1579,8 +1595,9 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
 
-    // Poll until the audit row lands instead of sleeping a fixed interval;
-    // this prevents the test from being sensitive to daemon startup latency.
+    // Block on the first response: the daemon writes it only after the audit
+    // row commits, so the row exists before the DB is broken, with no clock on
+    // daemon startup.
     wait_for_first_response(&stdout_rx, &audit_db);
 
     // Break the audit DB so the next SQLite write fails with
@@ -1686,9 +1703,9 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
 
-    // Poll until the audit row lands before breaking the DB.
-    // This guards against a timing race where the daemon hasn't yet committed
-    // the SQLite write when chattr +i is applied to the directory.
+    // Block on the first response before breaking the DB: the daemon writes it
+    // only after the SQLite write commits, so the break (`chattr +i` or the
+    // table drop) cannot land while that write is still in flight.
     wait_for_first_response(&stdout_rx, &audit_db);
 
     // Break the audit DB.
@@ -2038,6 +2055,15 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
+    // Drain stderr alongside stdout: this test reads stdout to EOF before the
+    // daemon exits, so an undrained stderr past the pipe buffer would block
+    // the daemon and hang the read.
+    let mut stderr_pipe = child.stderr.take().unwrap();
+    let stderr_thread = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stderr_pipe.read_to_end(&mut bytes);
+        bytes
+    });
 
     // First request succeeds (audit DB is writable).
     {
@@ -2081,12 +2107,10 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
 
     let mut remaining = String::new();
     stdout.read_to_string(&mut remaining).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "stderr={}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let status = child.wait().unwrap();
+    let stderr = stderr_thread.join().unwrap();
+    let stderr = String::from_utf8_lossy(&stderr);
+    assert!(status.success(), "stderr={stderr}");
 
     let stdout = first_response + &remaining;
     let responses: Vec<Value> = stdout
@@ -2111,7 +2135,6 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
         responses[1]
     );
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         !stderr.contains("AuditWriteFailed"),
         "no eviction occurred, so no AuditWriteFailed on stderr: {stderr}"

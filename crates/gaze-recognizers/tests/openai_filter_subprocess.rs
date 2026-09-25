@@ -743,7 +743,7 @@ while :; do {output}; done
             let Some(pid) = read_pidfile(&pidfile) else {
                 assert!(
                     !stdout_overflow && attempt < MAX_ATTEMPTS,
-                    "child never started within {timeout:?} \
+                    "child never got past startup and `cat` (stdin EOF) within {timeout:?} \
                      (stdout_overflow={stdout_overflow}, attempt {attempt}/{MAX_ATTEMPTS}): \
                      {message}"
                 );
