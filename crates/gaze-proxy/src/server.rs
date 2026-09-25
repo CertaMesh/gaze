@@ -24,7 +24,9 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use url::{Host, Url};
 
-use crate::adapter::{CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent};
+use crate::adapter::{
+    CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent, SurfaceSyntax,
+};
 use crate::adapters::anthropic::{AnthropicAdapter, DEFAULT_ANTHROPIC_VERSION};
 use crate::codec::{
     BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionParsedFactsV1,
@@ -1972,6 +1974,9 @@ async fn proxy_inner(
     let session = session_for(&state, &headers).await?;
     let mut json: Value =
         serde_json::from_slice(&body).map_err(|source| ProxyError::InvalidJson { source })?;
+    // Read before redaction mutates the body: it decides how restore writes raw values into the
+    // model's answer text.
+    let json_output = adapter.requests_json_output(&json);
     // One source of truth for both passes below: widening or narrowing detection on this
     // path is a configuration decision, and it must land on the primary pass and the residual
     // re-scan identically or the two disagree about what counts as PII.
@@ -2035,11 +2040,15 @@ async fn proxy_inner(
 
     let is_sse = content_type.contains("text/event-stream");
     let body = if is_sse {
-        transform_sse(&adapter, &session, &bytes)?
+        transform_sse(&adapter, &session, &bytes, json_output)?
     } else {
         let mut response_json: Value =
             serde_json::from_slice(&bytes).map_err(|source| ProxyError::InvalidJson { source })?;
-        restore_surfaces(&session, adapter.response_pii_surfaces(&mut response_json));
+        restore_surfaces(
+            &session,
+            adapter.response_pii_surfaces(&mut response_json),
+            json_output,
+        );
         serde_json::to_vec(&response_json).map_err(|source| ProxyError::InvalidJson { source })?
     };
 
@@ -2899,21 +2908,40 @@ impl RequestResidualScan<'_> {
     }
 }
 
-fn restore_surfaces(session: &Session, surfaces: Vec<crate::adapter::PiiSurface<'_>>) {
+/// Restores every surface in its own syntax. `json_output` is the request's
+/// [`ProviderAdapter::requests_json_output`] answer, which resolves
+/// [`SurfaceSyntax::ModelOutput`].
+fn restore_surfaces(
+    session: &Session,
+    surfaces: Vec<crate::adapter::PiiSurface<'_>>,
+    json_output: bool,
+) {
     for surface in surfaces {
-        *surface.text = restore_text(session, surface.text);
+        let into_json_string = match surface.syntax {
+            SurfaceSyntax::Text => false,
+            SurfaceSyntax::Json => true,
+            SurfaceSyntax::ModelOutput => json_output,
+        };
+        *surface.text = restore_text(session, surface.text, into_json_string);
     }
 }
 
-fn restore_text(session: &Session, clean: &str) -> String {
+/// Replaces every known token in `clean` with its raw value.
+///
+/// With `into_json_string`, `clean` is (a fragment of) a serialized JSON document. A token can
+/// only stand inside one of its string literals, so the raw value is JSON-escaped instead of
+/// pasted verbatim, where a `"`, `\`, or control character would break the document or change
+/// the value the agent parses. The escape does not depend on where the literal's quotes are,
+/// which keeps a streamed fragment correct when they arrive in a different SSE event.
+fn restore_text(session: &Session, clean: &str, into_json_string: bool) -> String {
     let mut restored = String::new();
     let mut last = 0;
     for matched in token_shape::pattern().find_iter(clean) {
         restored.push_str(&clean[last..matched.start()]);
-        if let Some(raw) = session.restore(matched.as_str()) {
-            restored.push_str(&raw);
-        } else {
-            restored.push_str(matched.as_str());
+        match session.restore(matched.as_str()) {
+            Some(raw) if into_json_string => push_json_string_contents(&mut restored, &raw),
+            Some(raw) => restored.push_str(&raw),
+            None => restored.push_str(matched.as_str()),
         }
         last = matched.end();
     }
@@ -2921,10 +2949,17 @@ fn restore_text(session: &Session, clean: &str) -> String {
     restored
 }
 
+/// Appends `raw` as the contents of a JSON string literal, without the surrounding quotes.
+fn push_json_string_contents(out: &mut String, raw: &str) {
+    let literal = Value::String(raw.to_owned()).to_string();
+    out.push_str(&literal[1..literal.len() - 1]);
+}
+
 fn transform_sse(
     adapter: &Arc<dyn ProviderAdapter>,
     session: &Session,
     bytes: &[u8],
+    json_output: bool,
 ) -> Result<Vec<u8>, ProxyError> {
     let text = std::str::from_utf8(bytes).map_err(|err| ProxyError::SsePartialFrame {
         reason: err.to_string(),
@@ -2961,7 +2996,11 @@ fn transform_sse(
             data: serde_json::from_str(&data)
                 .map_err(|source| ProxyError::InvalidJson { source })?,
         };
-        restore_surfaces(session, adapter.sse_event_pii_surfaces(&mut event));
+        restore_surfaces(
+            session,
+            adapter.sse_event_pii_surfaces(&mut event),
+            json_output,
+        );
         if let Some(name) = event_name {
             out.push_str("event: ");
             out.push_str(&name);
@@ -3221,11 +3260,13 @@ mod tests {
             vec![
                 crate::adapter::PiiSurface {
                     field_path: "$.first".into(),
-                    text: &mut first
+                    text: &mut first,
+                    syntax: SurfaceSyntax::Text,
                 },
                 crate::adapter::PiiSurface {
                     field_path: "$.second".into(),
-                    text: &mut second
+                    text: &mut second,
+                    syntax: SurfaceSyntax::Text,
                 },
             ],
             &[LocaleTag::Global],
@@ -5108,9 +5149,35 @@ mod tests {
     }
 
     #[test]
+    fn restore_text_json_escapes_raw_values_only_into_json_syntax() {
+        let session = Session::new(Scope::Conversation("test".to_string())).unwrap();
+        let raw = "q\"b\\s\u{1}\u{1f}\u{7f}\u{2028}\u{e9}\r\n";
+        let mut transaction = session.begin_transaction();
+        let token = transaction
+            .tokenize(&PiiClass::Custom("secret".to_string()), raw)
+            .unwrap();
+        transaction.commit().unwrap();
+
+        let restored = restore_text(&session, &format!("{{\"v\":\"x{token}y\"}}"), true);
+        let parsed: Value = serde_json::from_str(&restored).unwrap();
+        assert_eq!(parsed["v"].as_str(), Some(format!("x{raw}y").as_str()));
+        assert_eq!(
+            restore_text(&session, &format!("x{token}y"), false),
+            format!("x{raw}y")
+        );
+    }
+
+    #[test]
     fn restore_text_leaves_unknown_tokens() {
         let session = Session::new(Scope::Conversation("test".to_string())).unwrap();
-        assert_eq!(restore_text(&session, "hello <Email_1>"), "hello <Email_1>");
+        assert_eq!(
+            restore_text(&session, "hello <Email_1>", false),
+            "hello <Email_1>"
+        );
+        assert_eq!(
+            restore_text(&session, "{\"to\":\"<Email_1>\"}", true),
+            "{\"to\":\"<Email_1>\"}"
+        );
     }
 
     #[test]

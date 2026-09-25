@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`gaze-proxy` restores raw values into JSON documents as valid JSON.** The
+  legacy OpenAI and Gemini adapters pasted raw values verbatim into answer
+  fields that hold serialized JSON: Chat Completions
+  `tool_calls[].function.arguments`, Responses `function_call` `arguments`,
+  and JSON-mode answer text. JSON mode means OpenAI `json_object` or
+  `json_schema`, or Gemini `responseMimeType: application/json`. Streaming
+  deltas had the same problem. A value holding `"`, `\`, or a control
+  character made the agent's tool call or structured answer fail to parse.
+  Some values still parsed but changed silently: the UNC path
+  `\\fileserver\new_hires` decoded as `\fileserver`, a newline, and `ew_hires`.
+  Restore now JSON-escapes raw values in these fields and writes plain text byte
+  for byte as before. The Anthropic Messages codec and Gemini
+  `functionCall.args` were already exact and are pinned by the same end-to-end
+  suite (todo #3837).
+
 - Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
   surrogate prefix derived from the placeholder shape after removing the random
   session hex. Nym, OPF, and registry backends no longer change detections
@@ -67,6 +82,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   additional bundled packs and locales.
 
 ### Changed
+
+- **Breaking (custom `gaze-proxy` adapters):** `PiiSurface` has a new
+  `syntax: SurfaceSyntax` field (`Text`, `Json`, or `ModelOutput`). Restore uses
+  it to choose the escaping for each surface. `ProviderAdapter` has a new
+  provided method, `requests_json_output(request)`, which defaults to `false`.
+  If an adapter builds `PiiSurface` values directly, set `syntax:
+  SurfaceSyntax::Text` to keep the previous verbatim restore. Use `Json` for
+  fields that hold serialized JSON.
 
 - **Breaking:** `gaze setup --safety-net ner` is removed. Use `--safety-net none`
   for the former NER-only policy. `gaze setup` now installs Nym by default and

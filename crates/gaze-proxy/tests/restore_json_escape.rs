@@ -576,16 +576,25 @@ fn output_message(text: String) -> Value {
 }
 
 #[tokio::test]
-async fn openai_responses_function_call_arguments_restore_to_the_exact_values() {
+async fn openai_responses_function_and_mcp_call_arguments_restore_to_the_exact_values() {
     let upstream = spawn_upstream(|_, tokens| {
-        let body = responses_output(json!([{
-            "type": "function_call",
-            "id": "fc_1",
-            "call_id": "call_1",
-            "name": "save_contact",
-            "arguments": tokens.json_document(),
-            "status": "completed"
-        }]));
+        let body = responses_output(json!([
+            {
+                "type": "function_call",
+                "id": "fc_1",
+                "call_id": "call_1",
+                "name": "save_contact",
+                "arguments": tokens.json_document(),
+                "status": "completed"
+            },
+            {
+                "type": "mcp_call",
+                "id": "mcp_1",
+                "server_label": "contacts",
+                "name": "save_contact",
+                "arguments": tokens.json_document()
+            }
+        ]));
         ("application/json", body)
     })
     .await;
@@ -593,10 +602,18 @@ async fn openai_responses_function_call_arguments_restore_to_the_exact_values() 
 
     let body = post_legacy(&proxy, "/v1/responses", responses_request(false)).await;
     let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
-    let arguments = response["output"][0]["arguments"]
-        .as_str()
-        .expect("arguments stay a string");
-    assert_exact_json("responses output[].arguments", arguments);
+    for (index, destination) in [
+        "responses function_call.arguments",
+        "responses mcp_call.arguments",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let arguments = response["output"][index]["arguments"]
+            .as_str()
+            .expect("arguments stay a string");
+        assert_exact_json(destination, arguments);
+    }
 }
 
 #[tokio::test]
@@ -687,7 +704,10 @@ async fn gemini_json_mode_text_restores_to_the_exact_values() {
             request["generationConfig"]["responseMimeType"],
             "application/json"
         );
-        let body = gemini_candidate(json!([{"text": tokens.json_document()}]));
+        let body = gemini_candidate(json!([
+            {"thought": true, "text": tokens.plain_text()},
+            {"text": tokens.json_document()}
+        ]));
         ("application/json", body.to_string())
     })
     .await;
@@ -695,10 +715,16 @@ async fn gemini_json_mode_text_restores_to_the_exact_values() {
 
     let body = post_legacy(&proxy, GEMINI_GENERATE, gemini_request(true)).await;
     let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
-    let text = response["candidates"][0]["content"]["parts"][0]["text"]
-        .as_str()
-        .expect("text part is a string");
-    assert_exact_json("gemini JSON-mode parts[].text", text);
+    let parts = &response["candidates"][0]["content"]["parts"];
+    // A thought summary is prose even when the answer is JSON.
+    assert_exact_text(
+        "gemini JSON-mode thought summary",
+        parts[0]["text"].as_str().expect("thought part is a string"),
+    );
+    assert_exact_json(
+        "gemini JSON-mode parts[].text",
+        parts[1]["text"].as_str().expect("text part is a string"),
+    );
 }
 
 #[tokio::test]
@@ -713,7 +739,12 @@ async fn gemini_stream_json_mode_text_restores_to_the_exact_values() {
     .await;
     let proxy = spawn_legacy(&upstream).await;
 
-    let body = post_legacy(&proxy, GEMINI_STREAM, gemini_request(true)).await;
+    // The snake_case spelling of the same protobuf fields selects JSON output too.
+    let request = json!({
+        "contents": [{"role": "user", "parts": [{"text": user_text()}]}],
+        "generation_config": {"response_mime_type": "application/json"}
+    });
+    let body = post_legacy(&proxy, GEMINI_STREAM, request).await;
     let text: String = sse_payloads(&body)
         .iter()
         .filter_map(|payload| payload["candidates"][0]["content"]["parts"][0]["text"].as_str())

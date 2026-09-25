@@ -427,11 +427,35 @@ pub trait ProviderAdapter: Send + Sync + 'static {
     fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>>;
     fn response_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>>;
     fn sse_event_pii_surfaces<'a>(&self, event: &'a mut SseEvent) -> Vec<PiiSurface<'a>>;
+
+    /// Reports whether `request` asked the model for JSON output (a JSON mode or a JSON
+    /// schema), which makes every [`SurfaceSyntax::ModelOutput`] response surface a JSON
+    /// document. The default, `false`, restores model output as free text.
+    fn requests_json_output(&self, _request: &Value) -> bool {
+        false
+    }
+}
+
+/// The syntax of a surface's text, which decides how restore writes a raw value into it.
+///
+/// Only restore reads it: request protection scans a surface's text as it stands.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SurfaceSyntax {
+    /// Free text. Restore writes the raw value byte for byte.
+    Text,
+    /// A serialized JSON document, such as tool-call `arguments`. A token can only stand inside
+    /// one of its string literals, so restore JSON-escapes the raw value; a verbatim `"`, `\`,
+    /// or control character would break the document or silently change the parsed value.
+    Json,
+    /// Model-authored response text: [`Self::Json`] when the request asked for JSON output
+    /// ([`ProviderAdapter::requests_json_output`]), [`Self::Text`] otherwise.
+    ModelOutput,
 }
 
 pub struct PiiSurface<'a> {
     pub field_path: String,
     pub text: &'a mut String,
+    pub syntax: SurfaceSyntax,
 }
 
 #[derive(Debug, Clone)]
@@ -451,15 +475,19 @@ pub(crate) fn push_string<'a>(
     surfaces: &mut Vec<PiiSurface<'a>>,
     field_path: impl Into<String>,
     value: &'a mut Value,
+    syntax: SurfaceSyntax,
 ) {
     if let Value::String(text) = value {
         surfaces.push(PiiSurface {
             field_path: field_path.into(),
             text,
+            syntax,
         });
     }
 }
 
+/// Surfaces every string under `value`. Each one is a decoded JSON string, so its syntax is
+/// [`SurfaceSyntax::Text`]: re-serializing the body escapes it.
 pub(crate) fn walk_all_strings<'a>(
     surfaces: &mut Vec<PiiSurface<'a>>,
     prefix: String,
@@ -469,6 +497,7 @@ pub(crate) fn walk_all_strings<'a>(
         Value::String(text) => surfaces.push(PiiSurface {
             field_path: prefix,
             text,
+            syntax: SurfaceSyntax::Text,
         }),
         Value::Array(items) => {
             for (index, item) in items.iter_mut().enumerate() {
@@ -493,11 +522,13 @@ pub(crate) fn push_text_blocks<'a>(
     surfaces: &mut Vec<PiiSurface<'a>>,
     prefix: &str,
     value: &'a mut Value,
+    syntax: SurfaceSyntax,
 ) {
     match value {
         Value::String(text) => surfaces.push(PiiSurface {
             field_path: prefix.to_string(),
             text,
+            syntax,
         }),
         Value::Array(items) => {
             for (index, item) in items.iter_mut().enumerate() {
@@ -505,6 +536,7 @@ pub(crate) fn push_text_blocks<'a>(
                     Value::String(text) => surfaces.push(PiiSurface {
                         field_path: format!("{prefix}[{index}]"),
                         text,
+                        syntax,
                     }),
                     Value::Object(map) => {
                         if matches!(map.get("type"), Some(Value::String(kind))
@@ -514,6 +546,7 @@ pub(crate) fn push_text_blocks<'a>(
                                 surfaces.push(PiiSurface {
                                     field_path: format!("{prefix}[{index}].text"),
                                     text,
+                                    syntax,
                                 });
                             }
                         } else if matches!(map.get("type"), Some(Value::String(kind)) if kind == "message")
@@ -523,6 +556,7 @@ pub(crate) fn push_text_blocks<'a>(
                                     surfaces,
                                     &format!("{prefix}[{index}].content"),
                                     content,
+                                    syntax,
                                 );
                             }
                         }
