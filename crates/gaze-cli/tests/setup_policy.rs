@@ -198,6 +198,23 @@ fn setup_default_attaches_nym_and_catches_the_plate() {
     let clean = value["clean_text"].as_str().unwrap();
     assert!(!clean.contains("M-AB 1234"), "{clean}");
     assert!(clean.contains(":Custom:license_plate_"), "{clean}");
+    let restore_input = serde_json::json!({
+        "session_blob": value["session_blob"],
+        "text": clean,
+    });
+    let restored = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("restore")
+        .write_stdin(restore_input.to_string())
+        .output()
+        .unwrap();
+    assert!(
+        restored.status.success(),
+        "{}",
+        String::from_utf8_lossy(&restored.stderr)
+    );
+    let restored: serde_json::Value = serde_json::from_slice(&restored.stdout).unwrap();
+    assert_eq!(restored["text"], plate);
 }
 
 #[test]
