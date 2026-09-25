@@ -1032,7 +1032,7 @@ threshold = 0.3
 If `model_dir` is set but the model fails to load (missing files, bad
 manifest), the CLI maps the failure to **exit `2` `PolicyConfig`**. Treat
 NER load errors as policy configuration failures: verify the install path
-against [README §"NER Model Runtime"](../../README.md#ner-model-runtime).
+against [`gaze setup`](../../crates/gaze-cli/README.md#setup).
 
 The v0.5.2 default NER bundle is pinned to the Hugging Face mirror
 `onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
@@ -1115,8 +1115,8 @@ why the document above stresses "rules are evaluated in declaration order"
 
 NER is opt-in and stacks on top of regex detectors. The runtime expects a
 local ONNX model directory; no models are downloaded at runtime. See the
-[README NER Model Runtime](../../README.md#ner-model-runtime) section for the
-required files and the canonical install path.
+[`gaze setup` section of the CLI README](../../crates/gaze-cli/README.md#setup) for the
+pinned bundle and the canonical install path.
 
 When loaded with the default label contract, the NER detector emits
 `PiiClass::Name`, `PiiClass::Location`, and `PiiClass::Organization` for
@@ -1349,7 +1349,7 @@ and is summarised here.
 
 - [`CHANGELOG.md`](../../CHANGELOG.md) — version history, including shipped CLI
   and host-integration changes.
-- [`README.md`](../../README.md) — install, build, NER model runtime.
+- [`README.md`](../../README.md) — what Gaze is, benchmark summary, quickstart, install.
 - [`crates/gaze/src/policy.rs`](../../crates/gaze/src/policy.rs) — canonical
   parser; the source of truth for every field on this page.
 

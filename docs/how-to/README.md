@@ -5,6 +5,13 @@ walks you to that goal. If Gaze is new to you, start with the
 [Getting Started tutorial](../tutorials/getting-started.md) first. For exact behavior and
 schemas, see the [reference](../reference/README.md).
 
+## Library and audit
+
+- **[Use the `gaze setup` policy from Rust](rust-library.md)** — build the Nym-enabled
+  pipeline from the policy `gaze setup` writes, and keep the restore snapshot owner-side.
+- **[Audit and restore](audit-and-restore.md)** — write, query, export, and purge the
+  metadata audit log, and how manifest-first restore works.
+
 ## Proxy
 
 - **[Set up the proxy](proxy/set-up-proxy.md)** — route OpenAI, Anthropic, or Gemini SDK
