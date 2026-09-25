@@ -10,7 +10,7 @@ use url::Url;
 
 use crate::clean_overrides::CleanOverrides;
 use crate::error::CliError;
-use crate::pipeline::build::resolve_pipeline;
+use crate::pipeline::build::{map_policy_error, resolve_pipeline};
 
 pub(crate) struct ServeArgs {
     pub(crate) bind: SocketAddr,
@@ -100,6 +100,7 @@ pub(crate) fn start(args: StartArgs) -> Result<(), CliError> {
     #[cfg(feature = "dashboard")]
     let dashboard_args = args.dashboard.clone();
     apply_start_overrides(&mut config, args);
+    preflight_policy(&config)?;
     let start_options = daemon::StartOptions::new(paths.clone(), config.clone());
     #[cfg(feature = "dashboard")]
     let start_options =
@@ -158,6 +159,7 @@ pub(crate) fn logs(follow: bool) -> Result<(), CliError> {
 pub(crate) fn restart(args: RestartArgs) -> Result<(), CliError> {
     let paths = DaemonPaths::resolve().map_err(map_proxy)?;
     let config = daemon::read_or_default_config(&paths).map_err(map_proxy)?;
+    preflight_policy(&config)?;
     let pid = daemon::restart(
         daemon::StartOptions::new(paths.clone(), config.clone()),
         parse_duration(&args.timeout)?,
@@ -216,11 +218,20 @@ fn build_pipeline(
             None,
             None,
         )?;
-        return Ok((
-            resolved.pipeline,
-            resolved.locale_chain,
-            resolved.dictionaries,
-        ));
+        let pipeline = if resolved.policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym {
+            let model_dir = std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from);
+            gaze_assembly::attach_nym_safety_net(
+                resolved.pipeline,
+                &resolved.policy,
+                model_dir.as_deref(),
+                None,
+                None,
+            )
+            .map_err(|err| CliError::SafetyNetPolicyConfigDetail(err.to_string()))?
+        } else {
+            resolved.pipeline
+        };
+        return Ok((pipeline, resolved.locale_chain, resolved.dictionaries));
     }
     let mut config = gaze_assembly::CorePipelineConfig::new();
     if rulepack != "core" {
@@ -235,6 +246,20 @@ fn build_pipeline(
         locale_chain,
         gaze::DictionaryBundle::default(),
     ))
+}
+
+fn preflight_policy(config: &DaemonConfig) -> Result<(), CliError> {
+    if let Some(path) = &config.policy {
+        let policy = gaze::Policy::load_for_cli(path).map_err(map_policy_error)?;
+        if policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym {
+            // Fail before reporting a successful start or stopping an existing daemon.
+            let _ = build_pipeline(
+                Some(path.clone()),
+                config.rulepack.as_deref().unwrap_or("core"),
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn proxy_config(

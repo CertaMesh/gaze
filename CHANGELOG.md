@@ -19,7 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `location = generalize` rule emits a one-way marker), and enable the
   additional bundled packs and locales.
 
+### Changed
+
+- **Breaking:** `--safety-net-backend nym` now requires one explicit
+  `--safety-net nym` selection. Add `--safety-net nym` to existing commands
+  that used only the backend selector; the old form succeeded without
+  activating a safety net.
+
 ### Added
+
+- `[safety_net].backend = "nym"` activates Nym from a policy in both CLI and
+  `gaze-assembly`; `[safety_net.nym].model_dir` supplies its optional bundle
+  location. `gaze-assembly/safety-net-nym` forwards the backend feature.
+  Repeatable `--safety-net` values stack CLI nets and replace policy selection;
+  `--safety-net none` disables them for one run with a notice.
 
 - **`ConflictTier::ContainmentPrecedence`** (audit string
   `containment_precedence`): a candidate that wholly contains a candidate of

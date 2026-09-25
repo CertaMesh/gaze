@@ -87,8 +87,8 @@ Releases up to v0.14.0 installed a different, unbenchmarked DistilBERT NER
 bundle as the `[ner]` model. Re-run `gaze setup` to get the benchmarked model.
 
 `--safety-net opf` additionally verifies an OpenAI Privacy Filter checkpoint,
-and `--safety-net nym` installs the pinned Nym-small bundle. Neither net runs
-unless `gaze clean` is given the matching `--safety-net` flag.
+and `--safety-net nym` installs the pinned Nym-small bundle. A policy can
+activate Nym through `[safety_net].backend = "nym"`; OPF remains CLI-only.
 
 ## Daemon mode
 
@@ -266,15 +266,15 @@ Flags:
 | `--max-bytes <bytes>` | Stdin byte cap. Defaults to `10485760`. |
 | `--context-json <path>` | Typed context envelope with dictionaries, class map, and fields. |
 | `--audit-db <path>` | Optional SQLite redaction-log database path for metadata-only audit entries. |
-| `--safety-net <kind>` | Optional observer-only safety net. Accepts `openai-filter` (v0.6+) or `nym` (opt-in). No safety net runs unless this flag or `--safety-net-backend` is set. Activates the post-clean leak audit. |
-| `--safety-net-backend <backend>` | v0.8 single-backend selector: `openai-filter` or `nym`. When set alongside `--safety-net=<kind>`, this flag wins and lets adopters swap the Pass-3 implementation without re-typing the legacy `--safety-net` value. Cannot be combined with `--safety-net-registry`. |
+| `--safety-net <kind>` | Repeatable `openai-filter` or `nym` selection; multiple nets stack. A CLI list replaces policy selection. `none` disables all nets for this run and cannot be combined with another value. |
+| `--safety-net-backend <backend>` | Replaces exactly one explicit `--safety-net` value. Zero or multiple values are a usage error. Cannot be combined with `--safety-net-registry`. |
 | `--safety-net-registry` | Enables locale-aware Pass-3 dispatch through `LocaleAwareModelRegistry`. Requires one or more `--safety-net-add` flags. |
 | `--safety-net-add <backend>` | Adds one backend to the registry. Repeatable. First resolved backend wins for v1. The only registry-capable backend is `openai-filter`. |
 | `--openai-filter-command <path>` | Path to the local OpenAI Privacy Filter `opf` command. Required with the `openai-filter` backend. |
 | `--openai-filter-checkpoint <path>` | Path to the OPF checkpoint or model directory. Required with the `openai-filter` backend. |
 | `--opf-command <path>` / `--opf-checkpoint <path>` | Registry-example aliases for the OpenAI Privacy Filter command and checkpoint. |
 | `--opf-locales <tag[,tag...]>` | Native locales for the OpenAI Privacy Filter registry entry. Empty keeps the backend default. |
-| `--nym-model-dir <path>` | Pinned Nym-small int8 bundle (`SHA256SUMS`, `config.json`, `model_int8.onnx`, `tokenizer.json`). Required with the `nym` backend unless `GAZE_NYM_MODEL_DIR` is set; install with `gaze setup --safety-net nym`. |
+| `--nym-model-dir <path>` | Pinned Nym-small int8 bundle (`SHA256SUMS`, `config.json`, `model_int8.onnx`, `tokenizer.json`). Takes precedence over `GAZE_NYM_MODEL_DIR`, then policy `[safety_net.nym].model_dir`; install with `gaze setup --safety-net nym`. |
 | `--nym-intra-threads <n>` | ONNX Runtime intra-op threads for the `nym` backend. Defaults to `1`. |
 | `--safety-net-timeout-ms <ms>` | Subprocess deadline. Defaults to `5000`. |
 | `--safety-net-input-limit-bytes <bytes>` | Clean-text input cap forwarded to the safety net. Defaults to `1048576`. |
@@ -287,8 +287,8 @@ surface can be exercised. Production use should pass `--policy`.
 
 ### Safety net
 
-The optional `--safety-net=<kind>` flag activates the observer-only safety
-net documented in
+The policy `[safety_net].backend = "nym"` or a `--safety-net=<kind>` flag
+activates the observer-only safety net documented in
 [docs/explanation/safety-net/safety-nets.md](../../docs/explanation/safety-net/safety-nets.md).
 The safety net runs after the deterministic clean and reports suspected
 leaks against the manifest of emitted tokens. It cannot mutate the clean
@@ -296,9 +296,9 @@ text and cannot affect restore.
 
 #### Safety-net backends
 
-No safety net runs by default. Two opt-in observer-only backends are
-available; pick one via
-`--safety-net-backend <backend>` (v0.8) or the legacy `--safety-net=<kind>`.
+No safety net runs when the policy table is absent and no CLI choice is given.
+Two observer-only backends are available. Repeat `--safety-net` to run both;
+`--safety-net-backend` replaces a single explicit choice.
 Both share the strict/tolerant exit-code contract, the `LeakReport` shape,
 and the `safety_net_log` audit table.
 

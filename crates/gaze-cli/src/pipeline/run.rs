@@ -44,7 +44,7 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) max_bytes: u64,
     pub(crate) context_json: Option<&'a Path>,
     pub(crate) audit_db: Option<&'a Path>,
-    pub(crate) safety_net: Option<SafetyNetKind>,
+    pub(crate) safety_net: &'a [SafetyNetKind],
     pub(crate) safety_net_backend: Option<SafetyNetBackend>,
     pub(crate) safety_net_registry: bool,
     pub(crate) safety_net_add: &'a [SafetyNetBackend],
@@ -63,17 +63,56 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) safety_net_fallback: SafetyNetFallback,
 }
 
-/// Resolves the active Pass-3 SafetyNet backend.
-///
-/// `--safety-net-backend` takes precedence when explicitly different from the
-/// default (`openai-filter`). Otherwise we fall back to the value of
-/// `--safety-net=<kind>`. Returns `None` when no safety net is active.
-pub(crate) fn effective_safety_net_backend(options: &CleanOptions<'_>) -> Option<SafetyNetBackend> {
-    let activator = options.safety_net?;
-    if let Some(backend) = options.safety_net_backend {
-        return Some(backend);
+fn selected_safety_nets(
+    options: &CleanOptions<'_>,
+    policy: &gaze::Policy,
+) -> Result<Vec<SafetyNetBackend>, CliError> {
+    let selected = options.safety_net;
+    if selected.contains(&SafetyNetKind::None) {
+        if selected.len() != 1 || options.safety_net_backend.is_some() {
+            return Err(CliError::SafetyNetUsageDetail(
+                "--safety-net none cannot be combined with another safety-net selection".into(),
+            ));
+        }
+        return Ok(Vec::new());
     }
-    Some(SafetyNetBackend::from(activator))
+    if options.safety_net_backend.is_some() && selected.len() != 1 {
+        return Err(CliError::SafetyNetUsageDetail(
+            "--safety-net-backend requires exactly one --safety-net value".into(),
+        ));
+    }
+    let mut backends = if selected.is_empty() {
+        match policy.safety_net.backend {
+            gaze::SafetyNetPolicyBackend::None => Vec::new(),
+            gaze::SafetyNetPolicyBackend::Nym => vec![SafetyNetBackend::Nym],
+        }
+    } else if let Some(backend) = options.safety_net_backend {
+        vec![backend]
+    } else {
+        selected
+            .iter()
+            .map(|kind| match kind {
+                SafetyNetKind::Nym => SafetyNetBackend::Nym,
+                SafetyNetKind::OpenaiFilter => SafetyNetBackend::OpenaiFilter,
+                SafetyNetKind::None => unreachable!(),
+            })
+            .collect()
+    };
+    let mut unique = Vec::new();
+    for backend in backends.drain(..) {
+        if !unique.contains(&backend) {
+            unique.push(backend);
+        }
+    }
+    Ok(unique)
+}
+
+pub(crate) fn policy_nym_was_overridden(options: &CleanOptions<'_>, policy: &gaze::Policy) -> bool {
+    policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym
+        && !options.safety_net.is_empty()
+        && !selected_safety_nets(options, policy)
+            .expect("selection was validated during assembly")
+            .contains(&SafetyNetBackend::Nym)
 }
 
 pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
@@ -114,8 +153,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let session = Session::from_policy_with_ttl_override(&effective_policy, options.session_ttl)
         .map_err(|_| CliError::Pipeline)?;
 
-    let safety_net_active = options.safety_net.is_some() || options.safety_net_registry;
-    let (clean_doc, leak_report) = if safety_net_active {
+    let (clean_doc, leak_report) = if pipeline.safety_net_count() > 0 {
         let (doc, _manifest, _report) = pipeline
             .clean_with_safety_net_policy_detect_context(
                 &session,
@@ -182,6 +220,9 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     // path there is no output, and the notice must not corrupt the single-line
     // JSON error envelope on stderr (issue #360).
     warn_uncovered_collision_families(&effective_policy, &loaded_rulepacks, &locale_chain);
+    if policy_nym_was_overridden(&options, &effective_policy) {
+        eprintln!("notice: command line disabled policy safety net nym");
+    }
     println!("{json}");
     Ok(())
 }
@@ -191,22 +232,10 @@ pub(crate) fn maybe_register_safety_net(
     options: &CleanOptions<'_>,
     policy: &gaze::Policy,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
-    let nym_policy = policy.safety_net.nym.as_ref();
-    // A policy that tunes the Nym net while a different net (or none) runs would read as
-    // protection that is not there; refuse instead of ignoring the table.
-    if nym_policy.is_some()
-        && (options.safety_net_registry
-            || effective_safety_net_backend(options) != Some(SafetyNetBackend::Nym))
-    {
-        return Err(CliError::SafetyNetConfigDetail(
-            "policy [safety_net.nym] requires --safety-net nym (or --safety-net-backend nym)"
-                .to_string(),
-        ));
-    }
     if options.safety_net_registry {
-        if options.safety_net_backend.is_some() {
-            return Err(CliError::SafetyNetConfigDetail(
-                "--safety-net-registry cannot be combined with --safety-net-backend".to_string(),
+        if options.safety_net_backend.is_some() || !options.safety_net.is_empty() {
+            return Err(CliError::SafetyNetUsageDetail(
+                "--safety-net-registry cannot be combined with --safety-net or --safety-net-backend".to_string(),
             ));
         }
         if options.safety_net_add.is_empty() {
@@ -220,16 +249,48 @@ pub(crate) fn maybe_register_safety_net(
         if options.safety_net_add.contains(&SafetyNetBackend::Nym) {
             return Err(nym_registry_refusal());
         }
-        return register_safety_net_registry(pipeline, options);
+        if policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym {
+            return Err(CliError::SafetyNetConfigDetail(
+                "--safety-net-registry cannot replace policy safety net nym".into(),
+            ));
+        }
+        return attach_selected_safety_net(
+            pipeline,
+            |pipeline| register_safety_net_registry(pipeline, options),
+            "selected safety net registry was not attached".into(),
+        );
     }
-    let Some(backend) = effective_safety_net_backend(options) else {
-        validate_no_backend_options(options)?;
+    let backends = selected_safety_nets(options, policy)?;
+    if backends.is_empty() {
+        if options.safety_net != [SafetyNetKind::None] {
+            validate_no_backend_options(options)?;
+        }
         return Ok(pipeline);
-    };
-    match backend {
-        SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options),
-        SafetyNetBackend::Nym => register_nym(pipeline, options, nym_policy),
     }
+    let mut pipeline = pipeline;
+    for backend in backends {
+        pipeline = attach_selected_safety_net(
+            pipeline,
+            |pipeline| match backend {
+                SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options),
+                SafetyNetBackend::Nym => register_nym(pipeline, options, policy),
+            },
+            format!("selected safety net {backend:?} was not attached"),
+        )?;
+    }
+    Ok(pipeline)
+}
+
+fn attach_selected_safety_net(
+    pipeline: gaze::Pipeline,
+    attach: impl FnOnce(gaze::Pipeline) -> Result<gaze::Pipeline, CliError>,
+    missing_message: String,
+) -> Result<gaze::Pipeline, CliError> {
+    gaze_assembly::attach_safety_net_checked(
+        pipeline,
+        attach,
+        CliError::SafetyNetConfigDetail(missing_message),
+    )
 }
 
 fn nym_registry_refusal() -> CliError {
@@ -238,59 +299,31 @@ fn nym_registry_refusal() -> CliError {
     )
 }
 
-#[cfg(feature = "safety-net-nym")]
 fn register_nym(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
-    operating_point: Option<&gaze_types::nym::NymOperatingPoint>,
+    policy: &gaze::Policy,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
-    use gaze_recognizers::safety_net::nym::{
-        NymConfig, NymSafetyNet, REQUIRED_NYM_SMALL_ARTIFACTS,
-    };
-
     let model_dir = options
         .nym_model_dir
         .map(Path::to_path_buf)
-        .or_else(|| std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from))
-        .ok_or_else(|| {
-            CliError::SafetyNetConfigDetail(
-                "--nym-model-dir (or GAZE_NYM_MODEL_DIR) is required for the nym safety net; install the bundle with `gaze setup --safety-net nym`"
-                    .to_string(),
-            )
-        })?;
-    // Missing files are a config error (exit 2) before the model loads; digest mismatches
-    // still fail closed inside the backend.
-    for required in REQUIRED_NYM_SMALL_ARTIFACTS {
-        let artifact = model_dir.join(required);
-        if !artifact.exists() {
-            return Err(CliError::SafetyNetArtifactMissing {
+        .or_else(|| std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from));
+    gaze_assembly::attach_nym_safety_net(
+        pipeline,
+        policy,
+        model_dir.as_deref(),
+        Some(options.safety_net_input_limit_bytes),
+        options.nym_intra_threads,
+    )
+    .map_err(|error| match error {
+        gaze_assembly::BuildError::NymBundle(gaze::SafetyNetError::WeightsMissing { path }) => {
+            CliError::SafetyNetArtifactMissing {
                 backend: "nym",
-                path: format!(
-                    "{} (install via gaze setup --safety-net nym)",
-                    artifact.display()
-                ),
-            });
+                path: format!("{path} (install via gaze setup --safety-net nym)"),
+            }
         }
-    }
-    let mut config = NymConfig::new(model_dir)
-        .with_max_input_bytes(options.safety_net_input_limit_bytes)
-        .with_operating_point(operating_point.cloned().unwrap_or_default());
-    if let Some(threads) = options.nym_intra_threads {
-        config = config.with_intra_threads(threads);
-    }
-    Ok(pipeline.with_safety_net(NymSafetyNet::new(config)))
-}
-
-#[cfg(not(feature = "safety-net-nym"))]
-fn register_nym(
-    _pipeline: gaze::Pipeline,
-    _options: &CleanOptions<'_>,
-    _operating_point: Option<&gaze_types::nym::NymOperatingPoint>,
-) -> std::result::Result<gaze::Pipeline, CliError> {
-    Err(CliError::SafetyNetConfigDetail(
-        "nym backend requested but gaze-cli was not compiled with feature safety-net-nym"
-            .to_string(),
-    ))
+        other => CliError::SafetyNetPolicyConfigDetail(other.to_string()),
+    })
 }
 
 #[cfg(feature = "safety-net-openai")]
@@ -881,6 +914,7 @@ fn emit_safety_net_warning(variant: &'static str, count: usize) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::pipeline::build::resolve_ner_threshold;
     use gaze::Policy;
 
@@ -923,5 +957,20 @@ mod tests {
             resolve_ner_threshold(None, None),
             gaze::DEFAULT_NER_THRESHOLD
         );
+    }
+
+    #[test]
+    fn cli_selected_safety_net_rejects_missing_attachment() {
+        let pipeline = gaze_assembly::CorePipelineConfig::new()
+            .build()
+            .unwrap()
+            .pipeline()
+            .clone();
+        let result = attach_selected_safety_net(
+            pipeline,
+            Ok::<_, CliError>,
+            "selected safety net nym was not attached".into(),
+        );
+        assert!(matches!(result, Err(CliError::SafetyNetConfigDetail(_))));
     }
 }

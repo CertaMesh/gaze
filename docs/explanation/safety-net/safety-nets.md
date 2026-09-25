@@ -886,12 +886,12 @@ see the "Future work" section below.
 
 ## Activation surface
 
-v0.6 activates the safety net through the CLI or the programmatic builder
-on `Pipeline`. Activation still has no policy-TOML surface. The one
-safety-net table policy.toml accepts is `[safety_net.nym]`, which
-**configures** the opt-in Nym backend (allowlist and thresholds) and does not
-activate it; a policy that declares it while a different net or no net runs is
-refused, so the table can never read as protection that is not there.
+`[safety_net].backend = "nym"` activates Nym for policy-driven assembly in
+Rust and for CLI verbs that load the policy. `[safety_net.nym]` configures its
+bundle location, allowlist and thresholds. An absent table or `backend =
+"none"` runs no net. OpenAI Privacy Filter can only be selected on the
+command line in this release. A missing feature or invalid bundle fails
+closed before input is processed.
 
 The minimum CLI form is:
 
@@ -909,9 +909,13 @@ behind the `safety-net` feature on `gaze` and `safety-net-openai` on
 `gaze-recognizers`. Both features are off by default; the safety-net code
 path is excluded from the default `cargo build` graph.
 
-`crates/gaze-cli/README.md` documents every flag, the strict/tolerant exit
-codes, and synthetic examples. `docs/reference/policy.md` notes the explicit absence
-of a TOML surface.
+For policy-driven Rust assembly, enable `gaze-assembly/safety-net-nym` and
+call `build_pipeline`. The CLI calls the same Nym attachment code. Its
+repeatable `--safety-net` values replace policy selection; `none` disables
+all nets for one run, with a notice if policy Nym was active. Multiple selected
+nets run and the pipeline unions their suspects. Bundle paths resolve from
+CLI flag, then environment, then policy; library assembly reads only the
+policy path unless given an explicit override.
 
 ## Future work (deferred to a post-v0.6.0 release)
 
