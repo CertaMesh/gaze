@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use unicode_normalization::UnicodeNormalization;
 
 pub struct NormalizedText {
@@ -24,6 +26,18 @@ pub fn normalize(input: &str) -> NormalizedText {
     }
 
     NormalizedText { text, spans }
+}
+
+/// Map a byte range of the normalized text back to the raw bytes it came from. Every
+/// normalized byte carries its source char's full raw range, so a folded 2- or 3-byte
+/// separator maps back to all of its raw bytes. Returns `None` for an empty or
+/// out-of-bounds range.
+pub fn raw_range(span: Range<usize>, spans: &[(usize, usize)]) -> Option<Range<usize>> {
+    if span.is_empty() || span.end > spans.len() {
+        return None;
+    }
+
+    Some(spans[span.start].0..spans[span.end - 1].1)
 }
 
 fn fullwidth_to_ascii(ch: char) -> char {

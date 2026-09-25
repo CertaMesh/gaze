@@ -4923,7 +4923,7 @@ fn walk_structured_value(
 }
 
 fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {
-    translate_span(candidate.span.clone(), spans).map(|span| candidate.with_span(span))
+    crate::normalize::raw_range(candidate.span.clone(), spans).map(|span| candidate.with_span(span))
 }
 
 fn translate_vetoed_candidate(
@@ -4936,19 +4936,6 @@ fn translate_vetoed_candidate(
             reason: vetoed.reason,
         }
     })
-}
-
-fn translate_span(
-    span: std::ops::Range<usize>,
-    spans: &[(usize, usize)],
-) -> Option<std::ops::Range<usize>> {
-    if span.is_empty() || span.end > spans.len() {
-        return None;
-    }
-
-    let start = spans[span.start].0;
-    let end = spans[span.end - 1].1;
-    Some(start..end)
 }
 
 fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<IndexedDetection> {

@@ -107,7 +107,7 @@ fn map_span(span: &Range<usize>, normalized: &NormalizedText, raw: &str) -> Resu
             "invalid normalized candidate geometry",
         ));
     }
-    let mapped = super::translate_span(span.clone(), &normalized.spans)
+    let mapped = crate::normalize::raw_range(span.clone(), &normalized.spans)
         .ok_or_else(|| super::clean_to_raw_mapping_error("unmappable candidate geometry"))?;
     if mapped.is_empty() || !raw.is_char_boundary(mapped.start) || !raw.is_char_boundary(mapped.end)
     {
