@@ -56,9 +56,10 @@ Consume PairedDashboard::into_pending_activation() to receive:
 - one provider-neutral PendingInspectionConsumerV1;
 - the exact immutable DashboardCaptureDescriptorV1.
 
-Pass the pending consumer and the producer half to the one atomic gaze-inspection installation
-operation (`gaze_proxy::install_proxy_inspection_v1` for the proxy). It returns the
-`ActivatedInspectionConsumerV1`. Pass that value to `PendingDashboardActivation::commit`, which
+Pass the pending consumer and the `DashboardCaptureDescriptorV1` to the one atomic
+gaze-inspection installation operation (`gaze_proxy::install_proxy_inspection_v1` for the
+proxy). It returns the proxy producer and the `ActivatedInspectionConsumerV1`. Pass the
+activated consumer to `PendingDashboardActivation::commit`, which
 binds it against the one-shot binding retained by `into_pending_activation` before any socket,
 writer, runtime, or admission side effect. A consumer from any other registration fails with
 `ActivationFailed`. Do not substitute descriptor equality, a caller assertion, a generic

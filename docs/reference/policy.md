@@ -927,8 +927,8 @@ only, never next to the symbol.
 `PolicyConfig` and never reaches `gaze clean`'s stdin read.
 
 Detection order matters when spans overlap. After validator veto,
-collision-family precedence, mandatory-anchor context, and containment
-precedence, the generic tiers decide: class priority > rule priority > score >
+collision-family precedence, mandatory-anchor context, containment
+precedence, and structured containment, the generic tiers decide: class priority > rule priority > score >
 span length > lexicographically smaller recognizer id (`compare_base_ladder` in
 [`crates/gaze/src/resolver.rs`](../../crates/gaze/src/resolver.rs)).
 Declaration order does not break a tie between recognizers. See
