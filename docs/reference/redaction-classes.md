@@ -328,10 +328,9 @@ no policy or explicit locale. It describes which recognizers are registered and
 eligible to match; whether a particular input produces a candidate still
 depends on its shape, cues, and validator outcome.
 
-No safety net runs by default. The opt-in OpenAI Privacy Filter
-(`--safety-net openai-filter`) and Nym-small (`--safety-net nym`) nets run only
-when selected, and `gaze setup` wires only the pinned Davlan mBERT NER model into
-the policy it writes.
+With no policy, no safety net runs. The `gaze setup` policy activates Nym-small
+alongside the pinned Davlan mBERT NER model; the OpenAI Privacy Filter remains
+opt-in (`--safety-net openai-filter`).
 
 The plain `core` default locale chain is `global`
 (`crates/gaze-recognizers/embedded/core.toml:1-1373`), so the document-basis

@@ -71,7 +71,7 @@ Audit logging is captured on `clean` via `--audit-db <path>`; the
 
 ## `setup`
 
-`gaze setup` (default `--safety-net ner`) downloads and SHA-verifies the pinned
+`gaze setup` (default `--safety-net nym`) downloads and SHA-verifies the pinned
 Davlan mBERT NER bundle, the same model the benchmark scores:
 `onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
 `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`, `SHA256SUMS` digest
@@ -82,13 +82,20 @@ section points at it, and setup prints `For gaze index: export
 GAZE_NER_MODEL_DIR=<dir>`.
 The generated policy enables every bundled PII rulepack and its declared locales,
 tokenizes every detected class, and leaves the `secrets` pack opt-in.
+For a hand-authored policy, pinned NER fetch script, OPF build steps, and safety-net
+modes, see [Manual policy setup](../../docs/how-to/manual-policy.md).
 
 Releases up to v0.14.0 installed a different, unbenchmarked DistilBERT NER
 bundle as the `[ner]` model. Re-run `gaze setup` to get the benchmarked model.
 
-`--safety-net opf` additionally verifies an OpenAI Privacy Filter checkpoint,
-and `--safety-net nym` installs the pinned Nym-small bundle. A policy can
-activate Nym through `[safety_net].backend = "nym"`; OPF remains CLI-only.
+`gaze setup` also installs the pinned Nym-small bundle and writes
+`[safety_net].backend = "nym"` with its absolute `[safety_net.nym].model_dir`.
+`--safety-net none` writes the NER-only policy; the removed `ner` value migrates
+to `none`. `--safety-net opf` additionally verifies an OpenAI Privacy Filter
+checkpoint and prints a Nym + OPF command; OPF remains CLI-only. Setup prints
+the model card MIT licence, upstream revision, the open [training-data licence
+review](../../docs/explanation/safety-net/safety-nets.md#licence-review-open),
+and the opt-out. The doctor checks that Nym catches a synthetic licence plate.
 
 ## Daemon mode
 
@@ -314,7 +321,7 @@ process. Only building numbers, licence plates, usernames and dates of birth
 can fire by default (op-B); `[safety_net.nym]` in policy.toml changes the
 allowlist and thresholds. It is not available through
 `--safety-net-registry`. Contract:
-[safety-nets.md](../../docs/explanation/safety-net/safety-nets.md#nym-small-adapter-opt-in).
+[safety-nets.md](../../docs/explanation/safety-net/safety-nets.md#nym-small-adapter).
 
 #### Setup
 
@@ -325,8 +332,7 @@ $ cargo build -p gaze-cli --features safety-net-openai
 ```
 
 The `nym` backend is compiled into the default build through the `setup`
-feature (`safety-net-nym`). Install its pinned bundle with
-`gaze setup --safety-net nym`.
+feature (`safety-net-nym`). The default `gaze setup` installs its pinned bundle.
 
 The `opf` command must be installed from a pinned upstream Git revision or
 an official release of the

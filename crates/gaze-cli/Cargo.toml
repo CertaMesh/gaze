@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["proxy", "setup"]
-setup = ["dep:gaze-model-setup", "safety-net-nym"]
+setup = ["dep:gaze-model-setup", "dep:tempfile", "safety-net-nym"]
 safety-net-openai = ["gaze-recognizers/safety-net-openai"]
 safety-net-nym = ["gaze-recognizers/safety-net-nym", "gaze-assembly/safety-net-nym"]
 document = ["dep:gaze-document"]
@@ -66,6 +66,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 signal-hook = "0.3"
 sha2 = "0.10"
+tempfile = { version = "3", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 tracing = "0.1"
 url = "2"

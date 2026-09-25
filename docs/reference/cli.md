@@ -13,6 +13,7 @@ Every verb below is defined by the clap `Subcommand` enum in
 | Subcommand | One-line summary | Feature gate |
 |------------|------------------|--------------|
 | [`gaze clean`](../../crates/gaze-cli/README.md#clean) | Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON. | always |
+| `gaze setup` | Install the pinned NER and Nym bundles, write a policy, and run a doctor check. See [guide](#gaze-setup). | `setup` (default build) |
 | `gaze daemon` | Run a long-lived JSONL stdio cleaner with one process-level pipeline and per-`session_id` manifests. See [guide](#gaze-daemon). | always |
 | [`gaze restore`](../../crates/gaze-cli/README.md#restore) | Read `{session_blob, text}` JSON from stdin; emit restored `{text}` JSON. | always |
 | [`gaze audit query`](../../crates/gaze-cli/README.md#audit-query) | Print filtered redaction-log metadata rows as TSV from a read-only SQLite DB. | always |
@@ -39,6 +40,18 @@ value on stderr.
 
 ## Guides
 
+### `gaze setup`
+
+`gaze setup` installs and verifies the pinned Davlan NER and Nym bundles, writes
+`gaze.toml` with `[safety_net].backend = "nym"` and an absolute
+`[safety_net.nym].model_dir`, then checks that Nym tokenizes a synthetic licence
+plate. `--safety-net none` writes a NER-only policy. The old `ner` value was
+removed; use `none`. `--safety-net opf` verifies the installed OPF checkpoint
+and prints a command that stacks Nym and OPF; policy activation remains Nym.
+Setup prints the model card MIT licence, pinned upstream source and revision,
+the open [licence review](../explanation/safety-net/safety-nets.md#licence-review-open),
+and the `gaze setup --safety-net none` opt-out.
+
 ### Safety-net selection
 
 `gaze clean` and `gaze daemon` read `[safety_net].backend` from their policy.
@@ -51,7 +64,7 @@ one stderr notice. `--safety-net-backend` replaces exactly one explicit
 
 Nym model location precedence is `--nym-model-dir` > `GAZE_NYM_MODEL_DIR` >
 policy `[safety_net.nym].model_dir`. A missing or invalid bundle is a
-configuration error; install it with `gaze setup --safety-net nym`.
+configuration error; install it with `gaze setup`.
 
 ### `gaze proxy`
 

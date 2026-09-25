@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use clap::ValueEnum;
 use gaze::{CleanDocument, LocaleTag, RawDocument, Rulepack, Session};
 use gaze_model_setup::{install_ner_bundle, install_nym_bundle, InstallOutcome, SetupError};
+use gaze_recognizers::safety_net::nym::{NYM_SMALL_HF_COMMIT, NYM_SMALL_HF_REPO};
 use sha2::{Digest, Sha256};
 
 use crate::clean_overrides::CleanOverrides;
@@ -13,8 +14,9 @@ use crate::error::CliError;
 use crate::pipeline::build::resolve_pipeline;
 
 const DEFAULT_POLICY_FILE: &str = "gaze.toml";
-const OPF_UNPINNED_NOTICE: &str = "OPF safety-net is not pinned in this build; defaulting to NER.";
+const OPF_UNAVAILABLE: &str = "OPF requires the `safety-net-openai` feature and a pinned checkpoint bundle in this build. Reinstall with `cargo install gaze-cli --features safety-net-openai` when a pinned bundle is available, or run `gaze setup` for the default Nym safety net.";
 const DOCTOR_INPUT: &str = "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd.\nPhone +1-555-0100\nIBAN AT61 1904 3002 3457 3201\nCard 4111 1111 1111 1111\nRouter IP 10.1.2.3"; // fixture-cited(crates/gaze-cli/src/commands/setup.rs:commands::setup::tests::generated_policy_tokenizes_with_clean_pipeline)
+const DOCTOR_NYM_INPUT: &str = "Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt."; // fixture-cited(crates/gaze-cli/tests/nym_cli.rs:live_nym_net_tokenizes_a_plate_the_rules_miss)
 
 #[derive(Debug)]
 pub(crate) struct Args {
@@ -27,9 +29,8 @@ pub(crate) struct Args {
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SetupSafetyNet {
-    Ner,
+    None,
     Opf,
-    // Downloads and verifies the pinned Nym-small int8 bundle (opt-in net).
     Nym,
 }
 
@@ -51,7 +52,6 @@ struct SetupSummary {
     policy_path: PathBuf,
     model_status: ModelInstallStatus,
     doctor_clean_text: String,
-    opf_notice: Option<String>,
     opf_checkpoint: Option<PathBuf>,
     nym_model_dir: Option<(PathBuf, ModelInstallStatus)>,
 }
@@ -70,7 +70,6 @@ struct OpfSetup<'a> {
 
 #[derive(Debug)]
 struct ResolvedSetupSafetyNet {
-    opf_notice: Option<String>,
     opf_checkpoint: Option<PathBuf>,
     nym_model_dir: Option<(PathBuf, ModelInstallStatus)>,
 }
@@ -81,15 +80,22 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
 
     let (model_dir, model_status) = install_ner_model(args.model_dir)?;
 
-    write_policy(&policy_path, &model_dir, args.force)?;
-    let doctor_clean_text = doctor_check(&policy_path)?;
+    let doctor_clean_text = write_verified_policy(
+        &policy_path,
+        &model_dir,
+        resolved_safety_net
+            .nym_model_dir
+            .as_ref()
+            .map(|(path, _)| path.as_path()),
+        args.force,
+        doctor_check,
+    )?;
 
     Ok(SetupSummary {
         model_dir,
         policy_path,
         model_status,
         doctor_clean_text,
-        opf_notice: resolved_safety_net.opf_notice,
         opf_checkpoint: resolved_safety_net.opf_checkpoint,
         nym_model_dir: resolved_safety_net.nym_model_dir,
     })
@@ -120,17 +126,21 @@ fn resolve_safety_net(
 ) -> Result<ResolvedSetupSafetyNet, CliError> {
     let choice = match requested {
         Some(choice) => choice,
-        None if non_interactive => SetupSafetyNet::Ner,
+        None if non_interactive => SetupSafetyNet::Nym,
         None => prompt_safety_net()?,
     };
 
     match choice {
-        SetupSafetyNet::Ner => Ok(ResolvedSetupSafetyNet {
-            opf_notice: None,
+        SetupSafetyNet::None => Ok(ResolvedSetupSafetyNet {
             opf_checkpoint: None,
             nym_model_dir: None,
         }),
-        SetupSafetyNet::Opf => resolve_opf_safety_net(opf_setup),
+        SetupSafetyNet::Opf => {
+            let mut resolved = resolve_opf_safety_net(opf_setup)?;
+            resolved.nym_model_dir =
+                resolve_nym_safety_net(|| install_nym_bundle(None))?.nym_model_dir;
+            Ok(resolved)
+        }
         SetupSafetyNet::Nym => resolve_nym_safety_net(|| install_nym_bundle(None)),
     }
 }
@@ -149,7 +159,6 @@ fn resolve_nym_safety_net(
         InstallOutcome::Installed { model_dir } => (model_dir, ModelInstallStatus::Downloaded),
     };
     Ok(ResolvedSetupSafetyNet {
-        opf_notice: None,
         opf_checkpoint: None,
         nym_model_dir: Some(installed),
     })
@@ -184,11 +193,7 @@ fn default_opf_setup() -> OpfSetup<'static> {
 
 fn resolve_opf_safety_net(opf_setup: OpfSetup<'_>) -> Result<ResolvedSetupSafetyNet, CliError> {
     if opf_setup.pin.bundle_sha256.is_none() {
-        return Ok(ResolvedSetupSafetyNet {
-            opf_notice: Some(OPF_UNPINNED_NOTICE.to_string()),
-            opf_checkpoint: None,
-            nym_model_dir: None,
-        });
+        return Err(setup_error(OPF_UNAVAILABLE.to_string()));
     }
 
     let checkpoint_dir = match opf_setup.checkpoint_dir {
@@ -204,7 +209,6 @@ fn resolve_opf_safety_net(opf_setup: OpfSetup<'_>) -> Result<ResolvedSetupSafety
     })?;
 
     Ok(ResolvedSetupSafetyNet {
-        opf_notice: None,
         opf_checkpoint: Some(canonical_or_absolute(&checkpoint_dir)?),
         nym_model_dir: None,
     })
@@ -265,18 +269,22 @@ fn push_sha256sum_manifest_line(manifest: &mut String, artifact: &str, sha256: &
 
 fn prompt_safety_net() -> Result<SetupSafetyNet, CliError> {
     loop {
-        let input = prompt_line("Safety net [ner/opf/nym] (default ner): ")?;
+        let input = prompt_line("Safety net [nym/none/opf] (default nym): ")?;
         let trimmed = input.trim();
-        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("ner") {
-            return Ok(SetupSafetyNet::Ner);
+        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("nym") {
+            return Ok(SetupSafetyNet::Nym);
+        }
+        if trimmed.eq_ignore_ascii_case("none") {
+            return Ok(SetupSafetyNet::None);
         }
         if trimmed.eq_ignore_ascii_case("opf") {
             return Ok(SetupSafetyNet::Opf);
         }
-        if trimmed.eq_ignore_ascii_case("nym") {
-            return Ok(SetupSafetyNet::Nym);
+        if trimmed.eq_ignore_ascii_case("ner") {
+            println!("`ner` was removed; enter `none` for a NER-only policy.");
+            continue;
         }
-        println!("Enter `ner`, `opf` or `nym`.");
+        println!("Enter `nym`, `none` or `opf`.");
     }
 }
 
@@ -330,7 +338,12 @@ fn reject_symlink(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn write_policy(policy_path: &Path, model_dir: &Path, force: bool) -> Result<(), CliError> {
+fn write_policy(
+    policy_path: &Path,
+    model_dir: &Path,
+    nym_model_dir: Option<&Path>,
+    force: bool,
+) -> Result<tempfile::NamedTempFile, CliError> {
     if policy_path.exists() && !force {
         return Err(setup_error(format!(
             "policy `{}` already exists; pass --force to overwrite",
@@ -347,16 +360,57 @@ fn write_policy(policy_path: &Path, model_dir: &Path, force: bool) -> Result<(),
     }
 
     let model_dir = canonical_or_absolute(model_dir)?;
-    let policy = setup_policy_toml(&model_dir)?;
-    fs::write(policy_path, policy).map_err(|err| {
+    let nym_model_dir = nym_model_dir.map(canonical_or_absolute).transpose()?;
+    let policy = setup_policy_toml(&model_dir, nym_model_dir.as_deref())?;
+    let parent = policy_path
+        .parent()
+        .ok_or_else(|| setup_error("policy has no parent directory".to_string()))?;
+    let mut staged = tempfile::NamedTempFile::new_in(parent).map_err(|err| {
         setup_error(format!(
-            "cannot write policy `{}`: {err}",
+            "cannot stage policy beside `{}`: {err}",
             policy_path.display()
         ))
-    })
+    })?;
+    staged.write_all(policy.as_bytes()).map_err(|err| {
+        setup_error(format!(
+            "cannot write staged policy for `{}`: {err}",
+            policy_path.display()
+        ))
+    })?;
+    staged.flush().map_err(|err| {
+        setup_error(format!(
+            "cannot flush staged policy for `{}`: {err}",
+            policy_path.display()
+        ))
+    })?;
+    Ok(staged)
 }
 
-fn setup_policy_toml(model_dir: &Path) -> Result<String, CliError> {
+fn write_verified_policy(
+    policy_path: &Path,
+    model_dir: &Path,
+    nym_model_dir: Option<&Path>,
+    force: bool,
+    doctor: impl FnOnce(&Path) -> Result<String, CliError>,
+) -> Result<String, CliError> {
+    let staged = write_policy(policy_path, model_dir, nym_model_dir, force)?;
+    let clean_text = doctor(staged.path())?;
+    let published = if force {
+        staged.persist(policy_path)
+    } else {
+        staged.persist_noclobber(policy_path)
+    };
+    published.map_err(|err| {
+        setup_error(format!(
+            "cannot publish verified policy `{}`: {}",
+            policy_path.display(),
+            err.error
+        ))
+    })?;
+    Ok(clean_text)
+}
+
+fn setup_policy_toml(model_dir: &Path, nym_model_dir: Option<&Path>) -> Result<String, CliError> {
     let model_dir = toml_basic_string(&model_dir.to_string_lossy());
     let packs = gaze_recognizers::embedded_rulepacks()
         .filter(|(name, _)| *name != "secrets")
@@ -392,6 +446,12 @@ fn setup_policy_toml(model_dir: &Path) -> Result<String, CliError> {
         .join(", ");
     // The Davlan NER locale option is metadata only; no locale hint lets the
     // multilingual recognizer run on every document.
+    let safety_net = nym_model_dir.map_or(String::new(), |dir| {
+        format!(
+            "\n[safety_net]\nbackend = \"nym\"\n\n[safety_net.nym]\nmodel_dir = \"{}\"\n",
+            toml_basic_string(&dir.to_string_lossy())
+        )
+    });
     Ok(format!(
         r#"schema_version = "0.1.0"
 
@@ -404,6 +464,7 @@ active = [{active}]
 [ner]
 model_dir = "{model_dir}"
 threshold = 0.3
+{safety_net}
 
 [policy.rulepacks]
 bundled = [{bundled}]
@@ -425,9 +486,14 @@ fn doctor_check(policy_path: &Path) -> Result<String, CliError> {
         None,
     )?;
     let policy = resolved.policy;
-    let pipeline = resolved.pipeline;
+    let mut pipeline = resolved.pipeline;
     let locale_chain = resolved.locale_chain;
     let dictionaries = resolved.dictionaries;
+    let nym_enabled = policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym;
+    if nym_enabled {
+        pipeline = gaze_assembly::attach_nym_safety_net(pipeline, &policy, None, None, None)
+            .map_err(|err| setup_error(format!("doctor Nym attachment failed: {err}")))?;
+    }
     let session = Session::from_policy(&policy)
         .map_err(|err| setup_error(format!("doctor session init failed: {err}")))?;
     let clean = pipeline
@@ -458,13 +524,47 @@ fn doctor_check(policy_path: &Path) -> Result<String, CliError> {
             )));
         }
     }
+    if nym_enabled {
+        let plate = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text(DOCTOR_NYM_INPUT.to_string()),
+                locale_chain.as_slice(),
+                &dictionaries,
+                gaze::SafetyNetPolicy::default(),
+            )
+            .map_err(|err| setup_error(format!("doctor Nym clean failed: {err}")))?;
+        let (CleanDocument::Text(plate_text), _, report) = plate else {
+            return Err(setup_error(
+                "doctor Nym produced a non-text clean document".to_string(),
+            ));
+        };
+        verify_doctor_nym(pipeline.safety_net_count(), &plate_text, &report)?;
+    }
     Ok(clean_text)
 }
 
-fn print_summary(summary: &SetupSummary) {
-    if let Some(notice) = &summary.opf_notice {
-        println!("{notice}");
+fn verify_doctor_nym(
+    net_count: usize,
+    clean_text: &str,
+    report: &gaze::LeakReport,
+) -> Result<(), CliError> {
+    if net_count == 0
+        || clean_text.contains("M-AB 1234")
+        || !clean_text.contains(":Custom:license_plate_")
+        || !report.suspects.iter().any(|suspect| {
+            suspect.safety_net_id == "nym-small-int8"
+                && suspect.raw_label.starts_with("LICENSE_PLATE>=")
+        })
+    {
+        return Err(setup_error(
+            "doctor: Nym did not tokenize the synthetic licence plate".to_string(),
+        ));
     }
+    Ok(())
+}
+
+fn print_summary(summary: &SetupSummary) {
     if let Some(opf_checkpoint) = &summary.opf_checkpoint {
         println!("OPF checkpoint verified {}", opf_checkpoint.display());
     }
@@ -485,6 +585,9 @@ fn print_summary(summary: &SetupSummary) {
     }
     println!("policy written {}", summary.policy_path.display());
     println!("doctor pass {}", summary.doctor_clean_text);
+    if summary.nym_model_dir.is_some() {
+        println!("doctor Nym pass: synthetic licence plate tokenized");
+    }
     println!("Setup complete.");
     println!("Model: {}", summary.model_dir.display());
     println!("Policy: {}", summary.policy_path.display());
@@ -496,18 +599,19 @@ fn print_summary(summary: &SetupSummary) {
         "For gaze index: export GAZE_NER_MODEL_DIR={}",
         shell_quote_path(&summary.model_dir)
     );
+    if summary.nym_model_dir.is_some() {
+        println!("Nym model: {NYM_SMALL_HF_REPO} (model card licence: MIT)");
+        println!(
+            "Source: https://huggingface.co/{NYM_SMALL_HF_REPO} at revision {NYM_SMALL_HF_COMMIT}"
+        );
+        println!("Training-data licence review is open: https://github.com/CertaMesh/gaze/blob/main/docs/explanation/safety-net/safety-nets.md#licence-review-open");
+        println!("Opt out: gaze setup --safety-net none");
+    }
     if let Some(opf_checkpoint) = &summary.opf_checkpoint {
         println!(
-            "For OPF safety net: gaze clean --policy {} --safety-net openai-filter --opf-command $(command -v opf) --opf-checkpoint {}",
+            "For stacked Nym and OPF: gaze clean --policy {} --safety-net nym --safety-net openai-filter --opf-command $(command -v opf) --opf-checkpoint {}",
             shell_quote_path(&summary.policy_path),
             shell_quote_path(opf_checkpoint)
-        );
-    }
-    if let Some((nym_model_dir, _)) = &summary.nym_model_dir {
-        println!(
-            "For the Nym safety net (opt-in): gaze clean --policy {} --safety-net nym --nym-model-dir {}",
-            shell_quote_path(&summary.policy_path),
-            shell_quote_path(nym_model_dir)
         );
     }
     println!("For gaze index: set GAZE_INDEX_KEY before ingest/search.");
@@ -592,7 +696,7 @@ mod tests {
 
         let err = run_with_opf_setup(
             Args {
-                safety_net: Some(SetupSafetyNet::Ner),
+                safety_net: Some(SetupSafetyNet::None),
                 policy_out: Some(policy_out.clone()),
                 model_dir: Some(model_dir),
                 non_interactive: true,
@@ -625,7 +729,7 @@ mod tests {
 
         let err = run_with_opf_setup(
             Args {
-                safety_net: Some(SetupSafetyNet::Ner),
+                safety_net: Some(SetupSafetyNet::None),
                 policy_out: Some(policy_out.clone()),
                 model_dir: Some(model_dir.clone()),
                 non_interactive: true,
@@ -666,7 +770,10 @@ mod tests {
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
         write_synthetic_ner_dir(&model_dir);
-        write_policy(&policy_out, &model_dir, false).unwrap();
+        write_policy(&policy_out, &model_dir, None, false)
+            .unwrap()
+            .persist(&policy_out)
+            .unwrap();
 
         let policy = fs::read_to_string(&policy_out).unwrap();
         assert!(policy.contains("[ner]"));
@@ -679,12 +786,37 @@ mod tests {
     }
 
     #[test]
+    fn generated_policy_includes_nym_only_when_selected() {
+        let dir = tempdir().unwrap();
+        let ner = dir.path().join("ner");
+        let nym = dir.path().join("nym");
+        fs::create_dir_all(&nym).unwrap();
+        let none = setup_policy_toml(&ner, None).unwrap();
+        assert!(!none.contains("[safety_net]"));
+        let selected = setup_policy_toml(&ner, Some(&nym)).unwrap();
+        assert!(selected.contains("[safety_net]\nbackend = \"nym\""));
+        assert!(selected.contains(&format!("model_dir = \"{}\"", nym.display())));
+    }
+
+    #[test]
+    fn doctor_refuses_a_detached_or_inert_nym() {
+        let report = gaze::LeakReport::default();
+        let tokenized = "Kennzeichen <session:Custom:license_plate_1>";
+        assert!(verify_doctor_nym(0, tokenized, &report).is_err());
+        assert!(verify_doctor_nym(1, tokenized, &report).is_err());
+        assert!(verify_doctor_nym(1, DOCTOR_NYM_INPUT, &report).is_err());
+    }
+
+    #[test]
     fn generated_policy_registers_every_non_secret_bundled_recognizer() {
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
         write_synthetic_ner_dir(&model_dir);
-        write_policy(&policy_out, &model_dir, false).unwrap();
+        write_policy(&policy_out, &model_dir, None, false)
+            .unwrap()
+            .persist(&policy_out)
+            .unwrap();
 
         let resolved = resolve_pipeline(
             Some(&policy_out),
@@ -767,25 +899,20 @@ mod tests {
     }
 
     #[test]
-    fn opf_request_defaults_to_ner_when_bundle_is_not_pinned() {
+    fn opf_request_rejects_unpinned_bundle() {
         let dir = tempdir().unwrap();
         let checkpoint_dir = dir.path().join("missing-opf");
 
-        let resolved = resolve_safety_net(
-            Some(SetupSafetyNet::Opf),
-            true,
-            OpfSetup {
-                pin: OpfBundlePin {
-                    bundle_sha256: None,
-                    required_artifacts: &[],
-                },
-                checkpoint_dir: Some(&checkpoint_dir),
+        let err = resolve_opf_safety_net(OpfSetup {
+            pin: OpfBundlePin {
+                bundle_sha256: None,
+                required_artifacts: &[],
             },
-        )
-        .unwrap();
+            checkpoint_dir: Some(&checkpoint_dir),
+        })
+        .unwrap_err();
 
-        assert_eq!(resolved.opf_notice.as_deref(), Some(OPF_UNPINNED_NOTICE));
-        assert_eq!(resolved.opf_checkpoint, None);
+        assert!(matches!(err, CliError::SetupDetail(detail) if detail == OPF_UNAVAILABLE));
     }
 
     #[test]
@@ -877,21 +1004,16 @@ mod tests {
         );
         let bundle_sha = hex_sha256(opf_manifest.as_bytes());
 
-        let resolved = resolve_safety_net(
-            Some(SetupSafetyNet::Opf),
-            true,
-            OpfSetup {
-                pin: OpfBundlePin {
-                    bundle_sha256: Some(Box::leak(bundle_sha.into_boxed_str())),
-                    required_artifacts: &["config.json", "model.safetensors"],
-                },
-                checkpoint_dir: Some(&checkpoint_dir),
+        let resolved = resolve_opf_safety_net(OpfSetup {
+            pin: OpfBundlePin {
+                bundle_sha256: Some(Box::leak(bundle_sha.into_boxed_str())),
+                required_artifacts: &["config.json", "model.safetensors"],
             },
-        )
+            checkpoint_dir: Some(&checkpoint_dir),
+        })
         .unwrap();
 
         let checkpoint_dir = checkpoint_dir.canonicalize().unwrap();
-        assert_eq!(resolved.opf_notice, None);
         assert_eq!(
             resolved.opf_checkpoint.as_deref(),
             Some(checkpoint_dir.as_path())
@@ -899,16 +1021,71 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "hits Hugging Face; validates CLI setup with the real pinned NER bundle"]
-    fn non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes() {
+    fn failing_doctor_never_publishes_or_replaces_policy() {
         let dir = tempdir().unwrap();
-        let model_dir = dir.path().join("davlan-mbert-ner-hrl");
+        let model_dir = dir.path().join("ner");
+        fs::create_dir_all(&model_dir).unwrap();
+        let policy_path = dir.path().join("policy.toml");
+        let old_policy = b"existing valid policy bytes\n";
+
+        for existing in [false, true] {
+            if existing {
+                fs::write(&policy_path, old_policy).unwrap();
+            }
+            let err = write_verified_policy(&policy_path, &model_dir, None, existing, |staged| {
+                assert_ne!(staged, policy_path);
+                assert!(fs::read_to_string(staged).unwrap().contains("[ner]"));
+                Err(setup_error("doctor rejected staged policy".to_string()))
+            })
+            .unwrap_err();
+            assert!(
+                matches!(err, CliError::SetupDetail(detail) if detail == "doctor rejected staged policy")
+            );
+            if existing {
+                assert_eq!(fs::read(&policy_path).unwrap(), old_policy);
+            } else {
+                assert!(!policy_path.exists());
+            }
+            assert_eq!(
+                fs::read_dir(dir.path()).unwrap().count(),
+                1 + usize::from(existing)
+            );
+        }
+    }
+
+    #[test]
+    fn passing_doctor_publishes_staged_policy_over_existing_file() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("ner");
+        fs::create_dir_all(&model_dir).unwrap();
+        let policy_path = dir.path().join("policy.toml");
+        fs::write(&policy_path, b"old policy\n").unwrap();
+
+        let clean = write_verified_policy(&policy_path, &model_dir, None, true, |staged| {
+            assert_eq!(fs::read(&policy_path).unwrap(), b"old policy\n");
+            assert!(fs::read_to_string(staged).unwrap().contains("[ner]"));
+            Ok("doctor passed".to_string())
+        })
+        .unwrap();
+
+        assert_eq!(clean, "doctor passed");
+        assert!(fs::read_to_string(&policy_path).unwrap().contains("[ner]"));
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes() {
+        let Ok(model_dir) = std::env::var("GAZE_SETUP_TEST_MODEL_DIR") else {
+            return;
+        };
+        let dir = tempdir().unwrap();
+        let model_dir = PathBuf::from(model_dir);
         let first_policy = dir.path().join("first.toml");
         let second_policy = dir.path().join("second.toml");
 
         let first = run_with_opf_setup(
             Args {
-                safety_net: Some(SetupSafetyNet::Ner),
+                safety_net: Some(SetupSafetyNet::None),
                 policy_out: Some(first_policy),
                 model_dir: Some(model_dir.clone()),
                 non_interactive: true,
@@ -919,7 +1096,7 @@ mod tests {
         .unwrap();
         let second = run_with_opf_setup(
             Args {
-                safety_net: Some(SetupSafetyNet::Ner),
+                safety_net: Some(SetupSafetyNet::None),
                 policy_out: Some(second_policy),
                 model_dir: Some(model_dir.clone()),
                 non_interactive: true,
@@ -929,7 +1106,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(first.model_status, ModelInstallStatus::Downloaded);
+        assert_eq!(first.model_status, ModelInstallStatus::AlreadyPresent);
         assert_eq!(second.model_status, ModelInstallStatus::AlreadyPresent);
         assert_eq!(second.model_dir, model_dir);
         assert!(second.doctor_clean_text.contains(":Name_"));
