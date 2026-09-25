@@ -1,13 +1,15 @@
 use std::collections::BTreeSet;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use gaze::{
     Action, CleanDocument, Context, DictionaryBundle, EmittedTokenSpan, FallbackReason,
     GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleChain, LocaleTag, NerPolicy,
-    PiiClass, Pipeline, RuleSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback,
-    SafetyNetMode, SafetyNetPolicy, Scope, Session,
+    PiiClass, Pipeline, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
+    RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope,
+    Session,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -213,6 +215,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
+    // Opt-in audit capture for before/after identity checks: every response carries the audit
+    // rows its request logged, with the per-run `created_at` and random `session_id` cleared.
+    let audit_rows = std::env::var_os("GAZE_BENCH_AUDIT_ROWS").map(|_| AuditRows::default());
+    let policy_run = policy_run.map(|mut run| {
+        if let Some(rows) = &audit_rows {
+            run.pipeline = run.pipeline.with_redaction_logger(rows.clone());
+        }
+        run
+    });
+    let benchmark_pipeline = benchmark_pipeline.map(|pipeline| match &audit_rows {
+        Some(rows) => pipeline.with_redaction_logger(rows.clone()),
+        None => pipeline,
+    });
     let full = policy_run
         .as_ref()
         .map(|run| &run.pipeline)
@@ -226,7 +241,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let request: Request = serde_json::from_str(&line)?;
         match handle_request_with_policy(config, full, request, policy_run.as_ref())? {
-            Outcome::Success(response) => {
+            Outcome::Success(mut response) => {
+                response.audit_rows = audit_rows.as_ref().map(AuditRows::drain);
                 serde_json::to_writer(&mut stdout, &response)?;
                 stdout.write_all(b"\n")?;
                 stdout.flush()?;
@@ -237,12 +253,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 reason,
                 total_ms,
             } => {
+                if let Some(rows) = &audit_rows {
+                    rows.drain();
+                }
                 write_pipeline_error(&mut stdout, &fixture_id, stage, reason, total_ms)?;
             }
         }
     }
 
     Ok(())
+}
+
+#[derive(Clone, Default)]
+struct AuditRows(Arc<Mutex<Vec<RedactionEntry>>>);
+
+impl AuditRows {
+    fn drain(&self) -> Vec<String> {
+        std::mem::take(&mut *self.0.lock().expect("audit rows"))
+            .into_iter()
+            .map(|mut entry| {
+                entry.created_at = 0;
+                entry.session_id = None;
+                format!("{entry:?}")
+            })
+            .collect()
+    }
+}
+
+impl RedactionLogger for AuditRows {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        self.0.lock().expect("audit rows").push(entry.clone());
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -400,6 +442,7 @@ fn handle_request_with_policy(
             post_policy_scan_ms,
         },
         final_protection_trace,
+        audit_rows: None,
     }))
 }
 
@@ -424,6 +467,8 @@ struct Response {
     manifest_integrity: ManifestIntegrity,
     timing: Timing,
     final_protection_trace: Vec<FinalProtectionTraceItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    audit_rows: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
