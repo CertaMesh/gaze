@@ -54,7 +54,7 @@ pub struct CardRunScan {
 /// and a layout window at most five groups, so there are O(n) windows in a run of n bytes; the
 /// union sorts them (O(n log n)) and the rejected windows are matched against the cards in one
 /// sorted walk. A long run needs no length cap (pinned by
-/// `scan_work_grows_linearly_with_the_run`).
+/// `the_rejected_walk_is_linear_in_its_inputs`).
 ///
 /// A group ends at a whitespace or `-` separator and, when `source_spans` is given, wherever the
 /// source text breaks between two digits: at a character normalization dropped (ZWJ, ZWNJ) and
@@ -99,29 +99,40 @@ pub fn scan_card_run(
     }
 
     let cards = union_of_overlapping(candidates);
-    let rejected = without_overlap(failed, &cards);
+    let (rejected, _) = without_overlap(failed, &cards);
     CardRunScan { cards, rejected }
 }
 
 /// The `windows` that overlap no card. Both lists are sorted by start and the cards do not
 /// overlap each other, so one forward walk decides every window: cards that end at or before a
 /// window's start cannot overlap it or any later window.
-fn without_overlap(windows: Vec<Range<usize>>, cards: &[Range<usize>]) -> Vec<Range<usize>> {
+///
+/// Also returns the work done, counted in card comparisons: at most one per card passed over
+/// plus one per window, so never more than `windows.len() + cards.len()`.
+/// `the_rejected_walk_is_linear_in_its_inputs` pins that bound.
+fn without_overlap(
+    windows: Vec<Range<usize>>,
+    cards: &[Range<usize>],
+) -> (Vec<Range<usize>>, usize) {
+    debug_assert!(windows.is_sorted_by_key(|window| window.start));
+    debug_assert!(cards.is_sorted_by_key(|card| card.start));
+    let mut comparisons = 0;
     let mut next_card = 0;
-    windows
+    let kept = windows
         .into_iter()
         .filter(|window| {
-            while cards
-                .get(next_card)
-                .is_some_and(|card| card.end <= window.start)
-            {
+            while cards.get(next_card).is_some_and(|card| {
+                comparisons += 1;
+                card.end <= window.start
+            }) {
                 next_card += 1;
             }
             !cards
                 .get(next_card)
                 .is_some_and(|card| overlaps(card, window))
         })
-        .collect()
+        .collect();
+    (kept, comparisons)
 }
 
 /// True when `text[span]`, read as one digit run, holds a card by [`scan_card_run`]: the check
@@ -364,29 +375,54 @@ mod tests {
     }
 
     #[test]
-    fn scan_work_grows_linearly_with_the_run() {
-        // REVIEW 658 F1: matching rejected windows against every card made the scan quadratic
-        // (1 MB 195 ms, 4 MB 2.9 s in release). Linear work takes about 4x as long for 4x the
-        // text; quadratic takes 16x. The bound is generous against host noise: best of three
-        // runs each, and the 2 MB run may take up to 10x the 0.5 MB run.
-        let small = random_grouped_run(100_000);
-        let large = random_grouped_run(400_000);
-        let best = |text: &str| {
-            (0..3)
-                .map(|_| {
-                    let started = std::time::Instant::now();
-                    let scan = scan_card_run(text, 0..text.len(), None);
-                    assert!(!scan.cards.is_empty());
-                    started.elapsed()
-                })
-                .min()
-                .expect("three runs")
+    fn the_rejected_walk_is_linear_in_its_inputs() {
+        // REVIEW 658 F1 / round 4: matching rejected windows against every card made the scan
+        // quadratic. Count card comparisons instead of timing (no wall clock): the walk may
+        // compare at most once per card passed over and once per window, whatever the size.
+        let failing_windows = |text: &str| -> Vec<Range<usize>> {
+            pattern_windows(text, 0)
+                .into_iter()
+                .filter(|window| !crate::luhn_check(&text[window.clone()]))
+                .collect()
         };
-        let (small_time, large_time) = (best(&small), best(&large));
+        // Synthetic lists of n and 4n: a card every third slot, windows in between.
+        for n in [1_000usize, 4_000] {
+            let cards: Vec<_> = (0..n).map(|index| index * 30..index * 30 + 10).collect();
+            let windows: Vec<_> = (0..n)
+                .map(|index| index * 30 + 12..index * 30 + 25)
+                .collect();
+            let (kept, comparisons) = without_overlap(windows.clone(), &cards);
+            assert_eq!(kept, windows);
+            assert!(
+                comparisons <= windows.len() + cards.len(),
+                "n {n}: {comparisons}"
+            );
+        }
+        // A 1 MB run of random 4-digit groups, the shape the review timed.
+        let text = random_grouped_run(200_000);
+        let scan = scan_card_run(&text, 0..text.len(), None);
+        let failed = failing_windows(&text);
+        let (rejected, comparisons) = without_overlap(failed.clone(), &scan.cards);
+        assert_eq!(rejected, scan.rejected);
+        assert!(scan.cards.len() > 10_000 && failed.len() > 10_000);
         assert!(
-            large_time < small_time * 10,
-            "0.5 MB {small_time:?}, 2 MB {large_time:?}"
+            comparisons <= failed.len() + scan.cards.len(),
+            "{comparisons} comparisons for {} windows and {} cards",
+            failed.len(),
+            scan.cards.len()
         );
+    }
+
+    #[test]
+    fn a_card_that_ends_where_a_window_starts_does_not_hide_the_next_card() {
+        // REVIEW 658 round 4 I1: `0..10` touches the window `10..14` without overlapping it; the
+        // walk must move past it and find that `12..15` does overlap.
+        let (kept, _) = without_overlap(vec![10..14, 20..24], &[0..10, 12..15]);
+        assert_eq!(kept, vec![(20..24)]);
+        let touching_window: Vec<Range<usize>> = std::iter::once(10..14).collect();
+        let touching_card: Vec<Range<usize>> = std::iter::once(0..10).collect();
+        let (kept, _) = without_overlap(touching_window, &touching_card);
+        assert_eq!(kept, vec![(10..14)]);
     }
 
     #[test]
