@@ -41,12 +41,11 @@ Current ambiguity reasons:
 - `MultiFamilyMatch`: recognizers matched across more than one collision family.
 - `PrecedenceTie`: family policy precedence tied without a discriminator.
 
-Validator failure reasons are also closed:
-
-- `LuhnFailed`
-- `IbanMod97Failed`
-- `EmailRfcFailed`
-- `E164PhoneFailed`
+Validator failure reasons are also closed. `ValidatorFailReason` has one
+variant per validator; the full list is in
+[validator veto](validator-veto.md#type-ownership). Two older spellings,
+`email_rfc_failed` and `e164_phone_failed`, still deserialize as
+`EmailRfcRejected` and `PhoneE164Rejected`, so older audit rows stay readable.
 
 ## Serialization
 

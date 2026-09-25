@@ -56,14 +56,21 @@ compatibility.
 
 `ValidatorFailReason` is a closed typed image of current validators:
 
+- `LuhnFailed`
+- `IbanMod97Failed`
 - `EmailRfcRejected`
 - `PhoneE164Rejected`
 - `PhoneNationalRegionMismatch`
-- `LuhnFailed`
-- `IbanMod97Failed`
 - `Ipv4ParseFailed`
 - `Ipv6ParseFailed`
 - `EthEip55ChecksumFailed`
+- `AadhaarVerhoeffFailed`
+- `FrNirMod97Failed`
+- `DeSteuerIdMod1110Failed`
+- `BsnMod11Failed`
+- `CpfMod11Failed`
+- `CnpjMod11Failed`
+- `UkNhsMod11Failed`
 
 Phone reasons are always present in the type. They are emitted only when the
 `phone-parser` feature makes the corresponding validators available.
