@@ -868,6 +868,15 @@ action = "tokenize"
   omitted, unmatched detections fall through to `Preserve` automatically,
   but an explicit `default` makes the policy intent visible.
 
+If the effective fallback is `preserve`, Gaze warns after a successful
+`clean` run or daemon/proxy startup when registered detection classes have no
+reachable class rule. The one-line warning gives the class count and names;
+those values can pass through raw. A class rule placed after `default` is not
+reachable. Back up custom rules, then run `gaze setup --force`, or set the
+default action to `"tokenize"`. An intentional `preserve` default remains
+valid. A reachable per-class `generalize` rule gets a separate warning because
+it produces no restore token.
+
 #### Collision-family fallback classes (avoid a silent leak)
 
 Some bundled recognizers belong to a **collision family** — a set of structural

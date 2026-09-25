@@ -18,11 +18,13 @@ use super::{
 };
 use crate::error::CliError;
 use crate::io::DEFAULT_MAX_BYTES;
-use crate::pipeline::build::{map_policy_error, resolve_pipeline, validate_ner_threshold};
+use crate::pipeline::build::{
+    map_policy_error, policy_warnings, resolve_pipeline, validate_ner_threshold,
+};
 use crate::pipeline::run::{
     clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
     map_safety_net_pipeline_error, maybe_register_safety_net, policy_nym_was_overridden,
-    safety_net_policy, validate_safety_net_tolerant_gate, CleanOptions,
+    safety_net_policy, validate_safety_net_tolerant_gate, CleanOptions, CORE_EXTENDED_DEPRECATION,
 };
 use gaze::{
     Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, LocaleTag,
@@ -94,7 +96,18 @@ pub(crate) struct Args {
 
 pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
     let shutdown = install_signal_flags()?;
+    let deprecated_core_extended = args
+        .rulepacks
+        .rulepack_bundled
+        .iter()
+        .any(|bundle| bundle == "core-extended");
     let mut daemon = Daemon::new(args)?;
+    if deprecated_core_extended {
+        eprintln!("warning: {CORE_EXTENDED_DEPRECATION}");
+    }
+    for warning in policy_warnings(&daemon.policy, &daemon.pipeline) {
+        eprintln!("{warning}");
+    }
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         for line in io::stdin().lock().lines() {

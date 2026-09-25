@@ -47,6 +47,10 @@ impl Recognizer for NerRecognizer {
         &PiiClass::Name
     }
 
+    fn possible_classes(&self) -> Vec<PiiClass> {
+        self.detector.backend.possible_classes()
+    }
+
     fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Result<Vec<Candidate>, DetectError> {
         self.detector
             .detect_span_results(input)

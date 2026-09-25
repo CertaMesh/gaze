@@ -3955,6 +3955,10 @@ pub trait Recognizer: Send + Sync {
     fn id(&self) -> &str;
     /// PII class supported by this recognizer.
     fn supported_class(&self) -> &PiiClass;
+    /// Every class this recognizer can emit. Multi-label recognizers override this.
+    fn possible_classes(&self) -> Vec<PiiClass> {
+        vec![self.supported_class().clone()]
+    }
     /// Detects PII candidates in the supplied input and context.
     fn detect(
         &self,

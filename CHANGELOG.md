@@ -28,12 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Policy fall-through warnings in `gaze clean`, `gaze daemon`, and `gaze proxy`.**
+  After successful processing or startup, Gaze names registered detection
+  classes that an explicit `preserve` default or omitted default sends through
+  raw. It also identifies reachable per-class `generalize` rules as one-way.
+  Existing policies remain valid; back up custom rules and run
+  `gaze setup --force`, or set the default action to `"tokenize"`.
 - `[safety_net].backend = "nym"` activates Nym from a policy in both CLI and
   `gaze-assembly`; `[safety_net.nym].model_dir` supplies its optional bundle
   location. `gaze-assembly/safety-net-nym` forwards the backend feature.
   Repeatable `--safety-net` values stack CLI nets and replace policy selection;
   `--safety-net none` disables them for one run with a notice.
-
 - **`ConflictTier::ContainmentPrecedence`** (audit string
   `containment_precedence`): a candidate that wholly contains a candidate of
   another class won the whole span as one token; the swallowed candidate is a

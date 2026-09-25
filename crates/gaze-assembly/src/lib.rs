@@ -254,11 +254,11 @@ pub fn build_pipeline_builder(
 /// classes (before or after the first `Default` rule), or a rule names the
 /// family class only after the first `Default` rule, where it is never reached.
 ///
-/// Such a token does not leak: it takes the strictest action among its member
-/// classes' rules and the default (`gaze::Action::strictness_rank`). The list
-/// is informational. It tells the adopter that the token class they will see
-/// differs from the member class they named, and that a rule for the family
-/// class declared before the default rule sets the action directly.
+/// Such a token takes the strictest action among its member classes' rules and
+/// the default (`gaze::Action::strictness_rank`). That action can be `preserve`
+/// when every member and the default preserve. The list tells the adopter that
+/// the token class differs from the member class they named, and that a rule
+/// for the family class declared before the default sets its action directly.
 ///
 /// Scope is limited to families with a `mandatory_anchor` member because those
 /// emit the family class *systematically* whenever the anchor cue pack is not

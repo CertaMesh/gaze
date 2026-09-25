@@ -10,7 +10,7 @@ use url::Url;
 
 use crate::clean_overrides::CleanOverrides;
 use crate::error::CliError;
-use crate::pipeline::build::{map_policy_error, resolve_pipeline};
+use crate::pipeline::build::{map_policy_error, policy_warnings, resolve_pipeline};
 
 pub(crate) struct ServeArgs {
     pub(crate) bind: SocketAddr,
@@ -83,14 +83,23 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
     // decides which recognizers are registered, `ProxyConfig` decides which may fire. Dropping
     // it here is what pinned proxied traffic to `[LocaleTag::Global]` and left locale-gated
     // recognizers inert for adopters who had configured a locale (solo todo #2403).
-    let (pipeline, locale_chain, dictionaries) = build_pipeline(args.policy, &args.rulepack)?;
+    let (pipeline, locale_chain, dictionaries, notices) =
+        build_pipeline(args.policy, &args.rulepack)?;
     config = config
         .with_locale_chain(locale_chain)
         .with_dictionaries(dictionaries);
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|err| CliError::ProxyDetail(format!("runtime: {err}")))?;
     runtime
-        .block_on(gaze_proxy::serve(config, Arc::new(pipeline)))
+        .block_on(gaze_proxy::server::serve_with_ready(
+            config,
+            Arc::new(pipeline),
+            move || {
+                for notice in notices {
+                    eprintln!("{notice}");
+                }
+            },
+        ))
         .map_err(map_proxy)
 }
 
@@ -208,7 +217,15 @@ pub(crate) fn uninstall_systemd_user() -> Result<(), CliError> {
 fn build_pipeline(
     policy: Option<PathBuf>,
     rulepack: &str,
-) -> Result<(gaze::Pipeline, gaze::LocaleChain, gaze::DictionaryBundle), CliError> {
+) -> Result<
+    (
+        gaze::Pipeline,
+        gaze::LocaleChain,
+        gaze::DictionaryBundle,
+        Vec<String>,
+    ),
+    CliError,
+> {
     if let Some(path) = policy {
         let resolved = resolve_pipeline(
             Some(&path),
@@ -218,6 +235,7 @@ fn build_pipeline(
             None,
             None,
         )?;
+        let notices = policy_warnings(&resolved.policy, &resolved.pipeline);
         let pipeline = if resolved.policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym {
             let model_dir = std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from);
             gaze_assembly::attach_nym_safety_net(
@@ -231,7 +249,12 @@ fn build_pipeline(
         } else {
             resolved.pipeline
         };
-        return Ok((pipeline, resolved.locale_chain, resolved.dictionaries));
+        return Ok((
+            pipeline,
+            resolved.locale_chain,
+            resolved.dictionaries,
+            notices,
+        ));
     }
     let mut config = gaze_assembly::CorePipelineConfig::new();
     if rulepack != "core" {
@@ -245,6 +268,7 @@ fn build_pipeline(
         core.into_pipeline(),
         locale_chain,
         gaze::DictionaryBundle::default(),
+        Vec::new(),
     ))
 }
 
