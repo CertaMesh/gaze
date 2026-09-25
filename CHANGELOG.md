@@ -35,6 +35,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **National IDs in tool-call JSON and `key=value` logs are now tokenized.**
+  Every release up to and including v0.14.0 matched cue-anchored identifiers
+  (BSN, Steuer-ID, CPF, CNPJ, NHS, SSN, NINO, PAN, Aadhaar, NIR, VAT ID,
+  passport, national ID, driver licence, tax number) only in prose such as
+  `BSN: 111222333`. A JSON key (`{"bsn":"111222333"}`), a log field
+  (`bsn=111222333`) or a snake, camel or kebab key (`steuer_id`, `steuerId`,
+  `nhs_number`, `customer_ssn`) passed the value through raw, including on the
+  `gaze proxy` tool-call argument path. The `core` rulepack patterns now accept
+  quoted, single-quoted and escaped JSON keys, `=` and `:` log forms, and those
+  key spellings. A camelCase prefix before the cue (`customerSsn`) is not yet
+  matched. (solo todo #3818)
+- **Identifiers grouped with non-breaking or thin spaces are now tokenized.**
+  Every release up to and including v0.14.0 missed IBANs, payment cards,
+  Steuer-IDs and other grouped identifiers whose groups were separated by
+  NO-BREAK SPACE, NARROW NO-BREAK SPACE, THIN SPACE or another Unicode space,
+  as PDFs and banking UIs write them. The IBAN and Steuer-ID patterns accepted
+  only ASCII spaces, and the Luhn check vetoed a card holding a non-ASCII
+  separator, so each value shipped raw; an NBSP-grouped Steuer-ID leaked its
+  first two digits next to a `phone` token. Detection now reads every Unicode space
+  separator as an ASCII space; tokens, manifests and restore keep the original
+  bytes. (solo todo #3819)
 - **`gaze setup` policies now tokenize every detected class.** Generated policies
   in v0.11.2–v0.14.0 preserved unmatched classes, allowing detected phone,
   IBAN, payment card, and IP address values to pass through raw. The generated

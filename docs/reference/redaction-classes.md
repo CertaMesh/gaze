@@ -134,6 +134,24 @@ remaining column is checked against the loaded rulepack by
 | `secrets` | `password.field` | `regex` | Values in explicit EN/DE password or passphrase records; 1 to 256 normalized grammar units, with matching quoted or plain scalar syntax; not a raw-byte ceiling | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 <!-- redaction-classes-gate:recognizers:end -->
 
+### Cue shapes and group separators
+
+Every cue-anchored identifier rule above (`aadhaar.in` through `pan.in`,
+`ssn.de_cue`, and the `*.cue_anchored` rules) accepts its cue as prose
+(`BSN: 111222333`), as a JSON key in double, single, or backslash-escaped
+quotes (`{"bsn":"111222333"}`, `{"bsn":111222333}`), and as a `key=value` or
+`key: value` log field. Keys may be snake, camel, or kebab case (`steuer_id`,
+`steuerId`, `nhs_number`) and may carry an underscore prefix (`customer_ssn`).
+A camelCase prefix (`customerSsn`) is not matched. `birth_date.cue` keeps its
+line-start field form. Pinned by
+`crates/gaze-recognizers/tests/structured_cue_shapes.rs`.
+
+Detection reads every Unicode space separator (NO-BREAK SPACE, NARROW NO-BREAK
+SPACE, THIN SPACE, FIGURE SPACE, and the rest of category Zs) as an ASCII
+space, so a grouped IBAN, card, Steuer-ID, or national ID matches and validates
+the same way with any of them. Tokens, manifests, and restore keep the original
+bytes. Pinned by `crates/gaze-recognizers/tests/unicode_group_separators.rs`.
+
 ## Closed validator and normalizer sets
 
 ### `ValidatorKind`
