@@ -10,10 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
-  session prefix. Nym, OPF, and registry backends no longer change detections
+  surrogate prefix derived from the placeholder shape after removing the random
+  session hex. Nym, OPF, and registry backends no longer change detections
   when a fresh session chooses a different random prefix. The scan view
   preserves byte offsets; observable clean output and restore mappings retain
-  the original token bytes.
+  the original token bytes. Findings wholly inside a verified placeholder are
+  discarded; findings that cross one are clipped to exposed bytes before
+  policy or fallback can act, so fallback cannot replace an owned placeholder
+  with a one-way redaction marker.
+
+  On the 2,910-document scored-labels-v2 Nym/NER replay with fresh random
+  sessions, three pre-fix runs leaked 14,071–14,088 bytes (mean 14,078),
+  produced 28,645–28,676 false-positive bytes (mean 28,659), and restored
+  2,909–2,910 documents exactly. The selected shape-derived hex mapping was
+  scored again from the implementation branch:
+
+  | Scan prefix | Leaked bytes | False-positive bytes | Exact restores | Redaction actions | Post-policy suspects |
+  |---|---:|---:|---:|---:|---:|
+  | `00000000` | 14,116 | 28,638 | 2,907 | 4 | 0 |
+  | `xxxxxxxx` | 14,706 | 28,598 | 2,909 | 1 | 0 |
+  | No prefix, mapped offsets | 14,471 | 28,642 | 2,910 | 0 | 0 |
+  | Shape-derived hex (selected) | 13,991 | 28,652 | 2,910 | 0 | 0 |
 
 ### Security
 
