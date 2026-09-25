@@ -4,11 +4,11 @@
 
 `gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an agent-tier MCP tool to the model** passes through `PiiEnvelope::dispatch` and is protected before the model sees it. Authorized operator-tier tools can explicitly bypass response protection for restore/export semantics; their raw responses must stay on the operator surface.
 
-`gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, see `gaze-proxy` (planned for v0.8 — multi-vendor reverse proxy supporting Anthropic, OpenAI, Gemini).
+`gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, see `gaze-proxy` (shipped in v0.8.0 — multi-vendor reverse proxy supporting Anthropic, OpenAI, Gemini; [proxy runtime](../proxy/proxy-runtime.md)).
 
 ---
 
-This document specifies the runtime contract `gaze-mcp-core` v0.7 ships and
+This document specifies the runtime contract `gaze-mcp-core` has shipped since v0.7 and
 the threat model adopters can rely on. It is the source of truth for the
 type-level chokepoint guarantees. The architectural rationale, per-axis
 trade-offs, and scope split between `gaze-mcp` (model↔source) and `gaze-proxy`
@@ -188,7 +188,7 @@ On the success path, the adopter additionally records the
 | Restore exposed by default | `operator-tier` Cargo feature is opt-in; default builds don't link the symbols |
 | Operator surface lit up without auth | `authorize_operator` is the only path; `DenyAllAuthHook` returns `MissingHook` |
 | Audit-sink coupling drift in chokepoint | `cargo-metadata-audit-isolation` xtask + dylint protected-path lint both reject `gaze_audit::*` from gaze-mcp-core |
-| **User pastes PII into chat UI** | **Out of scope** — `gaze-proxy` (v0.8) covers user→model axis. See top-of-doc boundary statement. |
+| **User pastes PII into chat UI** | **Out of scope** — `gaze-proxy` (shipped in v0.8.0) covers user→model axis. See top-of-doc boundary statement. |
 
 ## Out of scope
 
@@ -202,7 +202,7 @@ gaze-mcp because:
 - Under GDPR Art. 4(2), receipt by the LLM service is processing.
 - Pre-input filtering needs a different mechanism (host-side
   preprocessor, vendor-agnostic API reverse proxy, or workflow
-  discipline) — `gaze-proxy` v0.8.
+  discipline) — `gaze-proxy`, shipped in v0.8.0.
 
 The v0.7.0 CHANGELOG entry captures the model↔source vs user↔model
-split and the v0.8 follow-up.
+split; the v0.8.0 entry records the `gaze-proxy` release.
