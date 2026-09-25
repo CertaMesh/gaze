@@ -67,6 +67,7 @@ jobs:
     timeout-minutes: 180
     env:
       NYM_SMALL_INT8_BUNDLE_SHA256: 71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767
+      XDG_DATA_HOME: ${{ runner.temp }}
     steps:
       - name: Free disk space (ubuntu-latest preinstalled bloat removal)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
@@ -126,14 +127,14 @@ jobs:
       - name: Cache pinned Nym bundle
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ${{ runner.temp }}/nym-small-int8
+          path: ${{ runner.temp }}/gaze/models/nym-small-int8
           key: ${{ runner.os }}-nym-small-int8-${{ env.NYM_SMALL_INT8_BUNDLE_SHA256 }}
       - name: Install and verify pinned Nym bundle
         shell: bash
         run: |
           set -euo pipefail
           grep -Fq "$NYM_SMALL_INT8_BUNDLE_SHA256" crates/gaze-recognizers/src/safety_net/nym/artifacts.rs
-          bundle="$RUNNER_TEMP/nym-small-int8"
+          bundle="$XDG_DATA_HOME/gaze/models/nym-small-int8"
           mkdir -p "$bundle"
           chmod 700 "$bundle"
           revision=4348999cd3c2e20c49615e9af7c6bbb45b64cd85
@@ -153,13 +154,46 @@ jobs:
       - name: Test live Nym policy attachment
         shell: bash
         env:
-          GAZE_NYM_MODEL_DIR: ${{ runner.temp }}/nym-small-int8
+          GAZE_NYM_MODEL_DIR: ${{ runner.temp }}/gaze/models/nym-small-int8
         run: |
           set -euo pipefail
           for name in live_nym_net_tokenizes_a_plate_the_rules_miss policy_nym_model_dir_activates_live_bundle; do
             cargo test -p gaze-cli --all-features --test nym_cli "$name" -- --ignored --exact --nocapture 2>&1 | tee "$RUNNER_TEMP/$name.log"
             grep -Fq "test $name ... ok" "$RUNNER_TEMP/$name.log"
           done
+      - name: Cache pinned Davlan NER bundle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/gaze/models/davlan-mbert-ner-hrl
+          key: ${{ runner.os }}-davlan-ner-7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16
+      - name: Install and verify pinned Davlan NER bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq '7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16' crates/gaze-recognizers/src/ner/pinned.rs
+          cargo run --locked -p gaze-cli -- setup --safety-net none --non-interactive \
+            --model-dir "$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl" \
+            --policy-out "$RUNNER_TEMP/ner-only.toml" --force
+          printf '%s  %s\n' \
+            '7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16' \
+            "$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl/SHA256SUMS" | sha256sum -c -
+          (cd "$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl" && sha256sum -c SHA256SUMS)
+      - name: Test setup policy with both pinned models
+        shell: bash
+        env:
+          GAZE_SETUP_TEST_MODEL_DIR: ${{ runner.temp }}/gaze/models/davlan-mbert-ner-hrl
+          GAZE_SETUP_TEST_DATA_HOME: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          cargo test -p gaze-cli --all-features --test setup_policy -- --nocapture > "$RUNNER_TEMP/setup_policy.log" 2>&1
+          cat "$RUNNER_TEMP/setup_policy.log"
+          grep -Fq 'test setup_default_attaches_nym_and_catches_the_plate ... ok' "$RUNNER_TEMP/setup_policy.log"
+          grep -Fq 'test setup_cli_clean_tokenizes_every_bundled_class ... ok' "$RUNNER_TEMP/setup_policy.log"
+          cargo test -p gaze-cli --all-features --bin gaze commands::setup::tests::non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes -- --exact --nocapture > "$RUNNER_TEMP/setup_doctor.log" 2>&1
+          cat "$RUNNER_TEMP/setup_doctor.log"
+          grep -Fq 'test commands::setup::tests::non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes ... ok' "$RUNNER_TEMP/setup_doctor.log"
+      - name: Compile README Nym Rust example
+        run: cargo build --locked -p gaze-assembly --features safety-net-nym --example setup_nym
       - name: Verify synthetic bridge Python requirement
         run: python3 -c 'import sys; assert sys.version_info >= (3, 11), "Python >= 3.11 required"'
       - name: Build offline synthetic rmcp bridge

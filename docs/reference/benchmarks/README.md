@@ -507,8 +507,8 @@ The Kiji DistilBERT safety net, which earlier leaderboard rounds validated as
 the int8 in-process default, was removed after the 2026-09-16 safety-net
 leaderboard. On the 2,910-document benchmark it recovered 1,831 leaked gold
 bytes (scored-label contract v2) for +169,657 false-positive bytes, a 2.5%
-action precision. No safety net runs by default now; the shipped default is
-`pass2-ner`. The Kiji leaderboard rows and the Kiji int8, ORT, tract, and
+action precision. At removal, the default was `pass2-ner`; `gaze setup` now
+enables Nym. The Kiji leaderboard rows and the Kiji int8, ORT, tract, and
 candle runtime measurements are readable at the
 [`v0.14.0` tag](https://github.com/CertaMesh/gaze/blob/v0.14.0/docs/reference/benchmarks/README.md#ner-model-leaderboard).
 
