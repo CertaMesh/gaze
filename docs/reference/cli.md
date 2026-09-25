@@ -237,8 +237,8 @@ for the crate README reference.
 low-latency redaction without paying binary startup and model-load cost on every
 request. It is a stdio server in the LSP / MCP tradition: a foreground child
 process that owns stdin/stdout for line-delimited JSON, not a Unix daemon in the
-strict sense. The subcommand verb is preserved through v0.9.x; a `gaze serve`
-alias lands in v0.10. See the [Terminology note in `daemon-mode.md`](../explanation/daemon/daemon-mode.md)
+strict sense. The subcommand verb is `gaze daemon`; there is no `gaze serve`
+alias. See the [Terminology note in `daemon-mode.md`](../explanation/daemon/daemon-mode.md)
 for the full framing.
 
 The wire format is one JSON request per stdin line and one JSON response per

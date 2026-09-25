@@ -5,8 +5,7 @@ server** in the LSP / MCP tradition: a foreground
 child process that inherits stdin/stdout from its parent and exchanges one JSON
 object per line. Despite the subcommand name, this is not a Unix daemon in the
 strict sense (detached, backgrounded, no controlling terminal). The historical
-name is preserved for binary stability; a `gaze serve` alias is planned for
-v0.10. For the full runtime contract, see
+name is preserved for binary stability. For the full runtime contract, see
 [`docs/explanation/daemon/daemon-mode.md`](../../explanation/daemon/daemon-mode.md).
 
 ## When To Use
@@ -26,9 +25,8 @@ long-lived foreground child that owns stdin/stdout for line-delimited JSON
 request/response, the same pattern as LSP language servers, MCP servers,
 tsserver, and rust-analyzer.
 
-The subcommand verb is kept as `gaze daemon` for binary stability through
-v0.9.x. A `gaze serve` canonical alias lands in v0.10 with a deprecation
-warning on the legacy verb; the alias drops in v0.11.
+The subcommand verb is kept as `gaze daemon` for binary stability. There is no
+`gaze serve` alias.
 
 If you need an actual Unix daemon (backgrounded, supervised, persistent), use
 `gaze proxy start`; the proxy is the daemon-style surface in this binary.
