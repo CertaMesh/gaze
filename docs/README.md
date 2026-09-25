@@ -1,11 +1,21 @@
 # Gaze documentation
 
-**Start here:** [How Gaze works](explanation/how-gaze-works.md) follows one document from input to restore in plain English, with the modes, the limits, and a glossary.
-
 Gaze is a reliable, reversible PII pseudonymization runtime for agentic workflows. It
 replaces personal data with restorable tokens *before* text reaches an LLM, then restores
 the original values from the model's response. The goal is a hard one: no PII leaks
 between your agent and your data owner, and nothing is lost in the round trip.
+
+## How good is it
+
+The measured numbers for the current release, the corpora and scoring contract
+behind them, and the commands to reproduce every figure are in
+[Gaze Benchmarks](reference/benchmarks/README.md).
+
+## How it works
+
+[How Gaze works](explanation/how-gaze-works.md) follows one document from input to restore in plain English, with the modes, the limits, and a glossary.
+
+## Quickstart
 
 New here? Start with the [Getting Started tutorial](tutorials/getting-started.md) — a
 working redact → send → restore loop in about ten minutes.
@@ -20,7 +30,7 @@ pick the column that matches *why* you're here:
 - **[Reference](reference/README.md)** — dry, complete descriptions: the CLI, policy schema, crates, metrics, audit columns, benchmarks.
 - **[Explanation](explanation/README.md)** — the design contracts: *why* the never-leak and restore guarantees hold.
 
-## By feature
+## Docs by feature
 
 Each row is a Gaze capability; each column is the kind of page you want. A dash (—) means
 there is no dedicated page in that mode yet — the section index for that column lists
@@ -30,7 +40,7 @@ everything in full.
 |---|---|---|---|---|
 | Core redaction & restore | [Getting Started](tutorials/getting-started.md) | [Use the setup policy from Rust](how-to/rust-library.md) | [CLI](reference/cli.md) · [Metrics](reference/metrics.md) | [Restore boundary](explanation/core/restore-boundary.md) · [Session contract](explanation/core/session-contract.md) |
 | CLI (`gaze clean` / `restore`) | [Getting Started](tutorials/getting-started.md) | — | [CLI reference](reference/cli.md) | — |
-| Policy & recognizers | — | [Custom recognizers](how-to/policy/custom-recognizers.md) | [Policy schema](reference/policy.md) | [Locale chain](explanation/policy/locale-chain.md) · [detection contracts](explanation/README.md#detection--conflict-resolution) |
+| Policy & recognizers | — | [Custom recognizers](how-to/policy/custom-recognizers.md) · [Policy by hand](how-to/manual-policy.md) · [Policy examples](how-to/policy/policy-examples.md) | [Policy schema](reference/policy.md) | [Locale chain](explanation/policy/locale-chain.md) · [detection contracts](explanation/README.md#detection--conflict-resolution) |
 | Safety nets / NER | — | [Safety net setup in the CLI README](../crates/gaze-cli/README.md#safety-net) | [Benchmarks](reference/benchmarks/README.md) | [Safety nets](explanation/safety-net/safety-nets.md) · [Modes](explanation/safety-net/safety-net-modes.md) |
 | Proxy (OpenAI / Anthropic / Gemini) | — | [Set up the proxy](how-to/proxy/set-up-proxy.md) | — | [Proxy runtime](explanation/proxy/proxy-runtime.md) · [Strict Anthropic Messages contract](explanation/proxy/anthropic-messages-contract.md) |
 | Inspection dashboard (opt-in) | — | [Run the local dashboard](how-to/dashboard/run-local-dashboard.md) | [Accessibility & visual verification](reference/dashboard/accessibility-and-visual-verification.md) · [Browser security](reference/dashboard/browser-security.md) | [Dashboard trust boundary](explanation/dashboard/trust-boundary.md) |

@@ -1,4 +1,4 @@
-# Set Up the MCP Bridge
+# Set up the MCP bridge
 
 Use the MCP bridge when an agent should call downstream MCP servers without
 receiving raw PII. The agent connects only to `gaze mcp bridge`; the bridge
@@ -21,7 +21,7 @@ Install the CLI from the repository with MCP support:
 cargo install --path crates/gaze-cli --features mcp
 ```
 
-## Start From a Config
+## Start from a config
 
 Copy the starter that most closely matches your downstream server:
 
@@ -40,7 +40,7 @@ Available starters:
 | [`policy.toml`](bridge-configs/policy.toml) | A policy-only snippet for embedding into a larger bridge config. |
 | [`dangerous-outputs.toml`](bridge-configs/dangerous-outputs.toml) | Isolated tests for the explicit unsafe `result.mode = "allow"` opt-in. |
 
-## Configure Downstream Servers
+## Configure downstream servers
 
 Edit each `[servers.<name>]` entry so `command`, `args`, `env`, and `cwd` match
 the downstream MCP server you want the bridge to spawn:
@@ -54,7 +54,7 @@ args = ["--stdio"]
 The bridge discovers each downstream tool and exposes it to the agent with a
 namespaced name such as `email.send`.
 
-## Keep Policy Deny-By-Default
+## Keep the policy deny-by-default
 
 Start with a restrictive default policy:
 
@@ -86,7 +86,7 @@ text results are redacted before the agent sees them. `result.mode = "allow"` is
 an explicit unsafe opt-in and should stay limited to isolated tests where the
 downstream server cannot produce raw PII.
 
-## Choose Session Storage
+## Choose session storage
 
 Use ephemeral sessions for short-lived local runs:
 
@@ -113,7 +113,7 @@ export GAZE_BRIDGE_SESSION_KEY="$(openssl rand -base64 32)"
 Treat the key as restore material. Store it in a secret manager for shared or
 long-lived deployments, and rotate it deliberately.
 
-## Verify the Surface
+## Verify the tool surface
 
 Load the config and discover the downstream tool surface before serving it to an
 agent:
@@ -126,7 +126,7 @@ The command starts the downstream MCP servers, prints the namespaced tools and
 denied resource/prompt counts, and exits with `policy loaded fail-closed` when
 the bridge config is accepted.
 
-## Connect an MCP Client
+## Connect an MCP client
 
 Point your MCP client at the bridge command instead of the downstream servers:
 
@@ -152,7 +152,7 @@ Point your MCP client at the bridge command instead of the downstream servers:
 The downstream MCP servers stay private to the bridge process. Do not also
 register them directly with the agent host.
 
-## Run the Bridge
+## Run the bridge
 
 Start the stdio bridge:
 

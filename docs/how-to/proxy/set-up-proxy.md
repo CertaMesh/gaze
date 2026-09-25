@@ -1,4 +1,4 @@
-# Gaze Proxy Setup
+# Set up the proxy
 
 This page is an adopter setup guide for `gaze proxy`, the HTTP chokepoint for
 API-key-authenticated SDK traffic. For the full runtime contract, see
@@ -6,7 +6,7 @@ API-key-authenticated SDK traffic. For the full runtime contract, see
 Anthropic adopters must also follow the
 [strict Anthropic Messages contract](../../explanation/proxy/anthropic-messages-contract.md).
 
-## When To Use
+## When to use the proxy
 
 Use `gaze proxy` when an application, worker, or agent already calls OpenAI,
 Anthropic, or Gemini through provider SDKs and you want a drop-in PII
@@ -33,11 +33,13 @@ For a minimal policy, start with the same deterministic floor you use for
 [session]
 scope = "ephemeral"
 
-[rules]
-emails = "tokenize"
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
 ```
 
-## Start The Proxy
+## Start the proxy
 
 Start the daemon with your policy:
 
@@ -59,7 +61,7 @@ you want the proxy in the foreground for a process supervisor you already own:
 gaze proxy serve --policy ./policy.toml --bind 127.0.0.1:8787
 ```
 
-## Point Your SDK At The Proxy
+## Point your SDK at the proxy
 
 OpenAI SDKs usually expect `/v1` in the base URL:
 
@@ -100,7 +102,7 @@ Now run the application the same way you did before. Text such as
 `alice@example.invalid` is tokenized before the upstream provider sees it, then
 restored for the owner-visible response path.
 
-## Verify
+## Verify the proxy is running
 
 Check the daemon state:
 
@@ -130,7 +132,7 @@ For a local health check, call the reserved proxy endpoint:
 curl http://127.0.0.1:8787/_gaze_proxy/healthz
 ```
 
-## Lifecycle
+## Stop, restart, and supervise the proxy
 
 Stop the daemon:
 
@@ -161,7 +163,7 @@ gaze proxy install-systemd-user
 Those hooks are reserved for the platform integration path. Today they return a
 typed message directing you to `gaze proxy start` and `gaze proxy stop`.
 
-## Out Of Scope
+## What the proxy does not cover
 
 `gaze proxy` covers provider API traffic authenticated by API keys, such as
 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GOOGLE_API_KEY`.
@@ -176,7 +178,7 @@ Those products use browser sessions, cookie auth, and web endpoints instead of
 provider SDK base URLs. They are outside the public proxy contract documented
 here.
 
-## Five-Axis Pitch
+## How the proxy meets the five axes
 
 - Reliability: request text is tokenized before provider transit, including
   SSE deltas and tool-call JSON surfaces.
@@ -189,7 +191,7 @@ here.
 - Adopter ergonomics: one local daemon plus provider base URL overrides is
   enough for the common API-key path.
 
-## Next Steps
+## Next steps
 
 - [`docs/explanation/proxy/proxy-runtime.md`](../../explanation/proxy/proxy-runtime.md) —
   adapter matrix, session TTL, and daemon lifecycle.

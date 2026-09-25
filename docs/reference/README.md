@@ -5,20 +5,29 @@ schema fields, crate boundaries, metric surfaces, and benchmark evidence — wit
 narrative. Use them to look things up once you know what you're doing. For the reasoning
 behind a contract, follow through to [explanation](../explanation/README.md).
 
-## Surfaces
+## Commands and configuration
 
 - **[CLI](cli.md)** — every `gaze` subcommand, flag, stdin/stdout protocol, and exit code.
 - **[Policy schema](policy.md)** — the full `policy.toml` surface: rulepacks, custom
   recognizers, validators, normalizers, and locale gating.
+- **[Example policy TOML](policy.example.toml)** — a copyable starter policy file.
 - **[Redaction classes and recognizers](redaction-classes.md)** — the canonical,
   drift-gated inventory of emitted classes, embedded recognizers, validators,
   normalizers, collision precedence, conflict ordering, deterministic gaps, and
   shipped default activation.
-- **[Example policy TOML](policy.example.toml)** — a copyable starter policy file.
-- **[Crate map](crates.md)** — the published crates and what each owns; links to every crate README.
+
+## Observability
+
 - **[Metrics catalog](metrics.md)** — the single source of truth for every observable surface: audit-log
   columns, conflict tiers, pipeline counters, SafeBundle fields, MCP context, with stability
   guarantees per metric.
+
+## Crates
+
+- **[Crate map](crates.md)** — the published crates and what each owns; links to every crate README.
+
+## Security and accessibility
+
 - **[Security review](security-review.md)** — the security invariants, each citing the named
   test that verifies it, plus the unverified bucket and explicit non-guarantees.
 - **[Accessibility](accessibility.md)** — the accessibility posture of each Gaze surface.

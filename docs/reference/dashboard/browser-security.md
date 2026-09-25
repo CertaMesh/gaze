@@ -1,5 +1,8 @@
 # Dashboard browser security reference
 
+The browser-facing security rules of the opt-in `gaze-proxy-dashboard` child: origin and
+transport checks, credentials, reveal and response leases, and safe view constraints.
+
 ## Origin and transport
 
 - Bind a CSPRNG-selected literal IPv4 address in 127.0.0.0/8 with port zero.
@@ -18,10 +21,12 @@ Every response uses no-store/no-cache, nosniff, no-referrer, frame denial, same-
 COOP/COEP/CORP, a deny-by-default Permissions-Policy, Connection: close, Clear-Site-Data, and this
 CSP:
 
-    default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self';
-    img-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none';
-    worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none';
-    frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types 'none'
+```text
+default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self';
+img-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none';
+worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none';
+frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types 'none'
+```
 
 ## Credentials
 
