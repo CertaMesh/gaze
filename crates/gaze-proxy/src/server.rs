@@ -2802,8 +2802,8 @@ const CARRIER_SUBTREE_KEYS: &[&str] = &[
 ///
 /// The returned set is the authorization input for [`residual_scan_request`]: a position the
 /// adapter surfaced has passed primary policy, the configured nets' Resolve step, and
-/// configured-net admission. Primary preserve
-/// remains allowed unless a configured net reports an unprotected suspect. Other positions
+/// configured-net admission. Primary preserve remains allowed unless a configured net flags
+/// it; Resolve then tokenizes it, and admission refuses anything still raw. Other positions
 /// require the separate residual scan.
 ///
 /// `locale_chain` is the adopter-configured chain from
