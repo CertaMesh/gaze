@@ -741,7 +741,7 @@ placeholder bytes are stored.
 The schema lives in `gaze-audit`; the protected-path Dylint gate keeps
 `gaze` core free of `gaze-audit` imports outside the explicit
 audit-responsible allowlist
-(see [`docs/explanation/contributing/xtask-gates.md`](../contributing/xtask-gates.md#cargo_metadata_audit_isolation-self-test)).
+(see [`docs/explanation/contributing/xtask-gates.md`](../contributing/xtask-gates.md#cargo-metadata-audit-isolation)).
 
 ### Querying suspects
 
