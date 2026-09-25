@@ -1580,13 +1580,29 @@ fn restore_boundary_events(
         .collect()
 }
 
+/// Outbound DLP scan of restored text: flags structural identifiers the manifest did not
+/// authorize. The patterns run on the same normalized detection view as the pipeline
+/// (`crate::normalize`), so a Zs-grouped (NBSP, NARROW NBSP, THIN SPACE, ...) or fullwidth
+/// IBAN or card is found exactly as its ASCII form is (solo todo #3827). `location` and `raw`
+/// are mapped back to the caller's original bytes; `canonical` comes from the normalized view,
+/// so it equals the canonical form of the same value in the manifest whatever separator
+/// either side used.
 fn structural_findings(text: &str) -> Vec<StructuralFinding> {
+    let view = crate::normalize::normalize(text);
     let mut findings = Vec::new();
-    collect_email_findings(text, &mut findings);
-    collect_phone_findings(text, &mut findings);
-    collect_iban_findings(text, &mut findings);
-    collect_credit_card_findings(text, &mut findings);
-    collect_api_key_findings(text, &mut findings);
+    collect_email_findings(&view.text, &mut findings);
+    collect_phone_findings(&view.text, &mut findings);
+    collect_iban_findings(&view.text, &mut findings);
+    collect_credit_card_findings(&view.text, &mut findings);
+    collect_api_key_findings(&view.text, &mut findings);
+    for finding in &mut findings {
+        // Regex matches are non-empty and inside the view, so the mapping cannot fail; if it
+        // ever did, flag the whole text rather than drop the finding.
+        let location = crate::normalize::raw_range(finding.location.clone(), &view.spans)
+            .unwrap_or(0..text.len());
+        finding.raw = text[location.clone()].to_string();
+        finding.location = location;
+    }
     findings.sort_by(|left, right| {
         left.location
             .start
@@ -2855,6 +2871,158 @@ mod tests {
             event.kind == RestoreEventKind::FreshPiiDetected
                 && event.class == PiiClass::custom("api_key").expect("valid custom class")
         }));
+    }
+
+    /// Every Unicode space separator (general category Zs) that `normalize` folds to an
+    /// ASCII space. The restore-boundary DLP scan must see these exactly as it sees `' '`.
+    const RESTORE_DLP_ZS_SEPARATORS: [char; 17] = [
+        ' ', '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}', '\u{2004}',
+        '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}', '\u{200A}', '\u{202F}',
+        '\u{205F}', '\u{3000}',
+    ];
+
+    fn restore_dlp_grouped_identifiers(
+    ) -> [(&'static str, &'static [&'static str], &'static str); 3] {
+        [
+            (
+                "iban",
+                &["GB82", "WEST", "1234", "5698", "7654", "32"],
+                "GB82WEST12345698765432",
+            ),
+            (
+                "credit_card",
+                &["4012", "8888", "8888", "1881"],
+                "4012888888881881",
+            ),
+            ("phone", &["+44", "7700", "900123"], "447700900123"),
+        ]
+    }
+
+    #[test]
+    fn restore_dlp_flags_zs_grouped_identifiers_at_exact_raw_offsets() {
+        for separator in RESTORE_DLP_ZS_SEPARATORS {
+            for (class, groups, canonical) in restore_dlp_grouped_identifiers() {
+                let value = groups.join(&separator.to_string());
+                let prefix = "Überweisung → ";
+                let text = format!("{prefix}{value} — danke");
+                let expected = prefix.len()..prefix.len() + value.len();
+
+                let findings = structural_findings(&text);
+                let label = format!("{class} with U+{:04X}", u32::from(separator));
+                assert_eq!(findings.len(), 1, "{label}: {findings:?}");
+                let finding = &findings[0];
+                assert_eq!(
+                    finding.class,
+                    PiiClass::custom(class).expect("valid custom class"),
+                    "{label}"
+                );
+                assert_eq!(finding.location, expected, "{label}");
+                assert_eq!(finding.raw, value, "{label}");
+                assert_eq!(&text[finding.location.clone()], value, "{label}");
+                assert_eq!(finding.canonical, canonical, "{label}");
+            }
+        }
+    }
+
+    #[test]
+    fn restore_dlp_flags_fullwidth_digit_identifiers_at_exact_raw_offsets() {
+        for (class, value, canonical) in [
+            (
+                "iban",
+                "GB82 WEST １２３４ ５６９８ ７６５４ ３２",
+                "GB82WEST12345698765432",
+            ),
+            (
+                "credit_card",
+                "４０１２ ８８８８ ８８８８ １８８１",
+                "4012888888881881",
+            ),
+        ] {
+            let text = format!("x {value}.");
+            let findings = structural_findings(&text);
+            assert_eq!(findings.len(), 1, "{class}: {findings:?}");
+            assert_eq!(
+                findings[0].class,
+                PiiClass::custom(class).expect("valid custom class")
+            );
+            assert_eq!(findings[0].location, 2..2 + value.len(), "{class}");
+            assert_eq!(findings[0].raw, value, "{class}");
+            assert_eq!(findings[0].canonical, canonical, "{class}");
+        }
+    }
+
+    #[test]
+    fn restore_dlp_zs_grouped_manifest_value_is_a_bypass_not_fresh_pii() {
+        let iban = PiiClass::custom("iban").expect("valid custom class");
+        let card = PiiClass::custom("credit_card").expect("valid custom class");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        session
+            .tokenize(
+                &iban,
+                "GB82\u{00A0}WEST\u{00A0}1234\u{00A0}5698\u{00A0}7654\u{00A0}32",
+            )
+            .expect("iban token");
+        session
+            .tokenize(&card, "4012 8888 8888 1881")
+            .expect("card token");
+
+        let events = session.restore_boundary_events(
+            "echo GB82 WEST 1234 5698 7654 32 and 4012\u{202F}8888\u{202F}8888\u{202F}1881",
+        );
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert!(events
+            .iter()
+            .all(|event| event.kind == RestoreEventKind::ManifestBypass));
+        assert_eq!(events[0].class, iban);
+        assert_eq!(events[1].class, card);
+    }
+
+    #[test]
+    fn restore_dlp_zs_separators_scan_exactly_like_an_ascii_space() {
+        // Benign Zs-heavy text stays clean; valid identifiers stay flagged. Each line is scanned
+        // with ASCII spaces and with every Zs separator, and the findings must agree.
+        let benign = [
+            "Prix : 1 234 567,89 € TTC",
+            "Budget 1 000 000,00 EUR pour 2026",
+            "Ref 4012 8888 8888 1882 (checksum invalid)",
+            "GB82 WEST 1234 5698 7654 33 (mod-97 invalid)",
+            "le 25 09 2026 à 12 h 30, version 1 2 3",
+            "+44 7700 900",
+        ];
+        let flagged = [
+            "pay GB82 WEST 1234 5698 7654 32 now",
+            "card 4012 8888 8888 1881 ok",
+        ];
+        for separator in RESTORE_DLP_ZS_SEPARATORS {
+            for line in benign {
+                let text = line.replace(' ', &separator.to_string());
+                let findings = structural_findings(&text);
+                assert!(
+                    findings.is_empty(),
+                    "U+{:04X} {line}: {findings:?}",
+                    u32::from(separator)
+                );
+            }
+            for line in flagged {
+                let text = line.replace(' ', &separator.to_string());
+                let ascii = structural_findings(line);
+                let folded = structural_findings(&text);
+                assert_eq!(ascii.len(), 1, "{line}");
+                assert_eq!(
+                    folded
+                        .iter()
+                        .map(|finding| (&finding.class, &finding.canonical))
+                        .collect::<Vec<_>>(),
+                    ascii
+                        .iter()
+                        .map(|finding| (&finding.class, &finding.canonical))
+                        .collect::<Vec<_>>(),
+                    "U+{:04X} {line}",
+                    u32::from(separator)
+                );
+            }
+        }
     }
 
     #[test]
