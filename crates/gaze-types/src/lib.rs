@@ -4031,6 +4031,8 @@ pub struct Candidate {
     pub decided_by: ConflictTier,
     /// Sources merged into this candidate.
     pub merged_sources: Vec<String>,
+    /// Original recognizer IDs contributing to this candidate's provenance.
+    pub source_recognizer_ids: Vec<String>,
 }
 
 impl Candidate {
@@ -4048,10 +4050,12 @@ impl Candidate {
         decided_by: ConflictTier,
         merged_sources: Vec<String>,
     ) -> Self {
+        let recognizer_id = recognizer_id.into();
         Self {
             span,
             class,
-            recognizer_id: recognizer_id.into(),
+            source_recognizer_ids: vec![recognizer_id.clone()],
+            recognizer_id,
             recognizer_version_id: None,
             score,
             priority,

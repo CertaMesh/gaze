@@ -107,7 +107,7 @@ fn insert_candidate(
             }
             Arbitration::Family(tie) => {
                 resolved[index] = Slot {
-                    candidate: tie,
+                    candidate: *tie,
                     settled: true,
                 };
                 if overlap != Overlap::Exact {
@@ -116,6 +116,13 @@ fn insert_candidate(
             }
             Arbitration::CandidateWins(tier) => {
                 let mut candidate = candidate;
+                candidate.source_recognizer_ids.extend(
+                    resolved[index]
+                        .candidate
+                        .source_recognizer_ids
+                        .iter()
+                        .cloned(),
+                );
                 candidate.decided_by = tier;
                 candidate
                     .merged_sources
@@ -130,6 +137,9 @@ fn insert_candidate(
             }
             Arbitration::ExistingWins(tier) => {
                 let slot = &mut resolved[index];
+                slot.candidate
+                    .source_recognizer_ids
+                    .extend(candidate.source_recognizer_ids.iter().cloned());
                 slot.candidate.decided_by = tier;
                 slot.settled |= tier == ConflictTier::CollisionPolicy;
                 slot.candidate.merged_sources.push(candidate.source);
@@ -176,7 +186,7 @@ enum Arbitration {
     Merge,
     /// Precedence tie inside one collision family: emit the family-level
     /// candidate in place of both rivals.
-    Family(Candidate),
+    Family(Box<Candidate>),
     /// `candidate` replaces `existing`; the tier names what decided it.
     CandidateWins(ConflictTier),
     /// `existing` keeps the slot; the tier names the rung that separated the
@@ -195,7 +205,7 @@ fn arbitrate(
     // ladder: two equal-precedence variants collapse into one family token even
     // when they share a class.
     if let Some(tie) = family_tie_candidate(candidate, existing, policy) {
-        return Arbitration::Family(tie);
+        return Arbitration::Family(Box::new(tie));
     }
     if overlap == Overlap::Exact && existing.class == candidate.class {
         return Arbitration::Merge;
@@ -403,6 +413,9 @@ fn ladder_verdict(existing: &Candidate, candidate: &Candidate) -> Arbitration {
 
 fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
     existing.score = combine_confidence(existing.score, candidate.score);
+    existing
+        .source_recognizer_ids
+        .extend(candidate.source_recognizer_ids.iter().cloned());
     append_unique(&mut existing.recognizer_id, &candidate.recognizer_id);
     append_unique(&mut existing.source, &candidate.source);
     if existing.canonical_form.is_none() {
@@ -464,7 +477,13 @@ fn family_tie_candidate(
     merged_sources.push(candidate.recognizer_id.clone());
     merged_sources.sort();
     merged_sources.dedup();
-    Some(Candidate::new(
+    let source_recognizer_ids = existing
+        .source_recognizer_ids
+        .iter()
+        .chain(&candidate.source_recognizer_ids)
+        .cloned()
+        .collect();
+    let mut tied = Candidate::new(
         candidate.span.start.min(existing.span.start)..candidate.span.end.max(existing.span.end),
         PiiClass::family(family),
         format!("collision-family:{family}"),
@@ -475,7 +494,9 @@ fn family_tie_candidate(
         format!("collision-family:{family}"),
         ConflictTier::CollisionPolicy,
         merged_sources,
-    ))
+    );
+    tied.source_recognizer_ids = source_recognizer_ids;
+    Some(tied)
 }
 
 fn apply_missing_anchor_fallback(
@@ -513,7 +534,8 @@ fn family_fallback_candidate(
     {
         merged_sources.push(original_recognizer_id);
     }
-    Candidate::new(
+    let source_recognizer_ids = candidate.source_recognizer_ids.clone();
+    let mut fallback = Candidate::new(
         candidate.span,
         PiiClass::family(&family),
         format!("collision-family:{family}"),
@@ -524,7 +546,9 @@ fn family_fallback_candidate(
         candidate.source,
         decided_by,
         merged_sources,
-    )
+    );
+    fallback.source_recognizer_ids = source_recognizer_ids;
+    fallback
 }
 
 #[cfg(test)]

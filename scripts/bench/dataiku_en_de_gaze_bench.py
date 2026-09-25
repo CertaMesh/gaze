@@ -174,7 +174,7 @@ def load_documents(path: Path) -> tuple[list[score.Document], dict[str, object]]
     return documents, report
 
 
-def build_binary(repo_root: Path, configs: tuple[str, ...]) -> Path:
+def build_binary(repo_root: Path, configs: tuple[str, ...], *, release: bool = False) -> Path:
     command = [
         "cargo",
         "build",
@@ -187,10 +187,16 @@ def build_binary(repo_root: Path, configs: tuple[str, ...]) -> Path:
     features = []
     if any("opf" in config for config in configs):
         features.append("safety-net-openai")
+    if "policy-file" in configs:
+        features.append("safety-net-nym")
     if features:
         command.extend(["--features", ",".join(features)])
+    if release:
+        command.append("--release")
     subprocess.run(command, cwd=repo_root, check=True)
-    binary = repo_root / "target/debug/examples/clean_for_bench"
+    target_dir = Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
+    profile = "release" if release else "debug"
+    binary = target_dir / profile / "examples/clean_for_bench"
     if not binary.is_file():
         raise FileNotFoundError(f"benchmark runner is missing: {binary}")
     return binary
