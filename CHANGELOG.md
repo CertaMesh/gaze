@@ -170,7 +170,13 @@ Max, 18 cores, 64 GB, macOS 26.5). The arm is the exact policy
 | v0.14.0 default (rules + NER + Kiji) | 0 | 25,179 (19.3%) | 25,179 (19.3%) | 168,276 | 2,282 / 2,910 |
 
 Neither setup refused a document, so the common set is all 2,910. Leaked PII
-bytes fell 22.3% and false-positive bytes 82.1%.
+bytes fell 22.3% and false-positive bytes 82.1%. Both rows use scored-label
+contract v1, which scores every corpus label. Under scored-label contract v2
+(PASSWORD and SECURITYTOKEN out of contract, gold 123,621 B) the same run
+leaks 13,319 B (10.77%): the same release code (`6fcba31a`), policy (SHA-256
+`f909a23a…`), seed and host, rerun with `--scored-labels
+docs/reference/benchmarks/scored-labels-v2.json`. That v2 scorecard is not
+committed; the v1 row stays the version's benchmark figure.
 
 ### Security
 

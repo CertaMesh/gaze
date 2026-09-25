@@ -27,7 +27,7 @@ The [v0.15.0 release benchmark](docs/reference/benchmarks/README.md#current-rele
 | v0.14.0 rules + NER, no net | 0 | 27,000 (20.7%) | 27,000 (20.7%) | 28,030 | 100.0% |
 | v0.14.0 rules only | 0 | 93,850 (72.0%) | 93,850 (72.0%) | 5,423 | 100.0% |
 
-Neither default refused a document, so all 2,910 processed documents are also the common set. The v0.15.0 default leaks 22% fewer PII bytes than v0.14.0's, with 82% fewer false-positive bytes, and every document restores exactly. The removed Kiji net's 78.4% exact-restore rate came from its one-way `redact` fallback, not from restore failures.
+Neither default refused a document, so all 2,910 processed documents are also the common set. The v0.15.0 default leaks 22% fewer PII bytes than v0.14.0's, with 82% fewer false-positive bytes, and every document restores exactly. The removed Kiji net's 78.4% exact-restore rate came from its one-way `redact` fallback, not from restore failures. All rows use scored-label contract v1, which scores every corpus label; under contract v2 (PASSWORD and SECURITYTOKEN out of contract, gold 123,621 B) the same v0.15.0 run leaks 13,319 B (10.77%).
 
 **Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw). A payment card written directly next to a CVV, an expiry date or other digits can also pass untokenized; a fix is in progress.
 
