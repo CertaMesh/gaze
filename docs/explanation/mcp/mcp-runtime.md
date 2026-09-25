@@ -1,6 +1,6 @@
 # gaze-mcp runtime architecture
 
-### Scope
+## Scope
 
 `gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an agent-tier MCP tool to the model** passes through `PiiEnvelope::dispatch` and is protected before the model sees it. Authorized operator-tier tools can explicitly bypass response protection for restore/export semantics; their raw responses must stay on the operator surface.
 

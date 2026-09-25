@@ -1,16 +1,16 @@
-# Gaze Daemon Mode
-
-> **Terminology note.** `gaze daemon` is a long-lived stdio server in the LSP /
-> MCP tradition, not a Unix daemon in the strict sense. `gaze daemon` is the
-> only name for this subcommand; there is no `gaze serve` alias. For the actual
-> backgrounded supervised daemon, see
-> [`docs/explanation/proxy/proxy-runtime.md`](../proxy/proxy-runtime.md).
+# Gaze daemon mode
 
 `gaze daemon` is the long-lived stdio runtime for adapters that need repeated
 low-latency pseudonymization without paying a binary startup and model-load cost
 for every request.
 
-## Protocol
+`gaze daemon` is a long-lived stdio server in the LSP /
+MCP tradition, not a Unix daemon in the strict sense. `gaze daemon` is the
+only name for this subcommand; there is no `gaze serve` alias. For the actual
+backgrounded supervised daemon, see
+[`docs/explanation/proxy/proxy-runtime.md`](../proxy/proxy-runtime.md).
+
+## Wire protocol
 
 The wire format is JSON per line over stdin/stdout.
 
@@ -35,7 +35,7 @@ Error:
 Malformed JSON is fail-closed per line: the daemon emits `JsonMalformed` with a
 null `session_id` and continues reading. Errors never echo the input line.
 
-## Runtime Shape
+## Runtime shape
 
 The daemon constructs one `Pipeline` at launch from `--policy`. Optional
 Pass-3 safety nets, including the in-process Nym-small backend, are initialized
@@ -47,11 +47,9 @@ creates a new session from the policy. Reusing a `session_id` reuses the
 same manifest and token map. Distinct `session_id` values never share a
 manifest.
 
-## Common Pitfalls
-
 The cross-conversation pseudonym linkability pitfall (sharing one `Session::new(Scope::Ephemeral)` across logical conversations) applies to all `Session` consumers, not just daemon mode. See [`docs/explanation/core/session-contract.md#single-shared-session-across-conversations`](../core/session-contract.md#single-shared-session-across-conversations).
 
-## Session Lifecycle
+## Session lifecycle and eviction
 
 The registry defaults to 1000 live sessions. When it exceeds `--session-cap`,
 the least recently used session is evicted. Sessions idle longer than
@@ -62,19 +60,19 @@ the least recently used session is evicted. Sessions idle longer than
 `--idle-timeout` is process-level stdin inactivity. When no request line arrives
 for that duration, the daemon exits cleanly.
 
-## Signals
+## Signals and shutdown
 
 SIGINT and SIGTERM set a shutdown flag. The foreground loop finishes the current
 line, flushes stdout and audit writes, then exits. SIGHUP policy reload is not
 part of the v1 daemon contract.
 
-## Audit
+## Audit provenance
 
 The daemon passes its redaction audit rows through a logger wrapper that sets
 `provenance_stage = "daemon"`. This lets adopters query daemon-emitted metadata
 separately from one-shot `gaze clean` invocations without storing raw PII.
 
-## Five-Axis Check
+## Five-axis check
 
 Reliability: malformed protocol input produces typed JSON errors and the stdio
 server continues. Safety-net artifact verification remains fail-closed.
@@ -91,7 +89,7 @@ opaque audit IDs, not token session hexes.
 Adopter ergonomics: adapters can start one process, stream line-delimited JSON,
 and avoid per-call binary startup or model cold starts.
 
-## See Also
+## See also
 
 - [Daemon adapter quickstart](../../how-to/daemon/run-daemon.md)
 - [`gaze daemon` CLI guide](../../reference/cli.md#gaze-daemon)

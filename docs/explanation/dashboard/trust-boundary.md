@@ -2,7 +2,9 @@
 
 The dashboard expands the local trusted computing base only when an adopter explicitly enables it.
 The default is absence: no dashboard entropy call, credential, listener, inspection consumer,
-process, store, or browser surface exists.
+process, store, or browser surface exists. This page covers what runs where once the dashboard
+is enabled, who may capture what, how purge and failure work, and what the dashboard cannot
+revoke or report.
 
 ## Process boundary
 

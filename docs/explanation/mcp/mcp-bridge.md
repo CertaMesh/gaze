@@ -1,11 +1,11 @@
-# MCP Bridge Architecture
+# MCP bridge architecture
 
 `gaze-mcp-bridge` is an optional MCP bridge for deployments where an agent
 should call real downstream MCP servers without ever seeing raw PII. Gaze is
 the only MCP server exposed to the agent. The bridge is also an MCP client to
 the real servers.
 
-## Fit
+## When to use the bridge
 
 The bridge is for side-effecting agent workflows that already use Gaze tokens:
 email and calendar actions, filesystem tools, and computer-use agents. The
@@ -17,7 +17,7 @@ before returning it to the agent.
 Resources and prompts are discovered in v1 so operators can see the downstream
 surface, but they are denied by default. Tool calls are the only proxied path.
 
-## Trust Model
+## Trust model
 
 The agent is untrusted. It must never receive raw PII and must not be able to
 smuggle raw PII into downstream tools. Missing auth, missing session IDs,
@@ -30,7 +30,7 @@ untrusted agent into a real tool. Restore is dangerous and lossless: a wrong
 restore injects raw PII into a real side effect. For that reason the bridge is
 stricter than the core redaction path.
 
-## Dispatch Order
+## Dispatch order
 
 `BridgeHost` implements `gaze_mcp_core::DispatchHost`, so it does not inherit
 `PiiEnvelope` internals. It re-implements the required guards:
@@ -45,7 +45,7 @@ stricter than the core redaction path.
 8. Deny unsupported content and redact all text-bearing result fields.
 9. Persist encrypted session state when file mode is enabled.
 
-## Policy Resolution
+## Policy resolution
 
 Argument policy is fail-closed by default and resolves at top-level argument
 boundaries. A policy entry such as `[policy.tools."email.send".arguments.to]`
@@ -60,7 +60,7 @@ Boolean guard fields are monotonic: if an outer scope sets
 cannot reset that flag to `false`. Keep `[policy.default]` and server-wide
 policy deny-by-default, then allow only the smallest top-level argument needed.
 
-## Session Storage
+## Session storage
 
 Ephemeral mode uses `Scope::Ephemeral` and never exports a session snapshot.
 File mode stores one encrypted file per validated external session ID. Gaze's
@@ -73,7 +73,7 @@ files can decrypt the token-to-PII map. Operators should inject it through a
 secret manager, rotate it deliberately, and treat old encrypted session files
 as unreadable after rotation unless migrated.
 
-## Stderr Containment
+## Stderr containment
 
 Downstream child MCP servers can log restored arguments. rmcp's child process
 transport inherits stderr by default, which would leak raw PII to parent logs.
@@ -81,7 +81,7 @@ The bridge forces child stderr to a pipe and drains it without writing raw
 bytes to stdout, stderr, tracing, or audit. Operators should still review
 downstream server logging because those processes may write to their own files.
 
-## Result Handling
+## Result handling
 
 Only fully handled text content blocks pass in v1. Image, audio, embedded
 resource, resource link, blob, and unknown future content kinds are denied.
