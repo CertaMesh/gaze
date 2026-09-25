@@ -21,7 +21,7 @@ cargo add gaze-pii gaze-assembly
 
 The crate is published as `gaze-pii`. Import path remains `use gaze::...`.
 
-`gaze-assembly` provides `CorePipelineConfig` -- bundled defaults (core rulepack:
+`gaze-assembly` provides `CorePipelineConfig`: bundled defaults (core rulepack:
 emails, names, locations, organizations, plus optional locale-aware recognizers)
 without manually wiring recognizers.
 
