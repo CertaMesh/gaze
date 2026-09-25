@@ -28,7 +28,7 @@ everything in full.
 
 | Feature | Tutorial | How-to | Reference | Explanation |
 |---|---|---|---|---|
-| Core redaction & restore | [Getting Started](tutorials/getting-started.md) | — | [CLI](reference/cli.md) · [Metrics](reference/metrics.md) | [Restore boundary](explanation/core/restore-boundary.md) · [Session contract](explanation/core/session-contract.md) |
+| Core redaction & restore | [Getting Started](tutorials/getting-started.md) | [Use the setup policy from Rust](how-to/rust-library.md) | [CLI](reference/cli.md) · [Metrics](reference/metrics.md) | [Restore boundary](explanation/core/restore-boundary.md) · [Session contract](explanation/core/session-contract.md) |
 | CLI (`gaze clean` / `restore`) | [Getting Started](tutorials/getting-started.md) | — | [CLI reference](reference/cli.md) | — |
 | Policy & recognizers | — | [Custom recognizers](how-to/policy/custom-recognizers.md) | [Policy schema](reference/policy.md) | [Locale chain](explanation/policy/locale-chain.md) · [detection contracts](explanation/README.md#detection--conflict-resolution) |
 | Safety nets / NER | — | [Safety net setup in the CLI README](../crates/gaze-cli/README.md#safety-net) | [Benchmarks](reference/benchmarks/README.md) | [Safety nets](explanation/safety-net/safety-nets.md) · [Modes](explanation/safety-net/safety-net-modes.md) |
@@ -38,7 +38,7 @@ everything in full.
 | MCP bridge | — | [Set up the MCP bridge](how-to/mcp/set-up-mcp-bridge.md) | — | [MCP bridge](explanation/mcp/mcp-bridge.md) |
 | Daemon mode | — | [Run the daemon](how-to/daemon/run-daemon.md) | — | [Daemon mode](explanation/daemon/daemon-mode.md) |
 | Document ingestion / OCR | — | [Ingest documents](how-to/document/ingest-documents.md) | — | [Document extension](explanation/document/document-extension.md) |
-| Audit | — | — | [Metrics & audit columns](reference/metrics.md) · [Crates](reference/crates.md) | [Ambiguity side-channel](explanation/detection/ambiguity-side-channel.md) |
+| Audit | — | [Audit and restore](how-to/audit-and-restore.md) | [Metrics & audit columns](reference/metrics.md) · [Crates](reference/crates.md) | [Ambiguity side-channel](explanation/detection/ambiguity-side-channel.md) |
 | Compliance / GDPR | — | [GDPR adopter guidance](how-to/compliance/gdpr-adopter-guidance.md) | [Security review](reference/security-review.md) · [Accessibility](reference/accessibility.md) | [Governance](explanation/governance.md) |
 | Project & crates | — | [Release process](how-to/maintainers/release-process.md) | [Crate map](reference/crates.md) | [xtask gates](explanation/contributing/xtask-gates.md) |
 
@@ -46,7 +46,8 @@ everything in full.
 
 Framework adapters (for example **gaze-laravel** and **gaze-lens**) live in separate
 repositories so the core runtime stays dependency-light. See the
-[project README](../README.md) for the current adapter list and links.
+[AI support drafts in production](explanation/support-drafts-in-production.md) for the
+Laravel adapter in use, and the [project README](../README.md) for the rest.
 
 ## Project root documents
 

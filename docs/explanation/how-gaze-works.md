@@ -1,6 +1,6 @@
 # How Gaze works
 
-Gaze, explained for the person who owns it: one document followed from input to restore, in plain English, then the details. Start with the [project README](../../README.md) if you only want the short version; this page repeats its opening and adds everything below it.
+Gaze, explained for the person who owns it: one document followed from input to restore, in plain English, then the details. Start with the [project README](../../README.md) if you only want the short version: what Gaze is, how well it performs, and a quickstart.
 
 ## The promise in one picture
 
@@ -84,6 +84,21 @@ On the 2,910-document scored-label contract v2 benchmark, rules, NER, and Nym le
 7. **Restore.** Placeholders in the reply become the originals. A placeholder Gaze never issued is refused, never guessed.
 
 Steps 1 to 4 are the deterministic floor: same input, same output, every placeholder traceable to a versioned rule.
+
+## Nym in action
+
+With the policy from `gaze setup`, the rules and NER miss this synthetic licence plate and Nym catches it:
+
+```sh
+printf '%s' 'Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt.' \
+  | gaze clean --policy gaze.toml | jq -r .clean_text
+```
+
+Real output (session prefix varies):
+
+```text
+Das Fahrzeug mit dem Kennzeichen <0c2e0bc4:Custom:license_plate_1> wurde abgeschleppt.
+```
 
 ## What happens when the safety net disagrees
 
