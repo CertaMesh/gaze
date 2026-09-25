@@ -14,6 +14,8 @@ Gaze pseudonymizes: every placeholder can be restored, and the manifest that res
 
 **Scope:** outbound PII control with reversibility. Gaze is *not* a guardrail, prompt-injection defense, or content-safety filter — it keeps real PII out of the model and restores it in the reply.
 
+The same boundary applies to tool-call arguments in agent frameworks: the JSON the model fills in carries placeholders, and Gaze restores them before your tool runs ([how it fits your stack](docs/explanation/how-gaze-works.md#how-it-fits-your-stack)).
+
 ## How good is it
 
 <!-- PHASE2: v0.15.0 numbers -->
