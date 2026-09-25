@@ -16,6 +16,10 @@ use tempfile::tempdir;
 mod token_assertions;
 use token_assertions::without_tokens;
 
+#[path = "support/proxy_health.rs"]
+mod proxy_health;
+use proxy_health::proxy_answers_health;
+
 const PARITY_INPUT: &str = "id ES-TEST-123456 track Sonnenlied";
 
 fn write_cross_verb_parity_policy() -> (tempfile::TempDir, std::path::PathBuf) {
@@ -141,6 +145,28 @@ impl Drop for ChildGuard {
     }
 }
 
+/// Waits until the proxy at `addr` answers its health check. There is no
+/// deadline: these tests never assert how fast a server starts (user ruling
+/// 2026-09-16). Instead `exited` reports why the server can no longer come up,
+/// so a dead server fails the test at once rather than hanging it.
+fn wait_until_serving(addr: SocketAddr, mut exited: impl FnMut() -> Option<String>) {
+    while !proxy_answers_health(addr) {
+        if let Some(reason) = exited() {
+            panic!("server for {addr} exited before serving: {reason}");
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn child_exited(child: &mut Child) -> Option<String> {
+    let status = child.try_wait().unwrap()?;
+    let mut stderr = String::new();
+    if let Some(mut pipe) = child.stderr.take() {
+        let _ = pipe.read_to_string(&mut stderr);
+    }
+    Some(format!("{status}: {stderr}"))
+}
+
 fn direct_proxy_body(policy: &std::path::Path) -> String {
     let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
     let upstream_addr = upstream.local_addr().unwrap();
@@ -176,18 +202,8 @@ fn direct_proxy_body(policy: &std::path::Path) -> String {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let _child = ChildGuard(child);
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        if TcpStream::connect(proxy_addr).is_ok() {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "proxy did not start at {proxy_addr}"
-        );
-        thread::sleep(Duration::from_millis(20));
-    }
+    let mut child = ChildGuard(child);
+    wait_until_serving(proxy_addr, || child_exited(&mut child.0));
 
     let request_body = json!({
         "model": "claude-test",
@@ -406,6 +422,10 @@ fn proxy_restart_keeps_running_daemon_when_policy_nym_bundle_is_missing() {
         .output()
         .unwrap();
     assert!(started.status.success());
+    // `proxy start` returns before the daemon binds; wait for it so the final
+    // connect proves the restart kept it serving.
+    let pid = started_daemon_pid(&started);
+    wait_until_serving(bind, || daemon_exited(pid, home.path()));
     fs::OpenOptions::new()
         .append(true)
         .open(&policy)
@@ -779,6 +799,38 @@ fn daemon_log_tail(home: &Path) -> String {
         .collect()
 }
 
+fn daemon_pid(home: &Path) -> Option<u32> {
+    let text = fs::read_to_string(find_under(home, "proxy.pid")?).ok()?;
+    text.lines().next()?.trim().parse().ok()
+}
+
+/// The daemon pid a successful `gaze proxy start` printed
+/// (`gaze-proxy started (pid=N, …)`). `start` knows it at spawn, so it is never
+/// missing. The pidfile is not: `start` creates it empty and the daemon fills
+/// it only once it runs, so reading that for liveness would put back a startup
+/// deadline (`start` returns after its 250 ms `confirm_started` window).
+fn started_daemon_pid(start: &Output) -> u32 {
+    let stdout = String::from_utf8_lossy(&start.stdout);
+    stdout
+        .split_once("gaze-proxy started (pid=")
+        .and_then(|(_, rest)| rest.split_once(','))
+        .and_then(|(pid, _)| pid.parse().ok())
+        .unwrap_or_else(|| panic!("`proxy start` printed no daemon pid: {stdout}"))
+}
+
+/// Liveness probe for [`wait_until_serving`]: the detached daemon is not our
+/// child, so probe the pid `proxy start` reported ([`started_daemon_pid`]) with
+/// `kill -0`. `start` has exited, so a dead daemon is reaped rather than left a
+/// zombie that `kill -0` would still count as alive.
+fn daemon_exited(pid: u32, home: &Path) -> Option<String> {
+    let alive = Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success());
+    (!alive).then(|| format!("daemon pid {pid} is not running{}", daemon_log_tail(home)))
+}
+
 /// Stops the detached daemon however the test ended, so a failed assertion
 /// cannot leave a proxy running on the developer's machine.
 struct DaemonGuard {
@@ -792,10 +844,7 @@ impl Drop for DaemonGuard {
             .output();
         // Backstop for a `stop` that never reached the child: the pidfile is
         // written before the daemon serves anything.
-        if let Some(pid) = find_under(&self.home, "proxy.pid")
-            .and_then(|pidfile| fs::read_to_string(pidfile).ok())
-            .and_then(|text| text.lines().next()?.trim().parse::<u32>().ok())
-        {
+        if let Some(pid) = daemon_pid(&self.home) {
             let _ = Command::new("kill").arg("-9").arg(pid.to_string()).output();
         }
     }
@@ -854,18 +903,8 @@ fn daemonized_proxy_body(policy: &Path) -> String {
         "daemon state escaped the redirected HOME"
     );
 
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        if TcpStream::connect(proxy_addr).is_ok() {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "daemonized proxy never bound {proxy_addr}{}",
-            daemon_log_tail(home.path())
-        );
-        thread::sleep(Duration::from_millis(20));
-    }
+    let pid = started_daemon_pid(&start);
+    wait_until_serving(proxy_addr, || daemon_exited(pid, home.path()));
 
     let request_body = json!({
         "model": "claude-test",
@@ -1399,28 +1438,24 @@ fn eviction_row_count_for(audit_db: &Path, audit_session_id: &str) -> i64 {
     }
 }
 
-/// Polls `redaction_log` until at least `min_count` rows are present or the
-/// deadline is exceeded.  Returns the final row count.  This replaces a fixed
-/// `thread::sleep` before breaking the audit DB so the test is not sensitive
-/// to how long the daemon needs to commit its SQLite write.
-fn wait_for_redaction_rows(audit_db: &Path, min_count: i64, timeout: Duration) -> i64 {
-    let deadline = Instant::now() + timeout;
-    loop {
-        if let Ok(conn) = rusqlite::Connection::open(audit_db) {
-            if let Ok(count) = conn.query_row("SELECT count(*) FROM redaction_log", [], |row| {
-                row.get::<_, i64>(0)
-            }) {
-                if count >= min_count {
-                    return count;
-                }
-            }
-        }
-        assert!(
-            Instant::now() < deadline,
-            "timed out waiting for {min_count} row(s) in redaction_log"
-        );
-        thread::sleep(Duration::from_millis(20));
-    }
+/// Blocks until the daemon answers its first request, then checks that the
+/// request's audit row landed. The daemon writes a response only after the
+/// pipeline's synchronous audit write returns, so no polling is needed, and
+/// there is no deadline: startup time is not what these tests measure. A
+/// daemon that dies closes `stdout` and fails the wait.
+fn wait_for_first_response(stdout: &mpsc::Receiver<String>, audit_db: &Path) {
+    stdout
+        .recv()
+        .expect("daemon exited before answering its first request");
+    assert_first_audit_row(audit_db);
+}
+
+fn assert_first_audit_row(audit_db: &Path) {
+    let conn = rusqlite::Connection::open(audit_db).expect("open audit db");
+    let count: i64 = conn
+        .query_row("SELECT count(*) FROM redaction_log", [], |row| row.get(0))
+        .expect("count redaction_log rows");
+    assert!(count >= 1, "daemon answered before its audit row committed");
 }
 
 fn wait_for_eviction_rows(audit_db: &Path, min_count: i64) {
@@ -1483,6 +1518,7 @@ type DaemonCollection = (
     thread::JoinHandle<Vec<String>>,
     thread::JoinHandle<Vec<String>>,
     mpsc::Receiver<String>,
+    mpsc::Receiver<String>,
 );
 
 /// Spawns `gaze daemon` and returns the child plus background stdout/stderr
@@ -1501,10 +1537,15 @@ fn spawn_daemon_collect(args: &[&str]) -> DaemonCollection {
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
     let (stderr_tx, stderr_rx) = mpsc::channel();
+    let (stdout_tx, stdout_rx) = mpsc::channel();
     let stdout_thread = thread::spawn(move || {
         std::io::BufReader::new(stdout)
             .lines()
-            .map(|l| l.unwrap())
+            .map(|line| {
+                let line = line.unwrap();
+                let _ = stdout_tx.send(line.clone());
+                line
+            })
             .collect::<Vec<_>>()
     });
     let stderr_thread = thread::spawn(move || {
@@ -1517,7 +1558,13 @@ fn spawn_daemon_collect(args: &[&str]) -> DaemonCollection {
             })
             .collect::<Vec<_>>()
     });
-    (ChildGuard(child), stdout_thread, stderr_thread, stderr_rx)
+    (
+        ChildGuard(child),
+        stdout_thread,
+        stderr_thread,
+        stderr_rx,
+        stdout_rx,
+    )
 }
 
 /// T1 — Idle-eviction audit-write failure surfaces on stderr.
@@ -1529,7 +1576,7 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
     let audit_dir = tempdir().unwrap();
     let audit_db = audit_dir.path().join("audit.db");
 
-    let (mut guard, stdout_thread, stderr_thread, stderr_rx) = spawn_daemon_collect(&[
+    let (mut guard, stdout_thread, stderr_thread, stderr_rx, stdout_rx) = spawn_daemon_collect(&[
         "daemon",
         "--policy",
         policy.to_str().unwrap(),
@@ -1552,9 +1599,10 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
 
-    // Poll until the audit row lands instead of sleeping a fixed interval;
-    // this prevents the test from being sensitive to daemon startup latency.
-    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(30));
+    // Block on the first response: the daemon writes it only after the audit
+    // row commits, so the row exists before the DB is broken, with no clock on
+    // daemon startup.
+    wait_for_first_response(&stdout_rx, &audit_db);
 
     // Break the audit DB so the next SQLite write fails with
     // `RedactionLogError::Sqlite`.
@@ -1636,7 +1684,7 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
     let audit_dir = tempdir().unwrap();
     let audit_db = audit_dir.path().join("audit.db");
 
-    let (mut guard, stdout_thread, stderr_thread, _stderr_rx) = spawn_daemon_collect(&[
+    let (mut guard, stdout_thread, stderr_thread, _stderr_rx, stdout_rx) = spawn_daemon_collect(&[
         "daemon",
         "--policy",
         policy.to_str().unwrap(),
@@ -1659,10 +1707,10 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
 
-    // Poll until the audit row lands before breaking the DB.
-    // This guards against a timing race where the daemon hasn't yet committed
-    // the SQLite write when chattr +i is applied to the directory.
-    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(30));
+    // Block on the first response before breaking the DB: the daemon writes it
+    // only after the SQLite write commits, so the break (`chattr +i` or the
+    // table drop) cannot land while that write is still in flight.
+    wait_for_first_response(&stdout_rx, &audit_db);
 
     // Break the audit DB.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
@@ -1755,7 +1803,7 @@ fn daemon_eviction_writes_audit_row_when_db_healthy() {
     let audit_dir = tempdir().unwrap();
     let audit_db = audit_dir.path().join("audit.db");
 
-    let (mut guard, stdout_thread, stderr_thread, _stderr_rx) = spawn_daemon_collect(&[
+    let (mut guard, stdout_thread, stderr_thread, _stderr_rx, stdout_rx) = spawn_daemon_collect(&[
         "daemon",
         "--policy",
         policy.to_str().unwrap(),
@@ -1774,7 +1822,7 @@ fn daemon_eviction_writes_audit_row_when_db_healthy() {
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
-    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(30));
+    wait_for_first_response(&stdout_rx, &audit_db);
     // Keep stdin open until the idle eviction has committed its audit row.
     wait_for_eviction_rows(&audit_db, 1);
 
@@ -1838,7 +1886,7 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
 
     let hostile = r#"a"b\c{d}e"#;
 
-    let (mut guard, stdout_thread, stderr_thread, stderr_rx) = spawn_daemon_collect(&[
+    let (mut guard, stdout_thread, stderr_thread, stderr_rx, stdout_rx) = spawn_daemon_collect(&[
         "daemon",
         "--policy",
         policy.to_str().unwrap(),
@@ -1861,7 +1909,7 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
     // The request audit row must exist before the DB is broken. This also
     // proves startup and request handling completed under host load.
-    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(30));
+    wait_for_first_response(&stdout_rx, &audit_db);
 
     // Break the audit DB.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
@@ -1928,15 +1976,16 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
 fn daemon_eviction_without_audit_db_produces_no_error() {
     let (_policy_dir, policy) = write_policy();
 
-    let (mut guard, stdout_thread, stderr_thread, _stderr_rx) = spawn_daemon_collect(&[
-        "daemon",
-        "--policy",
-        policy.to_str().unwrap(),
-        "--session-idle-timeout",
-        "0",
-        "--idle-timeout",
-        "30",
-    ]);
+    let (mut guard, stdout_thread, stderr_thread, _stderr_rx, _stdout_rx) =
+        spawn_daemon_collect(&[
+            "daemon",
+            "--policy",
+            policy.to_str().unwrap(),
+            "--session-idle-timeout",
+            "0",
+            "--idle-timeout",
+            "30",
+        ]);
 
     writeln!(
         guard.0.stdin.as_mut().unwrap(),
@@ -2010,6 +2059,15 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
+    // Drain stderr alongside stdout: this test reads stdout to EOF before the
+    // daemon exits, so an undrained stderr past the pipe buffer would block
+    // the daemon and hang the read.
+    let mut stderr_pipe = child.stderr.take().unwrap();
+    let stderr_thread = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stderr_pipe.read_to_end(&mut bytes);
+        bytes
+    });
 
     // First request succeeds (audit DB is writable).
     {
@@ -2023,9 +2081,16 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
         stdin.flush().unwrap();
     }
 
-    // Poll until the first request's audit row has landed before breaking the
-    // DB, so we don't race with the daemon's SQLite write.
-    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(5));
+    // The first response is written after its audit row committed, so reading
+    // it (no deadline) means breaking the DB cannot race the daemon's write.
+    let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+    let mut first_response = String::new();
+    stdout.read_line(&mut first_response).unwrap();
+    assert!(
+        !first_response.is_empty(),
+        "daemon exited before answering its first request"
+    );
+    assert_first_audit_row(&audit_db);
 
     // Break the audit DB.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
@@ -2044,14 +2109,14 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
     }
     drop(child.stdin.take());
 
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "stderr={}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let mut remaining = String::new();
+    stdout.read_to_string(&mut remaining).unwrap();
+    let status = child.wait().unwrap();
+    let stderr = stderr_thread.join().unwrap();
+    let stderr = String::from_utf8_lossy(&stderr);
+    assert!(status.success(), "stderr={stderr}");
 
-    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stdout = first_response + &remaining;
     let responses: Vec<Value> = stdout
         .lines()
         .map(serde_json::from_str)
@@ -2074,7 +2139,6 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
         responses[1]
     );
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         !stderr.contains("AuditWriteFailed"),
         "no eviction occurred, so no AuditWriteFailed on stderr: {stderr}"

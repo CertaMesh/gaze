@@ -62,7 +62,13 @@ if os.fork() == 0:
 os.write(1, b'[]')
 os._exit(0)
 "#;
-    'attempt: loop {
+    // Caps retries so sustained overload fails with a diagnosis instead of
+    // spinning until the CI job timeout.
+    const MAX_ATTEMPTS: u32 = 20;
+    // Kept alive so a descendant that starts after its attempt's deadline
+    // still finds `.release` and exits instead of lingering for 30s.
+    let mut abandoned = Vec::new();
+    'attempt: for attempt in 1..=MAX_ATTEMPTS {
         let (dir, backend) = backend(script, Duration::from_secs(1));
         let ready = dir.path().join("synthetic-backend.ready");
         let release = dir.path().join("synthetic-backend.release");
@@ -75,10 +81,17 @@ os._exit(0)
             match receiver.try_recv() {
                 Ok(result) => {
                     worker.join().unwrap();
+                    fs::write(&release, b"").unwrap();
                     assert!(
                         matches!(&result, Err(SafetyNetError::Runtime { message }) if message.contains("timed out")),
                         "fixture failed before startup: {result:?}"
                     );
+                    assert!(
+                        attempt < MAX_ATTEMPTS,
+                        "descendant never signalled readiness before the 1s deadline \
+                         in {MAX_ATTEMPTS} attempts; last attempt returned {result:?}"
+                    );
+                    abandoned.push(dir);
                     continue 'attempt;
                 }
                 Err(TryRecvError::Empty) => thread::sleep(Duration::from_millis(10)),
@@ -96,6 +109,7 @@ os._exit(0)
             matches!(&result, Err(SafetyNetError::Runtime { message }) if message.contains("timed out")),
             "{result:?}"
         );
-        break;
+        return;
     }
+    unreachable!("the final attempt either passes or panics");
 }
