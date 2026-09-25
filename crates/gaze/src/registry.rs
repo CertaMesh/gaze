@@ -684,6 +684,61 @@ mod tests {
         assert_eq!(invariant_calls.load(AtomicOrdering::SeqCst), 1);
     }
 
+    // Keeps the default and emits only at the de-DE step, so running it once at en-US drops it.
+    struct StepLocale;
+
+    impl Recognizer for StepLocale {
+        fn id(&self) -> &str {
+            "step-locale"
+        }
+
+        fn supported_class(&self) -> &PiiClass {
+            &PiiClass::Name
+        }
+
+        fn detect(
+            &self,
+            _input: &str,
+            ctx: &DetectContext<'_>,
+        ) -> Result<Vec<Candidate>, DetectError> {
+            if ctx.locale_chain.first() != Some(&LocaleTag::DeDe) {
+                return Ok(Vec::new());
+            }
+            Ok(vec![Candidate::new(
+                0..3,
+                PiiClass::Name,
+                "step-locale",
+                1.0,
+                0,
+                None,
+                "counter",
+                "step-locale",
+                ConflictTier::None,
+                Vec::new(),
+            )])
+        }
+
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+
+        fn locales(&self) -> &[LocaleTag] {
+            std::slice::from_ref(&LocaleTag::Global)
+        }
+    }
+
+    #[test]
+    fn default_recognizer_still_sees_every_locale_step() {
+        let registry = RecognizerRegistry::builder().register(StepLocale).build();
+        assert_eq!(
+            pool_ids(
+                &registry,
+                &[LocaleTag::EnUs, LocaleTag::DeDe, LocaleTag::Global]
+            ),
+            vec!["step-locale"]
+        );
+    }
+
     #[test]
     fn empty_family_policy_never_applies() {
         assert_eq!(FamilyPolicyTable::EMPTY.compare("a", "b"), None);
