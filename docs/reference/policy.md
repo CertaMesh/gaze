@@ -16,8 +16,8 @@ including shipped CLI and host-integration changes, see
 
 ## What `policy.toml` is for
 
-`gaze clean` accepts `--policy=<path>`. The path is opened, parsed as TOML,
-and turned into a [`Pipeline`](../../crates/gaze/src/pipeline.rs) via
+`gaze clean` accepts `--policy=<path>`. It opens the path, parses the file as
+TOML, and turns it into a [`Pipeline`](../../crates/gaze/src/pipeline.rs) via
 `Pipeline::from_policy`. Two failure modes:
 
 - **File cannot be opened** (missing path, permission denied) → exit `4`,
@@ -102,7 +102,7 @@ The loader checks the `major.minor` prefix against
 The envelope is intentionally distinct from `PolicyConfig` so adopters
 upgrading the gaze binary across a contract break see the version mismatch
 directly, rather than chasing a generic policy-load error that shadows the
-real cause. Mirrors the rulepack-side version gate in
+real cause. It mirrors the rulepack-side version gate in
 [`crates/gaze/src/rulepack.rs`](../../crates/gaze/src/rulepack.rs).
 
 ### Soft default for pre-versioned policies
@@ -1102,8 +1102,8 @@ The same applies to any custom class whose values start or end with a symbol
 (percentages, `#`-prefixed IDs, currency): put `\b` next to `\d`/`\w` edges
 only, never next to the symbol.
 
-The pattern is compiled at `Policy::load` time, so a malformed regex fails
-fast with `PolicyConfig` and never reaches `gaze clean`'s stdin read.
+`Policy::load` compiles the pattern, so a malformed regex fails fast with
+`PolicyConfig` and never reaches `gaze clean`'s stdin read.
 
 Detection order matters when spans overlap: longer spans win first, then
 declaration order, then earlier start position (see

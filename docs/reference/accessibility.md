@@ -27,4 +27,4 @@ The opt-in `gaze proxy --dashboard` inspection dashboard is the first end-user U
 
 The companion marketing site (`gaze-website`) and any future audit-viewer UI built on top of `gaze-audit` will target at least **WCAG 2.1 AA conformance** as their accessibility baseline. This includes keyboard-only navigation, sufficient color contrast, focus indicators, and ARIA labels on interactive controls.
 
-Accessibility regressions are treated like security regressions: they should not ship.
+The project treats accessibility regressions like security regressions: they should not ship.
