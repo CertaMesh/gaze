@@ -134,7 +134,7 @@ the same-document-set numbers, linked to the script and hardware line. -->
   run and also passed unreported, in ASCII text too. The check now retries the
   group-aligned sub-runs printed in a card layout (compact, 4-4-4-4,
   4-4-4-4-3, 4-6-5, 4-6-4) and reports the card at its exact offsets. Other
-  ASCII input scans unchanged.
+  ASCII input scans unchanged (PR #652).
 
 - **National IDs in tool-call JSON and `key=value` logs are now tokenized.**
   Every release up to and including v0.14.0 matched cue-anchored identifiers
