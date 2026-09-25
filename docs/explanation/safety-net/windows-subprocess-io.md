@@ -24,8 +24,8 @@ may append or close but cannot consume the bytes between peek and read. Windows
 read-only std child handles do not have the `FILE_WRITE_ATTRIBUTES` access needed
 to set their wait mode, so reads use availability instead.
 
-Rust 1.96 creates overlapped parent handles for `Stdio::piped()`. This matters:
-Microsoft warns that peeking a synchronous handle in a multithreaded application
+Rust 1.96 creates overlapped parent handles for `Stdio::piped()`, which matters
+because Microsoft warns that peeking a synchronous handle in a multithreaded application
 can block. This adapter must not be generalized to arbitrary files, borrowed
 handles, or second consumers. Native CI exercises the actual Rust-created pipes.
 

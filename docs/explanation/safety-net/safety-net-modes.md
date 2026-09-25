@@ -83,7 +83,7 @@ Where each fits in adopter posture:
 
 ### 3.0 Why `resolve` is the production default
 
-The chosen pairing — `--safety-net-mode resolve --safety-net-fallback redact` — is designed to attempt the reversibility-preserving path first and only replace suspect bytes with a one-way marker when reversibility cannot be honored. This is a strict improvement over the v0.7.x strict-default along axes 2, 3, and 5 with no weakening of axis 1.
+The chosen pairing, `--safety-net-mode resolve --safety-net-fallback redact`, attempts the reversibility-preserving path first and replaces suspect bytes with a one-way marker only when reversibility cannot be honored. This is a strict improvement over the v0.7.x strict-default along axes 2, 3, and 5 with no weakening of axis 1.
 
 Axis-1 (never leak) is preserved: when `resolve` promotes a suspect to a synthetic custom-recognizer match, the existing conflict resolver tokenizes it through the manifest — the suspect bytes never reach the LLM. When `resolve` cannot honor a suspect (validator-veto, missing anchor, residual suspect after one-shot re-run), the default `redact` fallback strips the suspect span with a sentinel *before* the clean text leaves the chokepoint, and a typed `RedactionEntry` with `decided_by: Fallback` and `fallback_triggered: Some(...)` is appended to the audit DB. From the perspective of "did PII reach the LLM?", resolve-with-redact-fallback is identical to strict — the suspect bytes never crossed the boundary.
 
@@ -250,8 +250,8 @@ Each emits a `decided_by: Fallback` audit row with the corresponding `FallbackRe
 
 > **Implemented behaviour (v0.9).** §6.2 and §6.3 below have been rewritten to describe what the
 > runtime actually does; §6.1 and §6.4-§6.6 remain the original design with corrections noted
-> inline. What shipped is narrower than the design in one respect, and the difference is
-> load-bearing: **the fallback is consulted only under `resolve`.** `SafetyNetPolicy::decision()` in `crates/gaze/src/pipeline.rs` is the single,
+> inline. What shipped is narrower than the design in one respect: **the fallback is consulted
+> only under `resolve`.** `SafetyNetPolicy::decision()` in `crates/gaze/src/pipeline.rs` is the single,
 > total lowering of the `(mode, fallback)` pair, and it is what every runtime arm reads:
 >
 > | `--safety-net-mode` | `--safety-net-fallback` | `SafetyNetDecision`          | runtime behaviour |
