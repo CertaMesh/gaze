@@ -2729,6 +2729,12 @@ impl<'a> ProtectionTraceCollector<'a> {
         {
             return Err(protection_trace_error("invalid original-text span"));
         }
+        // Exact-span resolver merges join recognizer IDs with '+'. Trace provenance
+        // carries the original IDs, not a new identifier absent from the rulepack.
+        source_ids = source_ids
+            .into_iter()
+            .flat_map(|source_id| source_id.split('+').map(str::to_owned).collect::<Vec<_>>())
+            .collect();
         if source_ids
             .iter()
             .any(|source_id| source_id.trim().is_empty())
@@ -5474,6 +5480,23 @@ mod tests {
         assert!(manifest.iter().any(|span| {
             span.raw_span == (name_start..text.len()) && span.class == PiiClass::Name
         }));
+    }
+
+    #[test]
+    fn protection_trace_expands_merged_recognizer_ids() {
+        let mut trace = ProtectionTraceCollector::new("Dr. Schmidt");
+        trace
+            .record(
+                0..11,
+                PiiClass::Name,
+                GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
+                vec!["name.auto_footer+ner".to_string(), "ner".to_string()],
+            )
+            .expect("valid merged source IDs");
+        assert_eq!(
+            trace.items[0].source_ids(),
+            &["name.auto_footer".to_string(), "ner".to_string()]
+        );
     }
 
     #[test]

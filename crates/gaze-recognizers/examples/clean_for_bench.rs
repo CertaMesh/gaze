@@ -109,6 +109,9 @@ struct Request {
     fixture_id: String,
     locale_chain: Vec<String>,
     text: String,
+    /// Used only by CLI equivalence checks; scored requests keep fixture-derived sessions.
+    #[serde(default)]
+    session_hex: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -269,7 +272,13 @@ fn handle_request_with_policy(
     let dictionaries = policy_run
         .map(|run| &run.dictionaries)
         .unwrap_or(&empty_dictionaries);
-    let session_hex = session_hex_for_fixture(&request.fixture_id);
+    let session_hex = match request.session_hex.as_deref() {
+        Some(value) if value.len() == 8 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) => {
+            u32::from_str_radix(value, 16)?.to_be_bytes()
+        }
+        Some(_) => return Err("session_hex must be eight hexadecimal characters".into()),
+        None => session_hex_for_fixture(&request.fixture_id),
+    };
     let raw_text = request.text;
     let session = Session::new_with_session_hex_for_tests(Scope::Ephemeral, session_hex)?;
     let clean_start = Instant::now();
@@ -1094,12 +1103,31 @@ mod tests {
             fixture_id: fixture_id.to_string(),
             locale_chain: vec![locale.to_string()],
             text: text.to_string(),
+            session_hex: None,
         };
 
         match handle_request(config, &full, request).expect("synthetic request should be handled") {
             Outcome::Success(response) => response,
             outcome => panic!("expected a success response, got {outcome:?}"),
         }
+    }
+
+    #[test]
+    fn request_session_hex_matches_cli_token_prefix() {
+        let config = BenchConfig::RuleFloorExtended;
+        let full = build_pipeline(config).expect("rule floor");
+        let request = Request {
+            fixture_id: "synthetic-prefix".to_string(),
+            locale_chain: vec!["en-US".to_string()],
+            text: "alice@example.invalid".to_string(),
+            session_hex: Some("deadbeef".to_string()),
+        };
+        let Outcome::Success(response) =
+            handle_request(config, &full, request).expect("synthetic request")
+        else {
+            panic!("expected success");
+        };
+        assert!(response.clean_text.contains("<deadbeef:"));
     }
 
     #[test]
@@ -1605,11 +1633,13 @@ mod tests {
                 fixture_id: "producer-determinism-en-1".to_string(),
                 locale_chain: vec!["en-US".to_string()],
                 text: "Dr. Schmidt from Example Labs reviews GAZE-1001 in Berlin. Contact alice@example.invalid or +1-555-0101. This synthetic paragraph repeats Example Labs, Dr. Schmidt, Berlin, and GAZE-1001 so the full producer exercises deterministic recognition, Pass 2 NER and manifest restoration across a document longer than three hundred bytes.".to_string(),
+                session_hex: None,
             },
             Request {
                 fixture_id: "producer-determinism-de-2".to_string(),
                 locale_chain: vec!["de-DE".to_string()],
                 text: "Dr. Schmidt prueft fuer Example Labs den synthetischen Vorgang GAZE-1002 in Berlin. Der Testkontakt lautet alice@example.invalid und die Testnummer +49 1555 0112233. Dieser erfundene Absatz wiederholt Example Labs, Dr. Schmidt, Berlin und GAZE-1002, damit der vollstaendige Produzent Erkennung, Pass 2 NER und Manifest-Wiederherstellung ueber mehr als dreihundert Bytes ausfuehrt.".to_string(),
+                session_hex: None,
             },
         ] {
             let outcome =

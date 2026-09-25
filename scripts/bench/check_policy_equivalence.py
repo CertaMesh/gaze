@@ -18,7 +18,7 @@ from bench_subprocess import BenchSubprocess
 
 
 TOKEN = re.compile(r"<[0-9a-f]{8}:[^>]+>")
-SESSION_HEX = re.compile(r"<[0-9a-f]{8}:")
+SESSION_HEX = re.compile(r"<([0-9a-f]{8}):")
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "scripts/bench/fixtures"
 
@@ -86,8 +86,6 @@ def compare(args: argparse.Namespace) -> int:
     command = [str(bench), "--config", "policy-file"]
     with BenchSubprocess(command, cwd=ROOT, env=env) as process:
         for index, (uid, raw, locales) in enumerate(selected, 1):
-            request = {"fixture_id": uid, "locale_chain": locales, "text": raw}
-            observed = process.exchange(request)
             cli = subprocess.run(
                 [str(gaze), "clean", "--policy", str(policy)],
                 input=raw,
@@ -97,18 +95,37 @@ def compare(args: argparse.Namespace) -> int:
                 cwd=ROOT,
                 env=env,
             )
-            if cli.returncode != 0 or "pipeline_error_code" in observed:
+            if cli.returncode != 0:
                 mismatches.append({
                     "id": uid,
-                    "cause": "pipeline refusal differs or prevents comparison",
+                    "cause": "CLI pipeline refused the document",
                     "cli_exit": cli.returncode,
-                    "bench_error": observed.get("pipeline_error_code"),
                 })
                 continue
             try:
                 result = json.loads(cli.stdout)
             except json.JSONDecodeError:
                 mismatches.append({"id": uid, "cause": "CLI response is not JSON"})
+                continue
+            request = {"fixture_id": uid, "locale_chain": locales, "text": raw}
+            # Nym scans clean text containing session tokens. Match the CLI's random
+            # token prefix so both paths receive the same safety-net input.
+            session = None
+            for entry in result["entries"]:
+                session = SESSION_HEX.match(entry["token"])
+                if session:
+                    break
+            if session is None:
+                session = SESSION_HEX.search(result["clean_text"])
+            if session:
+                request["session_hex"] = session.group(1)
+            observed = process.exchange(request)
+            if "pipeline_error_code" in observed:
+                mismatches.append({
+                    "id": uid,
+                    "cause": "benchmark pipeline refused the document",
+                    "bench_error": observed["pipeline_error_code"],
+                })
                 continue
             if normalize(result["clean_text"]) != normalize(observed["clean_text"]):
                 mismatches.append({"id": uid, "cause": "normalized clean_text differs"})
