@@ -471,6 +471,43 @@ fn live_nym_suspects_ignore_random_session_hex() {
 
 #[test]
 #[ignore = "needs GAZE_NYM_MODEL_DIR pointing at the pinned bundle"]
+fn live_nym_fallback_never_replaces_an_owned_placeholder() {
+    let model_dir = std::env::var("GAZE_NYM_MODEL_DIR").expect("GAZE_NYM_MODEL_DIR");
+    let (_dir, policy) = policy("");
+    let text = format!("Contact alice@example.invalid. {PLATE_PROSE}");
+    let out = clean(
+        &[
+            "--policy",
+            path_str(&policy),
+            "--safety-net",
+            "nym",
+            "--nym-model-dir",
+            &model_dir,
+        ],
+        &text,
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let json: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let clean_text = json["clean_text"].as_str().unwrap();
+    assert!(!clean_text.contains("[REDACTED:"));
+    let entries = json["entries"].as_array().unwrap();
+    assert!(!entries.is_empty());
+    for entry in entries {
+        let token = entry["token"].as_str().unwrap();
+        assert!(clean_text.contains(token), "owned placeholder was lost");
+    }
+    assert!(json["leak_report"]["suspects"]
+        .as_array()
+        .is_some_and(|suspects| !suspects.is_empty()));
+}
+
+#[test]
+#[ignore = "needs GAZE_NYM_MODEL_DIR pointing at the pinned bundle"]
 fn policy_nym_model_dir_activates_live_bundle() {
     let model_dir = std::env::var("GAZE_NYM_MODEL_DIR").expect("GAZE_NYM_MODEL_DIR");
     let (_dir, policy) = policy(&format!(

@@ -1493,9 +1493,12 @@ impl Pipeline {
 
         // The nets saw a scan view of real placeholders. Their findings may include the
         // placeholder itself, but only bytes outside an owned placeholder can be acted on.
-        suspects = clip_suspects_to_placeholders(suspects, clean_text, manifest, |token| {
-            target.contains_token(token)
-        });
+        suspects =
+            clip_suspects_to_placeholders(suspects, clean_text, manifest, |token, raw_len| {
+                target
+                    .restore(token)
+                    .is_some_and(|raw| raw_len.is_none_or(|expected| raw.len() == expected))
+            });
 
         // Observe acts on nothing, so only acting decisions say why a suspect will not be acted on.
         if !matches!(decision, SafetyNetDecision::Observe { .. }) {
@@ -4477,14 +4480,13 @@ impl PipelineBuilder {
     }
 }
 
-#[cfg(feature = "bundled-recognizers")]
 /// Remove bytes already protected by this session before policy or fallback sees a finding.
 /// A straddling finding becomes one finding for each exposed gap, preserving its provenance.
 fn clip_suspects_to_placeholders(
     suspects: Vec<LeakSuspect>,
     clean_text: &str,
     manifest: &Manifest,
-    is_owned: impl Fn(&str) -> bool,
+    is_owned: impl Fn(&str, Option<usize>) -> bool,
 ) -> Vec<LeakSuspect> {
     let mut placeholders = manifest
         .spans
@@ -4492,14 +4494,21 @@ fn clip_suspects_to_placeholders(
         .filter(|emitted| {
             clean_text
                 .get(emitted.clean_span.clone())
-                .is_some_and(&is_owned)
+                .is_some_and(|token| {
+                    emitted
+                        .raw_span
+                        .end
+                        .checked_sub(emitted.raw_span.start)
+                        .filter(|length| *length > 0)
+                        .is_some_and(|length| is_owned(token, Some(length)))
+                })
         })
         .map(|emitted| emitted.clean_span.clone())
         .collect::<Vec<_>>();
     placeholders.extend(
         crate::token_shape::pattern()
             .find_iter(clean_text)
-            .filter(|matched| is_owned(matched.as_str()))
+            .filter(|matched| is_owned(matched.as_str(), None))
             .map(|matched| matched.range()),
     );
     placeholders.sort_by_key(|span| (span.start, span.end));
@@ -4588,7 +4597,7 @@ mod placeholder_clip_tests {
             ],
             &text,
             &manifest,
-            |candidate| candidate == token,
+            |candidate, _| candidate == token,
         );
         assert_eq!(rows.len(), 3);
         assert_eq!(rows[0].span, 0..start);
@@ -4598,6 +4607,7 @@ mod placeholder_clip_tests {
     }
 }
 
+#[cfg(feature = "bundled-recognizers")]
 fn model_span_to_suspect(
     span: ModelSpan,
     backend_name: &str,
