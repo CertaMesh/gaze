@@ -14,9 +14,39 @@ Adapters implement `ProviderAdapter`:
 - `response_pii_surfaces(body)` returns mutable text leaves to restore on the
   owner-visible response.
 - `sse_event_pii_surfaces(event)` handles provider-native event payloads.
+- `requests_json_output(request)` reports whether the request asked the model
+  for JSON output. It defaults to `false`.
 
 Adapters do not decide what is PII. They only describe where strings live; the
 configured `gaze::Pipeline` and recognizer registry make detection decisions.
+
+Each surface also declares its `SurfaceSyntax`, which decides how restore
+writes a raw value back:
+
+- `Text`: the raw value is written byte for byte.
+- `Json`: the surface is a serialized JSON document, such as
+  `tool_calls[].function.arguments` or a Responses `function_call` or
+  `mcp_call` item's `arguments`. A token can only stand inside one of its
+  string literals, so restore JSON-escapes the raw value. A verbatim `"`, `\`, or control character
+  would break the document or change the value the agent parses. The escape
+  does not depend on where the literal's quotes are, so it stays correct when a
+  streamed fragment carries the token and a neighbouring SSE event carries the
+  quotes. The one exception is a value the request carried inside a JSON string
+  literal, such as a field of a JSON tool result. The manifest stores that value
+  in its escaped spelling (`\"`, `\u00fc`), so restore writes it into a JSON
+  document as it is. The legacy session records which tokens those are.
+  Known limit: the manifest keeps only that escaped spelling, so the same value
+  restores into a `Text` destination with its escapes (`\"`, `\u00fc`), not
+  decoded. Recording the spelling per token is planned for v0.16.
+- `ModelOutput`: answer text. It restores as `Json` when
+  `requests_json_output` is true and as `Text` otherwise. OpenAI reads
+  `response_format.type` (Chat Completions) or `text.format.type` (Responses)
+  for `json_object` or `json_schema`. Gemini reads
+  `generationConfig.responseMimeType` for `application/json`; thought summaries
+  stay `Text`.
+
+Only restore reads the syntax. Request protection scans each surface's text as
+it stands.
 
 ## Provider Surface Matrix
 

@@ -4,7 +4,7 @@ use http::Method;
 use serde_json::Value;
 use url::Url;
 
-use crate::adapter::{walk_all_strings, PiiSurface, ProviderAdapter, SseEvent};
+use crate::adapter::{walk_all_strings, PiiSurface, ProviderAdapter, SseEvent, SurfaceSyntax};
 
 /// Canonicalizes a protobuf-JSON field name to its lowerCamelCase spelling.
 ///
@@ -74,6 +74,24 @@ impl ProviderAdapter for GeminiAdapter {
 
     fn sse_event_pii_surfaces<'a>(&self, event: &'a mut SseEvent) -> Vec<PiiSurface<'a>> {
         self.response_pii_surfaces(&mut event.data)
+    }
+
+    /// `generationConfig.responseMimeType = "application/json"` (which a response schema
+    /// requires) makes every answer text part a JSON document.
+    fn requests_json_output(&self, request: &Value) -> bool {
+        let Value::Object(root) = request else {
+            return false;
+        };
+        root.iter()
+            .filter(|(key, _)| canonical_field_name(key) == "generationConfig")
+            .filter_map(|(_, config)| config.as_object())
+            .flatten()
+            .any(|(key, value)| {
+                canonical_field_name(key) == "responseMimeType"
+                    && value
+                        .as_str()
+                        .is_some_and(|mime| mime.eq_ignore_ascii_case("application/json"))
+            })
     }
 }
 
@@ -149,6 +167,12 @@ fn collect_content<'a>(surfaces: &mut Vec<PiiSurface<'a>>, prefix: String, value
         let Value::Object(part) = part else {
             continue;
         };
+        // A thought summary stays prose even when the answer is JSON.
+        let text_syntax = if part.get("thought").and_then(Value::as_bool) == Some(true) {
+            SurfaceSyntax::Text
+        } else {
+            SurfaceSyntax::ModelOutput
+        };
         for (key, value) in part {
             let part_prefix = format!("{parts_prefix}[{index}].{key}");
             match canonical_field_name(key).as_ref() {
@@ -157,6 +181,7 @@ fn collect_content<'a>(surfaces: &mut Vec<PiiSurface<'a>>, prefix: String, value
                         surfaces.push(PiiSurface {
                             field_path: part_prefix,
                             text,
+                            syntax: text_syntax,
                         });
                     }
                 }

@@ -9,7 +9,7 @@ use url::{Host, Url};
 
 use crate::adapter::{
     push_string, push_text_blocks, walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter,
-    SessionPolicy, SessionRegistryConfig, SseEvent,
+    SessionPolicy, SessionRegistryConfig, SseEvent, SurfaceSyntax,
 };
 use crate::codec::CodecLimits;
 use crate::codecs::anthropic::AnthropicMessagesCodec;
@@ -366,7 +366,9 @@ impl ProviderAdapter for AnthropicAdapter {
         if let Value::Object(root) = body {
             for (key, value) in root {
                 match key.as_str() {
-                    "system" => push_text_blocks(&mut surfaces, "system", value),
+                    "system" => {
+                        push_text_blocks(&mut surfaces, "system", value, SurfaceSyntax::Text);
+                    }
                     "messages" => {
                         if let Value::Array(messages) = value {
                             for (index, message) in messages.iter_mut().enumerate() {
@@ -413,10 +415,12 @@ impl ProviderAdapter for AnthropicAdapter {
                                 "text" => surfaces.push(PiiSurface {
                                     field_path: "delta.text".to_string(),
                                     text,
+                                    syntax: SurfaceSyntax::ModelOutput,
                                 }),
                                 "partial_json" => surfaces.push(PiiSurface {
                                     field_path: "delta.partial_json".to_string(),
                                     text,
+                                    syntax: SurfaceSyntax::Json,
                                 }),
                                 _ => {}
                             }
@@ -435,7 +439,7 @@ fn collect_content_blocks<'a>(
     content: &'a mut Value,
 ) {
     match content {
-        Value::String(_) => push_string(surfaces, prefix, content),
+        Value::String(_) => push_string(surfaces, prefix, content, SurfaceSyntax::ModelOutput),
         Value::Array(blocks) => {
             for (index, block) in blocks.iter_mut().enumerate() {
                 let Value::Object(block) = block else {
@@ -447,6 +451,7 @@ fn collect_content_blocks<'a>(
                             surfaces.push(PiiSurface {
                                 field_path: format!("{prefix}[{index}].text"),
                                 text,
+                                syntax: SurfaceSyntax::ModelOutput,
                             });
                         }
                     }

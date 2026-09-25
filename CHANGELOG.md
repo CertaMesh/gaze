@@ -82,6 +82,8 @@ with non-breaking spaces (PR #647).
   (PR #616).
 - `gaze_document::extract::pdf::rasterize_first_page` is removed; use
   `extract_pages` (PR #650).
+- Custom `gaze-proxy` adapters that build `PiiSurface` values must set the new
+  `syntax` field (PR #656).
 
 **Known limitations.** Two `gaze proxy` restore gaps ship in this release.
 Both fail toward pseudonymized or escaped output, never toward a leak, and
@@ -405,6 +407,14 @@ the same-document-set numbers, linked to the script and hardware line. -->
   (`postal.at_ch`, above).
 
 ### Changed
+
+- **Breaking (custom `gaze-proxy` adapters):** `PiiSurface` has a new
+  `syntax: SurfaceSyntax` field (`Text`, `Json`, or `ModelOutput`). Restore uses
+  it to choose the escaping for each surface. `ProviderAdapter` has a new
+  provided method, `requests_json_output(request)`, which defaults to `false`.
+  If an adapter builds `PiiSurface` values directly, set `syntax:
+  SurfaceSyntax::Text` to keep the previous verbatim restore. Use `Json` for
+  fields that hold serialized JSON (PR #656).
 
 - **Breaking:** `gaze setup --safety-net ner` is removed. Use `--safety-net none`
   for the former NER-only policy. `gaze setup` now installs Nym by default and
@@ -737,6 +747,23 @@ the same-document-set numbers, linked to the script and hardware line. -->
   single-page mode and does not rasterize pages that have selectable text.
 
 ### Fixed
+
+- **`gaze-proxy` restores raw values into JSON documents as valid JSON.** The
+  legacy OpenAI and Gemini adapters pasted raw values verbatim into answer
+  fields that hold serialized JSON: Chat Completions
+  `tool_calls[].function.arguments`, Responses `function_call` and `mcp_call`
+  `arguments`, and JSON-mode answer text. JSON mode means OpenAI `json_object` or
+  `json_schema`, or Gemini `responseMimeType: application/json`. Streaming
+  deltas had the same problem. A value holding `"`, `\`, or a control
+  character made the agent's tool call or structured answer fail to parse.
+  Some values still parsed but changed silently: the UNC path
+  `\\fileserver\new_hires` decoded as `\fileserver`, a newline, and `ew_hires`.
+  Restore now JSON-escapes raw values in these fields and writes plain text byte
+  for byte as before. A value captured inside a JSON string of the request, such
+  as a field of a JSON tool result, is already escaped in the manifest. It is
+  still written into these fields as it is, so it is not escaped twice. The
+  Anthropic Messages codec and Gemini `functionCall.args` were already exact and
+  are pinned by the same end-to-end suite (PR #656, solo todo #3837).
 
 - Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
   surrogate prefix derived from the placeholder shape after removing the random
