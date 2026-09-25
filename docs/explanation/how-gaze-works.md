@@ -167,7 +167,7 @@ PII in agent workflows usually falls into one of three failure modes:
 
 1. **No redaction.** Real emails, phone numbers, and order IDs end up in the model provider's logs.
 2. **One-way redaction.** PII is stripped, the agent replies "I've sent the confirmation to `<REDACTED>`", and you have no way to thread the reply back to the actual customer.
-3. **LLM-judged redaction.** A second model call decides what's PII. Non-deterministic, non-auditable, costs another round trip every turn.
+3. **LLM-judged redaction.** A second model call decides what's PII. It is non-deterministic and cannot be audited, and it costs another round trip every turn.
 
 Gaze is the fourth path: deterministic detection, signed restore manifest, every token traced to a versioned recognizer.
 

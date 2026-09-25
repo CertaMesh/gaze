@@ -131,15 +131,15 @@ base: captured payloads become visible to the paired browser session.
 
 Pairing prints exactly one `http://<origin>/` line and one
 `GazeDashboardV1 <token>` authorization line to the controlling terminal (or
-the validated pairing descriptor) — never to stdout, stderr, or a log file.
+the validated pairing descriptor), never to stdout, stderr, or a log file.
 On Linux, the launcher that supplies `--dashboard-pairing-fd` must hold (or
-promptly open) the read end of the pairing FIFO — otherwise `gaze proxy serve`
+promptly open) the read end of the pairing FIFO; otherwise `gaze proxy serve`
 blocks in the write-only open before provider startup.
 Any flag-validation or activation failure — including a missing controlling
 terminal without a pairing descriptor — prints one sanitized
 `gaze dashboard disabled: <reason>` line, and the proxy starts or continues
 without any capture. `start` relays the dashboard flags verbatim to the
-daemon serve process; `restart` intentionally does not — dashboard activation
+daemon serve process; `restart` does not, because dashboard activation
 is per-invocation and never persisted into the daemon config. The dashboard
 child requires verified no-crash-dump readiness (`RLIMIT_CORE=0`), which
 currently limits successful activation to non-macOS Unix hosts; on other
@@ -235,7 +235,7 @@ for the crate README reference.
 
 `gaze daemon` is a long-lived **stdio server** for adapters that need repeated
 low-latency redaction without paying binary startup and model-load cost on every
-request. It is a stdio server in the LSP / MCP tradition - a foreground child
+request. It is a stdio server in the LSP / MCP tradition: a foreground child
 process that owns stdin/stdout for line-delimited JSON, not a Unix daemon in the
 strict sense. The subcommand verb is preserved through v0.9.x; a `gaze serve`
 alias lands in v0.10. See the [Terminology note in `daemon-mode.md`](../explanation/daemon/daemon-mode.md)
@@ -281,7 +281,7 @@ when `--session-cap` is exceeded and by idle timeout when a session is quiet too
 long. Each `session_id` owns its own manifest, and eviction emits audit metadata
 with source `daemon.session_eviction`.
 
-Daemon redaction audit rows are stamped with
+The daemon stamps its redaction audit rows with
 `provenance_stage = "daemon"`, which lets adopters filter daemon-emitted rows
 separately from one-shot `gaze clean` rows.
 
@@ -297,7 +297,7 @@ Five-axis check:
 
 See [`docs/explanation/daemon/daemon-mode.md`](../explanation/daemon/daemon-mode.md) for the
 full contract. See
-[getting-started/daemon-adapter.md](../how-to/daemon/run-daemon.md) for an
+[Daemon Adapter Quickstart](../how-to/daemon/run-daemon.md) for an
 adopter quickstart.
 
 ### `gaze audit purge`
@@ -334,7 +334,7 @@ input:
 through Tesseract, redacts the recognized text through the standard Gaze
 pipeline, and writes a split `SafeBundle`: `clean.md` and `report.json` go to
 the agent-visible output, while `manifest.json` goes to the owner-only output.
-Requires the binary to be built with `--features document`, and the host must
+The verb requires a binary built with `--features document`, and the host must
 have `tesseract` on PATH plus the pdfium runtime for PDF input.
 
 ```sh

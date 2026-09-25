@@ -126,10 +126,10 @@ security and lifecycle contract; they are recorded in the same ledger.
   surfaces 6.62–7.80:1. WCAG 2.2 AA floor is 4.5:1 for text.
 - **Focus:** every sampled focus rectangle is visible inside the viewport and
   never intersects the sticky safety bar. The machine gate caught a real
-  defect during implementation — the `scroll-padding-top` offset derived from
+  defect during implementation: the `scroll-padding-top` offset derived from
   the safety bar exceeded short viewports where the bar is non-sticky, which
-  broke focus scrolling at V9 — and the fix (zero offset when the bar is not
-  sticky) is regression-locked by the same gate.
+  broke focus scrolling at V9. The same gate regression-locks the fix (zero
+  offset when the bar is not sticky).
 - **Sticky bar:** at viewport height ≤ 400 CSS px the bar is non-sticky by
   stylesheet contract, so it can never obscure focus at V8/V9.
 - **Targets:** all buttons have a 24×24 px minimum via the stylesheet; the

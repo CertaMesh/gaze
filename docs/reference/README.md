@@ -16,7 +16,7 @@ behind a contract, follow through to [explanation](../explanation/README.md).
   shipped default activation.
 - **[Example policy TOML](policy.example.toml)** — a copyable starter policy file.
 - **[Crate map](crates.md)** — the published crates and what each owns; links to every crate README.
-- **[Metrics catalog](metrics.md)** — the SSOT for every observable surface: audit-log
+- **[Metrics catalog](metrics.md)** — the single source of truth for every observable surface: audit-log
   columns, conflict tiers, pipeline counters, SafeBundle fields, MCP context, with stability
   guarantees per metric.
 - **[Security review](security-review.md)** — the security invariants, each citing the named

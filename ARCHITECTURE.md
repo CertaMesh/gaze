@@ -141,8 +141,8 @@ Source anchors: [AGENTS.md](AGENTS.md),
 
 ### KDD-2: Rule-Based Detectors Are The Trust Floor
 
-Precise classes should be handled by deterministic recognizers, validators,
-dictionaries, and locale-aware rules before neural systems get involved.
+Deterministic recognizers, validators, dictionaries, and locale-aware rules
+should handle precise classes before neural systems get involved.
 Neural components are defense in depth; every emitted token must still trace
 back to a recognizer, rule, or typed safety contract.
 

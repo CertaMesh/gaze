@@ -5,7 +5,7 @@ restore key, send only safe text to an LLM, and restore original values from the
 
 By the end you will have a complete redact → send → restore round trip running locally, and
 you will know where the restore key lives and why it must never travel with the clean text.
-You do not need prior PII-domain knowledge — just a working Rust toolchain. When you want to
+You need a working Rust toolchain and no prior PII-domain knowledge. When you want to
 go deeper, each step links to the reference page or the design contract behind it.
 
 ## Prerequisites
@@ -21,7 +21,7 @@ cargo add gaze-pii gaze-assembly
 
 The crate is published as `gaze-pii`. Import path remains `use gaze::...`.
 
-`gaze-assembly` provides `CorePipelineConfig` -- bundled defaults (core rulepack:
+`gaze-assembly` provides `CorePipelineConfig`: bundled defaults (core rulepack:
 emails, names, locations, organizations, plus optional locale-aware recognizers)
 without manually wiring recognizers.
 
@@ -186,7 +186,7 @@ dictionary recognizer and tokenizes `ORD-789012` as `Custom:order_id`. See the
 | `PolicyError` (unknown field) | Typo in `policy.toml` | Check [docs/reference/policy.md](../reference/policy.md) |
 | `Error::BlobExpired { .. }` | Snapshot TTL elapsed | Increase `ttl` (a `Duration`) or refresh before expiry |
 | Export errors on `Ephemeral` | Cannot restore from ephemeral sessions | Use `Scope::Conversation` |
-| `RulepackError::UnsupportedValidator` | Unknown validator name | See valid names in [docs/reference/policy.md](../reference/policy.md#validators) |
+| `RulepackError::UnsupportedValidator` | Unknown validator name | See valid names in [docs/reference/policy.md](../reference/policy.md#built-in-validators) |
 | Tokens not restored | Wrong session blob | The blob must come from the exact session that produced the clean output |
 
 ## Next steps
