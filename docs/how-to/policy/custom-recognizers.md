@@ -60,7 +60,7 @@ let pipeline = gaze_assembly::build_pipeline(
 Now `pipeline.redact(...)` tokenizes `ORD-789012` alongside the bundled classes, and
 `Session` restore reconstructs the original value byte-for-byte.
 
-## Beyond regex
+## Go beyond regex
 
 - **Validators and normalizers** — constrain or canonicalize a match (for example, checksum a
   number) without breaking restore. A normalizer must preserve the original byte span; see
