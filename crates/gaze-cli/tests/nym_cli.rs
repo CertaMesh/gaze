@@ -430,6 +430,47 @@ fn live_nym_net_tokenizes_a_plate_the_rules_miss() {
 
 #[test]
 #[ignore = "needs GAZE_NYM_MODEL_DIR pointing at the pinned bundle"]
+fn live_nym_suspects_ignore_random_session_hex() {
+    let model_dir = std::env::var("GAZE_NYM_MODEL_DIR").expect("GAZE_NYM_MODEL_DIR");
+    let (_dir, policy) = policy("");
+    let text = format!("Contact alice@example.invalid. {PLATE_PROSE}");
+    let mut clean_texts = std::collections::BTreeSet::new();
+    let mut reports = Vec::new();
+    for _ in 0..5 {
+        let out = clean(
+            &[
+                "--policy",
+                path_str(&policy),
+                "--safety-net",
+                "nym",
+                "--nym-model-dir",
+                &model_dir,
+            ],
+            &text,
+        );
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let json: Value = serde_json::from_slice(&out.stdout).unwrap();
+        clean_texts.insert(json["clean_text"].as_str().unwrap().to_string());
+        reports.push(json["leak_report"].clone());
+    }
+    assert_eq!(
+        clean_texts.len(),
+        5,
+        "each CLI run must have a fresh session"
+    );
+    assert!(reports[0]["suspects"]
+        .as_array()
+        .is_some_and(|rows| !rows.is_empty()));
+    assert!(reports.iter().all(|report| report == &reports[0]));
+}
+
+#[test]
+#[ignore = "needs GAZE_NYM_MODEL_DIR pointing at the pinned bundle"]
 fn policy_nym_model_dir_activates_live_bundle() {
     let model_dir = std::env::var("GAZE_NYM_MODEL_DIR").expect("GAZE_NYM_MODEL_DIR");
     let (_dir, policy) = policy(&format!(

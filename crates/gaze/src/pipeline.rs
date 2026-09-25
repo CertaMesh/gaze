@@ -29,6 +29,7 @@ use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 use crate::registry::{Candidate, DetectContext, Recognizer, RecognizerRegistry};
 use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
+use crate::safety_net_scan::SafetyNetScanText;
 use crate::session::{RestoreEvent, Session, SessionTransaction};
 use crate::types::{CleanDocument, RawDocument, Value};
 use crate::DictionaryBundle;
@@ -1363,6 +1364,7 @@ impl Pipeline {
             return Ok(LeakReport::default());
         }
 
+        let scan = SafetyNetScanText::new(clean_text, manifest)?;
         let mut suspects = Vec::<LeakSuspect>::new();
         let mut telemetry = Vec::new();
         let active = gaze_types::LocaleChain::from(locale_chain);
@@ -1387,7 +1389,13 @@ impl Pipeline {
                 field_path,
             )
             .with_dictionaries(dictionaries);
-            let mut reported = net.check(clean_text, context)?;
+            let mut reported = net.check(scan.text(), context)?;
+            for suspect in &mut reported {
+                suspect.span = scan.to_clean_range(suspect.span.clone())?;
+                if let LeakKind::PartialBleed { uncovered } = &mut suspect.kind {
+                    *uncovered = scan.to_clean_range(uncovered.clone())?;
+                }
+            }
             if let Some(path) = field_path {
                 for suspect in &mut reported {
                     if suspect.field_path.is_none() {
@@ -1429,7 +1437,7 @@ impl Pipeline {
                     let spans = model
                         .infer(
                             ModelInput {
-                                text: clean_text.to_string(),
+                                text: scan.text().to_string(),
                                 locale: locale.clone(),
                             },
                             ModelHints {
@@ -1470,6 +1478,8 @@ impl Pipeline {
                                 ));
                             }
                         }
+                        let mut span = span;
+                        span.byte_range = scan.to_clean_range(span.byte_range)?;
                         if let Some(suspect) =
                             model_span_to_suspect(span, model.name(), manifest, field_path)
                         {
@@ -5230,6 +5240,77 @@ mod tests {
         id: &'static str,
         marker: &'static str,
         class: PiiClass,
+    }
+
+    struct HexSensitiveSafetyNet;
+
+    impl SafetyNet for HexSensitiveSafetyNet {
+        fn id(&self) -> &str {
+            "hex-sensitive.fixture"
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            clean_text: &str,
+            context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            if clean_text.contains("cafefeed") {
+                return Ok(Vec::new());
+            }
+            let marker = "Dr. Schmidt";
+            let start = clean_text.find(marker).expect("synthetic marker");
+            let span = start..start + marker.len();
+            let kind = context
+                .manifest
+                .diff_against(&span, &PiiClass::Name)
+                .expect("uncovered marker");
+            Ok(vec![LeakSuspect::new(
+                span,
+                PiiClass::Name,
+                self.id(),
+                Some(1.0),
+                kind,
+                "Name",
+                None,
+            )])
+        }
+    }
+
+    #[test]
+    fn safety_net_suspects_are_independent_of_session_hex() {
+        let pipeline = traced_email_pipeline(HexSensitiveSafetyNet);
+        let text = "alice@example.invalid met Dr. Schmidt";
+        let scan = |hex| {
+            let session = Session::new_with_session_hex_for_tests(Scope::Ephemeral, hex).unwrap();
+            let (clean, manifest, report) = pipeline
+                .clean_with_safety_net_policy_detect_context(
+                    &session,
+                    RawDocument::Text(text.to_string()),
+                    &[crate::LocaleTag::Global],
+                    &DictionaryBundle::default(),
+                    SafetyNetPolicy::new(SafetyNetMode::Tolerant, SafetyNetFallback::Redact),
+                )
+                .unwrap();
+            (clean, manifest, report.suspects)
+        };
+        let (first_clean, first_manifest, first) = scan([0xde, 0xad, 0xbe, 0xef]);
+        let (second_clean, second_manifest, second) = scan([0xca, 0xfe, 0xfe, 0xed]);
+        let (CleanDocument::Text(first_text), CleanDocument::Text(second_text)) =
+            (first_clean, second_clean)
+        else {
+            panic!("text input must produce text");
+        };
+        assert_ne!(first_text, second_text);
+        assert_eq!(first_manifest, second_manifest);
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 1);
+        let name_start = first_text.find("Dr. Schmidt").unwrap();
+        assert_eq!(first[0].span, name_start..name_start + "Dr. Schmidt".len());
+        assert_eq!(first[0].kind, LeakKind::Uncovered);
     }
 
     impl SafetyNet for MarkerSafetyNet {

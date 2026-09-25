@@ -11,6 +11,13 @@ Filter subprocess adapter (`--safety-net openai-filter`) and the in-process
 Nym-small adapter (`--safety-net nym`). CLI flags and setup:
 [`crates/gaze-cli/README.md`](../../../crates/gaze-cli/README.md#safety-net).
 
+Before a net scans clean text, Gaze replaces the random eight-digit session
+hex in each manifest-owned placeholder with `00000000`. The replacement has
+the same byte length, so model spans map exactly to the real clean text and
+retain their manifest coverage, partial-bleed, and class-mismatch meaning.
+The observable clean text, manifest, audit rows, and restore input keep the
+original token bytes. Literal text outside manifest-owned tokens is untouched.
+
 Validator-backed self-validation is handled earlier by the deterministic
 [`validator-veto`](../detection/validator-veto.md) stage. Safety nets do not veto candidates
 and do not participate in conflict resolution.
