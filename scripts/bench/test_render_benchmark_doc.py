@@ -672,7 +672,10 @@ class RefusalAwareHistoryTest(unittest.TestCase):
 
     def test_legacy_rows_alone_keep_the_original_table(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
-        self.assertTrue(all("shipped_default_arm" not in r for r in committed["releases"]))
+        committed["releases"] = [
+            r for r in committed["releases"] if "shipped_default_arm" not in r
+        ]
+        self.assertEqual([r["version"] for r in committed["releases"]], ["v0.14.0"])
         block = render.render_history(committed)
         self.assertTrue(block.startswith(
             "| Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |\n"
