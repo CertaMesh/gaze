@@ -3979,6 +3979,16 @@ pub trait Recognizer: Send + Sync {
     fn locale_basis(&self) -> LocaleBasis {
         LocaleBasis::Document
     }
+    /// Whether [`Self::detect`] returns the same candidates for the same input whatever
+    /// `ctx.locale_chain` holds.
+    ///
+    /// A document-basis recognizer is offered every locale-chain step it is active for. When
+    /// this returns `true`, the registry calls `detect` once per document and reuses the result
+    /// at later steps; span claiming across steps is unchanged. Return `true` only when the
+    /// output ignores the step locale; the default `false` keeps one call per step.
+    fn detect_is_locale_invariant(&self) -> bool {
+        false
+    }
 }
 
 /// Caller-visible recognizer detection failure.

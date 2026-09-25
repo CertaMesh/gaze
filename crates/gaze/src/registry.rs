@@ -600,6 +600,90 @@ mod tests {
         );
     }
 
+    struct LocaleInvariant(BasisRecognizer);
+
+    impl Recognizer for LocaleInvariant {
+        fn id(&self) -> &str {
+            self.0.id()
+        }
+
+        fn supported_class(&self) -> &PiiClass {
+            self.0.supported_class()
+        }
+
+        fn detect(
+            &self,
+            input: &str,
+            ctx: &DetectContext<'_>,
+        ) -> Result<Vec<Candidate>, DetectError> {
+            self.0.detect(input, ctx)
+        }
+
+        fn token_family(&self) -> &str {
+            self.0.token_family()
+        }
+
+        fn locales(&self) -> &[LocaleTag] {
+            self.0.locales()
+        }
+
+        fn detect_is_locale_invariant(&self) -> bool {
+            true
+        }
+    }
+
+    fn fifteen_step_chain() -> Vec<LocaleTag> {
+        let mut chain = vec![LocaleTag::EnUs, LocaleTag::DeDe, LocaleTag::DeAt];
+        chain.extend((0..11).map(|i| LocaleTag::Other(format!("x{i}-XX"))));
+        chain.push(LocaleTag::Global);
+        chain
+    }
+
+    // A locale-invariant recognizer is offered all 15 steps but detects once; a recognizer that
+    // keeps the default still runs at every step it is active for.
+    #[test]
+    fn locale_invariant_recognizer_detects_once_per_document() {
+        let invariant = document_recognizer("invariant", LocaleTag::Global, 0..5);
+        let invariant_calls = Arc::clone(&invariant.calls);
+        let per_step = BasisRecognizer {
+            class: PiiClass::Name,
+            ..document_recognizer("per-step", LocaleTag::Global, 5..10)
+        };
+        let per_step_calls = Arc::clone(&per_step.calls);
+        let registry = RecognizerRegistry::builder()
+            .register(LocaleInvariant(invariant))
+            .register(per_step)
+            .build();
+
+        assert_eq!(
+            pool_ids(&registry, &fifteen_step_chain()),
+            vec!["invariant", "per-step"]
+        );
+        assert_eq!(invariant_calls.load(AtomicOrdering::SeqCst), 1);
+        assert_eq!(per_step_calls.load(AtomicOrdering::SeqCst), 15);
+    }
+
+    // Reused candidates still pass the claimed-span filter of the step they are reused at: a
+    // de-DE-only invariant rule is first eligible at step two and loses the span de-AT claimed.
+    #[test]
+    fn reused_candidates_keep_per_span_claiming() {
+        let invariant = document_recognizer("invariant", LocaleTag::DeDe, 3..8);
+        let invariant_calls = Arc::clone(&invariant.calls);
+        let registry = RecognizerRegistry::builder()
+            .register(LocaleInvariant(invariant))
+            .register(document_recognizer("de-at", LocaleTag::DeAt, 0..5))
+            .build();
+
+        assert_eq!(
+            pool_ids(
+                &registry,
+                &[LocaleTag::DeAt, LocaleTag::DeDe, LocaleTag::Global]
+            ),
+            vec!["de-at"]
+        );
+        assert_eq!(invariant_calls.load(AtomicOrdering::SeqCst), 1);
+    }
+
     #[test]
     fn empty_family_policy_never_applies() {
         assert_eq!(FamilyPolicyTable::EMPTY.compare("a", "b"), None);
@@ -804,30 +888,46 @@ impl RecognizerRegistry {
             // before validator veto, so this never admits less than stopping at the first
             // locale did. Global rules repeat their spans at every step and drop out here.
             let mut claimed: Vec<std::ops::Range<usize>> = Vec::new();
+            // Locale-invariant recognizers detect at their first eligible step; later steps
+            // reuse that output, so NER infers once per document instead of once per step.
+            let mut reused: HashMap<usize, Vec<Candidate>> = HashMap::new();
             for locale in locale_chain.as_slice() {
                 let locale_ctx = DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
                 locale_ctx.degraded.set(ctx.degraded.get());
                 let mut class_candidates = Vec::new();
-                for recognizer in self
+                for (index, recognizer) in self
                     .entries
                     .iter()
-                    .filter(|recognizer| recognizer.supported_class() == &class)
-                    .filter(|recognizer| recognizer.locale_basis() == LocaleBasis::Document)
-                    .filter(|recognizer| {
+                    .enumerate()
+                    .filter(|(_, recognizer)| recognizer.supported_class() == &class)
+                    .filter(|(_, recognizer)| recognizer.locale_basis() == LocaleBasis::Document)
+                    .filter(|(_, recognizer)| {
                         LocaleChain::from(locale_ctx.locale_chain).intersects(recognizer.locales())
                     })
                 {
+                    let fresh;
+                    let detected: &[Candidate] = if recognizer.detect_is_locale_invariant() {
+                        match reused.entry(index) {
+                            std::collections::hash_map::Entry::Occupied(slot) => slot.into_mut(),
+                            std::collections::hash_map::Entry::Vacant(slot) => {
+                                slot.insert(recognizer.detect(input, &locale_ctx)?)
+                            }
+                        }
+                    } else {
+                        fresh = recognizer.detect(input, &locale_ctx)?;
+                        &fresh
+                    };
                     class_candidates.extend(
-                        recognizer
-                            .detect(input, &locale_ctx)?
-                            .into_iter()
+                        detected
+                            .iter()
                             .filter(|candidate| candidate.score >= min_score(&class))
                             .filter(|candidate| {
                                 !claimed.iter().any(|span| {
                                     span.start < candidate.span.end
                                         && candidate.span.start < span.end
                                 })
-                            }),
+                            })
+                            .cloned(),
                     );
                 }
                 claimed.extend(

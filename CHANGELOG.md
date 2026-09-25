@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- NER now runs once per document instead of once per locale-chain step. Since the
+  per-span locale fall-through, the registry called every document-basis recognizer at
+  every chain step, so the 15-step `gaze setup` chain ran the same NER inference 15
+  times per document and the two-step rules+NER chain ran it twice. Recognizers whose
+  output ignores the step locale (NER, regex, anchored-match, dictionary) now declare it
+  through the new `Recognizer::detect_is_locale_invariant` method (default `false`), and
+  the registry reuses their first result at later steps. Per-span claiming is unchanged,
+  and clean text, manifests, and audit rows are byte-identical. Custom recognizers keep
+  one call per step unless they opt in.
+
 ### Fixed
 
 - Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
