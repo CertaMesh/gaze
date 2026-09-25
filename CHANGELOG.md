@@ -214,9 +214,14 @@ the same-document-set numbers, linked to the script and hardware line. -->
     population it removes 6,154 leaked gold bytes under scored-label contract v2
     (20,727 to 14,573) for 526 false-positive bytes, action precision 0.891,
     one one-way deletion, 2,909 of 2,910 exact restores; timings provisional.
-  - Open before any default change: an address-context guard for room and seat
-    numbers, a quiet-host latency measurement, and a licence review of the
-    Wikipedia-derived (CC-BY-SA) training data.
+  - Three items were open before any default change; this release turns Nym on
+    in the `gaze setup` policy with each one stated. The address-context guard
+    for room and seat numbers is still a documented known gap. The licence
+    review of the Wikipedia-derived (CC-BY-SA) training data is still open, and
+    setup's notice names it. Latency was measured quietly for rules plus NER
+    with and without Nym; the release numbers for the setup policy are in the
+    Performance summary above. See
+    [Known gaps and open review items](docs/explanation/safety-net/safety-nets.md#known-gaps-and-open-review-items).
 
 - **Anchored four-digit postal codes for Austria and Switzerland**
   (`postal.at_ch`). Four-digit codes in `de-AT` and `de-CH` documents had no

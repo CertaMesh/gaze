@@ -54,9 +54,10 @@ Post-repair hashes and owner/mode inventory are retained in the receipts. Exact 
 a zero-test cargo result cannot pass the gate.
 
 After review, dispatch with `gh workflow run release.yml --ref <preparation-branch>
--f version=0.14.0 -f pr_number=<release-pr>`. Require a successful
-`model-setup-ownership-preflight` job for that exact preparation head before
-tagging. Its `model-setup-ownership-<commit>` artifact
+-f version=<X.Y.Z> -f pr_number=<release-pr>`. Require successful
+`scrub-public-text-preflight` and `model-setup-ownership-preflight` jobs for
+that exact preparation head before tagging. The ownership job's
+`model-setup-ownership-<commit>` artifact
 records the commit, commands, toolchain, model hashes, owner/mode inventory,
 and test results. It contains receipts only; model files are temporary and
 are removed when the gate exits. The script requires an unprivileged Linux
