@@ -1,0 +1,14 @@
+schema_version = "0.1.0"
+
+[session]
+scope = "conversation"
+
+[locale]
+active = ["en-US", "de-DE"]
+
+[policy.rulepacks]
+bundled = ["core"]
+
+[[rule]]
+kind = "default"
+action = "tokenize"
