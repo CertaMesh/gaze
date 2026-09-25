@@ -21,6 +21,7 @@ TOKEN = re.compile(r"<[0-9a-f]{8}:[^>]+>")
 SESSION_HEX = re.compile(r"<([0-9a-f]{8}):")
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "scripts/bench/fixtures"
+SELF_CHECK_MIN_CASES = 6
 
 
 def normalize(text: str) -> str:
@@ -79,6 +80,12 @@ def compare(args: argparse.Namespace) -> int:
     if not all(path.is_file() for path in (gaze, bench, policy)):
         raise FileNotFoundError("release CLI, benchmark binary, or policy is missing")
     selected = documents(args)
+    expected = args.documents
+    if args.self_check:
+        fixture_count = len((FIXTURES / "policy_equivalence.jsonl").read_text().splitlines())
+        expected = max(SELF_CHECK_MIN_CASES, fixture_count)
+    if expected <= 0 or len(selected) < expected:
+        raise ValueError(f"expected at least {expected} equivalence cases, got {len(selected)}")
     env = dict(os.environ)
     env.pop("GAZE_NYM_MODEL_DIR", None)
     env["GAZE_BENCH_POLICY"] = str(policy.resolve())

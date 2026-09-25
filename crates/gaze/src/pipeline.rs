@@ -2729,12 +2729,6 @@ impl<'a> ProtectionTraceCollector<'a> {
         {
             return Err(protection_trace_error("invalid original-text span"));
         }
-        // Exact-span resolver merges join recognizer IDs with '+'. Trace provenance
-        // carries the original IDs, not a new identifier absent from the rulepack.
-        source_ids = source_ids
-            .into_iter()
-            .flat_map(|source_id| source_id.split('+').map(str::to_owned).collect::<Vec<_>>())
-            .collect();
         if source_ids
             .iter()
             .any(|source_id| source_id.trim().is_empty())
@@ -4846,8 +4840,7 @@ fn indexed_detection_from_candidate(
     candidate: Candidate,
     registry: &RecognizerRegistry,
 ) -> IndexedDetection {
-    let mut trace_source_ids = candidate.merged_sources.clone();
-    trace_source_ids.push(candidate.recognizer_id.clone());
+    let trace_source_ids = candidate.source_recognizer_ids.clone();
     let membership = registry
         .family_policy()
         .membership(&candidate.recognizer_id);
@@ -5483,19 +5476,49 @@ mod tests {
     }
 
     #[test]
-    fn protection_trace_expands_merged_recognizer_ids() {
+    fn protection_trace_keeps_literal_plus_in_source_id() {
         let mut trace = ProtectionTraceCollector::new("Dr. Schmidt");
         trace
             .record(
                 0..11,
                 PiiClass::Name,
                 GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
-                vec!["name.auto_footer+ner".to_string(), "ner".to_string()],
+                vec!["synthetic+support".to_string()],
             )
-            .expect("valid merged source IDs");
+            .expect("valid literal-plus source ID");
         assert_eq!(
             trace.items[0].source_ids(),
-            &["name.auto_footer".to_string(), "ner".to_string()]
+            &["synthetic+support".to_string()]
+        );
+    }
+
+    #[test]
+    fn protection_trace_uses_original_ids_after_same_span_merge() {
+        let text = "alice@example.invalid";
+        let pipeline = Pipeline::builder()
+            .detector(FixedDetector {
+                detections: vec![
+                    Detection::new(0..text.len(), PiiClass::Email, "synthetic+support"),
+                    Detection::new(0..text.len(), PiiClass::Email, "email.fixture"),
+                ],
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (_, _, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .expect("traced clean");
+        assert_eq!(trace.len(), 1);
+        assert_eq!(
+            trace[0].source_ids(),
+            &["email.fixture".to_string(), "synthetic+support".to_string()]
         );
     }
 
