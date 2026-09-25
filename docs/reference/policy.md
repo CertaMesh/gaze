@@ -5,7 +5,8 @@ build its detection-and-redaction pipeline. It declares which detectors run,
 which PII classes they emit, and what action the pipeline takes when each class
 is found.
 
-This document describes the schema as shipped in v0.4.0-rc.1. The canonical
+This document describes the current policy schema (`schema_version = "0.1.0"`;
+see [Policy schema versioning](#policy-schema-versioning)). The canonical
 parser lives at [`crates/gaze/src/policy.rs`](../../crates/gaze/src/policy.rs);
 the CLI wiring (argument parsing, context envelope assembly, policy-error
 mapping) is in [`crates/gaze-cli/src/main.rs`](../../crates/gaze-cli/src/main.rs).
