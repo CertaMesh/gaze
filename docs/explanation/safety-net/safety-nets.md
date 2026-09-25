@@ -202,7 +202,7 @@ production default since v0.8.1. Pass an explicit `Strict` policy to
 `Pipeline::clean_with_safety_net_policy_detect_context`, or use
 `Pipeline::scan_safety_nets`, when you want report-only behaviour. Mode catalog
 and the full lowering table:
-[`safety-net-modes.md`](safety-net-modes.md#6-fallback-flag).
+[`safety-net-modes.md`](safety-net-modes.md#the-fallback-applies-only-under-resolve).
 
 The pipeline calls
 `Pipeline::clean_with_safety_net_detect_context`, which:
