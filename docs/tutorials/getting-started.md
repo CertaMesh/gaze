@@ -186,7 +186,7 @@ dictionary recognizer and tokenizes `ORD-789012` as `Custom:order_id`. See the
 | `PolicyError` (unknown field) | Typo in `policy.toml` | Check [docs/reference/policy.md](../reference/policy.md) |
 | `Error::BlobExpired { .. }` | Snapshot TTL elapsed | Increase `ttl` (a `Duration`) or refresh before expiry |
 | Export errors on `Ephemeral` | Cannot restore from ephemeral sessions | Use `Scope::Conversation` |
-| `RulepackError::UnsupportedValidator` | Unknown validator name | See valid names in [docs/reference/policy.md](../reference/policy.md#validators) |
+| `RulepackError::UnsupportedValidator` | Unknown validator name | See valid names in [docs/reference/policy.md](../reference/policy.md#built-in-validators) |
 | Tokens not restored | Wrong session blob | The blob must come from the exact session that produced the clean output |
 
 ## Next steps
