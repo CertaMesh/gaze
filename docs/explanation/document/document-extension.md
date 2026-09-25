@@ -1,8 +1,20 @@
-# Document Extension Architecture
+# Document extension architecture
+
+`gaze-document` turns a PNG, JPG, or PDF into a `SafeBundle`: files an agent
+can read, plus restore material that stays with the owner. This page covers the
+bundle that ships today and the envelope planned to sign it.
 
 `DocumentExtension` is the v0.7.x upstream hook for `gaze-document`. It lets a
 document bundle bind document metadata into the same signed owner-only
 `SensitiveSnapshot` that already restores tokens.
+
+## Shipped in v0.7.1
+
+`gaze-document` now ships the OSS document-ingestion path with PNG/JPG/PDF
+input, Tesseract OCR, optional PDF rasterization, `write_bundle` runtime
+separation, and a versioned `BundleReport` with `bundle_version = 2`. The
+signed `DocumentExtension` envelope described below is still the intended Design B
+integrity upgrade, not the v0.10 on-disk owner manifest.
 
 ## Boundary
 
@@ -24,7 +36,7 @@ remains a v0.11+ Design B follow-up; v0.10 Design A keeps the shipped JSON
 manifest and enforces the partition with `AgentBundleDir` / `OwnerBundleDir`
 newtypes plus path validation.
 
-## File Shapes
+## Bundle files
 
 The shipped writer emits three of these files: `clean.md`, `manifest.json`,
 and `report.json` (`CLEAN_MARKDOWN_FILE`, `MANIFEST_FILE`, and `REPORT_FILE` in
@@ -45,6 +57,17 @@ v0.10 bundle file that can carry reversible PII, so it stays in `owner_out`.
 Moving the owner restore material to the signed snapshot envelope
 (`Session::export_with_extension` -> `manifest.bin`) is deferred to v0.11+.
 
+### report.json
+
+`report.json` is metadata-only: status, codec provenance, capability flags,
+counts, warning codes, and safety-net stats. It must not contain raw PII or
+token restore values.
+
+## The DocumentExtension envelope
+
+The envelope is the planned Design B integrity upgrade. It adds two files and
+versions the bundle as one unit.
+
 ### layout.json
 
 `layout.json` carries geometry, reading order, coordinate-space metadata, and
@@ -57,19 +80,13 @@ PDF metadata, EXIF fields, or codec stderr/stdout.
 pixels. Its metadata is not authoritative; the signed snapshot extension is the
 integrity root.
 
-### report.json
-
-`report.json` is metadata-only: status, codec provenance, capability flags,
-counts, warning codes, and safety-net stats. It must not contain raw PII or
-token restore values.
-
-## Versioning
+### Versioning
 
 `DocumentExtension::schema_version` is a single bundle-level `u16`. It versions
 the bundle contract as one unit. Sub-files do not carry independent schema
 versions because spans and integrity data cross file boundaries.
 
-## Rust Hook
+### Rust hook
 
 ```rust
 use gaze::{DocumentExtension, Scope, Session};
@@ -88,11 +105,3 @@ let manifest_bin = session.export_with_extension(extension)?.into_bytes();
 
 `Session::export()` remains unchanged for text-only adopters. `Session::import`
 continues to restore both plain v3 and document-extended v4 snapshots.
-
-## Shipped in v0.7.1
-
-`gaze-document` now ships the OSS document-ingestion path with PNG/JPG/PDF
-input, Tesseract OCR, optional PDF rasterization, `write_bundle` runtime
-separation, and a versioned `BundleReport` with `bundle_version = 2`. The
-signed `DocumentExtension` envelope shown above is still the intended Design B
-integrity upgrade, not the v0.10 on-disk owner manifest.
