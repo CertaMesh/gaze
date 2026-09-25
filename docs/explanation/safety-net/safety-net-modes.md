@@ -17,9 +17,9 @@ with `--safety-net-mode` and `--safety-net-fallback`; `gaze clean` and
 
 | Mode | What happens to a suspect | Reversible? | Production use |
 |---|---|---|---|
-| `resolve` **(default)** | Promoted into a synthetic custom-recognizer match; the resolver runs again and the suspect becomes a normal, restorable token. What resolve cannot handle goes to the fallback. | Yes, for every resolved suspect | Default |
+| `resolve` **(default)** | The suspect span is tokenized directly as a normal, restorable token of the suspect's class (family `safety_net`); the nets then run once more. What resolve cannot handle goes to the fallback. | Yes, for every resolved suspect | Default |
 | `redact` | The suspect span is replaced with a one-way `[REDACTED:<class>]` marker, and an audit row is written. There is no fallback. | No, for that span | Opt-in, when you want to skip the resolve pass |
-| `strict` | Nothing is changed; the report is returned. The CLI refuses the document: exit code `3`, empty stdout. | Nothing was sent | Opt-in, when any suspect must stop the run |
+| `strict` | Nothing is changed; the report is returned. The CLI refuses the document (exit code `3`, empty stdout) when an `Uncovered` or `PartialBleed` suspect remains; a `ClassMismatch`-only report gets the stderr warning and ships. | Nothing was sent | Opt-in, when an uncovered suspect must stop the run |
 | `tolerant` | Nothing is changed; the CLI prints a warning and ships the document. **The suspect reaches the model.** | Yes | Never. Development only |
 
 Two kinds of finding are never acted on in any mode:
@@ -44,19 +44,18 @@ Two kinds of finding are never acted on in any mode:
 The test `safety_net_policy_lowering_covers_all_twelve_representable_pairs` in
 `crates/gaze/tests/safety_net.rs` pins all twelve pairs.
 
-Under `resolve`, a suspect goes to the fallback when:
+Under `resolve`, a suspect goes to the fallback for one of two reasons:
 
-- **`ValidatorVeto`**: the promoted span fails its validator, for example a
-  malformed phone number.
-- **`AnchorMissing`**: the promoted recognizer needs a
-  [mandatory anchor](../detection/anchor-resolution.md) that the context does
-  not contain.
+- **`OverlapConflict`**: the suspect is a `ClassMismatch` that does not lie
+  wholly inside one live token or redaction marker, so tokenizing it would
+  re-tokenize a token; or its span does not match the manifest and no complete
+  multi-gap plan covers it; or two planned spans overlap.
 - **`ResidualSuspect`**: after the one resolve pass, the re-run still reports a
-  suspect.
-- **`OverlapConflict`**: the suspect is a `ClassMismatch` on a token that is
-  not a placeholder Gaze issued, so promoting it would re-tokenize a token.
+  suspect; or the suspect span splits a UTF-8 character.
 
-These four are the closed `FallbackReason` enum. The CLI also prints a
+`ValidatorVeto` and `AnchorMissing` exist in the closed `FallbackReason` enum
+and are accepted in audit rows, but no code path emits them today: resolve
+never runs a validator or an anchor check on a suspect. The CLI also prints a
 `ClassMismatch` warning on stderr in every mode. The fallback acts on the report from the re-run, at
 post-resolve positions, not on the first report, whose spans may already be
 tokenized.

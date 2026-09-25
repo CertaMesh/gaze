@@ -6,6 +6,11 @@
 > [Safety-net modes](safety-net-modes.md). Where this record and the code
 > disagree, the code wins. Known differences:
 >
+> - `resolve` does not promote a suspect into a synthetic custom-recognizer
+>   match, and the conflict resolver does not run again: the suspect span is
+>   tokenized directly (family `safety_net`). No validator or anchor check runs
+>   on a suspect, so the `ValidatorVeto` and `AnchorMissing` fallback reasons
+>   (§5.4) are never emitted; only `OverlapConflict` and `ResidualSuspect` are.
 > - The redaction marker is `[REDACTED:<class>]` and is not configurable. The
 >   proposed `[REDACTED-by-safety-net]` literal and the policy-configurable
 >   sentinel (§4.1, §14 Q1) were not built.
