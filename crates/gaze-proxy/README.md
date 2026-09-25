@@ -129,15 +129,20 @@ contract.
 
 ### Configured safety nets at request admission
 
-Surfaced request text in the direct Anthropic and legacy adapter paths now passes
-configured safety-net admission after primary pseudonymization and before provider
-I/O. Nets inspect the complete transformed surface with a manifest built from the
-actual session token ownership and restore boundaries. Token-contained reflags,
-including class disagreements, remain allowed; raw-gap or malformed suspects and
-net execution errors reject the request. No destructive clean fallback is used.
+Surfaced request text in the direct Anthropic and legacy adapter paths first runs
+the same safety-net Resolve step as `gaze clean`: every span a configured net flags
+becomes a restorable token. The result then passes configured safety-net admission
+before provider I/O. Nets inspect the complete transformed surface with a manifest
+built from the actual session token ownership and restore boundaries. Token-contained
+reflags, including class disagreements, remain allowed; a flagged span Resolve could
+not tokenize, a malformed suspect, or a net execution error rejects the request with
+`422` and a typed refusal (variant, fallback reason, suspect classes; never text). No
+destructive clean fallback is used. See
+[Safety Nets and Refusals](../../docs/explanation/proxy/proxy-runtime.md#safety-nets-and-refusals).
 
-**Compatibility:** configured nets can now deny requests that previously reached
-the provider, including text preserved by primary policy when a net flags it.
+**Compatibility:** a net-flagged span, including text preserved by primary policy,
+is now tokenized and forwarded instead of refused. Requests Resolve cannot protect
+are still denied before reaching the provider.
 Admission adds inference on surfaced text and codec validation views, bypasses
 observer skip optimizations, and runs all registry backends selected across the
 locale chain. Registry resolution and inference errors fail closed. This can
