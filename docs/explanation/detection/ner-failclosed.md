@@ -38,8 +38,8 @@ execution; chunk failures are propagated as recognizer errors.
 
 The fallible contract above only holds if the backend actually reports a
 failure. Between the ONNX session and the BIO decode there is a second
-boundary -- the raw output tensor -- and a malformed tensor there must not be
-read as "this document contains no PII".
+boundary, the raw output tensor, and a malformed tensor there must not be read
+as "this document contains no PII".
 
 `OrtBackend::detect` funnels every model result through one validation
 function before any label selection, softmax, or span filtering runs. These
@@ -56,7 +56,7 @@ empty span list:
 The non-finite scan covers every value in the tensor, including `O` rows,
 low-confidence rows, and special-token rows. Restricting it to the argmax
 label or to above-threshold rows would let corruption hide behind exactly the
-rows the decoder discards -- and `NaN` loses every `>` comparison in the
+rows the decoder discards. `NaN` also loses every `>` comparison in the
 argmax fold, so a corrupt row silently reports `O` with maximum plausibility.
 
 An empty result stays representable only where it is genuinely correct: an

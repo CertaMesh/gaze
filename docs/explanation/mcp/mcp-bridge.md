@@ -98,5 +98,5 @@ gaze mcp bridge --config gaze.mcp.toml --dry-run
 gaze mcp bridge --config gaze.mcp.toml --print-tools
 ```
 
-`--session-dir` overrides `[session].dir` for file mode. Audit JSONL is written
-under the same MCP manifest directory used by `gaze mcp serve`.
+`--session-dir` overrides `[session].dir` for file mode. The bridge writes audit
+JSONL under the same MCP manifest directory used by `gaze mcp serve`.

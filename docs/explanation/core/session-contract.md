@@ -1,6 +1,6 @@
 # Session Contract
 
-A `Session` is the boundary of a pseudonym namespace in gaze. This document describes the runtime contract - what `Session` and `Scope` guarantee, what they do not guarantee, and the common pitfall that triggered issue #275.
+A `Session` is the boundary of a pseudonym namespace in Gaze. The runtime contract below covers what `Session` and `Scope` guarantee, what they do not guarantee, and the common pitfall that triggered issue #275.
 
 ## The Contract
 
@@ -24,7 +24,7 @@ A `Session` is the boundary of a pseudonym namespace in gaze. This document desc
 **Symptom:** the same email or person name in two adapter-side conversations
 produces the same pseudonym. Per-class counters (`Email_N`, `Person_N`) grow
 monotonically across the entire app lifetime. Internal value-to-token maps grow
-unboundedly.
+without bound.
 
 **Cause:** one `Session::new(Scope::Ephemeral)` shared across all calls. The
 `Scope` variant controls *persistence* (whether the namespace survives process

@@ -11,9 +11,9 @@ recognizer floor, do not change token shapes, and are default-off through
   token spans with no residual gold-shape signals. It never applies to
   `Resolve` or `Redact`.
 - `capitals_heuristic_gate`: skips observer-only Pass-3 for numeric-heavy inputs
-  and inputs without a capital letter at a non-sentence-start position. This is
-  valid only for configured English/German capital-case locales; unsupported
-  locales fail closed with `UnsupportedCapitalHeuristicLocale`.
+  and inputs without a capital letter at a non-sentence-start position. The
+  heuristic is valid only for configured English/German capital-case locales;
+  unsupported locales fail closed with `UnsupportedCapitalHeuristicLocale`.
 - `prefix_cache`: compatibility flag only. The pipeline always rescans each
   complete input, including repeated or extended text in live and transactional
   calls. It stores no raw prefixes and emits the current recognizer/rule audit
@@ -36,9 +36,10 @@ recognizer floor, do not change token shapes, and are default-off through
 - Both `PrefixCacheWriteMode::Allow` and `Suppress` perform full scans without
   prefix storage. Token mappings, manifest offsets, transaction commit/drop and
   logger error propagation retain the normal full-scan behavior.
-- This intentionally trades opted-in prefix-cache throughput for detection
-  correctness. Repeated growing inputs scan all bytes each time, as with the
-  default configuration; token mappings remain reusable and restorable.
+- Disabling prefix reuse intentionally trades opted-in prefix-cache throughput
+  for detection correctness. Repeated growing inputs scan all bytes each time,
+  as with the default configuration; token mappings remain reusable and
+  restorable.
 
 ## Bench Snapshot
 

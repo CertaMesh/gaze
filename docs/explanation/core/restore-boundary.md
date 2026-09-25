@@ -54,7 +54,7 @@ wrapped) and on incomplete prefixed wrappers. Legacy emitted formats such as
 blocking. Only broad bare identifiers such as `Kunde_7`, `ORDER_12345`, and `run_1`
 move to audit-only.
 
-This deliberately removes the former bare-identifier rejection boundary in
+This change deliberately removes the former bare-identifier rejection boundary in
 pipeline, Session/MCP, and CLI restore. The trade improves exact round-trips and
 ordinary prose handling without granting any new token-to-value mapping. It is
 a narrower heuristic rejection net, not evidence of improved PII detection.
@@ -121,7 +121,7 @@ Phase B distinguishes:
 
 Blocking behavior is deferred until telemetry shows an acceptable false-positive
 profile. Structural raw-PII checks remain audit-only and opt-in. The lightweight
-token-shape audit scan in restore telemetry is always run: `manifest_bypass_count`
+token-shape audit scan in restore telemetry always runs: `manifest_bypass_count`
 counts broad bare identifier shapes outside authorized substitutions. It is a lexical
 suspicion count, not proof that raw PII bypassed the manifest. It never drives
 the Strict decision. `trap_shape_count` counts all unprefixed trap matches,

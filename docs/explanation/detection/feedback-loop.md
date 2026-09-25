@@ -55,8 +55,9 @@ The ignored integration test is:
 cargo test -p gaze-recognizers --test coverage_loop -- --ignored --nocapture
 ```
 
-Default mode is informational. `GAZE_COVERAGE_LOOP_INFO_ONLY` unset or set to
-`1` prints and writes the report without failing on baseline regressions.
+Default mode is informational. With `GAZE_COVERAGE_LOOP_INFO_ONLY` unset or set
+to `1`, the test prints and writes the report without failing on baseline
+regressions.
 
 Blocking mode:
 

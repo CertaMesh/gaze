@@ -64,8 +64,9 @@ directory:
 - Windows: `%LOCALAPPDATA%\gaze\proxy.pid`
 
 Status and start always validate the recorded PID with process liveness checks.
-If the PID is dead, the pidfile is stale and removed before continuing. Stop is
-signal-only: `SIGTERM`, bounded wait, optional `SIGKILL` with `--force`.
+If the PID is dead, the command treats the pidfile as stale and removes it
+before continuing. Stop is signal-only: `SIGTERM`, bounded wait, optional
+`SIGKILL` with `--force`.
 
 The proxy exposes `/_gaze_proxy/healthz` for local health inspection. The path is
 reserved outside all adapter-matched provider routes.

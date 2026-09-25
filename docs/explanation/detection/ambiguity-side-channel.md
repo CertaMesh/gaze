@@ -58,9 +58,9 @@ Validator failure reasons are also closed:
 - `organization`
 - `custom:<name>`
 
-This keeps JSON side-channel blobs, SQLite class columns, and CLI exports on one
-taxonomy. Deserialization accepts legacy builtin names such as `Name` so checked
-in and adopter-owned older snapshots remain importable.
+Sharing these strings keeps JSON side-channel blobs, SQLite class columns, and CLI
+exports on one taxonomy. Deserialization accepts legacy builtin names such as
+`Name` so checked-in and adopter-owned older snapshots remain importable.
 
 ## SQLite Storage
 
