@@ -1,11 +1,11 @@
-# Ambiguity Side-Channel
+# Ambiguity side-channel
 
 Gaze keeps pseudonymization decisions reversible and audit-safe by separating
 token emission from metadata explaining why a recognizer outcome was kept,
 dropped, or generalized. The ambiguity side-channel extends that audit metadata
 for v0.7.x collision handling.
 
-## Contract
+## Public value contract
 
 `gaze-types` owns the public value contract:
 
@@ -23,7 +23,7 @@ The side-channel is metadata-only. It records PII classes, recognizer IDs, and
 closed reason enums. It does not store original PII bytes, emitted token bytes,
 or restore material.
 
-## Shape
+## Record shape
 
 An ambiguity record carries:
 
@@ -61,7 +61,7 @@ Sharing these strings keeps JSON side-channel blobs, SQLite class columns, and C
 exports on one taxonomy. Deserialization accepts legacy builtin names such as
 `Name` so checked-in and adopter-owned older snapshots remain importable.
 
-## SQLite Storage
+## SQLite storage
 
 `gaze-audit::SqliteLogger` owns persistence. The v0.7.x migration adds four
 nullable columns to `redaction_log`:
@@ -90,7 +90,7 @@ on `serde_json` or `rusqlite`.
 for the collision-family producer work. Until producers populate them, they are
 `NULL`.
 
-## Query Semantics
+## Query semantics
 
 `AuditLogRow` exposes the four new columns as optional strings:
 
@@ -104,7 +104,7 @@ interpret CLI presentation concerns. CLI JSONL parses the JSON strings back into
 typed `ValidatorFailReason` and `AmbiguityRecord` values before writing output.
 
 `build_audit_query_sql` accepts a `PresentColumns` set for cross-version
-compatibility. If a database lacks a Spike 4 column, query projection uses
+compatibility. If a database lacks one of these four columns, query projection uses
 `NULL AS <column>`. Filters against missing columns naturally return no matching
 rows, except `has_ambiguity = false`, which matches legacy rows because their
 projected ambiguity value is `NULL`.
@@ -126,7 +126,7 @@ This is intentionally simple for v0.7.x. If audit logs become large enough that
 reason filtering needs indexes, add generated/indexed columns in a later
 migration.
 
-## CLI Surface
+## CLI surface
 
 `gaze audit query` and `gaze audit export` accept:
 
@@ -152,7 +152,7 @@ JSONL export emits parsed typed values:
 - `collision_family: "de-postal-phone"`
 - `collision_variant: "postal-de"`
 
-## Safety Properties
+## Safety properties
 
 The side-channel strengthens axis 4 by making fallback decisions traceable to
 closed reason enums and recognizer IDs. It strengthens axis 5 by bundling

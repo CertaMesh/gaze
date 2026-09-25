@@ -1,4 +1,4 @@
-# Validator Veto
+# Validator veto
 
 Validator veto is the pre-resolver stage that turns validator-backed recognizer
 failures into typed audit metadata. It replaces the old regex self-drop path:
@@ -29,7 +29,7 @@ For each candidate:
 `ConflictTier::Validator` still means the same-class containment tie-breaker.
 `ConflictTier::ValidatorVeto` is only used for this pre-resolver drop.
 
-## Audit Shape
+## Audit shape
 
 The pipeline logs one loser-only `RedactionEntry` per vetoed candidate:
 
@@ -47,7 +47,7 @@ semantics do not change. The row is metadata-only: source, class, action,
 document kind, conflict tier, session id, and typed failure reason. Raw matched
 bytes never enter the audit entry.
 
-## Type Ownership
+## Type ownership
 
 `ValidatorKind`, `ValidatorOutcome`, and `ValidatorFailReason` live in
 `gaze-types` because both recognizers and the core pipeline consume them.
@@ -75,7 +75,7 @@ compatibility.
 Phone reasons are always present in the type. They are emitted only when the
 `phone-parser` feature makes the corresponding validators available.
 
-## North-Star Fit
+## North-star fit
 
 - **Axis 1, reliability:** invalid validator-backed candidates still fail
   closed before token emission.
@@ -84,14 +84,14 @@ Phone reasons are always present in the type. They are emitted only when the
 - **Axis 4, auditability:** previously silent drops now produce typed
   loser-only audit rows.
 
-## Audit Volume
+## Audit volume
 
 This stage intentionally increases audit volume. Any invalid validator-backed
 shape that was previously dropped inside `RegexDetector` now emits one
 `validator_veto` row. Adopters with high invalid-candidate rates should expect
 redaction logs to grow in proportion to those rejects.
 
-## Non-Goals
+## Non-goals
 
 - Safety nets remain observer-only and post-clean. They do not participate in
   validator veto.
