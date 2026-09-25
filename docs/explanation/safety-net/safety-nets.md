@@ -715,10 +715,11 @@ to a rule token of that class resolved against it; with their own classes 42
 more spans tokenize. Timings from that run are provisional (shared host under
 load) and are not a latency claim.
 
-Every residual suspect a post-policy re-scan reports sits inside a Gaze token:
-the model reads token text such as `Custom:building_number` as a building
-number. A suspect inside a live token is never acted on, so bytes and restore
-are unaffected, under every `Resolve` fallback including `strict`
+The model can read token text such as `Custom:building_number` as a building
+number. Findings wholly inside an owned placeholder are dropped before policy;
+straddling findings retain only exposed bytes. A suspect inside a live token
+is never acted on, so bytes and restore are unaffected under every `Resolve`
+fallback, including `strict`
 (`nym_suspect_inside_its_own_token_text_is_protected_under_every_resolve_fallback`).
 Masking token text before the net reads it is a follow-up (todo 3681). A first
 attempt replaced every manifest token with same-length spaces before inference

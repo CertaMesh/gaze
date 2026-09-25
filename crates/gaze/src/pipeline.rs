@@ -1575,11 +1575,9 @@ impl Pipeline {
     ) -> Result<()> {
         match decision {
             SafetyNetDecision::Observe { .. } => Ok(()),
-            // Redact mode acts on every suspect the nets reported, including any that lie inside
-            // a live token: the mode's contract is that the flagged bytes go, and the redactor
-            // expands each span to swallow whatever manifest entry it overlaps. That is the
-            // documented axis-2 cost of `Redact`, and it is why the `Resolve` fallback -- which
-            // promises to preserve what resolve already protected -- uses the filtered set above.
+            // The scan boundary has removed owned-placeholder bytes from every finding, so
+            // Redact may only act on exposed bytes. The redactor can still widen against an
+            // emitted token if a later caller supplies an unfiltered report directly.
             SafetyNetDecision::Redact => {
                 let actionable = without_unactionable_subwords(&clean.text, report);
                 self.redact_safety_net_suspects(
@@ -5704,6 +5702,45 @@ mod tests {
             .iter()
             .all(|suspect| { suspect.span.start >= manifest[0].clean_span.end }));
         assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), raw);
+    }
+
+    #[test]
+    fn fallback_redacts_only_the_exposed_part_of_a_straddling_finding() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let pipeline = Pipeline::builder()
+            .detector(detector_with_detections(
+                "email.fixture",
+                vec![Detection::new(0..21, PiiClass::Email, "email.fixture")],
+            ))
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(TokenStraddleSafetyNet)
+            .register_safety_net(MarkerSafetyNet {
+                id: "overlap.fixture",
+                marker: " Schmidt",
+                class: PiiClass::Organization,
+            })
+            .build()
+            .unwrap();
+        let (document, manifest, _) = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text("alice@example.invalid Schmidt".to_string()),
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+            )
+            .unwrap();
+        let CleanDocument::Text(clean) = document else {
+            panic!("text input must produce text");
+        };
+        let email = &clean[manifest[0].clean_span.clone()];
+        assert_eq!(
+            session.restore(email).as_deref(),
+            Some("alice@example.invalid")
+        );
+        assert!(clean[manifest[0].clean_span.end..].contains("[REDACTED:"));
+        assert!(!clean[..manifest[0].clean_span.end].contains("[REDACTED:"));
     }
 
     impl SafetyNet for ManifestMismatchSafetyNet {
