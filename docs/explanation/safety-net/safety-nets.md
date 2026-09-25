@@ -6,9 +6,9 @@ mutate the [`Manifest`](../../../crates/gaze-types/src/lib.rs), and never reach
 the restore path. They exist to surface leak suspects so the deterministic
 detectors and rulepacks can be improved.
 
-No safety net runs by default. Two opt-in backends ship: the OpenAI Privacy
-Filter subprocess adapter (`--safety-net openai-filter`) and the in-process
-Nym-small adapter (`--safety-net nym`). CLI flags and setup:
+A policy without `[safety_net]` runs no net. `gaze setup` enables the in-process
+Nym-small adapter by default; `gaze setup --safety-net none` opts out. The OpenAI
+Privacy Filter subprocess adapter remains opt-in (`--safety-net openai-filter`). CLI flags and setup:
 [`crates/gaze-cli/README.md`](../../../crates/gaze-cli/README.md#safety-net).
 
 Before a net scans clean text, Gaze replaces the random eight-digit session
@@ -65,17 +65,17 @@ can land without changing the trait shape or audit schema.
                                 │ (this is what restore will reverse)
                                 ▼
    ┌─────────────────────────────────────────────────────────────────┐
-   │ PASS 3 — SAFETYNET (observer-only, opt-in, off by default)      │
+   │ PASS 3 — SAFETYNET (setup enables Nym by default)               │
    │   Selector: --safety-net-backend or registry dispatch           │
    │                  ↓                  ↓                           │
    │   ┌──────────────────────┐  ┌────────────────────────────┐      │
-   │   │  openai-filter       │  │  nym (opt-in)              │      │
+   │   │  openai-filter       │  │  nym (setup default)       │      │
    │   │  (OPF subprocess)    │  │  (in process, ORT)         │      │
    │   │                      │  │                            │      │
    │   │  ─ heavier weights   │  │  ─ Nym-small v3 int8       │      │
    │   │  ─ OpenAI's PII set  │  │  ─ op-B label allowlist    │      │
-   │   │  ─ requires `opf`    │  │  ─ `gaze setup             │      │
-   │   │    binary install    │  │     --safety-net nym`      │      │
+   │   │  ─ requires `opf`    │  │  ─ `gaze setup`            │      │
+   │   │    binary install    │  │    enables Nym             │      │
    │   └──────────┬───────────┘  └────────────┬───────────────┘      │
    │              │                            │                     │
    │              └──────────────┬─────────────┘                     │
@@ -591,12 +591,12 @@ in [`class_map.rs`](../../../crates/gaze-recognizers/src/safety_net/openai_filte
 the `class-map-override-safety` xtask gate runs the
 `all_official_labels_map_exactly_to_gaze_classes` test on every PR.
 
-## Nym-small adapter (opt-in)
+## Nym-small adapter
 
 `--safety-net nym` runs [`Wismut/nym-pii-multilingual-small`](https://huggingface.co/Wismut/nym-pii-multilingual-small)
 v3 (int8 ONNX, ModernBERT, 22 languages including German and English) in
-process through ONNX Runtime. It is **opt-in**: the default safety-net posture
-does not change, and nothing loads unless `nym` is selected. Source:
+process through ONNX Runtime. The `gaze setup` policy enables it by default. With no policy, nothing loads
+unless `nym` is selected explicitly. Source:
 [`crates/gaze-recognizers/src/safety_net/nym/`](../../../crates/gaze-recognizers/src/safety_net/nym/mod.rs),
 behind the `safety-net-nym` feature (on in the default `gaze-cli` build through
 `setup`).
@@ -606,7 +606,7 @@ fallback and audit path as every other net.
 
 ### Pinned bundle
 
-`gaze setup --safety-net nym` downloads `int8/config.json`,
+`gaze setup` downloads `int8/config.json`,
 `int8/model_int8.onnx` and `int8/tokenizer.json` at revision
 `4348999cd3c2e20c49615e9af7c6bbb45b64cd85` into
 `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/nym-small-int8`, writes the
@@ -734,17 +734,22 @@ measured proposal.
   contains none of these shapes, so its false-flag rate says nothing about them.
   The fixture `room-number-known-gap` pins the current behaviour; an
   address-context guard is a follow-up.
-- **Latency is not proven.** Measured p95 on a loaded shared host was 116 ms on
-  the 120-document pre-gate set but 390 ms on documents of 1 KB or more. A
-  quiet-host or in-process measurement decides whether this net can become a
-  default.
-- **Licence review (open, not resolved here).** The model card declares MIT
-  (inherited from `jhu-clsp/mmBERT-small`); the repository has no LICENSE file.
-  v3 training data includes 77.5k Wikipedia passages auto-labelled by
-  gemma-4-26b. Whether CC-BY-SA obligations reach weights trained on that text,
-  and whether the teacher model's terms add conditions, needs legal review
-  before Gaze redistributes or recommends the weights by default. Gaze does not
-  vendor the weights; `gaze setup` fetches them from the upstream repository.
+- **Latency measured (2026-09-24).** On a quiet MacBook Pro M5 Max with 64 GB RAM, macOS 26.5, release build, 30 documents: rules + NER p50 40.0 ms / p95 65.3 ms; with Nym p50 89.8 ms / p95 171.9 ms, peak memory 1,027 MB. This closes the default-decision latency item; it is a small local sample, not a fleet guarantee.
+
+### Licence review (open)
+
+The model card declares MIT (inherited from `jhu-clsp/mmBERT-small`); the
+repository has no LICENSE file. v3 training data includes 77.5k Wikipedia
+passages auto-labelled by gemma-4-26b. Whether CC-BY-SA obligations reach
+weights trained on that text, and whether the teacher model's terms add
+conditions, still needs legal review.
+
+On 2026-09-24 the user accepted this open question and decided to enable Nym
+in generated setup policies with an explicit setup notice. That notice names
+the model and MIT model-card licence, links this item, names the upstream
+source and pinned revision, and gives `gaze setup --safety-net none` as the
+opt-out. Gaze does not vendor the weights; setup fetches the pinned revision
+from the upstream repository.
 
 ## Structured-document per-field behavior
 

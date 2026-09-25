@@ -23,6 +23,22 @@ use crate::error::CliError;
 fn main() -> ExitCode {
     logger::install_panic_hook();
 
+    #[cfg(feature = "setup")]
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("setup")) {
+        let args = std::env::args_os().collect::<Vec<_>>();
+        if args
+            .windows(2)
+            .any(|pair| pair[0] == "--safety-net" && pair[1] == "ner")
+            || args.iter().any(|arg| arg == "--safety-net=ner")
+        {
+            let err = CliError::SetupDetail(
+                "`--safety-net ner` was removed; use `--safety-net none` for the former NER-only policy".to_string(),
+            );
+            err.emit_stderr();
+            return ExitCode::from(err.exit_code());
+        }
+    }
+
     // Test-only panic trigger. Lets the integration suite prove the panic
     // hook sanitizes stderr under `RUST_BACKTRACE=1`. Gated by an env var
     // so no production invocation can stumble into it.

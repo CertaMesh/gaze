@@ -81,7 +81,7 @@ enum Cmd {
     /// Requires the binary to be built with `--features setup`.
     #[cfg(feature = "setup")]
     Setup {
-        /// Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available; nym downloads and verifies the pinned Nym-small int8 bundle.
+        /// Safety-net setup path. Defaults to Nym; `none` keeps NER only; `opf` adds a verified OPF checkpoint for explicit stacked use.
         #[arg(long, value_enum)]
         safety_net: Option<setup::SetupSafetyNet>,
         /// Policy TOML output path. Defaults to ./gaze.toml.

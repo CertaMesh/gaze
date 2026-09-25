@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** `gaze setup --safety-net ner` is removed. Use `--safety-net none`
+  for the former NER-only policy. `gaze setup` now installs Nym by default and
+  writes an activating policy with the pinned model path. OPF remains opt-in
+  and can be stacked by the printed command. The doctor proves Nym catches a
+  synthetic plate; setup prints the model card MIT licence, pinned upstream
+  revision, open training-data licence review, and opt-out.
+
 - **Breaking:** `--safety-net-backend nym` now requires one explicit
   `--safety-net nym` selection. Add `--safety-net nym` to existing commands
   that used only the backend selector; the old form succeeded without

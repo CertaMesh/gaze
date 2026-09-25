@@ -15,13 +15,13 @@ This is pseudonymization, not deletion. The model never needs to know who the cu
 A support agent asks the model: *"Draft a short reply confirming the refund."* The app attaches the ticket. The customer and every value are synthetic:
 
 ```text
-Ticket #48213 from Laura Meyer <laura.meyer@example.com>, phone +49 30 5550 1234:
+Ticket #48213 from Laura Meyer <laura.meyer@example.com>, phone +49 1555 0112233:
 I sent back the headphones from order 2026-4471 two weeks ago and still have no refund.
 Please pay it to my account DE89 3704 0044 0532 0130 00.
 Address: Lindenstraße 8, 10115 Berlin.
 ```
 
-**1. What the model receives** (real `gaze clean` output; the only edit is the per-session prefix, shortened from `<a37823d4:Name_1>` to `<Name_1>`):
+**1. What the model receives** (captured with the explicit core + NER policy below, no Nym; the only edit is the per-session prefix, shortened from `<5042f9d8:Name_1>` to `<Name_1>`):
 
 ```text
 Ticket #<Custom:postal_code_1> from <Name_1> <<Email_1>>, phone <Custom:phone_1>:
@@ -69,23 +69,25 @@ What this run gets wrong, stated plainly:
 
 The same boundary applies to tool-call arguments in agent frameworks: the JSON the model fills in carries placeholders, and Gaze restores them before your tool runs ([how it fits your stack](#how-it-fits-your-stack)).
 
-This is the real output of the current `main` branch, not a picked best case. On the v0.14.0 benchmark (2,910 documents), the configuration that now ships by default (rules plus the NER model, no safety net) still let **20.7 % of personal-data (PII) bytes** through; the goal is zero ([benchmark](../../docs/reference/benchmarks/README.md#current-release)). The exact policy and commands: [reproduce this example](#reproduce-this-example).
+On the 2,910-document scored-label contract v2 benchmark, rules, NER, and Nym left **14,044 of 123,621 PII bytes (11.4%)** raw, with **0 refusals**; the goal is zero ([benchmark methods and evidence](../../docs/reference/benchmarks/README.md#safety-net-matrix)). Release prep will refresh this with the exact generated setup policy. The support-ticket policy and commands: [reproduce this example](#reproduce-this-example).
 
 ## Seven steps
 
-![Steps 1 to 4, normalize, recognize, resolve and swap, are the deterministic floor. Step 5, the optional safety net, and step 6, the output check, give a second opinion. The AI model sees placeholders only, and step 7 restores the reply.](../../docs/assets/gaze-seven-steps.svg)
+![Steps 1 to 4, normalize, recognize, resolve and swap, are the deterministic floor. Step 5, the safety net on by default, and step 6, the output check, give a second opinion. The AI model sees placeholders only, and step 7 restores the reply.](../../docs/assets/gaze-seven-steps.svg)
 
 1. **Normalize.** Tidy Unicode and spacing, and keep a map back to the original bytes.
-2. **Recognize.** About 40 bundled rules (formats, checksums, cue words) plus one NER model (a model that spots names and places) each propose candidates.
-3. **Resolve.** Where candidates overlap, one wins. The losers are logged.
+2. **Recognize.** 40 bundled rules (formats, checksums, cue words) plus one NER model (a model that spots names and places) each propose candidates.
+3. **Resolve.** Where candidates overlap, one wins; a whole entity takes precedence over pieces inside it. The losers are logged.
 4. **Swap.** Each winner becomes a placeholder plus a manifest entry. The same value always gets the same placeholder.
-5. **Safety net** (optional). A second, different model rereads the output and raises suspects. It is a second opinion and cannot edit anything itself.
+5. **Safety net (on by default: Nym; OPF opt-in).** It rereads the output and turns PII it catches into a normal restorable placeholder.
 6. **Output check.** Each suspect becomes a placeholder, is replaced with a one-way `[REDACTED:<class>]` marker as a last resort, or the whole document is refused, depending on the mode below.
 7. **Restore.** Placeholders in the reply become the originals. A placeholder Gaze never issued is refused, never guessed.
 
 Steps 1 to 4 are the deterministic floor: same input, same output, every placeholder traceable to a versioned rule.
 
 ## What happens when the safety net disagrees
+
+The policy from `gaze setup` runs Nym by default.
 
 | Mode | What happens to a suspect | Reversible? | Who refuses |
 |---|---|---|---|
@@ -98,7 +100,7 @@ The fallback (`--safety-net-fallback`) can be `redact` (default), `strict`, or `
 
 ## Reproduce this example
 
-The example above is synthetic. It is shown as produced with the bundled `core` rules and the Davlan NER model, with no safety net. Install the NER model once with `gaze setup` (or `bash scripts/fetch/fetch-ner-model.sh`) and save this policy as `example-policy.toml`:
+The example above is synthetic and uses a custom policy with `core` rules and Davlan NER, with no safety net. It is a reproducible illustration of that configuration; the policy from `gaze setup` now enables Nym and additional rulepacks. Install the NER model once with `gaze setup --safety-net none` (or `bash scripts/fetch/fetch-ner-model.sh`) and save this policy as `example-policy.toml`:
 
 ```toml
 schema_version = "0.1.0"
@@ -180,7 +182,7 @@ Each feature, what you get, where the proof lives.
 - **Reversible by contract.** Tokens are session-scoped, counted per class (`Email_1`, `Email_2`), and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback. Manifests written by an older minor restore on a newer minor — see the reversibility statement at the bottom of [`UPGRADE.md`](../../UPGRADE.md).
 - **Every token is auditable.** Each emission carries a `recognizer_id` plus `recognizer_version_id` (suffixed `_vN`) into the optional SQLite audit log. Pre-v0.8 rows surface as `legacy_unversioned`. The export column set never includes raw PII payloads.
 - **10 validator-backed national IDs across 5 locale packs, 3 locale-gated regex IDs.** Aadhaar (Verhoeff), NIR (MOD-97 variant), Steuer-ID (MOD 11,10), BSN (MOD-11), CPF + CNPJ (MOD-11), NHS (MOD-11), US SSN, UK NINO, Indian PAN. Adopters in BR / FR / NL / IN / UK / US get coverage with one `--locale` flag. Full table in [Detection coverage](#detection-coverage).
-- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](../../docs/explanation/detection/ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. No safety net runs by default. Two opt-in backends ship: the OpenAI Privacy Filter (subprocess) and Nym-small (in process). Contract: [`docs/explanation/safety-net/safety-nets.md`](../../docs/explanation/safety-net/safety-nets.md).
+- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](../../docs/explanation/detection/ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. A policy without `[safety_net]` runs no net; `gaze setup` enables Nym. OPF remains opt-in. Contract: [`docs/explanation/safety-net/safety-nets.md`](../../docs/explanation/safety-net/safety-nets.md).
 - **Fail closed everywhere.** Ambiguous matches are tokenized, never silently passed. Unknown validators or normalizers fail at policy load — no degraded mode. Strict-mode SafetyNet exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty.
 - **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) all redact correctly. The MCP runtime in [`gaze-mcp-core`](../../crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
 - **Multi-provider HTTP proxy with a daemon.** `gaze proxy start` puts a PII chokepoint in front of **API-key-authenticated** traffic to OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` — i.e. when an SDK or agent authenticates with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`. Consumer subscription tiers (ChatGPT Plus, Claude.ai, Gemini Advanced) use browser sessions and web endpoints and are outside this public proxy contract. SSE streams and tool-call argument JSON are accumulated chunk-by-chunk before redaction. The strict Anthropic profile proves each full request and response; see its [public contract](../../docs/explanation/proxy/anthropic-messages-contract.md). Subcommands `serve`, `start`, `stop`, `status`, `logs`, `restart`, plus opt-in `install-launchd` / `install-systemd-user`. See [`crates/gaze-proxy/README.md`](../../crates/gaze-proxy/README.md).
@@ -273,7 +275,7 @@ Tenant-specific PII — order IDs, song titles, artist names — needs a diction
 - Detection floor is regex + validator + locale cue. Tenant-specific PII needs a custom recognizer.
 - Linux x86_64 binaries link against glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). Older distros: build from source.
 - No Intel macOS, no musl, no Windows binaries today. Build from source.
-- NER model leaderboard: [`docs/reference/benchmarks/README.md`](../../docs/reference/benchmarks/README.md#ner-model-leaderboard). The shipped default is the pinned Davlan mBERT NER model with no safety net.
+- NER model leaderboard: [`docs/reference/benchmarks/README.md`](../../docs/reference/benchmarks/README.md#ner-model-leaderboard). The `gaze setup` policy uses the pinned Davlan mBERT NER model plus Nym.
 - SafetyNet benchmark cells for the OpenAI Privacy Filter are populated in the [safety-net matrix](../../docs/reference/benchmarks/README.md#safety-net-matrix). Nym-small measurements are in [safety nets](../../docs/explanation/safety-net/safety-nets.md#measured).
 - `gaze-proxy` ships OpenAI / Anthropic / Gemini adapters. Certificate management, PAC mode, Electron integration, transparent interception, browser sessions, and consumer subscription endpoints are outside its public contract.
 

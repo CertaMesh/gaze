@@ -19,13 +19,13 @@ This is pseudonymization, not deletion. The model never needs to know who the cu
 A support agent asks the model: *"Draft a short reply confirming the refund."* The app attaches the ticket. The customer and every value are synthetic:
 
 ```text
-Ticket #48213 from Laura Meyer <laura.meyer@example.com>, phone +49 30 5550 1234:
+Ticket #48213 from Laura Meyer <laura.meyer@example.com>, phone +49 1555 0112233:
 I sent back the headphones from order 2026-4471 two weeks ago and still have no refund.
 Please pay it to my account DE89 3704 0044 0532 0130 00.
 Address: Lindenstraße 8, 10115 Berlin.
 ```
 
-**1. What the model receives** (real `gaze clean` output; the only edit is the per-session prefix, shortened from `<a37823d4:Name_1>` to `<Name_1>`):
+**1. What the model receives** (captured with the explicit core + NER policy below, no Nym; the only edit is the per-session prefix, shortened from `<5042f9d8:Name_1>` to `<Name_1>`):
 
 ```text
 Ticket #<Custom:postal_code_1> from <Name_1> <<Email_1>>, phone <Custom:phone_1>:
@@ -73,23 +73,25 @@ What this run gets wrong, stated plainly:
 
 The same boundary applies to tool-call arguments in agent frameworks: the JSON the model fills in carries placeholders, and Gaze restores them before your tool runs ([how it fits your stack](docs/explanation/how-gaze-works.md#how-it-fits-your-stack)).
 
-This is the real output of the current `main` branch, not a picked best case. On the v0.14.0 benchmark (2,910 documents), the configuration that now ships by default (rules plus the NER model, no safety net) still let **20.7 % of personal-data (PII) bytes** through; the goal is zero ([benchmark](docs/reference/benchmarks/README.md#current-release)). The exact policy and commands: [reproduce this example](docs/explanation/how-gaze-works.md#reproduce-this-example).
+The [v0.14.0 release benchmark](docs/reference/benchmarks/README.md#current-release) measured rules plus NER, without a safety net, under scored-label contract v1: **27,000 of 130,282 PII bytes (20.7243%)** survived. The goal is zero. v0.15 turns Nym on by default in `gaze setup`; its release benchmark will replace this number using the exact generated setup policy ([release prep runner, PR #643](https://github.com/CertaMesh/gaze/pull/643)). The support-ticket policy and commands: [reproduce this example](docs/explanation/how-gaze-works.md#reproduce-this-example).
 
 ## Seven steps
 
-![Steps 1 to 4, normalize, recognize, resolve and swap, are the deterministic floor. Step 5, the optional safety net, and step 6, the output check, give a second opinion. The AI model sees placeholders only, and step 7 restores the reply.](docs/assets/gaze-seven-steps.svg)
+![Steps 1 to 4, normalize, recognize, resolve and swap, are the deterministic floor. Step 5, the safety net on by default, and step 6, the output check, give a second opinion. The AI model sees placeholders only, and step 7 restores the reply.](docs/assets/gaze-seven-steps.svg)
 
 1. **Normalize.** Tidy Unicode and spacing, and keep a map back to the original bytes.
-2. **Recognize.** About 40 bundled rules (formats, checksums, cue words) plus one NER model (a model that spots names and places) each propose candidates.
-3. **Resolve.** Where candidates overlap, one wins. The losers are logged.
+2. **Recognize.** 40 bundled rules (formats, checksums, cue words) plus one NER model (a model that spots names and places) each propose candidates.
+3. **Resolve.** Where candidates overlap, one wins; a whole entity takes precedence over pieces inside it. The losers are logged.
 4. **Swap.** Each winner becomes a placeholder plus a manifest entry. The same value always gets the same placeholder.
-5. **Safety net** (optional). A second, different model rereads the output and raises suspects. It is a second opinion and cannot edit anything itself.
+5. **Safety net (on by default: Nym; OPF opt-in).** It rereads the output and turns PII it catches into a normal restorable placeholder.
 6. **Output check.** Each suspect becomes a placeholder, is replaced with a one-way `[REDACTED:<class>]` marker as a last resort, or the whole document is refused, depending on the mode below.
 7. **Restore.** Placeholders in the reply become the originals. A placeholder Gaze never issued is refused, never guessed.
 
 Steps 1 to 4 are the deterministic floor: same input, same output, every placeholder traceable to a versioned rule.
 
 ## What happens when the safety net disagrees
+
+The policy from `gaze setup` runs Nym by default.
 
 | Mode | What happens to a suspect | Reversible? | Who refuses |
 |---|---|---|---|
@@ -106,21 +108,36 @@ The fallback (`--safety-net-fallback`) can be `redact` (default), `strict`, or `
 
 ## Quickstart
 
-Three commands from zero to redacting real PII:
+Three commands from zero to protecting a synthetic contact:
 
 ```sh
-cargo install gaze-cli --version 0.14.0                     # `gaze setup` ships in the default build
-gaze setup                                                   # installs + SHA-verifies the NER model, writes ./gaze.toml, runs a doctor check
-echo "Contact Markus Gottschaue at markus@acme.com" | gaze clean --policy gaze.toml
+cargo install --git https://github.com/CertaMesh/gaze.git gaze-cli
+gaze setup
+printf '%s' 'From: Ada Example <ada@example.invalid>' | gaze clean --policy gaze.toml | jq -r .clean_text
 ```
+
+Real output from the built CLI (the session prefix changes each run):
 
 ```text
-{"clean_text":"Contact <Name_1> at <Email_1>", "entries":[{"class":"Name",...},{"class":"Email",...}], ...}
+From: <87744c1c:Name_1> <<87744c1c:Email_1>>
 ```
 
-`gaze setup` fetches the pinned, SHA-verified NER model into your data dir, generates a working policy wired to it, and confirms detection runs — no manual model fetch or flag-wrangling. The model never sees `Markus Gottschaue` or `markus@acme.com`; rehydrate the reply with `gaze restore` on the same per-session manifest.
+`gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a NER-only policy. Keep the `session_blob` from the full JSON response on the owner side for `gaze restore`.
 
-Want explicit control over rulepacks, locales, and the observer-only SafetyNet? See [Manual setup](#manual-setup).
+### Nym in action
+
+The rules and NER miss this synthetic licence plate; Nym catches it:
+
+```sh
+printf '%s' 'Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt.' \
+  | gaze clean --policy gaze.toml | jq -r .clean_text
+```
+
+Real output (session prefix varies):
+
+```text
+Das Fahrzeug mit dem Kennzeichen <0c2e0bc4:Custom:license_plate_1> wurde abgeschleppt.
+```
 
 ## In production: AI support drafts that never see the customer
 
@@ -178,11 +195,13 @@ CLI surface (`gaze clean`, `gaze restore`, audit, policy TOML): [Quickstart](#qu
 
 ## Install
 
-Install the CLI from crates.io:
+Install the current source version for the Nym-on setup flow:
 
 ```sh
-cargo install gaze-cli --version 0.14.0
+cargo install --git https://github.com/CertaMesh/gaze.git gaze-cli
 ```
+
+The published `0.14.0` CLI still uses the old setup default; release prep will update the crates.io instructions.
 
 Or build from source (latest `main`, or to enable extra features):
 
@@ -215,157 +234,6 @@ The MCP server exposes `gaze_read_file` and `gaze_read_text`, returning tokenize
 
 For library use, see [Use from Rust](#use-from-rust) below.
 
-## Manual setup
-
-Prefer to wire the policy by hand instead of `gaze setup`? This guided path goes from zero PII configuration to a working clean run, with optional NER and the observer-only SafetyNet layered on top. Each step is copy-paste-able against the current `gaze` CLI. (For the one-command path, see [Quickstart](#quickstart) above.)
-
-### 1. First redact
-
-Write the smallest policy that drives the bundled `core` rulepack and tokenizes every detected class:
-
-```toml
-# quickstart-policy.toml
-schema_version = "0.1.0"
-
-[session]
-scope = "persistent"
-ttl_secs = 86400
-
-[policy.rulepacks]
-bundled = ["core"]
-
-[[rule]]
-kind = "default"
-action = "tokenize"
-```
-
-Run `gaze clean` against it:
-
-```sh
-printf '%s' 'Contact alice@example.invalid for details.' \
-  | gaze clean --policy quickstart-policy.toml
-```
-
-The output is JSON. `clean_text` is the only field that may reach the LLM; `session_blob` is the signed restore manifest and must never leave the server:
-
-```json
-{
-  "clean_text": "Contact <{session_hex}:Email_1> for details.",
-  "session_blob": "<base64>",
-  "stats": {"detections": 1, "locale_chain": ["global"], "dictionaries_loaded": []}
-}
-```
-
-Round-trip through restore to recover the original on the same manifest:
-
-```sh
-printf '{"session_blob":"<base64>","text":"Re: <{session_hex}:Email_1>"}' \
-  | gaze restore
-```
-
-```json
-{"text": "Re: alice@example.invalid"}
-```
-
-Schema and every rule kind / action live in [`docs/reference/policy.md`](docs/reference/policy.md).
-
-### 2. Add NER
-
-NER is opt-in and stacks on top of the deterministic regex and dictionary passes. Turn it on when the input has free-prose names that the cue-anchored Name recognizer in `core` does not cover.
-
-Fetch the pinned mBERT bundle once:
-
-```sh
-bash scripts/fetch/fetch-ner-model.sh
-```
-
-The script verifies a release-pinned `SHA256SUMS.ner` and installs the artifact set into `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl` (pass a directory argument to override). No model is downloaded at `gaze clean` runtime — Gaze only consumes the on-disk bundle.
-
-Add the `[ner]` block to `quickstart-policy.toml`. The default rule already tokenizes detected names:
-
-```toml
-[ner]
-model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
-locale = "de"
-threshold = 0.3
-```
-
-Re-run on free-prose German with a Name span the rule-based passes leave alone:
-
-```sh
-printf '%s' 'Bitte richten Sie es Dr. Erika Müller aus.' \
-  | gaze clean --policy quickstart-policy.toml
-```
-
-NER contributes a `Name_*` span via the model's `PER` label:
-
-```json
-{
-  "clean_text": "Bitte richten Sie es <{session_hex}:Name_1> aus.",
-  "session_blob": "<base64>",
-  "stats": {"detections": 1, "locale_chain": ["de-DE", "global"], "dictionaries_loaded": []}
-}
-```
-
-Schema details, threshold range, and `~/` expansion rules: [`docs/reference/policy.md`](docs/reference/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json`](crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json).
-
-### 3. Add a SafetyNet (Pass-3 observer)
-
-The SafetyNet is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md).
-
-No safety net runs by default. Two opt-in nets ship: `openai-filter` wraps the upstream OpenAI Privacy Filter as a subprocess, and `nym` runs the Nym-small token classifier in process. Both are observer-only and both run under the **`resolve` mode default with a `redact` fallback**, the reversibility-preserving production posture (see below).
-
-#### OpenAI Privacy Filter
-
-The safety-net code path is off the default build graph. Reinstall the CLI with the OpenAI backend compiled in:
-
-```sh
-cargo install --path crates/gaze-cli --features safety-net-openai
-```
-
-Install the upstream [`openai/privacy-filter`](https://github.com/openai/privacy-filter) `opf` binary and a checkpoint per its instructions. Gaze does not download or update either — bring-your-own-binary plus bring-your-own-weights is the contract. The checkpoint directory must be owned by the running user with mode `0700`.
-
-Activate the filter on the same `gaze clean` invocation:
-
-```sh
-printf '%s' 'Contact alice@example.invalid for details.' \
-  | gaze clean \
-      --policy quickstart-policy.toml \
-      --safety-net openai-filter \
-      --openai-filter-command /opt/opf/bin/opf \
-      --openai-filter-checkpoint /opt/opf/checkpoint \
-      --openai-filter-device auto
-```
-
-`--openai-filter-device` accepts `auto` (default; the upstream `opf` picks), `cpu`, `cuda`, or `mps`.
-
-A clean run produces a `leak_report` block alongside the usual JSON; `suspect_count = 0` is the contract for "no leaks":
-
-```json
-{
-  "clean_text": "Contact <{session_hex}:Email_1> for details.",
-  "session_blob": "<base64>",
-  "stats": {"detections": 1},
-  "leak_report": {
-    "stats": {
-      "suspect_count": 0,
-      "uncovered_count": 0,
-      "partial_bleed_count": 0,
-      "class_mismatch_count": 0,
-      "locale_skipped_count": 0
-    }
-  }
-}
-```
-
-SafetyNet runs in **`resolve` mode by default** with a **`redact` fallback**. When the filter raises an `Uncovered` or `PartialBleed` suspect, Gaze first promotes the suspect into a synthetic custom-recognizer match and re-runs the resolver so the span can be tokenized into the manifest — preserving reversibility. If `resolve` cannot honor a suspect (validator-veto, missing anchor, or a residual suspect after the one-shot pass), the composable `--safety-net-fallback {strict|tolerant|redact}` flag (default `redact`) decides what happens next: by default the suspect span is replaced with a one-way `[REDACTED:<class>]` marker in the clean text, the redaction is recorded in the manifest and in the audit trail, and the rest of the clean text continues to stdout. **The reversibility-first default is the production contract**: every suspect either becomes a fully restorable manifest token or is replaced by a one-way marker before reaching the LLM, and every action emits a typed audit row.
-
-Adopters who want the v0.7.x hard-fail posture can opt in with `--safety-net-mode strict` (any suspect exits `3`, stdout stays empty). Adopters who cannot afford the resolve pass can skip directly to strip-and-continue with `--safety-net-mode redact`. A `tolerant` mode exists for **local development only** — while debugging recognizer coverage or measuring SafetyNet recall, it downgrades suspects to a stderr warning instead of refusing the output. **Do not use `tolerant` in production traffic.** A tolerant-mode pipeline is one that has agreed to ship suspected leaks. Mode catalog, fallback composition matrix, and exit-code map: [`docs/explanation/safety-net/safety-net-modes.md`](docs/explanation/safety-net/safety-net-modes.md) and [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net).
-
-#### Nym-small (opt-in)
-
-The second opt-in net runs the multilingual Nym-small token classifier in process and flags only building numbers, licence plates, usernames and dates of birth by default: `gaze setup --safety-net nym`, then `gaze clean --safety-net nym --nym-model-dir <dir>`. The allowlist and thresholds are policy data (`[safety_net.nym]`), which configures the net but never activates it. Contract, measurements and open items (latency, licence review): [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md#nym-small-adapter-opt-in).
-
 ## Audit and restore
 
 Restore is manifest-first. Tokens are session-scoped, counted by class, and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback.
@@ -383,16 +251,65 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 
 ## Use from Rust
 
-The CLI is a process boundary around the Rust runtime; you can link the runtime directly:
+Use the policy written by `gaze setup` from Rust with `gaze-assembly`'s Nym feature:
 
-```sh
-cargo add gaze-pii gaze-assembly
+```toml
+[dependencies]
+gaze-pii = { git = "https://github.com/CertaMesh/gaze.git" }
+gaze-assembly = { git = "https://github.com/CertaMesh/gaze.git", features = ["safety-net-nym"] }
+gaze-recognizers = { git = "https://github.com/CertaMesh/gaze.git" }
+serde_json = "1"
 ```
 
-The crate is published as `gaze-pii` because the bare `gaze` name is in transfer on crates.io; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
+<!-- setup-nym-rust-example -->
+```rust
+use std::collections::HashMap;
+use std::error::Error;
+use std::path::Path;
 
-- Minimal example and the API surface table: [`crates/gaze/README.md`](crates/gaze/README.md) (also rendered on [crates.io/crates/gaze-pii](https://crates.io/crates/gaze-pii)).
-- Full walk-through with structured documents, tenant-specific recognizers, and policy TOML: [`docs/tutorials/getting-started.md`](docs/tutorials/getting-started.md).
+use gaze::{
+    CleanDocument, Context, DictionaryBundle, LocaleChain, Policy, RawDocument, Rulepack,
+    RulepackSource, SafetyNetPolicy, Session,
+};
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let policy = Policy::load_for_cli(Path::new("gaze.toml"))?;
+    let context = Context {
+        dictionaries: HashMap::new(),
+        class_map: HashMap::new(),
+        fields: serde_json::Map::new(),
+    };
+    let mut rulepacks = Vec::new();
+    for name in &policy.rulepacks.bundled {
+        let contents = gaze_recognizers::embedded(name).ok_or("unknown bundled rulepack")?;
+        rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
+    }
+    for path in &policy.rulepacks.paths {
+        rulepacks.push(Rulepack::load(RulepackSource::Path(path.clone()))?);
+    }
+    let locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = gaze_assembly::build_pipeline(&policy, &context, &rulepacks, &locales, None)?;
+    let session = Session::from_policy(&policy)?;
+    let (clean, _, _) = pipeline.clean_with_safety_net_policy_detect_context(
+        &session,
+        RawDocument::Text("Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt.".into()), // fixture-cited(crates/gaze-cli/tests/nym_cli.rs:live_nym_net_tokenizes_a_plate_the_rules_miss)
+        locales.as_slice(),
+        &DictionaryBundle::default(),
+        SafetyNetPolicy::default(),
+    )?;
+    let CleanDocument::Text(text) = clean else {
+        return Err("expected text output".into());
+    };
+    println!("{text}");
+    let snapshot = session.export()?;
+    // Keep snapshot.into_bytes() on the owner side for authorized restore.
+    let _owner_blob = snapshot.into_bytes();
+    Ok(())
+}
+```
+<!-- /setup-nym-rust-example -->
+
+The snapshot contains restore material; store it privately and pass it only to an authorized restore flow. The published crate is named `gaze-pii` and imports as `gaze`. The [compiled source](crates/gaze-assembly/examples/setup_nym.rs) is checked against this README in CI. Release prep will switch the dependency snippet to published versions.
 
 ## Workspace and crates.io
 
