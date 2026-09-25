@@ -12,7 +12,11 @@ pub(crate) struct SafetyNetScanText<'a> {
 }
 
 impl<'a> SafetyNetScanText<'a> {
-    pub(crate) fn new(clean_text: &'a str, manifest: &Manifest) -> Result<Self> {
+    pub(crate) fn new(
+        clean_text: &'a str,
+        manifest: &Manifest,
+        is_owned: impl Fn(&str) -> bool,
+    ) -> Result<Self> {
         let mut stable = None::<Vec<u8>>;
         for emitted in &manifest.spans {
             let token =
@@ -23,12 +27,14 @@ impl<'a> SafetyNetScanText<'a> {
                         end: emitted.clean_span.end,
                         text_len: clean_text.len(),
                     })?;
-            let Some(offset) = session_hex_offset(token) else {
-                continue;
-            };
-            let bytes = stable.get_or_insert_with(|| clean_text.as_bytes().to_vec());
-            let start = emitted.clean_span.start + offset;
-            bytes[start..start + 8].copy_from_slice(b"00000000");
+            replace_session_hex(clean_text, &mut stable, emitted.clean_span.start, token);
+        }
+        // Scan-only APIs have no manifest. The live session can still prove which
+        // token-shaped strings it minted; leave every unowned literal unchanged.
+        for matched in crate::token_shape::pattern().find_iter(clean_text) {
+            if is_owned(matched.as_str()) {
+                replace_session_hex(clean_text, &mut stable, matched.start(), matched.as_str());
+            }
         }
 
         let text = match stable {
@@ -58,6 +64,20 @@ impl<'a> SafetyNetScanText<'a> {
         }
         Ok(range)
     }
+}
+
+fn replace_session_hex(
+    clean_text: &str,
+    stable: &mut Option<Vec<u8>>,
+    token_start: usize,
+    token: &str,
+) {
+    let Some(offset) = session_hex_offset(token) else {
+        return;
+    };
+    let bytes = stable.get_or_insert_with(|| clean_text.as_bytes().to_vec());
+    let start = token_start + offset;
+    bytes[start..start + 8].copy_from_slice(b"00000000");
 }
 
 fn session_hex_offset(token: &str) -> Option<usize> {
@@ -103,7 +123,7 @@ mod tests {
                 EmittedTokenSpan::new(start..cursor, 0..1, PiiClass::Name)
             })
             .collect();
-        let scan = SafetyNetScanText::new(&text, &Manifest::from_spans(spans)).unwrap();
+        let scan = SafetyNetScanText::new(&text, &Manifest::from_spans(spans), |_| false).unwrap();
         assert_eq!(
             scan.text(),
             "<00000000:Name_1> 🦊 email2.00000000@gaze-fake.invalid 🦊 00000000:custom:tenant_3"
@@ -124,7 +144,7 @@ mod tests {
             let start = before.len();
             let end = start + token.len();
             let manifest = Manifest::from_spans(vec![EmittedTokenSpan::new(start..end, 0..1, PiiClass::Name)]);
-            let scan = SafetyNetScanText::new(&text, &manifest).unwrap();
+            let scan = SafetyNetScanText::new(&text, &manifest, |_| false).unwrap();
             prop_assert_eq!(scan.text().len(), text.len());
             for index in 0..=text.len() {
                 prop_assert_eq!(scan.text().is_char_boundary(index), text.is_char_boundary(index));

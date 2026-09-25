@@ -1364,7 +1364,8 @@ impl Pipeline {
             return Ok(LeakReport::default());
         }
 
-        let scan = SafetyNetScanText::new(clean_text, manifest)?;
+        let scan =
+            SafetyNetScanText::new(clean_text, manifest, |token| target.contains_token(token))?;
         let mut suspects = Vec::<LeakSuspect>::new();
         let mut telemetry = Vec::new();
         let active = gaze_types::LocaleChain::from(locale_chain);
@@ -5244,6 +5245,27 @@ mod tests {
 
     struct HexSensitiveSafetyNet;
 
+    struct CaptureScanSafetyNet(Arc<Mutex<Vec<String>>>);
+
+    impl SafetyNet for CaptureScanSafetyNet {
+        fn id(&self) -> &str {
+            "capture-scan.fixture"
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            clean_text: &str,
+            _context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            self.0.lock().unwrap().push(clean_text.to_string());
+            Ok(Vec::new())
+        }
+    }
+
     impl SafetyNet for HexSensitiveSafetyNet {
         fn id(&self) -> &str {
             "hex-sensitive.fixture"
@@ -5311,6 +5333,34 @@ mod tests {
         let name_start = first_text.find("Dr. Schmidt").unwrap();
         assert_eq!(first[0].span, name_start..name_start + "Dr. Schmidt".len());
         assert_eq!(first[0].kind, LeakKind::Uncovered);
+    }
+
+    #[test]
+    fn scan_only_normalizes_owned_tokens_but_keeps_unknown_literals() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let pipeline = Pipeline::builder()
+            .register_safety_net(CaptureScanSafetyNet(seen.clone()))
+            .build()
+            .unwrap();
+        let scan = |hex| {
+            let session = Session::new_with_session_hex_for_tests(Scope::Ephemeral, hex).unwrap();
+            let token = session
+                .tokenize(&PiiClass::Email, "alice@example.invalid")
+                .unwrap();
+            let text = format!("{token} <cafefeed:Name_9> Dr. Schmidt");
+            pipeline
+                .scan_safety_nets(&session, &text, &[crate::LocaleTag::Global])
+                .unwrap();
+        };
+        scan([0xde, 0xad, 0xbe, 0xef]);
+        scan([0xca, 0xfe, 0xfe, 0xed]);
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![
+                "<00000000:Email_1> <cafefeed:Name_9> Dr. Schmidt",
+                "<00000000:Email_1> <cafefeed:Name_9> Dr. Schmidt",
+            ]
+        );
     }
 
     impl SafetyNet for MarkerSafetyNet {

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Safety nets now scan manifest-owned placeholders with a stable eight-byte
+- Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
   session prefix. Nym, OPF, and registry backends no longer change detections
   when a fresh session chooses a different random prefix; clean output,
   manifest offsets, audit rows, and restore behavior are unchanged.
