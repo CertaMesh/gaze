@@ -88,4 +88,4 @@ brew info CertaMesh/gaze-smoke/gaze
 brew untap CertaMesh/gaze-smoke
 ```
 
-Future public tap work is org-level operations outside this repo PR. When a public tap exists, update this document, the README install section, and `.github/workflows/release.yml` together so the formula location, adopter instructions, and release automation agree.
+Future public tap work is an org-level operation outside this repository. When a public tap exists, update this document, the README install section, and `.github/workflows/release.yml` together so the formula location, adopter instructions, and release automation agree.
