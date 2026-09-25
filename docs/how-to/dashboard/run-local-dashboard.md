@@ -1,10 +1,18 @@
 # Run the local dashboard
 
-The dashboard is an explicit adopter composition. Do not construct any dashboard object on the
+This guide is for Rust adopters who embed the opt-in inspection dashboard in their own proxy
+host. The dashboard is an explicit adopter composition. Do not construct any dashboard object on the
 default/off path.
 
 The `gaze` CLI runs this whole sequence for you with `gaze proxy serve --dashboard` (see the
 [dashboard flags](../../reference/cli.md#dashboard-flags-opt-in-dashboard-cargo-feature)).
+
+## Prerequisites
+
+The current child implementation requires Unix-domain sockets and a reviewed Unix resource-limit
+API that can set and verify both core-dump limits at zero. Darwin is explicitly unsupported and
+returns `NoDumpUnavailable` before binding, token generation, or sensitive IPC acceptance. No
+macOS crash-artifact suppression is claimed. There is no in-process or thread-only fallback.
 
 ## 1. Select immutable startup capture
 
@@ -68,10 +76,3 @@ one-way and returns only after disable, zeroization, termination, and reap.
 
 Treat DashboardStatus::Disabled as a dashboard-only failure. Do not retry capture in the same
 launch and do not alter the provider enforcement result.
-
-## Environment prerequisites
-
-The current child implementation requires Unix-domain sockets and a reviewed Unix resource-limit
-API that can set and verify both core-dump limits at zero. Darwin is explicitly unsupported and
-returns `NoDumpUnavailable` before binding, token generation, or sensitive IPC acceptance. No
-macOS crash-artifact suppression is claimed. There is no in-process or thread-only fallback.

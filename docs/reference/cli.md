@@ -199,6 +199,7 @@ Audit databases written before v0.4.4 lack a `created_at` column. Unfiltered
 `gaze audit query` calls still surface those rows. Filtered queries that use
 `--from` or `--to` omit NULL `created_at` rows by SQL semantics; drop the time
 filter to access legacy rows.
+
 ## `gaze document clean`
 
 `gaze document clean` is the OSS document ingestion verb. It OCRs the input
