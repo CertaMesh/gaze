@@ -173,12 +173,12 @@ jobs:
           set -euo pipefail
           grep -Fq '7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16' crates/gaze-recognizers/src/ner/pinned.rs
           cargo run --locked -p gaze-cli -- setup --safety-net none --non-interactive \
-            --model-dir "$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl" \
+            --model-dir "$RUNNER_TEMP/gaze/models/davlan-mbert-ner-hrl" \
             --policy-out "$RUNNER_TEMP/ner-only.toml" --force
           printf '%s  %s\n' \
             '7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16' \
-            "$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl/SHA256SUMS" | sha256sum -c -
-          (cd "$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl" && sha256sum -c SHA256SUMS)
+            "$RUNNER_TEMP/gaze/models/davlan-mbert-ner-hrl/SHA256SUMS" | sha256sum -c -
+          (cd "$RUNNER_TEMP/gaze/models/davlan-mbert-ner-hrl" && sha256sum -c SHA256SUMS)
       - name: Test setup policy with both pinned models
         shell: bash
         env:
