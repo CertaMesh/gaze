@@ -73,25 +73,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fullwidth group or a dropped ZERO WIDTH JOINER), with no policy and under
   the `gaze setup` policy alike. `card.structural` took the greedy 13-19 digit
   run and ran Luhn on it once. It now takes the whole digit run
-  (`\b\d(?:[\s-]?\d)*\b`) and finds the card inside it: every window the old
-  pattern matched that passes Luhn is still a card; in the rest of the run,
-  the longest group-aligned window printed in a card layout (compact 13-19,
-  4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4) that passes Luhn is one, at its exact
-  offsets. Groups end at separators and, through the new
-  `DetectContext::source_spans`, where normalization hid a break. The
-  restore-boundary DLP check runs the same code
+  (`\b\d(?:[\s-]?\d)*\b`) and finds the card inside it. Every window the old
+  pattern matched that passes Luhn, and every group-aligned window printed in
+  a card layout (compact 13-19, 4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4) that passes
+  Luhn, is a card candidate; overlapping candidates are tokenized as one span
+  covering their union. The digits cannot tell which of two overlapping
+  Luhn-valid windows is the card (`0 4111 1111 1111 1111` passes as the
+  17-digit window and as the card; a random number before a card makes such a
+  window about one time in ten), so the token fails closed and covers both.
+  Groups end at separators and, through the new `DetectContext::source_spans`,
+  where normalization hid a break; validator veto accepts a union span that
+  still holds a card. The restore-boundary DLP check runs the same code
   (`gaze_types::payment_card::scan_card_run`), so both directions agree; on
   the #652 review probe (440,000 texts) it reports every card it reported
-  before, plus 12,696 texts with a card it missed. On 5,000 generated texts
-  per family (forward path, no policy), cards with touching digits went from
-  1,799 to 4,315 fully tokenized; amounts, timestamps, phone numbers, IBANs,
-  compact long IDs and year or order prefixes without a card are unchanged.
-  The cost is more card tokens on Luhn-passing windows in longer grouped
-  runs: random 13-19 digit groupings 481 to 489 texts, a Luhn-invalid
-  4-4-4-4 with a 2-4 digit tail 346 to 503, and grouped IDs of five to ten
-  4-digit groups 748 to 1,840. Every such token restores exactly. The
-  no-OPF scorecard (2,910 documents) is unchanged: its card gold fails Luhn.
-  The `luhn` validator now also skips any Unicode whitespace and non-ASCII
+  before, plus 13,953 texts with a card it missed. Every 1- to 4-digit number
+  written before a 16-digit, 19-digit, Amex or Diners card (separated, glued by
+  a ZERO WIDTH JOINER, or in fullwidth digits; 133,320 cases) now leaves no
+  card digit raw on either path. On 5,000 generated texts per family (forward
+  path, no policy), cards with touching digits went from 1,799 to 4,423 fully
+  tokenized; amounts, timestamps, phone numbers, IBANs, compact long IDs and
+  year or order prefixes without a card are unchanged. The cost, taken
+  deliberately (leak safety over false positives), is more card tokens on
+  Luhn-passing windows in longer grouped runs: random 13-19 digit groupings
+  481 to 489 texts, a Luhn-invalid 4-4-4-4 with a 2-4 digit tail 346 to 503,
+  and grouped IDs of five to ten 4-digit groups 748 to 1,840 texts (14,896 to
+  39,395 card-token bytes). Every such token restores exactly. The no-OPF
+  scorecard (2,910 documents) is unchanged: its card gold fails Luhn. The
+  `luhn` validator now also skips any Unicode whitespace and non-ASCII
   digits, as the restore check already did. (solo todo 3843)
 - **The restore-boundary DLP check now flags NBSP-grouped and fullwidth IBANs
   and cards, and cards with digits touching them.** This deterministic outbound
