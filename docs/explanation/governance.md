@@ -13,7 +13,7 @@ Gaze is currently maintained by two people:
 
 Both maintainers have equal merge authority. Either can land changes; either can block changes that violate the licence, the recognizer-class commitments below, or the project's stated north star ("zero PII leaks between agent and data owner").
 
-Adding a new maintainer requires explicit agreement from both current maintainers and is recorded by updating this file and the relevant `CODEOWNERS` entries.
+Adding a new maintainer requires explicit agreement from both current maintainers and is recorded by updating this file.
 
 ## Copyright
 
@@ -49,7 +49,7 @@ The decision-making process is intentionally lightweight:
 
 - **Bug fixes and routine changes:** any maintainer can review and merge.
 - **New recognizer classes:** opened as a GitHub issue describing the class, target locale, validator strategy, and fixture plan. Discussion in the issue thread. Merge once both maintainers have signed off — or one maintainer has signed off and the other has not raised concerns within a reasonable window.
-- **Roadmap and milestone decisions:** discussed in public issues or in `ROADMAP.md`. Maintainer consensus, with the rationale recorded in writing.
+- **Roadmap and milestone decisions:** discussed in public issues. Maintainer consensus, with the rationale recorded in writing.
 - **Licence, governance, or security-posture changes:** require explicit agreement from both maintainers, documented in this file (or its successor) and announced before the change takes effect.
 
 Disagreements between maintainers are resolved by discussion. If a disagreement cannot be resolved, the more conservative option wins: do not merge, do not change the licence, do not weaken a security or audit guarantee.
@@ -72,4 +72,4 @@ If any of these commitments are ever weakened, this file gets updated openly fir
 
 - **Code of Conduct violations:** see `CODE_OF_CONDUCT.md` (Contributor Covenant) for reporting channels.
 - **Security issues:** see `SECURITY.md` for coordinated-disclosure contact details.
-- **Governance concerns:** open a GitHub issue tagged `governance`, or contact the maintainers directly via the emails listed in `CONTRIBUTING.md` if the matter is not appropriate for a public issue.
+- **Governance concerns:** open a GitHub issue tagged `governance`.
