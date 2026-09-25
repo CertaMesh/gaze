@@ -193,7 +193,7 @@ jobs:
           cargo test -p gaze-cli --all-features --bin gaze commands::setup::tests::non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes -- --exact --nocapture > "$RUNNER_TEMP/setup_doctor.log" 2>&1
           cat "$RUNNER_TEMP/setup_doctor.log"
           grep -Fq 'test commands::setup::tests::non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes ... ok' "$RUNNER_TEMP/setup_doctor.log"
-      - name: Compile README Nym Rust example
+      - name: Compile rust-library how-to Nym Rust example
         run: cargo build --locked -p gaze-assembly --features safety-net-nym --example setup_nym
       - name: Verify synthetic bridge Python requirement
         run: python3 -c 'import sys; assert sys.version_info >= (3, 11), "Python >= 3.11 required"'
