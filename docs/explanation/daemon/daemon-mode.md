@@ -1,9 +1,8 @@
 # Gaze Daemon Mode
 
 > **Terminology note.** `gaze daemon` is a long-lived stdio server in the LSP /
-> MCP tradition, not a Unix daemon in the strict sense. The subcommand verb is
-> preserved through v0.9.x for binary stability; a `gaze serve` canonical alias
-> lands in v0.10 with a deprecation warning on `gaze daemon`. For the actual
+> MCP tradition, not a Unix daemon in the strict sense. `gaze daemon` is the
+> only name for this subcommand; there is no `gaze serve` alias. For the actual
 > backgrounded supervised daemon, see
 > [`docs/explanation/proxy/proxy-runtime.md`](../proxy/proxy-runtime.md).
 
