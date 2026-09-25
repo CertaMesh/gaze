@@ -1,0 +1,6 @@
+{"id":"synthetic-en-email","language":"en","text":"Contact alice@example.invalid for the example order."}
+{"id":"synthetic-de-email","language":"de","text":"Kontakt: alice@example.invalid. Vielen Dank."}
+{"id":"synthetic-en-phone","language":"en","text":"Call +1-555-0101 about the example order."}
+{"id":"synthetic-de-phone","language":"de","text":"Telefon +49 1555 0112233 für Dr. Schmidt."}
+{"id":"synthetic-en-negative","language":"en","text":"A quiet afternoon with paper notes and a blue desk."}
+{"id":"synthetic-de-negative","language":"de","text":"Ein ruhiger Nachmittag mit Papier und einem blauen Tisch."}

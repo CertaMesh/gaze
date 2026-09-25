@@ -8,6 +8,8 @@ import copy
 import hashlib
 import json
 import os
+import platform
+import re
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -108,6 +110,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ).expanduser(),
     )
     parser.add_argument("--threshold", type=float, default=0.3)
+    parser.add_argument(
+        "--policy", type=Path,
+        help="run the policy-file cell using this gaze clean policy",
+    )
     parser.add_argument("--warmups", type=int, default=DEFAULT_WARMUPS)
     parser.add_argument(
         "--measured-repetitions",
@@ -125,6 +131,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--performance-gating", action="store_true")
     parser.add_argument("--no-download", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
+    parser.add_argument("--release", action="store_true", help="use the optimized benchmark binary")
     return parser.parse_args(argv)
 
 
@@ -473,12 +480,13 @@ def execute_measurements(
     measured_repetitions: int,
     validator_measurements: Mapping[str, object] | None = None,
     source_environment: Mapping[str, str] | None = None,
+    policy_path: Path | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if measured_repetitions <= 0:
         raise CandidateError("measured repetitions must be positive")
     if warmup_count < 0:
         raise CandidateError("warmup count must be non-negative")
-    configs = tuple(score.DEFAULT_CONFIGS)
+    configs = ("policy-file",) if policy_path is not None else tuple(score.DEFAULT_CONFIGS)
     if any("opf" in config.lower() for config in configs):
         raise CandidateError("canonical no-OPF config set unexpectedly contains OPF")
     environment = build_no_opf_environment(source_environment or os.environ)
@@ -501,6 +509,7 @@ def execute_measurements(
                 base_environment=environment,
                 warmup_count=warmup_count,
                 validator_measurements=validator_measurements,
+                policy_path=policy_path,
             )
             current.append(run)
         repetition_runs.append(current)
@@ -777,9 +786,68 @@ def run(args: argparse.Namespace) -> int:
     dataset_path = repo_path(repo_root, args.dataset)
     negative_path = repo_path(repo_root, args.negative_corpus)
     davlan_model = args.model_dir.expanduser().resolve()
+    policy_path = repo_path(repo_root, args.policy).resolve() if args.policy else None
+    policy_sha = None
+    nym_bundle_sha = None
+    nym_expected_sha = None
+    effective_threshold = args.threshold
+    if policy_path is not None:
+        if not policy_path.is_file():
+            raise CandidateError(f"policy is missing: {policy_path}")
+        policy_sha = score.sha256_file(policy_path)
+        try:
+            policy_data = tomllib.loads(policy_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+            raise CandidateError(f"cannot read policy {policy_path}: {error}") from error
+        try:
+            ner = policy_data["ner"]
+            model_path = Path(ner["model_dir"]).expanduser()
+            davlan_model = (
+                model_path if model_path.is_absolute() else policy_path.parent / model_path
+            ).resolve()
+            effective_threshold = float(ner["threshold"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise CandidateError(f"policy NER settings are missing or invalid: {error}") from error
+        if policy_data.get("safety_net", {}).get("backend") == "nym":
+            try:
+                nym_path = Path(
+                    policy_data["safety_net"]["nym"]["model_dir"]
+                ).expanduser()
+            except (KeyError, TypeError) as error:
+                raise CandidateError(f"policy Nym model_dir is missing or invalid: {error}") from error
+            nym_dir = (
+                nym_path if nym_path.is_absolute() else policy_path.parent / nym_path
+            ).resolve()
+            nym_manifest = nym_dir / "SHA256SUMS"
+            if not nym_manifest.is_file():
+                raise ModelBundleError(f"Nym checksum manifest is missing: {nym_manifest}")
+            nym_bundle_sha = score.sha256_file(nym_manifest)
+            artifacts_source = (
+                repo_root / "crates/gaze-recognizers/src/safety_net/nym/artifacts.rs"
+            ).read_text(encoding="utf-8")
+            pin = re.search(
+                r'NYM_SMALL_INT8_BUNDLE_SHA256: &str =\s*"([0-9a-f]{64})"',
+                artifacts_source,
+            )
+            if pin is None:
+                raise ModelBundleError("Nym bundle pin is missing from recognizer source")
+            nym_expected_sha = pin.group(1)
+            if nym_bundle_sha != nym_expected_sha:
+                raise ModelBundleError(
+                    f"Nym bundle digest mismatch: expected {nym_expected_sha}, got {nym_bundle_sha}"
+                )
     scored_label_contract = load_scored_label_contract(repo_root, args.scored_labels)
 
     model_provenance = validate_required_models(repo_root, davlan_model)
+    if nym_bundle_sha is not None:
+        model_provenance.append(
+            {
+                "model_id": "nym-small-int8",
+                "digest_kind": "SHA256SUMS",
+                "expected_sha256": nym_expected_sha,
+                "observed_sha256": nym_bundle_sha,
+            }
+        )
     if dataset_path.is_file():
         dataiku.verify_dataset(dataset_path)
     elif args.no_download:
@@ -807,10 +875,16 @@ def run(args: argparse.Namespace) -> int:
     except score.ScoredLabelContractError as error:
         raise CandidateError(str(error)) from error
 
+    profile = "release" if args.release else "debug"
     binary = (
-        repo_root / "target/debug/examples/clean_for_bench"
+        Path(os.environ.get("CARGO_TARGET_DIR", str(repo_root / "target")))
+        / profile / "examples/clean_for_bench"
         if args.skip_build
-        else dataiku.build_binary(repo_root, tuple(score.DEFAULT_CONFIGS))
+        else dataiku.build_binary(
+            repo_root,
+            ("policy-file",) if policy_path else tuple(score.DEFAULT_CONFIGS),
+            release=args.release,
+        )
     )
     if not binary.is_file():
         raise CandidateError(f"benchmark binary is missing: {binary}")
@@ -831,11 +905,12 @@ def run(args: argparse.Namespace) -> int:
         binary=binary,
         documents=documents,
         davlan_model=davlan_model,
-        threshold=args.threshold,
+        threshold=effective_threshold,
         diagnostics_dir=output_dir / "logs",
         warmup_count=args.warmups,
         measured_repetitions=args.measured_repetitions,
         validator_measurements=validator_measurements,
+        policy_path=policy_path,
     )
     metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
     dataset_report["validator_gold_census"] = score.validator_gold_census(
@@ -848,10 +923,12 @@ def run(args: argparse.Namespace) -> int:
         sampling_report=sampling_report,
         parameters={
             "profile": args.profile,
-            "configs": list(score.DEFAULT_CONFIGS),
+            "configs": ["policy-file"] if policy_path else list(score.DEFAULT_CONFIGS),
+            "policy_sha256": policy_sha,
+            "binary_profile": profile,
             "max_documents": max_documents,
             "sampling_seed": args.seed,
-            "ner_threshold": args.threshold,
+            "ner_threshold": effective_threshold,
             "warmup_count": args.warmups,
             "measured_repetitions": args.measured_repetitions,
             "opf": False,
@@ -865,6 +942,8 @@ def run(args: argparse.Namespace) -> int:
         "entry_point": "scripts/bench/run_no_opf_benchmark.py",
         "profile": args.profile,
         "model_bundles": model_provenance,
+        "policy": {"path": str(policy_path), "sha256": policy_sha} if policy_path else None,
+        "hardware": platform.platform() + "; " + platform.processor(),
         "warmup_count": args.warmups,
         "measured_repetitions": args.measured_repetitions,
         "repetitions": repetition_provenance,
@@ -877,7 +956,11 @@ def run(args: argparse.Namespace) -> int:
         },
     }
 
-    readiness_result = score.evaluate_release_readiness(candidate)
+    readiness_result = score.evaluate_release_readiness(
+        candidate,
+        expected_configs=("policy-file",) if policy_path else score.DEFAULT_CONFIGS,
+        production_config="policy-file" if policy_path else score.PRODUCTION_CONFIG,
+    )
     readiness_correctness_failed = not readiness_result["passed"]
     if args.profile != "full":
         readiness_result = copy.deepcopy(readiness_result)

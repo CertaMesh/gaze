@@ -2306,6 +2306,7 @@ def run_config(
     base_environment: Mapping[str, str] | None = None,
     warmup_count: int = 0,
     validator_measurements: Mapping[str, object] | None = None,
+    policy_path: Path | None = None,
 ) -> dict[str, object]:
     if not documents:
         raise ValueError(f"{config}: cannot run an empty document cell")
@@ -2319,6 +2320,8 @@ def run_config(
     )
     environment["GAZE_NER_MODEL_DIR"] = str(model_dir)
     environment["GAZE_NER_THRESHOLD"] = str(threshold)
+    if policy_path is not None:
+        environment["GAZE_BENCH_POLICY"] = str(policy_path)
     if opf_command is not None:
         environment["GAZE_OPENAI_FILTER_OPF"] = str(opf_command)
     if opf_checkpoint is not None:
@@ -3093,7 +3096,11 @@ def _run_correctness_counts(run: Mapping[str, object]) -> dict[str, int]:
     }
 
 
-def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, object]:
+def evaluate_release_readiness(
+    candidate: Mapping[str, object],
+    expected_configs: Sequence[str] = DEFAULT_CONFIGS,
+    production_config: str = PRODUCTION_CONFIG,
+) -> dict[str, object]:
     failures: list[dict[str, object]] = []
     evaluated_document_ids: list[str] | None = None
     try:
@@ -3103,7 +3110,7 @@ def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, obj
             "passed": False,
             "failures": [{"gate": "candidate_runs", "reason": str(error)}],
         }
-    expected_configs = frozenset(DEFAULT_CONFIGS)
+    expected_configs = frozenset(expected_configs)
     if frozenset(candidate_runs) != expected_configs:
         failures.append(
             {
@@ -3170,8 +3177,8 @@ def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, obj
                 )
         if counts["attempted_documents"] <= 0:
             failures.append({"config": config, "gate": "non_empty_run"})
-    if PRODUCTION_CONFIG in candidate_runs:
-        counts = cell_counts.get(PRODUCTION_CONFIG)
+    if production_config in candidate_runs:
+        counts = cell_counts.get(production_config)
         if counts is not None:
             zero_targets = (
                 "documents_with_leaks",
@@ -3185,7 +3192,7 @@ def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, obj
                 if counts[gate] != 0:
                     failures.append(
                         {
-                            "config": PRODUCTION_CONFIG,
+                            "config": production_config,
                             "gate": gate,
                             "actual": counts[gate],
                             "required": 0,
