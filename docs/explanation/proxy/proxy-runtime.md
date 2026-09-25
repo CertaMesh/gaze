@@ -1,10 +1,10 @@
-# Proxy Runtime
+# Proxy runtime
 
 `gaze-proxy` is a pass-through-per-provider HTTP runtime. Its north-star role is
 to keep PII out of provider calls while preserving each SDK's native request and
 response shape.
 
-## Adapter Contract
+## Adapter contract
 
 Adapters implement `ProviderAdapter`:
 
@@ -48,7 +48,7 @@ writes a raw value back:
 Only restore reads the syntax. Request protection scans each surface's text as
 it stands.
 
-## Provider Surface Matrix
+## Provider surface matrix
 
 | Provider | Request surfaces | Response surfaces | Streaming surfaces |
 | --- | --- | --- | --- |
@@ -61,7 +61,7 @@ JSON without provider-shape transcoding. The strict Anthropic direct profile is
 different: it admits only its documented Messages schema, rejects unknown or
 opaque media surfaces, and proves the complete transformed request or response.
 
-## Anthropic Direct Sessions
+## Anthropic direct sessions
 
 `AnthropicAdapter::new` is intentionally ephemeral and single-request. It creates
 an internal session for that request and rejects any `x-gaze-session-id` header;
@@ -75,7 +75,7 @@ recreated. See the [strict Anthropic Messages contract](anthropic-messages-contr
 for registry bounds, principal resolution, and the migration from legacy
 header behavior.
 
-## Daemon Lifecycle
+## Daemon lifecycle
 
 `gaze proxy start` persists config, reexecs `gaze proxy serve --_foreground-daemon`,
 and writes a pidfile:

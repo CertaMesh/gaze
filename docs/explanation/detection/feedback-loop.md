@@ -1,4 +1,4 @@
-# Detection Coverage Feedback Loop
+# Detection coverage feedback loop
 
 The coverage feedback loop is a synthetic, deterministic regression harness for
 Gaze recognizer coverage. It exists for axes 1 and 4: reliability and trust.
@@ -7,7 +7,7 @@ It does not train models, does not call an LLM, and does not expand production
 rulepacks by itself. It measures the current rule floor against a committed
 oracle so rule gaps can be fixed deliberately.
 
-## Contract
+## How the loop works
 
 The loop is:
 
@@ -38,7 +38,7 @@ baseline for each `(class_id, locale)` bucket. `PartialBleed` and
 `ClassMismatch` remain reported but not gated because they usually require
 separate class-priority or resolver analysis.
 
-## Data Rules
+## Data rules
 
 All fixtures are synthetic. Current accepted origin:
 
@@ -47,7 +47,7 @@ All fixtures are synthetic. Current accepted origin:
 Any future vendored snippet work must extend the origin enum, document
 provenance, and keep fixture bytes out of production `src/` paths.
 
-## Gate Mode
+## Gate mode
 
 The ignored integration test is:
 
@@ -69,7 +69,7 @@ Blocking mode loads
 `crates/gaze-recognizers/testdata/coverage-loop/baseline.json` and fails if any
 current `Uncovered` count exceeds baseline for the same class and locale.
 
-## Adding Coverage
+## Adding coverage
 
 1. Add a generator under `crates/xtask/src/coverage_corpus/generators/`.
 2. Register it in `GeneratorRegistry::default_phase_1()`.
@@ -81,7 +81,7 @@ current `Uncovered` count exceeds baseline for the same class and locale.
 8. Commit the corpus and update `baseline.json` only after deciding the current
    leak set is the accepted baseline.
 
-## Sibling Gates
+## Sibling gates
 
 This loop complements existing gates rather than replacing them:
 
@@ -92,4 +92,3 @@ This loop complements existing gates rather than replacing them:
 
 The coverage loop is narrower: committed synthetic labels versus emitted
 manifest spans.
-

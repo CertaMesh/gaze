@@ -1,4 +1,4 @@
-# Collision-Family Policy
+# Collision-family policy
 
 Collision-family metadata handles cross-class recognizer rivalries that cannot
 be represented as one PII class. PAN vs IBAN is the first bundled example:
@@ -42,7 +42,7 @@ class-priority chain.
 - Normal class-priority, rule-priority, score, span-length, and recognizer-id
   ordering stays unchanged for recognizers without collision declarations.
 
-## TOML Shape
+## TOML shape
 
 ```toml
 [[recognizers]]
@@ -61,7 +61,7 @@ Two recognizers may share a `(family, variant)` only when their precedence
 matches. Two different variants in one family cannot share precedence in
 rulepacks; that fails rulepack load.
 
-## Bundled Families
+## Bundled families
 
 Current bundled declarations:
 

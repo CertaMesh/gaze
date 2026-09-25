@@ -1,4 +1,4 @@
-# Tier 4 Pipeline Gating
+# Tier 4 pipeline gating
 
 Tier 4 gates are pipeline-level performance controls. They do not weaken the
 recognizer floor, do not change token shapes, and are default-off through
@@ -41,7 +41,7 @@ recognizer floor, do not change token shapes, and are default-off through
   as with the default configuration; token mappings remain reusable and
   restorable.
 
-## Bench Snapshot
+## Bench snapshot
 
 Command:
 
