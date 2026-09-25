@@ -380,6 +380,18 @@ rules that name `custom:security_token`, `custom:password` or
 `custom:username` still parse; without `secrets` loaded the first two simply
 never match.
 
+### Policy `schema_version` needs a patch component
+
+The loader now accepts `0.1.x` only. A bare `schema_version = "0.1"` fails
+closed, as do `0.10.0` and `0.2.0`:
+
+```text
+{"error":"PolicySchemaUnsupported","exit":2,"found":"0.1","supported":"0.1."}
+```
+
+Write `schema_version = "0.1.0"`. Policies written by `gaze setup` already do.
+If you match on the error's `supported` field, it now reads `"0.1."`.
+
 ---
 
 ## How this file is organized
@@ -619,12 +631,13 @@ Shipped in v0.7.2 (PR #192) but worth re-stating because v0.8.0 is the
 first minor where the field is *exercised by new content*:
 
 ```toml
-schema_version = "0.1"
+schema_version = "0.1.0"
 ```
 
-The loader checks the `major.minor` prefix against the supported version
+The loader checks the `major.minor.` prefix against the supported version
 and fails closed with
-`{"error":"PolicySchemaUnsupported","exit":2,"found":"...","supported":"0.1"}`.
+`{"error":"PolicySchemaUnsupported","exit":2,"found":"...","supported":"0.1."}`.
+Since v0.15.0 a bare `"0.1"` no longer loads (see the v0.15.0 section above).
 Existing policies without the field continue to load via a soft default;
 add it explicitly to lock yourself onto a known schema.
 

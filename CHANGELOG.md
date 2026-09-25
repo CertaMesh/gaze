@@ -24,13 +24,19 @@ regenerate it; the manual repair is in the Security entry below. `gaze clean`,
 `gaze daemon` and `gaze proxy` now warn on stderr when a loaded policy sends a
 detected class through raw, whether by an explicit `preserve` default or an
 omitted default, and name reachable one-way `generalize` rules (PR #641).
-Existing policies stay valid. Other shipped leaks closed in this release are
-listed under Fixed with their affected version ranges: `gaze clean` without
-`--policy` ran an email-only pipeline (v0.3.0–v0.14.0, PR #618), `gaze index`
-ran without the `core` floor (v0.11.0–v0.14.0, PR #620), and several IBAN and
-collision-family shapes shipped raw (PRs #622, #624, #626, #627, #628), as did
-national IDs under JSON keys and `key=value` log fields and identifiers grouped
-with non-breaking spaces (PR #647).
+Existing policies stay valid. Other shipped leaks closed in this release each
+have an entry under Security or Fixed, which names the affected releases where
+the history proves them. Among them: `gaze clean` without `--policy` ran an
+email-only pipeline (v0.3.0–v0.14.0, PR #618); `gaze index` ran without the
+`core` floor (v0.11.0–v0.14.0, PR #620); `gaze proxy` never ran a configured
+safety net on request text (v0.13.0–v0.14.0, PR #585) and forwarded raw bytes
+after a safety-net fallback deletion (v0.13.0–v0.14.0, PR #593); the opt-in
+prefix cache could return raw PII from a stale decision (v0.9.0–v0.14.0,
+PR #579); a Resolve+Redact fallback deletion could leave newly detectable raw
+text behind (v0.8.1–v0.14.0, PR #584); several IBAN and collision-family
+shapes shipped raw (PRs #622, #624, #626, #627, #628); and so did national IDs
+under JSON keys and `key=value` log fields and identifiers grouped with
+non-breaking spaces, in every release through v0.14.0 (PR #647).
 
 **Highlights.**
 
@@ -84,6 +90,17 @@ with non-breaking spaces (PR #647).
   `extract_pages` (PR #650).
 - Custom `gaze-proxy` adapters that build `PiiSurface` values must set the new
   `syntax` field (PR #656).
+- A policy with `schema_version = "0.1"` no longer loads; write `"0.1.0"`. The
+  `PolicySchemaUnsupported` error's `supported` field now reads `"0.1."`
+  (PR #576).
+- `gaze-mcp-bridge` caps its session cache at `session.max_sessions` (default
+  1,000) and refuses a new session at the cap when none can be evicted
+  (PR #578).
+- `gaze-token-bridge` fingerprints of custom entities that contain repeated or
+  non-space whitespace change; re-ingest them (PR #553).
+- `gaze proxy` runs configured safety nets on request text, so a request in
+  which a net finds raw text outside the tokens, or a net that errors, now
+  refuses the request before it reaches the provider (PR #585).
 
 **Known limitations.** One detection gap and two `gaze proxy` restore gaps
 ship in this release:
@@ -208,6 +225,12 @@ bytes fell 22.3% and false-positive bytes 82.1%.
   default action to `"tokenize"`, delete the old per-class rules (the
   `location = generalize` rule emits a one-way marker), and enable the
   additional bundled packs and locales.
+- **rustls 0.23.45 and rustls-webpki 0.103.15.** The lockfile moves rustls from
+  0.23.40 to 0.23.45 for RUSTSEC-2026-0285 (TLS 1.3 handshake messages were
+  accepted across encryption-level boundaries; the advisory does not let a
+  network attacker alter or complete an authenticated handshake), and
+  rustls-webpki from 0.103.13 to 0.103.15, which the new rustls requires.
+  `gaze-proxy`, `gaze-model-setup` and the `gaze` CLI link rustls (PR #580).
 
 ### Added
 
@@ -443,6 +466,42 @@ bytes fell 22.3% and false-positive bytes 82.1%.
   of 2,723 runs are gold ZIP) and fires 1,717 times across 62.5% of the negative
   corpus, so it requires an anchor; `de-AT` / `de-CH` now have one
   (`postal.at_ch`, above).
+
+- **`birth_date.cue` in `core`** (`custom:birth_date`, every locale): a date of
+  birth in a field record (`date of birth:`, `birth date:`, `birthdate:`,
+  `DOB:`, `Geburtsdatum:`, with `:` or `=` at line start) or after `born on` /
+  `geboren am`, in ISO, `DD.MM.YYYY` or slash form. The same change recovers a
+  whole candidate that an explicit-field rule suppressed and then lost to a
+  later rival, so its bytes are tokenized instead of left raw (PR #589).
+- **`gaze-mcp-core` untrusted-invocation request mode.**
+  `RequestMode::UntrustedInvocation`, `PiiEnvelope::dispatch_request` and
+  `ToolCtx::invocation_args()` let an opted-in tool receive its execution
+  arguments unchanged while the envelope audits a fixed omission marker and
+  still protects the response. Both entry points reject a descriptor whose
+  mode does not match before authorization or audit, and the new mode refuses
+  operator response bypass. `request_mode` is not serialized, so wire metadata
+  cannot opt in. `BeginCallContext.args_audit` is new: `None` for existing
+  calls, a versioned constant for the new mode, which hosts that adopt it must
+  persist. `SessionTransaction::restore_strict_text_bounded` checks the exact
+  expanded UTF-8 size against a limit before it reserves output, then
+  substitutes once without detecting, minting mappings or committing
+  (PR #590).
+- **`gaze::DetectError` at the crate root**, so an out-of-crate `Recognizer`
+  implementation can name its error type without `gaze::registry` or a direct
+  `gaze-types` dependency. The `gaze::registry` docs carry a complete
+  out-of-crate example (PR #601).
+- **`gaze-mcp-bridge` bounds its session cache** with `session.max_sessions`
+  (default 1,000; `0` is a config error, also through
+  `BridgeSessionStore::from_config`). At the cap a file store persists the
+  least recently used inactive session before evicting it; an ephemeral store
+  refuses the new session. A session that any caller still holds, even through
+  a weak handle, is never evicted: admission fails with
+  `BridgeError::LimitExceeded`, and a persistence failure with
+  `BridgeError::SessionStore` (PR #578).
+- **`Pipeline::admit_safety_nets` and `admit_safety_nets_transaction`** run
+  every configured safety net over already pseudonymized text, with token
+  coverage built from the session's owned values. `gaze proxy` uses them at
+  request admission (PR #585).
 
 ### Changed
 
@@ -726,6 +785,67 @@ bytes fell 22.3% and false-positive bytes 82.1%.
   `IndexEntity` and no posting. Fragment raw bytes no longer reach the
   persistent index. Documented consequence: a residual fragment is **protected
   but unsearchable**. Whole entities remain searchable exactly as before.
+- **Breaking: the policy schema gate matches `0.1.` instead of `0.1`.** The
+  old prefix also accepted `0.10.0` and any later two-digit minor. Now `0.1.x`
+  loads, and `0.10.0`, `0.2.0` and a bare `"0.1"` fail closed with
+  `PolicySchemaUnsupported`, whose `supported` field reads `"0.1."`. Policies
+  written by `gaze setup` already say `"0.1.0"`; change a hand-written
+  `schema_version = "0.1"` to `"0.1.0"` (PR #576).
+- **The prefix cache no longer skips detection.** `enable_prefix_cache()`,
+  `PipelineOptimizationConfig::with_prefix_cache(true)` and both
+  `PrefixCacheWriteMode` values stay source-compatible, but every input is now
+  rescanned in full under its current field, locale, dictionaries, recognizers
+  and rules, and no prefix is stored. Adopters who enabled it lose its speedup
+  on growing inputs and should budget full-scan latency. Audit rows carry the
+  real recognizer and rule decisions instead of `prefix_cache` provenance, and
+  the test-support prefix counters return zero. The leak this closes is under
+  Fixed (PR #579).
+- **Locale chains fall through per span, not per document.** A class's rules
+  at a later chain locale used to switch off for the whole document as soon as
+  an earlier locale produced any candidate of that class. Now a later locale's
+  candidate joins where no earlier-locale candidate of the same class overlaps
+  it, so the earlier locale still wins per span. Under `[global, de-DE]`, a
+  document with an international mobile number and a national Berlin number
+  now tokenizes both instead of only the first, which switched
+  `phone.national.de` off. Expect more tokens under multi-locale chains
+  (PR #614).
+- **Safety-net Resolve plans more before it falls back.** A truthful
+  `PartialBleed` report with raw text on both sides of an owned token used to
+  pick `OverlapConflict` and the configured fallback; every gap in the report
+  is now planned against the original manifest without retokenizing owned
+  entries (PR #588). Under Resolve+Redact a successful first resolve followed
+  by actionable raw gaps gets one more complete reversible batch before any
+  deletion, so residual bytes can become tokens instead of being deleted. A
+  text policy runs at most four safety-net sweeps per call. Malformed
+  follow-up metadata (invalid classes, ranges or UTF-8, a false gap claim,
+  inconsistent coordinates) now refuses the document before any effect, and a
+  later failure can leave the extra mappings and audit attempts in place
+  (PR #591). The terminal behaviour after a fallback is described in the
+  entry above.
+- **Malformed primary geometry is refused.** Invalid or overlapping raw
+  mappings from the primary pass now return `InvalidOutput` before policy,
+  audit or token allocation, a new refusal for output that used to be accepted
+  (PR #589).
+- **`gaze-token-bridge` collapses internal whitespace in custom entities**
+  before the HMAC projection, as its canonicalization contract documents:
+  `Case  123` and `Case 123` now share a fingerprint. Re-ingest custom entities
+  that contain repeated or non-space whitespace (PR #553).
+- **`gaze mcp serve` writes terminal outcomes to `{call_id}.terminal.json`.**
+  The start record `{call_id}.json` is no longer overwritten, so principal,
+  tool, external session, redacted arguments and start time survive success
+  and failure and join on `call_id` (PR #582).
+- **Dictionary terms stop at hyphenated identifiers.** A hyphen counts as a
+  connector only when an identifier character sits on its other side, so a
+  term no longer matches one part of `AAA-BBB`, while `-AAA` and `AAA-` still
+  match. A dictionary that relied on partial matches inside hyphenated words
+  must list the full form (PR #568).
+- **Byte-adjacent NER entities of one class stay separate.** Two entities that
+  touch without sharing a byte used to merge into one pseudonym; each now gets
+  its own, and overlapping chunk results still merge (PR #564).
+- **`gaze daemon` reports failed eviction audit writes on stderr** as JSON with
+  the session's generated `audit_session_id`, the eviction reason and a closed
+  `Sqlite`/`Backend`/`Unknown` detail code, instead of dropping them silently.
+  The caller's session ID and backend error text are never printed (PR #570).
 
 ### Removed
 
@@ -1152,6 +1272,114 @@ bytes fell 22.3% and false-positive bytes 82.1%.
   sessions also reject empty custom classes constructed directly through the
   enum before changing session state. Valid session tokens continue to
   round-trip through the token bridge's strict parser (#507).
+- **Security: the opt-in prefix cache could return raw PII.** Affected v0.9.0,
+  where the cache shipped (PR #252), through v0.14.0, when the prefix cache
+  was enabled. A repeated or extended input replayed stored detection
+  decisions, so after a locale, dictionary, custom rule, custom recognizer or
+  pipeline policy change, or when an appended suffix completed a value
+  (`alice@` growing into a full address), bytes the current configuration
+  protects left the process raw. Every input is now rescanned in full; the
+  cost is under Changed (PR #579).
+- **Security: `gaze proxy` never ran a configured safety net on request
+  text.** Affected v0.13.0, the first release whose proxy accepts a safety
+  net, through v0.14.0. Surfaced request text reached the Anthropic and OpenAI
+  providers after primary pseudonymization alone, so a residual only a net
+  would catch was forwarded raw. Requests now pass safety-net admission after
+  primary pseudonymization and before the provider call: a raw gap, a
+  malformed suspect or a net error refuses the request, and a net that
+  re-flags text inside an owned token is allowed. Admission ignores observer
+  skip optimizations and runs every backend the locale chain selects, which
+  adds inference time to each request. Responses and proxies without a net
+  are unchanged (PR #585).
+- **Security: `gaze proxy` forwarded raw bytes after a safety-net fallback
+  deletion.** Affected v0.13.0 through v0.14.0. Both residual checks read only
+  the surviving manifest entries, and a Redact fallback deletion leaves no
+  entry, so a net-only span the fallback deleted looked like "no PII" while
+  the checks still held the original bytes; the request, or a buffered JSON or
+  SSE response, went out with `Ok`. Both checks now fail closed when a fallback deletion
+  leaves them nothing to check (PR #593).
+- **Security: a Resolve+Redact fallback deletion could leave newly detectable
+  raw text.** Affected v0.8.1, where the fallback modes shipped (PR #223),
+  through v0.14.0. Resolve could tokenize a suspect, delete a follow-up
+  residual through the Redact fallback and return `Ok` without scanning the
+  changed text, so raw text the deletion exposed shipped. A terminal scan now
+  checks the final output, and malformed registry spans are refused before
+  manifest correlation could drop them; how that scan admits and refuses is
+  described under Changed (PR #584, PR #586).
+- **Security: strict protection ran only the first chain locale's safety
+  net.** Affected v0.13.0, where strict protection shipped, through v0.14.0.
+  Under `[en-US, de-DE]` a benign global fallback ran for English and the
+  German-only net was skipped, so an IBAN-shaped residual came back unchanged,
+  and validation made the same first-locale choice and accepted the
+  configuration. Validation and dispatch now resolve backends over the whole
+  chain, and a chain locale with no covering backend is refused at validation
+  time. Observer mode keeps first-match selection (PR #574).
+- **Security: `--rulepack-path` without `--policy` preserved the classes its
+  rulepacks detected.** Affected at least v0.4.5, where the synthesized
+  policy's class rules first shipped, through v0.14.0; earlier releases were
+  not checked. The synthesized policy generated tokenize rules only from
+  bundled rulepacks, so custom PII found by a path rulepack left raw. Every
+  bundled and path rulepack now contributes its classes (PR #545).
+- **Security: a skipped optional-cue recognizer could hand a collision family
+  to a `preserve` rule.** Affected v0.7.1, where collision families shipped,
+  through v0.14.0. Collision metadata was registered before the recognizer was
+  built, so an optional cue recognizer that was then skipped still lowered a
+  live variant's precedence and the wrong `preserve` variant won. Metadata is now
+  registered only after construction succeeds (PR #558).
+- **Security: `gaze proxy` could return restored PII in a carrier assembled
+  across Anthropic text blocks.** Affected v0.13.0, where the carrier guard
+  shipped, through v0.14.0. The guard checked each text block on its own; it
+  now also checks the joined restored text in JSON, NDJSON and SSE responses
+  before residual validation (PR #544).
+- **Security: OCR email repair closed only the first gap in a multi-label
+  domain.** Affected v0.9.0, where the repair shipped, through v0.14.0.
+  `user@mail. corp. example. invalid` left the address tail outside
+  detection in `gaze document clean`; the repair now repeats until no gap is
+  left (PR #565).
+- **`gaze proxy` no longer copies upstream response headers on the legacy
+  path.** Cookies, hop-by-hop headers and infrastructure metadata from the
+  provider reached the client. The response is rebuilt with only the canonical
+  JSON or SSE content type for the transformed body (PR #549).
+- **`gaze proxy` pseudonymizes structured Responses API message text.**
+  `input_text` and `output_text` parts inside message content were not
+  surfaced, so the residual scan refused requests that contained PII there
+  (PR #548).
+- **Known session tokens restore after a leading word character.**
+  `rec_<prefix>:name_1` restores to `rec_` plus the value instead of failing
+  strict restore with `UnknownToken`; a known family token no longer swallows
+  a longer unknown one (PR #581). Family namespace tokens also round-trip in
+  prose restore, matched as a whole rather than at their tail (PR #552).
+- **`gaze_read_file` accepts ordinary filenames** such as `scan_1.png`; token
+  syntax in the path is validated by the central session scanner and malformed,
+  nested, foreign and legacy placeholders still fail closed (PR #571).
+- **`gaze index search` without `--class` searches every class the index
+  domain declares**, so indexed organizations and custom entities are found;
+  an explicitly disallowed class is still refused (PR #569).
+- **Verbose safety-net subprocess diagnostics no longer abort inference.** A
+  healthy OPF child that wrote more than 256 bytes to stderr with diagnostics
+  on used to fail; the adapter keeps a bounded prefix and drains the rest, and
+  the shared redactor no longer shows an unfinished raw token at the cut. On
+  Windows the adapter uses non-blocking pipe writes and reads only available
+  bytes, with diagnostics on or off (PR #580).
+- **Pipeline and resolver fixes:** an empty optional model registry no longer
+  raises a coverage error at runtime when custom nets run (PR #561); an inline
+  TOML comment after `strict_locale_overlap = true` no longer disables the
+  strict check (PR #562); name spans with a trailing particle after multibyte
+  whitespace no longer panic (PR #563); regex exclusions match regardless of
+  ASCII case (PR #567); family-level candidates keep earlier losing
+  recognizers in their audit provenance (PR #566).
+- **Audit fixes:** `gaze audit` JSONL export carries all seven restore
+  telemetry fields (PR #555); ingress-blocked `gaze-mcp-bridge` results are
+  audited as `Blocked` with the deciding rule instead of `Allowed` (PR #554);
+  `BundleReport.clean_char_count` counts the final `clean.md`, header and
+  trailing newline included (PR #556).
+- **Concurrency and lifecycle fixes:** concurrent `gaze-mcp-core` dispatches
+  with unchanged argument mappings no longer conflict (PR #546); `gaze proxy`
+  daemon cleanup deletes a pidfile only if it still is the file it locked, and
+  reports lock I/O errors (PR #572); the proxy dashboard accepts normal browser
+  navigation headers (PR #547), keeps browser purge notifications on their own
+  socket (PR #550), stays up when idle (PR #551), and waits for the child's
+  ready message before pairing completes (PR #592).
 
 ### Performance
 
@@ -1165,6 +1393,14 @@ bytes fell 22.3% and false-positive bytes 82.1%.
   and clean text, manifests, and audit rows are byte-identical. Custom recognizers keep
   one call per step unless they opt in (PR #653). Measured latency is in the
   Performance summary at the top of this section.
+- NER chunk planning borrows the tokenizer when truncation is already off
+  instead of cloning it and its WordPiece vocabulary on every call; configured
+  truncation keeps the clone. Output is unchanged (PR #587).
+- The occurrence ledger's origin-agreement guard runs once per record instead
+  of once per segment, which was quadratic in the number of carried tokens on
+  the restore-boundary protection paths. The guard also runs on a ledger with
+  no segments, where it used to be skipped; no production path reached that
+  case (PR #602).
 
 ## [0.14.0] - 2026-09-11
 
