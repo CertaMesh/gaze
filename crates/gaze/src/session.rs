@@ -1675,104 +1675,21 @@ fn collect_credit_card_findings(
     view: &crate::normalize::NormalizedText,
     findings: &mut Vec<StructuralFinding>,
 ) {
-    for matched in card_pattern().find_iter(&view.text) {
-        let Some(location) = luhn_valid_card_run(view, matched.range()) else {
-            continue;
-        };
-        let raw = &view.text[location.clone()];
-        findings.push(StructuralFinding {
-            class: PiiClass::custom("credit_card").expect("valid custom class"),
-            raw: raw.to_string(),
-            canonical: ascii_digits(raw),
-            location,
-        });
-    }
-}
-
-/// The Luhn-valid card inside a `card_pattern` match, as a range of the normalized view.
-///
-/// The greedy match wins when it passes Luhn. When it fails, digits touching the card may have
-/// pushed the run past it: a CVV or expiry after it, a number before it, or digits that
-/// normalization joined on (a fullwidth group, a dropped ZERO WIDTH JOINER). The retry then
-/// tries every group-aligned sub-run written in a card layout (see `is_card_layout`) and keeps
-/// the longest one that passes Luhn (13 to 19 digits; on a tie, the leftmost).
-///
-/// A random digit run passes Luhn one time in ten, so every extra candidate costs precision.
-/// The retry never splits inside a group, and the layout filter keeps grouped amounts,
-/// timestamps and phone numbers (groups of 3, 2 or 8 digits) at the greedy rate.
-fn luhn_valid_card_run(
-    view: &crate::normalize::NormalizedText,
-    matched: Range<usize>,
-) -> Option<Range<usize>> {
-    if luhn_check(&ascii_digits(&view.text[matched.clone()])) {
-        return Some(matched);
-    }
-    let groups = card_digit_groups(view, matched);
-    let widths: Vec<usize> = groups
-        .iter()
-        .map(|group| view.text[group.clone()].chars().count())
-        .collect();
-    let mut best: Option<(usize, Range<usize>)> = None;
-    for first in 0..groups.len() {
-        for last in first..groups.len() {
-            if first == 0 && last + 1 == groups.len() {
-                continue;
-            }
-            if !is_card_layout(&widths[first..=last]) {
-                continue;
-            }
-            let candidate = groups[first].start..groups[last].end;
-            let canonical = ascii_digits(&view.text[candidate.clone()]);
-            if luhn_check(&canonical)
-                && best
-                    .as_ref()
-                    .is_none_or(|(digits, _)| canonical.len() > *digits)
-            {
-                best = Some((canonical.len(), candidate));
-            }
+    // The forward `card.structural` recognizer segments runs with the same code
+    // (`gaze_types::payment_card`), so both directions agree on what a card is.
+    for run in card_run_pattern().find_iter(&view.text) {
+        let scan =
+            gaze_types::payment_card::scan_card_run(&view.text, run.range(), Some(&view.spans));
+        for location in scan.cards {
+            let raw = &view.text[location.clone()];
+            findings.push(StructuralFinding {
+                class: PiiClass::custom("credit_card").expect("valid custom class"),
+                raw: raw.to_string(),
+                canonical: ascii_digits(raw),
+                location,
+            });
         }
     }
-    best.map(|(_, range)| range)
-}
-
-/// The group widths a card number is printed in: compact (13 to 19 digits), 4-4-4-4, the
-/// 19-digit 4-4-4-4-3, and the Amex and Diners 4-6-5 and 4-6-4.
-fn is_card_layout(widths: &[usize]) -> bool {
-    matches!(
-        widths,
-        [13..=19] | [4, 4, 4, 4] | [4, 4, 4, 4, 3] | [4, 6, 5] | [4, 6, 4]
-    )
-}
-
-/// Split a `card_pattern` match into digit groups (ranges of the normalized view). A group ends
-/// at a `[\s-]` separator and wherever the raw text breaks between two digits: at a character
-/// normalization dropped (ZWJ, ZWNJ), and where the raw digits change width (fullwidth next to
-/// ASCII).
-fn card_digit_groups(
-    view: &crate::normalize::NormalizedText,
-    matched: Range<usize>,
-) -> Vec<Range<usize>> {
-    let mut groups: Vec<Range<usize>> = Vec::new();
-    let mut previous_digit: Option<usize> = None;
-    for (offset, ch) in view.text[matched.clone()].char_indices() {
-        let at = matched.start + offset;
-        if ch.is_whitespace() || ch == '-' {
-            previous_digit = None;
-            continue;
-        }
-        let (start, end) = view.spans[at];
-        let joins_previous = previous_digit.is_some_and(|previous| {
-            let (previous_start, previous_end) = view.spans[previous];
-            (previous_start, previous_end) == (start, end)
-                || (previous_end == start && previous_end - previous_start == end - start)
-        });
-        match groups.last_mut() {
-            Some(group) if joins_previous => group.end = at + ch.len_utf8(),
-            _ => groups.push(at..at + ch.len_utf8()),
-        }
-        previous_digit = Some(at);
-    }
-    groups
 }
 
 fn collect_api_key_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
@@ -1817,10 +1734,11 @@ fn iban_pattern() -> &'static Regex {
     })
 }
 
-fn card_pattern() -> &'static Regex {
+fn card_run_pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN.get_or_init(|| {
-        Regex::new(r"\b\d(?:[\s-]?\d){12,18}\b").expect("credit-card restore DLP regex compiles")
+        Regex::new(gaze_types::payment_card::CARD_RUN_PATTERN)
+            .expect("credit-card restore DLP regex compiles")
     })
 }
 
@@ -1897,36 +1815,6 @@ fn iban_mod97_check(input: &str) -> bool {
         }
     }
     remainder == 1
-}
-
-fn luhn_check(input: &str) -> bool {
-    let mut digits = Vec::new();
-    for byte in input.bytes() {
-        if !byte.is_ascii_digit() {
-            return false;
-        }
-        digits.push(byte - b'0');
-    }
-    if !(13..=19).contains(&digits.len()) {
-        return false;
-    }
-
-    let sum: u32 = digits
-        .iter()
-        .rev()
-        .enumerate()
-        .map(|(index, digit)| {
-            let mut value = u32::from(*digit);
-            if index % 2 == 1 {
-                value *= 2;
-                if value > 9 {
-                    value -= 9;
-                }
-            }
-            value
-        })
-        .sum();
-    sum.is_multiple_of(10)
 }
 
 #[derive(Debug, Clone)]
@@ -3089,6 +2977,73 @@ mod tests {
             let findings = structural_findings(benign);
             assert!(findings.is_empty(), "{benign:?}: {findings:?}");
         }
+    }
+
+    #[test]
+    fn restore_dlp_flags_a_card_anywhere_in_a_longer_digit_run() {
+        // REVIEW 652 round 2 F-A (solo todo 3843): the card sits past the first 19 digits of the
+        // run, so the scan must look at the whole run, not only its first pattern-sized window.
+        // F-B: every card layout, and the 19-digit card whose 16-digit prefix also passes Luhn
+        // (the longest card wins).
+        let mut failures = Vec::new();
+        for (text, card, canonical) in [
+            (
+                "2024 4111 1111 1111 1111",
+                "4111 1111 1111 1111",
+                "4111111111111111",
+            ),
+            (
+                "Order 5678 4111 1111 1111 1111 paid",
+                "4111 1111 1111 1111",
+                "4111111111111111",
+            ),
+            (
+                "Nr 12345 4111 1111 1111 1111",
+                "4111 1111 1111 1111",
+                "4111111111111111",
+            ),
+            (
+                "Ref 12 4111 1111 1111 1111 003 45 ok",
+                "4111 1111 1111 1111 003",
+                "4111111111111111003",
+            ),
+            (
+                "Karte 4111 1111 1111 1111\u{200D}1234 ok",
+                "4111 1111 1111 1111",
+                "4111111111111111",
+            ),
+            (
+                "Karte 4111 1111 1111 1111１２３４ ok",
+                "4111 1111 1111 1111",
+                "4111111111111111",
+            ),
+            (
+                "Karte 4111111111111111 123",
+                "4111111111111111",
+                "4111111111111111",
+            ),
+            (
+                "Amex 3782 822463 10005 1234",
+                "3782 822463 10005",
+                "378282246310005",
+            ),
+            (
+                "Diners 3056 930902 5904 123",
+                "3056 930902 5904",
+                "30569309025904",
+            ),
+        ] {
+            let start = text.find(card).expect("fixture contains the card");
+            let findings = structural_findings(text);
+            let whole_card = findings.len() == 1
+                && findings[0].class == PiiClass::custom("credit_card").expect("valid class")
+                && findings[0].location == (start..start + card.len())
+                && findings[0].canonical == canonical;
+            if !whole_card {
+                failures.push(format!("{text:?}: {findings:?}"));
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
     #[test]

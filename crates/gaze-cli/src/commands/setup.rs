@@ -785,6 +785,75 @@ mod tests {
         assert!(clean_text.contains(":Email_"));
     }
 
+    include!("../../tests/support/card_shapes.rs");
+
+    #[test]
+    fn generated_policy_tokenizes_a_card_with_touching_digits() {
+        // Solo todo 3843: the forward path under the `gaze setup` policy. The no-policy run of
+        // the same shapes is `tests/card_forward_path.rs`.
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        let policy_out = dir.path().join("policy.toml");
+        write_synthetic_ner_dir(&model_dir);
+        write_policy(&policy_out, &model_dir, None, false)
+            .unwrap()
+            .persist(&policy_out)
+            .unwrap();
+        let resolved = resolve_pipeline(
+            Some(&policy_out),
+            &CleanOverrides::default(),
+            &[],
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let session = Session::from_policy(&resolved.policy).unwrap();
+        let digit_run = regex::Regex::new(r"\d+").unwrap();
+        let mut failures = Vec::new();
+        for (before, card, after) in CARD_SHAPES {
+            let input = format!("{before}{card}{after}");
+            let clean = resolved
+                .pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(input.clone()),
+                    resolved.locale_chain.as_slice(),
+                    &resolved.dictionaries,
+                )
+                .unwrap();
+            let CleanDocument::Text(clean) = clean else {
+                panic!("text in, text out");
+            };
+            // The card is one credit-card token. Other bundled rules may still tokenize a
+            // digit run around it (`12345` is a US postal code under this policy).
+            let marked =
+                gaze::token_shape::pattern().replace_all(&clean, |token: &regex::Captures<'_>| {
+                    if token[0].contains(":Custom:credit_card_") {
+                        "\u{1}"
+                    } else {
+                        "\0"
+                    }
+                });
+            let around = |text: &str| {
+                digit_run
+                    .split(&regex::escape(text))
+                    .collect::<Vec<_>>()
+                    .join(r"(?:\d+|\x00)")
+            };
+            let expected =
+                regex::Regex::new(&format!("^{}\u{1}{}$", around(before), around(after))).unwrap();
+            if !expected.is_match(&marked) {
+                failures.push(format!("{input:?} -> {clean:?}"));
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "leaked or mis-scoped:\n{}",
+            failures.join("\n")
+        );
+    }
+
     #[test]
     fn generated_policy_includes_nym_only_when_selected() {
         let dir = tempdir().unwrap();

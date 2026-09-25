@@ -947,7 +947,9 @@ impl RecognizerRegistry {
             // reuse that output, so NER infers once per document instead of once per step.
             let mut reused: HashMap<usize, Vec<Candidate>> = HashMap::new();
             for locale in locale_chain.as_slice() {
-                let locale_ctx = DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
+                let mut locale_ctx =
+                    DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
+                locale_ctx.source_spans = ctx.source_spans;
                 locale_ctx.degraded.set(ctx.degraded.get());
                 let mut class_candidates = Vec::new();
                 for (index, recognizer) in self

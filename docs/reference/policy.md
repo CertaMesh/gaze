@@ -553,7 +553,9 @@ gaze clean --rulepack-bundled core --locale=en-US --policy ./policy.toml
   after the candidate may be empty or letters only; a digit or underscore in it
   marks the candidate as a prefix of a longer identifier and drops it.
 - `card.structural` emits `custom:credit_card` only for 13- to 19-digit
-  candidates that pass `luhn`.
+  candidates that pass `luhn`. Its pattern takes a whole digit run; the
+  recognizer finds the card inside it, so a CVV, expiry or number touching the
+  card does not hide it (`gaze_types::payment_card::scan_card_run`).
 - `ip.v4` and `ip.v6` emit `custom:ip_address`.
 - `postal.de` emits `custom:postal_code` only under active locale `de-DE`.
 - `postal.us` emits `custom:postal_code` only under active locale `en-US`.

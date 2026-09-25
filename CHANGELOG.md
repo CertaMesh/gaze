@@ -64,6 +64,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A payment card with digits touching it is now tokenized before the text
+  reaches the model.** Every release up to and including v0.14.0 sent the
+  card raw when a CVV or expiry followed it (`Karte 4111 1111 1111 1111 123`,
+  `… 1111 12 28`, `4111111111111111 123`, a fullwidth `１２３`), when a number
+  preceded it (`Nr 7 4111 …`, `2024 4111 …`, `Order 5678 4111 … paid`,
+  `Nr 12345 4111 …`), or when normalization glued more digits onto it (a
+  fullwidth group or a dropped ZERO WIDTH JOINER), with no policy and under
+  the `gaze setup` policy alike. `card.structural` took the greedy 13-19 digit
+  run and ran Luhn on it once. It now takes the whole digit run
+  (`\b\d(?:[\s-]?\d)*\b`) and finds the card inside it: every window the old
+  pattern matched that passes Luhn is still a card; in the rest of the run,
+  the longest group-aligned window printed in a card layout (compact 13-19,
+  4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4) that passes Luhn is one, at its exact
+  offsets. Groups end at separators and, through the new
+  `DetectContext::source_spans`, where normalization hid a break. The
+  restore-boundary DLP check runs the same code
+  (`gaze_types::payment_card::scan_card_run`), so both directions agree; on
+  the #652 review probe (440,000 texts) it reports every card it reported
+  before, plus 12,696 texts with a card it missed. On 5,000 generated texts
+  per family (forward path, no policy), cards with touching digits went from
+  1,799 to 4,315 fully tokenized; amounts, timestamps, phone numbers, IBANs,
+  compact long IDs and year or order prefixes without a card are unchanged.
+  The cost is more card tokens on Luhn-passing windows in longer grouped
+  runs: random 13-19 digit groupings 481 to 489 texts, a Luhn-invalid
+  4-4-4-4 with a 2-4 digit tail 346 to 503, and grouped IDs of five to ten
+  4-digit groups 748 to 1,840. Every such token restores exactly. The
+  no-OPF scorecard (2,910 documents) is unchanged: its card gold fails Luhn.
+  The `luhn` validator now also skips any Unicode whitespace and non-ASCII
+  digits, as the restore check already did. (solo todo 3843)
 - **The restore-boundary DLP check now flags NBSP-grouped and fullwidth IBANs
   and cards, and cards with digits touching them.** This deterministic outbound
   check scans model output at the restore boundary (before tokens are
@@ -81,7 +110,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   run and also passed unreported, in ASCII text too. The check now retries the
   group-aligned sub-runs printed in a card layout (compact, 4-4-4-4,
   4-4-4-4-3, 4-6-5, 4-6-4) and reports the card at its exact offsets. Other
-  ASCII input scans unchanged.
+  ASCII input scans unchanged. As first merged, the retry only looked inside
+  the first 19 digits of the run, so a card after a separated number of four
+  or more digits (`2024 4111 1111 1111 1111`, `Order 5678 4111 …`), any number
+  before a 19-digit card, and a glued tail of four or more digits still passed
+  unreported; the fix below scans the whole run on both paths.
 
 - **National IDs in tool-call JSON and `key=value` logs are now tokenized.**
   Every release up to and including v0.14.0 matched cue-anchored identifiers
