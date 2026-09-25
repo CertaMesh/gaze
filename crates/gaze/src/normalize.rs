@@ -28,7 +28,18 @@ pub fn normalize(input: &str) -> NormalizedText {
 
 fn fullwidth_to_ascii(ch: char) -> char {
     match ch {
-        '\u{3000}' => ' ',
+        // Every Unicode space separator (general category Zs) is a group separator wherever an
+        // ASCII space is. PDFs and banking UIs write IBANs, cards and tax IDs with NBSP, NARROW
+        // NBSP or THIN SPACE between groups; patterns written with `\x20` / `[ -]` and validators
+        // that strip only ASCII whitespace (Luhn, mod-97) missed them, so the value shipped raw
+        // (solo todo #3819). Folding here fixes every recognizer and validator at once; the span
+        // map keeps tokens and restore byte-exact to the original separator.
+        '\u{00A0}'
+        | '\u{1680}'
+        | '\u{2000}'..='\u{200A}'
+        | '\u{202F}'
+        | '\u{205F}'
+        | '\u{3000}' => ' ',
         '\u{FF01}'..='\u{FF5E}' => char::from_u32(ch as u32 - 0xFEE0).unwrap_or(ch),
         _ => ch,
     }

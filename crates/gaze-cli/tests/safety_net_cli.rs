@@ -239,7 +239,7 @@ fn tolerant_fallback_requires_env_opt_in() {
 
 #[test]
 #[file_serial(gaze_subprocess)]
-fn class_mismatch_warns_and_reports_without_failing() {
+fn class_mismatch_inside_owned_token_is_dropped() {
     let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_person","start":8,"end":17}]"#);
     let checkpoint = checkpoint_dir();
     let out = clean(
@@ -253,18 +253,10 @@ fn class_mismatch_warns_and_reports_without_failing() {
         "stderr={}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(String::from_utf8_lossy(&out.stderr).contains(r#""variant":"ClassMismatch""#));
+    assert!(!String::from_utf8_lossy(&out.stderr).contains(r#""variant":"ClassMismatch""#));
     let body: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(body["leak_report"]["stats"]["class_mismatch_count"], 1);
-    assert_eq!(
-        body["leak_report"]["suspects"][0]["leak_kind"],
-        "class_mismatch"
-    );
-    assert_eq!(
-        body["leak_report"]["suspects"][0]["raw_label"],
-        "private_person"
-    );
-    assert_eq!(body["leak_report"]["suspects"][0]["mapped_class"], "Name");
+    assert_eq!(body["leak_report"]["stats"]["suspect_count"], 0);
+    assert_eq!(body["leak_report"]["suspects"].as_array().unwrap().len(), 0);
     let leak_report = body["leak_report"].to_string();
     assert!(!leak_report.contains("alice@example.invalid"));
     assert!(!leak_report.contains("\"start\""));

@@ -354,7 +354,7 @@ impl SafetyNet for Reports {
 }
 
 #[test]
-fn second_batch_history_counts_parent_once_and_preserve_once_per_nonterminal_phase() {
+fn second_batch_history_counts_exposed_fragments_only() {
     let (session, mut clean, original) = fixture(false);
     let token = clean.manifest[0].clean_span.clone();
     let parent = suspect(
@@ -407,11 +407,15 @@ fn second_batch_history_counts_parent_once_and_preserve_once_per_nonterminal_pha
             Some(&mut trace),
         )
         .unwrap();
-    assert_eq!(history.suspects.len(), 1);
-    assert_eq!(history.suspects[0].span, parent.span);
-    assert_eq!(history.suspects[0].field_path, parent.field_path);
-    assert_eq!(history.stats.suspect_count, 1);
-    assert_eq!(history.stats.partial_bleed_count, 1);
+    assert_eq!(history.suspects.len(), 2);
+    assert_eq!(history.suspects[0].span, 0..5);
+    assert_eq!(history.suspects[1].span, 23..27);
+    assert!(history
+        .suspects
+        .iter()
+        .all(|row| row.field_path == parent.field_path));
+    assert_eq!(history.stats.suspect_count, 2);
+    assert_eq!(history.stats.uncovered_count, 2);
     assert_eq!(history.replay_hash, None);
     assert_eq!(history.telemetry, [telemetry]);
     assert_eq!(session.restore_strict_text(&clean.text).unwrap(), original);
@@ -428,12 +432,7 @@ fn second_batch_history_counts_parent_once_and_preserve_once_per_nonterminal_pha
             .iter()
             .map(|r| r.action)
             .collect::<Vec<_>>(),
-        [
-            Action::Preserve,
-            Action::Tokenize,
-            Action::Tokenize,
-            Action::Preserve
-        ]
+        [Action::Tokenize, Action::Tokenize]
     );
 }
 

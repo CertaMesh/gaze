@@ -134,8 +134,8 @@ fn safety_net_resolve_manifest_raw_span_indexes_original_request_bytes() {
     let clean_text = text(clean);
 
     assert!(
-        matches!(report.suspects[0].kind, LeakKind::PartialBleed { .. }),
-        "fixture must exercise the partial-bleed resolve path, got {:?}",
+        matches!(report.suspects[0].kind, LeakKind::Uncovered),
+        "the token-covered part must be clipped before resolve, got {:?}",
         report.suspects[0].kind
     );
     assert_eq!(manifest.len(), 2, "primary token + safety-net promotion");

@@ -24,7 +24,7 @@ At runtime, Gaze runs validator veto first, then anchor resolution, then normal
 conflict resolution. `AnchorResolver` looks up the candidate's recognizer id in
 `FamilyPolicyTable`; when `mandatory_anchor` is present, it scans the active
 locale chain for a matching cue bundle and searches a bounded window around the
-candidate span. Missing cue bundles are treated as missing anchors, not as
+candidate span. It treats a missing cue bundle as a missing anchor, not as
 permission to emit the narrower variant.
 
 When a mandatory anchor is found, the candidate flows normally and can emit its

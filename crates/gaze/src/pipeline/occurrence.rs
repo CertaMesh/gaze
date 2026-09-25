@@ -1384,7 +1384,13 @@ mod tests {
         assert!(calls[0].2.starts_with("aa"));
         assert!(calls[2].2.ends_with("bbcc"));
         assert!(calls[4].2.ends_with("cc"));
-        assert_eq!(calls[6].2, clean.text);
+        let final_scan = crate::safety_net_scan::SafetyNetScanText::new(
+            &clean.text,
+            clean.manifest.projection(),
+            |token| session.contains_token(token),
+        )
+        .unwrap();
+        assert_eq!(calls[6].2, final_scan.text());
         // The `cc` tail was redacted, so restore does not bring it back; the marker standing in
         // its place survives the strict scan as ordinary text.
         assert_eq!(

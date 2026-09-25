@@ -63,7 +63,7 @@ consumer and fully terminate/reap the dashboard child before continuing provider
 
 After the gaze-inspection identity API exists, use `DashboardControl::purge` for reusable
 registration-bound purge. `rotate_pairing_secret` requires a
-fresh acknowledged delivery and invalidates the previous authentication generation. shutdown is
+fresh acknowledged delivery and invalidates the previous authentication generation. The shutdown operation is
 one-way and returns only after disable, zeroization, termination, and reap.
 
 Treat DashboardStatus::Disabled as a dashboard-only failure. Do not retry capture in the same

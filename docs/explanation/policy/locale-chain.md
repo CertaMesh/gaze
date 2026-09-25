@@ -1,6 +1,6 @@
 # Locale Chain
 
-Locale chain precedence - CLI > policy > rulepack default > system default.
+Locale chain precedence: CLI > policy > rulepack default > system default.
 
 Gaze resolves the document locale from left to right. The CLI `--locale` value
 is the highest-precedence operator override. If it is absent, the policy locale

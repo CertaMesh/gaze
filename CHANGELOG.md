@@ -95,6 +95,27 @@ the same-document-set numbers, linked to the script and hardware line. -->
 
 ### Security
 
+- **National IDs in tool-call JSON and `key=value` logs are now tokenized.**
+  Every release up to and including v0.14.0 matched cue-anchored identifiers
+  (BSN, Steuer-ID, CPF, CNPJ, NHS, SSN, NINO, PAN, Aadhaar, NIR, VAT ID,
+  passport, national ID, driver licence, tax number) only in prose such as
+  `BSN: 111222333`. A JSON key (`{"bsn":"111222333"}`), a log field
+  (`bsn=111222333`) or a snake, camel or kebab key (`steuer_id`, `steuerId`,
+  `nhs_number`, `customer_ssn`) passed the value through raw, including on the
+  `gaze proxy` tool-call argument path. The `core` rulepack patterns now accept
+  quoted, single-quoted and escaped JSON keys, `=` and `:` log forms, and those
+  key spellings. A camelCase prefix before the cue (`customerSsn`) is not yet
+  matched. (solo todo #3818)
+- **Identifiers grouped with non-breaking or thin spaces are now tokenized.**
+  Every release up to and including v0.14.0 missed IBANs, payment cards,
+  Steuer-IDs and other grouped identifiers whose groups were separated by
+  NO-BREAK SPACE, NARROW NO-BREAK SPACE, THIN SPACE or another Unicode space,
+  as PDFs and banking UIs write them. The IBAN and Steuer-ID patterns accepted
+  only ASCII spaces, and the Luhn check vetoed a card holding a non-ASCII
+  separator, so each value shipped raw; an NBSP-grouped Steuer-ID leaked its
+  first two digits next to a `phone` token. Detection now reads every Unicode space
+  separator as an ASCII space; tokens, manifests and restore keep the original
+  bytes. (solo todo #3819)
 - **`gaze setup` policies now tokenize every detected class.** Generated policies
   in v0.11.2–v0.14.0 preserved unmatched classes, allowing detected phone,
   IBAN, payment card, and IP address values to pass through raw. The generated
@@ -666,6 +687,30 @@ the same-document-set numbers, linked to the script and hardware line. -->
 
 ### Fixed
 
+- Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
+  surrogate prefix derived from the placeholder shape after removing the random
+  session hex. Nym, OPF, and registry backends no longer change detections
+  when a fresh session chooses a different random prefix. The scan view
+  preserves byte offsets; observable clean output and restore mappings retain
+  the original token bytes. Findings wholly inside a verified placeholder are
+  discarded; findings that cross one are clipped to exposed bytes before
+  policy or fallback can act, so fallback cannot replace an owned placeholder
+  with a one-way redaction marker.
+
+  On the 2,910-document scored-labels-v2 Nym/NER replay with fresh random
+  sessions, three pre-fix runs leaked 14,071–14,088 bytes (mean 14,078),
+  produced 28,645–28,676 false-positive bytes (mean 28,659), and restored
+  2,909–2,910 documents exactly. Each variant passed a 60-document replay
+  across five fresh CLI sessions. The selected shape-derived hex mapping was
+  scored again after merging main with identical results:
+
+  | Scan prefix | Unstable documents / 60 | Leaked bytes | False-positive bytes | Exact restores | Redaction actions | Post-policy suspects |
+  |---|---:|---:|---:|---:|---:|---:|
+  | `00000000` | 0 | 14,116 | 28,638 | 2,907 | 4 | 0 |
+  | `xxxxxxxx` | 0 | 14,706 | 28,598 | 2,909 | 1 | 0 |
+  | No prefix, mapped offsets | 0 | 14,471 | 28,642 | 2,910 | 0 | 0 |
+  | Shape-derived hex (selected) | 0 | 13,991 | 28,652 | 2,910 | 0 | 0 |
+
 - **IPv6 after a glued address cue no longer ships raw.** The `core` `ip.v6`
   recognizer now accepts a fully parsed address immediately after `Address:`,
   `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` (case-insensitively at every
@@ -993,6 +1038,18 @@ the same-document-set numbers, linked to the script and hardware line. -->
   sessions also reject empty custom classes constructed directly through the
   enum before changing session state. Valid session tokens continue to
   round-trip through the token bridge's strict parser (#507).
+
+### Performance
+
+- NER now runs once per document instead of once per locale-chain step. Since the
+  per-span locale fall-through, the registry called every document-basis recognizer at
+  every chain step, so the 15-step `gaze setup` chain ran the same NER inference 15
+  times per document and the two-step rules+NER chain ran it twice. Recognizers whose
+  output ignores the step locale (NER, regex, anchored-match, dictionary) now declare it
+  through the new `Recognizer::detect_is_locale_invariant` method (default `false`), and
+  the registry reuses their first result at later steps. Per-span claiming is unchanged,
+  and clean text, manifests, and audit rows are byte-identical. Custom recognizers keep
+  one call per step unless they opt in.
 
 ## [0.14.0] - 2026-09-11
 

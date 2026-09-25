@@ -504,7 +504,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:aadhaar|uid|unique identification|आधार)(?:\s*(?:number|no\.?|id))?\s*[:#-]?\s*(\d{4}[ -]?\d{4}[ -]?\d{4})\b'''
+pattern = '''(?i)(?:\b|_)(?:aadhaar|uid|unique[\s_-]*identification|आधार)(?:[\s_-]*(?:number|no\.?|id))?\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{4}[ -]?\d{4}[ -]?\d{4})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
@@ -526,7 +526,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:n[°º]?\s*ss|nir|s[ée]curit[ée]\s+sociale|num[ée]ro\s+de\s+s[ée]curit[ée]\s+sociale)\s*[:#-]?\s*([123478]\d(?:[ -]?\d){13})\b'''
+pattern = '''(?i)(?:\b|_)(?:n[°º]?\s*ss|nir(?:[_-]?(?:number|num|no))?|s[ée]curit[ée][\s_-]*sociale|num[ée]ro[\s_-]+(?:de[\s_-]+)?s[ée]curit[ée][\s_-]*sociale)\s*\\?["']?\s*[:=#-]?\s*\\?["']?([123478]\d(?:[ -]?\d){13})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
@@ -548,7 +548,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:steuer-id|steuerid|idnr\.?|steuerliche\s+identifikationsnummer|identifikationsnummer)\s*[:#-]?\s*(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
+pattern = '''(?i)(?:\b|_)(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|identifikationsnummer|tax[_-]?id(?:[_-]?(?:number|no))?)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
@@ -573,7 +573,7 @@ locale_basis = "format"
 kind = "regex"
 # Keep DE USt-IdNr cue-anchored so the short `DE` + 9 digit shape cannot
 # compete with unrelated identifiers, but do not checksum-gate reported leaks.
-pattern = '''(?i)\b(?:ust[\s.-]*(?:idnr\.?|id)|umsatzsteuer[\s-]*id|mwst[\s-]*nr\.?)\s*[:#-]?\s*(DE\d{9})\b'''
+pattern = '''(?i)(?:\b|_)(?:ust[\s._-]*(?:idnr\.?|id)|umsatzsteuer[\s_-]*id|mwst[\s_-]*nr\.?|vat[\s_-]*(?:id|number|no))\s*\\?["']?\s*[:=#-]?\s*\\?["']?(DE\d{9})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -595,7 +595,7 @@ locale_basis = "format"
 kind = "regex"
 # ES VAT/CIF/NIF checks vary by entity type. Until that checksum is implemented
 # end-to-end, keep ES format-gated instead of risking false checksum rejects.
-pattern = '''(?i)\b(?:nif[\s-]*iva|cif|nif|iva|vat(?:[\s-]*id)?)\s*[:#-]?\s*(ES[A-Z0-9]\d{7}[A-Z0-9])\b'''
+pattern = '''(?i)(?:\b|_)(?:nif[\s_-]*iva|cif|nif|iva|vat(?:[\s_-]*id)?)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(ES[A-Z0-9]\d{7}[A-Z0-9])\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -614,7 +614,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:bsn|burgerservicenummer)\s*[:#-]?\s*(\d{9})\b'''
+pattern = '''(?i)(?:\b|_)(?:bsn(?:[_-]?(?:nr|nummer|number|no))?|burger[_-]?service[_-]?nummer)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{9})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
@@ -636,7 +636,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:cpf|cadastro\s+de\s+pessoas\s+f[íi]sicas)\s*[:#-]?\s*(\d{3}\.?\d{3}\.?\d{3}-?\d{2})\b'''
+pattern = '''(?i)(?:\b|_)(?:cpf(?:[_-]?(?:number|numero|número|nr|no))?|cadastro[\s_-]+de[\s_-]+pessoas[\s_-]+f[íi]sicas)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{3}\.?\d{3}\.?\d{3}-?\d{2})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
@@ -658,7 +658,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:cnpj|cadastro\s+nacional\s+da\s+pessoa\s+jur[íi]dica)\s*[:#-]?\s*(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})\b'''
+pattern = '''(?i)(?:\b|_)(?:cnpj(?:[_-]?(?:number|numero|número|nr|no))?|cadastro[\s_-]+nacional[\s_-]+da[\s_-]+pessoa[\s_-]+jur[íi]dica)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
@@ -680,7 +680,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\bnhs\s*(?:number|no\.?|id)?\s*[:#-]?\s*(\d{3}[ -]?\d{3}[ -]?\d{4})\b'''
+pattern = '''(?i)(?:\b|_)nhs[\s_-]*(?:number|num|no\.?|id)?\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{3}[ -]?\d{3}[ -]?\d{4})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
@@ -703,7 +703,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:ssn|social\s+security(?:\s+number)?|ss#)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*(\d{3}-\d{2}-\d{4}|\d{9})\b'''
+pattern = '''(?i)(?:\b|_)(?:ssn|social[\s_-]*security(?:[\s_-]*number)?|ss#)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?(\d{3}-\d{2}-\d{4}|\d{9})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -725,7 +725,7 @@ kind = "regex"
 # Prefix letters follow HMRC NINO format constraints: D/F/I/Q/U/V are
 # excluded from both positions, O is excluded from the second position, and
 # BG, GB, KN, NK, NT, TN, and ZZ are not allocated.
-pattern = '''(?i)\b(?:nino|ni\s+number|national\s+insurance(?:\s+number)?)\s*[:#-]?\s*((?:[ACEHJLMOPRSWXY][ABCEGHJKLMNPRSTWXYZ]|B[ABCEHJKLMNPRSTWXYZ]|G[ACEGHJKLMNPRSTWXYZ]|K[ABCEGHJLMPRSTWXYZ]|N[ABCEGHJLMPRSWXYZ]|T[ABCEGHJKLMPRSTWXYZ]|Z[ABCEGHJKLMNPRSTWXY])\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D])\b'''
+pattern = '''(?i)(?:\b|_)(?:nino|ni[\s_-]*number|national[\s_-]*insurance(?:[\s_-]*number)?)\s*\\?["']?\s*[:=#-]?\s*\\?["']?((?:[ACEHJLMOPRSWXY][ABCEGHJKLMNPRSTWXYZ]|B[ABCEHJKLMNPRSTWXYZ]|G[ACEGHJKLMNPRSTWXYZ]|K[ABCEGHJLMPRSTWXYZ]|N[ABCEGHJLMPRSWXYZ]|T[ABCEGHJKLMPRSTWXYZ]|Z[ABCEGHJKLMNPRSTWXY])\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D])\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -744,7 +744,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:pan|permanent\s+account\s+number|pan\s+card|pan\s+no|पैन)\s*[:#-]?\s*([A-Z]{3}[ABCFGHJLPT][A-Z]\d{4}[A-Z])\b'''
+pattern = '''(?i)(?:\b|_)(?:pan|permanent[\s_-]+account[\s_-]+number|pan[\s_-]*card|pan[\s_-]*(?:no|number)|पैन)\s*\\?["']?\s*[:=#-]?\s*\\?["']?([A-Z]{3}[ABCFGHJLPT][A-Z]\d{4}[A-Z])\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1158,7 +1158,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:sozialversicherung(?:s(?:nummer|ausweis))?|sv-?nummer)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*(\d{3}-\d{2}-\d{4}|\d{3}\.\d{4}\.\d{4}\.\d{2}|\d{9,11})\b'''
+pattern = '''(?i)(?:\b|_)(?:sozialversicherung(?:s[_-]?(?:nummer|ausweis))?|sv[_-]?nummer)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?(\d{3}-\d{2}-\d{4}|\d{3}\.\d{4}\.\d{4}\.\d{2}|\d{9,11})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1225,7 +1225,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:steuer(?:-?id|nummer|liche[ \t]identifikationsnummer)?|idnr\.?|tax(?:[ \t](?:id|number))?|taxpayer|tin)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*(\d{3}[ ./-]\d{2,4}[ ./-]\d{2,4}(?:[ ./-]\d{2,4})?)\b'''
+pattern = '''(?i)(?:\b|_)(?:steuer(?:[_-]?id|[_-]?nummer|liche[ \t_-]identifikationsnummer)?|idnr\.?|tax(?:[ \t_-]?(?:id|number))?|taxpayer|tin)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?(\d{3}[ ./-]\d{2,4}[ ./-]\d{2,4}(?:[ ./-]\d{2,4})?)\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1265,7 +1265,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:driver'?s?[ \t]licen[cs]e|driving[ \t]licen[cs]e|licen[cs]e[ \t]number|dl#|f[uü]hrerschein(?:nummer)?|fahrerlaubnis)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*([A-Z]{1,3}\d{5,12}|[A-Z]{1,3}-?\d{5,12})\b'''
+pattern = '''(?i)(?:\b|_)(?:driver'?s?[ \t_-]?licen[cs]e|driving[ \t_-]?licen[cs]e|licen[cs]e[ \t_-]?number|dl#|dl[_-]?(?:number|num|no|nr)|f[uü]hrerschein(?:[_-]?nummer)?|fahrerlaubnis)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?([A-Z]{1,3}\d{5,12}|[A-Z]{1,3}-?\d{5,12})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1306,7 +1306,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:national[ \t-]?id(?:entity|entification)?(?:[ \t-]?(?:number|nummer))?|nationalid|nationale[nr]?[ \t]+(?:id(?:-?nummer)?|identifikationsnummer|identit[äa]tsnummer|id-nummer)|national(?:-?ausweis(?:es)?|er[ \t]+identit[äa]tsausweis)(?:nummer)?|identity[ \t](?:card|number)|id[ \t-]?(?:card|number|nummer|karte)(?:n?nummer)?|idcard|id-kartennummer|identit[äa]tskarte(?:n?nummer)?|personalausweis(?:es|nummer)?|ausweis(?:es)?(?:nummer)?|national[ \t]insurance(?:[ \t]number)?|identifikationsnummer|personalnummer|staatsb[üu]rgerschaftsnummer|b[üu]rgerschaftsnummer|ahv(?:-?nummer)?)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*([A-Z]{2}-?756\.\d{4}\.\d{4}\.\d{1,2}|[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,13}|\d{6}-\d{4}|\d\.\d{2}\.\d{6}\.\d)\b'''
+pattern = '''(?i)(?:\b|_)(?:national[ \t_-]?id(?:entity|entification)?(?:[ \t_-]?(?:number|nummer))?|nationalid|nationale[nr]?[ \t_-]+(?:id(?:-?nummer)?|identifikationsnummer|identit[äa]tsnummer|id-nummer)|national(?:-?ausweis(?:es)?|er[ \t_-]+identit[äa]tsausweis)(?:nummer)?|identity[ \t_-]?(?:card|number)|id[ \t_-]?(?:card|number|nummer|karte)(?:n?nummer)?|idcard|id-kartennummer|identit[äa]tskarte(?:n?nummer)?|personalausweis(?:es|nummer)?|ausweis(?:es)?(?:nummer)?|national[ \t_-]?insurance(?:[ \t_-]?number)?|identifikationsnummer|personalnummer|staatsb[üu]rgerschaftsnummer|b[üu]rgerschaftsnummer|ahv(?:-?nummer)?)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?([A-Z]{2}-?756\.\d{4}\.\d{4}\.\d{1,2}|[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,13}|\d{6}-\d{4}|\d\.\d{2}\.\d{6}\.\d)\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1347,7 +1347,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:passports?|passport[ \t-]?id|reisep[aä]ss(?:e?s|nummer|-?nr\.?|-?id|dokument)?|passnummer|passagierschein|pass(?:es)?[ \t]+(?:mit[ \t]+de[rmn][ \t]+(?:nummer|id)|nummer|nr\.?|trug[ \t]+die[ \t]+nummer))\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*([A-Z]{1,3}-?\d{6,9}[A-Z]{0,2}|[A-Z]\d{2}[A-Z]\d{5,6}|\d{2}[A-Z]\d{6}|\d{9}|[A-Z]\d{2}[A-Z]\d[A-Z]\d[A-Z]\d|[A-Z]\d{2}[ ]\d{7}|\d{2}[A-Z]{2}\d{4})\b'''
+pattern = '''(?i)(?:\b|_)(?:passports?|passport[ \t_-]?id|reisep[aä]ss(?:e?s|[_-]?nummer|[_-]?nr\.?|[_-]?id|dokument)?|passnummer|passagierschein|pass(?:es)?[ \t]+(?:mit[ \t]+de[rmn][ \t]+(?:nummer|id)|nummer|nr\.?|trug[ \t]+die[ \t]+nummer))\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?([A-Z]{1,3}-?\d{6,9}[A-Z]{0,2}|[A-Z]\d{2}[A-Z]\d{5,6}|\d{2}[A-Z]\d{6}|\d{9}|[A-Z]\d{2}[A-Z]\d[A-Z]\d[A-Z]\d|[A-Z]\d{2}[ ]\d{7}|\d{2}[A-Z]{2}\d{4})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]

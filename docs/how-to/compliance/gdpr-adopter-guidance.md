@@ -133,7 +133,7 @@ Re-materialising original values from tokens is a **privileged operation**, not 
 
 ## 6. Enterprise security considerations
 
-This section is written for security and infrastructure reviewers. It states precisely what Gaze does and — importantly — what it leaves to your deployment. Gaze is a **boundary-protection tool against third-party LLM exposure; it is not a host-security, key-management, or storage-encryption product.**
+This section is written for security and infrastructure reviewers. It states what Gaze does and what it leaves to your deployment. Gaze is a **boundary-protection tool against third-party LLM exposure; it is not a host-security, key-management, or storage-encryption product.**
 
 ### 6.1 Manifest storage and encryption at rest
 
@@ -171,7 +171,7 @@ The restore manifest contains original PII. When you persist a manifest across r
 
 ## 7. Audit logs and metadata
 
-Gaze ships an optional audit sink (`gaze-audit`) that records **metadata only** about what was tokenised. This is true and load-bearing — but "metadata-only" is **not** the same as "outside the scope of the GDPR".
+Gaze ships an optional audit sink (`gaze-audit`) that records **metadata only** about what was tokenised. "Metadata-only" is **not** the same as "outside the scope of the GDPR".
 
 **What Gaze's own audit log is:**
 
@@ -229,7 +229,8 @@ Pseudonymisation reduces re-identification risk; it does not eliminate it. Adopt
 
 ## 11. Dual-use and misuse risks
 
-Privacy tooling can be misused. Being honest about where a careless deployment goes wrong is part of using Gaze responsibly:
+Privacy tooling can be misused. Naming the common ways a careless deployment
+goes wrong is part of using Gaze responsibly:
 
 - **Hiding identity from the human reviewer, not just from the model.** If you pseudonymise so aggressively that the eventual authorised human cannot exercise accountable judgement, you may produce GDPR-clean LLM traffic but poor downstream decisions. Restore only the minimum value necessary, only for authorised users, and only where needed (see [§5](#5-the-restore-authorisation-boundary)); blanket restoration as a default display mode is not supported by data-protection-by-default.
 - **Using pseudonymisation as a substitute for lawful basis.** Pseudonymisation is a *technical measure*, not an [Art. 6 lawful basis](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/lawful-basis/a-guide-to-lawful-basis/). If you have no lawful basis to process the personal data, pseudonymising it does not create one.

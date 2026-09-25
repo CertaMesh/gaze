@@ -52,7 +52,7 @@ The decision-making process is intentionally lightweight:
 - **Roadmap and milestone decisions:** discussed in public issues or in `ROADMAP.md`. Maintainer consensus, with the rationale recorded in writing.
 - **Licence, governance, or security-posture changes:** require explicit agreement from both maintainers, documented in this file (or its successor) and announced before the change takes effect.
 
-Disagreements between maintainers are resolved by discussion. If a disagreement cannot be resolved, the more conservative option is taken — meaning: do not merge, do not change the licence, do not weaken a security or audit guarantee.
+Disagreements between maintainers are resolved by discussion. If a disagreement cannot be resolved, the more conservative option wins: do not merge, do not change the licence, do not weaken a security or audit guarantee.
 
 ## Commercial activities and the commons
 
@@ -60,7 +60,7 @@ The maintainers operate a company (Empire2 Ltd, in formation in Ireland) that bu
 
 Three structural commitments answer this:
 
-1. **DCO without CLA.** As above — there is no unilateral re-licensing authority. The currently-published code is permanently available under Apache-2.0 OR MIT.
+1. **DCO without CLA.** As above, there is no unilateral re-licensing authority. The currently-published code is permanently available under Apache-2.0 OR MIT.
 
 2. **Open detection layer, forever.** Every PII recognizer, every validator, every locale pack, and the entire detection pipeline ships in the public repository under the project's licence. The commercial tier is built on **operational** value (hosted multi-tenant audit dashboards, compliance reports, vertical curation, on-premise support engagements) — never on holding back detection capability. If a vertical needs a new detector, it lands in `gaze-recognizers` first; the commercial layer can only enable it via configuration.
 

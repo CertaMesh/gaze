@@ -1,7 +1,7 @@
 # Daemon Adapter Quickstart
 
 This page is an adopter setup guide for `gaze daemon`, a long-lived **stdio
-server** in the LSP / MCP / language-server-protocol tradition: a foreground
+server** in the LSP / MCP tradition: a foreground
 child process that inherits stdin/stdout from its parent and exchanges one JSON
 object per line. Despite the subcommand name, this is not a Unix daemon in the
 strict sense (detached, backgrounded, no controlling terminal). The historical
@@ -23,7 +23,7 @@ cost on every turn.
 cupsd, cron) is a backgrounded process detached from any controlling terminal,
 with stdin/stdout closed or redirected to log files. `gaze daemon` is a
 long-lived foreground child that owns stdin/stdout for line-delimited JSON
-request/response - the same pattern as LSP language servers, MCP servers,
+request/response, the same pattern as LSP language servers, MCP servers,
 tsserver, and rust-analyzer.
 
 The subcommand verb is kept as `gaze daemon` for binary stability through
@@ -31,7 +31,7 @@ v0.9.x. A `gaze serve` canonical alias lands in v0.10 with a deprecation
 warning on the legacy verb; the alias drops in v0.11.
 
 If you need an actual Unix daemon (backgrounded, supervised, persistent), use
-`gaze proxy start` - the proxy is the daemon-style surface in this binary.
+`gaze proxy start`; the proxy is the daemon-style surface in this binary.
 
 Use one-shot `gaze clean` when a shell pipeline or batch job only needs one
 document and does not benefit from a resident process.
@@ -107,9 +107,9 @@ SIGINT and SIGTERM set a shutdown flag. The foreground loop finishes the
 current line, flushes stdout and audit writes, then exits. If no request line
 arrives for `--idle-timeout` seconds, the stdio server also exits cleanly.
 
-Session eviction is independent of process shutdown. When `--session-cap` is
-exceeded, the least recently used session is evicted. Sessions idle longer than
-`--session-idle-timeout` seconds are also evicted. Eviction writes audit
+Session eviction is independent of process shutdown. When the registry exceeds
+`--session-cap`, it evicts the least recently used session. It also evicts
+sessions idle longer than `--session-idle-timeout` seconds. Eviction writes audit
 metadata with source `daemon.session_eviction` when audit logging is enabled.
 
 ## Multi-Session Example

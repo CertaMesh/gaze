@@ -161,8 +161,8 @@ complete final buffer. It commits the session transaction immediately before
 the single upstream send. Dropping a prepared request performs neither commit
 nor upstream I/O.
 
-For non-stream responses, the complete upstream body is buffered, framed,
-parsed, restored, provenance-checked, and residual-scanned before the proxy
+For non-stream responses, the proxy buffers, frames, parses, restores,
+provenance-checks, and residual-scans the complete upstream body before it
 creates any successful downstream response.
 
 For SSE, the upstream status and headers are validated before a downstream
@@ -260,9 +260,9 @@ Before consuming a successful body, the proxy requires the expected JSON or SSE
 content type and rejects unsupported content encodings, conflicting
 `content-length`/`transfer-encoding`, duplicate or malformed framing, and
 over-limit headers. It creates a minimal successful downstream head containing
-only the canonical content type. Stale upstream representation or credential
-metadata such as `content-length`, `etag`, `last-modified`, `set-cookie`, and
-request IDs is not copied.
+only the canonical content type. It does not copy stale upstream representation
+or credential metadata such as `content-length`, `etag`, `last-modified`,
+`set-cookie`, and request IDs.
 
 No automatic retry occurs. A validated, single, bounded numeric
 `retry-after` seconds value may accompany a rate-limit error; it does not turn

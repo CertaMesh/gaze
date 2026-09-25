@@ -121,65 +121,6 @@ impl PdfPagePayload {
     }
 }
 
-/// Rasterize a single page of a PDF on disk to PNG bytes.
-///
-/// # Errors
-///
-/// * [`DocumentError::PdfiumNotFound`] — pdfium dynamic library could not be
-///   located. Payload carries per-OS install guidance.
-/// * [`DocumentError::PdfRasterFailed`] — pdfium reported an error while
-///   opening or rendering the document.
-pub fn rasterize_first_page(
-    path: &Path,
-    config: PdfRasterConfig,
-) -> Result<RasterizedPage, DocumentError> {
-    let bindings = Pdfium::bind_to_system_library().map_err(|err| {
-        DocumentError::PdfiumNotFound(format!("{}. {}", err, pdfium_install_hint()))
-    })?;
-    let pdfium = Pdfium::new(bindings);
-    let document = pdfium
-        .load_pdf_from_file(path, None)
-        .map_err(map_pdfium_error)?;
-    let pages = document.pages();
-    let page_count = pages.len();
-    if page_count == 0 {
-        return Err(DocumentError::PdfRasterFailed(
-            "input PDF contains zero pages".to_string(),
-        ));
-    }
-
-    if config.page_index < 0 || config.page_index >= page_count {
-        return Err(DocumentError::PdfRasterFailed(format!(
-            "requested page index {} but document has {} page(s)",
-            config.page_index, page_count
-        )));
-    }
-
-    let page = pages.get(config.page_index).map_err(map_pdfium_error)?;
-    let mut render_config = PdfRenderConfig::new().set_target_width(config.width_px as i32);
-    if config.height_px > 0 {
-        render_config = render_config.set_maximum_height(config.height_px as i32);
-    }
-    let bitmap = page
-        .render_with_config(&render_config)
-        .map_err(map_pdfium_error)?;
-    let dynamic_image = bitmap.as_image().map_err(map_pdfium_error)?;
-    let (width, height) = (dynamic_image.width(), dynamic_image.height());
-
-    let mut buf = Cursor::new(Vec::with_capacity(64 * 1024));
-    dynamic_image
-        .write_to(&mut buf, ImageFormat::Png)
-        .map_err(|err| DocumentError::PdfRasterFailed(format!("png encode failed: {err}")))?;
-
-    Ok(RasterizedPage {
-        png_bytes: buf.into_inner(),
-        page_index: config.page_index,
-        page_count,
-        width_px: width,
-        height_px: height,
-    })
-}
-
 /// Extract every PDF page, routing selectable-text pages directly and
 /// rasterizing image-only pages for OCR.
 ///

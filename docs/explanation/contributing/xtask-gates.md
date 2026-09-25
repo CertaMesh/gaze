@@ -64,7 +64,7 @@ $ cargo run -p xtask -- dylint-gate
 
 The UI suite covers 18 bypass classes, including macro call-site hygiene,
 `#[path]` modules, `include!()`, type positions, trait bounds, and clean
-controls. This is the source of truth for audit-sink protected-path isolation;
+controls. This lint is the source of truth for audit-sink protected-path isolation;
 the legacy `audit-metadata-only` syn walker was decommissioned in v0.5 Phase E.
 The architecture, toolchain pins, timings, and Phase E migration plan are documented in
 [`v0.5-dylint-audit-gate.md`](https://github.com/PIInuts/business/blob/main/research/v0.5-dylint-audit-gate.md)
@@ -178,9 +178,9 @@ The current helper shape is:
 - call `ensure_test_exists(test)` before running it
 - call `run_behavioral_test(test)` to execute the exact test
 
-This makes the gate recursive-Potemkin resistant: deleting or renaming the
-test fails during the list phase, and breaking the contract fails during the
-execution phase.
+This helper shape makes the gate recursive-Potemkin resistant: deleting or
+renaming the test fails during the list phase, and breaking the contract fails
+during the execution phase.
 
 ## Adding a gate
 

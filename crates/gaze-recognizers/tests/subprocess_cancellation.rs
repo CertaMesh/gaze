@@ -28,10 +28,6 @@ fn infer_with_timeout(
     .map(|_| ())
 }
 
-fn infer(command: &Path, input: &str) -> Result<(), SafetyNetError> {
-    infer_with_timeout(command, input, Duration::from_secs(1))
-}
-
 fn wait_for_file(path: &Path, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
@@ -45,22 +41,45 @@ fn wait_for_file(path: &Path, timeout: Duration) -> bool {
     }
 }
 
-fn infer_after_backend_starts(body: &str, input: &str) -> (tempfile::TempDir, SafetyNetError) {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
+/// Caps retries so sustained overload fails with a diagnosis instead of
+/// spinning until the CI job timeout.
+const MAX_FORK_ATTEMPTS: u32 = 6;
+
+/// Runs the fixture until an attempt forks its descendant before the backend
+/// deadline kills the fixture's parent.
+///
+/// The deadline counts from spawn, so a loaded host can kill the parent before
+/// it forks; that attempt proves nothing and the next one doubles the
+/// deadline. The parent writes `.forked` right after `fork()`, and `infer`
+/// has reaped the parent before it returns, so a missing marker is final:
+/// the test never waits on the fixture's startup.
+fn infer_after_backend_forks(
+    body: &str,
+    input: &str,
+) -> (tempfile::TempDir, SafetyNetError, Vec<tempfile::TempDir>) {
+    let mut timeout = Duration::from_secs(1);
+    // Kept alive so a descendant forked just before the kill still finds
+    // `.release` and exits instead of polling a deleted directory.
+    let mut abandoned = Vec::new();
+    for _ in 0..MAX_FORK_ATTEMPTS {
         let dir = tempfile::tempdir().unwrap();
         let command = script(dir.path(), body);
-        let error = infer(&command, input).unwrap_err();
-        // A heavily loaded host can spend the whole backend timeout before
-        // the fixture starts. Only inspect cancellation on a started attempt.
-        if wait_for_file(
-            &dir.path().join("synthetic-backend.ready"),
-            Duration::from_millis(500),
-        ) {
-            return (dir, error);
+        let error = infer_with_timeout(&command, input, timeout).unwrap_err();
+        if dir.path().join("synthetic-backend.forked").exists() {
+            return (dir, error, abandoned);
         }
-        assert!(Instant::now() < deadline, "synthetic backend never started");
+        release(dir.path());
+        abandoned.push(dir);
+        timeout = (timeout * 2).min(Duration::from_secs(30));
     }
+    panic!(
+        "fixture was killed before forking on all {MAX_FORK_ATTEMPTS} attempts \
+         (deadlines doubled from 1s up to {timeout:?})"
+    );
+}
+
+fn release(dir: &Path) {
+    fs::write(dir.join("synthetic-backend.release"), b"").unwrap();
 }
 
 fn script(dir: &Path, body: &str) -> std::path::PathBuf {
@@ -100,17 +119,18 @@ fn closes_descendant_held_read_pipes_before_returning() {
     for held in [1, 2] {
         // The descendant observes EPIPE after infer returns. A detached reader
         // would keep the pipe open and make this fail even if return was fast.
-        let (dir, error) = infer_after_backend_starts(
+        let (dir, error, _abandoned) = infer_after_backend_forks(
             &format!(
                 r#"#!/usr/bin/env python3
 import os, sys, time
 sys.stdin.buffer.read()
-if os.fork() == 0:
+if os.fork() != 0:
+    open(sys.argv[0] + '.forked', 'w').close()
+else:
     os.close(0)
     os.close({other})
     fd = {held}
     os.set_blocking(fd, False)
-    open(sys.argv[0] + '.ready', 'w').close()
     end = time.monotonic() + 60
     while time.monotonic() < end:
         try:
@@ -144,13 +164,19 @@ os._exit(0)
 #[test]
 #[file_serial(gaze_subprocess)]
 fn cancels_full_stdin_and_closes_the_writer() {
+    // The descendant leaves stdin unread until the test releases it, so the
+    // pipe stays full past any deadline and only cancellation can end the
+    // write.
     let body = r#"#!/usr/bin/env python3
 import os, sys, time
-if os.fork() == 0:
+if os.fork() != 0:
+    open(sys.argv[0] + '.forked', 'w').close()
+else:
     os.close(1)
     os.close(2)
-    open(sys.argv[0] + '.ready', 'w').close()
-    time.sleep(2)
+    end = time.monotonic() + 60
+    while not os.path.exists(sys.argv[0] + '.release') and time.monotonic() < end:
+        time.sleep(0.01)
     count = 0
     os.set_blocking(0, False)
     end = time.monotonic() + 60
@@ -170,11 +196,12 @@ os.write(1, b'[]')
 os._exit(0)
 "#;
     let input = "w".repeat(2 * 1024 * 1024);
-    let (dir, error) = infer_after_backend_starts(body, &input);
+    let (dir, error, _abandoned) = infer_after_backend_forks(body, &input);
     assert!(
         matches!(error, SafetyNetError::Runtime { ref message } if message.contains("timed out")),
         "{error:?}"
     );
+    release(dir.path());
     let closed = dir.path().join("synthetic-backend.closed");
     assert!(
         wait_for_file(&closed, Duration::from_secs(30)),

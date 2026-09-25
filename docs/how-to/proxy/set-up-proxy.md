@@ -14,7 +14,7 @@ pseudonymization boundary without changing application code.
 
 The application keeps using its provider API key. The only SDK-side change is
 the base URL. Requests flow through the local proxy, Gaze tokenizes PII before
-the upstream call, and owner-visible response text is restored on the way back.
+the upstream call, and Gaze restores owner-visible response text on the way back.
 
 ## Prerequisites
 

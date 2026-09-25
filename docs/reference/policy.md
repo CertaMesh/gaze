@@ -16,8 +16,8 @@ including shipped CLI and host-integration changes, see
 
 ## What `policy.toml` is for
 
-`gaze clean` accepts `--policy=<path>`. The path is opened, parsed as TOML,
-and turned into a [`Pipeline`](../../crates/gaze/src/pipeline.rs) via
+`gaze clean` accepts `--policy=<path>`. It opens the path, parses the file as
+TOML, and turns it into a [`Pipeline`](../../crates/gaze/src/pipeline.rs) via
 `Pipeline::from_policy`. Two failure modes:
 
 - **File cannot be opened** (missing path, permission denied) → exit `4`,
@@ -102,7 +102,7 @@ The loader checks the `major.minor` prefix against
 The envelope is intentionally distinct from `PolicyConfig` so adopters
 upgrading the gaze binary across a contract break see the version mismatch
 directly, rather than chasing a generic policy-load error that shadows the
-real cause. Mirrors the rulepack-side version gate in
+real cause. It mirrors the rulepack-side version gate in
 [`crates/gaze/src/rulepack.rs`](../../crates/gaze/src/rulepack.rs).
 
 ### Soft default for pre-versioned policies
@@ -1086,8 +1086,8 @@ pattern = '\b(?:[$€£]\s?\d[\d.,]*|\d[\d.,]*\s?(?:€|£|EUR|USD|GBP))\b'
   so `\b` works as expected.
 
 For a redaction policy this fails **open**: the amount silently stays in the
-clean text. This is standard Rust `regex` (and PCRE, and RE2) `\b` semantics —
-not a Gaze behavior — and it has been stable across every Gaze release
+clean text. This is standard Rust `regex` (and PCRE, and RE2) `\b` semantics,
+not a Gaze behavior, and it has been stable across every Gaze release
 (verified 0.5.x through 0.11.x, byte-identical outputs; see issue #361).
 Because Rust `regex` has no look-around, you cannot emulate a one-sided
 boundary with `(?<!...)`/`(?!...)`. Instead, apply `\b` only to the edges that
@@ -1102,8 +1102,8 @@ The same applies to any custom class whose values start or end with a symbol
 (percentages, `#`-prefixed IDs, currency): put `\b` next to `\d`/`\w` edges
 only, never next to the symbol.
 
-The pattern is compiled at `Policy::load` time, so a malformed regex fails
-fast with `PolicyConfig` and never reaches `gaze clean`'s stdin read.
+`Policy::load` compiles the pattern, so a malformed regex fails fast with
+`PolicyConfig` and never reaches `gaze clean`'s stdin read.
 
 Detection order matters when spans overlap: longer spans win first, then
 declaration order, then earlier start position (see

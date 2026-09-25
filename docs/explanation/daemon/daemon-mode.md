@@ -44,7 +44,7 @@ through the same CLI build path as `gaze clean`, so pinned bundle SHA checks
 still run during daemon startup/backend initialization.
 
 Each request looks up a `Session` by client-provided `session_id`. First use
-creates a new session from the policy. Reuse of the same `session_id` reuses the
+creates a new session from the policy. Reusing a `session_id` reuses the
 same manifest and token map. Distinct `session_id` values never share a
 manifest.
 
@@ -71,7 +71,7 @@ part of the v1 daemon contract.
 
 ## Audit
 
-Daemon-mode redaction audit rows are passed through a logger wrapper that sets
+The daemon passes its redaction audit rows through a logger wrapper that sets
 `provenance_stage = "daemon"`. This lets adopters query daemon-emitted metadata
 separately from one-shot `gaze clean` invocations without storing raw PII.
 

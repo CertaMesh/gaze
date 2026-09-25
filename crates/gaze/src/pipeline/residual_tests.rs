@@ -966,23 +966,21 @@ fn actual_two_net_sequence_sees_residual_output_and_deletes_its_final_authority(
         assert_eq!(pair[0].1, phase);
         assert_eq!(pair[0].2, pair[1].2);
         assert_eq!(pair[0].3, pair[1].3);
-        // The final pass now sees 4 manifest spans, not 3: the fallback redaction is a manifest
-        // entry rather than a hole, so the document it hands the next net describes itself fully.
-        assert_eq!(pair[0].4, [2, 3, 4, 4][phase]);
+        // The straddling finding now resolves its exposed gap and leaves a narrower fallback
+        // marker, both represented in the final manifest.
+        assert_eq!(pair[0].4, [2, 3, 4, 5][phase]);
         if phase > 0 {
             assert_ne!(pair[0].2, observed[(phase - 1) * 2].2);
         }
     }
     assert!(!observed[0].2.contains(" right"));
-    // 15..22 is the fallback redaction. It used to leave no manifest entry at all, because the
-    // redactor cut the bytes out; it now stands for its own original range like every other
-    // one-way replacement, which is exactly what lets the clean/raw mapping stay affine.
+    // 15..21 is reversibly resolved; the remaining 21..22 gap is the fallback redaction.
     assert_eq!(
         manifest
             .iter()
             .map(|s| s.raw_span.clone())
             .collect::<Vec<_>>(),
-        vec![0..15, 15..22, 23..25, 27..29]
+        vec![0..15, 15..21, 21..22, 23..25, 27..29]
     );
     assert_eq!(
         trace
@@ -998,7 +996,7 @@ fn actual_two_net_sequence_sees_residual_output_and_deletes_its_final_authority(
             .count(),
         1
     );
-    // Three tokenizations plus one redaction, one manifest entry each: the trace accounts for
+    // Four tokenizations plus one redaction, one manifest entry each: the trace accounts for
     // every entry, and the redaction is no longer the one entry nothing in the trace explains.
     assert_eq!(
         trace.iter().filter(|t| t.action() == "tokenize").count(),
@@ -1011,7 +1009,7 @@ fn actual_two_net_sequence_sees_residual_output_and_deletes_its_final_authority(
     let marker = gaze_types::redaction_marker::redaction_marker(&PiiClass::Name);
     assert_eq!(
         session.restore_strict_text(&text(output)).unwrap(),
-        format!("{}{marker}{}", &RAW[..15], &RAW[22..])
+        format!("{}{marker}{}", &RAW[..21], &RAW[22..])
     );
 }
 

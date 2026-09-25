@@ -67,6 +67,10 @@ name = "mock_safety_net"
 required-features = ["test-support"]
 
 [[test]]
+name = "ner_once_per_document"
+required-features = ["test-support"]
+
+[[test]]
 name = "openai_filter_subprocess"
 required-features = ["safety-net-openai"]
 

@@ -15,6 +15,7 @@ pub mod registry;
 pub mod resolver;
 mod rule;
 pub mod rulepack;
+mod safety_net_scan;
 mod sandbox;
 mod session;
 pub mod token_shape;

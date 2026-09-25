@@ -1,5 +1,9 @@
 use gaze::*;
 use std::sync::{Arc, Mutex};
+
+#[path = "support/stable_scan.rs"]
+mod stable_scan;
+use stable_scan::stable_scan;
 const EMAIL: &str = "alice@example.invalid";
 #[derive(Clone)]
 struct Primary;
@@ -200,7 +204,11 @@ fn mandatory_scans_ignore_both_skip_flags_and_cover_complete_owned_leaf() {
     let seen = seen.lock().unwrap();
     assert_eq!(
         *seen,
-        vec![("residual".into(), 0), (token.clone(), 1), (token, 1)]
+        vec![
+            ("residual".into(), 0),
+            (stable_scan(&token), 1),
+            (stable_scan(&token), 1)
+        ]
     );
 }
 #[test]

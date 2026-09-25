@@ -178,6 +178,11 @@ impl Recognizer for AnchoredMatchRecognizer {
     fn locale_basis(&self) -> LocaleBasis {
         self.locale_basis
     }
+
+    // `detect` ignores its context: the cue vocabulary is folded in at build time.
+    fn detect_is_locale_invariant(&self) -> bool {
+        true
+    }
 }
 
 impl AnchoredMatchRecognizer {

@@ -357,46 +357,60 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[],"text":"","redacted_text"
 #[test]
 #[file_serial(gaze_subprocess)]
 fn stdin_blocked_child_times_out_and_kills_subprocess() {
-    let dir = tempfile::tempdir().unwrap();
-    let pidfile = dir.path().join("opf.pid");
-    let opf = script(
-        "opf-stdin-block",
-        &format!(
-            r#"#!/bin/sh
+    // Caps retries so sustained overload fails with a diagnosis instead of
+    // spinning until the CI job timeout.
+    const MAX_ATTEMPTS: u32 = 3;
+    for attempt in 1..=MAX_ATTEMPTS {
+        let dir = tempfile::tempdir().unwrap();
+        let pidfile = dir.path().join("opf.pid");
+        let opf = script(
+            "opf-stdin-block",
+            &format!(
+                r#"#!/bin/sh
 printf '%s\n' "$$" > '{}'
 IFS= read -r _ || true
 exec sleep 30
 "#,
-            pidfile.display()
-        ),
-    )
-    .unwrap();
-    let backend = SubprocessOpenAiFilterBackend::new(
-        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(15)),
-    )
-    .unwrap();
-    let clean = format!("x\n{}", "x".repeat(128 * 1024));
+                pidfile.display()
+            ),
+        )
+        .unwrap();
+        let backend = SubprocessOpenAiFilterBackend::new(
+            SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(15)),
+        )
+        .unwrap();
+        let clean = format!("x\n{}", "x".repeat(128 * 1024));
 
-    let started = Instant::now();
-    let error = backend.infer(&clean).unwrap_err();
-    let elapsed = started.elapsed();
+        let started = Instant::now();
+        let error = backend.infer(&clean).unwrap_err();
+        let elapsed = started.elapsed();
 
-    assert!(matches!(error, SafetyNetError::Runtime { .. }));
-    assert!(error.to_string().contains("timed out"));
-    // The failure mode this bounds is "the write blocked instead of timing
-    // out", which returns only when the child's own `sleep 30` exits - so any
-    // bound comfortably under 30s still discriminates it. The old 17s left the
-    // configured 15s timeout just 2s of slack, which is the same
-    // fixed-budget-loses-its-race shape as solo #2981; sit halfway between the
-    // two instead so a loaded runner cannot turn this into a false red.
-    assert!(
-        elapsed < Duration::from_secs(25),
-        "blocked stdin timeout took {elapsed:?}"
-    );
+        assert!(matches!(error, SafetyNetError::Runtime { .. }));
+        assert!(error.to_string().contains("timed out"));
+        // The failure mode this bounds is "the write blocked instead of timing
+        // out", which returns only when the child's own `sleep 30` exits - so
+        // any bound comfortably under 30s still discriminates it. The deadline
+        // runs from spawn whether or not the child started, so this bound does
+        // not measure startup. The old 17s left the configured 15s timeout
+        // just 2s of slack (solo #2981); sit halfway between the two instead.
+        assert!(
+            elapsed < Duration::from_secs(25),
+            "blocked stdin timeout took {elapsed:?}"
+        );
 
-    let child_pid = wait_for_pidfile(&pidfile, Duration::from_secs(10))
-        .expect("child failed to create pidfile within budget - child startup broken");
-    assert!(!process_is_present(&child_pid.to_string()));
+        // `infer` reaped the child before returning, so the pidfile is final:
+        // missing means the deadline killed the child before it started, and
+        // that attempt says nothing about killing a started child.
+        let Some(child_pid) = read_pidfile(&pidfile) else {
+            assert!(
+                attempt < MAX_ATTEMPTS,
+                "child never started before the 15s deadline in {MAX_ATTEMPTS} attempts"
+            );
+            continue;
+        };
+        assert!(!process_is_present(&child_pid.to_string()));
+        return;
+    }
 }
 
 #[test]
@@ -554,21 +568,8 @@ fn emulated_opf_with_prelude(name: &str, config: Value, prelude: &str) -> io::Re
     Ok(command)
 }
 
-fn wait_for_pidfile(path: &Path, deadline: Duration) -> io::Result<u32> {
-    let started = Instant::now();
-    while started.elapsed() < deadline {
-        if let Ok(content) = fs::read_to_string(path) {
-            if let Ok(pid) = content.trim().parse::<u32>() {
-                return Ok(pid);
-            }
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-
-    Err(io::Error::new(
-        io::ErrorKind::TimedOut,
-        format!("pidfile {path:?} not created within {deadline:?}"),
-    ))
+fn read_pidfile(path: &Path) -> Option<u32> {
+    fs::read_to_string(path).ok()?.trim().parse().ok()
 }
 
 fn process_is_present(pid: &str) -> bool {
@@ -690,55 +691,84 @@ printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97}]'
 #[test]
 #[file_serial(gaze_subprocess)]
 fn overflowing_pipes_still_kill_and_reap_child() {
+    // Caps retries so sustained overload fails with a diagnosis instead of
+    // spinning until the CI job timeout.
+    const MAX_ATTEMPTS: u32 = 4;
     for stdout_overflow in [false, true] {
-        let dir = tempfile::tempdir().unwrap();
-        let pidfile = dir.path().join("child.pid");
-        // Keep the shell itself writing: no descendant can retain a pipe after kill.
-        let output = if stdout_overflow {
-            "printf '%8192s' w; printf '%8192s' w >&2"
-        } else {
-            "printf '%8192s' w >&2"
-        };
-        let body = format!(
-            r#"#!/bin/sh
+        for attempt in 1..=MAX_ATTEMPTS {
+            let dir = tempfile::tempdir().unwrap();
+            let pidfile = dir.path().join("child.pid");
+            // Keep the shell itself writing: no descendant can retain a pipe after kill.
+            let output = if stdout_overflow {
+                "printf '%8192s' w; printf '%8192s' w >&2"
+            } else {
+                "printf '%8192s' w >&2"
+            };
+            let body = format!(
+                r#"#!/bin/sh
 cat >/dev/null
 printf '%s\n' "$$" > '{}'
 while :; do {output}; done
 "#,
-            pidfile.display()
-        );
-        let command = script("opf-lifecycle", &body).unwrap();
-        let config = SubprocessOpenAiFilterConfig::new(command);
-        let started = std::time::Instant::now();
-        let error = SubprocessOpenAiFilterBackend::new(
-            config
-                .with_timeout(Duration::from_secs(5))
-                .with_max_stdout_bytes(128 * 1024)
-                .with_stderr_diagnostics(true),
-        )
-        .unwrap()
-        .infer("clean")
-        .unwrap_err();
-        let SafetyNetError::Runtime { message } = error else {
-            panic!("expected runtime error");
-        };
-        if stdout_overflow {
-            assert!(message.contains("stdout capture failed"), "{message}");
-        } else {
-            assert!(message.contains("timed out"), "{message}");
+                pidfile.display()
+            );
+            let command = script("opf-lifecycle", &body).unwrap();
+            let config = SubprocessOpenAiFilterConfig::new(command);
+            // The byte cap, not the deadline, must end the overflow run, so that
+            // run gets the generous budget and startup cannot win the race. The
+            // deadline run doubles its deadline after an attempt whose shell
+            // never started (5, 10, 20, 40s).
+            let timeout = if stdout_overflow {
+                test_subprocess_timeout()
+            } else {
+                Duration::from_secs(5) * 2_u32.pow(attempt - 1)
+            };
+            let started = std::time::Instant::now();
+            let error = SubprocessOpenAiFilterBackend::new(
+                config
+                    .with_timeout(timeout)
+                    .with_max_stdout_bytes(128 * 1024)
+                    .with_stderr_diagnostics(true),
+            )
+            .unwrap()
+            .infer("clean")
+            .unwrap_err();
+            let SafetyNetError::Runtime { message } = error else {
+                panic!("expected runtime error");
+            };
+            let elapsed = started.elapsed();
+            // `infer` reaped the child before returning, so the pidfile is final:
+            // missing means the deadline killed the shell before it got past
+            // startup and `cat`.
+            let Some(pid) = read_pidfile(&pidfile) else {
+                assert!(
+                    !stdout_overflow && attempt < MAX_ATTEMPTS,
+                    "child never got past startup and `cat` (stdin EOF) within {timeout:?} \
+                     (stdout_overflow={stdout_overflow}, attempt {attempt}/{MAX_ATTEMPTS}): \
+                     {message}"
+                );
+                continue;
+            };
+            if stdout_overflow {
+                assert!(message.contains("stdout capture failed"), "{message}");
+            } else {
+                assert!(message.contains("timed out"), "{message}");
+                // The deadline runs from spawn, so this bounds kill-and-return
+                // after the deadline, not startup.
+                assert!(elapsed < timeout + Duration::from_secs(15), "{elapsed:?}");
+            }
+            assert!(
+                !std::process::Command::new("ps")
+                    .args(["-p", &pid.to_string()])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .unwrap()
+                    .success(),
+                "child must be killed and reaped"
+            );
+            break;
         }
-        assert!(started.elapsed() < Duration::from_secs(20));
-        let pid = fs::read_to_string(pidfile).unwrap();
-        assert!(
-            !std::process::Command::new("ps")
-                .args(["-p", pid.trim()])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .unwrap()
-                .success(),
-            "child must be killed and reaped"
-        );
     }
 }
 

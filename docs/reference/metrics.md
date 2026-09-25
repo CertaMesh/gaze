@@ -210,8 +210,8 @@ conditional `ALTER TABLE` block on every open. The full migration order is
 in `crates/gaze-audit/src/sqlite.rs:195-305`. Versions when each column
 shipped are tracked in the row tables above.
 
-> **Adopter note.** No schema-version PRAGMA is read; the schema is detected
-> by column presence. This is deliberate so older `redaction_log.sqlite`
+> **Adopter note.** The logger reads no schema-version PRAGMA; it detects the
+> schema by column presence. This is deliberate so older `redaction_log.sqlite`
 > files always open with the newest binary. Adopters who run multiple binary
 > versions against the same DB must accept that the newer binary will add
 > columns lazily on first write.
@@ -624,7 +624,7 @@ Source: [`BundleReport`](../../crates/gaze-document/src/bundle/mod.rs) at
 | `bundle_version: u32` | Top-level schema version. | `1` in v0.7.1, `2` in v0.8. v1 bundles continue to parse on read; emission is always v2 in v0.8+. |
 
 Field set is `#[non_exhaustive]` — adopters reading `report.json` must
-forward-compat. Adopter-write contract is `bundle_version` first, all other
+stay forward-compatible. Adopter-write contract is `bundle_version` first, all other
 fields readable on a best-effort basis.
 
 ### 6.2 Top-level `BundleReport` fields
@@ -850,7 +850,7 @@ literals must supply the new optional field. Snapshot payload versions are uncha
 Adopters must:
 
 - Match every closed enum with a wildcard arm (`_ => …`).
-- Forward-compat all `#[non_exhaustive]` structs (do not destructure
+- Stay forward-compatible with all `#[non_exhaustive]` structs (do not destructure
   positionally; use named field patterns plus `..`).
 - Treat free-string columns as opaque grouping keys, not as enum values
   for alert rules. Switch on canonical `Closed`-enum columns (`action`,

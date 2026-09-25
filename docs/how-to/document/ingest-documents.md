@@ -67,7 +67,8 @@ gaze document clean ./invoice.pdf --agent-out ./agent-bundle/ --owner-out ./owne
 ```
 
 The source document can be a synthetic fixture such as an invoice PDF containing
-`alice@example.invalid`. Output directories are created if they do not exist.
+`alice@example.invalid`. The verb creates the output directories if they do not
+exist.
 
 Successful stdout is a one-line JSON summary; the bundle files are written to
 the resolved agent and owner outputs.

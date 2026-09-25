@@ -621,7 +621,7 @@ fn government_ids_restore_exactly() {
 
 /// The canonical shared connector grammar. It appears byte-identical in all six family patterns;
 /// `shared_connector_grammar_is_byte_identical_across_the_family` fails the moment one copy drifts.
-const SHARED_CONNECTOR: &str = r"\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*";
+const SHARED_CONNECTOR: &str = r#"\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?"#;
 
 const CONNECTOR_FAMILY: [&str; 6] = [
     "ssn.us",
