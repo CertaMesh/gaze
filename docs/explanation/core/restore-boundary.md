@@ -1,4 +1,4 @@
-# Restore-Boundary Integrity
+# Restore-boundary integrity
 
 Gaze enforces **manifest-authorized re-materialization** of sensitive data at the restore boundary.
 
@@ -12,7 +12,7 @@ Gaze IS trying to determine: "Was this sensitive value authorized to exist in th
 
 That distinction is the core contract for v0.10 restore-boundary work. The restore path must answer an authorization question against the manifest, not infer intent or motive from surrounding text.
 
-## Core Principle
+## What restore authorizes
 
 The restore boundary is where pseudonymous content becomes owner-side sensitive data again. That makes restore an egress point, not a normal string substitution helper.
 
@@ -23,7 +23,7 @@ The invariant is:
 3. Restore-side checks must be deterministic and auditable. A restore decision must be traceable to the active manifest, the structural recognizer that observed unauthorized raw sensitive data, or restore telemetry metadata.
 4. Restore must not silently expand scope. If a later phase wants identity-sensitive policy, it must be explicit, opt-in, and separately approved.
 
-## Phase Summary
+## Phase status
 
 | Phase | Scope | v0.10 status |
 |---|---|---|
@@ -32,9 +32,9 @@ The invariant is:
 | C | Optional restore-risk rulepack | Deferred v0.11+, identity-sensitive |
 | D | Restore audit telemetry, metadata-only | Core, observability foundation |
 
-Phase C is explicitly deferred to v0.11+ and is not part of the v0.10 dispatch set. It is identity-sensitive and must not be dispatched without the user's explicit `lock C` signal.
+Phase C is explicitly deferred to v0.11+. It is identity-sensitive and is not implemented.
 
-## Phase A: Strict Manifest-Bound Restore
+## Phase A: strict manifest-bound restore
 
 Phase A makes the manifest the only authority for re-materialization.
 
@@ -107,7 +107,7 @@ A `success` decision is a restore-classification result, not a byte-equality
 claim or a detection-quality certificate. Byte-exact inverse equality and PII
 detection metrics must be evaluated independently.
 
-## Phase B: Unauthorized Raw-PII Detection
+## Phase B: unauthorized raw-PII detection
 
 Phase B checks restored output for raw sensitive values that were not authorized by the manifest. In v0.10, this is audit-only and opt-in.
 
@@ -131,7 +131,7 @@ including canonical legacy shapes and those inside authorized values. A bare lit
 Neither counter claims that a fresh-PII detector executed. The fresh-PII phase bit
 remains unset when that detector did not run.
 
-## Phase D: Restore Audit Telemetry
+## Phase D: restore audit telemetry
 
 Phase D records metadata-only restore events so adopters can inspect restore-boundary behavior without storing raw sensitive values in the audit sink.
 
@@ -151,7 +151,7 @@ zero for compatibility. Session snapshot payload versions and token grammar
 are unchanged. See the [metrics reference](../../reference/metrics.md#restore-telemetry)
 for field semantics.
 
-## Risks Addressed By Phase A And Phase B
+## Risks addressed by phases A and B
 
 Phase A and Phase B address these restore-boundary risk classes:
 
@@ -162,7 +162,7 @@ Phase A and Phase B address these restore-boundary risk classes:
 - Wrong-session restore integration bugs.
 - Unauthorized re-materialization of sensitive values.
 
-## Non-Goals
+## Out of scope
 
 This initiative does NOT attempt to solve:
 
@@ -176,11 +176,11 @@ This initiative does NOT attempt to solve:
 
 These are outside the v0.10 restore-boundary contract. Pulling them into the core restore path would blur Gaze's role as a reversible PII pseudonymization runtime and weaken the deterministic manifest contract.
 
-## Design Constraints
+## Design constraints
 
 - Fail closed on missing or mismatched manifest authority.
 - Keep core restore deterministic.
 - Keep restore decisions auditable without writing raw sensitive values to telemetry.
 - Keep Phase B audit-only in v0.10.
-- Keep Phase C deferred until v0.11+ and require explicit user `lock C` authorization before dispatch.
+- Keep Phase C deferred until v0.11+; it is identity-sensitive and needs its own explicit approval.
 - Preserve Gaze's identity as a PII pseudonymization runtime for agentic workflows.
