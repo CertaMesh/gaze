@@ -61,24 +61,36 @@ JSON without provider-shape transcoding. The strict Anthropic direct profile is
 different: it admits only its documented Messages schema, rejects unknown or
 opaque media surfaces, and proves the complete transformed request or response.
 
-## Safety Nets and Refusals
+## Safety nets and refusals
 
 With a safety net configured, such as Nym in the policy `gaze setup` writes,
 each surfaced request string goes through three steps before provider I/O:
 
 1. The primary pipeline tokenizes what the rules detect.
 2. The nets scan the result, and every span they flag becomes a restorable
-   token. This is the same Resolve step `gaze clean` and `gaze daemon` run,
-   through the same library function, so the proxy forwards what `gaze clean`
-   would print for the same text and policy. A date that Nym flags as
-   `DATE_OF_BIRTH` is forwarded as `<…:Custom:date_1>` and restored in the
-   response.
+   token. This is the Resolve step that
+   `gaze clean --safety-net-fallback strict` runs, through the same library
+   function, so the proxy forwards what that command prints for the same text
+   and policy. A date that Nym flags as `DATE_OF_BIRTH` is forwarded as
+   `<…:Custom:date_1>` and restored in the response.
 3. Admission scans the final text once more and refuses any raw span a net
    still flags.
 
 The proxy never deletes flagged bytes one way. Whatever step 2 cannot turn into
 a token, and whatever step 3 still flags, is refused before anything reaches
 the provider.
+
+This is where the proxy differs from plain `gaze clean`. Clean's default
+`redact` fallback goes further when the nets' re-run flags something new: it
+runs a second reversible tokenize batch and deletes what is still left one way
+as `[REDACTED:<class>]`. A network boundary never does either. For example,
+under the `gaze setup` policy, `user jweber84 born 1984-03-12` comes out of
+`gaze clean` as three tokens, while the proxy refuses it with
+`residual_suspect` for `custom:date` and `custom:username`.
+
+The nets only find what they flag. A span no net flags and no rule detects,
+such as a `DD.MM.YYYY` date without a cue Nym scores high enough, is forwarded
+raw, exactly as `gaze clean` prints it.
 
 A refusal carries its reason, never the text:
 

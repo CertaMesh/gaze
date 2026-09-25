@@ -16,13 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokenized the same date. The proxy ran only the primary pipeline and then
   used the net as an admission gate, so every net finding became a refusal.
   Both request paths (the legacy OpenAI and Gemini adapters and the Anthropic
-  direct profile) now run the same Resolve step as `gaze clean` and
-  `gaze daemon`, through one shared library function
-  (`Pipeline::resolve_boundary_text`), then admission as before. The flagged
-  span is forwarded as a token and restored in the response; nothing raw
-  reaches the provider. What Resolve cannot tokenize is still refused, never
-  deleted. No leak shipped: the old behaviour failed closed. Affected: v0.15.0
-  with a configured net (solo todo #3847).
+  direct profile) now run the Resolve step of
+  `gaze clean --safety-net-fallback strict`, through one shared library
+  function (`Pipeline::resolve_boundary_text`), then admission as before. The
+  flagged span is forwarded as a token and restored in the response. What
+  Resolve cannot tokenize is still refused, never deleted. Plain `gaze clean`
+  defaults to the `redact` fallback: when the nets' re-run flags something
+  new, it tokenizes that in a second reversible batch and deletes what is left
+  one way. The proxy refuses such a request instead (for example
+  `user jweber84 born 1984-03-12` under the `gaze setup` policy). Spans that no
+  net flags and no rule detects, such as a `DD.MM.YYYY` date without a cue,
+  still reach the provider raw, exactly as `gaze clean` prints them. The old
+  behaviour blocked some of them only because it refused the whole request
+  whenever any other date in it was flagged. No leak shipped: the old
+  behaviour failed closed. Affected: v0.15.0 with a configured net (solo todo
+  #3847).
 - **Proxy refusals say why.** A refusal is now `422` with the typed
   `ProtectionError` variant, the fallback reason and the suspect classes,
   never the text, and one line on the proxy's stderr. The legacy adapters

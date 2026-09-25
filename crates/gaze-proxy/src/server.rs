@@ -1314,7 +1314,8 @@ impl<'pipeline, 'context, 'transaction, 'session>
         input: &str,
         _prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
-        // The same Resolve step `gaze clean` runs (todo 3847); admission follows on the leaf.
+        // `gaze clean --safety-net-fallback strict`'s Resolve step (todo 3847); admission
+        // follows on the leaf.
         let result = self.pipeline.resolve_boundary_text_transaction(
             self.transaction,
             input,
@@ -2820,8 +2821,9 @@ fn redact_surfaces(
 ) -> Result<RedactedSurfaces, ProxyError> {
     let mut redacted = RedactedSurfaces::default();
     for surface in surfaces {
-        // The same Resolve step `gaze clean` runs, so a net-flagged date becomes a token here
-        // instead of a refusal at admission (todo 3847). Admission stays the final gate.
+        // `gaze clean --safety-net-fallback strict`'s Resolve step, so a net-flagged date becomes
+        // a token here instead of a refusal at admission (todo 3847). Admission stays the final
+        // gate.
         let text = pipeline
             .resolve_boundary_text(session, surface.text, locale_chain, dictionaries)
             .map_err(|refusal| ProxyError::Refused { refusal })?;

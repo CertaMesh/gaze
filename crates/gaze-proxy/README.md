@@ -130,15 +130,18 @@ contract.
 ### Configured safety nets at request admission
 
 Surfaced request text in the direct Anthropic and legacy adapter paths first runs
-the same safety-net Resolve step as `gaze clean`: every span a configured net flags
-becomes a restorable token. The result then passes configured safety-net admission
-before provider I/O. Nets inspect the complete transformed surface with a manifest
-built from the actual session token ownership and restore boundaries. Token-contained
+the safety-net Resolve step of `gaze clean --safety-net-fallback strict`: every span
+a configured net flags becomes a restorable token. Plain `gaze clean` defaults to
+the `redact` fallback, which also tokenizes what the nets' re-run flags and deletes
+what is left one way; the proxy refuses that request instead. The result then
+passes configured safety-net admission before provider I/O. Nets inspect the
+complete transformed surface with a manifest built from the actual session token
+ownership and restore boundaries. Token-contained
 reflags, including class disagreements, remain allowed; a flagged span Resolve could
 not tokenize, a malformed suspect, or a net execution error rejects the request with
 `422` and a typed refusal (variant, fallback reason, suspect classes; never text). No
 destructive clean fallback is used. See
-[Safety Nets and Refusals](../../docs/explanation/proxy/proxy-runtime.md#safety-nets-and-refusals).
+[Safety nets and refusals](../../docs/explanation/proxy/proxy-runtime.md#safety-nets-and-refusals).
 
 **Compatibility:** a net-flagged span, including text preserved by primary policy,
 is now tokenized and forwarded instead of refused. Requests Resolve cannot protect

@@ -113,16 +113,19 @@ impl From<ProtectionError> for BoundaryRefusal {
     }
 }
 
-/// The boundary's safety-net step: `gaze clean`'s Resolve, but with a `Strict` fallback. A
-/// boundary never deletes one-way, so whatever Resolve cannot tokenize is refused.
+/// The boundary's safety-net step: `gaze clean --safety-net-fallback strict`. A boundary never
+/// deletes one-way, so whatever Resolve cannot tokenize is refused. Clean's default `Redact`
+/// fallback also runs a second reversible tokenize batch for what the re-run flags; this one
+/// refuses that text instead.
 const BOUNDARY_DECISION: SafetyNetDecision = SafetyNetDecision::Resolve {
     on_residual: SafetyNetFallback::Strict,
 };
 
 impl Pipeline {
     /// Protects a text leaf for an outbound boundary such as `gaze-proxy`: the primary pipeline,
-    /// then the configured safety nets through the same Resolve step `gaze clean` runs, so a
-    /// net-flagged span becomes a restorable token instead of a refusal.
+    /// then the configured safety nets through the Resolve step
+    /// `gaze clean --safety-net-fallback strict` runs, so a net-flagged span becomes a
+    /// restorable token instead of a refusal.
     ///
     /// Anything Resolve cannot tokenize is refused (`Strict` fallback, never a one-way
     /// deletion). This is not the admission proof: run [`Self::admit_boundary_text`] on the
