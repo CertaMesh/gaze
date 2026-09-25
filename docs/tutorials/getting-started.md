@@ -5,7 +5,7 @@ restore key, send only safe text to an LLM, and restore original values from the
 
 By the end you will have a complete redact → send → restore round trip running locally, and
 you will know where the restore key lives and why it must never travel with the clean text.
-You do not need prior PII-domain knowledge — just a working Rust toolchain. When you want to
+You need a working Rust toolchain and no prior PII-domain knowledge. When you want to
 go deeper, each step links to the reference page or the design contract behind it.
 
 ## Prerequisites

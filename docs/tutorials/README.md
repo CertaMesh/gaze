@@ -1,7 +1,7 @@
 # Tutorials
 
 Learning-oriented guides. A tutorial takes you end to end through a working result so you
-learn how Gaze behaves by doing — not by looking things up. If you already know what you
+learn how Gaze behaves by doing rather than by looking things up. If you already know what you
 want to accomplish, the [how-to guides](../how-to/README.md) are faster.
 
 - **[Getting Started](getting-started.md)** — clean a document, store the restore key, send
