@@ -12,6 +12,7 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
 - Builds and uploads platform binary artifacts plus a source tarball to the GitHub Releases page.
 - The GitHub Release body uses GitHub-generated release notes from the tag history.
 - `CHANGELOG.md` remains the curated human source for release highlights and is scrubbed before publication; committed `dist/release-notes/` files are intentionally not maintained.
+- `cargo run -p xtask -- scrub-public-text` scrubs the release text: the version's `CHANGELOG.md` section, `UPGRADE.md`, and any release notes or PR body passed to the preflight. `UPGRADE.md` is also scrubbed on every PR by the `scrub_public_text_passes_upgrade_md` test. The gate tokenizes every URL except `https://github.com/CertaMesh/gaze/...` and `https://semver.org/...`, matched on the exact host (no subdomains or lookalikes) with no query string, port or userinfo. Link a pull request any other way and the gate fails.
 - Browse releases at <https://github.com/CertaMesh/gaze/releases>.
 
 ### crates.io

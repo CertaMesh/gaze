@@ -62,7 +62,7 @@ jobs:
             exit 1
           fi
 
-          files=("$changelog_section")
+          files=("$changelog_section" UPGRADE.md)
 
           if [ -n "$RELEASE_NOTES" ]; then
             if [ ! -f "$RELEASE_NOTES" ]; then

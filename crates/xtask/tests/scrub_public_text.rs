@@ -11,9 +11,15 @@ fn workspace_root() -> PathBuf {
 }
 
 fn run_gate(root: &Path, fixture: &str) -> Output {
+    run_gate_on(
+        root,
+        &format!("crates/xtask/fixtures/scrub_public_text/{fixture}"),
+    )
+}
+
+fn run_gate_on(root: &Path, path: &str) -> Output {
     Command::new("cargo")
-        .args(["run", "-p", "xtask", "--", "scrub-public-text"])
-        .arg(format!("crates/xtask/fixtures/scrub_public_text/{fixture}"))
+        .args(["run", "-p", "xtask", "--", "scrub-public-text", path])
         .current_dir(root)
         .output()
         .expect("run scrub-public-text gate")
@@ -56,5 +62,48 @@ fn scrub_public_text_fails_token_and_user_path_fixture() {
     assert!(
         text.contains("OS user path `/home/<name>/`"),
         "gate must report OS user path patterns without echoing the username; {text}"
+    );
+}
+
+#[test]
+fn scrub_public_text_passes_allowlisted_public_urls() {
+    let output = run_gate(&workspace_root(), "allowed_urls.md");
+    assert!(
+        output.status.success(),
+        "project-repo and semver.org links must pass; {}",
+        output_text(&output)
+    );
+}
+
+#[test]
+fn scrub_public_text_fails_lookalike_repo_url() {
+    let output = run_gate(&workspace_root(), "lookalike_url.md");
+    let text = output_text(&output);
+    assert!(
+        !output.status.success(),
+        "a lookalike repo URL must fail; {text}"
+    );
+    assert!(text.contains("gaze clean emitted"), "{text}");
+}
+
+#[test]
+fn scrub_public_text_fails_lookalike_semver_host() {
+    let output = run_gate(&workspace_root(), "other_url.md");
+    let text = output_text(&output);
+    assert!(
+        !output.status.success(),
+        "a semver.org lookalike host must fail; {text}"
+    );
+    assert!(text.contains("gaze clean emitted"), "{text}");
+}
+
+/// UPGRADE.md is public release text, so every PR keeps it scrub-clean, not only a release run.
+#[test]
+fn scrub_public_text_passes_upgrade_md() {
+    let output = run_gate_on(&workspace_root(), "UPGRADE.md");
+    assert!(
+        output.status.success(),
+        "UPGRADE.md must pass the public-text scrub; {}",
+        output_text(&output)
     );
 }
