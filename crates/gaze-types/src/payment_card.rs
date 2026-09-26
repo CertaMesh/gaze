@@ -309,6 +309,20 @@ mod tests {
     }
 
     #[test]
+    fn all_zero_pan_windows_are_rejected_across_whole_and_suffix_scans() {
+        for text in [
+            "0000000000000",
+            "0000 0000 0000 0000",
+            "0000-0000-0000-0000-000",
+            "00000000000000000000000000000000000000",
+        ] {
+            let scan = scan_card_run(text, 0..text.len(), None);
+            assert!(scan.cards.is_empty(), "all-zero card in {text:?}");
+        }
+        assert_eq!(cards("Card 4111 1111 1111 1111"), ["4111 1111 1111 1111"]);
+    }
+
+    #[test]
     fn the_longest_card_wins_over_its_luhn_valid_prefix() {
         // `4111 1111 1111 1111 003` passes Luhn and so does its 16-digit prefix. The leading
         // `12` makes the pattern window fail, so the retry has to choose.

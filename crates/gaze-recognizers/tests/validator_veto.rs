@@ -59,6 +59,11 @@ fn luhn_validator_reports_pass_and_fail() {
     assert_pass(ValidatorKind::Luhn, "4111-1111-1111-1111");
     assert_fail(
         ValidatorKind::Luhn,
+        "0000-0000-0000-0000",
+        ValidatorFailReason::LuhnFailed,
+    );
+    assert_fail(
+        ValidatorKind::Luhn,
         "4111-1111-1111-1112",
         ValidatorFailReason::LuhnFailed,
     );

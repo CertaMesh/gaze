@@ -326,7 +326,8 @@ gaze clean --rulepack-bundled core --locale=en-US --policy ./policy.toml
 - `card.structural` emits `custom:credit_card` only for 13- to 19-digit
   candidates that pass `luhn`. Its pattern takes a whole digit run; the
   recognizer finds the card inside it, so a CVV, expiry or number touching the
-  card does not hide it (`gaze_types::payment_card::scan_card_run`).
+  card does not hide it (`gaze_types::payment_card::scan_card_run`). All-zero
+  candidates are rejected even though their Luhn checksum is zero.
 - `ip.v4` and `ip.v6` emit `custom:ip_address` for parsed addresses outside
   RFC 5737 IPv4 documentation ranges and RFC 3849 IPv6 documentation range.
   IPv4-compatible and IPv4-mapped forms of RFC 5737 addresses are also excluded.

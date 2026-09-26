@@ -886,7 +886,8 @@ fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
 /// It checks the ASCII digits. Whitespace (any Unicode `White_Space`, as the card patterns'
 /// `\s`), `-` and non-ASCII digits (which the card patterns' `\d` matches but no card number is
 /// written in) are skipped; any other character fails the check, and so does an ASCII digit count
-/// outside 13 to 19. Fullwidth digits reach it already folded to ASCII by normalization.
+/// outside 13 to 19 or an all-zero number. Fullwidth digits reach it already folded to ASCII by
+/// normalization.
 pub(crate) fn luhn_check(input: &str) -> bool {
     let mut digits = Vec::new();
     for ch in input.chars() {
@@ -898,7 +899,7 @@ pub(crate) fn luhn_check(input: &str) -> bool {
         }
         digits.push(ch as u8 - b'0');
     }
-    if !(13..=19).contains(&digits.len()) {
+    if !(13..=19).contains(&digits.len()) || digits.iter().all(|digit| *digit == 0) {
         return false;
     }
 

@@ -1715,6 +1715,19 @@ fn every_phase2_recognizer_round_trips_through_restore() {
 }
 
 #[test]
+fn all_zero_pan_stays_literal_beside_valid_card_and_iban() {
+    let pipeline = pipeline_from_rulepack(&core_extended());
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let input =
+        "Zero 0000 0000 0000 0000; Card 4111 1111 1111 1111; IBAN DE70 8807 9565 3194 9631 87";
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+    assert!(clean.contains("0000 0000 0000 0000"), "{clean}");
+    assert_custom_token(&clean, "credit_card");
+    assert_custom_token(&clean, "iban");
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
 fn embedded_core_extended_load_smoke_has_at_least_seven_recognizers() {
     let rulepack = Rulepack::load(RulepackSource::Embedded(
         embedded("core-extended").expect("core-extended embedded rulepack"),
