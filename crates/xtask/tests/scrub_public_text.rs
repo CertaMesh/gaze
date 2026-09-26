@@ -107,3 +107,25 @@ fn scrub_public_text_passes_upgrade_md() {
         output_text(&output)
     );
 }
+
+#[test]
+fn scrub_public_text_fails_suffix_lookalike_host() {
+    let output = run_gate(&workspace_root(), "suffix_host_url.md");
+    let text = output_text(&output);
+    assert!(
+        !output.status.success(),
+        "a host that only ends in semver.org must fail; {text}"
+    );
+    assert!(text.contains("gaze clean emitted"), "{text}");
+}
+
+#[test]
+fn scrub_public_text_fails_free_text_path_on_allowlisted_host() {
+    let output = run_gate(&workspace_root(), "allowlisted_host_free_path.md");
+    let text = output_text(&output);
+    assert!(
+        !output.status.success(),
+        "an allowlisted host must not carry free text past the scrub; {text}"
+    );
+    assert!(text.contains("gaze clean emitted"), "{text}");
+}

@@ -114,11 +114,20 @@ fn scan_existing_tokens(file: &Path, text: &str) -> Result<Vec<Finding>> {
         .collect())
 }
 
-/// Public URLs release text may cite verbatim, as `(host, path prefix)`. The host must match
-/// exactly (never as a suffix, so `semver.org.example` and `evilsemver.org` do not pass), and the
-/// path prefix ends on a segment boundary (so `/CertaMesh/gaze-fork` does not pass).
-const PUBLIC_URL_ALLOWLIST: &[(&str, &str)] =
-    &[("github.com", "/CertaMesh/gaze"), ("semver.org", "")];
+/// Public URLs release text may cite verbatim, as `(host, path regex)`. The host must match
+/// exactly (never as a suffix, so `semver.org.example` and `evilsemver.org` do not pass). The
+/// regex is anchored and must match everything after the host (path and fragment), so a URL on an
+/// allowlisted host cannot carry free text past the scrub, such as `https://semver.org/<IBAN>`.
+const PUBLIC_URL_ALLOWLIST: &[(&str, &str)] = &[
+    (
+        "github.com",
+        r"^/CertaMesh/gaze(/(pull|issues)/\d+|/releases(/tag/v\d+\.\d+\.\d+)?)?$",
+    ),
+    (
+        "semver.org",
+        r"^(/|/spec/v\d+\.\d+\.\d+\.html)?(#spec-item-\d+)?$",
+    ),
+];
 
 /// Blanks every allowlisted URL with spaces before detection, keeping byte offsets. Any other URL,
 /// including a lookalike, still reaches `gaze clean` and fails the gate.
@@ -143,16 +152,13 @@ fn is_allowlisted_public_url(url: &str) -> bool {
     };
     let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let (host, path) = rest.split_at(authority_end);
-    // No query string, userinfo, port or percent-escape: those can carry arbitrary text.
-    let plain_path = path
-        .bytes()
-        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'.' | b'_' | b'-' | b'#'));
-    plain_path
-        && PUBLIC_URL_ALLOWLIST.iter().any(|(allowed_host, prefix)| {
+    PUBLIC_URL_ALLOWLIST
+        .iter()
+        .any(|(allowed_host, path_pattern)| {
             host == *allowed_host
-                && path.strip_prefix(prefix).is_some_and(|tail| {
-                    prefix.is_empty() || tail.is_empty() || tail.starts_with(['/', '#'])
-                })
+                && Regex::new(path_pattern)
+                    .expect("allowlist path patterns are valid")
+                    .is_match(path)
         })
 }
 
@@ -230,8 +236,11 @@ mod tests {
         for url in [
             "https://github.com/CertaMesh/gaze",
             "https://github.com/CertaMesh/gaze/pull/203",
-            "https://github.com/CertaMesh/gaze#readme",
+            "https://github.com/CertaMesh/gaze/issues/12",
+            "https://github.com/CertaMesh/gaze/releases",
+            "https://github.com/CertaMesh/gaze/releases/tag/v0.15.1",
             "https://semver.org",
+            "https://semver.org/",
             "https://semver.org/spec/v2.0.0.html#spec-item-4",
         ] {
             assert!(is_allowlisted_public_url(url), "{url} must be allowed");
@@ -255,6 +264,15 @@ mod tests {
             "https://github.com/CertaMesh/gaze/issues?author=someone",
             "https://github.com/CertaMesh/gaze/blob/main/a%40b",
             "https://example.org/",
+            // Free text in the path or fragment of an allowlisted host.
+            "https://semver.org/DE89370400440532013000",
+            "https://semver.org/spec/v2.0.0.html#4915112345678",
+            "https://semver.org/spec/v2.0.0.html#spec-item-4-jane.doe",
+            "https://github.com/CertaMesh/gaze/pull/7/jane.doe",
+            "https://github.com/CertaMesh/gaze/issues/jane.doe",
+            "https://github.com/CertaMesh/gaze/pull/+4915112345678",
+            "https://github.com/CertaMesh/gaze/tree/DE89370400440532013000",
+            "https://github.com/CertaMesh/gaze/releases/tag/v1.2.3-DE89370400440532013000",
         ] {
             assert!(!is_allowlisted_public_url(url), "{url} must be refused");
         }

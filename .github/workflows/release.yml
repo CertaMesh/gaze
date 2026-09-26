@@ -240,7 +240,7 @@ jobs:
             exit 1
           fi
 
-          cargo run -p xtask -- scrub-public-text "$changelog_section"
+          cargo run -p xtask -- scrub-public-text "$changelog_section" UPGRADE.md
       - name: Generate NER checksums
         shell: bash
         run: |

@@ -30,10 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is still left alone, so invoice, log and release dates are unchanged. Every
   value the old rule captured is still captured with the same span.
 - **The release text scrub covers `UPGRADE.md` and allows two public link
-  hosts.** `xtask scrub-public-text` no longer flags `https://github.com/CertaMesh/gaze/...`
-  and `https://semver.org/...` links (exact host, no query string, port or
-  userinfo); every other URL, lookalike hosts included, still fails. The
-  release preflight now scrubs `UPGRADE.md`, and a workspace test keeps it
+  shapes.** `xtask scrub-public-text` no longer flags links to this
+  repository's pull requests, issues and releases, or to the SemVer
+  specification. The host must match exactly and the whole path must fit a
+  fixed pattern, so any other URL, a lookalike host or free text in the path
+  still fails. The release preflight and the tag-push scrub steps in both
+  release workflows now include `UPGRADE.md`, and a workspace test keeps it
   clean on every PR.
 
 ## [0.15.1] - 2026-09-26
