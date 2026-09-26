@@ -158,15 +158,22 @@ decommissioned in v0.5 Phase E (PR #77, commit `f4fde12`). Toolchain pins,
 fixture matrix, and timings are recorded in a private research note that is
 not published with this repository; the lint crate in
 [`lint/dylint`](lint/dylint) is the public source.
-`cargo-dylint` is a scheduled-workflow requirement; the local gate ritual does
-not include it.
+The dedicated `dylint.yml` workflow runs the compiled lint and its UI fixtures
+on every pull request to `main`, weekly on Monday at 08:00 UTC, and on manual
+dispatch. It sets `GAZE_DYLINT_REQUIRED=1`, so missing tooling fails the job.
+The local gate ritual still permits a clearly reported deferral when
+`cargo-dylint` is unavailable.
 
-Run `dylint` manually when touching audit-sink boundaries or wait for the
-weekly scheduled workflow.
+To run the compiled gate locally when touching audit-sink boundaries, install
+the same pinned tools as CI:
 
-`dylint` requires the pinned `nightly-2025-09-18` toolchain and cargo-dylint
-setup. It runs weekly on Monday at 08:00 UTC via the scheduled workflow and
-can be triggered manually:
+```bash
+rustup toolchain install nightly-2025-09-18 --component rustc-dev,rust-src,llvm-tools-preview
+cargo install --locked --version 6.0.4 cargo-dylint dylint-link
+GAZE_DYLINT_REQUIRED=1 cargo run -p xtask --locked -- dylint-gate
+```
+
+The workflow can also be triggered manually:
 
 ```bash
 gh workflow run dylint.yml

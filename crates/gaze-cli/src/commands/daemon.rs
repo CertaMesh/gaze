@@ -592,7 +592,7 @@ impl DaemonError {
                 CliError::SafetyNetFailure { variant } => variant,
                 CliError::SafetyNetConfigDetail(_) => "SafetyNetConfig",
                 CliError::PolicyConfigDetail(_) => "PolicyConfig",
-                CliError::PolicyOpen => "PolicyOpen",
+                CliError::PolicyOpen | CliError::PolicyOpenDetail(_) => "PolicyOpen",
                 CliError::Pipeline => "Pipeline",
                 CliError::Io => "Io",
                 _ => "CliError",
@@ -604,7 +604,8 @@ impl DaemonError {
     fn detail(&self) -> Option<&str> {
         match self {
             Self::Cli(CliError::SafetyNetConfigDetail(detail))
-            | Self::Cli(CliError::PolicyConfigDetail(detail)) => Some(detail.as_str()),
+            | Self::Cli(CliError::PolicyConfigDetail(detail))
+            | Self::Cli(CliError::PolicyOpenDetail(detail)) => Some(detail.as_str()),
             Self::Cli(_) => Some("gaze daemon request failed closed"),
             Self::Invariant => Some("unexpected non-text clean document"),
         }

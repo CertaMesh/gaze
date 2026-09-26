@@ -3,8 +3,8 @@ use serde_json::Value;
 use url::Url;
 
 use crate::adapter::{
-    push_string, push_text_blocks, walk_all_strings, PiiSurface, ProviderAdapter, SseEvent,
-    SurfaceSyntax,
+    push_string, push_text_blocks, walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter,
+    SseEvent, SurfaceSyntax,
 };
 
 #[derive(Clone, Debug)]
@@ -21,6 +21,10 @@ impl OpenAiAdapter {
 
 #[async_trait::async_trait]
 impl ProviderAdapter for OpenAiAdapter {
+    fn contract(&self) -> AdapterContract<'_> {
+        AdapterContract::legacy()
+    }
+
     fn name(&self) -> &'static str {
         "openai"
     }

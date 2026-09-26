@@ -8,6 +8,11 @@ response shape.
 
 Adapters implement `ProviderAdapter`:
 
+- `contract()` declares the adapter's protocol, session, routing and coverage
+  behavior. It is required: an adapter that declares no contract does not
+  compile. `AdapterContract::legacy()` opts into the string-surface path below,
+  where the proxy re-scans the whole outbound request body after redaction and
+  refuses the request if anything is left unprotected.
 - `matches_path(method, path)` claims provider-native endpoints.
 - `request_pii_surfaces(body)` returns mutable text leaves to redact before
   forwarding upstream.

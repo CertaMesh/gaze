@@ -4,7 +4,9 @@ use http::Method;
 use serde_json::Value;
 use url::Url;
 
-use crate::adapter::{walk_all_strings, PiiSurface, ProviderAdapter, SseEvent, SurfaceSyntax};
+use crate::adapter::{
+    walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter, SseEvent, SurfaceSyntax,
+};
 
 /// Canonicalizes a protobuf-JSON field name to its lowerCamelCase spelling.
 ///
@@ -48,6 +50,10 @@ impl GeminiAdapter {
 
 #[async_trait::async_trait]
 impl ProviderAdapter for GeminiAdapter {
+    fn contract(&self) -> AdapterContract<'_> {
+        AdapterContract::legacy()
+    }
+
     fn name(&self) -> &'static str {
         "gemini"
     }

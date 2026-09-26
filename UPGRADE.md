@@ -42,6 +42,34 @@ re-tokenize stored manifests.
 
 ---
 
+## v0.15.x → v0.16.0
+
+### TL;DR
+
+1. **Custom `gaze-proxy` adapters must declare a contract.** Add a
+   `contract()` method to every `ProviderAdapter` you implement.
+
+### Breaking: `ProviderAdapter::contract()` has no default
+
+**Action required only if you implement `gaze_proxy::ProviderAdapter`
+yourself.** Until v0.15.x an adapter that did not mention `contract()`
+silently took `AdapterContract::legacy()`. That method is now required, so
+such an adapter fails to compile with `E0046` (missing trait item
+`contract`). To keep the old behavior, say so explicitly:
+
+```rust
+fn contract(&self) -> AdapterContract<'_> {
+    AdapterContract::legacy()
+}
+```
+
+On the legacy contract the proxy redacts the surfaces your adapter returns,
+then re-scans the whole outbound request body and refuses the request if
+anything is left unprotected. `PiiSurface` is unchanged. The bundled OpenAI,
+Gemini and Anthropic adapters need no action.
+
+---
+
 ## v0.14.x → v0.15.0
 
 ### TL;DR
