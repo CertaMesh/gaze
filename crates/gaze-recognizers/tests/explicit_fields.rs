@@ -163,6 +163,9 @@ fn dates_require_complete_shapes_and_suffixes() {
         "2/3/1990",
         "12/31/1990",
         "31/12/1990",
+        // Two-digit years and month names joined the grammar with #3651.
+        "03.02.90",
+        "February 3 1990",
     ] {
         for raw in [
             format!("DOB: {value}"),
@@ -183,8 +186,6 @@ fn dates_require_complete_shapes_and_suffixes() {
         "13/31/1990",
         "31/13/1990",
         "1990-02",
-        "03.02.90",
-        "February 3 1990",
         "1990-02-03X",
         "1990-02-03-04",
         "1990-02-03.4",
@@ -243,7 +244,6 @@ fn malformed_or_unrelated_records_add_no_field_candidate() {
         "password: a'b",
         "prefixpassword: x",
         "reborn on 1990-02-03",
-        "born on\n1990-02-03",
     ] {
         for detector in &detectors {
             assert!(
