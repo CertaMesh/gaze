@@ -105,9 +105,17 @@ def _compact_response(response: Mapping[str, object]) -> dict[str, object]:
             "fixture_id": response["fixture_id"],
             "pipeline_error_code": response["pipeline_error_code"],
             "pipeline_error_stage": response["pipeline_error_stage"],
+            "refused": True,
+            "fallback_redact": False,
         }
     return {
         "fixture_id": response["fixture_id"],
+        "refused": False,
+        "safety_net_mode": response.get("safety_net_mode"),
+        "fallback_redact": any(
+            item["provenance"]["decision"] == "fallback_redact"
+            for item in response["final_protection_trace"]
+        ),
         "final_protection_trace": [
             {key: item[key] for key in ("raw_start", "raw_end", "class", "action", "provenance")}
             for item in response["final_protection_trace"]
@@ -339,7 +347,15 @@ def rescore(
             response = row["response"]
             if response["fixture_id"] != document.uid:
                 raise RecordError(f"{document.uid}: response ID mismatch")
+            if response.get("refused") is not ("pipeline_error_code" in response):
+                raise RecordError(f"{document.uid}: refusal flag mismatch")
             if "pipeline_error_code" not in response:
+                fallback = any(
+                    item["provenance"]["decision"] == "fallback_redact"
+                    for item in response["final_protection_trace"]
+                )
+                if response.get("fallback_redact") is not fallback:
+                    raise RecordError(f"{document.uid}: fallback flag mismatch")
                 for item in response["final_protection_trace"]:
                     score.validate_prediction(document, item)
                     if item["action"] not in {"tokenize", "redact"}:
