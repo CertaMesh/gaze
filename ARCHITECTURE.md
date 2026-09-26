@@ -1,6 +1,4 @@
-# Gaze Architecture
-
-## Purpose And Audience
+# Gaze architecture
 
 This document is the root architecture map for contributors and adopters who
 need to understand how Gaze's crates fit together before reading individual
@@ -65,7 +63,7 @@ Source anchors: [crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs),
 [crates/gaze-types/src/lib.rs](crates/gaze-types/src/lib.rs), and
 [docs/explanation/safety-net/safety-nets.md](docs/explanation/safety-net/safety-nets.md).
 
-## Crate Map
+## Crate map
 
 The workspace has 15 published crates plus internal `xtask`.
 For the fuller crate boundary table, see
@@ -90,7 +88,7 @@ For the fuller crate boundary table, see
 | `gaze-token-bridge` | Experimental owner-side authorization and translation layer that lets an agent search redact-before-index corpora with session tokens. | An agent must search long-lived document corpora without seeing raw values. |
 | `xtask` | Internal gate runner plus detached Dylint workspace for protected-path enforcement. | You are adding or running repository gates and CI-only checks. |
 
-## Three Execution Layers
+## Three execution layers
 
 Gaze has three integration layers. They all rely on the same core invariant:
 PII must cross the agent boundary only as manifest-backed pseudonymous tokens.
@@ -133,9 +131,9 @@ Source anchors: [crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs),
 [crates/gaze-mcp-core/src/lib.rs](crates/gaze-mcp-core/src/lib.rs), and
 [crates/gaze-mcp-rmcp/src/lib.rs](crates/gaze-mcp-rmcp/src/lib.rs).
 
-## Key Design Decisions
+## Key design decisions
 
-### KDD-1: Reversibility First
+### KDD-1: Reversibility first
 
 Gaze is pseudonymization, not one-way redaction. The core contract emits clean
 tokens plus a manifest that can restore owner-side originals; anything that
@@ -146,7 +144,7 @@ Source anchors: [AGENTS.md](AGENTS.md),
 [crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs), and
 [crates/gaze-types/src/lib.rs](crates/gaze-types/src/lib.rs).
 
-### KDD-2: Rule-Based Detectors Are The Trust Floor
+### KDD-2: Rule-based detectors are the trust floor
 
 Deterministic recognizers, validators, dictionaries, and locale-aware rules
 should handle precise classes before neural systems get involved.
@@ -158,7 +156,7 @@ Source anchors: [AGENTS.md](AGENTS.md),
 [crates/gaze-recognizers/src/regex.rs](crates/gaze-recognizers/src/regex.rs),
 and [docs/explanation/safety-net/safety-nets.md](docs/explanation/safety-net/safety-nets.md).
 
-### KDD-3: Audit Sink Isolation Is Enforced By Dylint
+### KDD-3: Audit sink isolation is enforced by Dylint
 
 SQLite audit storage is isolated in `gaze-audit`; `gaze` must not grow a
 `rusqlite` feature graph. The canonical protected-path gate is the
@@ -170,7 +168,7 @@ Source anchors: [CLAUDE.md](CLAUDE.md),
 [crates/gaze-audit/src/sqlite.rs](crates/gaze-audit/src/sqlite.rs), and
 [lint/dylint/src/lib.rs](lint/dylint/src/lib.rs).
 
-### KDD-4: Closed Validator And Normalizer Surfaces Fail Closed
+### KDD-4: Closed validator and normalizer surfaces fail closed
 
 Validator and normalizer names parse into typed enums, and unknown names fail
 at rulepack load with explicit unsupported-kind errors. The public enums are
@@ -182,7 +180,7 @@ Source anchors: [crates/gaze-types/src/lib.rs](crates/gaze-types/src/lib.rs),
 [crates/gaze-recognizers/src/error.rs](crates/gaze-recognizers/src/error.rs),
 and [crates/gaze/src/rulepack.rs](crates/gaze/src/rulepack.rs).
 
-### KDD-5: Locale Resolution Has Four Tiers
+### KDD-5: Locale resolution has four tiers
 
 Active locale resolution is ordered as CLI override, policy locale, rulepack
 default locale, then system/default fallback. Recognizers declare locale gates,
@@ -193,7 +191,7 @@ Source anchors: [docs/explanation/policy/locale-chain.md](docs/explanation/polic
 [crates/gaze-cli/src/pipeline/run.rs](crates/gaze-cli/src/pipeline/run.rs),
 and [crates/gaze-assembly/src/defaults.rs](crates/gaze-assembly/src/defaults.rs).
 
-### KDD-6: Conflict Resolution Is Deterministic
+### KDD-6: Conflict resolution is deterministic
 
 When candidates overlap, Gaze resolves them in a fixed order: PII class
 priority, rule priority, score, span length, and recognizer id. Collision-family
@@ -207,7 +205,7 @@ Source anchors: [crates/gaze/src/resolver.rs](crates/gaze/src/resolver.rs),
 [docs/explanation/detection/collision-family.md](docs/explanation/detection/collision-family.md),
 and [docs/explanation/detection/anchor-resolution.md](docs/explanation/detection/anchor-resolution.md).
 
-### KDD-7: Pass-3 SafetyNet Is Observer-Only
+### KDD-7: Pass-3 SafetyNet is observer-only
 
 SafetyNet runs after tokenization against already-clean output and the runtime
 manifest. The net itself only reports: it emits `LeakSuspect` metadata and never
@@ -221,7 +219,7 @@ Source anchors: [docs/explanation/safety-net/safety-nets.md](docs/explanation/sa
 [crates/gaze-recognizers/src/safety_net/test_support.rs](crates/gaze-recognizers/src/safety_net/test_support.rs),
 and [crates/gaze/tests/safety_net.rs](crates/gaze/tests/safety_net.rs).
 
-### KDD-8: Proxy Providers Use Adapter Drivers (shipped in v0.8)
+### KDD-8: Proxy providers use adapter drivers (shipped in v0.8)
 
 The `gaze-proxy` runtime (shipped in v0.8.0) isolates vendor-specific API
 shape in provider drivers while the proxy core owns pseudonymization, manifest
@@ -232,7 +230,7 @@ Source anchors: [docs/explanation/proxy/proxy-runtime.md](docs/explanation/proxy
 [crates/gaze-proxy/src/lib.rs](crates/gaze-proxy/src/lib.rs), and
 [crates/gaze-proxy/src/adapters](crates/gaze-proxy/src/adapters).
 
-## Cross-Cutting Invariants
+## Cross-cutting invariants
 
 **Fail closed everywhere.** Unsupported validators, malformed locale tags,
 missing mandatory anchors, unavailable strict-mode SafetyNet backends, and
@@ -267,7 +265,7 @@ Source anchors:
 [docs/explanation/detection/collision-family.md](docs/explanation/detection/collision-family.md),
 and [crates/gaze-audit/src/sqlite.rs](crates/gaze-audit/src/sqlite.rs).
 
-## Deep-Dive Companions
+## Where to go next
 
 - [docs/explanation/detection/validator-veto.md](docs/explanation/detection/validator-veto.md)
   explains validator-backed candidate rejection before conflict resolution.
@@ -295,7 +293,7 @@ Related companion docs:
 [docs/explanation/policy/locale-chain.md](docs/explanation/policy/locale-chain.md), and
 [docs/explanation/contributing/xtask-gates.md](docs/explanation/contributing/xtask-gates.md).
 
-## Non-Goals
+## What this document does not cover
 
 - Per-recognizer rule documentation belongs in [docs/reference/policy.md](docs/reference/policy.md).
 - Release notes and chronology belong in [CHANGELOG.md](CHANGELOG.md).
