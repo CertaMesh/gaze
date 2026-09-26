@@ -495,12 +495,14 @@ def execute_measurements(
     validator_measurements: Mapping[str, object] | None = None,
     source_environment: Mapping[str, str] | None = None,
     policy_path: Path | None = None,
+    configs: Sequence[str] | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if measured_repetitions <= 0:
         raise CandidateError("measured repetitions must be positive")
     if warmup_count < 0:
         raise CandidateError("warmup count must be non-negative")
-    configs = ("policy-file",) if policy_path is not None else tuple(score.DEFAULT_CONFIGS)
+    if configs is None:
+        configs = ("policy-file",) if policy_path is not None else tuple(score.DEFAULT_CONFIGS)
     if any("opf" in config.lower() for config in configs):
         raise CandidateError("canonical no-OPF config set unexpectedly contains OPF")
     environment = build_no_opf_environment(source_environment or os.environ)
@@ -586,22 +588,25 @@ def measure_agentic_layers(
     warmup_count: int,
     measured_repetitions: int,
     policy_path: Path | None,
+    configs: Sequence[str] | None = None,
 ) -> dict[str, object]:
     """Score layers A and D as separate cells next to the Kiji/A4 layer C.
 
     Layer C stays the top-level `runs`: the generated documents never enter
     those cells, so their numbers are unchanged by this block.
     """
-    identifier_measurements = score.collect_validator_measurements(
-        validator_probe,
-        prepared.identifiers,
-        (document.uid for document in prepared.identifiers),
+    identifier_measurements, repeat_measurements = (
+        score.collect_validator_measurements(
+            validator_probe, documents, (document.uid for document in documents)
+        )
+        for documents in (prepared.identifiers, prepared.repeats)
     )
     layers: dict[str, object] = {
         "schema_version": 1,
         "generator": prepared.manifest,
         "scored_label_contract": score.scored_label_contract_report(
-            prepared.contract, prepared.identifiers + prepared.lookalikes
+            prepared.contract,
+            prepared.identifiers + prepared.lookalikes + prepared.repeats,
         ),
         "C": {
             "description": "Kiji EN/DE holdout plus the A4 negative corpus",
@@ -621,6 +626,13 @@ def measure_agentic_layers(
             prepared.lookalikes,
             None,
         ),
+        (
+            agentic.LAYER_REPEATS,
+            "repeat-value slice: every repeat of a value is gold, colliding "
+            "words and digit runs are not",
+            prepared.repeats,
+            repeat_measurements,
+        ),
     ):
         runs, provenance = execute_measurements(
             repo_root=repo_root,
@@ -633,6 +645,7 @@ def measure_agentic_layers(
             measured_repetitions=measured_repetitions,
             validator_measurements=measurements,
             policy_path=policy_path,
+            configs=configs,
         )
         block: dict[str, object] = {
             "description": description,
@@ -799,7 +812,7 @@ def _layers_summary(scorecard: Mapping[str, object]) -> list[str]:
         "| False-positive bytes |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for layer in (agentic.LAYER_IDENTIFIERS, agentic.LAYER_LOOKALIKES):
+    for layer in (agentic.LAYER_IDENTIFIERS, agentic.LAYER_LOOKALIKES, agentic.LAYER_REPEATS):
         for run in layers[layer]["runs"]:
             utf8 = run["metrics"]["utf8_bytes"]
             availability = run["pipeline_availability"]

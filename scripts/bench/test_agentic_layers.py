@@ -22,8 +22,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "6de726f1328dbd0b6345ccf5246b81051a4a7961ad277ef2c6b4582a72e866bd",
-    "test": "c44837256837d7c6368325d0b168a6b2634aa14293c5db0c2c439ede9f121e64",
+    "dev": "8a707e9f36d33ffda37c0fab104500353d52dabd7ba1cb9ddd6c2594e314a718",
+    "test": "f01361b64ec349201f2269797939df313c126561f53295e05e35b336ad7a8dd6",
 }
 
 
@@ -139,7 +139,7 @@ class GeneratorTests(unittest.TestCase):
     def test_nbsp_surfaces_perturb_their_prose_cue_parent_only(self) -> None:
         by_uid = {record.uid: record for record in self.corpora["test"]}
         for record in by_uid.values():
-            if record.surface not in ("nbsp", "narrow_nbsp"):
+            if record.layer != agentic.LAYER_IDENTIFIERS or record.surface not in ("nbsp", "narrow_nbsp"):
                 continue
             separator = agentic.NBSP if record.surface == "nbsp" else agentic.NARROW_NBSP
             parent = by_uid[record.uid.replace(f"-{record.surface}-", "-prose_cue-")]
@@ -191,6 +191,55 @@ class GeneratorTests(unittest.TestCase):
                 self.assertIn((family, surface), cells)
 
 
+class RepeatSliceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.records = [r for r in agentic.generate("test") if r.layer == agentic.LAYER_REPEATS]
+
+    def test_every_document_repeats_a_gold_value_two_to_four_times(self) -> None:
+        self.assertTrue(self.records)
+        for record in self.records:
+            by_entity: dict[str, int] = {}
+            for gold in record.gold:
+                key = f"{gold.label}:{agentic._only_digits(gold.value) or gold.value.lower()}"
+                by_entity[key] = by_entity.get(key, 0) + 1
+            self.assertTrue(any(2 <= n <= 4 for n in by_entity.values()), record.uid)
+
+    def test_decoys_are_in_the_text_and_never_overlap_gold(self) -> None:
+        collision_families = {"word_names", "substring_names", "id_repeats"}
+        for record in self.records:
+            encoded = record.text.encode("utf-8")
+            if record.family in collision_families:
+                self.assertTrue(record.decoys, record.uid)
+            for decoy in record.decoys:
+                self.assertEqual(encoded[decoy.start : decoy.end].decode("utf-8"), decoy.value)
+                for gold in record.gold:
+                    self.assertFalse(decoy.start < gold.end and gold.start < decoy.end, record.uid)
+
+    def test_word_decoys_spell_a_gold_name_part(self) -> None:
+        for record in self.records:
+            if record.family != "word_names":
+                continue
+            names = {g.value for g in record.gold if g.label in ("GIVENNAME", "SURNAME")}
+            self.assertTrue(all(d.value in names for d in record.decoys), record.uid)
+
+    def test_shared_digit_decoys_are_a_digit_run_of_the_repeated_id(self) -> None:
+        for record in self.records:
+            if record.family == "id_repeats":
+                digits = agentic._only_digits(record.gold[0].value)
+                self.assertTrue(all(d.value in digits for d in record.decoys))
+
+    def test_case_variant_shapes_are_all_present(self) -> None:
+        texts = {r.surface: r.text for r in self.records if r.family == "case_variants"}
+        self.assertEqual(set(texts), {"lower", "upper", "nbsp", "linebreak"})
+        self.assertIn(agentic.NBSP, texts["nbsp"])
+
+    def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
+        for record in agentic.generate("test"):
+            if record.layer != agentic.LAYER_REPEATS:
+                self.assertNotIn("decoys", record.to_json())
+
+
 class PartitionTests(unittest.TestCase):
     def test_vocabularies_are_split_before_generation(self) -> None:
         pools = [
@@ -198,15 +247,24 @@ class PartitionTests(unittest.TestCase):
             agentic.US_AREA_CODES, agentic.DE_MOBILE_PREFIXES,
             *agentic.KEYS.values(), *agentic.TEMPLATES.values(),
             *agentic.NAME_TEMPLATES.values(), *agentic.LOOKALIKE_TEMPLATES.values(),
+            *agentic.REPEAT_BODIES.values(), agentic.REPEAT_HEADERS, agentic.REPEAT_SIGNOFFS,
+            agentic.ID_REPEAT_TEMPLATES,
         ]
         for pool in pools:
             self.assertEqual(set(pool), set(agentic.PARTITIONS))
-            self.assertFalse(set(pool["dev"]) & set(pool["test"]), pool)
+            dev, test = (
+                {pool[p]} if isinstance(pool[p], str) else set(pool[p]) for p in ("dev", "test")
+            )
+            self.assertFalse(dev & test, pool)
         self.assertFalse(
             set(agentic.LOOKALIKE_KEYS["dev"].values())
             & set(agentic.LOOKALIKE_KEYS["test"].values())
         )
         self.assertNotEqual(agentic.PARTITION_SEEDS["dev"], agentic.PARTITION_SEEDS["test"])
+        for pool in (agentic.WORD_NAMES, agentic.SUBSTRING_NAMES):
+            dev_words = {entry[1] for entry in pool["dev"]} | {entry[2] for entry in pool["dev"]}
+            test_words = {entry[1] for entry in pool["test"]} | {entry[2] for entry in pool["test"]}
+            self.assertFalse(dev_words & test_words)
 
     def test_cue_text_is_not_a_split_axis_for_shared_standard_cues(self) -> None:
         # Standard cue words ("IBAN", "BSN") are the identifier's own name and
@@ -367,35 +425,38 @@ def _scorecard(leaks: dict[str, int], fps: dict[str, int] | None = None, refused
             "scored_label_contract": {"file_sha256": "a"},
             "A": {"runs": [run("A")]},
             "D": {"runs": [run("D")]},
+            "R": {"runs": [run("R")]},
         },
     }
 
 
 class GateTests(unittest.TestCase):
-    BASE = {"C": 100, "A": 50, "D": 0}
+    BASE = {"C": 100, "A": 50, "D": 0, "R": 30}
+    FP = {"C": 10, "A": 5, "D": 7, "R": 3}
 
     def verdict(self, candidate: dict) -> str:
-        return agentic.gate(_scorecard(self.BASE, {"C": 10, "A": 5, "D": 7}), candidate)["verdict"]
+        return agentic.gate(_scorecard(self.BASE, self.FP), candidate)["verdict"]
 
     def test_leak_falling_in_one_layer_and_rising_in_none_passes(self) -> None:
-        self.assertEqual(self.verdict(_scorecard({"C": 100, "A": 40, "D": 0}, {"C": 10, "A": 5, "D": 7})), "pass")
+        self.assertEqual(self.verdict(_scorecard({**self.BASE, "R": 10}, self.FP)), "pass")
 
     def test_leak_rising_in_any_layer_fails_even_if_another_falls(self) -> None:
-        self.assertEqual(self.verdict(_scorecard({"C": 101, "A": 10, "D": 0}, {"C": 10, "A": 5, "D": 7})), "fail")
+        self.assertEqual(self.verdict(_scorecard({**self.BASE, "C": 101, "A": 10}, self.FP)), "fail")
+        self.assertEqual(self.verdict(_scorecard({**self.BASE, "R": 31, "A": 10}, self.FP)), "fail")
 
     def test_more_refusals_fail_because_refused_documents_leave_the_leak_count(self) -> None:
-        candidate = _scorecard({"C": 90, "A": 50, "D": 0}, {"C": 10, "A": 5, "D": 7}, {"C": 1})
+        candidate = _scorecard({**self.BASE, "C": 90}, self.FP, {"C": 1})
         self.assertEqual(self.verdict(candidate), "fail")
 
     def test_false_positive_only_fix_passes(self) -> None:
-        self.assertEqual(self.verdict(_scorecard(self.BASE, {"C": 10, "A": 5, "D": 2})), "pass")
+        self.assertEqual(self.verdict(_scorecard(self.BASE, {**self.FP, "D": 2})), "pass")
 
     def test_no_movement_fails(self) -> None:
-        self.assertEqual(self.verdict(_scorecard(self.BASE, {"C": 10, "A": 5, "D": 7})), "fail")
+        self.assertEqual(self.verdict(_scorecard(self.BASE, self.FP)), "fail")
 
     def test_different_corpus_or_contract_is_not_comparable(self) -> None:
         for path in (("layers", "generator", "corpus_sha256"), ("scoring", "scored_label_contract", "file_sha256")):
-            candidate = _scorecard({"C": 1, "A": 1, "D": 0})
+            candidate = _scorecard({"C": 1, "A": 1, "D": 0, "R": 1})
             target = candidate
             for key in path[:-1]:
                 target = target[key]

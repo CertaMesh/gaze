@@ -42,6 +42,9 @@ DOCS_PER_FAMILY = 10
 SCORED_LABELS_PATH = Path("docs/reference/benchmarks/scored-labels-agentic.json")
 LAYER_IDENTIFIERS = "A"
 LAYER_LOOKALIKES = "D"
+LAYER_REPEATS = "R"
+REPEAT = "repeat"
+DECOY_PREFIX = "decoy:"
 SOURCE_DATASET = "gaze-agentic-layers"
 
 NBSP = "\u00a0"
@@ -652,6 +655,7 @@ class _Builder:
         self._parts: list[str] = []
         self._length = 0
         self._gold: list[tuple[int, int, str, str]] = []
+        self._decoys: list[tuple[int, int, str, str]] = []
 
     def text(self, value: str) -> None:
         self._parts.append(value)
@@ -661,17 +665,34 @@ class _Builder:
         self._gold.append((self._length, self._length + len(value), label, value))
         self.text(value)
 
-    def build(self) -> tuple[str, tuple[Gold, ...]]:
+    def decoy(self, value: str, kind: str) -> None:
+        self._decoys.append((self._length, self._length + len(value), kind, value))
+        self.text(value)
+
+    def build(self) -> tuple[str, tuple[Gold, ...], tuple[Gold, ...]]:
         text = "".join(self._parts)
         offsets = score.char_to_byte_offsets(text)
-        return text, tuple(
-            Gold(offsets[start], offsets[end], label, value)
-            for start, end, label, value in self._gold
-        )
+
+        def spans(items: list[tuple[int, int, str, str]]) -> tuple[Gold, ...]:
+            return tuple(
+                Gold(offsets[start], offsets[end], label, value)
+                for start, end, label, value in items
+            )
+
+        return text, spans(self._gold), spans(self._decoys)
 
 
 def _fill(template: str, fields: Mapping[str, tuple[str, str | None]]) -> tuple[str, tuple[Gold, ...]]:
     """Expand {X} placeholders; fields map X -> (text, gold label or None)."""
+    text, gold, decoys = _fill_with_decoys(template, fields)
+    assert not decoys
+    return text, gold
+
+
+def _fill_with_decoys(
+    template: str, fields: Mapping[str, tuple[str, str | None]]
+) -> tuple[str, tuple[Gold, ...], tuple[Gold, ...]]:
+    """As `_fill`; a label starting with DECOY_PREFIX marks a recorded non-gold span."""
     builder = _Builder()
     index = 0
     while index < len(template):
@@ -690,6 +711,8 @@ def _fill(template: str, fields: Mapping[str, tuple[str, str | None]]) -> tuple[
         value, label = fields[name]
         if label is None:
             builder.text(value)
+        elif label.startswith(DECOY_PREFIX):
+            builder.decoy(value, label[len(DECOY_PREFIX) :])
         else:
             builder.gold(value, label)
         index = closing + 1
@@ -710,6 +733,9 @@ class Record:
     region: str
     text: str
     gold: tuple[Gold, ...]
+    # Recorded non-gold spans (layer R): ordinary words and digit runs that
+    # collide with a gold value. Any coverage of them is a false positive.
+    decoys: tuple[Gold, ...] = ()
 
     @property
     def cell(self) -> str:
@@ -732,6 +758,16 @@ class Record:
                 {"start": g.start, "end": g.end, "label": g.label, "value": g.value}
                 for g in self.gold
             ],
+            **(
+                {
+                    "decoys": [
+                        {"start": d.start, "end": d.end, "kind": d.label, "value": d.value}
+                        for d in self.decoys
+                    ]
+                }
+                if self.decoys
+                else {}
+            ),
         }
 
     def to_document(self) -> score.Document:
@@ -971,11 +1007,219 @@ def _lookalike_records(partition: str, seed: int) -> list[Record]:
     return records
 
 
+# --------------------------------------------------------------------------
+# Layer R: the repeat-value slice. One document repeats a value 2-4 times in
+# different positions and shapes (every occurrence is gold) next to decoys:
+# ordinary words spelled like a name part, words containing a name part, and
+# digit runs shared with a repeated identifier. A pipeline that re-finds known
+# values across a document must cover the repeats without touching the decoys.
+# Value makers take (rng, partition), so a layer B transcript can reuse them.
+
+REPEAT_HEADERS = {
+    "dev": "From: {G} {S} <{E}>\nSubject: Contract renewal\n\n",
+    "test": "From: {G} {S} <{E}>\nSubject: Delivery complaint\n\n",
+}
+REPEAT_BODIES: dict[str, dict[str, tuple[str, ...]]] = {
+    "header_signature": {
+        "dev": ("Hello team,\nMs {S} asked to renew before Friday. {G} will call back.\n\nBest,\n{G}",),
+        "test": ("Hi,\nplease reply to Ms {S} today, she wrote twice.\n\nThanks, {G}",),
+    },
+    "case_lower": {
+        "dev": ("Logged in as {GL} {SL} from the kiosk.",),
+        "test": ("Parcel signed by {GL} {SL} at the front desk.",),
+    },
+    "case_upper": {
+        "dev": ("CUSTOMER: {GU} {SU}",),
+        "test": ("ACCOUNT HOLDER: {GU} {SU}",),
+    },
+    "case_nbsp": {
+        "dev": ("Assigned to {G}{NB}{S} for review.",),
+        "test": ("Contact person: {G}{NB}{S}",),
+    },
+    "case_linebreak": {
+        "dev": ("Best wishes\n{G}\n{S}",),
+        "test": ("Kind regards\n{G}\n{S}",),
+    },
+}
+# (slot, name, decoy word, decoy sentence). The name is used as the person's
+# given name or surname; the sentence uses the same spelling as a word.
+WORD_NAMES = {
+    "dev": (
+        ("G", "Hope", "Hope", "{W} this helps."),
+        ("G", "Mark", "Mark", "{W} the date in your calendar."),
+        ("G", "Bill", "Bill", "{W} total is attached."),
+        ("G", "Dawn", "Dawn", "{W} shift starts early."),
+        ("S", "Hall", "Hall", "Meet in {W} B."),
+        ("S", "Rich", "Rich", "Use {W} text formatting."),
+    ),
+    "test": (
+        ("G", "Rose", "Rose", "The {W} garden opens at nine."),
+        ("G", "May", "May", "We meet again in {W}."),
+        ("G", "Will", "Will", "{W} you confirm the slot?"),
+        ("G", "Grant", "Grant", "{W} approved by the board."),
+        ("S", "Page", "Page", "See {W} 3 of the report."),
+        ("S", "Court", "Court", "The {W} hearing moved, the Government portal has details."),
+    ),
+}
+# (slot, name, containing word, sentence); the file name repeats the word.
+SUBSTRING_NAMES = {
+    "dev": (
+        ("G", "Art", "Article", "{W} 5 applies, see files/{WL}_2026.pdf."),
+        ("G", "Ed", "Education", "{W} budget approved, see files/{WL}_2026.pdf."),
+        ("G", "Sam", "Sample", "{W} size is small, see files/{WL}_2026.pdf."),
+        ("S", "Ross", "Crossroads", "Turn at the {W}, map in files/{WL}_2026.pdf."),
+        ("S", "Lang", "Language", "{W} settings changed, see files/{WL}_2026.pdf."),
+    ),
+    "test": (
+        ("G", "Ann", "Annual", "The {W} report is due, see files/{WL}_2026.pdf."),
+        ("G", "Eva", "Evaluation", "{W} results are attached as files/{WL}_2026.pdf."),
+        ("G", "Max", "Maximum", "{W} load was reached, log in files/{WL}_2026.pdf."),
+        ("S", "Berg", "Heidelberg", "The office in {W} is closed, see files/{WL}_2026.pdf."),
+        ("S", "Hamm", "Hammer", "Bring the {W} tomorrow, list in files/{WL}_2026.pdf."),
+    ),
+}
+REPEAT_SIGNOFFS = {"dev": " Ms {S} will follow up.\n\nBest,\n{G}", "test": " Ms {S} confirmed.\n\nThanks, {G}"}
+ID_REPEAT_TEMPLATES = {
+    "dev": (
+        "Please use {V} for the refund.\n"
+        '{"action": "refund", "{K}": "{VC}"}\n'
+        "level=info svc=billing {K}={VC} batch={T}\n"
+        "Batch {T} is unrelated to the customer."
+    ),
+    "test": (
+        "Hi, the value on file is {V}, please keep it.\n"
+        '{"operation": "update", "{K}": "{VC}"}\n'
+        "2026-04-17T08:03:51Z INFO sync {K}={VC} job={T}\n"
+        "Job {T} finished without errors."
+    ),
+}
+ID_REPEAT_FAMILIES: dict[str, tuple[str, str, str, str]] = {
+    # surface: (label, key family, language, region)
+    "iban_de": ("IBAN", "iban", "de", "DE"),
+    "phone_de": ("TELEPHONENUM", "phone", "de", "DE"),
+    "steuer_id": ("TAXNUM", "steuer_id", "de", "DE"),
+}
+
+
+def _repeat_value(surface: str, rng: Rng, partition: str) -> Value:
+    if surface == "iban_de":
+        return Value(_by_four(_iban_de(rng)))
+    if surface == "phone_de":
+        return _phone_de(rng, partition)
+    return Value(_chunks(_steuer_id(rng), (2, 3, 3, 3)))
+
+
+def _person_fields(given: str, surname: str, email: str) -> dict[str, tuple[str, str | None]]:
+    return {
+        "G": (given, "GIVENNAME"),
+        "S": (surname, "SURNAME"),
+        "E": (email, "EMAIL"),
+        "GL": (given.lower(), "GIVENNAME"),
+        "SL": (surname.lower(), "SURNAME"),
+        "GU": (given.upper(), "GIVENNAME"),
+        "SU": (surname.upper(), "SURNAME"),
+        "NB": (NBSP, None),
+    }
+
+
+def _name_email(given: str, surname: str, rng: Rng, partition: str) -> str:
+    local = _ascii_fold(f"{given}.{surname}").lower()
+    return f"{local}@{rng.choice(EMAIL_DOMAINS[partition])}"
+
+
+def _repeat_record(partition: str, family: str, surface: str, index: int, template: str,
+                   template_id: str, fields: Mapping[str, tuple[str, str | None]],
+                   language: str, region: str) -> Record:
+    text, gold, decoys = _fill_with_decoys(template, fields)
+    return Record(
+        uid=f"agentic-{partition}-R-{family}-{index:03d}-{surface}-{REPEAT}",
+        partition=partition,
+        layer=LAYER_REPEATS,
+        family=family,
+        surface=surface,
+        validity=REPEAT,
+        group=f"{partition}-R-{family}-{surface}-{index:03d}",
+        template=template_id,
+        language=language,
+        region=region,
+        text=text,
+        gold=gold,
+        decoys=decoys,
+    )
+
+
+def _repeat_records(partition: str, seed: int) -> list[Record]:
+    records: list[Record] = []
+    header = REPEAT_HEADERS[partition]
+    for body_family, bodies in REPEAT_BODIES.items():
+        family, surface = (
+            ("header_signature", "thread")
+            if body_family == "header_signature"
+            else ("case_variants", body_family.removeprefix("case_"))
+        )
+        rng = Rng(seed, f"R/{body_family}")
+        for index in range(DOCS_PER_FAMILY):
+            given, surname = _person(rng, partition)
+            email = _name_email(given, surname, rng, partition)
+            body = rng.choice(bodies[partition])
+            template = header + body
+            records.append(_repeat_record(
+                partition, family, surface, index, template,
+                f"R/{body_family}/{partition}/{bodies[partition].index(body)}",
+                _person_fields(given, surname, email),
+                "de" if index % 2 else "en", "DE" if index % 2 else "US",
+            ))
+    for family, pool in (("word_names", WORD_NAMES), ("substring_names", SUBSTRING_NAMES)):
+        rng = Rng(seed, f"R/{family}")
+        entries = pool[partition]
+        for index in range(DOCS_PER_FAMILY):
+            slot, name, word, sentence = entries[index % len(entries)]
+            given, surname = _person(rng, partition)
+            if slot == "G":
+                given = name
+            else:
+                surname = name
+            email = _name_email(given, surname, rng, partition)
+            fields = {
+                **_person_fields(given, surname, email),
+                "W": (word, DECOY_PREFIX + family),
+                "WL": (word.lower(), DECOY_PREFIX + family),
+            }
+            template = header + sentence + REPEAT_SIGNOFFS[partition]
+            records.append(_repeat_record(
+                partition, family, "thread", index, template,
+                f"R/{family}/{partition}/{entries.index(entries[index % len(entries)])}",
+                fields, "en", "US",
+            ))
+    rng = Rng(seed, "R/id_repeats")
+    template = ID_REPEAT_TEMPLATES[partition]
+    for surface, (label, key_family, language, region) in ID_REPEAT_FAMILIES.items():
+        for index in range(DOCS_PER_FAMILY):
+            value = _repeat_value(surface, rng, partition)
+            digits = _only_digits(value.render())
+            shared = digits[2:8]
+            fields = {
+                "V": (value.render(), label),
+                "VC": (value.render(""), label),
+                "K": (rng.choice(KEYS[key_family][partition]), None),
+                "T": (shared, DECOY_PREFIX + "shared_digits"),
+            }
+            records.append(_repeat_record(
+                partition, "id_repeats", surface, index, template,
+                f"R/id_repeats/{partition}/0", fields, language, region,
+            ))
+    return records
+
+
 def generate(partition: str) -> list[Record]:
     if partition not in PARTITIONS:
         raise LayerError(f"unknown partition {partition!r}")
     seed = PARTITION_SEEDS[partition]
-    records = _identifier_records(partition, seed) + _lookalike_records(partition, seed)
+    records = (
+        _identifier_records(partition, seed)
+        + _lookalike_records(partition, seed)
+        + _repeat_records(partition, seed)
+    )
     for record in records:
         encoded = record.text.encode("utf-8")
         for gold in record.gold:
@@ -1057,6 +1301,7 @@ class PreparedLayers:
     contract: score.ScoredLabelContract
     identifiers: list[score.Document]
     lookalikes: list[score.Document]
+    repeats: list[score.Document]
 
 
 def prepare(repo_root: Path, contract_path: Path | None = None) -> PreparedLayers:
@@ -1065,9 +1310,14 @@ def prepare(repo_root: Path, contract_path: Path | None = None) -> PreparedLayer
     documents = apply_contract([record.to_document() for record in records], contract)
     identifiers = [d for d in documents if d.cell and d.cell.startswith(LAYER_IDENTIFIERS + "|")]
     lookalikes = [d for d in documents if d.cell and d.cell.startswith(LAYER_LOOKALIKES + "|")]
+    repeats = [d for d in documents if d.cell and d.cell.startswith(LAYER_REPEATS + "|")]
     if any(d.spans for d in lookalikes):
         raise LayerError("a layer D lookalike document carries gold")
-    return PreparedLayers(manifest(PUBLISHED_PARTITION, records), contract, identifiers, lookalikes)
+    if len(identifiers) + len(lookalikes) + len(repeats) != len(documents):
+        raise LayerError("a generated document belongs to no layer")
+    return PreparedLayers(
+        manifest(PUBLISHED_PARTITION, records), contract, identifiers, lookalikes, repeats
+    )
 
 
 # --------------------------------------------------------------------------
@@ -1130,10 +1380,21 @@ def coverage_grid(scorecard: Mapping[str, object], config: str | None = None) ->
             block = d_cells.get(f"D|{family}|{surface}|{BENIGN}")
             row.append("-" if block is None else str(block["utf8_bytes"]["false_positive"]))
         lines.append(f"| {family} | " + " | ".join(row) + " |")
+    run_r = _layer_run(scorecard, LAYER_REPEATS, config)
+    lines += ["", "**Layer R, repeat-value slice**", "",
+              "| Family | Shape | Gold bytes | Leaked bytes | Byte recall | False-positive bytes |",
+              "| --- | --- | ---: | ---: | ---: | ---: |"]
+    for key, block in sorted(run_r.get("per_cell", {}).items()):
+        _, family, surface, _ = key.split("|")
+        utf8 = block["utf8_bytes"]
+        lines.append(
+            f"| {family} | {surface} | {utf8['pii']} | {utf8['leaked']} | "
+            f"{utf8['recall']:.2f} | {utf8['false_positive']} |"
+        )
     return "\n".join(lines) + "\n"
 
 
-GATE_LAYERS = ("C", LAYER_IDENTIFIERS, LAYER_LOOKALIKES)
+GATE_LAYERS = ("C", LAYER_IDENTIFIERS, LAYER_LOOKALIKES, LAYER_REPEATS)
 
 
 def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
@@ -1211,6 +1472,54 @@ def _load_json(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _measure(args: argparse.Namespace) -> None:
+    """Layers only, for a binary this tree did not build (a past release's).
+
+    The corpus, contract, scorer and validator probe come from this tree; the
+    detection under test is the binary's. The output is a scorecard-shaped
+    object with `layers` and no layer C `runs`, which each release's own
+    committed scorecard already provides.
+    """
+    import platform
+
+    import run_no_opf_benchmark as runner
+
+    repo_root = Path(__file__).resolve().parents[2]
+    probe = score.validator_probe_binary(repo_root)
+    if not args.binary.is_file() or not probe.is_file():
+        raise LayerError(f"missing binary {args.binary} or validator probe {probe}")
+    policy = args.policy.resolve() if args.policy else None
+    layers = runner.measure_agentic_layers(
+        prepared=prepare(repo_root),
+        repo_root=repo_root,
+        binary=args.binary.resolve(),
+        validator_probe=probe,
+        davlan_model=args.model_dir.expanduser().resolve(),
+        threshold=args.threshold,
+        diagnostics_dir=args.output.parent / "logs",
+        warmup_count=0,
+        measured_repetitions=1,
+        policy_path=policy,
+        configs=args.config,
+    )
+    result = {
+        "schema_version": score.SCORECARD_SCHEMA_VERSION,
+        "measured": args.label,
+        "gaze": score.git_metadata(repo_root),
+        "binary_sha256": score.sha256_file(args.binary),
+        "parameters": {
+            "configs": list(args.config),
+            "policy_sha256": score.sha256_file(policy) if policy else None,
+            "ner_threshold": args.threshold,
+        },
+        "hardware": platform.platform(),
+        "runs": [],
+        "layers": layers,
+    }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -1221,6 +1530,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     grid_cmd = commands.add_parser("grid", help="print the coverage grid of a scorecard")
     grid_cmd.add_argument("scorecard", type=Path)
     grid_cmd.add_argument("--config")
+    measure_cmd = commands.add_parser(
+        "measure",
+        help="score layers A, D and R with any bench binary, e.g. a past release's",
+    )
+    measure_cmd.add_argument("--binary", type=Path, required=True)
+    measure_cmd.add_argument("--config", action="append", required=True)
+    measure_cmd.add_argument("--policy", type=Path)
+    measure_cmd.add_argument("--model-dir", type=Path, default=Path("~/.local/share/gaze/models/davlan-mbert-ner-hrl"))
+    measure_cmd.add_argument("--threshold", type=float, default=0.3)
+    measure_cmd.add_argument("--label", required=True, help="e.g. v0.15.1; recorded in the output")
+    measure_cmd.add_argument("--output", type=Path, required=True)
     gate_cmd = commands.add_parser("gate", help="apply the rule gate to a base/candidate pair")
     gate_cmd.add_argument("--base", type=Path, required=True)
     gate_cmd.add_argument("--candidate", type=Path, required=True)
@@ -1234,6 +1554,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(manifest(args.partition, records), indent=2))
         elif args.command == "manifest":
             print(json.dumps({p: manifest(p, generate(p)) for p in PARTITIONS}, indent=2))
+        elif args.command == "measure":
+            _measure(args)
         elif args.command == "grid":
             print(coverage_grid(_load_json(args.scorecard), args.config), end="")
         else:
