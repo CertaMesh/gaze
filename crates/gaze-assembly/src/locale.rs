@@ -116,3 +116,42 @@ pub(crate) fn register_anchor_cue_bundles(
         }
     }
 }
+
+/// Locale buckets holding the street words that license an adjacent house
+/// number, with the side each locale writes the number on (todo 3670).
+const STREET_LEXICON_BUCKETS: [(&str, gaze::StreetNumberOrder); 2] = [
+    (
+        "street_suffixes_number_after",
+        gaze::StreetNumberOrder::NumberAfter,
+    ),
+    (
+        "street_types_number_before",
+        gaze::StreetNumberOrder::NumberBefore,
+    ),
+];
+
+pub(crate) fn register_street_lexicons(
+    builder: &mut AssemblyBuilder,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+) {
+    for active_locale in active_locales.as_slice() {
+        for rulepack in rulepacks {
+            if !rulepack.default_locales.contains(active_locale) {
+                continue;
+            }
+            let Some(locale) = rulepack.locale.as_ref() else {
+                continue;
+            };
+            for (bucket, order) in STREET_LEXICON_BUCKETS {
+                if let Some(names) = locale.buckets.get(bucket) {
+                    builder.register_street_lexicon(
+                        active_locale.clone(),
+                        order,
+                        names.names.clone(),
+                    );
+                }
+            }
+        }
+    }
+}

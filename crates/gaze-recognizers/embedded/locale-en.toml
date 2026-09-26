@@ -4,6 +4,12 @@ rulepack_version = "0.5.1"
 default_locales = ["en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
 
 # Phase 2 ports English locale recognizers.
+# Street-type words that let a NER location span license the house number
+# written before it (`17 Example Street`). The word must end a multi-word NER
+# location span; a trailing dot marks an abbreviation (todo 3670).
+[locale.street_types_number_before]
+names = ["street", "st.", "road", "rd.", "avenue", "ave.", "drive", "dr.", "lane", "ln.", "boulevard", "blvd.", "court", "ct.", "crescent", "close", "way", "place", "pl.", "terrace", "parkway", "square", "sq.", "highway", "hwy.", "grove", "gardens", "mews"]
+
 [locale.email_headers]
 names = ["From", "To", "Cc", "Bcc", "Reply-To", "Sender"]
 
