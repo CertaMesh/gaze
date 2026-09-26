@@ -256,6 +256,32 @@ fn documentation_range_neighbor_cannot_hide_a_real_address() {
 }
 
 #[test]
+fn word_adjacent_neighbor_remains_refused_after_reusing_the_guard() {
+    for raw in ["host fe80::1 x::2 done", "host x::2 fe80::1 done"] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, manifest, _) = pipeline()
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(raw.to_string()),
+                &LOCALES,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(clean) = clean else {
+            panic!("expected text");
+        };
+        assert!(
+            clean.contains("x::2"),
+            "word-adjacent neighbor changed: {clean:?}"
+        );
+        assert!(!clean.contains("fe80::1"), "address leaked: {clean:?}");
+        assert_eq!(manifest.len(), 1, "unexpected token in {raw:?}");
+        assert_eq!(&raw[manifest[0].raw_span.clone()], "fe80::1");
+        assert_eq!(session.restore_strict_text(&clean).expect("restore"), raw);
+    }
+}
+
+#[test]
 fn a_zone_id_is_left_behind_exactly_as_before() {
     // The address tokenizes and `%eth0` survives: unchanged from the base rule, pinned so a
     // later guard change has to state its intent about zone ids.
