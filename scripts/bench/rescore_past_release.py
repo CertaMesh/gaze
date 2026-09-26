@@ -128,6 +128,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> Path:
+    # Read before anything runs: the scorecard names the harness that scored it,
+    # not whatever the checkout holds when the run ends.
+    harness = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=HARNESS_ROOT, check=True, text=True,
+        capture_output=True,
+    ).stdout.strip()
     release_root = args.release_root.resolve()
     status = subprocess.run(
         ["git", "status", "--porcelain"], cwd=release_root, check=True, text=True,
@@ -211,10 +217,6 @@ def run(args: argparse.Namespace) -> Path:
         runs=runs,
         scored_label_contract=score.scored_label_contract_report(contract, documents),
     )
-    harness = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=HARNESS_ROOT, check=True, text=True,
-        capture_output=True,
-    ).stdout.strip()
     card["runner_provenance"] = {
         "entry_point": "scripts/bench/rescore_past_release.py",
         "method": (

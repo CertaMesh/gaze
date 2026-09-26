@@ -23,9 +23,9 @@ The [v0.15.1 release benchmark](docs/reference/benchmarks/README.md#current-rele
 | Setup | Refused | Leaked, all processed docs (v2) | Leaked, common set (v2) | False-positive bytes (v2) | Leaked, all processed docs (v1) | Leaked, common set (v1) | False-positive bytes (v1) | Exact restores |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | **v0.15.0 – v0.15.1 default: `gaze setup` policy (rules + NER + Nym net)** | 0 | **13,319 (10.8%)** | 13,319 (10.8%) | 30,073 | 19,556 (15.0%) | 19,556 (15.0%) | 30,073 | 100.0% |
-| v0.14.0 default: rules + NER + the since-removed Kiji net | 0 | not measured | not measured | not measured | 25,179 (19.3%) | 25,179 (19.3%) | 168,276 | 78.4% |
-| v0.14.0 rules + NER | 0 | not measured | not measured | not measured | 27,000 (20.7%) | 27,000 (20.7%) | 28,030 | 100.0% |
-| v0.14.0 rules only | 0 | not measured | not measured | not measured | 93,850 (72.0%) | 93,850 (72.0%) | 5,423 | 100.0% |
+| v0.14.0 default: rules + NER + the since-removed Kiji net | 0 | 22,144 (17.9%) | 22,144 (17.9%) | 168,259 | 25,179 (19.3%) | 25,179 (19.3%) | 168,276 | 78.4% |
+| v0.14.0 rules + NER | 0 | 23,428 (19.0%) | 23,428 (19.0%) | 28,013 | 27,000 (20.7%) | 27,000 (20.7%) | 28,030 | 100.0% |
+| v0.14.0 rules only | 0 | 90,253 (73.0%) | 90,253 (73.0%) | 5,406 | 93,850 (72.0%) | 93,850 (72.0%) | 5,423 | 100.0% |
 
 <!-- BEGIN GENERATED: readme-chart -->
 
@@ -34,9 +34,9 @@ Leaked PII bytes per setup, scored labels v2, lower is better (generated from [`
 ```mermaid
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v2 - lower is better"
-    x-axis ["v0.15.0 – v0.15.1 default (10.8%)"]
-    y-axis "Leaked PII bytes" 0 --> 15000
-    bar [13319]
+    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)"]
+    y-axis "Leaked PII bytes" 0 --> 100000
+    bar [13319, 22144, 23428, 90253]
 ```
 
 Leaked PII bytes per setup, scored labels v1, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json)). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
@@ -51,7 +51,7 @@ xychart-beta horizontal
 
 <!-- END GENERATED: readme-chart -->
 
-Neither default refused a document, so all 2,910 processed documents are also the common set, and every document restores exactly. v0.15.1 scores the same as v0.15.0 here, so they share one row: its card fix covers cards that pass the Luhn check, and most of this corpus's card numbers do not. Against v0.14.0's default, the `gaze setup` default leaks 22% fewer PII bytes with 82% fewer false-positive bytes; the [benchmark history](docs/reference/benchmarks/README.md#release-history) has every measured arm. The headline is scored-label contract v2, the labels Gaze commits to detect (PASSWORD and SECURITYTOKEN are out of contract, gold 123,621 B); v1 scores every original corpus label (gold 130,282 B) and stays beside it because v0.14.0 was only measured under v1, so the v0.14.0 comparison above is a v1 comparison.
+Neither default refused a document, so all 2,910 processed documents are also the common set, and every document restores exactly. v0.15.1 scores the same as v0.15.0 here, so they share one row: its card fix covers cards that pass the Luhn check, and most of this corpus's card numbers do not. Against v0.14.0's default, the `gaze setup` default leaks 40% fewer PII bytes under v2 (22% under v1) with 82% fewer false-positive bytes; the [benchmark history](docs/reference/benchmarks/README.md#release-history) has every measured arm. The headline is scored-label contract v2, the labels Gaze commits to detect (PASSWORD and SECURITYTOKEN are out of contract, gold 123,621 B); v1 scores every original corpus label (gold 130,282 B) and stays beside it for comparison with earlier releases. v0.14.0's v2 numbers come from its own benchmark binary scored by today's harness, which reproduces its committed v1 numbers exactly.
 
 **Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw). Names and other values a recognizer found once are not carried to their other occurrences, so without NER a name repeated in prose can pass raw, and UK national-format phone numbers are not yet detected.
 

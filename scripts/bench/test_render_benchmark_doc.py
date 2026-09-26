@@ -687,6 +687,9 @@ class RefusalAwareHistoryTest(unittest.TestCase):
             r for r in committed["releases"] if "shipped_default_arm" not in r
         ]
         self.assertEqual([r["version"] for r in committed["releases"]], ["v0.14.0"])
+        # One contract only: a v2 re-score would switch to the per-contract table.
+        for row in committed["releases"]:
+            row.pop("contract_results", None)
         block = render.render_history(committed)
         self.assertTrue(block.startswith(
             "| Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |\n"
@@ -884,7 +887,7 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         title_re = re.compile(r"scored labels v(\d+)")
         for path, expected_axes in (
             (render.DEFAULT_README, 2),  # one comparison chart per contract
-            (render.DEFAULT_DOC, 3),  # both comparisons + the v1 leaked trend
+            (render.DEFAULT_DOC, 4),  # comparison + leaked trend, per contract
         ):
             contract, labelled = None, []
             for line in path.read_text(encoding="utf-8").splitlines():

@@ -356,16 +356,28 @@ Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its 
 ```mermaid
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v2 - lower is better"
-    x-axis ["v0.15.0 – v0.15.1 default (10.8%)"]
-    y-axis "Leaked PII bytes" 0 --> 15000
-    bar [13319]
+    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)"]
+    y-axis "Leaked PII bytes" 0 --> 100000
+    bar [13319, 22144, 23428, 90253]
 ```
 
 **Trend across releases — each release's shipped default.** Scored under scored labels v2. The shipped arm changes between releases; the history table names it per row.
 
-> One measured release so far (1 point). The trend charts render from two releases onward.
+```mermaid
+xychart-beta
+    title "Leaked PII bytes, shipped default - scored labels v2"
+    x-axis ["v0.14.0 (17.9%)", "v0.15.0 – v0.15.1 (10.8%)"]
+    y-axis "Leaked PII bytes (lower is better)" 0 --> 25000
+    line [22144, 13319]
+```
 
-> Not measured under scored labels v2: v0.14.0. Those releases are compared under the other contract.
+```mermaid
+xychart-beta
+    title "False-positive bytes, shipped default - scored labels v2"
+    x-axis ["v0.14.0", "v0.15.0 – v0.15.1"]
+    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 190000
+    line [168259, 30073]
+```
 
 #### Scored labels v1 (all original gold labels, kept for comparison with earlier releases)
 
@@ -418,8 +430,10 @@ which stay committed as the machine-readable evidence.
 
 | Release | Measured | Commit | Machine | Scorecards | Shipped arm | Refused ↓ | Leaked PII bytes, all processed, v2 ↓ | Leaked PII bytes, common documents, v2 ↓ | False-positive bytes, v2 ↔ | Leaked PII bytes, all processed, v1 ↓ | Leaked PII bytes, common documents, v1 ↓ | False-positive bytes, v1 ↔ | Restore exact ↑ | clean p95 ms ↓ |
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | `full-stack-kiji-resolve` | 0 | *not measured* | *not measured* | *not measured* | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
+| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json), [`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json) | `full-stack-kiji-resolve` | 0 | 22,144 | 22,144 | 168,259 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
 | v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json) | `policy-file` | 0 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
+
+- **v0.14.0, scored labels v2:** v0.14.0's own `clean_for_bench` (sha256 `fccad457ec06…`, built from `f66a3f2b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `c495a6f1`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
 
 <!-- END GENERATED: history -->
 
@@ -445,6 +459,20 @@ the measured tree only in docs and version pins.
   is zero, and the restore-success decision rate is 1.0. This is documented
   fallback behaviour, and it is not the strict-scan false-failure class fixed in
   #473.
+- **Scored labels v2 was measured afterwards, on v0.14.0's own code.** v0.14.0's
+  harness predates `--scored-labels`, so
+  [`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py)
+  runs v0.14.0's own debug `clean_for_bench` (built from `f66a3f2b` with its
+  Kiji feature and the same pinned Kiji bundle) under today's corpus loaders,
+  validation and scoring. Scored under v1 the same way, it reproduces this row
+  exactly on all three arms
+  ([`scorecard-v0.14.0-rescore-calibration-v1.json`](scorecard-v0.14.0-rescore-calibration-v1.json)),
+  so the v2 numbers
+  ([`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json))
+  differ from v1 only by the contract. One validator rule is the release's own:
+  v0.14.0 did not yet record safety-net redactions as manifest entries (#623
+  changed that), so trace/manifest agreement is checked on tokenizations only,
+  as this row originally was.
 - **The release-over-release comparison is informal.** No `--compare-baseline`
   was passed, so `regression-status.json` reports `not_compared`. Read by hand
   against the last committed full run at `a8f7182` over a byte-identical scored

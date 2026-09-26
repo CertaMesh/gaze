@@ -85,7 +85,72 @@
           "failed_closed_documents": 0,
           "clean_ms_p95": 195.8646645499999
         }
-      }
+      },
+      "contract_results": [
+        {
+          "scored_label_contract": {
+            "id": "scored-labels-v2",
+            "version": 2,
+            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "excluded_labels": [
+              "PASSWORD",
+              "SECURITYTOKEN"
+            ]
+          },
+          "scorecard": "scorecard-v0.14.0-scored-labels-v2.json",
+          "scorecard_sha256": "f813ef1d53986e9500679a0b7d90c2ebda9c4339a20c0e5a09cf58a618148933",
+          "arms": {
+            "rule-floor-extended": {
+              "gold_pii_utf8_bytes": 123621,
+              "surviving_pii_utf8_bytes": 90253,
+              "leak_rate": 0.7300782229556466,
+              "false_positive_utf8_bytes": 5406,
+              "byte_precision": 0.8605766750915562,
+              "zero_leak_document_rate": 0.35223367697594504,
+              "restore_exact_rate": 1.0,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 4.016531399999999
+            },
+            "pass2-ner": {
+              "gold_pii_utf8_bytes": 123621,
+              "surviving_pii_utf8_bytes": 23428,
+              "leak_rate": 0.18951472646233247,
+              "false_positive_utf8_bytes": 28013,
+              "byte_precision": 0.7815000857994165,
+              "zero_leak_document_rate": 0.4219931271477663,
+              "restore_exact_rate": 1.0,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 85.80790219999994
+            },
+            "full-stack-kiji-resolve": {
+              "gold_pii_utf8_bytes": 123621,
+              "surviving_pii_utf8_bytes": 22144,
+              "leak_rate": 0.17912814165877966,
+              "false_positive_utf8_bytes": 168259,
+              "byte_precision": 0.37620858913901,
+              "zero_leak_document_rate": 0.42371134020618556,
+              "restore_exact_rate": 0.784192439862543,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 283.5760731
+            }
+          },
+          "measurement": {
+            "method": "past release, today's harness",
+            "entry_point": "scripts/bench/rescore_past_release.py",
+            "harness_revision": "c495a6f10a1d0254d7a92cce3ef009ecaf3987d3",
+            "binary_sha256": "fccad457ec06ec86d474e9fbc49ff4c9e9f398dd70881e306771da12a9fbe488",
+            "manifest_replacing_actions": [
+              "tokenize"
+            ]
+          }
+        }
+      ]
     },
     {
       "version": "v0.15.0",
