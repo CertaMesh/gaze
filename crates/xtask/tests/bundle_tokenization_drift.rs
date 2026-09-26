@@ -90,12 +90,12 @@ fn bundle_tokenization_drift_gate_fails_when_enabled_recognizer_id_drifts() {
     let rulepack = fixture_root.join("crates/gaze-recognizers/embedded/core.toml");
     let source = fs::read_to_string(&rulepack).expect("read core rulepack");
     assert!(
-        source.contains("id = \"ip.v4\""),
+        source.contains("id = \"email.global\""),
         "fixture must contain expected recognizer id before mutation"
     );
     fs::write(
         &rulepack,
-        source.replacen("id = \"ip.v4\"", "id = \"ip.v4.drift\"", 1),
+        source.replacen("id = \"email.global\"", "id = \"email.global.drift\"", 1),
     )
     .expect("rename recognizer id in fixture");
 
@@ -122,11 +122,11 @@ fn bundle_tokenization_drift_gate_fails_when_enabled_recognizer_id_drifts() {
         "gate failure must name the changed bundle; {text}"
     );
     assert!(
-        text.contains("recognizer=ip.v4") && text.contains("recognizer=ip.v4.drift"),
+        text.contains("recognizer=email.global") && text.contains("recognizer=email.global.drift"),
         "gate failure must name old and new recognizer ids; {text}"
     );
     assert!(
-        text.contains("class=custom:ip_address"),
+        text.contains("class=Email"),
         "gate failure must name the changed class; {text}"
     );
 }

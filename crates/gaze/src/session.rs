@@ -3201,6 +3201,20 @@ mod tests {
     }
 
     #[test]
+    fn restore_dlp_ignores_zero_pan_and_still_flags_valid_card() {
+        for text in [
+            "Card 0000000000000",
+            "Card 0000 0000 0000 0000",
+            "Card 00000000000000000000000000000000000000",
+        ] {
+            assert!(structural_findings(text).is_empty(), "{text}");
+        }
+        let findings = structural_findings("Card 4111 1111 1111 1111");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].class, PiiClass::custom("credit_card").unwrap());
+    }
+
+    #[test]
     fn restore_dlp_zs_separators_scan_exactly_like_an_ascii_space() {
         // Benign Zs-heavy text stays clean; valid identifiers stay flagged. Each line is scanned
         // with ASCII spaces and with every Zs separator, and the findings must agree.

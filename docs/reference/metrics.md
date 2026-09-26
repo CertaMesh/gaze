@@ -139,6 +139,8 @@ in Rust and additive variants can ship in any minor release.
 | `phone_national_region_mismatch` | National phone parser accepted the number but region validation failed. | v0.7 |
 | `ipv4_parse_failed` | IPv4 parser rejected the candidate. | v0.7 |
 | `ipv6_parse_failed` | IPv6 parser rejected the candidate. | v0.7 |
+| `ipv4_documentation_range` | Bundled IPv4 rule excluded an RFC 5737 documentation address. | v0.16 |
+| `ipv6_documentation_range` | Bundled IPv6 rule excluded an RFC 3849 or embedded RFC 5737 documentation address. | v0.16 |
 | `eth_eip55_checksum_failed` | EIP-55 Ethereum checksum validation failed. | v0.7 |
 | `aadhaar_verhoeff_failed` | Aadhaar Verhoeff checksum failed. | v0.7 |
 | `fr_nir_mod97_failed` | French NIR MOD-97 key failed. | v0.7 |
