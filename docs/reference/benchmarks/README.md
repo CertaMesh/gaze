@@ -103,15 +103,21 @@ labels with a reason; it puts the credential labels `PASSWORD` and
 `SECURITYTOKEN` out of contract (user ruling 2026-09-16: credentials are not
 personal data), treats Gaze's own credential classes as neutral predictions, and
 marks `USERNAME`, `URL`, `COMPANYNAME`, `COUNTRY` and `STATE` as rulings still
-pending. v1 stays the default until v2 is ratified as the release contract.
-Out-of-contract bytes are neither leaked nor false positive. Numbers from
-different contracts are never compared as a regression, a row measured under
-anything other than v1 names its contract, and the release trend line only
-joins rows measured under the same contract. See
+pending. **v2 is the headline contract** (user decision 2026-09-26): it scores
+the labels Gaze commits to detect, while v1 scores every original gold label
+and stays beside it for comparison with releases measured before v2 existed.
+A release can carry both: its row is measured under one contract and
+re-scored under the other from the same commit and corpus, each with its own
+committed scorecard. Out-of-contract bytes are neither leaked nor false
+positive. Numbers from different contracts are never compared as a
+regression, every table and chart names its contract, and a release not
+measured under a contract shows *not measured* there instead of borrowing the
+other contract's numbers. See
 [`scripts/bench/README.md`](../../../scripts/bench/README.md#scored-label-contracts).
 
-Contract column note: a release row's contract is shown as "scored labels vN"
-beside its version; a row with no contract label was measured under v1. v3
+Contract column note: the history table carries leak and false-positive
+columns per contract, v2 first. A release row whose own contract is not v1
+shows "scored labels vN" beside its version. v3
 rows carry the same headline columns as v2 plus the gold-gap diagnostic below.
 
 ### Gold-gap protection (contract v3, diagnostic)
@@ -310,12 +316,22 @@ Two consequences worth stating plainly:
 | NER threshold | `0.3` |
 | Model bundle `davlan-mbert-ner-hrl-onnx` | `7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16` |
 | Model bundle `nym-small-int8` | `71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767` |
+| Scorecard, scored labels v2 | [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json) |
+| Scorecard sha256, scored labels v2 | `e20a8fb6b1f6f4d3098b93f3e77d62d73c7cc4c34c96aff527bbbb072931de55` |
+
+**Scored labels v2 (headline: the labels Gaze commits to detect).** Gold PII bytes: 123,621.
+
+| Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `policy-file` **(shipped default)** | 123,621 | 13,319 | 10.7741% | 30,073 | 0.785767 | 55.7732% | 100.0000% | 100.0000% | 100.0000% | 0 | 126.17 |
+
+**Scored labels v1 (all original gold labels, kept for comparison with earlier releases).** Gold PII bytes: 130,282.
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `policy-file` **(shipped default)** | 130,282 | 19,556 | 15.0105% | 30,073 | 0.786412 | 50.4124% | 100.0000% | 100.0000% | 100.0000% | 0 | 138.72 |
 
-Validator-backed labels on `policy-file`. Gold that fails its own checksum stays scored gold: the two leaked-bytes columns split the surviving bytes above, they do not replace them. Shape recall is what a shape-only match (validator ignored) would cover.
+Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its own checksum stays scored gold: the two leaked-bytes columns split the surviving bytes above, they do not replace them. Shape recall is what a shape-only match (validator ignored) would cover.
 
 | Label | Validator | Gold | Gold failing its validator | Validator-backed recall | Shape recall | Leaked bytes, valid gold | Leaked bytes, invalid gold |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -332,6 +348,26 @@ Validator-backed labels on `policy-file`. Gold that fails its own checksum stays
 ## Charts
 
 <!-- BEGIN GENERATED: charts -->
+
+#### Scored labels v2 (headline: the labels Gaze commits to detect)
+
+**Leaked PII bytes — v0.15.0 – v0.15.1 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v2; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
+
+```mermaid
+xychart-beta horizontal
+    title "Leaked PII bytes, scored labels v2 - lower is better"
+    x-axis ["v0.15.0 – v0.15.1 default (10.8%)"]
+    y-axis "Leaked PII bytes" 0 --> 15000
+    bar [13319]
+```
+
+**Trend across releases — each release's shipped default.** Scored under scored labels v2. The shipped arm changes between releases; the history table names it per row.
+
+> One measured release so far (1 point). The trend charts render from two releases onward.
+
+> Not measured under scored labels v2: v0.14.0. Those releases are compared under the other contract.
+
+#### Scored labels v1 (all original gold labels, kept for comparison with earlier releases)
 
 **Leaked PII bytes — v0.15.0 – v0.15.1 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
 
@@ -380,10 +416,10 @@ which stay committed as the machine-readable evidence.
 
 <!-- BEGIN GENERATED: history -->
 
-| Release | Measured | Commit | Machine | Scorecard | Shipped arm | Refused ↓ | Leaked PII bytes, all processed ↓ | Leaked PII bytes, common documents ↓ | False-positive bytes ↔ | Restore exact ↑ | clean p95 ms ↓ |
-| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | `full-stack-kiji-resolve` | 0 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
-| v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json) | `policy-file` | 0 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
+| Release | Measured | Commit | Machine | Scorecards | Shipped arm | Refused ↓ | Leaked PII bytes, all processed, v2 ↓ | Leaked PII bytes, common documents, v2 ↓ | False-positive bytes, v2 ↔ | Leaked PII bytes, all processed, v1 ↓ | Leaked PII bytes, common documents, v1 ↓ | False-positive bytes, v1 ↔ | Restore exact ↑ | clean p95 ms ↓ |
+| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | `full-stack-kiji-resolve` | 0 | *not measured* | *not measured* | *not measured* | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
+| v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json) | `policy-file` | 0 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
 
 <!-- END GENERATED: history -->
 
@@ -592,7 +628,7 @@ python3 scripts/bench/ner-warm-latency.py --repo-root .
 
 ### The release run
 
-Each release measures its own tree. The two steps below are the whole contract:
+Each release measures its own tree. The three steps below are the whole contract:
 
 ```bash
 # 1. Produce the scorecard on the release commit.
@@ -601,13 +637,30 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full
   --seed 20260710 --no-download
 
 # 2. Commit it under its release name and regenerate this document.
-cp target/bench-data/no-opf/scorecard-v4.json \
+cp target/bench-data/no-opf/full/scorecard-v4.json \
    docs/reference/benchmarks/scorecard-vX.Y.Z.json
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
   --version vX.Y.Z \
   --machine "<CPU, cores, RAM, OS and build>" \
   --append-history
+```
+
+Then score the same commit under the headline contract and record it on the
+row just appended. The run must use the same commit, corpus and policy; the
+renderer refuses a result that differs in any of them.
+
+```bash
+# 3. Re-score under contract v2 (the headline) and record it on the row.
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
+  --seed 20260710 --no-download \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json
+cp target/bench-data/no-opf/full/scorecard-v4.json \
+   docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json
+uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json \
+  --version vX.Y.Z \
+  --append-contract-result
 ```
 
 A quick smoke run uses the scorer's seeded stratified sampler instead of the

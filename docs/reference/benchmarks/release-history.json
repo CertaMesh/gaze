@@ -203,7 +203,37 @@
           "leaked_utf8_bytes_validator_passed_gold": 28,
           "leaked_utf8_bytes_validator_failed_gold": 1822
         }
-      }
+      },
+      "contract_results": [
+        {
+          "scored_label_contract": {
+            "id": "scored-labels-v2",
+            "version": 2,
+            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "excluded_labels": [
+              "PASSWORD",
+              "SECURITYTOKEN"
+            ]
+          },
+          "scorecard": "scorecard-v0.15.0-scored-labels-v2.json",
+          "scorecard_sha256": "cb6ac99aa6fa5d145fd77433514361dc385212b52c958c70caf2696c517eca80",
+          "arms": {
+            "policy-file": {
+              "gold_pii_utf8_bytes": 123621,
+              "surviving_pii_utf8_bytes": 13319,
+              "leak_rate": 0.10774059423560722,
+              "false_positive_utf8_bytes": 30073,
+              "byte_precision": 0.785766696349065,
+              "zero_leak_document_rate": 0.5577319587628866,
+              "restore_exact_rate": 1.0,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 249.21323329999998
+            }
+          }
+        }
+      ]
     },
     {
       "version": "v0.15.1",
@@ -321,7 +351,37 @@
           "leaked_utf8_bytes_validator_passed_gold": 28,
           "leaked_utf8_bytes_validator_failed_gold": 1822
         }
-      }
+      },
+      "contract_results": [
+        {
+          "scored_label_contract": {
+            "id": "scored-labels-v2",
+            "version": 2,
+            "file_sha256": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+            "excluded_labels": [
+              "PASSWORD",
+              "SECURITYTOKEN"
+            ]
+          },
+          "scorecard": "scorecard-v0.15.1-scored-labels-v2.json",
+          "scorecard_sha256": "e20a8fb6b1f6f4d3098b93f3e77d62d73c7cc4c34c96aff527bbbb072931de55",
+          "arms": {
+            "policy-file": {
+              "gold_pii_utf8_bytes": 123621,
+              "surviving_pii_utf8_bytes": 13319,
+              "leak_rate": 0.10774059423560722,
+              "false_positive_utf8_bytes": 30073,
+              "byte_precision": 0.785766696349065,
+              "zero_leak_document_rate": 0.5577319587628866,
+              "restore_exact_rate": 1.0,
+              "manifest_valid_document_rate": 1.0,
+              "availability_completion_rate": 1.0,
+              "failed_closed_documents": 0,
+              "clean_ms_p95": 126.16503109999998
+            }
+          }
+        }
+      ]
     }
   ]
 }
