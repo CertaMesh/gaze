@@ -61,6 +61,92 @@ JSON without provider-shape transcoding. The strict Anthropic direct profile is
 different: it admits only its documented Messages schema, rejects unknown or
 opaque media surfaces, and proves the complete transformed request or response.
 
+## Safety nets and refusals
+
+With a safety net configured, such as Nym in the policy `gaze setup` writes,
+each surfaced request string goes through three steps before provider I/O:
+
+1. The primary pipeline tokenizes what the rules detect.
+2. The nets scan the result, and every span they flag becomes a restorable
+   token. This is the Resolve step that
+   `gaze clean --safety-net-fallback strict` runs, through the same library
+   function, so the proxy forwards what that command prints for the same text
+   and policy. A date that Nym flags as `DATE_OF_BIRTH` is forwarded as
+   `<…:Custom:date_1>` and restored in the response.
+3. Admission scans the final text once more and refuses any raw span a net
+   still flags.
+
+The proxy never deletes flagged bytes one way. Whatever step 2 cannot turn into
+a token, and whatever step 3 still flags, is refused before anything reaches
+the provider.
+
+This is where the proxy differs from plain `gaze clean`. Clean's default
+`redact` fallback goes further when the nets' re-run flags something new: it
+runs a second reversible tokenize batch and deletes what is still left one way
+as `[REDACTED:<class>]`. A network boundary never does either. For example,
+under the `gaze setup` policy, `user jweber84 born 1984-03-12` comes out of
+`gaze clean` as three tokens, while the proxy refuses it with
+`residual_suspect` for `custom:date` and `custom:username`.
+
+The nets only find what they flag. A span no net flags and no rule detects,
+such as a `DD.MM.YYYY` date without a cue Nym scores high enough, is forwarded
+raw, exactly as `gaze clean` prints it.
+
+A refusal carries its reason, never the text:
+
+- `error`: the `ProtectionError` variant: `Residual` (a net flagged raw bytes
+  that could not be protected), `SafetyNet` (a net failed to run), `Primary`,
+  `Provenance`, `UnsupportedCoverage` or `EmptyPrimary`.
+- `fallback_reason`: set when step 2 refused: `residual_suspect` (a later scan
+  flagged something new), `overlap_conflict`, `validator_veto` or
+  `anchor_missing`. It is `null` when admission refused.
+- `suspect_classes`: class names, deduplicated, in a stable order. Admission
+  names the suspect it rejected. A step 2 refusal names every class the nets
+  flagged in that string.
+
+The legacy OpenAI and Gemini adapters answer `422 Unprocessable Entity`:
+
+```json
+{
+  "error": "Refused",
+  "refusal": {
+    "error": "Residual",
+    "fallback_reason": "residual_suspect",
+    "suspect_classes": ["name", "location"]
+  }
+}
+```
+
+The Anthropic direct profile answers `422` with its usual error envelope and
+the same `refusal` object:
+
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "api_error",
+    "message": "proxy_validation_failed",
+    "code": "ProtectionRefused",
+    "phase": "RequestTransform",
+    "refusal": {
+      "error": "Residual",
+      "fallback_reason": "residual_suspect",
+      "suspect_classes": ["name", "location"]
+    }
+  }
+}
+```
+
+Each refusal also writes one line to the proxy's stderr, which `gaze proxy
+start` sends to its log file:
+
+```text
+gaze-proxy: request refused: {"error":"Residual","fallback_reason":"residual_suspect","suspect_classes":["name","location"]}
+```
+
+Without a configured net, steps 2 and 3 do nothing and the proxy forwards the
+primary output as before.
+
 ## Anthropic direct sessions
 
 `AnthropicAdapter::new` is intentionally ephemeral and single-request. It creates

@@ -51,9 +51,9 @@ pub use gaze_types::{
 };
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{
-    Error, GazeLocalProtectionTraceItem, Pipeline, PipelineBuilder, PipelineOptimizationConfig,
-    PrefixCacheWriteMode, ProtectionContext, ProtectionError, Result, SafetyNetDecision,
-    SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    BoundaryRefusal, Error, GazeLocalProtectionTraceItem, Pipeline, PipelineBuilder,
+    PipelineOptimizationConfig, PrefixCacheWriteMode, ProtectionContext, ProtectionError, Result,
+    SafetyNetDecision, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
 };
 pub use policy::{
     validate_ner_locale, DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec,

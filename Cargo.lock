@@ -1419,6 +1419,7 @@ dependencies = [
  "hmac",
  "http",
  "libc",
+ "regex",
  "reqwest",
  "same-file",
  "serde",

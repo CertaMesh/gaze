@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`gaze proxy` tokenizes what the safety net flags instead of refusing the
+  request.** Under the policy `gaze setup` writes (Nym enabled), the proxy
+  answered `500 {"error":"Pipeline"}` to any request containing a date, such
+  as `Invoice date 1971-05-30.` or `born on 30 May 1971.`, while `gaze clean`
+  tokenized the same date. The proxy ran only the primary pipeline and then
+  used the net as an admission gate, so every net finding became a refusal.
+  Both request paths (the legacy OpenAI and Gemini adapters and the Anthropic
+  direct profile) now run the Resolve step of
+  `gaze clean --safety-net-fallback strict`, through one shared library
+  function (`Pipeline::resolve_boundary_text`), then admission as before. The
+  flagged span is forwarded as a token and restored in the response. What
+  Resolve cannot tokenize is still refused, never deleted. Plain `gaze clean`
+  defaults to the `redact` fallback: when the nets' re-run flags something
+  new, it tokenizes that in a second reversible batch and deletes what is left
+  one way. The proxy refuses such a request instead (for example
+  `user jweber84 born 1984-03-12` under the `gaze setup` policy). Spans that no
+  net flags and no rule detects, such as a `DD.MM.YYYY` date without a cue,
+  still reach the provider raw, exactly as `gaze clean` prints them. The old
+  behaviour blocked some of them only because it refused the whole request
+  whenever any other date in it was flagged. No leak shipped: the old
+  behaviour failed closed. Affected: v0.15.0 with a configured net (solo todo
+  #3847).
+- **Proxy refusals say why.** A refusal is now `422` with the typed
+  `ProtectionError` variant, the fallback reason and the suspect classes,
+  never the text, and one line on the proxy's stderr. The legacy adapters
+  answer `{"error":"Refused","refusal":{…}}`; the Anthropic direct profile
+  answers code `ProtectionRefused` with the same `refusal` object. It was an
+  opaque `500 {"error":"Pipeline"}` (legacy) or `502 InvalidToken` (direct)
+  with an empty log. The shape is documented in
+  `docs/explanation/proxy/proxy-runtime.md` (solo todo #3847).
+
 ### Security
 
 - **A payment card with digits touching it is now tokenized before the text
