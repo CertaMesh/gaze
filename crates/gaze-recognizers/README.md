@@ -69,14 +69,12 @@ assembly uses `RegexDetector::with_rulepack_fields` so locale tags, scores,
 priorities, token families, capture groups, exclusions, validators, and
 normalizers can flow from TOML rulepacks into the registry.
 
-Current validator and normalizer enums:
-
-- `ValidatorKind::EmailRfc`
-- `ValidatorKind::E164Phone` (requires the `phone-parser` feature)
-- `ValidatorKind::Luhn` (Mod 10 checksum, used by `card.structural`)
-- `ValidatorKind::IbanMod97` (ISO 7064 mod-97 IBAN checksum, used by `iban.structural`)
-- `NormalizerKind::EmailCanonical`
-- `NormalizerKind::IbanCanonical` (uppercase + whitespace strip, paired with `iban_mod97`)
+`ValidatorKind` and `NormalizerKind` are closed sets. The complete variant
+lists, rulepack spellings, feature gates and fail-closed wiring stage are in
+[Closed validator and normalizer sets](../../docs/reference/redaction-classes.md#closed-validator-and-normalizer-sets).
+Examples: `ValidatorKind::Luhn` (Mod 10 checksum, used by `card.structural`),
+`ValidatorKind::IbanMod97` (ISO 7064 mod-97, used by `iban.structural`) and
+`ValidatorKind::E164Phone` (requires the `phone-parser` feature).
 
 `E164Phone` is implemented via the `phonenumber` crate. It preserves valid E.164
 matches such as synthetic non-reachable `+49-30-0000-0000` (not a real number)
