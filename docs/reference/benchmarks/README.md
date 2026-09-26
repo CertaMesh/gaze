@@ -103,15 +103,21 @@ labels with a reason; it puts the credential labels `PASSWORD` and
 `SECURITYTOKEN` out of contract (user ruling 2026-09-16: credentials are not
 personal data), treats Gaze's own credential classes as neutral predictions, and
 marks `USERNAME`, `URL`, `COMPANYNAME`, `COUNTRY` and `STATE` as rulings still
-pending. v1 stays the default until v2 is ratified as the release contract.
-Out-of-contract bytes are neither leaked nor false positive. Numbers from
-different contracts are never compared as a regression, a row measured under
-anything other than v1 names its contract, and the release trend line only
-joins rows measured under the same contract. See
+pending. **v2 is the headline contract** (user decision 2026-09-26): it scores
+the labels Gaze commits to detect, while v1 scores every original gold label
+and stays beside it for comparison with releases measured before v2 existed.
+A release can carry both: its row is measured under one contract and
+re-scored under the other from the same commit and corpus, each with its own
+committed scorecard. Out-of-contract bytes are neither leaked nor false
+positive. Numbers from different contracts are never compared as a
+regression, every table and chart names its contract, and a release not
+measured under a contract shows *not measured* there instead of borrowing the
+other contract's numbers. See
 [`scripts/bench/README.md`](../../../scripts/bench/README.md#scored-label-contracts).
 
-Contract column note: a release row's contract is shown as "scored labels vN"
-beside its version; a row with no contract label was measured under v1. v3
+Contract column note: the history table carries leak and false-positive
+columns per contract, v2 first. A release row whose own contract is not v1
+shows "scored labels vN" beside its version. v3
 rows carry the same headline columns as v2 plus the gold-gap diagnostic below.
 
 ### Gold-gap protection (contract v3, diagnostic)
@@ -259,7 +265,10 @@ justifies weakening the current synthetic holdout gate.
 These numbers score one synthetic EN/DE holdout. A perfect row here is evidence
 about **this corpus**, not proof that a recognizer is complete — shapes the
 corpus does not contain are unmeasured. Recall claims about a rule change need a
-direct differential probe, not a scorecard row.
+direct differential probe, not a scorecard row. The generated
+[agentic layers](#agentic-layers-and-the-rule-gate) cover some of the agent
+shapes this corpus lacks, and they have the same limit: they measure only the
+families and surfaces they generate.
 
 Two consequences worth stating plainly:
 
@@ -310,12 +319,22 @@ Two consequences worth stating plainly:
 | NER threshold | `0.3` |
 | Model bundle `davlan-mbert-ner-hrl-onnx` | `7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16` |
 | Model bundle `nym-small-int8` | `71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767` |
+| Scorecard, scored labels v2 | [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json) |
+| Scorecard sha256, scored labels v2 | `e20a8fb6b1f6f4d3098b93f3e77d62d73c7cc4c34c96aff527bbbb072931de55` |
+
+**Scored labels v2 (headline: the labels Gaze commits to detect).** Gold PII bytes: 123,621.
+
+| Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `policy-file` **(shipped default)** | 123,621 | 13,319 | 10.7741% | 30,073 | 0.785767 | 55.7732% | 100.0000% | 100.0000% | 100.0000% | 0 | 126.17 |
+
+**Scored labels v1 (all original gold labels, kept for comparison with earlier releases).** Gold PII bytes: 130,282.
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `policy-file` **(shipped default)** | 130,282 | 19,556 | 15.0105% | 30,073 | 0.786412 | 50.4124% | 100.0000% | 100.0000% | 100.0000% | 0 | 138.72 |
 
-Validator-backed labels on `policy-file`. Gold that fails its own checksum stays scored gold: the two leaked-bytes columns split the surviving bytes above, they do not replace them. Shape recall is what a shape-only match (validator ignored) would cover.
+Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its own checksum stays scored gold: the two leaked-bytes columns split the surviving bytes above, they do not replace them. Shape recall is what a shape-only match (validator ignored) would cover.
 
 | Label | Validator | Gold | Gold failing its validator | Validator-backed recall | Shape recall | Leaked bytes, valid gold | Leaked bytes, invalid gold |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -332,6 +351,38 @@ Validator-backed labels on `policy-file`. Gold that fails its own checksum stays
 ## Charts
 
 <!-- BEGIN GENERATED: charts -->
+
+#### Scored labels v2 (headline: the labels Gaze commits to detect)
+
+**Leaked PII bytes — v0.15.0 – v0.15.1 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v2; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
+
+```mermaid
+xychart-beta horizontal
+    title "Leaked PII bytes, scored labels v2 - lower is better"
+    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)"]
+    y-axis "Leaked PII bytes" 0 --> 100000
+    bar [13319, 22144, 23428, 90253]
+```
+
+**Trend across releases — each release's shipped default.** Scored under scored labels v2. The shipped arm changes between releases; the history table names it per row.
+
+```mermaid
+xychart-beta
+    title "Leaked PII bytes, shipped default - scored labels v2"
+    x-axis ["v0.14.0 (17.9%)", "v0.15.0 – v0.15.1 (10.8%)"]
+    y-axis "Leaked PII bytes (lower is better)" 0 --> 25000
+    line [22144, 13319]
+```
+
+```mermaid
+xychart-beta
+    title "False-positive bytes, shipped default - scored labels v2"
+    x-axis ["v0.14.0", "v0.15.0 – v0.15.1"]
+    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 190000
+    line [168259, 30073]
+```
+
+#### Scored labels v1 (all original gold labels, kept for comparison with earlier releases)
 
 **Leaked PII bytes — v0.15.0 – v0.15.1 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
 
@@ -380,10 +431,12 @@ which stay committed as the machine-readable evidence.
 
 <!-- BEGIN GENERATED: history -->
 
-| Release | Measured | Commit | Machine | Scorecard | Shipped arm | Refused ↓ | Leaked PII bytes, all processed ↓ | Leaked PII bytes, common documents ↓ | False-positive bytes ↔ | Restore exact ↑ | clean p95 ms ↓ |
-| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | `full-stack-kiji-resolve` | 0 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
-| v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json) | `policy-file` | 0 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
+| Release | Measured | Commit | Machine | Scorecards | Shipped arm | Refused ↓ | Leaked PII bytes, all processed, v2 ↓ | Leaked PII bytes, common documents, v2 ↓ | False-positive bytes, v2 ↔ | Leaked PII bytes, all processed, v1 ↓ | Leaked PII bytes, common documents, v1 ↓ | False-positive bytes, v1 ↔ | Restore exact ↑ | clean p95 ms ↓ |
+| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json), [`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json) | `full-stack-kiji-resolve` | 0 | 22,144 | 22,144 | 168,259 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
+| v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json) | `policy-file` | 0 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
+
+- **v0.14.0, scored labels v2:** v0.14.0's own `clean_for_bench` (sha256 `fccad457ec06…`, built from `f66a3f2b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `c495a6f1`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
 
 <!-- END GENERATED: history -->
 
@@ -409,6 +462,20 @@ the measured tree only in docs and version pins.
   is zero, and the restore-success decision rate is 1.0. This is documented
   fallback behaviour, and it is not the strict-scan false-failure class fixed in
   #473.
+- **Scored labels v2 was measured afterwards, on v0.14.0's own code.** v0.14.0's
+  harness predates `--scored-labels`, so
+  [`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py)
+  runs v0.14.0's own debug `clean_for_bench` (built from `f66a3f2b` with its
+  Kiji feature and the same pinned Kiji bundle) under today's corpus loaders,
+  validation and scoring. Scored under v1 the same way, it reproduces this row
+  exactly on all three arms
+  ([`scorecard-v0.14.0-rescore-calibration-v1.json`](scorecard-v0.14.0-rescore-calibration-v1.json)),
+  so the v2 numbers
+  ([`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json))
+  differ from v1 only by the contract. One validator rule is the release's own:
+  v0.14.0 did not yet record safety-net redactions as manifest entries (#623
+  changed that), so trace/manifest agreement is checked on tokenizations only,
+  as this row originally was.
 - **The release-over-release comparison is informal.** No `--compare-baseline`
   was passed, so `regression-status.json` reports `not_compared`. Read by hand
   against the last committed full run at `a8f7182` over a byte-identical scored
@@ -594,7 +661,7 @@ Pull requests that change detection or the benchmark use these commands under th
 
 ### The release run
 
-Each release measures its own tree. The two steps below are the whole contract:
+Each release measures its own tree. The three steps below are the whole contract:
 
 ```bash
 # 1. Produce the scorecard on the release commit.
@@ -603,13 +670,30 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full
   --seed 20260710 --no-download
 
 # 2. Commit it under its release name and regenerate this document.
-cp target/bench-data/no-opf/scorecard-v4.json \
+cp target/bench-data/no-opf/full/scorecard-v4.json \
    docs/reference/benchmarks/scorecard-vX.Y.Z.json
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
   --version vX.Y.Z \
   --machine "<CPU, cores, RAM, OS and build>" \
   --append-history
+```
+
+Then score the same commit under the headline contract and record it on the
+row just appended. The run must use the same commit, corpus and policy; the
+renderer refuses a result that differs in any of them.
+
+```bash
+# 3. Re-score under contract v2 (the headline) and record it on the row.
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
+  --seed 20260710 --no-download \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json
+cp target/bench-data/no-opf/full/scorecard-v4.json \
+   docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json
+uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json \
+  --version vX.Y.Z \
+  --append-contract-result
 ```
 
 A quick smoke run uses the scorer's seeded stratified sampler instead of the
@@ -680,6 +764,222 @@ validated response are Python-runner provenance; response latency consumes the
 producer's honest `clean_ms`. See
 [`scripts/bench/README.md`](../../../scripts/bench/README.md) for model
 locations, planning runtime, and the guarded baseline-acceptance command.
+
+### Agentic layers and the rule gate
+
+The Kiji/A4 corpus is prose. It contains no tool-call JSON, no `key=value`
+logs, no CSV and no NBSP, which are the shapes agents actually send. A rule fix
+for one of those shapes cannot move the Kiji numbers, so the runner also scores
+three generated layers beside it:
+
+| Layer | What it is | Where it lives in the scorecard |
+| --- | --- | --- |
+| C | Kiji EN/DE holdout plus the A4 negative corpus | `runs[]` (unchanged) |
+| A | Generated identifiers in agentic surfaces, each checksum value with a checksum-invalid twin | `layers.A.runs[]` |
+| D | Generated benign lookalikes: amounts, SKUs, `#RRGGBB`, `L99 9999`, versions, order and tracking IDs, UUID fragments, room and seat numbers, invoice and log dates, and the counterweights below | `layers.D.runs[]` |
+| R | Repeat-value slice: one value repeated in several shapes in one document, next to decoys that collide with it | `layers.R.runs[]` |
+
+[`scripts/bench/agentic_layers.py`](../../../scripts/bench/agentic_layers.py)
+generates all three deterministically, with no network access and no
+model:
+
+- **Layer A families:** payment card; IBAN for DE (spaced and compact), AT,
+  NL, FR and GB; Steuer-ID; BSN; NHS number; CPF; email; German and US phone
+  numbers; dates of birth; and sender names in email headers, including
+  hyphenated surnames.
+- **Layer A surfaces:** prose with a cue, prose without a cue, NBSP-spaced,
+  NARROW-NBSP-spaced, log `key=value`, CSV, and tool-call JSON. The tool-call
+  JSON is the single-encoded `arguments` string that `gaze-proxy` cleans.
+- **Checksum code:** written from the published standards, not from Gaze's
+  validators. Standard test vectors pin it, and the validator probe
+  cross-checks it on every run.
+- **Invalid twins:** they stay scored gold, as in the Kiji validator gold
+  census. `layers.A.validator_gold_census` and each run's
+  `validator_recall_by_label` split the result by validity. That split uses
+  Gaze's validators, which reject NBSP and NARROW NBSP group separators, so an
+  NBSP-spaced valid IBAN, NHS number, Steuer-ID or phone number counts there as
+  validator-failed. The `per_cell` validity is the generator's own verdict.
+- **Gold spans:** they are the inserted values at their UTF-8 byte offsets.
+- **Layer R, the repeat-value slice:** each document repeats a name, an email,
+  an IBAN, a phone number or a Steuer-ID two to four times. Names appear in a
+  `From:` header, as `Ms Surname`, in a sign-off, in lower and upper case,
+  NBSP-joined and split across a line break, including hyphenated surnames.
+  Identifiers appear spaced in prose and compact in JSON and a log line. Every
+  repeat is gold. The same documents carry decoys, which are never gold:
+  ordinary words spelled like a name part (`Rose garden`, `in May`,
+  `Will you`, `Grant approved`, `Page 3`, `the Court hearing`), words and file
+  names that contain a name part (`Annual` for Ann, `Iceberg` for Berg), and
+  digit runs shared with a repeated identifier. Any byte predicted over a decoy
+  counts as a false positive. A given name and a surname are separate gold
+  spans, as in Kiji, so a single token over the full name also counts the
+  separator between them (1 byte for a space, 2 for an NBSP) as a false
+  positive. The JSONL output records the decoy spans. Several test templates
+  also carry the fixed log timestamp `2026-04-17T08:03:51Z`, and Gaze
+  tokenizes it as a date. That is template noise in the false-positive bytes
+  of layers A and R: 130 B in each of R's phone and Steuer-ID repeat cells. It
+  is identical on both sides of a gate comparison. This
+  slice is the baseline for a change that re-finds known values across a
+  document: it has to lower R's leaked bytes without raising R's
+  false-positive bytes. The value makers take a partition, so a layer B
+  transcript can reuse the same pools.
+
+Every result is also reported per `layer|family|surface|validity` cell under
+`per_cell`. [`scored-labels-agentic.json`](scored-labels-agentic.json) rules on
+every generated label, and it fails closed on a label it does not list, on a
+ruling for a label the generator no longer emits, and on a generator version
+mismatch. Layers A, D and R use this contract in every run, so
+`--scored-labels` changes layer C only.
+
+**Counterweights.** Some layer A gold can be reached only by a context-free
+rule, a rule that looks at shape alone. These are checksum-invalid twins and
+dates of birth in prose without a cue. A rule that tags every 9-digit run or
+every `DD.MM.YYYY` date would lower layer A's leak there. Layer D therefore
+carries the same shapes as benign values, so that rule pays for its catch in
+false-positive bytes:
+
+- reference numbers of 9, 10 and 11 digits, bare and in the NHS, Steuer-ID and
+  CPF groupings, each failing every checksum of its length;
+- space-grouped 16-digit voucher codes that fail Luhn, the card twin's shape;
+- delivery and due dates in German and US format, dated 2024 to 2027.
+
+`COUNTERWEIGHTS` in `agentic_layers.py` maps each such gold cell to its D
+family. A test fails when a context-free-only cell has neither a counterweight
+nor a written exemption. It also fails when a counterweight lacks one of its
+gold's display shapes. A shape maps digits to `9` and letters to `A`, and keeps
+every other character exactly, because a rule for `9999 9999` never sees
+`9999-9999`. IBAN twins are exempt: an IBAN shape that fails mod-97 has no
+common benign use.
+
+Two deliberately over-broad rules check the counterweights end to end.
+[`mutant-bare-nine-digits.toml`](../../../scripts/bench/fixtures/agentic/mutant-bare-nine-digits.toml)
+tags every bare 9-digit run, and
+[`mutant-spaced-sixteen-digits.toml`](../../../scripts/bench/fixtures/agentic/mutant-spaced-sixteen-digits.toml)
+tags every space-grouped 16-digit run without a Luhn check. Append one to the
+policy and run `agentic_layers.py measure`. Each must lower layer A's leak and
+raise layer D's false-positive bytes on its counterweight (`ref_number_9` or
+`ref_number_16`), where the unmodified policy has none.
+
+**Held-out protocol.** Templates, machine keys, name pools, email domains,
+phone prefixes, the layer R name-word and decoy pools, and seeds are split
+into a `dev` and a `test` partition before anything is generated. Machine keys
+differ even when case and `-`/`_` are ignored. Descriptive cue phrases are
+split too, but the standard names of the identifiers (`IBAN`, `Steuer-ID`,
+`BSN`, `NHS number`, `CPF`) appear in both partitions, because a real document
+uses exactly those words. Every perturbation (the NBSP variants
+and the invalid twin) comes from its parent document inside that parent's
+partition. The runner scores `test` only. Use `dev` for rule work:
+
+```bash
+python3 scripts/bench/agentic_layers.py generate --partition dev \
+  --output target/bench-data/agentic-dev.jsonl
+```
+
+`layers.generator` records the generator version, the seed and the corpus
+SHA-256. `scripts/bench/test_agentic_layers.py` pins both partition hashes, so
+a generator change must bump `GENERATOR_VERSION`, the contract's
+`generator_version` and the pins together. Once a test generation has been
+published, its failures belong in the next dev generation.
+
+**The rule gate.** A pull request that adds or widens a detection rule merges
+only on a fresh base-versus-candidate pair of full-profile runs: the base is
+the merge base on `main`, the candidate is the PR head, and both use the same
+policy, seed and corpus. The pair is scored under contract v2 and again under
+v1:
+
+```bash
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
+  --seed 20260710 --no-download --release --policy <gaze-setup-policy.toml> \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+  --output-dir target/bench-data/gate-base-v2   # then candidate, then both under v1
+python3 scripts/bench/agentic_layers.py gate \
+  --base target/bench-data/gate-base-v2/full/scorecard-v4.json \
+  --candidate target/bench-data/gate-cand-v2/full/scorecard-v4.json
+```
+
+For each contract, the production arm's numbers must satisfy all of these:
+
+1. **No layer leaks more.** Leaked bytes do not rise in C, A, D or R. This
+   is checked twice: on the gated bytes below, and on the headline leaked
+   bytes over all gold. A regression cannot hide inside gold the gate leaves
+   out.
+2. **No layer refuses more.** A refused document drops out of the leak count,
+   so a rise in failed-closed documents in any layer fails the gate.
+3. **Net bytes improve.** At least one layer's leaked bytes fall, and the
+   false-positive bytes added, summed over all four layers, are fewer than the
+   leaked bytes saved, summed the same way. A false-positive-only fix passes
+   instead when no layer's leaked bytes change and the summed false-positive
+   bytes fall.
+
+The gate counts only gold that a precise rule can reach. Layer A leaves out
+its checksum-invalid twins, and layer C leaves out the Kiji gold that fails its
+own validator (from the per-label validator split). Both kinds stay in the
+headline and the census, and the gate reports them beside its verdict. Their
+bytes are left out of the net-bytes credit, but a rise in them still fails
+rule 1. Only a rule without a checksum can reach them, and the layer
+D counterweights already price that kind of rule separately. This net-bytes
+limit is the user's decision of 2026-09-26.
+
+Gold validity is a property of the gold, but the validator probe that decides
+it is built from the measured tree. `layers.gold_validity.C` therefore records
+a SHA-256 over every layer C gold span's verdict, and the gate compares it. A
+candidate whose validators classify any Kiji gold span differently from the
+base is not comparable (exit `2`). Without this check, a validator regression
+could turn valid PII into "failed its checksum" and drop it from the gated
+bytes. The gate then needs an explicit review decision.
+
+[`gate-pin-mutants.json`](../../../scripts/bench/fixtures/agentic/gate-pin-mutants.json)
+pins the true verdicts of two real full-harness runs against main:
+
+- **The spaced 16-digit rule fails.** It saves 15 gated leaked bytes and adds
+  551 false-positive bytes. Its 1,830 byte Kiji "gain" is entirely card and
+  IBAN gold that fails Luhn or mod-97.
+- **The bare 9-digit rule passes.** It saves 353 gated leaked bytes: 180 of
+  valid BSN, and 173 of Kiji driver-licence, ID-card, national-ID, SSN and
+  building numbers. It adds 295 false-positive bytes.
+
+**The gate is necessary, not sufficient.** It measures only these corpora.
+Review still judges precision. A bare 9-digit rule would be refused in review
+for the false positives it causes on reference numbers outside the corpus,
+even though it passes here.
+
+The gate prints every layer's numbers, twins included. It exits `0` on
+pass, `1` on fail, and `2` when the two scorecards differ in policy, arm
+set, Kiji dataset, corpus hash or contract file, because such a pair is not
+comparable. `agentic_layers.py totals <scorecard>` prints the gated totals of
+one scorecard, and `agentic_layers.py grid <scorecard>` prints the family × surface
+coverage grid and the layer R table for a PR description. Multi-turn
+transcripts, restore round trips and token stability (the planned layer B) are
+not measured yet.
+
+**Past releases.** Each time these docs change, the layers are also measured
+for the displayed releases so that the comparison stays honest.
+`agentic_layers.py measure` scores layers A, D and R with any bench binary.
+Use a release's own `clean_for_bench`, built at its tag, with the arm that
+release shipped. `--vocabulary-root` points at a checkout of that tag, so the
+release's own rulepacks validate its source IDs:
+
+```bash
+python3 scripts/bench/agentic_layers.py measure --label v0.15.1 \
+  --binary <v0.15.1 checkout>/target/release/examples/clean_for_bench \
+  --vocabulary-root <v0.15.1 checkout> \
+  --config policy-file --policy <gaze-setup-policy.toml> \
+  --output target/bench-data/layers-v0.15.1.json
+```
+
+The output has `layers` and an empty `runs`. The release's committed
+scorecard already holds its layer C numbers.
+
+Two options exist for v0.14.0 only, and the output records both:
+
+- `--manifest-actions tokenize` applies the manifest rule from before #623,
+  the same one `rescore_past_release.py` uses.
+- `--split-composite-source-ids` handles v0.14.0's joined source IDs such as
+  `email.header.name+ner`. The source-ID grammar refuses the `+`, and that
+  grammar is also in v0.14.0's own harness; the Kiji corpus never contains the
+  email-header shape that triggers it. With the option, each part is checked
+  on its own against the grammar and the release's vocabulary.
+
+Both options are off by default.
 
 ### Hardware spec template
 

@@ -159,6 +159,9 @@ class Document:
     neutral_prediction_classes: frozenset[str] = frozenset()
     # Contract v3 gold-gap rule; None under v1 and v2, where it never runs.
     gold_gap: GoldGapRule | None = None
+    # Reporting cell of a generated agentic-layer document; None for every
+    # other corpus, whose scorecards therefore carry no per_cell block.
+    cell: str | None = None
 
     @property
     def locale_chain(self) -> list[str]:
@@ -449,6 +452,7 @@ def apply_scored_label_contract(
                 excluded_spans=document.excluded_spans + excluded,
                 neutral_prediction_classes=contract.neutral_prediction_classes,
                 gold_gap=contract.gold_gap,
+                cell=document.cell,
             )
         )
     return applied
@@ -1020,10 +1024,29 @@ def load_committed_source_id_vocabulary(
 COMMITTED_SOURCE_ID_VOCABULARY = load_committed_source_id_vocabulary()
 
 
+#: Trace actions that are manifest entries. Redactions joined the manifest in
+#: #623 (after v0.14.0); a release built before that recorded only tokenizations there, so
+#: scoring its own binary checks trace/manifest agreement under its own rule.
+#: The leak math reads every trace item either way.
+MANIFEST_REPLACING_ACTIONS = frozenset({"tokenize", "redact"})
+PRE_REDACT_MANIFEST_ACTIONS = frozenset({"tokenize"})
+
+
+def _check_replacing_actions(replacing_actions: frozenset[str]) -> None:
+    """Only the two manifest rules above exist; tokenizations always count."""
+    if "tokenize" not in replacing_actions or not replacing_actions <= MANIFEST_REPLACING_ACTIONS:
+        raise ValueError(
+            f"replacing_actions must be MANIFEST_REPLACING_ACTIONS or "
+            f"PRE_REDACT_MANIFEST_ACTIONS, got {sorted(replacing_actions)}"
+        )
+
+
 def _validate_final_protection_trace(
     document: Document,
     value: object,
     manifest: Sequence[object],
+    replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
+    split_composite_source_ids: bool = False,
 ) -> list[Span]:
     trace = _expect_list(value, "final_protection_trace")
     original_text = document.text.encode("utf-8")
@@ -1074,8 +1097,12 @@ def _validate_final_protection_trace(
             )
         for source_index, source_id in enumerate(source_ids):
             source_context = f"{context}.provenance.source_ids[{source_index}]"
-            _validate_source_id(source_id, source_context)
-            source_identifiers.append((source_id, source_context))
+            # v0.14.0 joins agreeing sources as `a+b` (`email.header.name+ner`);
+            # scoring its own binary checks each part like any other ID.
+            parts = source_id.split("+") if split_composite_source_ids else [source_id]
+            for part in parts:
+                _validate_source_id(part, source_context)
+                source_identifiers.append((part, source_context))
         if source_ids != sorted(source_ids) or len(source_ids) != len(set(source_ids)):
             raise ResponseValidationError(
                 f"{context}.provenance.source_ids: expected sorted duplicate-free IDs"
@@ -1099,7 +1126,7 @@ def _validate_final_protection_trace(
         # `[REDACTED:<class>]` marker and records it like any other replacement.
         # Counting only tokenizations here would read every redaction as a
         # manifest entry nothing in the trace explains, and reject the document.
-        if action in ("tokenize", "redact"):
+        if action in replacing_actions:
             tokenize_items[(raw_start, raw_end, pii_class)] += 1
 
     manifest_items: Counter[tuple[int, int, str]] = Counter()
@@ -1134,7 +1161,14 @@ def _validate_final_protection_trace(
     return predictions
 
 
-def validate_response(document: Document, value: object) -> dict[str, object]:
+def validate_response(
+    document: Document,
+    value: object,
+    *,
+    replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
+    split_composite_source_ids: bool = False,
+) -> dict[str, object]:
+    _check_replacing_actions(replacing_actions)
     response = _expect_object(value, f"{document.uid}: response")
     if "pipeline_error_code" in response:
         response = _expect_exact_keys(
@@ -1223,7 +1257,11 @@ def validate_response(document: Document, value: object) -> dict[str, object]:
             )
         _validate_success_timing(response["timing"], "timing")
         _validate_final_protection_trace(
-            document, response["final_protection_trace"], manifest
+            document,
+            response["final_protection_trace"],
+            manifest,
+            replacing_actions,
+            split_composite_source_ids,
         )
         if (
             any(
@@ -2307,7 +2345,11 @@ def run_config(
     warmup_count: int = 0,
     validator_measurements: Mapping[str, object] | None = None,
     policy_path: Path | None = None,
+    replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
+    split_composite_source_ids: bool = False,
 ) -> dict[str, object]:
+    # Checked before the subprocess starts, not on the first response.
+    _check_replacing_actions(replacing_actions)
     if not documents:
         raise ValueError(f"{config}: cannot run an empty document cell")
     attempted_document_ids = [document.uid for document in documents]
@@ -2337,6 +2379,7 @@ def run_config(
     per_negative_category: defaultdict[str, MetricAccumulator] = defaultdict(
         MetricAccumulator
     )
+    per_cell: defaultdict[str, MetricAccumulator] = defaultdict(MetricAccumulator)
     direct = RecallAccumulator()
     contextual = RecallAccumulator()
     excluded_label_coverage: defaultdict[str, RecallAccumulator] = defaultdict(
@@ -2363,7 +2406,12 @@ def run_config(
             "text": document.text,
         }
         request_started = time.perf_counter()
-        response = validate_response(document, process.exchange(request))
+        response = validate_response(
+            document,
+            process.exchange(request),
+            replacing_actions=replacing_actions,
+            split_composite_source_ids=split_composite_source_ids,
+        )
         process.check_message_deadline()
         validated_at = time.perf_counter()
         if first_response_ms is None:
@@ -2440,6 +2488,8 @@ def run_config(
                 per_negative_category[document.negative_category].add(
                     document, predictions
                 )
+            if document.cell is not None:
+                per_cell[document.cell].add(document, predictions)
             direct_spans = [
                 span
                 for span in document.spans
@@ -2574,6 +2624,11 @@ def run_config(
         "per_negative_category": {
             key: value.result() for key, value in sorted(per_negative_category.items())
         },
+        **(
+            {"per_cell": {key: value.result() for key, value in sorted(per_cell.items())}}
+            if any(document.cell is not None for document in documents)
+            else {}
+        ),
         "latency_ms": {
             key: timing_summary(value) for key, value in sorted(success_timing.items())
         },

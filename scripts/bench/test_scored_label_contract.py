@@ -353,15 +353,20 @@ class RendererContractTests(unittest.TestCase):
         rows[2]["scored_label_contract"] = dict(v2_block)
         history = {**render.empty_history(), "releases": rows}
 
+        # Mixed contracts render one section each; the v2 line joins only the
+        # v2 rows and the v1 section says which release it lacks.
         charts = render.render_charts(history)
-        self.assertIn("line [25000, 20000]", charts)
-        self.assertIn("1 row(s) under another contract", charts)
+        v2, v1 = charts.split("#### Scored labels v1", 1)
+        self.assertIn("line [25000, 20000]", v2)
+        self.assertIn("Not measured under scored labels v1: v0.14.0, v0.15.0.", v1)
+        self.assertNotIn("line [", v1)
 
         # A different v2 file is a different contract too.
         rows[1]["scored_label_contract"]["file_sha256"] = "d" * 64
         charts = render.render_charts(history)
-        self.assertNotIn("line [", charts)
-        self.assertIn("2 row(s) under another contract", charts)
+        v2 = charts.split("#### Scored labels v1", 1)[0]
+        self.assertNotIn("line [", v2)
+        self.assertIn("1 row(s) under another contract", v2)
 
         # History measured under one contract renders exactly as before.
         for row in rows:

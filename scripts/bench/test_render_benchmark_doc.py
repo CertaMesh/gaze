@@ -687,6 +687,9 @@ class RefusalAwareHistoryTest(unittest.TestCase):
             r for r in committed["releases"] if "shipped_default_arm" not in r
         ]
         self.assertEqual([r["version"] for r in committed["releases"]], ["v0.14.0"])
+        # One contract only: a v2 re-score would switch to the per-contract table.
+        for row in committed["releases"]:
+            row.pop("contract_results", None)
         block = render.render_history(committed)
         self.assertTrue(block.startswith(
             "| Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |\n"
@@ -840,8 +843,13 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         rate = value["releases"][1]["arms"]["policy-file"]["leak_rate"]
         self.assertEqual(labels, [f"v0.15.0 default ({pct(rate)})"])
         charts = render.render_charts(value)
-        self.assertIn("1 row(s) under another contract", charts)
-        self.assertIn("One measured release so far (1 point)", charts)
+        # Each contract gets its own section, headline first; neither borrows
+        # the other contract's row.
+        v2, v1 = charts.split("#### Scored labels v1", 1)
+        self.assertTrue(v2.startswith("#### Scored labels v2 (headline"), v2[:60])
+        self.assertIn("Not measured under scored labels v2: v0.14.0.", v2)
+        self.assertIn("Not measured under scored labels v1: v0.15.0.", v1)
+        self.assertEqual(charts.count("One measured release so far (1 point)"), 2)
 
     def test_previous_release_on_another_corpus_leaves_the_comparison(self):
         value = self.mixed()
@@ -852,50 +860,50 @@ class ShippedDefaultChartsTest(unittest.TestCase):
 
     def test_committed_chart_labels_carry_each_bars_leak_rate(self):
         """Every x-axis label in both committed files ends with the leak rate
-        of the arm it names, read from the history (and consistent with
-        leaked / gold bytes), rounded to one decimal."""
+        of the arm it names under the chart's own contract, read from the
+        history (and consistent with leaked / gold bytes), rounded to one
+        decimal."""
         committed = render.load_history(render.DEFAULT_HISTORY)
-        rows = {row["version"]: row for row in committed["releases"]}
-        old = rows["v0.14.0"]["arms"]
-        arms = {
-            "v0.14.0 rules + NER": old["pass2-ner"],
-            "v0.14.0 rules only": old["rule-floor-extended"],
-        }
-        for version, arm in self.committed_default_arms(committed).items():
-            arms[f"{version} default"] = arm
-            arms[version] = arm
-        for label, arm in self.committed_group_defaults(committed).items():
-            arms[f"{label} default"] = arm
-            arms[label] = arm
-        for arm in arms.values():
-            self.assertEqual(
-                round(arm["leak_rate"] * 100, 1),
-                round(
-                    arm["surviving_pii_utf8_bytes"] / arm["gold_pii_utf8_bytes"] * 100, 1
-                ),
-            )
+        arms_by_contract = {}
+        for version in render.shown_contracts(committed):
+            view = render.contract_history(committed, version)
+            arms = {}
+            for group in render.displayed_groups(view):
+                row = group[-1]
+                label = render.group_label(group)
+                default = render.shipped_default_arm(row)
+                arms[f"{label} default"] = arms[label] = row["arms"][default]
+                for arm, block in row["arms"].items():
+                    if arm != default:
+                        arms[f"{label} {render.ARM_CHART_LABELS.get(arm, arm)}"] = block
+            arms_by_contract[version] = arms
+        for arms in arms_by_contract.values():
+            for arm in arms.values():
+                self.assertEqual(
+                    round(arm["leak_rate"] * 100, 1),
+                    round(arm["surviving_pii_utf8_bytes"] / arm["gold_pii_utf8_bytes"] * 100, 1),
+                )
         label_re = re.compile(r'^"(.+) \((\d+\.\d)%\)"$')
+        title_re = re.compile(r"scored labels v(\d+)")
         for path, expected_axes in (
-            (render.DEFAULT_README, 1),
-            (render.DEFAULT_DOC, 2),  # comparison chart + leaked trend
+            (render.DEFAULT_README, 2),  # one comparison chart per contract
+            (render.DEFAULT_DOC, 4),  # comparison + leaked trend, per contract
         ):
-            text = path.read_text(encoding="utf-8")
-            axes = [
-                line.strip()[len("x-axis ") :]
-                for line in text.splitlines()
-                if line.strip().startswith("x-axis ")
-            ]
-            labelled = [axis for axis in axes if "%" in axis]
+            contract, labelled = None, []
+            for line in path.read_text(encoding="utf-8").splitlines():
+                stripped = line.strip()
+                if stripped.startswith("title "):
+                    contract = int(title_re.search(stripped).group(1))
+                elif stripped.startswith("x-axis ") and "%" in stripped:
+                    labelled.append((contract, stripped[len("x-axis ") :]))
             self.assertEqual(len(labelled), expected_axes, path)
-            for axis in labelled:
-                labels = [f'"{item}"' for item in json.loads(axis)]
-                self.assertGreaterEqual(len(labels), 2, axis)
-                for label in labels:
-                    with self.subTest(path=path.name, label=label):
-                        match = label_re.match(label)
-                        self.assertIsNotNone(match, label)
-                        name, shown = match.group(1), float(match.group(2))
-                        self.assertEqual(shown, round(arms[name]["leak_rate"] * 100, 1))
+            for contract, axis in labelled:
+                for item in json.loads(axis):
+                    with self.subTest(path=path.name, contract=contract, label=item):
+                        match = label_re.match(f'"{item}"')
+                        self.assertIsNotNone(match, item)
+                        arm = arms_by_contract[contract][match.group(1)]
+                        self.assertEqual(float(match.group(2)), round(arm["leak_rate"] * 100, 1))
 
     def test_root_readme_chart_matches_the_readme_table(self):
         """The hand-written README table and the generated chart show one set of numbers."""
@@ -906,12 +914,16 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             for line in section.splitlines()
             if line.startswith("| ") and not line.startswith("| Setup")
         ]
-        leaked = [
-            int(line.split("|")[3].strip().strip("*").split(" ")[0].replace(",", ""))
-            for line in table
-        ]
+        def column(index):
+            cells = [line.split("|")[index].strip().strip("*") for line in table]
+            return [int(c.split(" ")[0].replace(",", "")) for c in cells if c != "not measured"]
+
         committed = render.load_history(render.DEFAULT_HISTORY)
-        self.assertEqual(leaked, [value for _, value in render.comparison_bars(committed)])
+        # Column 3 is the v2 headline, column 6 the v1 comparison; each matches
+        # the generated chart for its own contract.
+        for index, version in ((3, 2), (6, 1)):
+            bars = render.comparison_bars(render.contract_history(committed, version))
+            self.assertEqual(column(index), [value for _, value in bars], version)
         self.assertIn(render.begin_marker("readme-chart"), section)
 
     def test_check_fails_when_the_readme_chart_drifts(self):
@@ -1708,6 +1720,204 @@ class LatencySectionTest(unittest.TestCase):
         text = render.DEFAULT_DOC.read_text(encoding="utf-8")
         self.assertNotIn("see the CHANGELOG for quiet-host latency", text)
         self.assertIn("[Latency](#latency)", text)
+
+
+
+V2_CONTRACT = {
+    "id": "scored-labels-v2",
+    "version": 2,
+    "file": "docs/reference/benchmarks/scored-labels-v2.json",
+    "file_sha256": "2" * 64,
+    "excluded_labels": ["PASSWORD", "SECURITYTOKEN"],
+}
+
+
+def v2_scorecard(row: dict, leaked: int = 13319, gold: int = 123621) -> dict:
+    """The row's own measurement re-scored under contract v2."""
+    value = RefusalAwareHistoryTest.policy_scorecard(RefusalAwareHistoryTest())
+    value["gaze"]["revision"] = row["commit"]
+    value["scoring"] = {"scored_label_contract": copy.deepcopy(V2_CONTRACT)}
+    metrics = value["runs"][0]["metrics"]["utf8_bytes"]
+    metrics.update(pii=gold, leaked=leaked, leak_rate=leaked / gold)
+    return value
+
+
+def with_v2(row: dict, leaked: int = 13319) -> dict:
+    name = render.contract_scorecard_name(row["version"], 2)
+    row["contract_results"] = [
+        render.contract_result_from_scorecard(
+            v2_scorecard(row, leaked),
+            row,
+            scorecard_filename=name,
+            scorecard_sha256="4" * 64,
+        )
+    ]
+    return row
+
+
+class HeadlineContractTest(unittest.TestCase):
+    """Contract v2 leads every leak headline; v1 stays beside it, labelled."""
+
+    def value(self) -> dict:
+        return releases(
+            release("v0.14.0", 25179),
+            with_v2(release("v0.15.0")),
+            with_v2(release("v0.15.1")),
+        )
+
+    def test_the_headline_contract_is_v2(self):
+        self.assertEqual(render.HEADLINE_CONTRACT, 2)
+
+    def test_current_release_leads_with_v2(self):
+        current = render.render_current_release(self.value())
+        v2 = current.index("**Scored labels v2 (headline")
+        v1 = current.index("**Scored labels v1 (all original gold labels")
+        self.assertLess(v2, v1)
+        self.assertIn("Gold PII bytes: 123,621.", current[v2:v1])
+        self.assertIn("| 13,319 |", current[v2:v1])
+        self.assertIn("| 19,556 |", current[v1:])
+        self.assertIn(
+            "| Scorecard, scored labels v2 | "
+            "[`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json) |",
+            current,
+        )
+
+    def test_charts_lead_with_v2_and_name_the_contract(self):
+        charts = render.render_charts(self.value())
+        self.assertTrue(charts.startswith("#### Scored labels v2 (headline"), charts[:80])
+        titles = [line.strip() for line in charts.splitlines() if line.strip().startswith("title ")]
+        self.assertIn("scored labels v2", titles[0])
+        self.assertTrue(all("scored labels v" in title for title in titles), titles)
+        v2, v1 = charts.split("#### Scored labels v1", 1)
+        self.assertIn("bar [13319]", v2)
+        self.assertIn("Not measured under scored labels v2: v0.14.0.", v2)
+        self.assertIn("bar [19556, 25179]", v1)
+
+    def test_readme_chart_leads_with_v2(self):
+        chart = render.render_readme_chart(self.value())
+        self.assertLess(chart.index("scored labels v2"), chart.index("scored labels v1"))
+
+    def test_history_lists_v2_columns_first_and_marks_unmeasured_rows(self):
+        lines = render.render_history(self.value()).splitlines()
+        header = lines[0]
+        self.assertLess(
+            header.index("Leaked PII bytes, all processed, v2"),
+            header.index("Leaked PII bytes, all processed, v1"),
+        )
+        old, new = lines[2], lines[3]
+        self.assertIn("| *not measured* | *not measured* | *not measured* | 25,179 |", old)
+        self.assertIn("| 13,319 | 13,319 | 5,426 | 19,556 | 19,556 | 5,426 |", new)
+        for version in ("v0.15.0", "v0.15.1"):
+            name = f"scorecard-{version}-scored-labels-v2.json"
+            self.assertIn(f"[`{name}`]({name})", new)
+
+    def test_a_v2_only_difference_splits_the_group(self):
+        value = releases(with_v2(release("v0.15.0")), with_v2(release("v0.15.1"), 13000))
+        self.assertEqual(len(render.release_groups(value["releases"])), 2)
+
+    def test_a_missing_v2_result_splits_the_group(self):
+        value = releases(release("v0.15.0"), with_v2(release("v0.15.1")))
+        self.assertEqual(len(render.release_groups(value["releases"])), 2)
+
+    def test_a_contract_result_from_another_commit_is_refused(self):
+        row = release("v0.15.1")
+        card = v2_scorecard(row)
+        card["gaze"]["revision"] = "f" * 40
+        with self.assertRaisesRegex(render.RenderError, "commit"):
+            render.contract_result_from_scorecard(
+                card, row, scorecard_filename="x.json", scorecard_sha256="4" * 64
+            )
+
+    def test_a_contract_result_on_another_corpus_is_refused(self):
+        row = release("v0.15.1")
+        card = v2_scorecard(row)
+        card["dataset"]["integrity"]["sha256"] = "9" * 64
+        with self.assertRaisesRegex(render.RenderError, "corpus"):
+            render.contract_result_from_scorecard(
+                card, row, scorecard_filename="x.json", scorecard_sha256="4" * 64
+            )
+
+    def test_a_contract_result_under_the_rows_own_contract_is_refused(self):
+        row = release("v0.15.1")
+        card = v2_scorecard(row)
+        del card["scoring"]
+        with self.assertRaisesRegex(render.RenderError, "own contract"):
+            render.contract_result_from_scorecard(
+                card, row, scorecard_filename="x.json", scorecard_sha256="4" * 64
+            )
+
+    def test_history_refuses_a_duplicate_or_misnamed_contract_result(self):
+        row = with_v2(release("v0.15.1"))
+        twice = copy.deepcopy(row)
+        twice["contract_results"].append(copy.deepcopy(twice["contract_results"][0]))
+        with self.assertRaisesRegex(render.RenderError, "recorded twice"):
+            releases(twice)
+        misnamed = copy.deepcopy(row)
+        misnamed["contract_results"][0]["scorecard"] = "scorecard-v0.15.1.json"
+        with self.assertRaisesRegex(render.RenderError, "must be named"):
+            releases(misnamed)
+
+    def past_release(self) -> dict:
+        row = release("v0.14.0", 25179)
+        card = v2_scorecard(row, leaked=22000)
+        card["runner_provenance"].update(
+            entry_point=render.PAST_RELEASE_ENTRY_POINT,
+            harness_revision="c" * 40,
+            binary_sha256="d" * 64,
+            manifest_replacing_actions=["tokenize"],
+        )
+        row["contract_results"] = [
+            render.contract_result_from_scorecard(
+                card,
+                row,
+                scorecard_filename=render.contract_scorecard_name("v0.14.0", 2),
+                scorecard_sha256="4" * 64,
+            )
+        ]
+        return row
+
+    def test_a_past_release_result_records_and_shows_how_it_was_measured(self):
+        row = self.past_release()
+        measurement = row["contract_results"][0]["measurement"]
+        self.assertEqual(measurement["harness_revision"], "c" * 40)
+        self.assertEqual(measurement["manifest_replacing_actions"], ["tokenize"])
+        value = releases(row, with_v2(release("v0.15.0")))
+        block = render.render_history(value)
+        self.assertIn("- **v0.14.0, scored labels v2:** v0.14.0's own `clean_for_bench`", block)
+        self.assertIn("at `cccccccc`", block)
+        self.assertIn("with `tokenize` as manifest actions", block)
+        # A result from the ordinary runner carries no measurement note.
+        self.assertNotIn("v0.15.0, scored labels v2", block)
+
+    def test_a_malformed_measurement_record_is_refused(self):
+        row = self.past_release()
+        row["contract_results"][0]["measurement"]["harness_revision"] = "HEAD"
+        with self.assertRaisesRegex(render.RenderError, "harness_revision"):
+            releases(row)
+
+    def test_cli_appends_a_contract_result_and_requires_its_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc, history_path = root / "README.md", root / "release-history.json"
+            doc.write_text(DOC, encoding="utf-8")
+            row = release("v0.15.1")
+            render.write_history(history_path, releases(row))
+            (root / "scorecard-v0.15.1.json").write_text("{}", encoding="utf-8")
+            card = root / "scorecard-v0.15.1-scored-labels-v2.json"
+            card.write_text(json.dumps(v2_scorecard(row)), encoding="utf-8")
+            argv = ["--doc", str(doc), "--history", str(history_path)]
+            self.assertEqual(
+                render.main(argv + ["--append-contract-result", "--scorecard", str(card), "--version", "v0.15.1"]),
+                0,
+            )
+            stored = json.loads(history_path.read_text(encoding="utf-8"))
+            [result] = stored["releases"][0]["contract_results"]
+            self.assertEqual(result["scored_label_contract"]["version"], 2)
+            self.assertEqual(result["arms"]["policy-file"]["surviving_pii_utf8_bytes"], 13319)
+            self.assertIn("#### Scored labels v2 (headline", doc.read_text(encoding="utf-8"))
+            self.assertEqual(render.main(argv + ["--check"]), 0)
+            card.unlink()
+            self.assertEqual(render.main(argv + ["--check"]), 2)
 
 
 if __name__ == "__main__":
