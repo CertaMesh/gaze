@@ -102,9 +102,13 @@ logger.log_leak_suspect(entry)?;
 `SqliteLogger`'s `redaction_log` migration adds four nullable columns and
 `AuditLogRow` mirrors them as `Option<String>`:
 
-- `validator_fail_reason` — JSON-encoded closed enum (`LuhnFailed`,
-  `IbanMod97Failed`, `EmailRfcFailed`, `E164PhoneFailed`) for validator-veto
-  losers. Populated only on rows where `decided_by = ValidatorVeto`.
+- `validator_fail_reason` — JSON-encoded closed `ValidatorFailReason` enum
+  (one variant per validator, such as `LuhnFailed`, `IbanMod97Failed`,
+  `EmailRfcRejected`, `PhoneE164Rejected`; full list in
+  [validator veto](../../docs/explanation/detection/validator-veto.md#type-ownership))
+  for validator-veto losers. The older spellings `email_rfc_failed` and
+  `e164_phone_failed` still deserialize. Populated only on rows where
+  `decided_by = ValidatorVeto`.
 - `ambiguity_record` — JSON-encoded `AmbiguityRecord` (family-level class,
   losing candidate list, closed `AmbiguityReason`). Populated when the
   resolver fell back to a family-level token instead of a precise variant.

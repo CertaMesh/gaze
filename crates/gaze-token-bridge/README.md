@@ -3,11 +3,6 @@
 > **Status:** experimental and published as `gaze-token-bridge = "0.15.1"`.
 > API is pre-1.0 and may change.
 
-```toml
-[dependencies]
-gaze-token-bridge = "0.15.1"
-```
-
 The token bridge is the **owner-side authorization + translation layer** that lets an
 agent search long-lived, policy-scoped document corpora while keeping raw values on
 the owner side of the bridge.
@@ -22,6 +17,13 @@ owner-side; the agent-visible response is current-session tokens plus non-sensit
 
 For the architecture and the frozen data-model contract, see the crate docs
 ([`src/lib.rs`](src/lib.rs)) and [`src/model.rs`](src/model.rs)'s three visibility tiers.
+
+## Install
+
+```toml
+[dependencies]
+gaze-token-bridge = "0.15.1"
+```
 
 ## Local demo (try it)
 
@@ -97,6 +99,16 @@ Integration coverage for expected outcomes and fixture leak checks lives in
   exposes this bridge as an agent tool) lives behind the `chokepoint` feature.
   This example drives the bridge through its library API directly.
 
+## MCP host configuration
+
+With `chokepoint`, register `SearchDocumentsTool` in a `ToolRegistry` and
+supply a nonempty primary pipeline to `PiiEnvelope`, for example through
+`gaze_assembly::CorePipelineConfig::new().build()` with `core.pipeline()` and
+`core.locale_chain().as_slice()` (add `gaze-assembly` as a direct dependency).
+The tool declares its supported argument and typed result carriers itself;
+reserved `filters` supports an empty array, not arbitrary filter objects or
+numbers. Owner-side bridge tokens remain in their separate namespace.
+
 ## Known limitation: residual fragments are protected but not searchable
 
 Since v0.15 the core pipeline has [residual
@@ -125,18 +137,10 @@ closed when any entity's raw value survives into agent-visible output, and a
 fragment's raw value is frequently a single space or quote, so indexing fragments
 would make that guard true for almost any prose and deny every translation.
 
+## Bring your own data
+
 For bring-your-own-data redaction, use the core folder scan example:
 
 ```bash
 cargo run -p gaze-pii --example scan_folder -- --path ./my-data
 ```
-
-### MCP host configuration
-
-With `chokepoint`, register `SearchDocumentsTool` in a `ToolRegistry` and
-supply a nonempty primary pipeline to `PiiEnvelope`, for example through
-`gaze_assembly::CorePipelineConfig::new().build()` with `core.pipeline()` and
-`core.locale_chain().as_slice()` (add `gaze-assembly` as a direct dependency).
-The tool declares its supported argument and typed result carriers itself;
-reserved `filters` supports an empty array, not arbitrary filter objects or
-numbers. Owner-side bridge tokens remain in their separate namespace.

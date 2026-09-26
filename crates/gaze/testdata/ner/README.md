@@ -21,16 +21,19 @@ out-of-repo via `scripts/fetch/fetch-ner-model.sh`.
   field to choose the runtime backend while keeping the pipeline API
   unchanged.
 
-## Running the span-correctness tests (real model)
+## Load-contract and real-model tests
 
-The unit tests under `crates/gaze/src/ner.rs` cover load-contract failure
-modes without a real model. Real German/English span correctness tests
-need the pinned artifact on disk.
+The unit tests under `crates/gaze-recognizers/src/ner/` cover load-contract
+failure modes without a real model. The workspace has no real-model
+span-correctness test today: the former
+`cargo test -p gaze -- --ignored ner_span_correctness` command names a
+package that is published as `gaze-pii` and a test that no longer exists.
+
+To put the pinned artifact on disk for manual checks:
 
 1. Run `scripts/fetch/fetch-ner-model.sh` once to populate
    `${XDG_DATA_HOME:-~/.local/share}/gaze/models/davlan-mbert-ner-hrl/`.
 2. Export `GAZE_NER_MODEL_DIR` pointing at that directory.
-3. Run `cargo test -p gaze -- --ignored ner_span_correctness`.
 
 Tests gated by `#[ignore]` or the `GAZE_NER_MODEL_DIR` env var never run
 in CI. They are operator-invoked smoke tests for a specific artifact

@@ -5,6 +5,43 @@ workspace (the published cargo name; the library is imported as `gaze`).
 Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
+## How this file is organized
+
+- One H2 section per release that needs adopter action, in
+  **reverse-chronological** order.
+- Each section opens with **TL;DR** (the one or two actions an adopter
+  cannot skip), then drills into details.
+- "Additive" entries are no-action and noted for awareness only.
+- "Action required" entries are the ones a human upgrade reviewer should
+  read in full.
+
+## Pre-1.0 promise
+
+Gaze is pre-1.0. Per the [SemVer pre-1.0 contract][semver-pre1] minor bumps
+*may* introduce breaking changes; we minimize them. Every breaking surface
+in this file is also a breaking entry in CHANGELOG.md, gated by closed
+non-exhaustive enums + typed errors so that downstream code only breaks
+at compile time, never silently at runtime.
+
+The five north-star axes — **reliability, reversibility, agentic-first,
+trust, ergonomics** — bound every upgrade. Reversibility means: if an
+upgrade ever changes a manifest's restore round-trip, that is a bug, not
+a migration step. Manifests written by an older minor restore on the new
+minor unless this file explicitly says otherwise. (No such exception
+exists today.)
+
+[semver-pre1]: https://semver.org/spec/v2.0.0.html#spec-item-4
+
+## Reversibility statement (every upgrade)
+
+If an upgrade ever causes a manifest written by an older minor to fail
+restore on a newer minor, that is a bug. Open an issue tagged
+`reversibility-regression` and we will treat it as a critical defect
+against north-star axis 2. There is no migration step that asks you to
+re-tokenize stored manifests.
+
+---
+
 ## v0.14.x → v0.15.0
 
 ### TL;DR
@@ -101,7 +138,7 @@ of a span.** Two resolver changes from solo todo #3740, both breaking in
    `containment_precedence`.
 2. **`preserve` keeps a class's characters unless the same characters are
    also PII of a class you protect.** With `custom:url = preserve` and
-   `email = tokenize` the email inside a URL now leaves as one `<Email_1>`
+   `email = tokenize` the email inside a URL now leaves as one `<Email_n>`
    fragment inside the otherwise raw URL; with `custom:postal_code =
    preserve` a postal code that is also part of a protected IBAN is
    protected. The fragment takes the protected class's own action (`redact`
@@ -394,37 +431,9 @@ If you match on the error's `supported` field, it now reads `"0.1."`.
 
 ---
 
-## How this file is organized
+## v0.9.0 → v0.9.1
 
-- One H2 section per `MAJOR.MINOR` release in **reverse-chronological** order.
-- Each section opens with **TL;DR** (the one or two actions an adopter
-  cannot skip), then drills into details.
-- "Additive" entries are no-action and noted for awareness only.
-- "Action required" entries are the ones a human upgrade reviewer should
-  read in full.
-
-## Pre-1.0 promise
-
-Gaze is pre-1.0. Per the [SemVer pre-1.0 contract][semver-pre1] minor bumps
-*may* introduce breaking changes; we minimize them. Every breaking surface
-in this file is also a breaking entry in CHANGELOG.md, gated by closed
-non-exhaustive enums + typed errors so that downstream code only breaks
-at compile time, never silently at runtime.
-
-The five north-star axes — **reliability, reversibility, agentic-first,
-trust, ergonomics** — bound every upgrade. Reversibility means: if an
-upgrade ever changes a manifest's restore round-trip, that is a bug, not
-a migration step. Manifests written by an older minor restore on the new
-minor unless this file explicitly says otherwise. (No such exception
-exists today.)
-
-[semver-pre1]: https://semver.org/spec/v2.0.0.html#spec-item-4
-
----
-
-## v0.9.x → v0.10.0
-
-Status: **unreleased.**
+Status: **shipped** in v0.9.1.
 
 ### TL;DR
 
@@ -454,6 +463,54 @@ Migration:
   the shorthand now creates both subdirs for you.
 - Downstream tooling that read files from `<PATH>` must move manifest reads
   to `<PATH>/owner/manifest.json` (or the explicit owner path).
+
+---
+
+## v0.8.x → v0.9.0
+
+### Perf wave
+
+v0.9.0 is a performance and deployment release: in-process Kiji ORT
+removes the Python subprocess boundary for adopters who select it, int8 dynamic
+quantization adds a separately SHA-pinned smaller/faster model path, `gaze
+daemon` keeps multi-session state behind a JSONL stdio process boundary,
+pipeline skip-gating/capitals/prefix-cache/length-bucketing optimizations are
+available behind explicit opt-in flags, and `tract`/`candle` feature gates give
+static-binary deployments alternatives to the default `ort` runtime. Public
+benchmark claims are documented in [`docs/reference/benchmarks/README.md`](docs/reference/benchmarks/README.md):
+Kiji int8 ORT warm p50 is 1.849ms in the committed model leaderboard snapshot,
+and the safety-net matrix records a 0.000 F1 delta versus fp32 Kiji.
+
+Measured on: Apple M5 Max / macOS 26.5 hosts in the committed v0.9 snapshots
+and final rc revalidation.
+
+### New CLI flags (opt-in)
+
+- `--kiji-backend {subprocess|ort}` (default `subprocess`): selects Kiji DistilBERT runtime.
+- `--kiji-distilbert-precision {fp32|int8}` (default `fp32`): selects precision for ORT path.
+- Pipeline-optimization flags wired through CLI: skip-class-gating, capitals-heuristic-gate, prefix-cache, length-bucketing (opt-in default-off).
+
+### New subcommand
+
+- `gaze daemon --policy <path> [--idle-timeout <secs>]` — long-lived JSONL stdio session manager. Protocol: `{session_id, text}` request, `{session_id, clean_text, manifest, tokens}` response. SIGTERM-graceful, multi-session-isolated.
+
+### New opt-in features (Cargo)
+
+- `gaze-recognizers` features: `runtime-tract`, `runtime-candle` — alternative ONNX runtimes for static-binary deployments.
+
+### Reversibility
+
+Manifest restore semantics + signed snapshot wire format unchanged from v0.8.1.
+
+---
+
+## v0.8.0 → v0.8.1
+
+v0.8.1 made SafetyNet `resolve` the default mode, added Kiji DistilBERT bundle
+SHA verification, and introduced the `LocaleAwareModel` registry groundwork in
+`gaze-recognizers`. The public default `--safety-net-mode` flipped from
+`strict` to `resolve`; adopters who require strict hard-fail semantics must opt
+back in explicitly with `--safety-net-mode=strict`.
 
 ---
 
@@ -590,7 +647,7 @@ permissions on Unix. Missing artifacts fail closed with typed
 `CliError::SafetyNetArtifactMissing` (exit `2`) before the subprocess
 spawns.
 
-Setup walkthrough: removed together with the backend; see the [removal section](#pending-unreleased-the-kiji-distilbert-safety-net-is-removed).
+Setup walkthrough: removed together with the backend; see the [removal section](#the-kiji-distilbert-safety-net-is-removed).
 
 **Action required:** none. The backend is opt-in. If you do not select
 it, your current SafetyNet configuration (OpenAI Privacy Filter or
@@ -640,6 +697,27 @@ and fails closed with
 Since v0.15.0 a bare `"0.1"` no longer loads (see the v0.15.0 section above).
 Existing policies without the field continue to load via a soft default;
 add it explicitly to lock yourself onto a known schema.
+
+### gaze-proxy
+
+The new off-by-default `proxy` feature adds `gaze-proxy` and `gaze proxy`
+subcommands for multi-provider LLM SDK base-URL swaps. OpenAI, Anthropic, and
+Gemini ship as separate provider adapters from day one. The proxy uses native
+provider wire shapes and does not transcode between providers.
+
+Daemon UX is available through:
+
+```bash
+gaze proxy serve
+gaze proxy start
+gaze proxy status
+gaze proxy logs --follow
+gaze proxy stop
+gaze proxy restart
+```
+
+Pidfiles are stored in platform local-data directories and stale pidfiles are
+cleaned after process liveness checks.
 
 ---
 
@@ -712,79 +790,3 @@ Highlights only — backfill in detail if adopter friction surfaces.
 - Audit-sink protected-path enforcement switched from the legacy
   syn-walker to a Dylint resolver-based gate
   (`xtask dylint-gate`).
-
----
-
-## Reversibility statement (every upgrade)
-
-If an upgrade ever causes a manifest written by an older minor to fail
-restore on a newer minor, that is a bug. Open an issue tagged
-`reversibility-regression` and we will treat it as a critical defect
-against north-star axis 2. There is no migration step that asks you to
-re-tokenize stored manifests.
-
-# v0.9.0
-
-## Perf wave
-
-v0.9.0 is a performance and deployment release: in-process Kiji ORT
-removes the Python subprocess boundary for adopters who select it, int8 dynamic
-quantization adds a separately SHA-pinned smaller/faster model path, `gaze
-daemon` keeps multi-session state behind a JSONL stdio process boundary,
-pipeline skip-gating/capitals/prefix-cache/length-bucketing optimizations are
-available behind explicit opt-in flags, and `tract`/`candle` feature gates give
-static-binary deployments alternatives to the default `ort` runtime. Public
-benchmark claims are documented in [`docs/reference/benchmarks/README.md`](docs/reference/benchmarks/README.md):
-Kiji int8 ORT warm p50 is 1.849ms in the committed model leaderboard snapshot,
-and the safety-net matrix records a 0.000 F1 delta versus fp32 Kiji.
-
-Measured on: Apple M5 Max / macOS 26.5 hosts in the committed v0.9 snapshots
-and final rc revalidation.
-
-## New CLI flags (opt-in)
-
-- `--kiji-backend {subprocess|ort}` (default `subprocess`): selects Kiji DistilBERT runtime.
-- `--kiji-distilbert-precision {fp32|int8}` (default `fp32`): selects precision for ORT path.
-- Pipeline-optimization flags wired through CLI: skip-class-gating, capitals-heuristic-gate, prefix-cache, length-bucketing (opt-in default-off).
-
-## New subcommand
-
-- `gaze daemon --policy <path> [--idle-timeout <secs>]` — long-lived JSONL stdio session manager. Protocol: `{session_id, text}` request, `{session_id, clean_text, manifest, tokens}` response. SIGTERM-graceful, multi-session-isolated.
-
-## New opt-in features (Cargo)
-
-- `gaze-recognizers` features: `runtime-tract`, `runtime-candle` — alternative ONNX runtimes for static-binary deployments.
-
-## Reversibility
-
-Manifest restore semantics + signed snapshot wire format unchanged from v0.8.1.
-
-# v0.8.1
-
-v0.8.1 made SafetyNet `resolve` the default mode, added Kiji DistilBERT bundle
-SHA verification, and introduced the `LocaleAwareModel` registry groundwork in
-`gaze-recognizers`. The public default `--safety-net-mode` flipped from
-`strict` to `resolve`; adopters who require strict hard-fail semantics must opt
-back in explicitly with `--safety-net-mode=strict`.
-# v0.8.0
-
-## gaze-proxy
-
-The new off-by-default `proxy` feature adds `gaze-proxy` and `gaze proxy`
-subcommands for multi-provider LLM SDK base-URL swaps. OpenAI, Anthropic, and
-Gemini ship as separate provider adapters from day one. The proxy uses native
-provider wire shapes and does not transcode between providers.
-
-Daemon UX is available through:
-
-```bash
-gaze proxy serve
-gaze proxy start
-gaze proxy status
-gaze proxy logs --follow
-gaze proxy stop
-gaze proxy restart
-```
-
-Pidfiles are stored in platform local-data directories and stale pidfiles are
-cleaned after process liveness checks.

@@ -69,20 +69,16 @@ assembly uses `RegexDetector::with_rulepack_fields` so locale tags, scores,
 priorities, token families, capture groups, exclusions, validators, and
 normalizers can flow from TOML rulepacks into the registry.
 
-Current validator and normalizer enums:
-
-- `ValidatorKind::EmailRfc`
-- `ValidatorKind::E164Phone` (requires the `phone-parser` feature)
-- `ValidatorKind::Luhn` (Mod 10 checksum, used by `card.structural`)
-- `ValidatorKind::IbanMod97` (ISO 7064 mod-97 IBAN checksum, used by `iban.structural`)
-- `NormalizerKind::EmailCanonical`
-- `NormalizerKind::IbanCanonical` (uppercase + whitespace strip, paired with `iban_mod97`)
+`ValidatorKind` and `NormalizerKind` are closed sets. The complete variant
+lists, rulepack spellings, feature gates and fail-closed wiring stage are in
+[Closed validator and normalizer sets](../../docs/reference/redaction-classes.md#closed-validator-and-normalizer-sets).
+Examples: `ValidatorKind::Luhn` (Mod 10 checksum, used by `card.structural`),
+`ValidatorKind::IbanMod97` (ISO 7064 mod-97, used by `iban.structural`) and
+`ValidatorKind::E164Phone` (requires the `phone-parser` feature).
 
 `E164Phone` is implemented via the `phonenumber` crate. It preserves valid E.164
 matches such as synthetic non-reachable `+49-30-0000-0000` (not a real number)
-while rejecting regex-passing but unassigned shapes such as `+99999999`. Audit notes live in
-[`v0.4.4-phonenumber-audit.md`](https://github.com/PIInuts/business/blob/main/research/v0.4.4-phonenumber-audit.md)
-(hosted in `PIInuts/business:research/`).
+while rejecting regex-passing but unassigned shapes such as `+99999999`.
 
 ## Anchored match backend
 
@@ -136,7 +132,7 @@ Loading failures are policy configuration failures in the CLI path.
 | Name | File | Purpose |
 |------|------|---------|
 | `core` | [`embedded/core.toml`](embedded/core.toml) | Unified bundled recognizer set. Email/name, parser-backed phone, IBAN, payment-card, IP, ETH, and postal recognizers now live in one bundle. Each recognizer declares `safety_tier = "safe_default"`, `"locale_gated"`, or `"opt_in"` and `locale_basis = "document"` or `"format"`. Format-basis recognizers ignore the document locale for eligibility. |
-| `core-extended` | alias of `core` | Deprecated since v0.8.0 and scheduled for removal in v0.10.0. CLI use emits a warning and preserves v0.8.x compatibility by auto-activating locale-gated recognizers. |
+| `core-extended` | alias of `core` | Deprecated since v0.8.0 and still accepted. CLI use emits a warning and preserves v0.8.x compatibility by auto-activating locale-gated recognizers. |
 | `secrets` | [`embedded/secrets.toml`](embedded/secrets.toml) | Opt-in credential recognizers (`security_token.anchored`, `password.field`). Credentials are not PII, so this bundle is never part of a default activation; load it by name next to `core`. |
 | `locale-de` | [`embedded/locale-de.toml`](embedded/locale-de.toml) | DACH locale metadata such as German email headers. |
 | `locale-en` | [`embedded/locale-en.toml`](embedded/locale-en.toml) | English locale metadata such as English email headers. |
@@ -217,56 +213,9 @@ recognizer declares `mandatory_anchor` without a matching bundled cue block.
 Full contract:
 [`docs/explanation/detection/anchor-resolution.md`](../../docs/explanation/detection/anchor-resolution.md).
 
-## Adding recognizers here
-
-Add a recognizer to this crate when it is a built-in backend Gaze should ship
-for many adopters. The recognizer should implement `gaze::Recognizer` and
-provide deterministic metadata:
-
-- stable `id`
-- supported `PiiClass`
-- locale eligibility
-- score and priority
-- token family
-- canonical form when a validator proves one
-- source labels suitable for audit logs
-
-The detection entry point is **fallible** (P0 #908):
-
-```rust
-fn detect(&self, input: &str, ctx: &DetectContext<'_>)
-    -> Result<Vec<Candidate>, gaze_types::DetectError>;
-```
-
-A backend failure MUST surface as `DetectError::backend(self.id(), <message>)`,
-never as an empty `Vec`. Returning an empty candidate list means "no PII here",
-and the pipeline trusts it — so a backend that fails silently is an axis-1 leak.
-The registry short-circuits on `Err` and the pipeline aborts outbound redaction
-(`gaze::pipeline::Error::RecognizerDetect`) rather than emitting partially
-cleaned output. Recognizers whose logic cannot fail simply return
-`Ok(candidates)`. Full contract:
-[`docs/explanation/detection/ner-failclosed.md`](../../docs/explanation/detection/ner-failclosed.md).
-
-Add adopter-specific recognizers outside this crate when the behavior is tied
-to one tenant, one private schema, or one proprietary data source.
-
-The per-recognizer metadata surface (`id`, `supported_class`, `token_family`,
-`validator_kind`, `locales`), the SafetyNet benchmark-snapshot fields
-(strict-span leak rate, observer-residual recall, composability quad), and
-the `Candidate`/`CollisionMembership` audit-row linkage are cataloged in
-[`docs/reference/metrics.md`](../../docs/reference/metrics.md#3-safetynet-metrics-gaze-recognizers)
-(SafetyNet) and
-[`docs/reference/metrics.md`](../../docs/reference/metrics.md#4-recognizer-surface-gaze-recognizers--gaze)
-(recognizer surface).
-
-## Test support
-
-The crate has a `test-support` feature for tests that need additional support
-surface without making it part of the default public runtime.
-
 ## Explicit birth-date and credential fields
 
-The embedded `gaze-core` rulepack version **0.6.0** contains 39 recognizers.
+The embedded `gaze-core` rulepack version **0.6.0** contains 40 recognizers.
 Two project-authored `safe_default` rules with `locales = ["global"]` add narrow EN/DE
 field recognition through the existing assembly and `RegexDetector` machinery,
 once their bundle is loaded.
@@ -353,3 +302,50 @@ candidate's own validator veto.
 These rules add deterministic coverage for supported text fields. Synthetic
 proofs do not establish a production leaked-byte reduction, zero rejects or
 latency nonregression. Additional regex work has not been benchmarked here.
+
+## Adding recognizers here
+
+Add a recognizer to this crate when it is a built-in backend Gaze should ship
+for many adopters. The recognizer should implement `gaze::Recognizer` and
+provide deterministic metadata:
+
+- stable `id`
+- supported `PiiClass`
+- locale eligibility
+- score and priority
+- token family
+- canonical form when a validator proves one
+- source labels suitable for audit logs
+
+The detection entry point is **fallible** (P0 #908):
+
+```rust
+fn detect(&self, input: &str, ctx: &DetectContext<'_>)
+    -> Result<Vec<Candidate>, gaze_types::DetectError>;
+```
+
+A backend failure MUST surface as `DetectError::backend(self.id(), <message>)`,
+never as an empty `Vec`. Returning an empty candidate list means "no PII here",
+and the pipeline trusts it — so a backend that fails silently is an axis-1 leak.
+The registry short-circuits on `Err` and the pipeline aborts outbound redaction
+(`gaze::pipeline::Error::RecognizerDetect`) rather than emitting partially
+cleaned output. Recognizers whose logic cannot fail simply return
+`Ok(candidates)`. Full contract:
+[`docs/explanation/detection/ner-failclosed.md`](../../docs/explanation/detection/ner-failclosed.md).
+
+Add adopter-specific recognizers outside this crate when the behavior is tied
+to one tenant, one private schema, or one proprietary data source.
+
+The per-recognizer metadata surface (`id`, `supported_class`, `token_family`,
+`validator_kind`, `locales`), the SafetyNet benchmark-snapshot fields
+(strict-span leak rate, observer-residual recall, composability quad), and
+the `Candidate`/`CollisionMembership` audit-row linkage are cataloged in
+[`docs/reference/metrics.md`](../../docs/reference/metrics.md#3-safetynet-metrics-gaze-recognizers)
+(SafetyNet) and
+[`docs/reference/metrics.md`](../../docs/reference/metrics.md#4-recognizer-surface-gaze-recognizers--gaze)
+(recognizer surface).
+
+## Test support
+
+The crate has a `test-support` feature for tests that need additional support
+surface without making it part of the default public runtime.

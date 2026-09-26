@@ -1,10 +1,13 @@
 # Contributing
 
-Thanks for considering a contribution to Gaze. The rest of this document is
-the technical workflow (gates, fixtures, test rituals). Before you open a PR,
-two project-wide rules apply:
+Thanks for considering a contribution to Gaze. Three project-wide rules apply
+before you open a PR: the licence terms, the DCO sign-off, and the Code of
+Conduct. The rest of this document is the technical workflow: setup, the
+local checks, and the fixture rules.
 
-## Licence
+## Before you open a PR
+
+### Licence
 
 By submitting a contribution to this project you agree to licence it under
 **Apache-2.0 OR MIT** at the user's option — the same dual permissive licence
@@ -17,7 +20,7 @@ later maintainer without contributor agreement. See [`docs/explanation/governanc
 for the full governance model and the structural commitments that keep the
 project a commons.
 
-## Developer Certificate of Origin (DCO)
+### Developer Certificate of Origin (DCO)
 
 Every commit MUST carry a `Signed-off-by:` trailer matching the commit author,
 certifying the [Developer Certificate of Origin](https://developercertificate.org/).
@@ -33,12 +36,10 @@ author identity. Fix existing commits with `git rebase --signoff <base>` (or
 `git commit --amend -s` for the latest). Enforcement is forward-looking on PRs;
 commits predating this gate are not retroactively signed.
 
-## Code of Conduct
+### Code of Conduct
 
 Community interactions are governed by the [Contributor Covenant](CODE_OF_CONDUCT.md).
 Reporting channels live in that file.
-
----
 
 ## Setup
 
@@ -50,12 +51,12 @@ cargo build --workspace --all-features
 
 PR-triggered CI runs `cargo doc -D warnings`, `cargo test --doc`, workspace
 tests, MSRV checks, cargo-deny, and the active xtask gate roster on every
-relevant PR. Keep running the local "PR-checks ritual" below before opening or
+relevant PR. Keep running the local [PR checks](#run-the-pr-checks) before opening or
 pushing to a PR.
 
 ## Workspace shape
 
-As of v0.7.2, the workspace has **nine** published-shape crates plus `xtask`. The ninth crate is `gaze-document` (added in v0.7.1).
+The workspace has **15** published crates plus the internal `xtask` crate and the detached `lint/dylint/` workspace. [docs/reference/crates.md](docs/reference/crates.md) has the full dependency map.
 
 | Crate | Role |
 |---|---|
@@ -68,75 +69,16 @@ As of v0.7.2, the workspace has **nine** published-shape crates plus `xtask`. Th
 | `crates/gaze-mcp-core` | Transport-free MCP-shaped chokepoint runtime: `Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`/`DispatchHost`, `ManifestStore`, `AuthHook`, `SessionIdPolicy`. New in v0.7.0. |
 | `crates/gaze-mcp-rmcp` | rmcp transport sink: `RmcpFrontend`, stdio default transport, opt-in streamable HTTP transport, adopter-supplied `PrincipalResolver`. New in v0.7.0. |
 | `crates/gaze-document` | OSS document ingestion: PNG/JPG/PDF → Tesseract OCR → gaze redact → `SafeBundle` (`clean.md`, `manifest.json`, `report.json`). Ships a `gaze document clean` CLI verb under the `gaze-cli` `document` feature. `BundleReport` schema versioned via `bundle_version = 1`. New in v0.7.1. |
+| `crates/gaze-proxy` | Feature-gated HTTP proxy runtime for OpenAI, Anthropic, and Gemini SDK base-URL swaps; backs `gaze proxy`. |
+| `crates/gaze-inspection` | Provider-neutral, bounded inspection delivery: zeroizing payload wrappers and the matched producer/consumer runtime. |
+| `crates/gaze-model-setup` | Installs and verifies pinned model bundles for `gaze setup`. |
+| `crates/gaze-mcp-bridge` | Optional policy-gated MCP bridge in front of downstream MCP tools. |
+| `crates/gaze-token-bridge` | Experimental owner-side authorization and translation bridge for searching redact-before-index corpora. |
 | `crates/gaze-proxy-dashboard` | Opt-in, memory-only inspection dashboard runtime for `gaze proxy`: a killable child process owns listener/auth/store/rendering while the parent owns bounded ingress and the registration-bound activation. Among Gaze crates it depends on exactly `gaze-types` + `gaze-inspection`; shipped behind the default-off `gaze-cli` `dashboard` feature and enforced by the `dashboard-isolation` xtask gate. |
 | `crates/xtask` | Internal repository gate runner: `bundle-tokenization-drift`, `fixture-citation-lint`, `trybuild-fixture-hygiene`, `ci-feature-matrix`, `class-map-override-safety`, `symmetric-potemkin`, `no-tenant-knowledge`, `cargo-metadata-audit-isolation` (Phase C), `dylint-gate` (Phase D), `dashboard-isolation`. |
 | `lint/dylint/` | Dylint lint crate hosting `gaze_module_isolation`. Detached workspace pinned to `nightly-2025-09-18`. New in v0.5 Phase D. |
 
-## Tenant class names in tests
-
-Test fixtures and benchmark labels MUST use neutral class names (e.g. `class_alpha`, `tenant_class_a`, `dict_alpha`), never tenant-specific patterns like `order_id`, `Order_42`, `Song_42`, `User_7`. Rationale: drawer `eac549ae` — gaze core has no built-in tenant knowledge.
-
-The `cargo run -p xtask -- no-tenant-knowledge` gate scans production Rust code in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/**/*.rs` and fails on those tenant-specific patterns. It intentionally does not scan `tests/`, `benches/`, docs, `CONTRIBUTING.md`, or `crates/xtask/`.
-
-Use `// allow(tenant-fixture)` only in tests, benches, or docs when a tenant-like fixture is necessary to exercise behavior. That marker is a production-bypass attempt in `crates/*/src/` and hard-fails the gate with `AllowMarkerInProductionScope`.
-
-The `order_id` denylist is intentionally broad — it catches `Order_42`, `order_ids`, etc. If a legitimate production identifier (e.g. `order_history_index_id` for an unrelated subsystem) collides with the denylist post-v0.4.3, coordinate with maintainers to add to allowlist with rationale comment. Do NOT silently bypass via `// allow(tenant-fixture)` in production code — that marker hard-fails the gate (drawer `eac549ae`).
-
-Round-trip, three-surfaces, and recognizer-composition cross-cutting rows are N/A for this structural gate: it emits no tokens, adds no runtime knobs, and does not compose recognizers. The no-tenant-knowledge row is enforced by CI so production code must pass post-merge.
-
-## Fixture citations in production code
-
-Production Rust code in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`
-MUST NOT introduce hardcoded fixture-shaped PII literals unless the line or
-immediately preceding line cites the behavioral test that owns the fixture:
-
-```rust
-// fixture-cited(crates/gaze/tests/email.rs:gaze::tests::email_round_trip)
-const FIXTURE_EMAIL: &str = "alice@example.invalid";
-```
-
-The `cargo run -p xtask -- fixture-citation-lint` gate verifies two things:
-the production literal has a `fixture-cited(...)` marker, and
-`cargo test --workspace -- --list` contains the cited fully qualified test name
-exactly. Suffix-only matches and path-only markers do not pass.
-
-Known limitation: this gate proves the cited test exists, not that the test body
-still asserts that exact fixture literal. Reviewers must still check that the
-citation points at a meaningful behavioral assertion.
-
-## Phone-number fixtures
-
-Test and benchmark fixtures that contain phone numbers MUST use synthetic, non-reachable values from documented reservation ranges:
-
-- US/NA fixtures: NANPA "555" exchanges (`+1-555-01xx` etc.), reserved for fictional use under [NANPA reservation 555-01xx](https://nationalnanpa.com/).
-- UK fixtures: Ofcom drama-reserved ranges (`+44-7700-900xxx`), per [Ofcom drama numbers guidance](https://www.ofcom.org.uk/phones-and-broadband/phone-numbers/numbers-for-drama).
-- DE fixtures: synthetic non-reachable mobile shapes the `phonenumber` parser still accepts as valid E.164 (e.g. `+49 1555 0112233`-style values used in v0.4.4 S3a / v0.4.5 S2 phone-recognizer tests). The `1555` mobile prefix mirrors the NANPA 555 carve-out — non-reachable but parseable. Cite the v0.4.5 S2 phonenumber-region tests rather than introducing real-looking BNetzA-assigned ranges.
-- Other locales: synthesize a non-reachable shape (e.g. exchange code `0` or out-of-band country code) and add a fixture comment noting the synthetic origin.
-
-Rationale: drawer `gaze_decisions_e1ab6dc0`. Real reachable numbers in test
-fixtures risk inadvertent leakage into adopter telemetry, public CI logs, and
-crate metadata. The `phonenumber` parser-backed `E164Phone` validator
-(v0.4.4 S3a) accepts the NANPA 555 reservation and Ofcom drama ranges as valid
-E.164, so positive-path tests continue to exercise the validator without using
-real numbers. v0.4.5 S2 (PR #58) adds parser-backed national phone recognizers
-for DE and US that follow the same synthetic-only fixture posture.
-
-## Local gate matrix
-
-Gaze does not ship a tracked pre-push hook — gates still run manually before
-opening or pushing to a PR. The "PR-checks ritual" below lists the local set.
-Relevant PRs also run the workspace, MSRV, cargo-deny, and active xtask gates in
-GitHub Actions.
-
-`dylint` requires the pinned `nightly-2025-09-18` toolchain and cargo-dylint
-setup. It runs weekly on Monday at 08:00 UTC via the scheduled workflow and
-can be triggered manually:
-
-```bash
-gh workflow run dylint.yml
-```
-
-## PR-checks ritual
+## Run the PR checks
 
 Before opening or pushing to a PR, run the workspace test suite plus all
 behavioral xtask gates:
@@ -168,6 +110,11 @@ tests import concrete audit sinks from `gaze-audit` directly.
 The `cargo-metadata-audit-isolation` gate (v0.5 Phase C) parses
 `cargo metadata` and fails closed if any non-audit-responsible workspace
 member has a normal-dependency path to `gaze-audit`.
+
+Gaze does not ship a tracked pre-push hook — gates still run manually before
+opening or pushing to a PR. The command list above is the local set.
+Relevant PRs also run the workspace, MSRV, cargo-deny, and active xtask gates in
+GitHub Actions.
 
 ### Trybuild compiler and blessing ritual
 
@@ -203,14 +150,75 @@ The hygiene gate fixes the root inventory at 19 expectations (13 inspection,
 compiler/Homebrew/user paths. Do not add root `rust-src` or bless under a
 sources-bundled compiler to work around the guard.
 
+### Dylint audit-sink gate
+
 The `dylint-gate` (v0.5 Phase D) is the canonical audit-sink protected-path
 enforcer. It supersedes the legacy `audit-metadata-only` syn walker, which was
 decommissioned in v0.5 Phase E (PR #77, commit `f4fde12`). Toolchain pins,
-fixture matrix, and timings live in
-[`v0.5-dylint-audit-gate.md`](https://github.com/PIInuts/business/blob/main/research/v0.5-dylint-audit-gate.md)
-(hosted in `PIInuts/business:research/`).
+fixture matrix, and timings are recorded in a private research note that is
+not published with this repository; the lint crate in
+[`lint/dylint`](lint/dylint) is the public source.
 `cargo-dylint` is a scheduled-workflow requirement; the local gate ritual does
 not include it.
 
 Run `dylint` manually when touching audit-sink boundaries or wait for the
 weekly scheduled workflow.
+
+`dylint` requires the pinned `nightly-2025-09-18` toolchain and cargo-dylint
+setup. It runs weekly on Monday at 08:00 UTC via the scheduled workflow and
+can be triggered manually:
+
+```bash
+gh workflow run dylint.yml
+```
+
+## Fixture rules
+
+### Tenant class names in tests
+
+Test fixtures and benchmark labels MUST use neutral class names (e.g. `class_alpha`, `tenant_class_a`, `dict_alpha`), never tenant-specific patterns like `order_id`, `Order_42`, `Song_42`, `User_7`. Rationale: drawer `eac549ae` — gaze core has no built-in tenant knowledge.
+
+The `cargo run -p xtask -- no-tenant-knowledge` gate scans production Rust code in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/**/*.rs` and fails on those tenant-specific patterns. It intentionally does not scan `tests/`, `benches/`, docs, `CONTRIBUTING.md`, or `crates/xtask/`.
+
+Use `// allow(tenant-fixture)` only in tests, benches, or docs when a tenant-like fixture is necessary to exercise behavior. That marker is a production-bypass attempt in `crates/*/src/` and hard-fails the gate with `AllowMarkerInProductionScope`.
+
+The `order_id` denylist is intentionally broad — it catches `Order_42`, `order_ids`, etc. If a legitimate production identifier (e.g. `order_history_index_id` for an unrelated subsystem) collides with the denylist post-v0.4.3, coordinate with maintainers to add to allowlist with rationale comment. Do NOT silently bypass via `// allow(tenant-fixture)` in production code — that marker hard-fails the gate (drawer `eac549ae`).
+
+Round-trip, three-surfaces, and recognizer-composition cross-cutting rows are N/A for this structural gate: it emits no tokens, adds no runtime knobs, and does not compose recognizers. The no-tenant-knowledge row is enforced by CI so production code must pass post-merge.
+
+### Fixture citations in production code
+
+Production Rust code in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`
+MUST NOT introduce hardcoded fixture-shaped PII literals unless the line or
+immediately preceding line cites the behavioral test that owns the fixture:
+
+```rust
+// fixture-cited(crates/gaze/tests/email.rs:gaze::tests::email_round_trip)
+const FIXTURE_EMAIL: &str = "alice@example.invalid";
+```
+
+The `cargo run -p xtask -- fixture-citation-lint` gate verifies two things:
+the production literal has a `fixture-cited(...)` marker, and
+`cargo test --workspace -- --list` contains the cited fully qualified test name
+exactly. Suffix-only matches and path-only markers do not pass.
+
+Known limitation: this gate proves the cited test exists, not that the test body
+still asserts that exact fixture literal. Reviewers must still check that the
+citation points at a meaningful behavioral assertion.
+
+### Phone-number fixtures
+
+Test and benchmark fixtures that contain phone numbers MUST use synthetic, non-reachable values from documented reservation ranges:
+
+- US/NA fixtures: NANPA "555" exchanges (`+1-555-01xx` etc.), reserved for fictional use under [NANPA reservation 555-01xx](https://nationalnanpa.com/).
+- UK fixtures: Ofcom drama-reserved ranges (`+44-7700-900xxx`), per [Ofcom drama numbers guidance](https://www.ofcom.org.uk/phones-and-broadband/phone-numbers/numbers-for-drama).
+- DE fixtures: synthetic non-reachable mobile shapes the `phonenumber` parser still accepts as valid E.164 (e.g. `+49 1555 0112233`-style values used in v0.4.4 S3a / v0.4.5 S2 phone-recognizer tests). The `1555` mobile prefix mirrors the NANPA 555 carve-out — non-reachable but parseable. Cite the v0.4.5 S2 phonenumber-region tests rather than introducing real-looking BNetzA-assigned ranges.
+- Other locales: synthesize a non-reachable shape (e.g. exchange code `0` or out-of-band country code) and add a fixture comment noting the synthetic origin.
+
+Rationale: drawer `gaze_decisions_e1ab6dc0`. Real reachable numbers in test
+fixtures risk inadvertent leakage into adopter telemetry, public CI logs, and
+crate metadata. The `phonenumber` parser-backed `E164Phone` validator
+(v0.4.4 S3a) accepts the NANPA 555 reservation and Ofcom drama ranges as valid
+E.164, so positive-path tests continue to exercise the validator without using
+real numbers. v0.4.5 S2 (PR #58) adds parser-backed national phone recognizers
+for DE and US that follow the same synthetic-only fixture posture.

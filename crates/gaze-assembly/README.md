@@ -38,11 +38,49 @@ gaze-recognizers = { path = "../gaze-recognizers" }
 serde_json = "1"
 ```
 
+## Minimal flow
+
+```rust
+use std::collections::HashMap;
+
+use gaze::{Context, LocaleChain, Policy, Rulepack};
+
+let policy: Policy = Policy::load_for_cli(policy_path)?;
+let context = Context {
+    dictionaries: HashMap::new(),
+    class_map: HashMap::new(),
+    fields: serde_json::Map::new(),
+};
+let rulepacks: Vec<Rulepack> = Vec::new();
+let active_locales = LocaleChain::merge_policy_and_cli(None, None);
+
+let pipeline = gaze_assembly::build_pipeline(
+    &policy,
+    &context,
+    &rulepacks,
+    &active_locales,
+    None,
+)?;
+```
+
+Consumers that need CLI-equivalent behavior call `resolve_policy_inputs`
+first; it loads bundled/path rulepacks, builds the `DictionaryBundle`, and
+resolves locale precedence. They still choose a session. See
+`crates/gaze-cli/src/pipeline/build.rs` for the CLI's use of both calls.
+
 ## Public entry points
 
-[`src/lib.rs`](src/lib.rs) exposes:
+[`src/lib.rs`](src/lib.rs) exposes, among others:
 
+- `CorePipelineConfig` / `CorePipeline`: the bundled-default pipeline
+  (`core` rulepack plus locale-aware recognizers) for the common case
+- `resolve_policy_inputs` / `ResolvedPolicyInputs`: resolves the rulepacks,
+  dictionaries, locales, and NER threshold that `gaze clean --policy` passes
+  to assembly
 - `build_pipeline(policy, context, rulepacks, active_locales, ner_threshold)`
+  and `build_pipeline_builder` (same arguments, returns the builder so a caller
+  can add recognizers or a safety net)
+- `attach_nym_safety_net` (feature `safety-net-nym`)
 - `BuildError`
 
 `build_pipeline` accepts:
@@ -73,36 +111,6 @@ It returns a fully built `gaze::Pipeline`.
 The function fails closed with `BuildError` when policy, rulepack, recognizer,
 or pipeline construction fails.
 
-## Minimal flow
-
-```rust
-use std::collections::HashMap;
-
-use gaze::{Context, LocaleChain, Policy, Rulepack};
-
-let policy: Policy = Policy::load_for_cli(policy_path)?;
-let context = Context {
-    dictionaries: HashMap::new(),
-    class_map: HashMap::new(),
-    fields: serde_json::Map::new(),
-};
-let rulepacks: Vec<Rulepack> = Vec::new();
-let active_locales = LocaleChain::merge_policy_and_cli(None, None);
-
-let pipeline = gaze_assembly::build_pipeline(
-    &policy,
-    &context,
-    &rulepacks,
-    &active_locales,
-    None,
-)?;
-```
-
-Consumers that need CLI-equivalent behavior must still load bundled/path
-rulepacks, build `DictionaryBundle` values, resolve locale precedence, and
-choose a session. See `crates/gaze-cli/src/main.rs` for that process-boundary
-work.
-
 ## Class-map safety
 
 Context `class_map` entries may override a dictionary recognizer's class. The
@@ -120,8 +128,8 @@ Rulepack regex recognizers may use supported pattern-template placeholders.
 `gaze-assembly` lowers those placeholders after the active locale chain is
 known. Generic placeholders use `{locale.<bucket>}` and lower from loaded
 rulepack locale metadata such as `[locale.salutations] names = [...]`.
-`{locale_email_headers}` remains a v0.4.2 compatibility alias for
-`{locale.email_headers}` and is deprecated for removal in the v0.5 cycle.
+`{locale_email_headers}` remains a deprecated v0.4.2 compatibility alias for
+`{locale.email_headers}`.
 
 Unknown placeholders fail closed with `RulepackError`; unknown locale buckets
 fail closed with `PolicyError::UnknownLocaleBucket`.
