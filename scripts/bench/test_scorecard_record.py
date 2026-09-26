@@ -121,7 +121,9 @@ class RecordReplayTests(unittest.TestCase):
             before = record.rescore(path, score.SCORED_LABEL_CONTRACT_V1)
             with gzip.open(path, "rt", encoding="utf-8") as stream:
                 rows = [json.loads(line) for line in stream]
-            rows[1]["response"]["final_protection_trace"] = []
+            rows[1]["response"]["final_protection_trace"][0]["raw_start"] = 0
+            rows[1]["response"]["final_protection_trace"][0]["raw_end"] = 21
+            rows[1]["gold_gap_evidence"][0][:5] = [0, 21, "email", 0, 21]
             with gzip.open(path, "wt", encoding="utf-8") as stream:
                 for row in rows:
                     stream.write(json.dumps(row) + "\n")

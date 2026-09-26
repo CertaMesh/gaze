@@ -115,6 +115,7 @@ re-score needs no corpus, binary or model:
 uv run --project scripts/bench python scripts/bench/rescore.py \
   target/bench-data/no-opf/observations-v1.jsonl.gz \
   --scored-labels docs/reference/benchmarks/scored-labels-v3.json \
+  --expected-sha256 HASH_FROM_SCORECARD \
   --output target/bench-data/no-opf/scorecard-v3.json
 ```
 
