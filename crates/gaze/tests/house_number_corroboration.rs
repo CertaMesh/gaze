@@ -220,3 +220,21 @@ fn every_other_detection_is_unchanged_by_the_second_resolution() {
         ["a@example.org", "Musterweg", "3", "Berlin"]
     );
 }
+
+#[test]
+fn a_ner_street_inside_an_organization_licenses_no_number() {
+    // Containment: the organization wholly contains the NER street and wins
+    // the span, so the settled selection is an organization, not a street.
+    let org = Spans {
+        id: "org.fixed",
+        class: PiiClass::Organization,
+        words: vec!["Bäckerei am Musterweg"],
+    };
+    let pipeline = builder(vec![ner(&["Musterweg"]), org], &Rows::default())
+        .build()
+        .unwrap();
+    assert_eq!(
+        tokenized(&pipeline, "Bäckerei am Musterweg 17"),
+        ["Bäckerei am Musterweg"]
+    );
+}
