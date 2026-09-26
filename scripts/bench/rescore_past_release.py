@@ -47,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import dataiku_en_de_gaze_bench as dataiku  # noqa: E402
 import gaze_bench_score as score  # noqa: E402
+import scorecard_record as records  # noqa: E402
 import run_no_opf_benchmark as runner  # noqa: E402
 
 HARNESS_ROOT = Path(__file__).resolve().parents[2]
@@ -168,6 +169,7 @@ def run(args: argparse.Namespace) -> Path:
         HARNESS_ROOT / runner.NEGATIVE_CORPUS
     )
     available = positives + negatives
+    original_available = available
     documents, sampling_report = score.stratified_sample(
         available, args.max_documents, seed=args.seed
     )
@@ -175,8 +177,14 @@ def run(args: argparse.Namespace) -> Path:
     documents = score.apply_scored_label_contract(documents, contract)
 
     probe = score.build_validator_probe(HARNESS_ROOT)
-    measurements = score.collect_validator_measurements(
-        probe, available, (document.uid for document in documents)
+    complete_measurements = score.collect_validator_measurements(
+        probe, original_available, (document.uid for document in documents)
+    )
+    measurements = records.filter_measurements(complete_measurements, available)
+    metadata, dataset_report = runner.composite_dataset_report(dataiku_report, negative_report)
+    record_writer = records.RecordWriter(
+        original_available, complete_measurements,
+        corpus_sha256=dataset_report["integrity"]["sha256"],
     )
     environment = runner.build_no_opf_environment(os.environ)
     for value in args.model_env:
@@ -199,10 +207,11 @@ def run(args: argparse.Namespace) -> Path:
             warmup_count=args.warmups,
             validator_measurements=measurements,
             replacing_actions=frozenset(args.manifest_actions.split(",")),
+            record_document=(lambda config, document, response, measurements:
+                record_writer.add("C", config, document, response, measurements)),
         )
         for config in configs
     ]
-    metadata, dataset_report = runner.composite_dataset_report(dataiku_report, negative_report)
     dataset_report["validator_gold_census"] = score.validator_gold_census(
         available, measurements
     )
@@ -242,6 +251,9 @@ def run(args: argparse.Namespace) -> Path:
         "measured_repetitions": 1,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
+    card["observation_record"] = record_writer.write(
+        output.with_name("observations-v1.jsonl.gz"), card, add_reference=True
+    )
     runner.write_json(output, card)
     return output
 

@@ -229,9 +229,17 @@ class RunnerWiringTests(unittest.TestCase):
                     mock.patch.object(runner, "load_negative_documents", return_value=([], {})), \
                     mock.patch.object(runner.dataiku, "build_binary", return_value=root / "clean_for_bench"), \
                     mock.patch.object(score, "build_validator_probe", return_value=root / "probe"), \
-                    mock.patch.object(score, "collect_validator_measurements", return_value={}), \
+                    mock.patch.object(score, "collect_validator_measurements", return_value={
+                        "documents": {positive[0].uid: {"gold_validation": [
+                            {"start": span.start, "end": span.end, "label": span.label,
+                             "applicable": False, "validator_passed": None}
+                            for span in positive[0].spans
+                        ]}}
+                    }), \
                     mock.patch.object(runner, "execute_measurements", side_effect=execute_measurements), \
-                    mock.patch.object(runner, "composite_dataset_report", return_value=({}, {})), \
+                    mock.patch.object(runner, "composite_dataset_report", return_value=(
+                        {}, {"integrity": {"sha256": "0" * 64}}
+                    )), \
                     mock.patch.object(score, "validator_gold_census", return_value={}), \
                     mock.patch.object(score, "assemble_scorecard", side_effect=assemble_scorecard):
                 with self.assertRaises(self.Stop):
