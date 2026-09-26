@@ -1745,7 +1745,11 @@ def gate(
     policy_ok = True
     if policy_delta is not None:
         policy_ok, reason, digests = _policy_delta_comparison(base, candidate, policy_delta)
-        delta_result = {"policy_digests": digests, "policy_delta_reason": reason}
+        delta_result = {
+            "policy_digests": digests,
+            "policy_delta_reason": reason,
+            "policy_delta_path": str(policy_delta),
+        }
     differing = sorted(
         key for key in base_identity
         if base_identity[key] != candidate_identity[key]
@@ -1766,7 +1770,10 @@ def gate_markdown(result: Mapping[str, object]) -> str:
         f"{result['policy_delta_reason']}; differing: {result['differing']}"
         if policy_differs else None
     )
-    lines = [f"Verdict: **{result['verdict']}** ({explanation or result.get('reason', result.get('differing'))})", ""]
+    detail = explanation or result.get("reason", result.get("differing"))
+    if "policy_delta_path" in result:
+        detail = f"{detail}; policy delta: {result['policy_delta_path']}"
+    lines = [f"Verdict: **{result['verdict']}** ({detail})", ""]
     if "policy_digests" in result:
         lines += ["Policy SHA-256 digests:"]
         lines += [f"- {name}: `{digest}`" for name, digest in result["policy_digests"].items()]

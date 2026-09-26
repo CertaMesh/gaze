@@ -766,6 +766,8 @@ class PolicyDeltaGateTests(unittest.TestCase):
     def compare(
         self, base_text: str, candidate_text: str, delta_text: str,
         missing_field: str | None = None,
+        tamper_policy: str | None = None,
+        remove_delta: bool = False,
     ) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             paths = {name: Path(directory) / f"{name}.toml" for name in ("base", "candidate", "delta")}
@@ -788,6 +790,13 @@ class PolicyDeltaGateTests(unittest.TestCase):
                         target[key] = None
                     else:
                         del target[key]
+            if tamper_policy:
+                paths[tamper_policy].write_text(
+                    paths[tamper_policy].read_text(encoding="utf-8") + "# changed after measurement\n",
+                    encoding="utf-8",
+                )
+            if remove_delta:
+                paths["delta"].unlink()
             return agentic.gate(base, candidate, policy_delta=paths["delta"])
 
     def test_declared_new_section_passes_with_parsed_toml_equality(self) -> None:
@@ -799,6 +808,7 @@ class PolicyDeltaGateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "pass")
         self.assertEqual(set(result["policy_digests"]), {"base", "candidate", "delta"})
         self.assertIn("Policy SHA-256 digests", agentic.gate_markdown(result))
+        self.assertIn("delta.toml", agentic.gate_markdown(result).splitlines()[0])
 
     def test_undeclared_extra_key_is_not_comparable(self) -> None:
         result = self.compare(
@@ -839,6 +849,44 @@ class PolicyDeltaGateTests(unittest.TestCase):
                     "[extension]\nthreshold = 0.5\n",
                     missing_field=field,
                 )
+
+    def test_policy_file_changed_after_measurement_is_refused(self) -> None:
+        for label in ("base", "candidate"):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                agentic.LayerError, f"{label} policy file differs from its scorecard SHA-256"
+            ):
+                self.compare(
+                    "[rules]\nenabled = true\n",
+                    "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                    "[extension]\nthreshold = 0.5\n",
+                    tamper_policy=label,
+                )
+
+    def test_empty_delta_is_not_comparable(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+            "",
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+        self.assertIn("at least one TOML section", result["policy_delta_reason"])
+
+    def test_missing_delta_file_is_refused(self) -> None:
+        with self.assertRaisesRegex(agentic.LayerError, "cannot read declared policy delta"):
+            self.compare(
+                "[rules]\nenabled = true\n",
+                "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                "[extension]\nthreshold = 0.5\n",
+                remove_delta=True,
+            )
+
+    def test_invalid_delta_toml_is_refused(self) -> None:
+        with self.assertRaisesRegex(agentic.LayerError, "invalid declared policy delta TOML"):
+            self.compare(
+                "[rules]\nenabled = true\n",
+                "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                "[extension\nthreshold = 0.5\n",
+            )
 
 
 class MutantGatePinTests(unittest.TestCase):
