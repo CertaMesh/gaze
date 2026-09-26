@@ -604,7 +604,8 @@ impl DaemonError {
     fn detail(&self) -> Option<&str> {
         match self {
             Self::Cli(CliError::SafetyNetConfigDetail(detail))
-            | Self::Cli(CliError::PolicyConfigDetail(detail)) => Some(detail.as_str()),
+            | Self::Cli(CliError::PolicyConfigDetail(detail))
+            | Self::Cli(CliError::PolicyOpenDetail(detail)) => Some(detail.as_str()),
             Self::Cli(_) => Some("gaze daemon request failed closed"),
             Self::Invariant => Some("unexpected non-text clean document"),
         }

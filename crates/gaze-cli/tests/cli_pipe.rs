@@ -4627,6 +4627,10 @@ fn t17b_unreadable_policy_names_the_file_and_the_permission_fix() {
     )
     .unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+    // Root (euid 0) still reads a mode-000 file, so this case cannot be exercised there.
+    if fs::read(&path).is_ok() {
+        return;
+    }
 
     let out = Command::cargo_bin("gaze")
         .unwrap()
@@ -4635,7 +4639,6 @@ fn t17b_unreadable_policy_names_the_file_and_the_permission_fix() {
         .write_stdin(b"Email alice@example.invalid now".to_vec())
         .output()
         .unwrap();
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
 
     assert_eq!(out.status.code(), Some(4));
     assert!(
@@ -4648,7 +4651,10 @@ fn t17b_unreadable_policy_names_the_file_and_the_permission_fix() {
     let detail = value["detail"].as_str().expect("detail names the fix");
     assert!(detail.contains(&path.display().to_string()), "{detail}");
     assert!(detail.contains("owner-only (mode 0600)"), "{detail}");
-    assert!(detail.contains("chmod 0640"), "{detail}");
+    assert!(
+        detail.contains(&format!("chmod 0640 '{}'", path.display())),
+        "{detail}"
+    );
     assert!(!detail.contains("alice@example.invalid"), "{detail}");
 }
 

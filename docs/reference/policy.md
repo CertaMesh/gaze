@@ -1071,16 +1071,20 @@ chgrp <service-group> /etc/gaze/gaze.toml
 chmod 0640 /etc/gaze/gaze.toml
 ```
 
+Re-running `gaze setup --force` replaces the file with a fresh owner-only
+copy, so apply the grant again afterwards.
+
 Keep the policy unwritable by the service account. A policy it can rewrite lets
 that account turn detection off.
 
 Without read access, gaze refuses to start rather than running without the
-policy. `Policy::load` returns `PolicyError::ReadPermissionDenied { path, .. }`,
-and the CLI prints the `PolicyOpen` envelope with a `detail` that names the
-file and this fix:
+policy. `Policy::load` returns `PolicyError::ReadPermissionDenied { path, .. }`
+(also for an unreadable `terms_file`; an unreadable rulepack path returns
+`RulepackError::ReadPermissionDenied`), and the CLI prints the `PolicyOpen`
+envelope with a `detail` that names the file and this fix:
 
 ```console
-{"error":"PolicyOpen","exit":4,"detail":"cannot read policy file `/etc/gaze/gaze.toml`: permission denied. ..."}
+{"error":"PolicyOpen","exit":4,"detail":"cannot read `/etc/gaze/gaze.toml`: permission denied. ..."}
 ```
 
 ## Troubleshooting
