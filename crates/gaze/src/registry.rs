@@ -948,6 +948,7 @@ impl RecognizerRegistry {
         }) {
             added.extend(recognizer.detect(input, &prior_ctx)?);
         }
+        ctx.degraded.set(prior_ctx.degraded.get());
         Ok(added)
     }
 

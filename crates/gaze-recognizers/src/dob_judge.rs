@@ -358,13 +358,18 @@ impl Recognizer for DobJudgeRecognizer {
 fn date_boundary_is_valid(input: &str, span: &Range<usize>) -> bool {
     let before = input[..span.start].chars().next_back();
     let after = input[span.end..].chars().next();
-    !before.is_some_and(|ch| ch.is_alphanumeric() || matches!(ch, '_' | '-' | '/' | '.'))
-        && !after.is_some_and(|ch| ch.is_alphanumeric() || matches!(ch, '_' | '-' | '/'))
-        && !(after == Some('.')
-            && input[span.end + 1..]
-                .chars()
-                .next()
-                .is_some_and(|ch| ch.is_alphanumeric() || matches!(ch, '_' | '-' | '/')))
+    if before.is_some_and(|ch| ch.is_alphanumeric() || matches!(ch, '_' | '-' | '/' | '.'))
+        || after.is_some_and(|ch| ch.is_alphanumeric() || matches!(ch, '_' | '-' | '/'))
+    {
+        return false;
+    }
+    if after == Some('.') {
+        return !input[span.end + 1..]
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_alphanumeric() || matches!(ch, '_' | '-' | '/'));
+    }
+    true
 }
 
 #[cfg(test)]
