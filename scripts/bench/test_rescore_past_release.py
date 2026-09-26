@@ -45,6 +45,36 @@ class ReleaseCheckoutTest(unittest.TestCase):
             with self.assertRaisesRegex(rescore.PastReleaseError, "dirty"):
                 rescore.run(args)
 
+    def test_a_dirty_harness_checkout_is_refused_before_anything_runs(self):
+        with tempfile.TemporaryDirectory() as release, tempfile.TemporaryDirectory() as harness:
+            for root in (release, harness):
+                subprocess.run(["git", "init", "-q", root], check=True)
+            scorer = Path(harness) / "gaze_bench_score.py"
+            scorer.write_text("committed", encoding="utf-8")
+            subprocess.run(["git", "-C", harness, "add", "-A"], check=True)
+            subprocess.run(
+                ["git", "-C", harness, "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                 "-c", "commit.gpgsign=false", "commit", "-qm", "t"],
+                check=True,
+            )
+            scorer.write_text("edited, not committed", encoding="utf-8")
+            args = rescore.parse_args(
+                [
+                    "--release-root", release,
+                    "--binary", str(Path(release) / "clean_for_bench"),
+                    "--binary-profile", "debug",
+                    "--configs", "rule-floor-extended",
+                    "--output", str(Path(release) / "out.json"),
+                ]
+            )
+            original = rescore.HARNESS_ROOT
+            rescore.HARNESS_ROOT = Path(harness)
+            try:
+                with self.assertRaisesRegex(rescore.PastReleaseError, "harness checkout is dirty"):
+                    rescore.run(args)
+            finally:
+                rescore.HARNESS_ROOT = original
+
     def test_opf_configs_are_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             subprocess.run(["git", "init", "-q", tmp], check=True)

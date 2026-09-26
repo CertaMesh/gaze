@@ -1028,6 +1028,15 @@ MANIFEST_REPLACING_ACTIONS = frozenset({"tokenize", "redact"})
 PRE_REDACT_MANIFEST_ACTIONS = frozenset({"tokenize"})
 
 
+def _check_replacing_actions(replacing_actions: frozenset[str]) -> None:
+    """Only the two manifest rules above exist; tokenizations always count."""
+    if "tokenize" not in replacing_actions or not replacing_actions <= MANIFEST_REPLACING_ACTIONS:
+        raise ValueError(
+            f"replacing_actions must be MANIFEST_REPLACING_ACTIONS or "
+            f"PRE_REDACT_MANIFEST_ACTIONS, got {sorted(replacing_actions)}"
+        )
+
+
 def _validate_final_protection_trace(
     document: Document,
     value: object,
@@ -1149,6 +1158,7 @@ def validate_response(
     *,
     replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
 ) -> dict[str, object]:
+    _check_replacing_actions(replacing_actions)
     response = _expect_object(value, f"{document.uid}: response")
     if "pipeline_error_code" in response:
         response = _expect_exact_keys(
@@ -2323,6 +2333,8 @@ def run_config(
     policy_path: Path | None = None,
     replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
 ) -> dict[str, object]:
+    # Checked before the subprocess starts, not on the first response.
+    _check_replacing_actions(replacing_actions)
     if not documents:
         raise ValueError(f"{config}: cannot run an empty document cell")
     attempted_document_ids = [document.uid for document in documents]

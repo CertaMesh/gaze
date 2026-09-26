@@ -1169,6 +1169,23 @@ class ResponseValidationTests(unittest.TestCase):
                 self.trace_document(), tokenized, replacing_actions=legacy
             )
 
+    def test_only_the_two_manifest_rules_are_accepted(self) -> None:
+        response = self.tokenize_response()
+        for rule in (benchmark.MANIFEST_REPLACING_ACTIONS, benchmark.PRE_REDACT_MANIFEST_ACTIONS):
+            benchmark.validate_response(
+                self.trace_document(), copy.deepcopy(response), replacing_actions=rule
+            )
+        for rule in (
+            frozenset({"redact"}),
+            frozenset(),
+            frozenset({"tokenize", "delete"}),
+        ):
+            with self.subTest(rule=sorted(rule)):
+                with self.assertRaisesRegex(ValueError, "replacing_actions"):
+                    benchmark.validate_response(
+                        self.trace_document(), copy.deepcopy(response), replacing_actions=rule
+                    )
+
     def test_marker_bytes_never_count_as_leaked_or_false_positive(self) -> None:
         """Guard (3) of the marker contract. The scorer counts in ORIGINAL-request coordinates:
         gold spans and trace predictions both point at the request bytes. A marker exists only in

@@ -128,6 +128,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> Path:
+    configs = tuple(c for c in args.configs.split(",") if c)
+    if not configs or any("opf" in c.lower() for c in configs):
+        raise PastReleaseError("configs must be non-empty and OPF-free")
     # Read before anything runs: the scorecard names the harness that scored it,
     # not whatever the checkout holds when the run ends.
     harness = subprocess.run(
@@ -141,12 +144,17 @@ def run(args: argparse.Namespace) -> Path:
     ).stdout
     if status.strip():
         raise PastReleaseError(f"release checkout is dirty: {release_root}")
+    # The scorecard stamps the harness commit; an uncommitted scorer edit would
+    # be credited to a commit that does not contain it.
+    harness_status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=HARNESS_ROOT, check=True, text=True,
+        capture_output=True,
+    ).stdout
+    if harness_status.strip():
+        raise PastReleaseError(f"harness checkout is dirty: {HARNESS_ROOT}")
     binary = args.binary.resolve()
     if not binary.is_file():
         raise PastReleaseError(f"release benchmark binary is missing: {binary}")
-    configs = tuple(c for c in args.configs.split(",") if c)
-    if not configs or any("opf" in c.lower() for c in configs):
-        raise PastReleaseError("configs must be non-empty and OPF-free")
 
     davlan = args.model_dir.expanduser().resolve()
     bundles = runner.validate_required_models(HARNESS_ROOT, davlan)
