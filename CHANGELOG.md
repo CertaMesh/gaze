@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Dates of birth after a birth cue are tokenized** (solo todo #3651).
+  Every release up to and including v0.15.1 sent these raw through
+  `gaze clean` and `gaze proxy` alike: `Geburtsdatum 30.05.1971`,
+  `{"dob": "30.05.1971"}` in a tool result, `née le 02/11/1992`, and any
+  month-name or two-digit-year date. `birth_date.cue` only read a line-start
+  field record (`DOB: 1990-02-03`) and `born on` / `geboren am`.
+
+### Changed
+
+- **`birth_date.cue` reads birth cues in prose, tool-call JSON and
+  `key=value` logs.** Cues cover en, de, fr, nl, da and es (`DOB`,
+  `date of birth`, `born`, `Geburtsdatum`, `geb.`, `geboren am`,
+  `am … geboren`, `née le`, `date de naissance`, `geboortedatum`,
+  `født den`, `fecha de nacimiento`, and more); JSON keys may be snake, camel
+  or kebab case with an underscore prefix (`customer_dob`, `dateOfBirth`,
+  `birth-date`). Dates may be ISO, year-first with `/` or `.`, compact
+  `YYYYMMDD`, day-first with `.` or `-`, slash in either order, two-digit
+  years, or month names in those six languages. A date without a birth cue
+  is still left alone, so invoice, log and release dates are unchanged. Every
+  value the old rule captured is still captured with the same span.
+
 ## [0.15.1] - 2026-09-26
 
 v0.15.1 closes the v0.15.0 known limitation for payment cards next to other

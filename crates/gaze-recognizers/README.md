@@ -216,9 +216,9 @@ Full contract:
 ## Explicit birth-date and credential fields
 
 The embedded `gaze-core` rulepack version **0.6.0** contains 40 recognizers.
-Two project-authored `safe_default` rules with `locales = ["global"]` add narrow EN/DE
-field recognition through the existing assembly and `RegexDetector` machinery,
-once their bundle is loaded.
+Two project-authored `safe_default` rules with `locales = ["global"]` add
+birth-date and credential field recognition through the existing assembly and
+`RegexDetector` machinery, once their bundle is loaded.
 `birth_date.cue` ships in `core`. `password.field` ships in the opt-in
 `secrets` bundle, because credentials are not PII; load it with
 `bundled = ["core", "secrets"]`. The former `username.field` rule was removed
@@ -226,12 +226,12 @@ in core 0.6.0.
 
 | Rule / custom class | Bundle | Complete, case-insensitive cues |
 | --- | --- | --- |
-| `birth_date.cue` / `custom:birth_date` | `core` | `date of birth`, `birth date`, `birthdate`, `DOB`, `Geburtsdatum` |
+| `birth_date.cue` / `custom:birth_date` | `core` | en `DOB`, `D.O.B.`, `date of birth`, `birth date`, `birthday`, `born`; de `Geburtsdatum`, `Geb.-Datum`, `geb.`, `Geburtstag`, `geboren`, trailing `am <date> geboren`; fr `né`/`née`, `date de naissance`; nl `geboortedatum`; da `fødselsdato`, `fødselsdag`, `født`; es `fecha de nacimiento`, `nacido`/`nacida`, `nació` |
 | `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
 
 ### Supported grammar
 
-A record occupies a complete line: optional ASCII spaces/tabs, a complete cue,
+`password.field` reads a record that occupies a complete line: optional ASCII spaces/tabs, a complete cue,
 optional spaces/tabs, `:` or `=`, optional spaces/tabs, a nonempty value,
 optional spaces/tabs, then LF, CRLF or EOF. Adjacent records work independently.
 Multiword cues use the literal spaces shown above. This is string recognition,
@@ -251,15 +251,29 @@ one permitted plain Unicode scalar or one supported two-scalar escape. Quoted
 values can therefore contain up to **512 normalized scalars**. This is neither
 a raw-source size bound nor a bound on the cost of scanning a document.
 
-Birth dates accept `YYYY-MM-DD`, `D.M.YYYY` and slash dates with four-digit years.
-Month/day components are structurally bounded to 1–12 / 1–31, including either
-slash ordering, without inferring or rewriting that ordering. Calendar validity
-is not asserted: a declared `31.02.1990` is still sensitive. A separate prose arm
-accepts a word-bounded `born on` or `geboren am`, horizontal whitespace and a
-complete supported date. Attached letters, digits, underscores or date separators
-cannot extend a captured date prefix. A final period is accepted only before EOF
-or a non-word, non-date-separator character. Month names, partial dates, two-digit
-years and intervening prose are outside this grammar.
+`birth_date.cue` is cue-anchored, not line-anchored: a date is captured only
+after a birth cue, and a date without one stays raw. The cue may be prose
+(`geboren am 30.05.1971`), a JSON key in plain, single or backslash-escaped
+quotes (`{"dob": "30.05.1971"}`), or a `key=value` / `key: value` log field.
+Keys may be snake, camel or kebab case (`date_of_birth`, `dateOfBirth`,
+`birth-date`) and may carry an underscore prefix (`customer_dob`). Up to eight
+filler tokens may sit between cue and date: separators, quotes, and short link
+words such as `is`, `ist der`, `est le`, `er`, `op`, `el`, `am`, `den`, `on`.
+`anniversaire` and `since` are not cues: both name other dates as often as a
+birth date.
+
+Accepted dates: `YYYY-MM-DD`, `YYYY/MM/DD`, `YYYY.MM.DD`, compact `YYYYMMDD`
+(19xx/20xx), `D.M.YYYY`, `D-M-YYYY`, slash dates in either day/month order,
+two-digit years in those numeric forms, and month names in en/de/fr/nl/da/es
+(`14 March 1987`, `March 14, 1987`, `14. März 1987`, `1er mars 1984`,
+`12 de marzo de 1987`, `12-Mar-1984`). Spaces inside the date may be NBSP or
+NARROW NBSP. Month/day components are structurally bounded to 1–12 / 1–31
+without inferring the ordering. Calendar validity is not asserted: a declared
+`31.02.1990` is still sensitive. A date glued to a longer word run (`1987x`,
+`1987_2`) is not captured. Year-only and year-less dates are outside this
+grammar. Pinned by `tests/birth_date_cues.rs`, which also enumerates the
+retired field-record grammar and requires every value it captured to be
+captured with the same span.
 
 ### Protection and policy limits
 
