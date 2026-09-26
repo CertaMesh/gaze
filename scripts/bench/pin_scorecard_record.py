@@ -12,8 +12,9 @@ def main() -> int:
     parser.add_argument("record", type=Path)
     parser.add_argument("scorecard", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--strip-layers", action="store_true")
     args = parser.parse_args()
-    pin_template(args.record, args.scorecard, args.output)
+    pin_template(args.record, args.scorecard, args.output, strip_layers=args.strip_layers)
     return 0
 
 

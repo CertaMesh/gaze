@@ -215,6 +215,16 @@ class RecordReplayTests(unittest.TestCase):
             writer.write(path, card, add_reference=False)
             replayed = record.rescore(path, score.SCORED_LABEL_CONTRACT_V1)
             self.assertEqual(agentic.gate(card, replayed)["verdict"], "fail")
+            template = copy.deepcopy(card)
+            del template["layers"]
+            template_path, pinned_path = (
+                Path(temporary) / "template.json", Path(temporary) / "c-only.gz"
+            )
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            record.pin_template(path, template_path, pinned_path, strip_layers=True)
+            self.assertEqual(
+                record.rescore(pinned_path, score.SCORED_LABEL_CONTRACT_V1), template
+            )
             broken = copy.deepcopy(replayed)
             del broken["layers"]["gold_validity"]
             with self.assertRaisesRegex(agentic.LayerError, "gold-validity"):
