@@ -36,9 +36,11 @@ Base sha (`main` the branch starts from, scored fresh):
 Candidate sha:
 Scorecard paths:
 
-| Layer | Leaked bytes v2 (base → candidate) | Leaked bytes v1 (base → candidate) | False-positive bytes (base → candidate) | Refusals (base → candidate) |
-| --- | --- | --- | --- | --- |
-|  |  |  |  |  |
+| Layer | Leaked bytes v2 (base → candidate) | Leaked bytes v1 (base → candidate) | False-positive bytes v2 (base → candidate) | False-positive bytes v1 (base → candidate) | Refusals (base → candidate) |
+| --- | --- | --- | --- | --- | --- |
+|  |  |  |  |  |  |
+
+Net bytes over all layers (leaked bytes removed − false-positive bytes added; must be above zero unless false-positive-only), v2:  v1:
 
 ## DCO
 
