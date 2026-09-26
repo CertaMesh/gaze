@@ -448,8 +448,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--agentic-scored-labels", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
-    contract = score.load_scored_label_contract(args.scored_labels) if args.scored_labels else score.SCORED_LABEL_CONTRACT_V1
-    layer_contract = score.load_scored_label_contract(args.agentic_scored_labels) if args.agentic_scored_labels else None
+    root = Path(__file__).resolve().parents[2]
+    def load(path: Path) -> score.ScoredLabelContract:
+        resolved = path if path.is_absolute() else root / path
+        try:
+            display = resolved.resolve().relative_to(root).as_posix()
+        except ValueError:
+            display = resolved.as_posix()
+        return score.load_scored_label_contract(resolved, display_path=display)
+    contract = load(args.scored_labels) if args.scored_labels else score.SCORED_LABEL_CONTRACT_V1
+    layer_contract = load(args.agentic_scored_labels) if args.agentic_scored_labels else None
     card = rescore(args.record, contract, layer_contract)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(card, indent=2) + "\n", encoding="utf-8")

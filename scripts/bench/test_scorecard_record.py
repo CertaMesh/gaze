@@ -1,6 +1,7 @@
 """Contract replay must depend on observations and retain no document values."""
 
 import gzip
+import copy
 import json
 import sys
 import tempfile
@@ -10,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import gaze_bench_score as score
+import agentic_layers as agentic
 import scorecard_record as record
 
 
@@ -128,6 +130,78 @@ class RecordReplayTests(unittest.TestCase):
                 before["runs"][0]["metrics"]["utf8_bytes"],
                 after["runs"][0]["metrics"]["utf8_bytes"],
             )
+
+    def test_rescored_layers_reach_gate_and_missing_identity_refuses(self):
+        layer_contract = agentic.load_contract(ROOT)
+        layer_docs = [
+            score.Document("layer-a", "alice@example.invalid", "en", "US", "synthetic",
+                           (score.Span(0, 21, "EMAIL"),), cell="A|email|prose_cue|valid"),
+            score.Document("layer-d", "benign sku", "en", "US", "synthetic", (),
+                           cell="D|sku|prose|benign"),
+            score.Document("layer-r", "alice@example.invalid", "en", "US", "synthetic",
+                           (score.Span(0, 21, "EMAIL"),), cell="R|email|repeat|valid"),
+        ]
+        layer_measurements = {
+            "validator_kinds_by_class": {},
+            "documents": {
+                document.uid: {
+                    "gold_validation": [
+                        {"start": span.start, "end": span.end, "label": span.label,
+                         "applicable": False, "validator_passed": None}
+                        for span in document.spans
+                    ],
+                    "predictions": None,
+                }
+                for document in layer_docs
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "observations.jsonl.gz"
+            card = self.make_record(path)
+            card["parameters"]["policy_sha256"] = "1" * 64
+            card["layers"] = {
+                "generator": {"corpus_sha256": "2" * 64},
+                "scored_label_contract": score.scored_label_contract_report(
+                    layer_contract, layer_docs
+                ),
+                "gold_validity": {"C": agentic.gold_validity_digest(
+                    [self.document], self.measurements
+                )},
+            }
+            writer = record.RecordWriter(
+                [self.document], self.measurements, corpus_sha256="0" * 64,
+                extra_documents=layer_docs, layer_contract=layer_contract,
+            )
+            writer.add("C", "policy-file", self.document, self.response, self.measurements)
+            for layer, document in zip(("A", "D", "R"), layer_docs, strict=True):
+                response = copy.deepcopy(self.response)
+                response["fixture_id"] = document.uid
+                response["final_protection_trace"] = []
+                response["manifest_integrity"]["spans"] = 0
+                measurements = None if layer == "D" else layer_measurements
+                run = score.run_config(
+                    Path("."), Path("."), "policy-file", [document], Path("."),
+                    None, None, None, 0.3, Path("."),
+                    validator_measurements=measurements,
+                    replay_responses={document.uid: response},
+                )
+                card["layers"][layer] = {
+                    "population": score.population_summary([document]),
+                    "runs": [run],
+                }
+                if measurements is not None:
+                    card["layers"][layer]["validator_gold_census"] = (
+                        score.validator_gold_census([document], measurements)
+                    )
+                    writer.layer_measurements[layer] = measurements
+                writer.add(layer, "policy-file", document, response, measurements)
+            writer.write(path, card, add_reference=False)
+            replayed = record.rescore(path, score.SCORED_LABEL_CONTRACT_V1)
+            self.assertEqual(agentic.gate(card, replayed)["verdict"], "fail")
+            broken = copy.deepcopy(replayed)
+            del broken["layers"]["gold_validity"]
+            with self.assertRaisesRegex(agentic.LayerError, "gold-validity"):
+                agentic.gate(card, broken)
 
 
 if __name__ == "__main__":

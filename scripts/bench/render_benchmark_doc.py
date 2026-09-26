@@ -24,6 +24,7 @@ history file is what lets ``--check`` run without it.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
@@ -351,6 +352,7 @@ def validate_history(history: Mapping[str, Any]) -> None:
         )
         _require_model_bundles(entry.get("provenance") or {}, f"{version}: history")
         _validate_validator_recall(entry.get("validator_recall"), version)
+        _validate_observation_record(entry.get("observation_record"), entry, version)
         shipped_default_arm(entry)
         _validate_contract_results(entry)
 
@@ -392,6 +394,24 @@ def _validate_contract_results(entry: Mapping[str, Any]) -> None:
             raise RenderError(f"{where}: the shipped default arm was not measured")
         if "measurement" in result:
             _validate_measurement(result["measurement"], f"{where} measurement")
+        _validate_observation_record(result.get("observation_record"), entry, where)
+
+
+def _validate_observation_record(
+    record: object, entry: Mapping[str, Any], where: str
+) -> None:
+    if record is None:
+        return
+    if not isinstance(record, Mapping):
+        raise RenderError(f"{where}: observation record must be an object")
+    if record.get("format") != "gzip-jsonl" or record.get("schema_version") != 1:
+        raise RenderError(f"{where}: unknown observation record format")
+    name = record.get("file")
+    if not isinstance(name, str) or Path(name).name != name:
+        raise RenderError(f"{where}: observation record file must be a basename")
+    _require_hex64(record.get("sha256"), f"{where} observation record sha256")
+    if record.get("corpus_sha256") != entry["dataset"]["integrity"]["sha256"]:
+        raise RenderError(f"{where}: observation record corpus digest mismatch")
 
 
 def contract_scorecard_name(version: str, contract_version: int) -> str:
@@ -448,6 +468,14 @@ def contract_result_from_scorecard(
         "scorecard": scorecard_filename,
         "scorecard_sha256": scorecard_sha256,
         "arms": projected["arms"],
+        **(
+            {"observation_record": projected["observation_record"]}
+            if "observation_record" in projected else {}
+        ),
+        **(
+            {"agentic_layers": projected["agentic_layers"]}
+            if "agentic_layers" in projected else {}
+        ),
     }
     provenance = scorecard.get("runner_provenance") or {}
     if provenance.get("entry_point") == PAST_RELEASE_ENTRY_POINT:
@@ -902,6 +930,9 @@ def history_entry_from_scorecard(
             field: _dig(run, path, f"run {config}")
             for field, path in ARM_FIELD_SOURCES.items()
         }
+        labels = run.get("per_label_recall")
+        if isinstance(labels, Mapping):
+            arms[config]["per_label_recall"] = copy.deepcopy(dict(labels))
         gold_gap = _gold_gap_from_run(run, config)
         if gold_gap is not None:
             arms[config]["gold_gap"] = gold_gap
@@ -971,6 +1002,14 @@ def history_entry_from_scorecard(
         **({"scored_label_contract": contract} if contract is not None else {}),
         "shipped_default_arm": shipped_arm,
         "arms": arms,
+        **(
+            {"observation_record": copy.deepcopy(scorecard["observation_record"])}
+            if "observation_record" in scorecard else {}
+        ),
+        **(
+            {"agentic_layers": layer_history_aggregates(scorecard)}
+            if isinstance(scorecard.get("layers"), Mapping) else {}
+        ),
         # Absent on rows measured before the gold-validity split, so those rows
         # and the document they render stay byte-identical.
         **(
@@ -978,6 +1017,39 @@ def history_entry_from_scorecard(
             if validator_recall is not None
             else {}
         ),
+    }
+
+
+def layer_history_aggregates(scorecard: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep the complete scored layer aggregates beside release headlines."""
+    layers = scorecard.get("layers")
+    if not isinstance(layers, Mapping):
+        raise RenderError("scorecard has no agentic layers")
+    generator = layers.get("generator")
+    contract = layers.get("scored_label_contract")
+    if not isinstance(generator, Mapping) or not isinstance(contract, Mapping):
+        raise RenderError("agentic layer identity is missing")
+    arms: dict[str, dict[str, Any]] = {}
+    for layer in ("A", "D", "R"):
+        block = layers.get(layer)
+        if not isinstance(block, Mapping) or not isinstance(block.get("runs"), list):
+            raise RenderError(f"agentic layer {layer} has no runs")
+        for run in block["runs"]:
+            config = run["config"]
+            arms.setdefault(config, {})[layer] = {
+                "metrics": copy.deepcopy(run["metrics"]),
+                "per_label_recall": copy.deepcopy(run["per_label_recall"]),
+                "pipeline_availability": copy.deepcopy(run["pipeline_availability"]),
+            }
+    return {
+        "generator_corpus_sha256": generator["corpus_sha256"],
+        "scored_label_contract": {
+            key: contract[key] for key in ("id", "version", "file_sha256")
+        },
+        "binary_commit": copy.deepcopy(scorecard.get("binary_commit", scorecard.get("gaze"))),
+        "binary_sha256": scorecard.get("binary_sha256"),
+        "harness_commit": copy.deepcopy(scorecard.get("gaze")),
+        "arms": arms,
     }
 
 
