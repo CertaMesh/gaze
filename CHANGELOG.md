@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- **`gaze_proxy::ProviderAdapter::contract()` is required** (solo todo
+  #2400). The default body, which silently gave every third-party adapter
+  `AdapterContract::legacy()`, is gone; an adapter that declares no contract
+  no longer compiles (`E0046`). Add
+  `fn contract(&self) -> AdapterContract<'_> { AdapterContract::legacy() }`
+  to keep today's behavior. The bundled OpenAI and Gemini adapters now declare
+  it explicitly; `PiiSurface` is unchanged. See UPGRADE.md.
+
 ### Security
 
 - **Dates of birth after a birth cue are tokenized** (solo todo #3651).

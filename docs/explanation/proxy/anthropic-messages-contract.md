@@ -364,9 +364,10 @@ Migrate as follows:
 
 The `AnthropicAdapter::new` constructor remains source-compatible; its strict
 behavior is the intentional contract. The builder is the continuity opt-in.
-OpenAI and Gemini remain explicitly on their legacy adapter contracts, and
-older third-party `ProviderAdapter` implementations continue to default to the
-legacy protocol contract. Existing public root re-exports remain available.
+OpenAI and Gemini remain explicitly on their legacy adapter contracts.
+Third-party `ProviderAdapter` implementations must declare a contract too:
+`contract()` has no default, so an adapter that declares none does not compile.
+Existing public root re-exports remain available.
 None of those compatibility promises relaxes the strict Anthropic wire rules.
 
 ## Retained official-SDK manual gate
