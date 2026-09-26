@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **[bundle-tokenization-drift] `core` excludes documentation IPs.** The
+  no-policy snapshot drops RFC 5737 IPv4 and RFC 3849 IPv6 detections; nearby
+  non-documentation addresses still tokenize and restore.
+
 - **`birth_date.cue` reads birth cues in prose, tool-call JSON and
   `key=value` logs.** Cues cover en, de, fr, nl, da and es (`DOB`,
   `date of birth`, `born`, `Geburtsdatum`, `geb.`, `geboren am`,

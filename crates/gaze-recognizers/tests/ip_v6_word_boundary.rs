@@ -106,6 +106,7 @@ fn assert_tokenized(text: &str, address: &str, surviving_context: &[&str]) {
 
 #[test]
 fn documentation_addresses_stay_untouched_and_adjacent_ranges_restore() {
+    // drift-ack: bundled core now excludes documentation IPs from its no-policy snapshot.
     for address in [
         "192.0.2.1",
         "198.51.100.7",
