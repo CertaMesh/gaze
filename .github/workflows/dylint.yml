@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   dylint:
@@ -54,7 +54,7 @@ jobs:
             lint/dylint/target
             target
             ~/.dylint_drivers
-          key: dylint-target-${{ runner.os }}-${{ runner.arch }}-6.0.4-${{ hashFiles('Cargo.lock', 'lint/dylint/Cargo.lock', 'rust-toolchain.toml', 'lint/dylint/rust-toolchain.toml') }}
+          key: dylint-target-${{ runner.os }}-${{ runner.arch }}-6.0.4-${{ hashFiles('Cargo.lock', 'lint/dylint/Cargo.toml', 'lint/dylint/Cargo.lock', 'lint/dylint/src/**', 'rust-toolchain.toml', 'lint/dylint/rust-toolchain.toml') }}
       - name: UI fixtures
         working-directory: lint/dylint
         run: cargo test --locked --test ui
