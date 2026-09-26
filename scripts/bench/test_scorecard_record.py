@@ -113,6 +113,13 @@ class RecordReplayTests(unittest.TestCase):
                 body = stream.read()
             self.assertNotIn("alice@example.invalid", body)
             self.assertNotIn("secret", body)
+            rows = [json.loads(line) for line in body.splitlines()]
+            self.assertNotIn("timing", rows[1]["response"])
+            second = Path(temporary) / "second.jsonl.gz"
+            self.make_record(second)
+            with gzip.open(second, "rt", encoding="utf-8") as stream:
+                second_rows = [json.loads(line) for line in stream]
+            self.assertEqual(rows[1:], second_rows[1:])
 
     def test_mutated_prediction_changes_score(self):
         with tempfile.TemporaryDirectory() as temporary:
