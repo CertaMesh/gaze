@@ -1020,10 +1020,19 @@ def load_committed_source_id_vocabulary(
 COMMITTED_SOURCE_ID_VOCABULARY = load_committed_source_id_vocabulary()
 
 
+#: Trace actions that are manifest entries. Redactions joined the manifest in
+#: #623 (after v0.14.0); a release built before that recorded only tokenizations there, so
+#: scoring its own binary checks trace/manifest agreement under its own rule.
+#: The leak math reads every trace item either way.
+MANIFEST_REPLACING_ACTIONS = frozenset({"tokenize", "redact"})
+PRE_REDACT_MANIFEST_ACTIONS = frozenset({"tokenize"})
+
+
 def _validate_final_protection_trace(
     document: Document,
     value: object,
     manifest: Sequence[object],
+    replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
 ) -> list[Span]:
     trace = _expect_list(value, "final_protection_trace")
     original_text = document.text.encode("utf-8")
@@ -1099,7 +1108,7 @@ def _validate_final_protection_trace(
         # `[REDACTED:<class>]` marker and records it like any other replacement.
         # Counting only tokenizations here would read every redaction as a
         # manifest entry nothing in the trace explains, and reject the document.
-        if action in ("tokenize", "redact"):
+        if action in replacing_actions:
             tokenize_items[(raw_start, raw_end, pii_class)] += 1
 
     manifest_items: Counter[tuple[int, int, str]] = Counter()
@@ -1134,7 +1143,12 @@ def _validate_final_protection_trace(
     return predictions
 
 
-def validate_response(document: Document, value: object) -> dict[str, object]:
+def validate_response(
+    document: Document,
+    value: object,
+    *,
+    replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
+) -> dict[str, object]:
     response = _expect_object(value, f"{document.uid}: response")
     if "pipeline_error_code" in response:
         response = _expect_exact_keys(
@@ -1223,7 +1237,7 @@ def validate_response(document: Document, value: object) -> dict[str, object]:
             )
         _validate_success_timing(response["timing"], "timing")
         _validate_final_protection_trace(
-            document, response["final_protection_trace"], manifest
+            document, response["final_protection_trace"], manifest, replacing_actions
         )
         if (
             any(
@@ -2307,6 +2321,7 @@ def run_config(
     warmup_count: int = 0,
     validator_measurements: Mapping[str, object] | None = None,
     policy_path: Path | None = None,
+    replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
 ) -> dict[str, object]:
     if not documents:
         raise ValueError(f"{config}: cannot run an empty document cell")
@@ -2363,7 +2378,9 @@ def run_config(
             "text": document.text,
         }
         request_started = time.perf_counter()
-        response = validate_response(document, process.exchange(request))
+        response = validate_response(
+            document, process.exchange(request), replacing_actions=replacing_actions
+        )
         process.check_message_deadline()
         validated_at = time.perf_counter()
         if first_response_ms is None:

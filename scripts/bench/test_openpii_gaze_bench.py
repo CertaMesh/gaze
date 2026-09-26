@@ -1145,6 +1145,30 @@ class ResponseValidationTests(unittest.TestCase):
         ):
             benchmark.validate_response(self.trace_document(), response)
 
+    def test_pre_redact_manifest_rule_is_opt_in_and_only_relaxes_redactions(self) -> None:
+        """Scoring a release built before #623 (v0.14.0) checks its trace against the
+        rule it was built with: redactions were not manifest entries yet. The option
+        is opt-in, and it still rejects a tokenization the manifest does not carry."""
+        legacy = benchmark.PRE_REDACT_MANIFEST_ACTIONS
+        response = self.redact_response("synthetic")
+        response["manifest_spans"] = []
+        response["manifest_integrity"]["spans"] = 0
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "agree 1:1"):
+            benchmark.validate_response(self.trace_document(), copy.deepcopy(response))
+        benchmark.validate_response(
+            self.trace_document(), copy.deepcopy(response), replacing_actions=legacy
+        )
+        tokenized = self.tokenize_response()
+        benchmark.validate_response(
+            self.trace_document(), copy.deepcopy(tokenized), replacing_actions=legacy
+        )
+        tokenized["manifest_spans"] = []
+        tokenized["manifest_integrity"]["spans"] = 0
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "agree 1:1"):
+            benchmark.validate_response(
+                self.trace_document(), tokenized, replacing_actions=legacy
+            )
+
     def test_marker_bytes_never_count_as_leaked_or_false_positive(self) -> None:
         """Guard (3) of the marker contract. The scorer counts in ORIGINAL-request coordinates:
         gold spans and trace predictions both point at the request bytes. A marker exists only in
