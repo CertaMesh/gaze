@@ -387,6 +387,17 @@ mod tests {
     }
 
     #[test]
+    fn zero_width_matches_advance_through_the_input_and_stop_at_the_end() {
+        let detector = RegexDetector::with_source(
+            r"\b",
+            PiiClass::custom("synthetic_id").unwrap(),
+            "synthetic.boundary",
+        )
+        .unwrap();
+        assert_eq!(detector.spans("a b", None), vec![0..0, 1..1, 2..2, 3..3]);
+    }
+
+    #[test]
     fn bundled_email_detector_matches_before_non_ascii_letter() {
         let detector = RegexDetector::emails().expect("email detector");
         let detections = Detector::detect(&detector, "a@example.invalidø");
