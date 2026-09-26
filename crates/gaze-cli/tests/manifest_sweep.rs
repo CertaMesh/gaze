@@ -99,8 +99,10 @@ fn case_b_lowercase_copy_gets_a_sibling_token() {
 #[test]
 #[file_serial(gaze_subprocess)]
 fn case_c_title_case_surname_part_is_swept() {
-    let input = format!("{HEADER}\nPlease forward this to Ms Schneider today.\n");
-    clean_and_round_trip(&input, &["Schneider"]);
+    // `Schneider` is an everyday German noun (tailor) and on the closed
+    // common-word list, so the surname part is probed with another name.
+    let input = "From: Lena Kowalski <lena.kowalski@example.invalid>\n\nPlease forward this to Ms Kowalski today.\n";
+    clean_and_round_trip(input, &["Kowalski"]);
 }
 
 #[test]
@@ -156,6 +158,29 @@ fn common_word_parts_are_not_swept() {
         "{clean}"
     );
     assert!(!clean.contains("From: Rose May"), "{clean}");
+}
+
+/// A four-digit postcode is found through its city anchor. Copying the bare
+/// digits would tokenize every year and room number, so short digit runs do
+/// not propagate (review 668 F1).
+#[test]
+#[file_serial(gaze_subprocess)]
+fn short_postcode_does_not_sweep_a_year() {
+    let input = "Adresse: Rue du Lac 1, 2024 Neuchâtel\nIm Jahr 2024 zogen wir um.\n";
+    let out = assert_cmd::Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", "--locale", "de-CH"])
+        .write_stdin(input.as_bytes().to_vec())
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let value: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let clean = value["clean_text"].as_str().unwrap();
+    assert!(
+        !clean.contains("2024 Neuchâtel"),
+        "the anchored postcode is still found: {clean}"
+    );
+    assert!(clean.contains("Im Jahr 2024 zogen"), "{clean}");
 }
 
 fn write_core_only_policy() -> (tempfile::TempDir, std::path::PathBuf) {

@@ -40,9 +40,15 @@ use crate::normalize::normalize;
 /// Recognizer id, source label and audit stage of a swept copy.
 pub(crate) const SWEEP_ID: &str = "manifest_sweep";
 
-/// Whole values shorter than this many non-space characters are left to
-/// their own recognizers.
+/// Precision floors, one per [`ValueShape`]. Whole values below their floor
+/// are left to their own recognizers.
 const MIN_VALUE_CHARS: usize = 4;
+/// A digit run needs this many digits. Short numbers (a four-digit AT/CH
+/// postcode, a bare five-digit postal code) are found only through the cue or
+/// city next to them, and that anchor is their whole precision: bare `\d{4}`
+/// is 19 % precise. Copying the digits alone would tokenize years and room
+/// numbers (`2024 Neuchâtel` then `Im Jahr 2024`).
+const MIN_DIGIT_RUN: usize = 6;
 /// Name parts need at least this many letters.
 const MIN_PART_LETTERS: usize = 3;
 /// The sweep fails closed instead of degrading when a session's value list
@@ -73,6 +79,23 @@ const COMMON_WORDS: &[&str] = &[
     "weiss", "weiß", "schwarz", "braun", "roth", "jung", "alt", "berg", "wald",
     "stein", "bach", "graf", "koch", "fuchs", "wolf", "vogel", "haas", "kaiser",
     "koenig", "könig", "herr", "frau",
+    // German surnames that are everyday nouns. German capitalises every noun,
+    // so title case does not tell `Der Richter hat entschieden` from a name.
+    "richter", "bauer", "fischer", "müller", "mueller", "schneider", "weber",
+    "meyer", "meier", "maier", "mayer", "wagner", "becker", "bäcker", "baecker",
+    "schäfer", "schaefer", "jäger", "jaeger", "zimmermann", "hoffmann", "hofmann",
+    "keller", "engel", "hahn", "busch", "brandt", "schmidt", "schmid", "schulz",
+    "schulze", "krüger", "krueger", "neumann", "lehmann", "kaufmann", "schuster",
+    "kramer", "krämer", "metzger", "maurer", "wirth", "vogt", "förster", "gärtner",
+    "pfarrer", "schreiber", "meister", "berger", "hartmann", "bergmann",
+    // English surnames that are everyday verbs or nouns, sentence-initial in
+    // title case (`Grant access to the repo.`).
+    "grant", "price", "rice", "bush", "banks", "wells", "cross", "lane", "west",
+    "dean", "case", "bond", "burns", "marsh", "moss", "ford", "fox", "lamb",
+    "park", "parks", "reed", "ward", "bell", "bird", "brook", "brooks", "hall",
+    "hart", "house", "hunt", "knight", "lord", "love", "low", "marshall", "mills",
+    "noble", "north", "south", "east", "pike", "pool", "pope", "power", "sharp",
+    "short", "spring", "steel", "swift", "walker", "street", "gates", "means",
 ];
 
 /// Certainty of the evidence a manifest value was found with, ordered like
@@ -335,10 +358,53 @@ pub(crate) fn select(mut hits: Vec<SweepHit>) -> Vec<SweepHit> {
     out
 }
 
+/// The shape of a value decides how it is swept and its precision floor.
+/// One minimum for every shape let a four-digit postcode lose the anchor it
+/// was found with; each variant now owns its floor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ValueShape {
+    /// A collision-family value: byte-exact, at least [`MIN_VALUE_CHARS`].
+    Family,
+    /// Digits and separators only: folded, at least [`MIN_DIGIT_RUN`] digits.
+    DigitRun,
+    /// One alphabetic word: its spellings, at least [`MIN_VALUE_CHARS`].
+    Word,
+    /// Anything else: folded, at least [`MIN_VALUE_CHARS`] non-space
+    /// characters, plus title-case parts of a `Name`.
+    MultiWord,
+}
+
+impl ValueShape {
+    fn of(class: &PiiClass, value: &str) -> Self {
+        if class.as_family_name().is_some() {
+            Self::Family
+        } else if value.chars().any(|ch| ch.is_ascii_digit())
+            && value
+                .chars()
+                .all(|ch| ch.is_ascii_digit() || ch.is_whitespace() || "-./".contains(ch))
+        {
+            Self::DigitRun
+        } else if is_word(value) {
+            Self::Word
+        } else {
+            Self::MultiWord
+        }
+    }
+
+    fn clears_floor(self, value: &str) -> bool {
+        match self {
+            Self::DigitRun => value.chars().filter(char::is_ascii_digit).count() >= MIN_DIGIT_RUN,
+            Self::Family | Self::Word | Self::MultiWord => {
+                value.chars().filter(|ch| !ch.is_whitespace()).count() >= MIN_VALUE_CHARS
+            }
+        }
+    }
+}
+
 fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Pattern>) {
     let normalized = normalize(&source.raw).text;
     let value = normalized.trim();
-    let non_space = value.chars().filter(|ch| !ch.is_whitespace()).count();
+    let shape = ValueShape::of(&source.class, value);
     let mut push = |kind, text: String, link| {
         patterns.push(Pattern {
             kind,
@@ -347,27 +413,28 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
             link,
         })
     };
-    if source.class.as_family_name().is_some() {
-        if non_space >= MIN_VALUE_CHARS {
-            push(PatternKind::Exact, value.to_string(), SweepLink::Exact);
-        }
-        return;
-    }
-    if is_word(value) {
-        if non_space >= MIN_VALUE_CHARS {
-            for spelling in word_spellings(value) {
-                push(PatternKind::Exact, spelling, SweepLink::Exact);
+    if shape.clears_floor(value) {
+        match shape {
+            ValueShape::Family => push(PatternKind::Exact, value.to_string(), SweepLink::Exact),
+            ValueShape::Word => {
+                for spelling in word_spellings(value) {
+                    push(PatternKind::Exact, spelling, SweepLink::Exact);
+                }
+            }
+            ValueShape::DigitRun | ValueShape::MultiWord => {
+                push(PatternKind::Folded, fold(value).text, SweepLink::Exact)
             }
         }
-        return;
     }
-    if non_space >= MIN_VALUE_CHARS {
-        push(PatternKind::Folded, fold(value).text, SweepLink::Exact);
-    }
-    if source.class == PiiClass::Name {
+    if shape == ValueShape::MultiWord && source.class == PiiClass::Name {
         for part in value.split_whitespace().filter(|part| is_word(part)) {
             if part.chars().filter(|ch| ch.is_alphabetic()).count() >= MIN_PART_LETTERS {
-                for spelling in word_spellings(part) {
+                // A part is swept only in a spelling that starts upper-case:
+                // a lower-case single word is too often an ordinary word.
+                for spelling in word_spellings(part)
+                    .into_iter()
+                    .filter(|spelling| spelling.chars().next().is_some_and(char::is_uppercase))
+                {
                     push(PatternKind::Exact, spelling, SweepLink::Part);
                 }
             }
@@ -383,22 +450,18 @@ fn is_word(value: &str) -> bool {
             .all(|piece| !piece.is_empty() && piece.chars().all(char::is_alphabetic))
 }
 
-/// The spellings a single word is swept in: title case, plus the word as
-/// written when it starts upper-case and is not all capitals (`McDonald`).
+/// The spellings a single word is swept in: the word as written (a
+/// byte-identical copy carries the source's own evidence, so `SCHNEIDER`
+/// sweeps `SCHNEIDER`) and its title case (`MARIA` also sweeps `Maria`).
 /// Empty for a word on the common-word list.
 fn word_spellings(word: &str) -> Vec<String> {
     if COMMON_WORDS.contains(&word.to_lowercase().as_str()) {
         return Vec::new();
     }
     let title = title_case(word);
-    let mut spellings = vec![title.clone()];
-    let starts_upper = word.chars().next().is_some_and(char::is_uppercase);
-    let all_upper = word
-        .chars()
-        .filter(|ch| ch.is_alphabetic())
-        .all(char::is_uppercase);
-    if starts_upper && !all_upper && word != title {
-        spellings.push(word.to_string());
+    let mut spellings = vec![word.to_string()];
+    if title != word {
+        spellings.push(title);
     }
     spellings
 }
@@ -544,11 +607,15 @@ mod tests {
     }
 
     #[test]
-    fn parts_match_in_title_case_only() {
-        let sources = vec![name("MARIA SCHNEIDER")];
+    fn parts_match_in_title_case_or_as_written_only() {
+        let sources = vec![name("MARIA KOWALSKI")];
         assert_eq!(found(sources.clone(), "Thanks, Maria"), ["Maria"]);
+        // Byte-identical to the source's own part: same evidence.
+        assert_eq!(found(sources.clone(), "thanks MARIA"), ["MARIA"]);
         assert!(found(sources.clone(), "thanks maria").is_empty());
-        assert!(found(sources, "thanks MARIA").is_empty());
+        // A lower-case source part never sweeps lower-case single words.
+        assert!(found(vec![name("maria kowalski")], "thanks maria").is_empty());
+        assert!(found(sources, "thanks mARIA").is_empty());
     }
 
     #[test]
@@ -593,6 +660,106 @@ mod tests {
         assert_eq!(
             links,
             [SweepLink::Exact, SweepLink::Variant, SweepLink::Part]
+        );
+    }
+    #[test]
+    fn short_digit_runs_are_not_swept() {
+        // A four-digit postcode found through its city anchor must not turn
+        // every year or room number into a postcode.
+        let postcode = SweepSource {
+            family: "counter".into(),
+            class: PiiClass::Custom("postal_code".into()),
+            raw: "2024".into(),
+        };
+        assert!(SweepMatcher::build(vec![postcode]).unwrap().is_none());
+        let long = SweepSource {
+            family: "counter".into(),
+            class: PiiClass::Custom("id".into()),
+            raw: "123 456".into(),
+        };
+        assert_eq!(found(vec![long], "ref 123\n456 ok"), ["123\n456"]);
+    }
+
+    #[test]
+    fn value_shapes_own_their_floors() {
+        let custom = PiiClass::Custom("x".into());
+        assert_eq!(ValueShape::of(&custom, "10115"), ValueShape::DigitRun);
+        assert_eq!(
+            ValueShape::of(&custom, "030 123-45.6"),
+            ValueShape::DigitRun
+        );
+        assert_eq!(
+            ValueShape::of(&custom, "BC-2024-789"),
+            ValueShape::MultiWord
+        );
+        assert_eq!(
+            ValueShape::of(&PiiClass::Name, "Schneider"),
+            ValueShape::Word
+        );
+        assert_eq!(
+            ValueShape::of(&PiiClass::family("id"), "2024"),
+            ValueShape::Family
+        );
+        assert!(!ValueShape::DigitRun.clears_floor("10115"));
+        assert!(ValueShape::DigitRun.clears_floor("101 150"));
+    }
+
+    #[test]
+    fn all_caps_single_word_sweeps_its_byte_exact_copy() {
+        let source = SweepSource {
+            family: "counter".into(),
+            class: PiiClass::Name,
+            raw: "KOWALSKI".into(),
+        };
+        assert_eq!(found(vec![source.clone()], "x KOWALSKI y"), ["KOWALSKI"]);
+        assert_eq!(found(vec![source], "x Kowalski y"), ["Kowalski"]);
+    }
+
+    #[test]
+    fn occupational_and_verb_surnames_are_never_parts() {
+        let sources = vec![
+            name("Thomas Richter"),
+            name("Hugh Grant"),
+            name("Anna Bauer"),
+        ];
+        assert!(found(sources.clone(), "Der Richter hat entschieden.").is_empty());
+        assert!(found(sources.clone(), "Grant access to the repo.").is_empty());
+        assert!(found(sources, "Der Bauer verkaufte Eier.").is_empty());
+    }
+
+    #[test]
+    fn pattern_count_cap_fails_closed() {
+        let sources = (0..=MAX_PATTERNS).map(|i| SweepSource {
+            family: "counter".into(),
+            class: PiiClass::Custom("id".into()),
+            raw: format!("ID-{i:08}"),
+        });
+        assert_eq!(
+            SweepMatcher::build(sources).err(),
+            Some(ManifestSweepError::CapacityExceeded)
+        );
+    }
+
+    #[test]
+    fn byte_cap_fails_the_request_closed() {
+        use crate::{Action, DefaultRule, Pipeline, RawDocument, Scope, Session};
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let huge = format!("Maria {}", "x".repeat(MAX_PATTERN_BYTES + 1));
+        session.tokenize(&PiiClass::Name, &huge).unwrap();
+        session.record_evidence(None, &PiiClass::Name, &huge, ManifestEvidence::Pattern);
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let result = pipeline.redact(&session, RawDocument::Text("hello Maria".into()));
+        assert!(
+            matches!(
+                result,
+                Err(crate::Error::ManifestSweep(
+                    ManifestSweepError::CapacityExceeded
+                ))
+            ),
+            "no text may ship when the sweep cannot run: {result:?}"
         );
     }
 }

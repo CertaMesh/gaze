@@ -280,3 +280,32 @@ fn session_blob_carries_evidence_across_export_and_import() {
     let second = clean(&p, &imported, "Maria Schneider asked.");
     assert_eq!(tokens(&second), tokens(&first), "{second}");
 }
+
+#[test]
+fn precision_probe_occupational_and_verb_surnames() {
+    // German capitalises every noun and English every sentence start, so a
+    // title-case surname part is not enough evidence when the surname is
+    // also an everyday word.
+    for (header, body) in [
+        (
+            "From: Thomas Richter <t@example.invalid>\n",
+            "Der Richter hat entschieden.",
+        ),
+        (
+            "From: Anna Bauer <a@example.invalid>\nFrom: Paul Fischer <p@example.invalid>\n",
+            "Der Bauer verkaufte dem Fischer Eier.",
+        ),
+        (
+            "From: Hugh Grant <h@example.invalid>\n",
+            "Grant access to the repo.",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let out = clean(
+            &pipeline(vec![], Audit::default()),
+            &session,
+            &format!("{header}{body}"),
+        );
+        assert!(out.ends_with(body), "{out:?}");
+    }
+}
