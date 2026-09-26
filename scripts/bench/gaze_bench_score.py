@@ -159,6 +159,9 @@ class Document:
     neutral_prediction_classes: frozenset[str] = frozenset()
     # Contract v3 gold-gap rule; None under v1 and v2, where it never runs.
     gold_gap: GoldGapRule | None = None
+    # Reporting cell of a generated agentic-layer document; None for every
+    # other corpus, whose scorecards therefore carry no per_cell block.
+    cell: str | None = None
 
     @property
     def locale_chain(self) -> list[str]:
@@ -449,6 +452,7 @@ def apply_scored_label_contract(
                 excluded_spans=document.excluded_spans + excluded,
                 neutral_prediction_classes=contract.neutral_prediction_classes,
                 gold_gap=contract.gold_gap,
+                cell=document.cell,
             )
         )
     return applied
@@ -2337,6 +2341,7 @@ def run_config(
     per_negative_category: defaultdict[str, MetricAccumulator] = defaultdict(
         MetricAccumulator
     )
+    per_cell: defaultdict[str, MetricAccumulator] = defaultdict(MetricAccumulator)
     direct = RecallAccumulator()
     contextual = RecallAccumulator()
     excluded_label_coverage: defaultdict[str, RecallAccumulator] = defaultdict(
@@ -2440,6 +2445,8 @@ def run_config(
                 per_negative_category[document.negative_category].add(
                     document, predictions
                 )
+            if document.cell is not None:
+                per_cell[document.cell].add(document, predictions)
             direct_spans = [
                 span
                 for span in document.spans
@@ -2574,6 +2581,11 @@ def run_config(
         "per_negative_category": {
             key: value.result() for key, value in sorted(per_negative_category.items())
         },
+        **(
+            {"per_cell": {key: value.result() for key, value in sorted(per_cell.items())}}
+            if any(document.cell is not None for document in documents)
+            else {}
+        ),
         "latency_ms": {
             key: timing_summary(value) for key, value in sorted(success_timing.items())
         },

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
+import agentic_layers as agentic
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
 
@@ -96,6 +97,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "docs/reference/benchmarks/scored-labels-v2.json); omitted means "
             "contract v1, which scores every corpus label"
         ),
+    )
+    parser.add_argument(
+        "--agentic-scored-labels",
+        type=Path,
+        help=(
+            "scored-label contract of the generated agentic layers A and D "
+            f"(default {agentic.SCORED_LABELS_PATH.as_posix()})"
+        ),
+    )
+    parser.add_argument(
+        "--no-agentic-layers",
+        action="store_true",
+        help="skip agentic layers A and D, e.g. to reproduce an older scorecard",
     )
     parser.add_argument(
         "--output-dir",
@@ -560,6 +574,80 @@ def execute_measurements(
     return canonical, provenance
 
 
+def measure_agentic_layers(
+    *,
+    prepared: agentic.PreparedLayers,
+    repo_root: Path,
+    binary: Path,
+    validator_probe: Path,
+    davlan_model: Path,
+    threshold: float,
+    diagnostics_dir: Path,
+    warmup_count: int,
+    measured_repetitions: int,
+    policy_path: Path | None,
+) -> dict[str, object]:
+    """Score layers A and D as separate cells next to the Kiji/A4 layer C.
+
+    Layer C stays the top-level `runs`: the generated documents never enter
+    those cells, so their numbers are unchanged by this block.
+    """
+    identifier_measurements = score.collect_validator_measurements(
+        validator_probe,
+        prepared.identifiers,
+        (document.uid for document in prepared.identifiers),
+    )
+    layers: dict[str, object] = {
+        "schema_version": 1,
+        "generator": prepared.manifest,
+        "scored_label_contract": score.scored_label_contract_report(
+            prepared.contract, prepared.identifiers + prepared.lookalikes
+        ),
+        "C": {
+            "description": "Kiji EN/DE holdout plus the A4 negative corpus",
+            "source": "runs",
+        },
+    }
+    for layer, description, documents, measurements in (
+        (
+            agentic.LAYER_IDENTIFIERS,
+            "generated identifiers in agentic surfaces, with checksum-invalid twins",
+            prepared.identifiers,
+            identifier_measurements,
+        ),
+        (
+            agentic.LAYER_LOOKALIKES,
+            "generated benign lookalikes; every predicted byte is a false positive",
+            prepared.lookalikes,
+            None,
+        ),
+    ):
+        runs, provenance = execute_measurements(
+            repo_root=repo_root,
+            binary=binary,
+            documents=documents,
+            davlan_model=davlan_model,
+            threshold=threshold,
+            diagnostics_dir=diagnostics_dir / f"layer-{layer}",
+            warmup_count=warmup_count,
+            measured_repetitions=measured_repetitions,
+            validator_measurements=measurements,
+            policy_path=policy_path,
+        )
+        block: dict[str, object] = {
+            "description": description,
+            "population": score.population_summary(documents),
+            "runs": runs,
+            "repetitions": provenance,
+        }
+        if measurements is not None:
+            block["validator_gold_census"] = score.validator_gold_census(
+                documents, measurements
+            )
+        layers[layer] = block
+    return layers
+
+
 def load_scorecard(path: Path, label: str) -> dict[str, object]:
     if not path.is_file():
         raise BaselineError(f"{label} scorecard is missing: {path}")
@@ -691,7 +779,37 @@ def markdown_summary(
                 f"{failed} | {validator_recall} | {shape_recall} | "
                 f"{passed_leak} | {failed_leak} |"
             )
+    if isinstance(scorecard.get("layers"), dict):
+        lines.extend(_layers_summary(scorecard))
     return "\n".join(lines) + "\n"
+
+
+def _layers_summary(scorecard: Mapping[str, object]) -> list[str]:
+    layers = scorecard["layers"]
+    generator = layers["generator"]
+    lines = [
+        "",
+        "## Agentic layers",
+        "",
+        f"Generator v{generator['generator_version']}, partition "
+        f"`{generator['partition']}`, corpus sha256 `{generator['corpus_sha256']}`. "
+        "Layer C is the table above.",
+        "",
+        "| Layer | Config | Documents | Failed closed | Gold bytes | Leaked bytes "
+        "| False-positive bytes |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for layer in (agentic.LAYER_IDENTIFIERS, agentic.LAYER_LOOKALIKES):
+        for run in layers[layer]["runs"]:
+            utf8 = run["metrics"]["utf8_bytes"]
+            availability = run["pipeline_availability"]
+            lines.append(
+                f"| {layer} | {run['config']} | {availability['attempted_documents']} | "
+                f"{availability['failed_closed_documents']} | {utf8['pii']} | "
+                f"{utf8['leaked']} | {utf8['false_positive']} |"
+            )
+    lines.extend(["", agentic.coverage_grid(scorecard).rstrip("\n")])
+    return lines
 
 
 def _status_document(kind: str, result: Mapping[str, object]) -> dict[str, object]:
@@ -837,6 +955,14 @@ def run(args: argparse.Namespace) -> int:
                     f"Nym bundle digest mismatch: expected {nym_expected_sha}, got {nym_bundle_sha}"
                 )
     scored_label_contract = load_scored_label_contract(repo_root, args.scored_labels)
+    try:
+        agentic_prepared = (
+            None
+            if args.no_agentic_layers
+            else agentic.prepare(repo_root, args.agentic_scored_labels)
+        )
+    except agentic.LayerError as error:
+        raise CandidateError(f"agentic layers: {error}") from error
 
     model_provenance = validate_required_models(repo_root, davlan_model)
     if nym_bundle_sha is not None:
@@ -955,6 +1081,20 @@ def run(args: argparse.Namespace) -> int:
             "validator_recognizers": validator_measurements["validator_recognizers"],
         },
     }
+
+    if agentic_prepared is not None:
+        candidate["layers"] = measure_agentic_layers(
+            prepared=agentic_prepared,
+            repo_root=repo_root,
+            binary=binary,
+            validator_probe=validator_probe,
+            davlan_model=davlan_model,
+            threshold=effective_threshold,
+            diagnostics_dir=output_dir / "logs",
+            warmup_count=args.warmups,
+            measured_repetitions=args.measured_repetitions,
+            policy_path=policy_path,
+        )
 
     readiness_result = score.evaluate_release_readiness(
         candidate,
