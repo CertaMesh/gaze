@@ -647,16 +647,17 @@ locations, planning runtime, and the guarded baseline-acceptance command.
 The Kiji/A4 corpus is prose. It contains no tool-call JSON, no `key=value`
 logs, no CSV and no NBSP, which are the shapes agents actually send. A rule fix
 for one of those shapes cannot move the Kiji numbers, so the runner also scores
-two generated layers beside it:
+three generated layers beside it:
 
 | Layer | What it is | Where it lives in the scorecard |
 | --- | --- | --- |
 | C | Kiji EN/DE holdout plus the A4 negative corpus | `runs[]` (unchanged) |
 | A | Generated identifiers in agentic surfaces, each checksum value with a checksum-invalid twin | `layers.A.runs[]` |
 | D | Generated benign lookalikes: amounts, SKUs, `#RRGGBB`, `L99 9999`, versions, order and tracking IDs, UUID fragments, room and seat numbers, invoice and log dates | `layers.D.runs[]` |
+| R | Repeat-value slice: one value repeated in several shapes in one document, next to decoys that collide with it | `layers.R.runs[]` |
 
 [`scripts/bench/agentic_layers.py`](../../../scripts/bench/agentic_layers.py)
-generates both layers deterministically, with no network access and no
+generates all three deterministically, with no network access and no
 model:
 
 - **Layer A families:** payment card; IBAN for DE (spaced and compact), AT,
@@ -676,16 +677,32 @@ model:
   NBSP-spaced valid IBAN, NHS number, Steuer-ID or phone number counts there as
   validator-failed. The `per_cell` validity is the generator's own verdict.
 - **Gold spans:** they are the inserted values at their UTF-8 byte offsets.
+- **Layer R, the repeat-value slice:** each document repeats a name, an email,
+  an IBAN, a phone number or a Steuer-ID two to four times. Names appear in a
+  `From:` header, as `Ms Surname`, in a sign-off, in lower and upper case,
+  NBSP-joined and split across a line break, including hyphenated surnames.
+  Identifiers appear spaced in prose and compact in JSON and a log line. Every
+  repeat is gold. The same documents carry decoys, which are never gold:
+  ordinary words spelled like a name part (`Rose garden`, `in May`,
+  `Will you`, `Grant approved`, `Page 3`, `the Court hearing`), words and file
+  names that contain a name part (`Annual` for Ann, `Heidelberg` for Berg), and
+  digit runs shared with a repeated identifier. Any byte predicted over a decoy
+  counts as a false positive. The JSONL output records the decoy spans. This
+  slice is the baseline for a change that re-finds known values across a
+  document: it has to lower R's leaked bytes without raising R's
+  false-positive bytes. The value makers take a partition, so a layer B
+  transcript can reuse the same pools.
 
 Every result is also reported per `layer|family|surface|validity` cell under
 `per_cell`. [`scored-labels-agentic.json`](scored-labels-agentic.json) rules on
 every generated label, and it fails closed on a label it does not list, on a
 ruling for a label the generator no longer emits, and on a generator version
-mismatch. Layers A and D use this contract in every run, so `--scored-labels`
-changes layer C only.
+mismatch. Layers A, D and R use this contract in every run, so
+`--scored-labels` changes layer C only.
 
 **Held-out protocol.** Templates, cue words, machine keys, name pools, email
-domains, phone prefixes and seeds are split into a `dev` and a `test`
+domains, phone prefixes, the layer R name-word and decoy pools, and seeds are
+split into a `dev` and a `test`
 partition before anything is generated. Every perturbation (the NBSP variants
 and the invalid twin) comes from its parent document inside that parent's
 partition. The runner scores `test` only. Use `dev` for rule work:
@@ -719,7 +736,7 @@ python3 scripts/bench/agentic_layers.py gate \
 
 For each contract, the production arm's numbers must satisfy all of these:
 
-1. **No layer leaks more.** Leaked bytes do not rise in C, A or D.
+1. **No layer leaks more.** Leaked bytes do not rise in C, A, D or R.
 2. **No layer refuses more.** A refused document drops out of the leak count,
    so a rise in failed-closed documents in any layer fails the gate.
 3. **Something gets better.** At least one layer's leaked bytes fall. A
@@ -730,8 +747,27 @@ The PR states false-positive bytes per layer either way. The gate exits `0` on
 pass, `1` on fail, and `2` when the two scorecards differ in policy, arm
 set, Kiji dataset, corpus hash or contract file, because such a pair is not
 comparable. `agentic_layers.py grid <scorecard>` prints the family × surface
-coverage grid for a PR description. Multi-turn transcripts, restore round
-trips and token stability (the planned layer B) are not measured yet.
+coverage grid and the layer R table for a PR description. Multi-turn
+transcripts, restore round trips and token stability (the planned layer B) are
+not measured yet.
+
+**Past releases.** Each time these docs change, the layers are also measured
+for the displayed releases so that the comparison stays honest.
+`agentic_layers.py measure` scores layers A, D and R with any bench binary.
+Use a release's own `clean_for_bench`, built at its tag, with the arm that
+release shipped. `--vocabulary-root` points at a checkout of that tag, so the
+release's own rulepacks validate its source IDs:
+
+```bash
+python3 scripts/bench/agentic_layers.py measure --label v0.15.1 \
+  --binary <v0.15.1 checkout>/target/release/examples/clean_for_bench \
+  --vocabulary-root <v0.15.1 checkout> \
+  --config policy-file --policy <gaze-setup-policy.toml> \
+  --output target/bench-data/layers-v0.15.1.json
+```
+
+The output has `layers` and an empty `runs`. The release's committed
+scorecard already holds its layer C numbers.
 
 ### Hardware spec template
 

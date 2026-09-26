@@ -169,7 +169,8 @@ Generated artifacts are under ignored `target/bench-data/no-opf/<profile>/`:
 | `performance-status.json` | separately configured p95 `clean_ms` comparison |
 
 The scorecard's `layers` block holds the generated agentic layers A
-(identifiers in agentic surfaces) and D (benign lookalikes), scored as separate
+(identifiers in agentic surfaces), D (benign lookalikes) and R (the
+repeat-value slice with its decoys), scored as separate
 cells from `agentic_layers.py` under
 `docs/reference/benchmarks/scored-labels-agentic.json`; `summary.md` appends
 their totals and coverage grid. `--no-agentic-layers` skips them. The layers,

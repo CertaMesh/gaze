@@ -7,7 +7,7 @@
     "generator_version": 1,
     "published_partition": "test"
   },
-  "semantics": "Every label the agentic-layer generator emits is listed here and scored. Gold that fails its own checksum (the invalid twins) stays scored, exactly as in the Kiji validator gold census; the per-label validity split is reported beside it and never replaces it. Layer D lookalike documents carry no gold, so every byte predicted there is a false positive. An unlisted label fails closed, and so does a ruling on a label the generator no longer emits.",
+  "semantics": "Every label the agentic-layer generator emits is listed here and scored. Gold that fails its own checksum (the invalid twins) stays scored, exactly as in the Kiji validator gold census; the per-label validity split is reported beside it and never replaces it. Layer D lookalike documents carry no gold, so every byte predicted there is a false positive. Layer R decoys (words spelled like or containing a name part, digit runs shared with a repeated identifier) are not gold either, so a byte predicted over one is a false positive; every repeat of a real value is gold. An unlisted label fails closed, and so does a ruling on a label the generator no longer emits.",
   "labels": [
     {
       "label": "BSN",

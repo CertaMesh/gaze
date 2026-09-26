@@ -1489,6 +1489,11 @@ def _measure(args: argparse.Namespace) -> None:
     if not args.binary.is_file() or not probe.is_file():
         raise LayerError(f"missing binary {args.binary} or validator probe {probe}")
     policy = args.policy.resolve() if args.policy else None
+    vocabulary_root = (args.vocabulary_root or repo_root).resolve()
+    # A past release's binary emits the recognizer IDs of its own rulepacks.
+    score.COMMITTED_SOURCE_ID_VOCABULARY = score.load_committed_source_id_vocabulary(
+        vocabulary_root
+    )
     layers = runner.measure_agentic_layers(
         prepared=prepare(repo_root),
         repo_root=repo_root,
@@ -1507,6 +1512,7 @@ def _measure(args: argparse.Namespace) -> None:
         "measured": args.label,
         "gaze": score.git_metadata(repo_root),
         "binary_sha256": score.sha256_file(args.binary),
+        "binary_commit": score.git_metadata(vocabulary_root),
         "parameters": {
             "configs": list(args.config),
             "policy_sha256": score.sha256_file(policy) if policy else None,
@@ -1540,6 +1546,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     measure_cmd.add_argument("--model-dir", type=Path, default=Path("~/.local/share/gaze/models/davlan-mbert-ner-hrl"))
     measure_cmd.add_argument("--threshold", type=float, default=0.3)
     measure_cmd.add_argument("--label", required=True, help="e.g. v0.15.1; recorded in the output")
+    measure_cmd.add_argument(
+        "--vocabulary-root",
+        type=Path,
+        help=(
+            "checkout of the binary's own commit; its committed rulepacks and "
+            "model IDs validate the binary's source IDs (default: this tree)"
+        ),
+    )
     measure_cmd.add_argument("--output", type=Path, required=True)
     gate_cmd = commands.add_parser("gate", help="apply the rule gate to a base/candidate pair")
     gate_cmd.add_argument("--base", type=Path, required=True)
