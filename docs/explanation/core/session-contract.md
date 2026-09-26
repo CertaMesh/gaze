@@ -8,6 +8,7 @@ A `Session` is the boundary of a pseudonym namespace in Gaze. The runtime contra
 - Each new `Session` starts with fresh per-class counters (`Name_1`, `Email_1`, etc.) and a fresh `session_hex` prefix.
 - Two `Session`s never share counters or value-keyed lookups, regardless of `Scope` variant.
 - `Scope` variants choose *persistence*, not *isolation*.
+- Once a rule-found value is tokenized, its later copies in the same `Session` are tokenized too, including copies in another case or spacing, which get a sibling token. See the [repeat-value sweep](../detection/manifest-sweep.md).
 
 ## `Scope` variants
 
@@ -41,6 +42,7 @@ correlating two logs would exploit.
 
 ## See also
 
+- [`docs/explanation/detection/manifest-sweep.md`](../detection/manifest-sweep.md) for how rule-found values propagate across a session and the v6 `session_blob`.
 - [`docs/explanation/daemon/daemon-mode.md`](../daemon/daemon-mode.md) for daemon-mode-specific `session_id` semantics.
 - [`docs/explanation/core/restore-boundary.md`](restore-boundary.md) for restore-side guarantees.
 - Rustdoc for [`Session`](https://docs.rs/gaze-pii/latest/gaze/struct.Session.html) and [`Scope`](https://docs.rs/gaze-pii/latest/gaze/enum.Scope.html).

@@ -48,6 +48,9 @@ re-tokenize stored manifests.
 
 1. **Custom `gaze-proxy` adapters must declare a contract.** Add a
    `contract()` method to every `ProviderAdapter` you implement.
+2. **`session_blob` moves to envelope version 6.** Blobs written by v0.16
+   cannot be read by v0.15 or older. Upgrade every process that restores a
+   blob before (or together with) every process that writes one.
 
 ### Breaking: `ProviderAdapter::contract()` has no default
 
@@ -67,6 +70,23 @@ On the legacy contract the proxy redacts the surfaces your adapter returns,
 then re-scans the whole outbound request body and refuses the request if
 anything is left unprotected. `PiiSurface` is unchanged. The bundled OpenAI,
 Gemini and Anthropic adapters need no action.
+
+### Breaking: `session_blob` / `SensitiveSnapshot` envelope version 6
+
+**Action required only if blobs cross a version boundary** (a v0.16 writer
+and a v0.15 reader, for example a rolling deploy or a stored blob read by an
+older service). The repeat-value sweep records, per manifest entry, the
+evidence tier its value was found with, so a later turn can tell rule-found
+values from model-found ones. The envelope version byte is now `6`.
+
+- A v0.15 or older reader refuses a v6 blob with
+  `InvalidSnapshotVersion(6)`. It fails closed; nothing is restored.
+- A v0.16 reader imports v2 to v6 blobs. A blob of version 5 or older
+  restores exactly as before, but its values do not seed the sweep, because
+  their tier is unknown. Values tokenized after the import do.
+
+Upgrade readers first. See
+[`docs/explanation/detection/manifest-sweep.md`](docs/explanation/detection/manifest-sweep.md).
 
 ---
 
