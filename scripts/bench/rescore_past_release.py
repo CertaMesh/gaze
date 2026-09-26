@@ -46,6 +46,7 @@ from typing import Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import dataiku_en_de_gaze_bench as dataiku  # noqa: E402
+import agentic_layers as agentic  # noqa: E402
 import gaze_bench_score as score  # noqa: E402
 import scorecard_record as records  # noqa: E402
 import run_no_opf_benchmark as runner  # noqa: E402
@@ -97,6 +98,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--binary-profile", choices=("debug", "release"), required=True)
     parser.add_argument("--configs", required=True)
     parser.add_argument("--policy", type=Path, help="policy for the policy-file config")
+    parser.add_argument("--agentic-layers", action="store_true", help="measure generated layers too")
+    parser.add_argument("--agentic-scored-labels", type=Path)
     parser.add_argument("--model-env", action="append", default=[])
     parser.add_argument("--model-bundle", action="append", default=[])
     parser.add_argument(
@@ -188,9 +191,18 @@ def run(args: argparse.Namespace) -> Path:
     )
     measurements = records.filter_measurements(complete_measurements, available)
     metadata, dataset_report = runner.composite_dataset_report(dataiku_report, negative_report)
+    prepared = (
+        agentic.prepare(HARNESS_ROOT, args.agentic_scored_labels)
+        if args.agentic_layers else None
+    )
     record_writer = records.RecordWriter(
         original_available, complete_measurements,
         corpus_sha256=dataset_report["integrity"]["sha256"],
+        extra_documents=(
+            [record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)]
+            if prepared is not None else []
+        ),
+        layer_contract=prepared.contract if prepared is not None else None,
     )
     environment = runner.build_no_opf_environment(os.environ)
     for value in args.model_env:
@@ -259,6 +271,25 @@ def run(args: argparse.Namespace) -> Path:
         "warmup_count": args.warmups,
         "measured_repetitions": 1,
     }
+    if prepared is not None:
+        card["layers"] = runner.measure_agentic_layers(
+            prepared=prepared,
+            repo_root=release_root,
+            binary=binary,
+            validator_probe=probe,
+            davlan_model=davlan,
+            threshold=args.threshold,
+            diagnostics_dir=output.parent / "logs",
+            warmup_count=args.warmups,
+            measured_repetitions=1,
+            policy_path=policy,
+            configs=configs,
+            replacing_actions=frozenset(args.manifest_actions.split(",")),
+            record_writer=record_writer,
+        )
+        card["layers"]["gold_validity"] = {
+            "C": agentic.gold_validity_digest(documents, measurements)
+        }
     output.parent.mkdir(parents=True, exist_ok=True)
     card["observation_record"] = record_writer.write(
         output.with_name("observations-v1.jsonl.gz"), card, add_reference=True

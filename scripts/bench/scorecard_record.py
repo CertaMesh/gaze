@@ -281,7 +281,9 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
     return header, observations
 
 
-def pin_template(source: Path, template: Path, output: Path) -> None:
+def pin_template(
+    source: Path, template: Path, output: Path, *, strip_layers: bool = False
+) -> None:
     """Attach a committed scorecard only after its correctness matches the capture."""
     header, observations = _read(source)
     expected = json.loads(template.read_text(encoding="utf-8"))
@@ -297,7 +299,12 @@ def pin_template(source: Path, template: Path, output: Path) -> None:
         ]
     if correctness(captured) != correctness(expected):
         raise RecordError("template run correctness differs from capture")
-    header["capture_scorecard"] = captured
+    capture = copy.deepcopy(captured)
+    if strip_layers:
+        capture.pop("layers", None)
+        observations = [row for row in observations if row["layer"] == "C"]
+        header["layer_contract"] = None
+    header["capture_scorecard"] = capture
     header["scorecard"] = expected
     header["add_reference"] = False
     _write_rows(output, [header, *observations])
