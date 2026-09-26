@@ -132,7 +132,7 @@ Loading failures are policy configuration failures in the CLI path.
 | Name | File | Purpose |
 |------|------|---------|
 | `core` | [`embedded/core.toml`](embedded/core.toml) | Unified bundled recognizer set. Email/name, parser-backed phone, IBAN, payment-card, IP, ETH, and postal recognizers now live in one bundle. Each recognizer declares `safety_tier = "safe_default"`, `"locale_gated"`, or `"opt_in"` and `locale_basis = "document"` or `"format"`. Format-basis recognizers ignore the document locale for eligibility. |
-| `core-extended` | alias of `core` | Deprecated since v0.8.0 and scheduled for removal in v0.10.0. CLI use emits a warning and preserves v0.8.x compatibility by auto-activating locale-gated recognizers. |
+| `core-extended` | alias of `core` | Deprecated since v0.8.0 and still accepted. CLI use emits a warning and preserves v0.8.x compatibility by auto-activating locale-gated recognizers. |
 | `secrets` | [`embedded/secrets.toml`](embedded/secrets.toml) | Opt-in credential recognizers (`security_token.anchored`, `password.field`). Credentials are not PII, so this bundle is never part of a default activation; load it by name next to `core`. |
 | `locale-de` | [`embedded/locale-de.toml`](embedded/locale-de.toml) | DACH locale metadata such as German email headers. |
 | `locale-en` | [`embedded/locale-en.toml`](embedded/locale-en.toml) | English locale metadata such as English email headers. |
