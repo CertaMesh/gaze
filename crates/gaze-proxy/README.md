@@ -47,6 +47,15 @@ upstream = "https://api.anthropic.com/"
 upstream = "https://generativelanguage.googleapis.com/"
 ```
 
+## Providers
+
+- OpenAI: `POST /v1/chat/completions`, `/v1/completions`, `/v1/responses`
+- Anthropic: `POST /v1/messages`
+- Gemini: `POST /v1beta/models/*:{generateContent,streamGenerateContent,countTokens}`
+
+Each adapter walks text, tool-call, tool-result, and function argument surfaces
+in that provider's native JSON. The proxy does not transcode requests.
+
 ## Locale
 
 Recognizers that declare `locales = [...]` — `postal.de`, `postal.us`, the national phone
@@ -77,16 +86,7 @@ let config = ProxyConfig::new(bind, adapters).with_locale_chain(core.locale_chai
 
 A locale chain always ends in `global`, so configuring one can only widen detection.
 
-## Providers
-
-- OpenAI: `POST /v1/chat/completions`, `/v1/completions`, `/v1/responses`
-- Anthropic: `POST /v1/messages`
-- Gemini: `POST /v1beta/models/*:{generateContent,streamGenerateContent,countTokens}`
-
-Each adapter walks text, tool-call, tool-result, and function argument surfaces
-in that provider's native JSON. The proxy does not transcode requests.
-
-## Daemon Commands
+## Daemon commands
 
 ```bash
 gaze proxy serve
@@ -104,7 +104,7 @@ cleanup removes only the owned pidfile and leaves the sidecar in place.
 
 `gaze proxy logs --follow` is also available for local daemon inspection.
 
-## Security Notes
+## Security notes
 
 The strict Anthropic Messages profile rebuilds its outbound headers from a closed
 allowlist: `content-type`, `x-api-key`, `anthropic-version`, and an optional,
