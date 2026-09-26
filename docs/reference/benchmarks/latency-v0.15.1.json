@@ -1,0 +1,282 @@
+{
+  "hardware": "Apple M5 Max, 18 cores, 64 GiB RAM, macOS-26.5-arm64-arm-64bit-Mach-O, ort 2.0.0-rc.12, Nym bundle 71f9023bcf86\u2026, intra-op threads 1",
+  "host": {
+    "chip": "Apple M5 Max",
+    "cores": "18",
+    "ram_gib": "64",
+    "os": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "ort": "2.0.0-rc.12",
+    "bundle_sha": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767",
+    "intra_threads": "1"
+  },
+  "git_head": "8153837022dcb106b95a6403a77eee16f0d81a51",
+  "seed": 20260710,
+  "documents": 30,
+  "smoke": false,
+  "host_before": {
+    "label": "before",
+    "load_1m": 1.77,
+    "load_5m": 2.67,
+    "load_15m": 3.66,
+    "foreign_processes": [],
+    "quiet": true
+  },
+  "binaries": {
+    "gaze": "1310d9d8d576086e6a39b9cd4c8002748c97a7f95f18d47c76173b274e7238e0",
+    "clean_for_bench": "76faf0ab4088f8c1b321522ed651ce05fd8b6191022de586ef3234d99fb49a20",
+    "clean_for_bench_v0_15_0": "d3696c1483cdb7fa8066afd7930a06067c124470e5d43fff806d72de34e9ea50"
+  },
+  "policy_sha256": {
+    "setup": "6f4327946bd088a9edb8a5875c7879b7c5efdc25f744b6566c7e90fd36677832",
+    "setup_nym": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
+  },
+  "baseline_version": "v0.15.0",
+  "pipeline": {
+    "setup": {
+      "cold_first_document_ms": 763.9,
+      "warm_clean": {
+        "n": 30,
+        "p50_ms": 20.36,
+        "p95_ms": 33.3,
+        "max_ms": 74.42,
+        "mean_ms": 21.68
+      },
+      "peak_rss_mib": 591.2
+    },
+    "setup_nym": {
+      "cold_first_document_ms": 2126.9,
+      "warm_clean": {
+        "n": 30,
+        "p50_ms": 69.42,
+        "p95_ms": 138.88,
+        "max_ms": 144.85,
+        "mean_ms": 77.57
+      },
+      "peak_rss_mib": 1049.9
+    },
+    "rules_ner": {
+      "cold_first_document_ms": 748.1,
+      "warm_clean": {
+        "n": 30,
+        "p50_ms": 19.73,
+        "p95_ms": 32.82,
+        "max_ms": 73.58,
+        "mean_ms": 21.46
+      },
+      "peak_rss_mib": 590.9
+    },
+    "v0_15_0_rules_ner": {
+      "cold_first_document_ms": 762.6,
+      "warm_clean": {
+        "n": 30,
+        "p50_ms": 20.03,
+        "p95_ms": 32.66,
+        "max_ms": 73.38,
+        "mean_ms": 21.46
+      },
+      "peak_rss_mib": 590.8
+    }
+  },
+  "cli": {
+    "oneshot_setup": {
+      "per_document": {
+        "n": 30,
+        "p50_ms": 771.5,
+        "p95_ms": 821.52,
+        "max_ms": 823.84,
+        "mean_ms": 778.71
+      },
+      "peak_rss_mib": 579.3
+    },
+    "daemon_setup": {
+      "first_request_cold_ms": 763.3,
+      "warm": {
+        "n": 30,
+        "p50_ms": 20.29,
+        "p95_ms": 32.35,
+        "max_ms": 73.05,
+        "mean_ms": 21.58
+      },
+      "peak_rss_mib": 600.5
+    },
+    "oneshot_setup_nym": {
+      "per_document": {
+        "n": 30,
+        "p50_ms": 2140.15,
+        "p95_ms": 2187.25,
+        "max_ms": 2188.89,
+        "mean_ms": 2143.48
+      },
+      "peak_rss_mib": 1035.7
+    },
+    "daemon_setup_nym": {
+      "first_request_cold_ms": 2120.5,
+      "warm": {
+        "n": 30,
+        "p50_ms": 69.5,
+        "p95_ms": 141.5,
+        "max_ms": 142.91,
+        "mean_ms": 77.95
+      },
+      "peak_rss_mib": 1029.4
+    }
+  },
+  "conversation": {
+    "setup": {
+      "turns": [
+        {
+          "turn": 1,
+          "bytes": 610,
+          "ms": 762.48
+        },
+        {
+          "turn": 2,
+          "bytes": 1041,
+          "ms": 94.35
+        },
+        {
+          "turn": 3,
+          "bytes": 1779,
+          "ms": 67.75
+        },
+        {
+          "turn": 4,
+          "bytes": 2328,
+          "ms": 96.21
+        },
+        {
+          "turn": 5,
+          "bytes": 2682,
+          "ms": 134.85
+        },
+        {
+          "turn": 6,
+          "bytes": 3207,
+          "ms": 141.37
+        },
+        {
+          "turn": 7,
+          "bytes": 3491,
+          "ms": 146.66
+        },
+        {
+          "turn": 8,
+          "bytes": 3651,
+          "ms": 152.44
+        },
+        {
+          "turn": 9,
+          "bytes": 3801,
+          "ms": 158.06
+        },
+        {
+          "turn": 10,
+          "bytes": 4243,
+          "ms": 183.42
+        }
+      ],
+      "turn_1_is_cold": true,
+      "peak_rss_mib": 678.2
+    },
+    "setup_nym": {
+      "turns": [
+        {
+          "turn": 1,
+          "bytes": 610,
+          "ms": 2118.11
+        },
+        {
+          "turn": 2,
+          "bytes": 1041,
+          "ms": 221.08
+        },
+        {
+          "turn": 3,
+          "bytes": 1779,
+          "ms": 353.76
+        },
+        {
+          "turn": 4,
+          "bytes": 2328,
+          "ms": 470.43
+        },
+        {
+          "turn": 5,
+          "bytes": 2682,
+          "ms": 586.75
+        },
+        {
+          "turn": 6,
+          "bytes": 3207,
+          "ms": 673.6
+        },
+        {
+          "turn": 7,
+          "bytes": 3491,
+          "ms": 738.16
+        },
+        {
+          "turn": 8,
+          "bytes": 3651,
+          "ms": 835.15
+        },
+        {
+          "turn": 9,
+          "bytes": 3801,
+          "ms": 900.41
+        },
+        {
+          "turn": 10,
+          "bytes": 4243,
+          "ms": 1019.27
+        }
+      ],
+      "turn_1_is_cold": true,
+      "peak_rss_mib": 1104.4
+    }
+  },
+  "proxy": {
+    "setup": {
+      "ready_ms": 773.2,
+      "first_request_cold_ms": 34.6,
+      "warm": {
+        "n": 30,
+        "p50_ms": 27.18,
+        "p95_ms": 39.55,
+        "max_ms": 80.62,
+        "mean_ms": 28.13
+      },
+      "status_counts": {
+        "200": 30
+      },
+      "restored_exact": 30,
+      "peak_rss_mib": 607.0
+    },
+    "setup_nym": {
+      "ready_ms": 2068.2,
+      "first_request_cold_ms": 153.0,
+      "warm": {
+        "n": 30,
+        "p50_ms": 112.05,
+        "p95_ms": 215.6,
+        "max_ms": 219.55,
+        "mean_ms": 124.29
+      },
+      "status_counts": {
+        "200": 30
+      },
+      "restored_exact": 30,
+      "peak_rss_mib": 1039.1
+    }
+  },
+  "host_after": {
+    "label": "after",
+    "load_1m": 2.41,
+    "load_5m": 2.64,
+    "load_15m": 3.51,
+    "foreign_processes": [],
+    "quiet": false
+  },
+  "verdict_rule": "start: load_1m < 2.0 and no foreign process; end: no foreign process (the workload's own load is expected)",
+  "verdict": "valid"
+}

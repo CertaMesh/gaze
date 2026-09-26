@@ -7,6 +7,146 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-09-26
+
+v0.15.1 closes the v0.15.0 known limitation for payment cards next to other
+digits and makes `gaze proxy` tokenize what the safety net flags instead of
+refusing the request. The curated summary below leads; the full entries follow
+in Keep a Changelog form.
+
+**Security.** Every release up to and including v0.15.0 sent a payment card
+number raw to the model when digits touched it: a CVV or expiry after it, an
+order or year number before it, or digits glued on by normalization. This was
+the v0.15.0 known limitation (solo todo #3843). The card is now tokenized on
+the forward path, and the restore-boundary DLP check finds it in model output
+through the same code (PR #658).
+
+**Highlights.**
+
+- **`gaze proxy` tokenizes safety-net findings** (PR #660). Under the policy
+  `gaze setup` writes (Nym on), the proxy refused every request that held a
+  date, such as `Invoice date 1971-05-30.`, with an opaque
+  `500 {"error":"Pipeline"}`, while `gaze clean` tokenized the same date. The
+  proxy now runs the Resolve step of
+  `gaze clean --safety-net-fallback strict` on request text: a flagged span is
+  forwarded as a token and restored in the response. What that step cannot
+  tokenize is still refused, never deleted.
+- **Proxy refusals say why** (PR #660): `422` with the typed
+  `ProtectionError` variant, the fallback reason and the suspect classes,
+  never the text, plus one line on the proxy's stderr.
+
+What #660 does not change, stated so nobody reads more into it:
+
+- Spans that no net flags and no rule detects, such as a `DD.MM.YYYY` date
+  without a cue, still reach the provider raw, exactly as `gaze clean` prints
+  them. The old behaviour blocked some of them only because it refused the
+  whole request whenever any other date in it was flagged.
+- The proxy is not plain `gaze clean`. Clean's default `redact` fallback runs
+  a second reversible batch and then deletes what is left one way; the proxy
+  refuses such a request instead.
+- Each request pays one more Nym pass per surfaced string on the legacy
+  adapters. The PR measured about +7 ms per request; the proxy latency row
+  under Performance is this release's measurement.
+
+**Breaking changes** (each has a full entry below):
+
+- `gaze proxy` refusals are now `422`. Legacy OpenAI and Gemini adapters
+  answer `{"error":"Refused","refusal":{…}}` instead of
+  `500 {"error":"Pipeline"}`; the Anthropic direct profile answers code
+  `ProtectionRefused` instead of `502 InvalidToken`. Clients that matched the
+  old status or error name must match the new ones (PR #660).
+- `gaze_proxy::DirectProxyError` is `Clone` but no longer `Copy` (PR #660).
+- A policy that acts on `custom:iban` differently from the
+  `family:payment-card-or-iban` class applies to about 7 % more IBANs, because
+  a card candidate inside a BBAN now settles the family to `custom:iban`
+  (PR #658).
+
+**Known limitations.** These gaps ship in this release:
+
+- **A repeat of a tokenized name can reach the model raw** (solo todo #3849).
+  Gaze tokenizes each occurrence only where a recognizer fires; it does not
+  carry a value it already tokenized to that value's other occurrences.
+  Without NER (no policy, `core` only), a name found in an email header stays
+  raw when the same document repeats it in prose. With NER (the `gaze setup`
+  policy), prose repeats are caught, but names written in lowercase can leak
+  whole or in fragments.
+- **UK national-format phone numbers are not detected** (solo todo #3848).
+  Numbers written with a leading `0` and a UK area code reach the model raw
+  under every setup, the Nym net included; `+44` numbers are covered.
+- **Some dates of birth pass raw** (solo todo #3651). Dates without a
+  birth-date cue in non-ISO formats, a German `Geburtsdatum` followed by a
+  `DD.MM.YYYY` date, and a `DD.MM.YYYY` value under a `dob` key in a JSON
+  tool result reach the model
+  raw on every path, `gaze clean` included.
+- **Two `gaze proxy` restore gaps from v0.15.0 remain** (solo todos #3841,
+  #3842). A token split across streaming events is not restored on the legacy
+  OpenAI chat and Gemini streaming paths, and the Anthropic path can restore a
+  JSON-escaped spelling. Both fail toward pseudonymized or escaped output,
+  never toward a leak.
+- **The MCP chokepoint still refuses what the safety net flags** (solo todo
+  #3850). `gaze clean`, `gaze daemon` and `gaze proxy` tokenize a net finding;
+  MCP tool calls refuse it. That fails closed; parity needs a contract
+  decision.
+
+**Performance.**
+Measured with [`scripts/bench/cli-latency.py`](scripts/bench/cli-latency.py)
+on the release code (built at `f769f823`) over 30 benchmark documents after
+one warm-up, on a quiet MacBook Pro (Apple M5 Max, 18 cores, 64 GB, macOS 26.5;
+1-minute load 1.77 at start, no other build or benchmark running, one ONNX
+Runtime thread). The script now also measures `gaze proxy`. Evidence:
+[`latency-v0.15.1.json`](docs/reference/benchmarks/latency-v0.15.1.json).
+
+| Warm per document or request | Median | p95 |
+|---|---:|---:|
+| v0.15.0 rules + NER | 20.0 ms | 32.7 ms |
+| v0.15.1 rules + NER | 19.7 ms | 32.8 ms |
+| v0.15.1 `gaze setup` policy, no net (`--safety-net none`) | 20.4 ms | 33.3 ms |
+| v0.15.1 `gaze setup` policy with Nym (the default) | 69.4 ms | 138.9 ms |
+| `gaze proxy` request, setup policy, no net | 27.2 ms | 39.6 ms |
+| `gaze proxy` request, setup policy with Nym | 112.1 ms | 215.6 ms |
+
+The pipeline rows match v0.15.0 within noise. The proxy rows are one OpenAI
+chat request per document through `gaze proxy serve` to a local upstream that
+echoes the text back, so they hold the proxy's own time and no provider time.
+All 30 requests on each policy were accepted and every reply restored to the
+sent document exactly. A proxy request took about 7 ms more at the median
+than the same document through a warm `gaze daemon` without a net, and about
+43 ms more with Nym (daemon: 69.5 ms). With a net the proxy runs the Resolve
+step and then its admission scan on each surfaced string (PR #660). This run
+does not isolate what PR #660 added; the PR's own probes measured about 7 ms
+per request against v0.15.0. One-shot `gaze clean` takes 772 ms per document
+for the setup policy and 2,140 ms with Nym; a warm `gaze daemon` answers in
+20.3 ms and 69.5 ms after a first cold request of 763 ms and 2,121 ms, and a
+proxy start takes 773 ms and 2,068 ms before the first request. In a 10-turn
+`gaze daemon` conversation that re-sends the history, a 4.2 KB turn took
+183 ms without a net and 1,019 ms with Nym.
+
+**Benchmark.**
+Measured on the release commit (`f769f823`, clean tree) with
+[`scripts/bench/run_no_opf_benchmark.py`](scripts/bench/run_no_opf_benchmark.py)
+(`full` profile, seed 20260710) on the same 2,910 documents and 130,282 gold
+PII bytes as v0.15.0, on a MacBook Pro (Apple M5 Max, 18 cores, 64 GB,
+macOS 26.5). The arm is the exact policy `gaze setup --non-interactive`
+writes, Nym on, byte-identical to the v0.15.0 policy (SHA-256 `f909a23a…`)
+([`scorecard-v0.15.1.json`](docs/reference/benchmarks/scorecard-v0.15.1.json)).
+
+| Setup | Refused | Leaked, all processed docs | Leaked, common set | False-positive bytes | Exact restores |
+|---|---:|---:|---:|---:|---:|
+| v0.15.1 `gaze setup` policy (rules + NER + Nym) | 0 | 19,556 (15.0%) | 19,556 (15.0%) | 30,073 | 2,910 / 2,910 |
+| v0.15.0 `gaze setup` policy (rules + NER + Nym) | 0 | 19,556 (15.0%) | 19,556 (15.0%) | 30,073 | 2,910 / 2,910 |
+
+Both rows use scored-label contract v1, which scores every corpus label. Under
+scored-label contract v2 (PASSWORD and SECURITYTOKEN out of contract, gold
+123,621 B) the same release code, policy, seed and host leak 13,319 B
+(10.77%), as in v0.15.0; that run adds `--scored-labels
+docs/reference/benchmarks/scored-labels-v2.json`, and its scorecard is not
+committed. The totals do not move because 96 of the corpus's 126 card
+numbers fail the Luhn check and the other 30 were already tokenized. The
+card fix shows only in the benchmark's shape-only probe, which ignores the
+Luhn check: it now covers 124 of the 126 card spans instead of 99. The #660
+proxy change does not touch this benchmark, which drives the `gaze clean`
+pipeline.
+
 ### Fixed
 
 - **`gaze proxy` tokenizes what the safety net flags instead of refusing the
@@ -29,8 +169,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still reach the provider raw, exactly as `gaze clean` prints them. The old
   behaviour blocked some of them only because it refused the whole request
   whenever any other date in it was flagged. No leak shipped: the old
-  behaviour failed closed. Affected: v0.15.0 with a configured net (solo todo
-  #3847).
+  behaviour failed closed. Affected: v0.15.0 with a configured net (PR #660,
+  solo todo #3847).
 - **Proxy refusals say why.** A refusal is now `422` with the typed
   `ProtectionError` variant, the fallback reason and the suspect classes,
   never the text, and one line on the proxy's stderr. The legacy adapters
@@ -38,7 +178,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answers code `ProtectionRefused` with the same `refusal` object. It was an
   opaque `500 {"error":"Pipeline"}` (legacy) or `502 InvalidToken` (direct)
   with an empty log. The shape is documented in
-  `docs/explanation/proxy/proxy-runtime.md` (solo todo #3847).
+  `docs/explanation/proxy/proxy-runtime.md`. **Breaking** for clients that
+  matched the old status or error name. `gaze_proxy::DirectProxyError` is
+  `Clone` but no longer `Copy` (PR #660, solo todo #3847).
 
 ### Security
 
@@ -87,7 +229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   39,395 card-token bytes). Every such token restores exactly. The no-OPF
   scorecard (2,910 documents) is unchanged: its card gold fails Luhn. The
   `luhn` validator now also skips any Unicode whitespace and non-ASCII
-  digits, as the restore check already did. (solo todo 3843)
+  digits, as the restore check already did. (PR #658, solo todo #3843)
   This fixes the v0.15.0 Known limitation "A payment card next to other
   digits can reach the model untokenized".
 - **The restore-boundary DLP check (PR #652, v0.15.0) now scans the whole
@@ -95,7 +237,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   19 digits of the run, so a card after a separated number of four or more
   digits (`2024 CARD`, `Order 5678 CARD`), any number before
   a 19-digit card, and a glued tail of four or more digits still passed
-  unreported. It now runs the card scan described above.
+  unreported. It now runs the card scan described above (PR #658).
+
+### Documentation
+
+- The explanation, reference, how-to and tutorial pages are restructured,
+  and stale facts in them are corrected against the code, among them the
+  `ValidatorFailReason` variant list, the proxy's shipped version, the
+  dashboard activation receipt and the document bundle files. The old
+  safety-net modes page is kept verbatim as a design record with a banner
+  listing where the code differs (PRs #657, #659; #657 merged before the
+  v0.15.0 tag but was not listed there).
 
 ## [0.15.0] - 2026-09-25
 
