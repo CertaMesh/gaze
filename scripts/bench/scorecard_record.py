@@ -167,7 +167,7 @@ class RecordWriter:
             "response": _compact_response(response),
         }
         measurement = self.layer_measurements.get(layer, validator_measurements)
-        if measurement is not None:
+        if layer != "C" and measurement is not None:
             row["validator"] = measurement["documents"][document.uid]
         if "pipeline_error_code" not in response:
             row["gold_gap_evidence"] = _gap_evidence(
