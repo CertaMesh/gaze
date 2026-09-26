@@ -1522,15 +1522,30 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
             "scorecard has no agentic layers: it predates them or was run with "
             "--no-agentic-layers; measure the base again on this harness"
         )
-    return {
+    gold_validity = layers.get("gold_validity")
+    if not isinstance(gold_validity, dict) or gold_validity.get("C") is None:
+        raise LayerError(
+            "scorecard predates the gold-validity digest; measure the base again on this harness"
+        )
+    identity = {
         "kiji_contract": score.scorecard_scored_label_contract_identity(scorecard),
         "kiji_dataset": scorecard.get("dataset", {}).get("integrity"),
         "corpus_sha256": layers.get("generator", {}).get("corpus_sha256"),
         "layer_contract": layers.get("scored_label_contract", {}).get("file_sha256"),
-        "layer_c_gold_validity": layers.get("gold_validity", {}).get("C"),
+        "layer_c_gold_validity": gold_validity["C"],
         "configs": scorecard.get("parameters", {}).get("configs"),
         "policy_sha256": scorecard.get("parameters", {}).get("policy_sha256"),
     }
+    missing = [
+        key for key, value in identity.items()
+        if value is None or (key == "kiji_contract" and None in value)
+    ]
+    if missing:
+        raise LayerError(
+            f"scorecard has no gate identity for {', '.join(missing)}; "
+            "measure the base again on this harness"
+        )
+    return identity
 
 
 def gold_validity_digest(

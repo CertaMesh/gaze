@@ -536,6 +536,7 @@ def _scorecard(
         "layers": {
             "generator": {"corpus_sha256": "g"},
             "scored_label_contract": {"file_sha256": "a"},
+            "gold_validity": {"C": {"algorithm": "sha256", "entities": 3, "value": "a" * 64}},
             "A": {"runs": [run("A")]},
             "D": {"runs": [run("D")]},
             "R": {"runs": [run("R")]},
@@ -655,6 +656,48 @@ class GateTests(unittest.TestCase):
         result = agentic.gate(base, candidate)
         self.assertEqual(result["verdict"], "not_comparable")
         self.assertIn("layer_c_gold_validity", result["differing"])
+
+    def test_missing_gold_validity_digest_is_refused_on_either_side(self) -> None:
+        for missing_side in ("both", "base", "candidate"):
+            with self.subTest(missing_side=missing_side):
+                base = _scorecard(self.BASE, self.FP)
+                candidate = _scorecard(self.BASE, self.FP)
+                if missing_side in ("both", "base"):
+                    del base["layers"]["gold_validity"]["C"]
+                if missing_side in ("both", "candidate"):
+                    del candidate["layers"]["gold_validity"]["C"]
+                with self.assertRaisesRegex(agentic.LayerError, "predates the gold-validity digest"):
+                    agentic.gate(base, candidate)
+
+    def test_reviewer_demo_relabelling_without_digest_is_refused(self) -> None:
+        # REVIEW 666 G2: reclassifying 100 already leaked valid phone bytes as
+        # validator-failed creates a gated gain without changing headline leak.
+        base = _scorecard({**self.BASE, "C": 200}, self.FP)
+        candidate = _scorecard({**self.BASE, "C": 100}, self.FP, c_invalid_leak=100)
+        del base["layers"]["gold_validity"]
+        del candidate["layers"]["gold_validity"]
+        with self.assertRaisesRegex(agentic.LayerError, "predates the gold-validity digest"):
+            agentic.gate(base, candidate)
+
+    def test_missing_other_gate_identity_is_refused(self) -> None:
+        for path in (
+            ("dataset", "integrity"),
+            ("layers", "generator", "corpus_sha256"),
+            ("layers", "scored_label_contract", "file_sha256"),
+            ("parameters", "configs"),
+            ("parameters", "policy_sha256"),
+            ("scoring", "scored_label_contract", "file_sha256"),
+        ):
+            with self.subTest(path=path):
+                base = _scorecard(self.BASE, self.FP)
+                candidate = _scorecard(self.BASE, self.FP)
+                for card in (base, candidate):
+                    target = card
+                    for key in path[:-1]:
+                        target = target[key]
+                    del target[path[-1]]
+                with self.assertRaisesRegex(agentic.LayerError, "no gate identity"):
+                    agentic.gate(base, candidate)
 
     def test_gold_validity_digest_moves_with_any_single_verdict(self) -> None:
         documents = [score.Document("d1", "Tel 0301234567", "de", "DE", "unit",
