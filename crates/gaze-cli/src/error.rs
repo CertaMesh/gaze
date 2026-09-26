@@ -44,6 +44,9 @@ pub(crate) enum CliError {
     Pipeline,
     Io,
     PolicyOpen,
+    /// The policy exists but this account may not read it; the detail names the file and the
+    /// chmod/chown fix. Same `PolicyOpen` variant name and exit code as a missing policy.
+    PolicyOpenDetail(String),
     /// `gaze index ingest` has no pinned NER bundle to detect prose names and organizations.
     #[cfg(feature = "index")]
     IndexNerModelMissing(String),
@@ -75,7 +78,7 @@ impl CliError {
             | Self::InvalidBlobVersion
             | Self::BlobExpired
             | Self::Pipeline => 3,
-            Self::Io | Self::PolicyOpen => 4,
+            Self::Io | Self::PolicyOpen | Self::PolicyOpenDetail(_) => 4,
             #[cfg(feature = "document")]
             Self::DocumentDetail(_) => 5,
             #[cfg(feature = "mcp")]
@@ -108,7 +111,7 @@ impl CliError {
             Self::BlobExpired => "BlobExpired",
             Self::Pipeline => "Pipeline",
             Self::Io => "Io",
-            Self::PolicyOpen => "PolicyOpen",
+            Self::PolicyOpen | Self::PolicyOpenDetail(_) => "PolicyOpen",
             #[cfg(feature = "document")]
             Self::DocumentDetail(_) => "Document",
             #[cfg(feature = "mcp")]
@@ -134,6 +137,7 @@ impl CliError {
                 )
             }
             Self::PolicyConfigDetail(detail)
+            | Self::PolicyOpenDetail(detail)
             | Self::SafetyNetConfigDetail(detail)
             | Self::SafetyNetPolicyConfigDetail(detail)
             | Self::SafetyNetUsageDetail(detail) => {

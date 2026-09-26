@@ -5,6 +5,7 @@ use regex::Regex;
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::policy::PolicyInputError;
 use crate::{CollisionMembership, LocaleBasis, LocaleTag, PiiClass, SafetyTier};
 
 const SUPPORTED_SCHEMA_MAJOR_MINOR: &str = "0.1.";
@@ -184,6 +185,13 @@ pub enum RulepackSource {
 pub enum RulepackError {
     #[error("failed to read rulepack: {0}")]
     Io(#[source] std::io::Error),
+    /// A rulepack path exists but this account may not read it.
+    #[error("{}", crate::policy::permission_denied_message(.path))]
+    ReadPermissionDenied {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("failed to parse rulepack TOML: {0}")]
     Toml(#[source] toml::de::Error),
     #[error("unsupported rulepack schema_version {found}; supported {supported}")]
@@ -295,7 +303,15 @@ impl Rulepack {
         match source {
             RulepackSource::Embedded(contents) => Self::parse_bundled(contents),
             RulepackSource::Path(path) => {
-                let raw = std::fs::read_to_string(path).map_err(RulepackError::Io)?;
+                let raw = crate::policy::read_policy_input(&path).map_err(|err| match err {
+                    PolicyInputError::PermissionDenied(source) => {
+                        RulepackError::ReadPermissionDenied {
+                            path: path.clone(),
+                            source,
+                        }
+                    }
+                    PolicyInputError::Io(source) => RulepackError::Io(source),
+                })?;
                 Self::parse(&raw)
             }
         }

@@ -29,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   years, or month names in those six languages. A date without a birth cue
   is still left alone, so invoice, log and release dates are unchanged. Every
   value the old rule captured is still captured with the same span.
+- **`gaze setup` writes `gaze.toml` owner-only (mode 0600) on purpose, and
+  checks for an existing policy before downloading any model.** An existing
+  policy without `--force` now fails before the NER and Nym downloads instead
+  of after them. When another account runs gaze with that policy (setup as
+  admin, run as a service user), `Policy::load` returns the new
+  `PolicyError::ReadPermissionDenied { path, source }` and the CLI keeps the
+  `PolicyOpen` / exit 4 envelope with a `detail` that names the file and the
+  `chown` / `chmod 0640` fix. It still fails closed. See
+  [Policy file permissions](docs/reference/policy.md#policy-file-permissions).
 
 ## [0.15.1] - 2026-09-26
 
