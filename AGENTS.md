@@ -52,16 +52,29 @@ Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTIN
 
 ## Benchmark gain gate
 
-Everything added to detection must be measured and must improve the benchmark. This is a review requirement for every PR that adds or widens detection behaviour: rules, cues, locale buckets, mechanisms (for example the manifest-value sweep), models, and safety-net or resolver changes. The harness needs the local corpus, so CI does not enforce it; the reviewer does.
+Everything added to detection must be measured and must improve the benchmark. This is a review requirement for every PR that changes detection output: one that adds, widens, narrows or removes rules, cues, locale buckets, mechanisms (for example the manifest-value sweep), models, or safety-net or resolver behaviour. A refactor claimed to preserve behaviour shows identical base and candidate scorecards. The harness needs the local corpus, so CI does not enforce the gate; the reviewer does.
 
-1. **Measure both sides fresh.** Base is the `main` commit the branch starts from, scored now, not an old scorecard. Candidate is the branch head. Both run on the `gaze setup` policy arm with the same corpus, seed, and machine, using the commands in [How to reproduce](docs/reference/benchmarks/README.md#how-to-reproduce).
+A **layer** is one scored part of the benchmark: the primary holdout corpus (layer C) and each generated layer (A, D and R), described in [Agentic layers and the rule gate](docs/reference/benchmarks/README.md#agentic-layers-and-the-rule-gate).
+
+1. **Measure both sides fresh.** Base is the `main` commit the branch starts from, scored now, not an old scorecard. Candidate is the branch head. Each side runs in its own worktree on the policy its own `gaze setup` writes, with the same corpus, seed and machine. Score it twice, once per contract, and skip the release-only copy and render steps:
+
+   ```bash
+   cargo run -p gaze-cli -- setup --non-interactive --force --policy-out target/gate/policy.toml
+   uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
+     --seed 20260710 --no-download --release --policy target/gate/policy.toml \
+     --output-dir target/bench-data/gate-<side>-v1
+   # repeat with --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+   #   --output-dir target/bench-data/gate-<side>-v2
+   ```
+
+   Compare the two sides per contract with `agentic_layers.py gate`, as shown in [Agentic layers and the rule gate](docs/reference/benchmarks/README.md#agentic-layers-and-the-rule-gate).
 2. **Report both scored-label contracts.** Contract v2 is the headline; contract v1 is reported next to it.
-3. **Merge rule.** No layer's leaked bytes rise, and at least one layer's leaked bytes fall. State false-positive bytes per layer. A false-positive-only fix passes when false-positive bytes fall and no layer's leaked bytes rise.
+3. **Merge rule.** No layer's leaked bytes rise, no layer's refusals rise, and at least one layer's leaked bytes fall. A refused document drops out of the leak count, so more refusals would hide leaks. State false-positive bytes per layer. A false-positive-only fix passes when false-positive bytes fall and no layer's leaked bytes or refusals rise.
 4. **A blind benchmark is not a pass.** If the benchmark cannot see the change, extend the generated layers first, with positives and false-positive counterweights, then measure. Never merge on "the corpus is blind".
 5. **Never tune a rule to the corpus.** A rule that only matches corpus-specific shapes will miss real text; see [A scorecard measures the corpus, not the recognizer](docs/reference/benchmarks/README.md#a-scorecard-measures-the-corpus-not-the-recognizer).
-6. **Evidence goes in the PR body** through the template's "Benchmark evidence" block: base and candidate sha, scorecard paths, v2 and v1 leaked bytes per layer, false-positive bytes per layer, and refusals. A PR skips the block only by ticking "not a detection change".
+6. **Evidence goes in the PR body** through the template's "Benchmark evidence" block: base and candidate sha, scorecard paths, v2 and v1 leaked bytes per layer, false-positive bytes per layer, and refusals. A PR skips the block only by ticking "not a detection change and not a benchmark change".
 
-**Benchmark changes re-measure past releases.** Any change to the benchmark itself (a layer, a scored-label contract, corpus or generated data, the scorer, or the benchmark document) re-measures every past release the document displays: the current harness drives each release tag's own detection code. A row that cannot be re-measured says why in the document. Local-only harness evidence does not count; the harness and its inputs must be committed.
+**Benchmark changes re-measure past releases.** Any change to the benchmark itself (a layer, a scored-label contract, corpus or generated data, the scorer, or the benchmark document) re-measures every past release the document displays: the current harness drives each release tag's own detection code. A row that cannot be re-measured says why in the document. Local-only harness evidence does not count; the harness and its inputs must be committed to the repo or pinned there by hash.
 
 ## Source of truth
 

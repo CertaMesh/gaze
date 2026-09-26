@@ -27,7 +27,10 @@ CI runs the same set and will fail otherwise.
 
 ## Benchmark evidence (AGENTS.md → "Benchmark gain gate")
 
-- [ ] Not a detection change (no rules, cues, locale buckets, mechanisms, models, or safety-net/resolver behaviour). Tick this only to skip the block below.
+- [ ] Not a detection change and not a benchmark change. Tick this only to skip the rest of this block.
+- [ ] Changes the benchmark (layer, contract, corpus or generated data, scorer, or benchmark doc): past-release rows re-measured with the current harness on each tag's code; rows that could not be re-measured give the reason in the doc.
+
+Detection changes (adds, widens, narrows or removes rules, cues, locale buckets, mechanisms, models, or safety-net/resolver behaviour) fill in the table. Layers are C, A, D and R.
 
 Base sha (`main` the branch starts from, scored fresh):
 Candidate sha:
