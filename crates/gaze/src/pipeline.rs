@@ -339,9 +339,7 @@ impl ProtectionTarget<'_, '_> {
     ) {
         match self {
             Self::Live(session) => session.record_evidence(family, class, raw, evidence),
-            Self::Staged(transaction) => {
-                transaction.record_evidence(family, class, raw, evidence)
-            }
+            Self::Staged(transaction) => transaction.record_evidence(family, class, raw, evidence),
         }
     }
 
@@ -1033,8 +1031,14 @@ impl Pipeline {
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
         let mut whole = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
-        let sweep_links =
-            self.sweep_repeat_values(target, &mut whole, &normalized, text, field_name, locale_chain)?;
+        let sweep_links = self.sweep_repeat_values(
+            target,
+            &mut whole,
+            &normalized,
+            text,
+            field_name,
+            locale_chain,
+        )?;
         let recovery::WholePlan {
             evidence,
             order,
@@ -1383,7 +1387,9 @@ impl Pipeline {
         if let Some(matcher) = target.sweep_matcher()? {
             hits.extend(matcher.find(&normalized.text));
         }
-        let covered = winners.map(|winner| winner.span.clone()).collect::<Vec<_>>();
+        let covered = winners
+            .map(|winner| winner.span.clone())
+            .collect::<Vec<_>>();
         let mut uncovered = Vec::new();
         for hit in hits {
             let raw = crate::normalize::raw_range(hit.span.clone(), &normalized.spans)

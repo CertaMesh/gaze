@@ -26,6 +26,7 @@ axis in practice.
 
 - **[Feedback loop](detection/feedback-loop.md)** — the coverage feedback loop behind detection completeness.
 - **[Validator veto](detection/validator-veto.md)** — how validator-backed recognizer failures are rejected before conflict resolution.
+- **[Repeat-value sweep](detection/manifest-sweep.md)** — how every copy of a rule-found value is tokenized across a document and session.
 - **[Collision family](detection/collision-family.md)** — cross-class recognizer rivalries and how family policy resolves them.
 - **[Anchor resolution](detection/anchor-resolution.md)** — mandatory-anchor resolution and the fail-closed family token.
 - **[Ambiguity side-channel](detection/ambiguity-side-channel.md)** — the optional validator/ambiguity metadata carried into the audit log.

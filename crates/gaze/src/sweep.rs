@@ -52,6 +52,7 @@ const MAX_PATTERN_BYTES: usize = 16 * 1024 * 1024;
 
 /// Closed list of words that are also common first names or surnames. A
 /// single-word value or name part on this list is never swept.
+#[rustfmt::skip]
 const COMMON_WORDS: &[&str] = &[
     // Months and weekdays, English and German.
     "january", "february", "march", "april", "may", "june", "july", "august",
@@ -324,7 +325,10 @@ pub(crate) fn select(mut hits: Vec<SweepHit>) -> Vec<SweepHit> {
     });
     let mut out: Vec<SweepHit> = Vec::with_capacity(hits.len());
     for hit in hits {
-        if out.last().is_none_or(|last| last.span.end <= hit.span.start) {
+        if out
+            .last()
+            .is_none_or(|last| last.span.end <= hit.span.start)
+        {
             out.push(hit);
         }
     }
@@ -419,7 +423,9 @@ fn title_case(word: &str) -> String {
 fn inside_url(text: &str, span: &Range<usize>) -> bool {
     let start = text[..span.start]
         .rfind(char::is_whitespace)
-        .map_or(0, |at| at + text[at..].chars().next().map_or(1, char::len_utf8));
+        .map_or(0, |at| {
+            at + text[at..].chars().next().map_or(1, char::len_utf8)
+        });
     let end = text[span.end..]
         .find(char::is_whitespace)
         .map_or(text.len(), |at| span.end + at);
@@ -514,7 +520,10 @@ mod tests {
         let text = "x İPEK YILDIZ y";
         let hits = found(vec![name("İpek Yildiz")], text);
         assert_eq!(hits, ["İPEK YILDIZ"]);
-        assert_eq!(found(vec![name("İpek Yildiz")], "İpek Yildiz!"), ["İpek Yildiz"]);
+        assert_eq!(
+            found(vec![name("İpek Yildiz")], "İpek Yildiz!"),
+            ["İpek Yildiz"]
+        );
     }
 
     #[test]
@@ -522,7 +531,10 @@ mod tests {
         assert!(found(vec![name("Maria Schneider")], "xmaria schneidery").is_empty());
         // The whole value stops inside `Schneiders`; only the title-case
         // part `Maria` stands on word edges.
-        assert_eq!(found(vec![name("Maria Schneider")], "Maria Schneiders"), ["Maria"]);
+        assert_eq!(
+            found(vec![name("Maria Schneider")], "Maria Schneiders"),
+            ["Maria"]
+        );
     }
 
     #[test]

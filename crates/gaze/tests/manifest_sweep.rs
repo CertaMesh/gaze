@@ -124,7 +124,11 @@ const HEADER: &str = "From: Maria Schneider <m@example.invalid>\n";
 
 fn swept(body: &str) -> String {
     let session = Session::new(Scope::Ephemeral).unwrap();
-    let text = clean(&pipeline(vec![], Audit::default()), &session, &format!("{HEADER}{body}"));
+    let text = clean(
+        &pipeline(vec![], Audit::default()),
+        &session,
+        &format!("{HEADER}{body}"),
+    );
     text[text.find('\n').unwrap() + 1..].to_string()
 }
 
@@ -149,7 +153,10 @@ fn recall_probe_length_changing_case_fold() {
     let session = Session::new(Scope::Ephemeral).unwrap();
     let input = "From: İpek Yildiz <i@example.invalid>\nSIGNED: İPEK YILDIZ.";
     let out = clean(&pipeline(vec![], Audit::default()), &session, input);
-    assert!(out.ends_with("SIGNED: <") || out.contains("SIGNED: <"), "{out}");
+    assert!(
+        out.ends_with("SIGNED: <") || out.contains("SIGNED: <"),
+        "{out}"
+    );
     assert!(!out.contains("YILDIZ"), "{out}");
 }
 
@@ -190,7 +197,11 @@ fn learned_values_do_not_propagate() {
     // because NER-found values never seed the sweep.
     let session = Session::new(Scope::Ephemeral).unwrap();
     let input = "Anna Weber wrote. later anna weber wrote again.";
-    let out = clean(&pipeline(vec!["Anna Weber"], Audit::default()), &session, input);
+    let out = clean(
+        &pipeline(vec!["Anna Weber"], Audit::default()),
+        &session,
+        input,
+    );
     assert!(out.contains("later anna weber wrote"), "{out}");
 }
 
@@ -203,7 +214,11 @@ fn rule_values_propagate_across_documents_of_one_session() {
     let third = clean(&p, &session, "maria schneider asked again.");
     assert_eq!(tokens(&second), tokens(&first), "{second}");
     assert_eq!(tokens(&third).len(), 1, "{third}");
-    assert_ne!(tokens(&third), tokens(&first), "variant gets a sibling token");
+    assert_ne!(
+        tokens(&third),
+        tokens(&first),
+        "variant gets a sibling token"
+    );
 }
 
 #[test]
@@ -212,10 +227,17 @@ fn swept_copy_covers_the_union_with_an_ner_fragment() {
     // leave a raw `r` behind the token. The swept copy encloses it and wins.
     let session = Session::new(Scope::Ephemeral).unwrap();
     let input = format!("{HEADER}hi, this is maria schneider again.");
-    let out = clean(&pipeline(vec!["maria schneide"], Audit::default()), &session, &input);
+    let out = clean(
+        &pipeline(vec!["maria schneide"], Audit::default()),
+        &session,
+        &input,
+    );
     let body = &out[out.find('\n').unwrap() + 1..];
     assert_eq!(tokens(body).len(), 1, "{out}");
-    assert!(body.starts_with("hi, this is <") && body.ends_with("> again."), "{out}");
+    assert!(
+        body.starts_with("hi, this is <") && body.ends_with("> again."),
+        "{out}"
+    );
 }
 
 #[test]

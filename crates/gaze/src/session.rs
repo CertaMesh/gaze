@@ -13,8 +13,8 @@ use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 
 use crate::detector::PiiClass;
-use crate::sweep::{ManifestEvidence, SweepMatcher, SweepSource};
 use crate::policy::{Policy, SessionScope};
+use crate::sweep::{ManifestEvidence, SweepMatcher, SweepSource};
 use crate::{Error, Result};
 use gaze_types::{
     DocumentExtension, RestoreDecision, RestorePolicy, RestoreTelemetry,
@@ -558,7 +558,10 @@ impl Session {
         evidence: ManifestEvidence,
     ) {
         self.mutate_state(|state| {
-            ((), record_evidence_in_state(state, family, class, raw, evidence))
+            (
+                (),
+                record_evidence_in_state(state, family, class, raw, evidence),
+            )
         })
     }
 
@@ -2516,12 +2519,24 @@ mod tests {
     #[test]
     fn learned_evidence_is_recorded_but_never_swept() {
         let session = Session::new(Scope::Ephemeral).expect("session");
-        session.tokenize(&PiiClass::Name, "Anna Weber").expect("token");
-        session.record_evidence(None, &PiiClass::Name, "Anna Weber", ManifestEvidence::Learned);
+        session
+            .tokenize(&PiiClass::Name, "Anna Weber")
+            .expect("token");
+        session.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Anna Weber",
+            ManifestEvidence::Learned,
+        );
         assert!(session.sweep_matcher().expect("matcher").is_none());
         // A later rule hit on the same value raises the tier and invalidates
         // the cached (empty) answer.
-        session.record_evidence(None, &PiiClass::Name, "Anna Weber", ManifestEvidence::Anchored);
+        session.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Anna Weber",
+            ManifestEvidence::Anchored,
+        );
         assert!(session.sweep_matcher().expect("matcher").is_some());
     }
 

@@ -75,7 +75,8 @@ fn clean_and_round_trip(input: &str, forbidden: &[&str]) -> String {
 #[test]
 #[file_serial(gaze_subprocess)]
 fn case_a_body_copy_reuses_the_header_token() {
-    let input = format!("{HEADER}Subject: hello\n\nMy name is Maria Schneider. Please call back.\n");
+    let input =
+        format!("{HEADER}Subject: hello\n\nMy name is Maria Schneider. Please call back.\n");
     let clean = clean_and_round_trip(&input, &["Maria", "Schneider"]);
     let tokens = name_tokens(&clean);
     assert_eq!(tokens.len(), 2, "{clean}");
@@ -210,10 +211,12 @@ fn daemon_later_turns_are_swept_with_earlier_turn_values() {
     let turns = String::from_utf8(output.stdout)
         .unwrap()
         .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap()["clean_text"]
-            .as_str()
-            .unwrap()
-            .to_string())
+        .map(|line| {
+            serde_json::from_str::<Value>(line).unwrap()["clean_text"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
         .collect::<Vec<_>>();
     assert_eq!(turns.len(), 3);
     let first = name_tokens(&turns[0]);

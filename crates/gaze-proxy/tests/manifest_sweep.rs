@@ -95,7 +95,8 @@ async fn a_rule_found_name_is_swept_in_every_message_of_the_request() {
             .build()
             .unwrap(),
     );
-    let proxy_task = tokio::spawn(async move { gaze_proxy::serve(config, pipeline).await.unwrap() });
+    let proxy_task =
+        tokio::spawn(async move { gaze_proxy::serve(config, pipeline).await.unwrap() });
     let client = Client::new();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
     while !client
@@ -104,7 +105,10 @@ async fn a_rule_found_name_is_swept_in_every_message_of_the_request() {
         .await
         .is_ok_and(|response| response.status().is_success())
     {
-        assert!(tokio::time::Instant::now() < deadline, "proxy did not start");
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "proxy did not start"
+        );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
 

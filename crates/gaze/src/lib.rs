@@ -62,7 +62,6 @@ pub use policy::{
     DEFAULT_NER_THRESHOLD, DEFAULT_POLICY_SCHEMA_VERSION, SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR,
 };
 pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
-pub use sweep::ManifestSweepError;
 pub use registry::{
     Candidate, Canonicalizer, DetectContext, DetectError, FamilyPolicyTable, Recognizer,
     RecognizerRegistry, RecognizerRegistryBuilder, ValidationResult, Validator,
@@ -82,4 +81,5 @@ pub use session::{
     RestoreEventKind, RestoredTextWithProvenance, Scope, SensitiveSnapshot, Session,
     SessionSnapshotEntry, SessionTransaction, SessionTransactionError,
 };
+pub use sweep::ManifestSweepError;
 pub use types::{CleanDocument, RawDocument, Value};
