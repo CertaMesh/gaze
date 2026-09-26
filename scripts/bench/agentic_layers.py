@@ -44,8 +44,8 @@ LAYER_IDENTIFIERS = "A"
 LAYER_LOOKALIKES = "D"
 SOURCE_DATASET = "gaze-agentic-layers"
 
-NBSP = " "
-NARROW_NBSP = " "
+NBSP = "\u00a0"
+NARROW_NBSP = "\u202f"
 
 SURFACES = (
     "prose_cue",
@@ -57,6 +57,8 @@ SURFACES = (
     "tool_json",
 )
 LOOKALIKE_SURFACES = ("prose", "log_kv", "tool_json")
+# Perturbed surfaces: the prose_cue parent with its spaces swapped for this.
+PERTURBED_SURFACES = {"nbsp": NBSP, "narrow_nbsp": NARROW_NBSP}
 VALID = "valid"
 INVALID = "invalid"
 UNCHECKED = "unchecked"
@@ -775,18 +777,18 @@ def _identifier_records(partition: str, seed: int) -> list[Record]:
                 variants.append((INVALID, twin))
             group = f"{partition}-A-{family.name}-{index:03d}"
             choices = {
-                surface: rng.choice(TEMPLATES["prose_cue" if surface in ("nbsp", "narrow_nbsp") else surface][partition])
+                surface: rng.choice(TEMPLATES[surface][partition])
                 for surface in SURFACES
-                if surface not in ("nbsp", "narrow_nbsp")
+                if surface not in PERTURBED_SURFACES
             }
             cue = rng.choice(CUES[cue_family][partition])
             key = rng.choice(KEYS[cue_family][partition])
             for validity, raw_value in variants:
                 value = family.display(raw_value)
                 for surface in SURFACES:
-                    base_surface = "prose_cue" if surface in ("nbsp", "narrow_nbsp") else surface
+                    base_surface = "prose_cue" if surface in PERTURBED_SURFACES else surface
                     template = choices[base_surface]
-                    separator = {"nbsp": NBSP, "narrow_nbsp": NARROW_NBSP}.get(surface, " ")
+                    separator = PERTURBED_SURFACES.get(surface, " ")
                     rendered = value.render(separator)
                     text, gold = _fill(
                         template,
@@ -892,9 +894,9 @@ def _unchecked_records(partition: str, seed: int) -> list[Record]:
                 cue = rng.choice(CUES[cue_family][partition])
                 key = rng.choice(KEYS[cue_family][partition])
             for surface in SURFACES:
-                base_surface = "prose_cue" if surface in ("nbsp", "narrow_nbsp") else surface
+                base_surface = "prose_cue" if surface in PERTURBED_SURFACES else surface
                 template = choices[base_surface]
-                separator = {"nbsp": NBSP, "narrow_nbsp": NARROW_NBSP}.get(surface, " ")
+                separator = PERTURBED_SURFACES.get(surface, " ")
                 if family == "header_name":
                     fields = {
                         "G": (given, "GIVENNAME"),
