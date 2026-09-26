@@ -12,7 +12,7 @@
       "byte_start": 60,
       "byte_end": 84,
       "class_id": "custom:ip_address",
-      "raw_label": "2001:db8:cd64:d0c2::a52b",
+      "raw_label": "2001:db9:cd64:d0c2::a52b",
       "generator_id": "ip_v6",
       "generator_seed": 10160907100951476092,
       "license_origin": "synthetic-rust-generator",

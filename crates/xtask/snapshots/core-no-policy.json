@@ -82,50 +82,6 @@
       "count": 1
     },
     {
-      "recognizer_id": "ip.v4",
-      "class": "custom:ip_address",
-      "byte_span": {
-        "start": 448,
-        "len": 10
-      },
-      "family": "session_custom_counter",
-      "token_shape": "<session:Custom:ip_address_{N}>",
-      "count": 1
-    },
-    {
-      "recognizer_id": "ip.v4",
-      "class": "custom:ip_address",
-      "byte_span": {
-        "start": 571,
-        "len": 12
-      },
-      "family": "session_custom_counter",
-      "token_shape": "<session:Custom:ip_address_{N}>",
-      "count": 1
-    },
-    {
-      "recognizer_id": "ip.v6",
-      "class": "custom:ip_address",
-      "byte_span": {
-        "start": 509,
-        "len": 28
-      },
-      "family": "session_custom_counter",
-      "token_shape": "<session:Custom:ip_address_{N}>",
-      "count": 1
-    },
-    {
-      "recognizer_id": "ip.v6",
-      "class": "custom:ip_address",
-      "byte_span": {
-        "start": 632,
-        "len": 18
-      },
-      "family": "session_custom_counter",
-      "token_shape": "<session:Custom:ip_address_{N}>",
-      "count": 1
-    },
-    {
       "recognizer_id": "url.anchored",
       "class": "custom:url",
       "byte_span": {
@@ -138,14 +94,13 @@
     }
   ],
   "stats": {
-    "detections": 12,
+    "detections": 8,
     "classes": {
       "Email": 3,
       "Name": 1,
       "custom:credit_card": 1,
       "custom:eth_address": 1,
       "custom:family:payment-card-or-iban": 1,
-      "custom:ip_address": 4,
       "custom:url": 1
     }
   }

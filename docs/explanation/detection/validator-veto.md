@@ -63,6 +63,8 @@ compatibility.
 - `PhoneNationalRegionMismatch`
 - `Ipv4ParseFailed`
 - `Ipv6ParseFailed`
+- `Ipv4DocumentationRange`
+- `Ipv6DocumentationRange`
 - `EthEip55ChecksumFailed`
 - `AadhaarVerhoeffFailed`
 - `FrNirMod97Failed`

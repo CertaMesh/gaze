@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- **`gaze_proxy::ProviderAdapter::contract()` is required** (solo todo
+  #2400). The default body, which silently gave every third-party adapter
+  `AdapterContract::legacy()`, is gone; an adapter that declares no contract
+  no longer compiles (`E0046`). Add
+  `fn contract(&self) -> AdapterContract<'_> { AdapterContract::legacy() }`
+  to keep today's behavior. The bundled OpenAI and Gemini adapters now declare
+  it explicitly; `PiiSurface` is unchanged. See UPGRADE.md.
+
 ### Security
 
 - **Dates of birth after a birth cue are tokenized** (solo todo #3651).
@@ -17,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   field record (`DOB: 1990-02-03`) and `born on` / `geboren am`.
 
 ### Changed
+
+- **[bundle-tokenization-drift] `core` excludes documentation IPs.** The
+  no-policy snapshot drops RFC 5737 IPv4 and RFC 3849 IPv6 detections; nearby
+  non-documentation addresses still tokenize and restore.
 
 - **`birth_date.cue` reads birth cues in prose, tool-call JSON and
   `key=value` logs.** Cues cover en, de, fr, nl, da and es (`DOB`,
@@ -29,6 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   years, or month names in those six languages. A date without a birth cue
   is still left alone, so invoice, log and release dates are unchanged. Every
   value the old rule captured is still captured with the same span.
+- **`gaze setup` writes `gaze.toml` owner-only (mode 0600) on purpose, and
+  checks for an existing policy before downloading any model.** An existing
+  policy without `--force` now fails before the NER and Nym downloads instead
+  of after them. When another account runs gaze with that policy (setup as
+  admin, run as a service user), `Policy::load` returns the new
+  `PolicyError::ReadPermissionDenied { path, source }` and the CLI keeps the
+  `PolicyOpen` / exit 4 envelope with a `detail` that names the file and the
+  `chown` / `chmod 0640` fix. It still fails closed. See
+  [Policy file permissions](docs/reference/policy.md#policy-file-permissions).
 
 ## [0.15.1] - 2026-09-26
 

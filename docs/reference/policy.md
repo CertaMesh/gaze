@@ -326,8 +326,13 @@ gaze clean --rulepack-bundled core --locale=en-US --policy ./policy.toml
 - `card.structural` emits `custom:credit_card` only for 13- to 19-digit
   candidates that pass `luhn`. Its pattern takes a whole digit run; the
   recognizer finds the card inside it, so a CVV, expiry or number touching the
-  card does not hide it (`gaze_types::payment_card::scan_card_run`).
-- `ip.v4` and `ip.v6` emit `custom:ip_address`.
+  card does not hide it (`gaze_types::payment_card::scan_card_run`). All-zero
+  candidates are rejected even though their Luhn checksum is zero.
+- `ip.v4` and `ip.v6` emit `custom:ip_address` for parsed addresses outside
+  RFC 5737 IPv4 documentation ranges and RFC 3849 IPv6 documentation range.
+  IPv4-compatible and IPv4-mapped forms of RFC 5737 addresses are also excluded.
+  The ordinary `ipv4_parse` and `ipv6_parse` validators remain available to
+  custom rules that intentionally protect documentation addresses.
 - `postal.de` emits `custom:postal_code` only under active locale `de-DE`.
 - `postal.us` emits `custom:postal_code` only under active locale `en-US`.
   Plain `en` does not activate `postal.us`.
@@ -417,6 +422,8 @@ kind = "luhn"
 | `iban_mod97` | IBAN-like alphanumeric candidates | ISO 7064 mod-97 check at the country's ISO 13616 registry length. Input is canonicalized as uppercase with ASCII whitespace removed before validation. Recognizers with this validator also get the identifier-run trailing boundary: the word run after the candidate may be empty or letters only (`gaze_types::word_run_extends_identifier`), so their pattern must not end in `\b`. |
 | `ipv4_parse` | IPv4-like candidates | `std::net::Ipv4Addr` parser validation. Rejects leading-zero octets, hex forms, short forms, and out-of-range octets. |
 | `ipv6_parse` | IPv6-like candidates | `std::net::Ipv6Addr` parser validation for RFC 4291 textual forms, including IPv4-embedded addresses. Rejects bracketed URI literals and zone-id suffixes. |
+| `ipv4_parse_non_documentation` | Bundled `ip.v4` candidates | Same IPv4 parser, then excludes RFC 5737 documentation ranges with a typed audit veto. |
+| `ipv6_parse_non_documentation` | Bundled `ip.v6` candidates | Same IPv6 parser, then excludes RFC 3849 and IPv4-embedded RFC 5737 documentation ranges with a typed audit veto. |
 | `eth_eip55` | Ethereum address candidates | EIP-55 checksum validation using Keccak-256. Mixed-case addresses must satisfy the checksum; all-lower and all-upper legacy forms are accepted. |
 | `aadhaar_verhoeff` | Aadhaar candidates | Verhoeff checksum validation for cue-anchored Indian Aadhaar recognizers. |
 | `fr_nir_mod97` | French NIR candidates | French NIR two-digit MOD-97 key validation. |
@@ -1050,15 +1057,53 @@ behavior for session scope, session TTL, NER threshold/model/locale, active
 locale, bundled rulepacks, and rulepack paths. The audit found no runtime
 policy field missing a CLI flag.
 
+## Policy file permissions
+
+`gaze setup` writes the policy owner-only (mode `0600`): only the account that
+ran setup can read it. The policy holds no secrets, but it records local model
+paths, and nothing else needs to read it in a single-user install.
+
+If you run setup as one account and gaze as another (for example setup as an
+admin, then `gaze proxy` or `gaze daemon` as a service user), grant that account
+read access. Either hand the file over:
+
+```console
+chown <service-user> /etc/gaze/gaze.toml
+```
+
+or share it through a group:
+
+```console
+chgrp <service-group> /etc/gaze/gaze.toml
+chmod 0640 /etc/gaze/gaze.toml
+```
+
+Re-running `gaze setup --force` replaces the file with a fresh owner-only
+copy, so apply the grant again afterwards.
+
+Keep the policy unwritable by the service account. A policy it can rewrite lets
+that account turn detection off.
+
+Without read access, gaze refuses to start rather than running without the
+policy. `Policy::load` returns `PolicyError::ReadPermissionDenied { path, .. }`
+(also for an unreadable `terms_file`; an unreadable rulepack path returns
+`RulepackError::ReadPermissionDenied`), and the CLI prints the `PolicyOpen`
+envelope with a `detail` that names the file and this fix:
+
+```console
+{"error":"PolicyOpen","exit":4,"detail":"cannot read `/etc/gaze/gaze.toml`: permission denied. ..."}
+```
+
 ## Troubleshooting
 
 Each `PolicyError` variant maps to one exit code via `gaze clean`. The
-mapping lives at [`gaze-cli/src/main.rs::map_policy_error`](../../crates/gaze-cli/src/main.rs)
+mapping lives at [`gaze-cli/src/pipeline/build.rs::map_policy_error`](../../crates/gaze-cli/src/pipeline/build.rs)
 and is summarised here.
 
 | Symptom (stderr variant)                | `PolicyError`              | Exit | Common cause                                                                 |
 |-----------------------------------------|----------------------------|------|------------------------------------------------------------------------------|
-| `{"error":"PolicyOpen","exit":4}`       | `Io`                       | 4    | `--policy` path does not exist, is unreadable, or points at a directory.     |
+| `{"error":"PolicyOpen","exit":4}`       | `Io`                       | 4    | `--policy` path does not exist or points at a directory.                     |
+| `{"error":"PolicyOpen","exit":4,"detail":…}` | `ReadPermissionDenied` | 4    | The policy exists but this account may not read it. `gaze setup` writes it mode `0600`; see [Policy file permissions](#policy-file-permissions). |
 | `{"error":"PolicyConfig","exit":2}`     | `TomlParse`                | 2    | TOML syntax error, or an unknown key (`deny_unknown_fields` is on everywhere). Re-check field spelling. |
 | `{"error":"PolicyConfig","exit":2}`     | `UnknownClass(s)`          | 2    | A `class` value not in `{email, name, location, organization}` and not prefixed `custom:`. Or `"custom:"` with an empty name. |
 | `{"error":"PolicyConfig","exit":2}`     | `BadRegex { name, … }`     | 2    | `pattern` failed to compile. Watch for unsupported PCRE features (lookaround, backrefs). |
