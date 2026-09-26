@@ -1266,7 +1266,9 @@ these words.
 An entry with a trailing dot (`str.`, `st.`) is an abbreviation, so a dot may
 follow the word. One or two spaces separate street and number; a line break,
 tab or other character ends the match. A house number is one to four digits,
-one optional letter, and one optional `-`, `–` or `/` part (`12-14`, `12/3`).
+one optional letter, and one optional `-`, `–` or `/` part (`12-14`, `12/3`,
+`12 - 14`). After a German street a bare year from 1900 to 2099 is refused
+(`Bahnhofstraße 2025 wird umgebaut`).
 The token is a `location` token with recognizer id
 `address.house_number.street_corroborated` and trace sources
 `[address.house_number.street_corroborated, ner]`. Without NER, or without a

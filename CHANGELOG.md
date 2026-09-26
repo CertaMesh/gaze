@@ -71,7 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before a street type (`Street`, `Road`, `Drive`, …, from
   `[locale.street_types_number_before]` in `locale-en`). A city, a bare street
   word, a number across a line break, tab or table border, a five-digit
-  number, and a decimal or time never qualify. Only policies that load a
+  number, a bare year (1900–2099) after a German street (`Bahnhofstraße
+  2025`), and a decimal or time never qualify. A spaced range before an
+  English street (`12 - 14 Harbor Road`) is covered whole. Only policies that load a
   locale pack with these lists and run NER change: `core` alone, or a policy
   without `[ner]`, tokenizes exactly what it did before. Known limit: the
   lexicon cannot tell a street from a title the NER model mislabels as a
