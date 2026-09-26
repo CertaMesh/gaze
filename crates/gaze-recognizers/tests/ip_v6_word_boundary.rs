@@ -147,6 +147,60 @@ fn documentation_addresses_stay_untouched_and_adjacent_ranges_restore() {
     }
 }
 
+#[test]
+fn explicit_dictionary_can_protect_documentation_addresses() {
+    let context = Context::from_json_str(
+        &serde_json::json!({
+            "dictionaries": {
+                "reserved_ips": {
+                    "terms": ["192.0.2.1", "2001:db8::1"],
+                    "case_sensitive": true
+                }
+            },
+            "class_map": {"reserved_ips": "custom:ip_address"},
+            "fields": {}
+        })
+        .to_string(),
+    )
+    .expect("context");
+    let rulepack = Rulepack::load(RulepackSource::Embedded(
+        embedded("core").expect("core rulepack"),
+    ))
+    .expect("core loads");
+    let mut policy = gaze::Policy::default();
+    policy.rules = vec![
+        RuleSpec::Class {
+            class: ip_class(),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ];
+    policy.rulepacks.bundled = vec!["core".to_string()];
+    let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&LOCALES));
+    let pipeline = gaze_assembly::build_pipeline(&policy, &context, &[rulepack], &chain, None)
+        .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let input = "host 192.0.2.1 and 2001:db8::1";
+    let dictionaries = gaze::dictionary_bundle_from_context(&context);
+    let (clean, manifest, _) = pipeline
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(input.to_string()),
+            &LOCALES,
+            &dictionaries,
+        )
+        .expect("clean");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text");
+    };
+    assert_eq!(manifest.len(), 2);
+    assert!(!clean.contains("192.0.2.1"));
+    assert!(!clean.contains("2001:db8::1"));
+    assert_eq!(session.restore_strict_text(&clean).expect("restore"), input);
+}
+
 // ============================================== the defect: `::` paths must not fire (todo 3710)
 
 // drift-ack: the drift corpus gained a Rust scope-separator line so the bundled no-policy gate
