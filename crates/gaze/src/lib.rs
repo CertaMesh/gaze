@@ -18,6 +18,7 @@ pub mod rulepack;
 mod safety_net_scan;
 mod sandbox;
 mod session;
+mod sweep;
 pub mod token_shape;
 mod types;
 mod validator_veto;
@@ -61,6 +62,7 @@ pub use policy::{
     DEFAULT_NER_THRESHOLD, DEFAULT_POLICY_SCHEMA_VERSION, SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR,
 };
 pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
+pub use sweep::ManifestSweepError;
 pub use registry::{
     Candidate, Canonicalizer, DetectContext, DetectError, FamilyPolicyTable, Recognizer,
     RecognizerRegistry, RecognizerRegistryBuilder, ValidationResult, Validator,

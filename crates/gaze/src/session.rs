@@ -13,6 +13,7 @@ use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 
 use crate::detector::PiiClass;
+use crate::sweep::{ManifestEvidence, SweepMatcher, SweepSource};
 use crate::policy::{Policy, SessionScope};
 use crate::{Error, Result};
 use gaze_types::{
@@ -27,6 +28,10 @@ const SNAPSHOT_VERSION_V2: u8 = 2;
 const SNAPSHOT_VERSION_V3: u8 = 3;
 const SNAPSHOT_VERSION_V4: u8 = 4;
 const SNAPSHOT_VERSION_V5: u8 = 5;
+/// v6 adds the per-entry evidence tier the repeat-value sweep reads. Older
+/// readers reject it as an unknown version instead of silently dropping the
+/// field and sweeping nothing.
+const SNAPSHOT_VERSION_V6: u8 = 6;
 
 pub type RestoreError = Error;
 
@@ -147,6 +152,10 @@ struct SnapshotEntry {
     token: String,
     #[serde(default = "default_counter_family")]
     family: String,
+    /// Evidence the value was found with (v6+). Entries from older blobs
+    /// carry none and are never swept: their tier is unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    evidence: Option<ManifestEvidence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,7 +193,11 @@ struct SessionState {
     next_by_class: HashMap<PiiClass, usize>,
     token_by_value: HashMap<TokenKey, String>,
     value_by_token: HashMap<String, String>,
+    evidence_by_value: HashMap<TokenKey, ManifestEvidence>,
     restore_regex_cache: Option<(u64, Arc<Regex>)>,
+    /// Matcher over the sweepable values. Cleared whenever a value's evidence
+    /// changes, like the restore regex cache when a token is minted.
+    sweep_matcher_cache: Option<Arc<SweepMatcher>>,
 }
 
 impl SessionState {
@@ -194,7 +207,9 @@ impl SessionState {
             next_by_class: HashMap::new(),
             token_by_value: HashMap::new(),
             value_by_token: HashMap::new(),
+            evidence_by_value: HashMap::new(),
             restore_regex_cache: None,
+            sweep_matcher_cache: None,
         }
     }
 
@@ -533,6 +548,42 @@ impl Session {
         })
     }
 
+    /// Records the evidence a minted value was found with, keeping the
+    /// strongest tier seen. `family` is `None` for format-preserving fakes.
+    pub(crate) fn record_evidence(
+        &self,
+        family: Option<&str>,
+        class: &PiiClass,
+        raw: &str,
+        evidence: ManifestEvidence,
+    ) {
+        self.mutate_state(|state| {
+            ((), record_evidence_in_state(state, family, class, raw, evidence))
+        })
+    }
+
+    /// Matcher over this session's sweepable values, or `None` when it holds
+    /// none. Built once per state change and cached.
+    pub(crate) fn sweep_matcher(&self) -> Result<Option<Arc<SweepMatcher>>> {
+        let captured = self.state_snapshot();
+        if let Some(matcher) = &captured.sweep_matcher_cache {
+            return Ok(Some(Arc::clone(matcher)));
+        }
+        let Some(matcher) = build_sweep_matcher(&captured)? else {
+            return Ok(None);
+        };
+        let mut boundary = self
+            .state
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if boundary.generation == captured.generation {
+            let mut next = (**boundary).clone();
+            next.sweep_matcher_cache = Some(Arc::clone(&matcher));
+            *boundary = Arc::new(next);
+        }
+        Ok(Some(matcher))
+    }
+
     fn intern_mapping<F>(
         &self,
         family: Option<&str>,
@@ -681,7 +732,7 @@ impl Session {
     /// `preview-redacted.png`) plus owner-only `<base>-owner/manifest.bin`. The supplied
     /// [`DocumentExtension`] is serialized inside the signed snapshot payload, so its hashes and
     /// codec audit rows become the integrity root for the agent-facing files. Text-only adopters
-    /// should use [`Session::export`]. Current snapshots emit v5 so older readers fail closed
+    /// should use [`Session::export`]. Current snapshots emit v6 so older readers fail closed
     /// before restore while the signature binds the emitted envelope bytes.
     ///
     /// ```rust
@@ -710,7 +761,7 @@ impl Session {
     ///     .build()?;
     ///
     /// let manifest_bin = session.export_with_extension(extension)?.into_bytes();
-    /// # assert_eq!(manifest_bin[0], 5);
+    /// # assert_eq!(manifest_bin[0], 6);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
@@ -748,13 +799,15 @@ impl Session {
         let payload = SnapshotPayload {
             scope: snapshot_scope(&self.identity.scope),
             session_hex: self.session_hex(),
-            entries: snapshot_entries_from_state(&state)
-                .into_iter()
-                .map(|entry| SnapshotEntry {
-                    family: entry.family,
-                    class: entry.class,
-                    raw: entry.raw,
-                    token: entry.token,
+            entries: state
+                .token_by_value
+                .iter()
+                .map(|(key, token)| SnapshotEntry {
+                    family: key.family.clone(),
+                    class: key.class.clone(),
+                    raw: key.raw.clone(),
+                    token: token.clone(),
+                    evidence: state.evidence_by_value.get(key).copied(),
                 })
                 .collect(),
             next_by_class: state
@@ -766,7 +819,7 @@ impl Session {
             document,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
-        let version = SNAPSHOT_VERSION_V5;
+        let version = SNAPSHOT_VERSION_V6;
         let signing_key = self.identity.signing_key.signing_key();
         let verifying_key = signing_key.verifying_key();
         let verifying_key_bytes = verifying_key.to_bytes();
@@ -792,6 +845,7 @@ impl Session {
             && version != SNAPSHOT_VERSION_V3
             && version != SNAPSHOT_VERSION_V4
             && version != SNAPSHOT_VERSION_V5
+            && version != SNAPSHOT_VERSION_V6
         {
             return Err(Error::InvalidSnapshotVersion(version));
         }
@@ -849,14 +903,15 @@ impl Session {
 
         let mut state = SessionState::empty();
         for entry in payload.entries {
-            state.token_by_value.insert(
-                TokenKey {
-                    family: entry.family,
-                    class: entry.class.clone(),
-                    raw: entry.raw.clone(),
-                },
-                entry.token.clone(),
-            );
+            let key = TokenKey {
+                family: entry.family,
+                class: entry.class.clone(),
+                raw: entry.raw.clone(),
+            };
+            if let Some(evidence) = entry.evidence {
+                state.evidence_by_value.insert(key.clone(), evidence);
+            }
+            state.token_by_value.insert(key, entry.token.clone());
             state.value_by_token.insert(entry.token.clone(), entry.raw);
             if let Some(index) = parse_token_index(&entry.token) {
                 let next = state.next_by_class.entry(entry.class).or_insert(0);
@@ -916,6 +971,25 @@ impl<'session> SessionTransaction<'session> {
             })
             .0,
         )
+    }
+
+    pub(crate) fn record_evidence(
+        &mut self,
+        family: Option<&str>,
+        class: &PiiClass,
+        raw: &str,
+        evidence: ManifestEvidence,
+    ) {
+        record_evidence_in_state(&mut self.staged, family, class, raw, evidence);
+    }
+
+    pub(crate) fn sweep_matcher(&mut self) -> Result<Option<Arc<SweepMatcher>>> {
+        if let Some(matcher) = &self.staged.sweep_matcher_cache {
+            return Ok(Some(Arc::clone(matcher)));
+        }
+        let matcher = build_sweep_matcher(&self.staged)?;
+        self.staged.sweep_matcher_cache = matcher.clone();
+        Ok(matcher)
     }
 
     pub fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
@@ -1202,6 +1276,48 @@ fn known_restore_matches<'a>(
             .is_some_and(|(_, body)| body.starts_with("custom:family:"))
             && text.as_bytes().get(matched.end()) == Some(&b'-'))
     })
+}
+
+/// Returns whether the stored evidence changed. Only a value the session
+/// already maps can carry evidence.
+fn record_evidence_in_state(
+    state: &mut SessionState,
+    family: Option<&str>,
+    class: &PiiClass,
+    raw: &str,
+    evidence: ManifestEvidence,
+) -> bool {
+    let key = TokenKey {
+        family: family.unwrap_or(DEFAULT_COUNTER_FAMILY).to_string(),
+        class: class.clone(),
+        raw: raw.to_string(),
+    };
+    if !state.token_by_value.contains_key(&key) {
+        return false;
+    }
+    let previous = state.evidence_by_value.get(&key).copied();
+    let next = previous.map_or(evidence, |previous| previous.max(evidence));
+    if previous == Some(next) {
+        return false;
+    }
+    if previous.is_some_and(ManifestEvidence::propagates) != next.propagates() {
+        state.sweep_matcher_cache = None;
+    }
+    state.evidence_by_value.insert(key, next);
+    true
+}
+
+fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>> {
+    let sources = state
+        .evidence_by_value
+        .iter()
+        .filter(|(_, evidence)| evidence.propagates())
+        .map(|(key, _)| SweepSource {
+            family: key.family.clone(),
+            class: key.class.clone(),
+            raw: key.raw.clone(),
+        });
+    Ok(SweepMatcher::build(sources)?.map(Arc::new))
 }
 
 fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry> {
@@ -2208,6 +2324,7 @@ mod tests {
                 class: PiiClass::Name,
                 raw: "Dr. Schmidt".to_string(),
                 token: "deadbeef:name_1".to_string(),
+                evidence: None,
             }],
             issued_at: 0,
             next_by_class: Vec::new(),
@@ -2227,12 +2344,14 @@ mod tests {
             class: PiiClass::Name,
             raw: "Dr. Schmidt".to_string(),
             token: "<a7f3b8e2:Name_1>".to_string(),
+            evidence: None,
         };
         let duplicate_token = SnapshotEntry {
             family: "tool".to_string(),
             class: PiiClass::Name,
             raw: "Synthetic Colleague".to_string(),
             token: first.token.clone(),
+            evidence: None,
         };
         let duplicate_value = SnapshotEntry {
             token: "<a7f3b8e2:Name_2>".to_string(),
@@ -2333,8 +2452,77 @@ mod tests {
 
         assert!(matches!(
             legacy_v0_4_0_accepts_only_v2(&snapshot),
-            Err(Error::InvalidSnapshotVersion(SNAPSHOT_VERSION_V5))
+            Err(Error::InvalidSnapshotVersion(SNAPSHOT_VERSION_V6))
         ));
+    }
+
+    #[test]
+    fn legacy_blob_without_evidence_imports_but_sweeps_nothing() {
+        // A pre-v6 blob cannot say how its values were found, so none of them
+        // seed the repeat-value sweep; restore is unchanged.
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Conversation("legacy".to_string()),
+            session_hex: "a7f3b8e2".to_string(),
+            entries: vec![SnapshotEntry {
+                family: DEFAULT_COUNTER_FAMILY.to_string(),
+                class: PiiClass::Name,
+                raw: "Maria Schneider".to_string(),
+                token: "<a7f3b8e2:Name_1>".to_string(),
+                evidence: None,
+            }],
+            issued_at: 0,
+            next_by_class: Vec::new(),
+            document: None,
+        });
+        let session = Session::import(snapshot).expect("legacy import");
+        assert_eq!(
+            session.restore("<a7f3b8e2:Name_1>").as_deref(),
+            Some("Maria Schneider")
+        );
+        assert!(session.sweep_matcher().expect("matcher").is_none());
+    }
+
+    #[test]
+    fn v6_blob_carries_evidence_and_a_v5_reader_refuses_it() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        session
+            .tokenize(&PiiClass::Name, "Maria Schneider")
+            .expect("token");
+        session.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Maria Schneider",
+            ManifestEvidence::Pattern,
+        );
+        let snapshot = session.export().expect("snapshot");
+        assert_eq!(snapshot.0[0], SNAPSHOT_VERSION_V6);
+        assert_eq!(
+            snapshot_payload_json(&snapshot)["entries"][0]["evidence"],
+            "pattern"
+        );
+        // The v0.15 reader's version gate, verbatim in effect: 2..=5.
+        let v5_reader = |snapshot: &SensitiveSnapshot| match snapshot.0[0] {
+            SNAPSHOT_VERSION_V2..=SNAPSHOT_VERSION_V5 => Ok(()),
+            version => Err(Error::InvalidSnapshotVersion(version)),
+        };
+        assert!(matches!(
+            v5_reader(&snapshot),
+            Err(Error::InvalidSnapshotVersion(SNAPSHOT_VERSION_V6))
+        ));
+        let imported = Session::import(snapshot).expect("import");
+        assert!(imported.sweep_matcher().expect("matcher").is_some());
+    }
+
+    #[test]
+    fn learned_evidence_is_recorded_but_never_swept() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        session.tokenize(&PiiClass::Name, "Anna Weber").expect("token");
+        session.record_evidence(None, &PiiClass::Name, "Anna Weber", ManifestEvidence::Learned);
+        assert!(session.sweep_matcher().expect("matcher").is_none());
+        // A later rule hit on the same value raises the tier and invalidates
+        // the cached (empty) answer.
+        session.record_evidence(None, &PiiClass::Name, "Anna Weber", ManifestEvidence::Anchored);
+        assert!(session.sweep_matcher().expect("matcher").is_some());
     }
 
     #[test]
@@ -2345,7 +2533,7 @@ mod tests {
             .expect("token");
 
         let mut bytes = session.export().expect("snapshot").into_bytes();
-        assert_eq!(bytes[0], SNAPSHOT_VERSION_V5);
+        assert_eq!(bytes[0], SNAPSHOT_VERSION_V6);
         bytes[0] = SNAPSHOT_VERSION_V3;
 
         assert!(matches!(
@@ -2580,7 +2768,7 @@ mod tests {
         assert!(beta.ends_with(":Name_2>"));
 
         let snapshot = session.export().expect("snapshot");
-        assert_eq!(snapshot.0[0], SNAPSHOT_VERSION_V5);
+        assert_eq!(snapshot.0[0], SNAPSHOT_VERSION_V6);
         let imported = Session::import(snapshot).expect("import");
 
         assert_eq!(imported.restore(&alpha).as_deref(), Some("Dr. Schmidt"));

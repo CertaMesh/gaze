@@ -31,6 +31,7 @@ use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
 use crate::safety_net_scan::SafetyNetScanText;
 use crate::session::{RestoreEvent, Session, SessionTransaction};
+use crate::sweep::{ManifestEvidence, SweepLink, SweepMatcher, SweepSource};
 use crate::types::{CleanDocument, RawDocument, Value};
 use crate::DictionaryBundle;
 
@@ -98,6 +99,8 @@ pub enum Error {
     UnsupportedSafetyNetModeForStructured { mode: SafetyNetMode },
     #[error("unsupported policy action variant")]
     UnsupportedActionVariant,
+    #[error("manifest sweep failed closed: {0}")]
+    ManifestSweep(#[from] crate::sweep::ManifestSweepError),
 }
 
 /// Primary safety-net action. See [`SafetyNetPolicy`] for how it composes with
@@ -324,6 +327,28 @@ impl ProtectionTarget<'_, '_> {
         match self {
             Self::Live(session) => session.format_preserving_fake(class, raw),
             Self::Staged(transaction) => transaction.format_preserving_fake(class, raw),
+        }
+    }
+
+    fn record_evidence(
+        &mut self,
+        family: Option<&str>,
+        class: &PiiClass,
+        raw: &str,
+        evidence: ManifestEvidence,
+    ) {
+        match self {
+            Self::Live(session) => session.record_evidence(family, class, raw, evidence),
+            Self::Staged(transaction) => {
+                transaction.record_evidence(family, class, raw, evidence)
+            }
+        }
+    }
+
+    fn sweep_matcher(&mut self) -> Result<Option<Arc<SweepMatcher>>> {
+        match self {
+            Self::Live(session) => session.sweep_matcher(),
+            Self::Staged(transaction) => transaction.sweep_matcher(),
         }
     }
 
@@ -1007,13 +1032,16 @@ impl Pipeline {
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
+        let mut whole = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
+        let sweep_links =
+            self.sweep_repeat_values(target, &mut whole, &normalized, text, field_name, locale_chain)?;
         let recovery::WholePlan {
             evidence,
             order,
             primary: resolved,
             recovered,
             ..
-        } = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
+        } = whole;
         let residual_plan = if self.residual_coverage {
             let by_span = resolved
                 .iter()
@@ -1083,6 +1111,10 @@ impl Pipeline {
         let primary_count = detections.len();
         for (index, mut detection) in detections.into_iter().chain(recovered).enumerate() {
             let raw = text[detection.detection.span.clone()].to_string();
+            if detection.recognizer_id.as_deref() == Some(crate::sweep::SWEEP_ID) {
+                let span = &detection.detection.span;
+                detection.sweep_link = sweep_links.get(&(span.start, span.end)).copied();
+            }
             let context = build_context(field_name);
             let resolved = self.resolve_action(&detection.detection.class, &context);
             let action = resolved.action;
@@ -1098,14 +1130,30 @@ impl Pipeline {
             self.log_entry(target, &detection, field_name, document_kind, action, false)?;
 
             let replacement = match action {
-                Action::Tokenize => Some(target.tokenize_with_family(
-                    &detection.family,
-                    &detection.detection.class,
-                    &raw,
-                )?),
+                Action::Tokenize => {
+                    let token = target.tokenize_with_family(
+                        &detection.family,
+                        &detection.detection.class,
+                        &raw,
+                    )?;
+                    target.record_evidence(
+                        Some(&detection.family),
+                        &detection.detection.class,
+                        &raw,
+                        detection.evidence,
+                    );
+                    Some(token)
+                }
                 Action::Redact => Some("[REDACTED]".to_string()),
                 Action::FormatPreserve => {
-                    Some(target.format_preserving_fake(&detection.detection.class, &raw)?)
+                    let fake = target.format_preserving_fake(&detection.detection.class, &raw)?;
+                    target.record_evidence(
+                        None,
+                        &detection.detection.class,
+                        &raw,
+                        detection.evidence,
+                    );
+                    Some(fake)
                 }
                 Action::Generalize => Some(generalize_token(&detection.detection.class)),
                 Action::Preserve => None,
@@ -1300,6 +1348,86 @@ impl Pipeline {
             text: out,
             manifest: ledger,
         })
+    }
+
+    /// Repeat-value sweep (todo 3849). Copies of this document's rule-found
+    /// winners and of the session's rule-found values that no winner covers
+    /// join the pool as candidates, and the pool is resolved again, so the
+    /// resolver's own rungs settle overlaps (a copy that encloses an NER
+    /// fragment wins the same-class ladder and covers the union). Runs after
+    /// resolve and before the safety net; a document with no uncovered copy
+    /// keeps its first plan. Returns each swept copy's link by raw span.
+    #[allow(clippy::too_many_arguments)]
+    fn sweep_repeat_values(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        whole: &mut recovery::WholePlan,
+        normalized: &crate::normalize::NormalizedText,
+        text: &str,
+        field_name: Option<&str>,
+        locale_chain: &[crate::LocaleTag],
+    ) -> Result<BTreeMap<(usize, usize), SweepLink>> {
+        let winners = whole.primary.iter().chain(&whole.recovered);
+        let own_values = winners
+            .clone()
+            .filter(|winner| ManifestEvidence::of(winner).propagates())
+            .map(|winner| SweepSource {
+                family: winner.token_family.clone(),
+                class: winner.class.clone(),
+                raw: text[winner.span.clone()].to_string(),
+            });
+        let mut hits = Vec::new();
+        if let Some(matcher) = SweepMatcher::build(own_values)? {
+            hits.extend(matcher.find(&normalized.text));
+        }
+        if let Some(matcher) = target.sweep_matcher()? {
+            hits.extend(matcher.find(&normalized.text));
+        }
+        let covered = winners.map(|winner| winner.span.clone()).collect::<Vec<_>>();
+        let mut uncovered = Vec::new();
+        for hit in hits {
+            let raw = crate::normalize::raw_range(hit.span.clone(), &normalized.spans)
+                .ok_or_else(|| clean_to_raw_mapping_error("unmappable sweep geometry"))?;
+            if !covered
+                .iter()
+                .any(|span| span.start <= raw.start && raw.end <= span.end)
+            {
+                uncovered.push(hit);
+            }
+        }
+        // Only a class the policy protects propagates: a swept copy of a
+        // preserved value would only compete with real detections. Asked
+        // once per class, and only when an uncovered copy exists.
+        let context = build_context(field_name);
+        let mut protective = BTreeMap::new();
+        uncovered.retain(|hit| {
+            *protective.entry(hit.class.clone()).or_insert_with(|| {
+                self.resolve_action(&hit.class, &context)
+                    .action
+                    .is_protective()
+            })
+        });
+        let mut links = BTreeMap::new();
+        let mut added = Vec::new();
+        for hit in crate::sweep::select(uncovered) {
+            let raw = crate::normalize::raw_range(hit.span.clone(), &normalized.spans)
+                .ok_or_else(|| clean_to_raw_mapping_error("unmappable sweep geometry"))?;
+            links.insert((raw.start, raw.end), hit.link);
+            added.push(hit.candidate());
+        }
+        if added.is_empty() {
+            return Ok(links);
+        }
+        let mut originals = std::mem::take(&mut whole.evidence.originals);
+        originals.extend(added);
+        *whole = recovery::plan(
+            crate::resolver::CandidatePool::new(originals),
+            &self.registry,
+            normalized,
+            text,
+            locale_chain,
+        )?;
+        Ok(links)
     }
 
     /// A residual row names the representative claimant, the cell's own
@@ -2597,6 +2725,10 @@ impl Pipeline {
                 detection.collision_variant.clone(),
             );
         }
+        if detection.recognizer_id.as_deref() == Some(crate::sweep::SWEEP_ID) {
+            entry.provenance_stage = Some(crate::sweep::SWEEP_ID.into());
+            entry.provenance_merged_from = detection.sweep_link.map(|link| link.as_str().into());
+        }
 
         for logger in &self.redaction_loggers {
             logger.log(&entry)?;
@@ -2729,6 +2861,10 @@ struct IndexedDetection {
     ambiguity_record: Option<AmbiguityRecord>,
     collision_family: Option<String>,
     collision_variant: Option<String>,
+    /// Evidence tier the session records for the value when it is minted.
+    evidence: ManifestEvidence,
+    /// Set on a swept copy: how it relates to its source value.
+    sweep_link: Option<SweepLink>,
 }
 
 struct CleanText {
@@ -4990,6 +5126,9 @@ fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<I
                     ambiguity_record: None,
                     collision_family: membership.map(|membership| membership.family.clone()),
                     collision_variant: membership.map(|membership| membership.variant.clone()),
+                    // Losers are logged, never minted.
+                    evidence: ManifestEvidence::Learned,
+                    sweep_link: None,
                 }
             })
         })
@@ -5001,6 +5140,7 @@ fn indexed_detection_from_candidate(
     registry: &RecognizerRegistry,
 ) -> IndexedDetection {
     let trace_source_ids = candidate.source_recognizer_ids.clone();
+    let evidence = ManifestEvidence::of(&candidate);
     let membership = registry
         .family_policy()
         .membership(&candidate.recognizer_id);
@@ -5020,16 +5160,23 @@ fn indexed_detection_from_candidate(
         }
     }
 
+    let decided_by = if candidate.recognizer_id == crate::sweep::SWEEP_ID {
+        ConflictTier::ManifestSweep
+    } else {
+        candidate.decided_by
+    };
     IndexedDetection {
         detection: Detection::new(candidate.span, candidate.class, candidate.source),
         recognizer_id: Some(candidate.recognizer_id),
         recognizer_version_id: candidate.recognizer_version_id,
         trace_source_ids,
-        decided_by: candidate.decided_by,
+        decided_by,
         family: candidate.token_family,
         ambiguity_record,
         collision_family,
         collision_variant,
+        evidence,
+        sweep_link: None,
     }
 }
 

@@ -2353,6 +2353,9 @@ pub enum ConflictTier {
     Resolve,
     /// Safety-net fallback policy decided the outcome.
     Fallback,
+    /// The repeat-value sweep protected a copy of a value the manifest
+    /// already holds from rule-based evidence.
+    ManifestSweep,
 }
 
 impl ConflictTier {
@@ -2376,6 +2379,7 @@ impl ConflictTier {
             Self::Redact => "redact",
             Self::Resolve => "resolve",
             Self::Fallback => "fallback",
+            Self::ManifestSweep => "manifest_sweep",
         }
     }
 
@@ -2399,6 +2403,7 @@ impl ConflictTier {
             "redact" => Some(Self::Redact),
             "resolve" => Some(Self::Resolve),
             "fallback" => Some(Self::Fallback),
+            "manifest_sweep" => Some(Self::ManifestSweep),
             _ => None,
         }
     }
@@ -3625,6 +3630,7 @@ mod redaction_logger_tests {
             ConflictTier::Redact,
             ConflictTier::Resolve,
             ConflictTier::Fallback,
+            ConflictTier::ManifestSweep,
         ] {
             assert_eq!(
                 ConflictTier::from_canonical_str(value.as_str()),
