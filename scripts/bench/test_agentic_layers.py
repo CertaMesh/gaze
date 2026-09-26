@@ -499,18 +499,28 @@ def _scorecard(
     fps: dict[str, int] | None = None,
     refused: dict[str, int] | None = None,
     twin_leak: int = 0,
+    c_invalid_leak: int = 0,
 ) -> dict:
-    """Layer A's `leaks` value is its valid gold; `twin_leak` adds twin bytes."""
+    """`leaks` is gated (valid) gold; `twin_leak` / `c_invalid_leak` add
+    checksum-failed bytes to layers A and C."""
     fps = fps or {}
     refused = refused or {}
 
     def run(layer: str) -> dict:
-        leaked = leaks[layer] + (twin_leak if layer == "A" else 0)
+        leaked = leaks[layer] + {"A": twin_leak, "C": c_invalid_leak}.get(layer, 0)
         block = {
             "config": "policy-file",
             "metrics": {"utf8_bytes": {"leaked": leaked, "false_positive": fps.get(layer, 0)}},
             "pipeline_availability": {"failed_closed_documents": refused.get(layer, 0)},
         }
+        if layer == "C":
+            block["validator_recall_by_label"] = {
+                "TAXNUM": {"production_recall_by_gold_validity": {
+                    "validator_passed_gold": {"leaked_utf8_bytes": 0},
+                    "validator_failed_gold": {"leaked_utf8_bytes": c_invalid_leak},
+                }},
+                "CITY": {"production_recall_by_gold_validity": None},
+            }
         if layer == "A":
             block["per_cell"] = {
                 "A|bsn|csv|valid": {"utf8_bytes": {"leaked": leaks["A"]}},
@@ -613,6 +623,20 @@ class GateTests(unittest.TestCase):
         self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 500)
         self.assertEqual(result["summary"]["leaked_bytes_decrease"], 0)
 
+    def test_kiji_gold_that_fails_its_validator_is_reported_not_gated(self) -> None:
+        base = _scorecard(self.BASE, self.FP, c_invalid_leak=400)
+        candidate = _scorecard(self.BASE, {**self.FP, "D": 7 + 100}, c_invalid_leak=0)
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["verdict"], "fail")
+        self.assertEqual(result["layers"]["C"]["twin_leaked_base"], 400)
+        self.assertEqual(result["layers"]["C"]["leaked_base"], self.BASE["C"])
+
+    def test_layer_c_without_a_validator_split_fails_closed(self) -> None:
+        candidate = _scorecard(self.BASE, self.FP)
+        del candidate["runs"][0]["validator_recall_by_label"]
+        with self.assertRaisesRegex(agentic.LayerError, "validator split"):
+            agentic.gate(_scorecard(self.BASE, self.FP), candidate)
+
     def test_different_corpus_or_contract_is_not_comparable(self) -> None:
         for path in (("layers", "generator", "corpus_sha256"), ("scoring", "scored_label_contract", "file_sha256")):
             candidate = _scorecard({"C": 1, "A": 1, "D": 0, "R": 1})
@@ -631,11 +655,14 @@ class GateTests(unittest.TestCase):
 
 
 class MutantGatePinTests(unittest.TestCase):
-    """Real full-harness runs: main vs main plus each over-broad rule must fail.
+    """True verdicts of real full-harness runs: main vs main plus each over-broad rule.
 
     `fixtures/agentic/gate-pin-mutants.json` holds `layer_totals` of three full
     runs (provenance inside). A mutant changes the policy, so `gate` rightly
-    calls the pair not comparable; `decide` is the rule it would face.
+    calls the pair not comparable; `decide` is the rule it faces. The gate is
+    necessary, not sufficient: the bare 9-digit rule passes it on these
+    corpora and would still be refused in review for its FP on reference
+    numbers outside them.
     """
 
     @classmethod
@@ -643,21 +670,38 @@ class MutantGatePinTests(unittest.TestCase):
         path = Path(__file__).resolve().parent / "fixtures/agentic/gate-pin-mutants.json"
         cls.pin = json.loads(path.read_text(encoding="utf-8"))
 
-    def test_bare_nine_digit_mutant_fails_the_net_rule(self) -> None:
-        result = agentic.decide(self.pin["totals"]["main"], self.pin["totals"]["mutant_bare_nine_digits"])
-        self.assertEqual(result["verdict"], "fail")
-        self.assertIn("net bytes", result["reason"])
-        self.assertEqual(result["summary"], self.pin["expected"]["mutant_bare_nine_digits"])
+    def verdict(self, mutant: str) -> dict:
+        result = agentic.decide(self.pin["totals"]["main"], self.pin["totals"][mutant])
+        self.assertEqual({**result["summary"], "verdict": result["verdict"]}, self.pin["expected"][mutant])
+        return result
 
     def test_spaced_sixteen_digit_mutant_fails(self) -> None:
-        result = agentic.decide(self.pin["totals"]["main"], self.pin["totals"]["mutant_spaced_sixteen_digits"])
+        result = self.verdict("mutant_spaced_sixteen_digits")
         self.assertEqual(result["verdict"], "fail")
-        self.assertEqual(result["summary"], self.pin["expected"]["mutant_spaced_sixteen_digits"])
+        self.assertIn("net bytes", result["reason"])
+        self.assertEqual(result["summary"], {"leaked_bytes_decrease": 15, "false_positive_bytes_increase": 551})
+
+    def test_bare_nine_digit_mutant_passes_on_net_valid_bytes(self) -> None:
+        result = self.verdict("mutant_bare_nine_digits")
+        self.assertEqual(result["verdict"], "pass")
+        self.assertEqual(result["summary"], {"leaked_bytes_decrease": 353, "false_positive_bytes_increase": 295})
+
+    def test_counted_over_all_gold_both_mutants_would_pass(self) -> None:
+        # Why the twin exclusion exists: with checksum-failed gold counted,
+        # the spaced 16-digit rule "saves" thousands of bytes no precise rule
+        # could reach.
+        def all_gold(totals: dict) -> dict:
+            return {layer: {**row, "leaked": row["leaked"] + row["twin_leaked"], "twin_leaked": 0}
+                    for layer, row in totals.items()}
+        result = agentic.decide(all_gold(self.pin["totals"]["main"]),
+                                all_gold(self.pin["totals"]["mutant_spaced_sixteen_digits"]))
+        self.assertEqual(result["verdict"], "pass")
 
     def test_pin_records_its_provenance(self) -> None:
         provenance = self.pin["provenance"]
         for key in ("harness_commit", "corpus_sha256", "policy_sha256", "binary_sha256", "commands"):
             self.assertTrue(provenance.get(key), key)
+        self.assertEqual(provenance["generator_version"], agentic.GENERATOR_VERSION)
 
 
 if __name__ == "__main__":

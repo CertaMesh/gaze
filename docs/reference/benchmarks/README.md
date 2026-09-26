@@ -905,15 +905,28 @@ For each contract, the production arm's numbers must satisfy all of these:
    instead when no layer's leaked bytes change and the summed false-positive
    bytes fall.
 
-Layer A's leak is gated on valid and unchecked gold only. Its checksum-invalid
-twins stay in the headline and are reported beside the gate but never gated,
-because only a rule without a checksum can reach them, and the layer D
-counterweights already price that kind of rule separately. This net-bytes
-limit is the user's decision of 2026-09-26. It is pinned by two real
-full-harness runs in
-[`gate-pin-mutants.json`](../../../scripts/bench/fixtures/agentic/gate-pin-mutants.json):
-the bare 9-digit rule saves 180 valid leaked bytes for 270 added
-false-positive bytes, and the spaced 16-digit rule saves none. Both fail.
+The gate counts only gold that a precise rule can reach. Layer A leaves out
+its checksum-invalid twins, and layer C leaves out the Kiji gold that fails its
+own validator (from the per-label validator split). Both kinds stay in the
+headline and the census, and the gate reports them beside its verdict but
+never gates them. Only a rule without a checksum can reach them, and the layer
+D counterweights already price that kind of rule separately. This net-bytes
+limit is the user's decision of 2026-09-26.
+
+[`gate-pin-mutants.json`](../../../scripts/bench/fixtures/agentic/gate-pin-mutants.json)
+pins the true verdicts of two real full-harness runs against main:
+
+- **The spaced 16-digit rule fails.** It saves 15 gated leaked bytes and adds
+  551 false-positive bytes. Its 1,830 byte Kiji "gain" is entirely card and
+  IBAN gold that fails Luhn or mod-97.
+- **The bare 9-digit rule passes.** It saves 353 gated leaked bytes: 180 of
+  valid BSN, and 173 of Kiji driver-licence, ID-card, national-ID, SSN and
+  building numbers. It adds 295 false-positive bytes.
+
+**The gate is necessary, not sufficient.** It measures only these corpora.
+Review still judges precision. A bare 9-digit rule would be refused in review
+for the false positives it causes on reference numbers outside the corpus,
+even though it passes here.
 
 The gate prints every layer's numbers, twins included. It exits `0` on
 pass, `1` on fail, and `2` when the two scorecards differ in policy, arm

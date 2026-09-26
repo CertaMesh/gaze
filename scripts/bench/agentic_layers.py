@@ -1535,10 +1535,11 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
 def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict[str, int]]:
     """Per layer: gated leaked bytes, FP bytes and refusals of one arm.
 
-    Layer A's gated leak counts valid and unchecked gold only. Its
-    checksum-invalid twins stay scored gold in the headline, but a rule that
-    tags every value of a shape "fixes" them for free, so they are reported
-    (`twin_leaked`) and never gated.
+    Gold that fails its own checksum stays scored in the headline, but only a
+    rule without a checksum can reach it, so it is reported (`twin_leaked`)
+    and never gated (user decision 2026-09-26). Layer A excludes its
+    checksum-invalid twins; layer C excludes Kiji gold its validator fails,
+    per label from the validator split. Layers D and R have no such gold.
     """
     totals: dict[str, dict[str, int]] = {}
     for layer in GATE_LAYERS:
@@ -1550,6 +1551,18 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
                 block["utf8_bytes"]["leaked"]
                 for cell, block in run["per_cell"].items()
                 if cell.split("|")[3] == INVALID
+            )
+        elif layer == "C":
+            by_label = run.get("validator_recall_by_label")
+            if not isinstance(by_label, dict):
+                raise LayerError(
+                    "layer C has no validator split; the gate cannot separate "
+                    "validator-failed gold"
+                )
+            twin_leaked = sum(
+                block["production_recall_by_gold_validity"]["validator_failed_gold"]["leaked_utf8_bytes"]
+                for block in by_label.values()
+                if block.get("production_recall_by_gold_validity")
             )
         totals[layer] = {
             "leaked": utf8["leaked"] - twin_leaked,
@@ -1628,7 +1641,9 @@ def gate_markdown(result: Mapping[str, object]) -> str:
                 f"{r['false_positive_candidate']} | {r['failed_closed_base']} | {r['failed_closed_candidate']} | "
                 f"{r['twin_leaked_base']} | {r['twin_leaked_candidate']} |"
             )
-        lines += ["", "Layer A leak is valid and unchecked gold; checksum-invalid twins are reported, not gated."]
+        lines += ["", "Gated leak excludes gold that fails its checksum (layer A twins, layer C "
+                  "validator-failed Kiji gold); it is reported in the twin columns, not gated. "
+                  "The gate is necessary, not sufficient: review still judges precision."]
     return "\n".join(lines) + "\n"
 
 
