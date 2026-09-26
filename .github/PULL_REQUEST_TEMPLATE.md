@@ -25,6 +25,18 @@ CI runs the same set and will fail otherwise.
 - [ ] No real PII anywhere (code, tests, fixtures, docs) — synthetic only (`alice@example.invalid`, `<Email_1>`).
 - [ ] Any PII-shaped literal is covered by a cited test (`fixture-citation-lint` enforces this).
 
+## Benchmark evidence (AGENTS.md → "Benchmark gain gate")
+
+- [ ] Not a detection change (no rules, cues, locale buckets, mechanisms, models, or safety-net/resolver behaviour). Tick this only to skip the block below.
+
+Base sha (`main` the branch starts from, scored fresh):
+Candidate sha:
+Scorecard paths:
+
+| Layer | Leaked bytes v2 (base → candidate) | Leaked bytes v1 (base → candidate) | False-positive bytes (base → candidate) | Refusals (base → candidate) |
+| --- | --- | --- | --- | --- |
+|  |  |  |  |  |
+
 ## DCO
 
 - [ ] All commits are signed off (`git commit -s`) — the DCO check (`.github/workflows/dco.yml`) requires it. No CLA.

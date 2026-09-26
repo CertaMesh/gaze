@@ -50,6 +50,19 @@ Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTIN
 4. **Branch per task.** Work on a dedicated branch; keep `main` clean.
 5. **Completion signaling:** every agent brief includes a sentinel line (e.g. `IMPL DONE:`, `REVIEW DONE:`, `DOCS DONE:`). Print it on the final stdout line.
 
+## Benchmark gain gate
+
+Everything added to detection must be measured and must improve the benchmark. This is a review requirement for every PR that adds or widens detection behaviour: rules, cues, locale buckets, mechanisms (for example the manifest-value sweep), models, and safety-net or resolver changes. The harness needs the local corpus, so CI does not enforce it; the reviewer does.
+
+1. **Measure both sides fresh.** Base is the `main` commit the branch starts from, scored now, not an old scorecard. Candidate is the branch head. Both run on the `gaze setup` policy arm with the same corpus, seed, and machine, using the commands in [How to reproduce](docs/reference/benchmarks/README.md#how-to-reproduce).
+2. **Report both scored-label contracts.** Contract v2 is the headline; contract v1 is reported next to it.
+3. **Merge rule.** No layer's leaked bytes rise, and at least one layer's leaked bytes fall. State false-positive bytes per layer. A false-positive-only fix passes when false-positive bytes fall and no layer's leaked bytes rise.
+4. **A blind benchmark is not a pass.** If the benchmark cannot see the change, extend the generated layers first, with positives and false-positive counterweights, then measure. Never merge on "the corpus is blind".
+5. **Never tune a rule to the corpus.** A rule that only matches corpus-specific shapes will miss real text; see [A scorecard measures the corpus, not the recognizer](docs/reference/benchmarks/README.md#a-scorecard-measures-the-corpus-not-the-recognizer).
+6. **Evidence goes in the PR body** through the template's "Benchmark evidence" block: base and candidate sha, scorecard paths, v2 and v1 leaked bytes per layer, false-positive bytes per layer, and refusals. A PR skips the block only by ticking "not a detection change".
+
+**Benchmark changes re-measure past releases.** Any change to the benchmark itself (a layer, a scored-label contract, corpus or generated data, the scorer, or the benchmark document) re-measures every past release the document displays: the current harness drives each release tag's own detection code. A row that cannot be re-measured says why in the document. Local-only harness evidence does not count; the harness and its inputs must be committed.
+
 ## Source of truth
 
 This file is the canonical agent-context for Gaze. `CLAUDE.md` defers to it for shared rules and adds only agent-specific addenda.

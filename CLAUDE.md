@@ -4,6 +4,8 @@ See [AGENTS.md](AGENTS.md) for canonical project rules + the Gaze north star. Th
 
 Repo-level guidance for Claude Code sessions working in this project.
 
+Detection changes and benchmark changes must pass the [benchmark gain gate](AGENTS.md#benchmark-gain-gate).
+
 ## Project north star
 
 **Gaze is the most reliable, reversible PII pseudonymization runtime for agentic workflows. Zero PII leaks between the agent and the data owner — ever. Any byte of PII that reaches an LLM outside the manifest contract is a critical defect.**

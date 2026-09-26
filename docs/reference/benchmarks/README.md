@@ -590,6 +590,8 @@ python3 scripts/bench/ner-warm-latency.py --repo-root .
 
 ## How to reproduce
 
+Pull requests that change detection or the benchmark use these commands under the [benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate).
+
 ### The release run
 
 Each release measures its own tree. The two steps below are the whole contract:
