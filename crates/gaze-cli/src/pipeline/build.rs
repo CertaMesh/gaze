@@ -280,6 +280,11 @@ pub(crate) fn map_policy_error(err: PolicyError) -> CliError {
 pub(crate) fn map_pipeline_error(err: gaze::Error) -> CliError {
     match err {
         gaze::Error::Policy(policy_err) => map_policy_error(policy_err),
+        // Same envelope as an unreadable policy file, so scripts see one PolicyOpen / exit 4 for
+        // every policy input this account may not read.
+        gaze::Error::Rulepack(err @ gaze::RulepackError::ReadPermissionDenied { .. }) => {
+            CliError::PolicyOpenDetail(err.to_string())
+        }
         gaze::Error::Rulepack(rulepack_err) => {
             CliError::PolicyConfigDetail(format!("rulepack error: {rulepack_err}"))
         }
