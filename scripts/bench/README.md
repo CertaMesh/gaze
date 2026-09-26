@@ -168,6 +168,16 @@ Generated artifacts are under ignored `target/bench-data/no-opf/<profile>/`:
 | `release-readiness-status.json` | candidate-only absolute correctness verdict |
 | `performance-status.json` | separately configured p95 `clean_ms` comparison |
 
+The scorecard's `layers` block holds the generated agentic layers A
+(identifiers in agentic surfaces), D (benign lookalikes) and R (the
+repeat-value slice with its decoys), scored as separate
+cells from `agentic_layers.py` under
+`docs/reference/benchmarks/scored-labels-agentic.json`; `summary.md` appends
+their totals and coverage grid. `--no-agentic-layers` skips them. The layers,
+the held-out protocol and the rule gate (`agentic_layers.py gate`) are described
+in [Agentic layers and the rule gate](../../docs/reference/benchmarks/README.md#agentic-layers-and-the-rule-gate).
+Regression and release readiness below read layer C (`runs[]`) only.
+
 Regression and release readiness are deliberately independent. Regression uses
 integer counts with zero tolerance and fails closed on missing, empty, invalid,
 or population-mismatched candidates. Release readiness requires every candidate

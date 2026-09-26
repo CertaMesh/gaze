@@ -265,7 +265,10 @@ justifies weakening the current synthetic holdout gate.
 These numbers score one synthetic EN/DE holdout. A perfect row here is evidence
 about **this corpus**, not proof that a recognizer is complete — shapes the
 corpus does not contain are unmeasured. Recall claims about a rule change need a
-direct differential probe, not a scorecard row.
+direct differential probe, not a scorecard row. The generated
+[agentic layers](#agentic-layers-and-the-rule-gate) cover some of the agent
+shapes this corpus lacks, and they have the same limit: they measure only the
+families and surfaces they generate.
 
 Two consequences worth stating plainly:
 
@@ -759,6 +762,222 @@ validated response are Python-runner provenance; response latency consumes the
 producer's honest `clean_ms`. See
 [`scripts/bench/README.md`](../../../scripts/bench/README.md) for model
 locations, planning runtime, and the guarded baseline-acceptance command.
+
+### Agentic layers and the rule gate
+
+The Kiji/A4 corpus is prose. It contains no tool-call JSON, no `key=value`
+logs, no CSV and no NBSP, which are the shapes agents actually send. A rule fix
+for one of those shapes cannot move the Kiji numbers, so the runner also scores
+three generated layers beside it:
+
+| Layer | What it is | Where it lives in the scorecard |
+| --- | --- | --- |
+| C | Kiji EN/DE holdout plus the A4 negative corpus | `runs[]` (unchanged) |
+| A | Generated identifiers in agentic surfaces, each checksum value with a checksum-invalid twin | `layers.A.runs[]` |
+| D | Generated benign lookalikes: amounts, SKUs, `#RRGGBB`, `L99 9999`, versions, order and tracking IDs, UUID fragments, room and seat numbers, invoice and log dates, and the counterweights below | `layers.D.runs[]` |
+| R | Repeat-value slice: one value repeated in several shapes in one document, next to decoys that collide with it | `layers.R.runs[]` |
+
+[`scripts/bench/agentic_layers.py`](../../../scripts/bench/agentic_layers.py)
+generates all three deterministically, with no network access and no
+model:
+
+- **Layer A families:** payment card; IBAN for DE (spaced and compact), AT,
+  NL, FR and GB; Steuer-ID; BSN; NHS number; CPF; email; German and US phone
+  numbers; dates of birth; and sender names in email headers, including
+  hyphenated surnames.
+- **Layer A surfaces:** prose with a cue, prose without a cue, NBSP-spaced,
+  NARROW-NBSP-spaced, log `key=value`, CSV, and tool-call JSON. The tool-call
+  JSON is the single-encoded `arguments` string that `gaze-proxy` cleans.
+- **Checksum code:** written from the published standards, not from Gaze's
+  validators. Standard test vectors pin it, and the validator probe
+  cross-checks it on every run.
+- **Invalid twins:** they stay scored gold, as in the Kiji validator gold
+  census. `layers.A.validator_gold_census` and each run's
+  `validator_recall_by_label` split the result by validity. That split uses
+  Gaze's validators, which reject NBSP and NARROW NBSP group separators, so an
+  NBSP-spaced valid IBAN, NHS number, Steuer-ID or phone number counts there as
+  validator-failed. The `per_cell` validity is the generator's own verdict.
+- **Gold spans:** they are the inserted values at their UTF-8 byte offsets.
+- **Layer R, the repeat-value slice:** each document repeats a name, an email,
+  an IBAN, a phone number or a Steuer-ID two to four times. Names appear in a
+  `From:` header, as `Ms Surname`, in a sign-off, in lower and upper case,
+  NBSP-joined and split across a line break, including hyphenated surnames.
+  Identifiers appear spaced in prose and compact in JSON and a log line. Every
+  repeat is gold. The same documents carry decoys, which are never gold:
+  ordinary words spelled like a name part (`Rose garden`, `in May`,
+  `Will you`, `Grant approved`, `Page 3`, `the Court hearing`), words and file
+  names that contain a name part (`Annual` for Ann, `Iceberg` for Berg), and
+  digit runs shared with a repeated identifier. Any byte predicted over a decoy
+  counts as a false positive. A given name and a surname are separate gold
+  spans, as in Kiji, so a single token over the full name also counts the
+  separator between them (1 byte for a space, 2 for an NBSP) as a false
+  positive. The JSONL output records the decoy spans. Several test templates
+  also carry the fixed log timestamp `2026-04-17T08:03:51Z`, and Gaze
+  tokenizes it as a date. That is template noise in the false-positive bytes
+  of layers A and R: 130 B in each of R's phone and Steuer-ID repeat cells. It
+  is identical on both sides of a gate comparison. This
+  slice is the baseline for a change that re-finds known values across a
+  document: it has to lower R's leaked bytes without raising R's
+  false-positive bytes. The value makers take a partition, so a layer B
+  transcript can reuse the same pools.
+
+Every result is also reported per `layer|family|surface|validity` cell under
+`per_cell`. [`scored-labels-agentic.json`](scored-labels-agentic.json) rules on
+every generated label, and it fails closed on a label it does not list, on a
+ruling for a label the generator no longer emits, and on a generator version
+mismatch. Layers A, D and R use this contract in every run, so
+`--scored-labels` changes layer C only.
+
+**Counterweights.** Some layer A gold can be reached only by a context-free
+rule, a rule that looks at shape alone. These are checksum-invalid twins and
+dates of birth in prose without a cue. A rule that tags every 9-digit run or
+every `DD.MM.YYYY` date would lower layer A's leak there. Layer D therefore
+carries the same shapes as benign values, so that rule pays for its catch in
+false-positive bytes:
+
+- reference numbers of 9, 10 and 11 digits, bare and in the NHS, Steuer-ID and
+  CPF groupings, each failing every checksum of its length;
+- space-grouped 16-digit voucher codes that fail Luhn, the card twin's shape;
+- delivery and due dates in German and US format, dated 2024 to 2027.
+
+`COUNTERWEIGHTS` in `agentic_layers.py` maps each such gold cell to its D
+family. A test fails when a context-free-only cell has neither a counterweight
+nor a written exemption. It also fails when a counterweight lacks one of its
+gold's display shapes. A shape maps digits to `9` and letters to `A`, and keeps
+every other character exactly, because a rule for `9999 9999` never sees
+`9999-9999`. IBAN twins are exempt: an IBAN shape that fails mod-97 has no
+common benign use.
+
+Two deliberately over-broad rules check the counterweights end to end.
+[`mutant-bare-nine-digits.toml`](../../../scripts/bench/fixtures/agentic/mutant-bare-nine-digits.toml)
+tags every bare 9-digit run, and
+[`mutant-spaced-sixteen-digits.toml`](../../../scripts/bench/fixtures/agentic/mutant-spaced-sixteen-digits.toml)
+tags every space-grouped 16-digit run without a Luhn check. Append one to the
+policy and run `agentic_layers.py measure`. Each must lower layer A's leak and
+raise layer D's false-positive bytes on its counterweight (`ref_number_9` or
+`ref_number_16`), where the unmodified policy has none.
+
+**Held-out protocol.** Templates, machine keys, name pools, email domains,
+phone prefixes, the layer R name-word and decoy pools, and seeds are split
+into a `dev` and a `test` partition before anything is generated. Machine keys
+differ even when case and `-`/`_` are ignored. Descriptive cue phrases are
+split too, but the standard names of the identifiers (`IBAN`, `Steuer-ID`,
+`BSN`, `NHS number`, `CPF`) appear in both partitions, because a real document
+uses exactly those words. Every perturbation (the NBSP variants
+and the invalid twin) comes from its parent document inside that parent's
+partition. The runner scores `test` only. Use `dev` for rule work:
+
+```bash
+python3 scripts/bench/agentic_layers.py generate --partition dev \
+  --output target/bench-data/agentic-dev.jsonl
+```
+
+`layers.generator` records the generator version, the seed and the corpus
+SHA-256. `scripts/bench/test_agentic_layers.py` pins both partition hashes, so
+a generator change must bump `GENERATOR_VERSION`, the contract's
+`generator_version` and the pins together. Once a test generation has been
+published, its failures belong in the next dev generation.
+
+**The rule gate.** A pull request that adds or widens a detection rule merges
+only on a fresh base-versus-candidate pair of full-profile runs: the base is
+the merge base on `main`, the candidate is the PR head, and both use the same
+policy, seed and corpus. The pair is scored under contract v2 and again under
+v1:
+
+```bash
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
+  --seed 20260710 --no-download --release --policy <gaze-setup-policy.toml> \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+  --output-dir target/bench-data/gate-base-v2   # then candidate, then both under v1
+python3 scripts/bench/agentic_layers.py gate \
+  --base target/bench-data/gate-base-v2/full/scorecard-v4.json \
+  --candidate target/bench-data/gate-cand-v2/full/scorecard-v4.json
+```
+
+For each contract, the production arm's numbers must satisfy all of these:
+
+1. **No layer leaks more.** Leaked bytes do not rise in C, A, D or R. This
+   is checked twice: on the gated bytes below, and on the headline leaked
+   bytes over all gold. A regression cannot hide inside gold the gate leaves
+   out.
+2. **No layer refuses more.** A refused document drops out of the leak count,
+   so a rise in failed-closed documents in any layer fails the gate.
+3. **Net bytes improve.** At least one layer's leaked bytes fall, and the
+   false-positive bytes added, summed over all four layers, are fewer than the
+   leaked bytes saved, summed the same way. A false-positive-only fix passes
+   instead when no layer's leaked bytes change and the summed false-positive
+   bytes fall.
+
+The gate counts only gold that a precise rule can reach. Layer A leaves out
+its checksum-invalid twins, and layer C leaves out the Kiji gold that fails its
+own validator (from the per-label validator split). Both kinds stay in the
+headline and the census, and the gate reports them beside its verdict. Their
+bytes are left out of the net-bytes credit, but a rise in them still fails
+rule 1. Only a rule without a checksum can reach them, and the layer
+D counterweights already price that kind of rule separately. This net-bytes
+limit is the user's decision of 2026-09-26.
+
+Gold validity is a property of the gold, but the validator probe that decides
+it is built from the measured tree. `layers.gold_validity.C` therefore records
+a SHA-256 over every layer C gold span's verdict, and the gate compares it. A
+candidate whose validators classify any Kiji gold span differently from the
+base is not comparable (exit `2`). Without this check, a validator regression
+could turn valid PII into "failed its checksum" and drop it from the gated
+bytes. The gate then needs an explicit review decision.
+
+[`gate-pin-mutants.json`](../../../scripts/bench/fixtures/agentic/gate-pin-mutants.json)
+pins the true verdicts of two real full-harness runs against main:
+
+- **The spaced 16-digit rule fails.** It saves 15 gated leaked bytes and adds
+  551 false-positive bytes. Its 1,830 byte Kiji "gain" is entirely card and
+  IBAN gold that fails Luhn or mod-97.
+- **The bare 9-digit rule passes.** It saves 353 gated leaked bytes: 180 of
+  valid BSN, and 173 of Kiji driver-licence, ID-card, national-ID, SSN and
+  building numbers. It adds 295 false-positive bytes.
+
+**The gate is necessary, not sufficient.** It measures only these corpora.
+Review still judges precision. A bare 9-digit rule would be refused in review
+for the false positives it causes on reference numbers outside the corpus,
+even though it passes here.
+
+The gate prints every layer's numbers, twins included. It exits `0` on
+pass, `1` on fail, and `2` when the two scorecards differ in policy, arm
+set, Kiji dataset, corpus hash or contract file, because such a pair is not
+comparable. `agentic_layers.py totals <scorecard>` prints the gated totals of
+one scorecard, and `agentic_layers.py grid <scorecard>` prints the family × surface
+coverage grid and the layer R table for a PR description. Multi-turn
+transcripts, restore round trips and token stability (the planned layer B) are
+not measured yet.
+
+**Past releases.** Each time these docs change, the layers are also measured
+for the displayed releases so that the comparison stays honest.
+`agentic_layers.py measure` scores layers A, D and R with any bench binary.
+Use a release's own `clean_for_bench`, built at its tag, with the arm that
+release shipped. `--vocabulary-root` points at a checkout of that tag, so the
+release's own rulepacks validate its source IDs:
+
+```bash
+python3 scripts/bench/agentic_layers.py measure --label v0.15.1 \
+  --binary <v0.15.1 checkout>/target/release/examples/clean_for_bench \
+  --vocabulary-root <v0.15.1 checkout> \
+  --config policy-file --policy <gaze-setup-policy.toml> \
+  --output target/bench-data/layers-v0.15.1.json
+```
+
+The output has `layers` and an empty `runs`. The release's committed
+scorecard already holds its layer C numbers.
+
+Two options exist for v0.14.0 only, and the output records both:
+
+- `--manifest-actions tokenize` applies the manifest rule from before #623,
+  the same one `rescore_past_release.py` uses.
+- `--split-composite-source-ids` handles v0.14.0's joined source IDs such as
+  `email.header.name+ner`. The source-ID grammar refuses the `+`, and that
+  grammar is also in v0.14.0's own harness; the Kiji corpus never contains the
+  email-header shape that triggers it. With the option, each part is checked
+  on its own against the grammar and the release's vocabulary.
+
+Both options are off by default.
 
 ### Hardware spec template
 

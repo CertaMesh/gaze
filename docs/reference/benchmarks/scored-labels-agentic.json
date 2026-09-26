@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "contract": "scored-labels-agentic",
+  "contract_version": 2,
+  "corpus": {
+    "generator": "scripts/bench/agentic_layers.py",
+    "generator_version": 3,
+    "published_partition": "test"
+  },
+  "semantics": "Every label the agentic-layer generator emits is listed here and scored. Gold that fails its own checksum (the invalid twins) stays scored, exactly as in the Kiji validator gold census; the per-label validity split is reported beside it and never replaces it. Layer D lookalike documents carry no gold, so every byte predicted there is a false positive. Layer R decoys (words spelled like or containing a name part, digit runs shared with a repeated identifier) are not gold either, so a byte predicted over one is a false positive; every repeat of a real value is gold. An unlisted label fails closed, and so does a ruling on a label the generator no longer emits.",
+  "labels": [
+    {
+      "label": "BSN",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Dutch citizen service number; generated checksum-valid with a checksum-invalid twin."
+    },
+    {
+      "label": "CPF",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Brazilian taxpayer number; generated checksum-valid with a checksum-invalid twin."
+    },
+    {
+      "label": "CREDITCARDNUMBER",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Payment card number; generated Luhn-valid with a Luhn-invalid twin."
+    },
+    {
+      "label": "DATEOFBIRTH",
+      "scored": true,
+      "category": "quasi_identifier",
+      "ruling": "settled",
+      "reason": "Date of birth, with and without a cue; a date inserted as a birth date is personal data."
+    },
+    {
+      "label": "EMAIL",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Personal email address derived from a synthetic name."
+    },
+    {
+      "label": "GIVENNAME",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Given name of the sender in an email header or agent payload."
+    },
+    {
+      "label": "IBAN",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Personal bank account (DE, AT, NL, FR, GB); generated mod-97-valid with an invalid twin."
+    },
+    {
+      "label": "NHSNUMBER",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "UK NHS number; generated modulus-11-valid with an invalid twin."
+    },
+    {
+      "label": "SURNAME",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Surname, including hyphenated double surnames."
+    },
+    {
+      "label": "TAXNUM",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "German Steuer-ID; generated MOD 11,10-valid with an invalid twin."
+    },
+    {
+      "label": "TELEPHONENUM",
+      "scored": true,
+      "category": "direct_identifier",
+      "ruling": "settled",
+      "reason": "Personal phone number (German mobile, US)."
+    }
+  ]
+}
