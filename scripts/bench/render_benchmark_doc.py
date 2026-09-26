@@ -1274,9 +1274,11 @@ def _latency_rows(
     hardware = data.get("hardware")
     if not isinstance(verdict, str) or not isinstance(hardware, str):
         raise RenderError(f"{where}: verdict and hardware must be strings")
+    def number(*path: str) -> float:
+        return _latency_number(data, path, where)
+
     pipeline, cli = [], []
     for setup_label, key in LATENCY_SETUPS:
-        number = lambda *path: _latency_number(data, path, where)  # noqa: E731
         pipeline.append(
             f"| {label} | {setup_label} | "
             f"{_fmt('ms', number('pipeline', key, 'warm_clean', 'p50_ms'))} | "
