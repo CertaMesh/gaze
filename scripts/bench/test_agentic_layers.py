@@ -22,8 +22,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "8a707e9f36d33ffda37c0fab104500353d52dabd7ba1cb9ddd6c2594e314a718",
-    "test": "253af8e0a65b730b8da58625bb7066bedf0dce813a6d40d1e43732891c9c2608",
+    "dev": "1266ca19668e1c24a4a46fffa52b2631e00364518792075a62c268465997b2a6",
+    "test": "6fe1c4735b1414d1490cfb37459e5fcfc5c8b2e1414372e3e3247d3dc82bb30a",
 }
 
 
@@ -178,6 +178,11 @@ class GeneratorTests(unittest.TestCase):
             for name in agentic.GIVEN_NAMES["test"] + agentic.SURNAMES["test"]:
                 self.assertNotRegex(rest, rf"\b{name}\b", record.uid)
 
+    def test_machine_keys_differ_across_partitions_ignoring_case(self) -> None:
+        for pool in agentic.KEYS.values():
+            fold = lambda keys: {k.lower().replace("-", "_") for k in keys}
+            self.assertFalse(fold(pool["dev"]) & fold(pool["test"]), pool)
+
     def test_every_published_surface_and_family_is_populated(self) -> None:
         cells = {(r.family, r.surface) for r in self.corpora["test"]}
         families = [f.name for f in agentic.IDENTIFIER_FAMILIES] + [
@@ -186,9 +191,79 @@ class GeneratorTests(unittest.TestCase):
         for family in families:
             for surface in agentic.SURFACES:
                 self.assertIn((family, surface), cells)
-        for family in agentic.LOOKALIKE_FAMILIES:
+        for family in [*agentic.LOOKALIKE_FAMILIES, *agentic.INDEXED_LOOKALIKE_FAMILIES]:
             for surface in agentic.LOOKALIKE_SURFACES:
                 self.assertIn((family, surface), cells)
+
+
+class CounterweightTests(unittest.TestCase):
+    """M1: every gold cell only a context-free rule can reach has an FP cost in D."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.records = agentic.generate("test")
+
+    def gold_shapes(self, cell: tuple[str, str, str]) -> set[str]:
+        return {
+            agentic.display_shape(g.value)
+            for r in self.records
+            if (r.family, r.surface, r.validity) == cell
+            for g in r.gold
+        }
+
+    def lookalike_values(self, family: str) -> list[str]:
+        key = agentic.LOOKALIKE_KEYS["test"][family]
+        return [
+            json.loads(r.text)[key]
+            for r in self.records
+            if r.layer == agentic.LAYER_LOOKALIKES and r.family == family and r.surface == "tool_json"
+        ]
+
+    def lookalike_shapes(self, family: str) -> set[str]:
+        return {agentic.display_shape(v) for v in self.lookalike_values(family)}
+
+    def test_every_context_free_only_cell_has_a_counterweight_or_an_exemption(self) -> None:
+        cells = {
+            (r.family, r.surface, r.validity)
+            for r in self.records
+            if r.layer == agentic.LAYER_IDENTIFIERS
+            and agentic.is_context_free_only(r.family, r.surface, r.validity)
+        }
+        self.assertTrue(cells)
+        ruled = set(agentic.COUNTERWEIGHTS) | set(agentic.COUNTERWEIGHT_EXEMPT)
+        self.assertEqual(cells - ruled, set(), "context-free gold with no D counterweight")
+        self.assertEqual(ruled - cells, set(), "stale counterweight entry")
+        self.assertFalse(set(agentic.COUNTERWEIGHTS) & set(agentic.COUNTERWEIGHT_EXEMPT))
+
+    def test_each_counterweight_renders_every_shape_of_its_gold(self) -> None:
+        for cell, family in agentic.COUNTERWEIGHTS.items():
+            with self.subTest(cell=cell):
+                self.assertLessEqual(self.gold_shapes(cell), self.lookalike_shapes(family))
+
+    def test_counterweight_values_fail_every_same_length_checksum(self) -> None:
+        checks = {9: (agentic.bsn_valid,), 10: (agentic.nhs_valid,),
+                  11: (agentic.steuer_id_valid, agentic.cpf_valid), 16: (agentic.luhn_valid,)}
+        for family in ("ref_number_9", "ref_number_10", "ref_number_11", "sku_4x4"):
+            for value in self.lookalike_values(family):
+                digits = agentic._only_digits(value)
+                self.assertFalse(any(check(digits) for check in checks[len(digits)]), value)
+
+    def test_counterweight_dates_are_not_birth_dates(self) -> None:
+        for r in self.records:
+            if r.family == "local_date":
+                year = int(re.search(r"(20\d\d)", r.text).group(1))
+                self.assertGreaterEqual(year, 2024)
+
+    def test_a_bare_nine_digit_rule_would_pay_for_its_catch_in_layer_d(self) -> None:
+        # The model-free half of the mutant check: the over-broad shape rule
+        # reaches the BSN twins it would "fix" and the D counterweight alike.
+        rule = re.compile(r"(?<![\d.-])\d{9}(?![\d.-])")
+        catches = [r for r in self.records
+                   if (r.family, r.surface, r.validity) == ("bsn", "prose_nocue", agentic.INVALID)
+                   and rule.search(r.text)]
+        costs = [r for r in self.records if r.family == "ref_number_9" and rule.search(r.text)]
+        self.assertEqual(len(catches), agentic.DOCS_PER_FAMILY)
+        self.assertEqual(len(costs), agentic.DOCS_PER_FAMILY * len(agentic.LOOKALIKE_SURFACES))
 
 
 class RepeatSliceTests(unittest.TestCase):
@@ -256,6 +331,7 @@ class PartitionTests(unittest.TestCase):
                 {pool[p]} if isinstance(pool[p], str) else set(pool[p]) for p in ("dev", "test")
             )
             self.assertFalse(dev & test, pool)
+        self.assertFalse(set(agentic.LOCAL_DATE_PROSE["dev"]) & set(agentic.LOCAL_DATE_PROSE["test"]))
         self.assertFalse(
             set(agentic.LOOKALIKE_KEYS["dev"].values())
             & set(agentic.LOOKALIKE_KEYS["test"].values())

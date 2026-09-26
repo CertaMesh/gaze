@@ -34,7 +34,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 
 
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -438,11 +438,11 @@ CUES: dict[str, dict[str, tuple[str, ...]]] = {
 # Machine keys for log_kv, csv and tool_json.
 KEYS: dict[str, dict[str, tuple[str, ...]]] = {
     "card": {"dev": ("card_number", "pan"), "test": ("cardNumber", "credit_card")},
-    "iban": {"dev": ("iban", "payout_iban"), "test": ("IBAN", "bank_iban")},
-    "steuer_id": {"dev": ("steuer_id", "tax_id"), "test": ("steuerId", "steuer-id")},
-    "bsn": {"dev": ("bsn", "citizen_bsn"), "test": ("BSN", "bsn_nummer")},
+    "iban": {"dev": ("iban", "payout_iban"), "test": ("ibanNumber", "bank_iban")},
+    "steuer_id": {"dev": ("steuer_id", "tax_id"), "test": ("steuerId", "taxIdentNr")},
+    "bsn": {"dev": ("bsn", "citizen_bsn"), "test": ("bsnNumber", "bsn_nummer")},
     "nhs": {"dev": ("nhs_number", "nhs"), "test": ("nhsNumber", "NHS_NO")},
-    "cpf": {"dev": ("cpf", "cpf_numero"), "test": ("CPF", "documento_cpf")},
+    "cpf": {"dev": ("cpf", "cpf_numero"), "test": ("cpfNumber", "documento_cpf")},
     "email": {"dev": ("email", "user_email"), "test": ("emailAddress", "contact_email")},
     "phone": {"dev": ("phone", "msisdn"), "test": ("phoneNumber", "mobile")},
     "dob": {"dev": ("dob", "birth_date"), "test": ("dateOfBirth", "geburtsdatum")},
@@ -590,6 +590,49 @@ def _log_timestamp(rng: Rng) -> str:
     )
 
 
+def _reference_digits(rng: Rng, count: int, invalid_for: Sequence[Callable[[str], bool]]) -> str:
+    """A reference number no checksum of a same-length identifier accepts."""
+    while True:
+        digits = str(rng.between(1, 9)) + rng.digits(count - 1)
+        if not any(check(digits) for check in invalid_for):
+            return digits
+
+
+def _ref_number_9(rng: Rng, index: int) -> str:
+    return _reference_digits(rng, 9, (bsn_valid,))
+
+
+def _ref_number_10(rng: Rng, index: int) -> str:
+    digits = _reference_digits(rng, 10, (nhs_valid,))
+    return digits if index % 2 == 0 else " ".join(_chunks(digits, (3, 3, 4)))
+
+
+def _ref_number_11(rng: Rng, index: int) -> str:
+    digits = _reference_digits(rng, 11, (steuer_id_valid, cpf_valid))
+    shape = index % 3
+    if shape == 0:
+        return digits
+    if shape == 1:
+        return " ".join(_chunks(digits, (2, 3, 3, 3)))
+    return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+
+
+def _local_date(rng: Rng, index: int) -> str:
+    """A non-birth date in a DOB display format: a recent or near-future year."""
+    year, month, day = rng.between(2024, 2027), rng.between(1, 12), rng.between(1, 28)
+    style = "de" if index % 2 == 0 else "en"
+    return DOB_FORMATS[style](year, month, day)
+
+
+# Counterweights take the document index, so each display shape of the gold
+# they balance is generated deterministically.
+INDEXED_LOOKALIKE_FAMILIES: dict[str, tuple[str, str, Callable[[Rng, int], str]]] = {
+    "ref_number_9": ("nl", "NL", _ref_number_9),
+    "ref_number_10": ("en", "GB", _ref_number_10),
+    "ref_number_11": ("de", "DE", _ref_number_11),
+    "local_date": ("de", "DE", _local_date),
+}
+
 LOOKALIKE_FAMILIES: dict[str, tuple[str, str, Callable[[Rng], str]]] = {
     # family: (language, region, generator)
     "amount_eur": ("en", "US", _amount_eur),
@@ -612,7 +655,8 @@ LOOKALIKE_KEYS = {
         "hex_colour": "color", "letter_digits": "part_no", "version": "version",
         "order_id": "order", "tracking_id": "tracking", "uuid_fragment": "trace",
         "room_number": "location", "seat_number": "seat", "invoice_date": "invoice_date",
-        "log_timestamp": "timestamp",
+        "log_timestamp": "timestamp", "ref_number_9": "customer_no",
+        "ref_number_10": "ticket", "ref_number_11": "invoice_no", "local_date": "delivery_date",
     },
     "test": {
         "amount_eur": "grandTotal", "amount_usd": "price", "sku_4x4": "itemCode",
@@ -620,8 +664,56 @@ LOOKALIKE_KEYS = {
         "order_id": "orderRef", "tracking_id": "trackingNumber", "uuid_fragment": "requestId",
         "room_number": "meetingRoom", "seat_number": "seatAssignment",
         "invoice_date": "invoiceDate", "log_timestamp": "occurredAt",
+        "ref_number_9": "customerNumber", "ref_number_10": "caseId",
+        "ref_number_11": "invoiceNumber", "local_date": "dueDate",
     },
 }
+# Prose for the date counterweight: a delivery or due date, never a birth date.
+LOCAL_DATE_PROSE = {
+    "dev": ("Die Lieferung kommt am {V}.", "Payment is due {V}."),
+    "test": ("Lieferung am {V} bestätigt.", "The invoice is due {V}."),
+}
+
+# M1: gold that only a context-free rule can reach (no cue, and no checksum or
+# a failing one) needs a layer D family of the same display shape. Otherwise a
+# rule that tags every such shape lowers layer A's leak at no visible FP cost.
+# Keys are (family, surface, validity) cells of layer A.
+COUNTERWEIGHTS: dict[tuple[str, str, str], str] = {
+    ("bsn", "prose_nocue", INVALID): "ref_number_9",
+    ("nhs", "prose_nocue", INVALID): "ref_number_10",
+    ("steuer_id", "prose_nocue", INVALID): "ref_number_11",
+    ("cpf", "prose_nocue", INVALID): "ref_number_11",
+    ("card", "prose_nocue", INVALID): "sku_4x4",
+    ("dob", "prose_nocue", UNCHECKED): "local_date",
+}
+# Context-free cells with no counterweight, and why none is needed.
+COUNTERWEIGHT_EXEMPT: dict[tuple[str, str, str], str] = {
+    (family, "prose_nocue", INVALID): (
+        "an IBAN shape (country code, check digits, BBAN) that fails mod-97 has no "
+        "common benign use, so a shape-only IBAN rule has no FP to measure"
+    )
+    for family in ("iban_de", "iban_de_compact", "iban_at", "iban_nl", "iban_fr", "iban_gb")
+}
+
+
+def is_context_free_only(family: str, surface: str, validity: str) -> bool:
+    """Layer A gold that no cue and no passing validator can anchor."""
+    return surface == "prose_nocue" and (validity == INVALID or family == "dob")
+
+
+def display_shape(value: str) -> str:
+    """Digits as 9, letters as A, every separator as '-': what a shape rule sees."""
+    shape = []
+    for character in value:
+        if character.isdigit():
+            shape.append("9")
+        elif character.isalpha():
+            shape.append("A")
+        else:
+            shape.append("-")
+    return "".join(shape)
+
+
 LOOKALIKE_TEMPLATES = {
     "prose": {
         "dev": ("The dashboard shows {V} for this item.", "We logged {V} in the report."),
@@ -979,14 +1071,24 @@ def _unchecked_records(partition: str, seed: int) -> list[Record]:
 
 def _lookalike_records(partition: str, seed: int) -> list[Record]:
     records: list[Record] = []
-    for family, (language, region, make) in LOOKALIKE_FAMILIES.items():
+    makers: dict[str, tuple[str, str, Callable[[Rng, int], str]]] = {
+        family: (language, region, lambda rng, index, make=make: make(rng))
+        for family, (language, region, make) in LOOKALIKE_FAMILIES.items()
+    }
+    makers.update(INDEXED_LOOKALIKE_FAMILIES)
+    for family, (language, region, make) in makers.items():
         rng = Rng(seed, f"D/{family}")
         key = LOOKALIKE_KEYS[partition][family]
         for index in range(DOCS_PER_FAMILY):
-            value = make(rng)
+            value = make(rng, index)
             group = f"{partition}-D-{family}-{index:03d}"
             for surface in LOOKALIKE_SURFACES:
-                template = rng.choice(LOOKALIKE_TEMPLATES[surface][partition])
+                pool = (
+                    LOCAL_DATE_PROSE
+                    if family == "local_date" and surface == "prose"
+                    else LOOKALIKE_TEMPLATES[surface]
+                )
+                template = rng.choice(pool[partition])
                 text, gold = _fill(template, {"K": (key, None), "V": (value, None)})
                 records.append(
                     Record(
@@ -997,7 +1099,11 @@ def _lookalike_records(partition: str, seed: int) -> list[Record]:
                         surface=surface,
                         validity=BENIGN,
                         group=group,
-                        template=_template_id(surface, partition, template, LOOKALIKE_TEMPLATES),
+                        template=(
+                            f"local_date_prose/{partition}/{pool[partition].index(template)}"
+                            if pool is LOCAL_DATE_PROSE
+                            else _template_id(surface, partition, template, LOOKALIKE_TEMPLATES)
+                        ),
                         language=language,
                         region=region,
                         text=text,

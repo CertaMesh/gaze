@@ -102,14 +102,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--agentic-scored-labels",
         type=Path,
         help=(
-            "scored-label contract of the generated agentic layers A and D "
+            "scored-label contract of the generated agentic layers A, D and R "
             f"(default {agentic.SCORED_LABELS_PATH.as_posix()})"
         ),
     )
     parser.add_argument(
         "--no-agentic-layers",
         action="store_true",
-        help="skip agentic layers A and D, e.g. to reproduce an older scorecard",
+        help="skip agentic layers A, D and R, e.g. to reproduce an older scorecard",
     )
     parser.add_argument(
         "--output-dir",
@@ -590,7 +590,7 @@ def measure_agentic_layers(
     policy_path: Path | None,
     configs: Sequence[str] | None = None,
 ) -> dict[str, object]:
-    """Score layers A and D as separate cells next to the Kiji/A4 layer C.
+    """Score layers A, D and R as separate cells next to the Kiji/A4 layer C.
 
     Layer C stays the top-level `runs`: the generated documents never enter
     those cells, so their numbers are unchanged by this block.

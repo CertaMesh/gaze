@@ -653,7 +653,7 @@ three generated layers beside it:
 | --- | --- | --- |
 | C | Kiji EN/DE holdout plus the A4 negative corpus | `runs[]` (unchanged) |
 | A | Generated identifiers in agentic surfaces, each checksum value with a checksum-invalid twin | `layers.A.runs[]` |
-| D | Generated benign lookalikes: amounts, SKUs, `#RRGGBB`, `L99 9999`, versions, order and tracking IDs, UUID fragments, room and seat numbers, invoice and log dates | `layers.D.runs[]` |
+| D | Generated benign lookalikes: amounts, SKUs, `#RRGGBB`, `L99 9999`, versions, order and tracking IDs, UUID fragments, room and seat numbers, invoice and log dates, and the counterweights below | `layers.D.runs[]` |
 | R | Repeat-value slice: one value repeated in several shapes in one document, next to decoys that collide with it | `layers.R.runs[]` |
 
 [`scripts/bench/agentic_layers.py`](../../../scripts/bench/agentic_layers.py)
@@ -685,12 +685,16 @@ model:
   repeat is gold. The same documents carry decoys, which are never gold:
   ordinary words spelled like a name part (`Rose garden`, `in May`,
   `Will you`, `Grant approved`, `Page 3`, `the Court hearing`), words and file
-  names that contain a name part (`Annual` for Ann, `Heidelberg` for Berg), and
+  names that contain a name part (`Annual` for Ann, `Iceberg` for Berg), and
   digit runs shared with a repeated identifier. Any byte predicted over a decoy
   counts as a false positive. A given name and a surname are separate gold
   spans, as in Kiji, so a single token over the full name also counts the
   separator between them (1 byte for a space, 2 for an NBSP) as a false
-  positive. The JSONL output records the decoy spans. This
+  positive. The JSONL output records the decoy spans. Several test templates
+  also carry the fixed log timestamp `2026-04-17T08:03:51Z`, and Gaze
+  tokenizes it as a date. That is template noise in the false-positive bytes
+  of layers A and R: 130 B in each of R's phone and Steuer-ID repeat cells. It
+  is identical on both sides of a gate comparison. This
   slice is the baseline for a change that re-finds known values across a
   document: it has to lower R's leaked bytes without raising R's
   false-positive bytes. The value makers take a partition, so a layer B
@@ -703,10 +707,30 @@ ruling for a label the generator no longer emits, and on a generator version
 mismatch. Layers A, D and R use this contract in every run, so
 `--scored-labels` changes layer C only.
 
-**Held-out protocol.** Templates, cue words, machine keys, name pools, email
-domains, phone prefixes, the layer R name-word and decoy pools, and seeds are
-split into a `dev` and a `test`
-partition before anything is generated. Every perturbation (the NBSP variants
+**Counterweights.** Some layer A gold can be reached only by a context-free
+rule, a rule that looks at shape alone. These are checksum-invalid twins and
+dates of birth in prose without a cue. A rule that tags every 9-digit run or
+every `DD.MM.YYYY` date would lower layer A's leak there. Layer D therefore
+carries the same shapes as benign values, so that rule pays for its catch in
+false-positive bytes:
+
+- reference numbers of 9, 10 and 11 digits, bare and in the NHS, Steuer-ID and
+  CPF groupings, each failing every checksum of its length;
+- delivery and due dates in German and US format, dated 2024 to 2027.
+
+`COUNTERWEIGHTS` in `agentic_layers.py` maps each such gold cell to its D
+family. A test fails when a context-free-only cell has neither a counterweight
+nor a written exemption, or when a counterweight lacks one of its gold's
+display shapes. IBAN twins are exempt: an IBAN shape that fails mod-97 has no
+common benign use.
+
+**Held-out protocol.** Templates, machine keys, name pools, email domains,
+phone prefixes, the layer R name-word and decoy pools, and seeds are split
+into a `dev` and a `test` partition before anything is generated. Machine keys
+differ even when case and `-`/`_` are ignored. Descriptive cue phrases are
+split too, but the standard names of the identifiers (`IBAN`, `Steuer-ID`,
+`BSN`, `NHS number`, `CPF`) appear in both partitions, because a real document
+uses exactly those words. Every perturbation (the NBSP variants
 and the invalid twin) comes from its parent document inside that parent's
 partition. The runner scores `test` only. Use `dev` for rule work:
 
