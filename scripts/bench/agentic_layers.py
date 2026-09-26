@@ -1532,54 +1532,103 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict[str, int]]:
+    """Per layer: gated leaked bytes, FP bytes and refusals of one arm.
+
+    Layer A's gated leak counts valid and unchecked gold only. Its
+    checksum-invalid twins stay scored gold in the headline, but a rule that
+    tags every value of a shape "fixes" them for free, so they are reported
+    (`twin_leaked`) and never gated.
+    """
+    totals: dict[str, dict[str, int]] = {}
+    for layer in GATE_LAYERS:
+        run = _layer_run(scorecard, layer, config)
+        utf8 = run["metrics"]["utf8_bytes"]
+        twin_leaked = 0
+        if layer == LAYER_IDENTIFIERS:
+            twin_leaked = sum(
+                block["utf8_bytes"]["leaked"]
+                for cell, block in run["per_cell"].items()
+                if cell.split("|")[3] == INVALID
+            )
+        totals[layer] = {
+            "leaked": utf8["leaked"] - twin_leaked,
+            "twin_leaked": twin_leaked,
+            "false_positive": utf8["false_positive"],
+            "failed_closed": run["pipeline_availability"]["failed_closed_documents"],
+        }
+    return totals
+
+
+def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mapping[str, int]]) -> dict[str, object]:
+    """The net-bytes rule gate (user decision 2026-09-26), per contract.
+
+    Fail when any layer leaks more or refuses more. A leak fix passes only when
+    its summed FP-byte increase over all layers is smaller than its summed
+    leaked-byte decrease. With no leak change, an FP-only fix passes when the
+    summed FP bytes fall.
+    """
+    rows = {
+        layer: {
+            "leaked_base": base[layer]["leaked"],
+            "leaked_candidate": candidate[layer]["leaked"],
+            "twin_leaked_base": base[layer]["twin_leaked"],
+            "twin_leaked_candidate": candidate[layer]["twin_leaked"],
+            "false_positive_base": base[layer]["false_positive"],
+            "false_positive_candidate": candidate[layer]["false_positive"],
+            "failed_closed_base": base[layer]["failed_closed"],
+            "failed_closed_candidate": candidate[layer]["failed_closed"],
+        }
+        for layer in GATE_LAYERS
+    }
+    leak_rise = [l for l, r in rows.items() if r["leaked_candidate"] > r["leaked_base"]]
+    refusal_rise = [l for l, r in rows.items() if r["failed_closed_candidate"] > r["failed_closed_base"]]
+    leak_drop = sum(r["leaked_base"] - r["leaked_candidate"] for r in rows.values())
+    fp_rise = sum(r["false_positive_candidate"] - r["false_positive_base"] for r in rows.values())
+    summary = {"leaked_bytes_decrease": leak_drop, "false_positive_bytes_increase": fp_rise}
+    if leak_rise:
+        verdict, reason = "fail", f"leaked bytes rose in {leak_rise}"
+    elif refusal_rise:
+        verdict, reason = "fail", f"failed-closed documents rose in {refusal_rise}"
+    elif leak_drop > 0:
+        if fp_rise < leak_drop:
+            verdict, reason = "pass", f"leaked bytes fell by {leak_drop}, FP bytes changed by {fp_rise:+d}"
+        else:
+            verdict, reason = "fail", (
+                f"net bytes: FP bytes rose by {fp_rise}, not less than the {leak_drop} "
+                "leaked bytes saved"
+            )
+    elif fp_rise < 0:
+        verdict, reason = "pass", f"false-positive-only fix: FP bytes fell by {-fp_rise}"
+    else:
+        verdict, reason = "fail", "no layer's leaked bytes fell and FP bytes did not fall"
+    return {"verdict": verdict, "reason": reason, "summary": summary, "layers": rows}
+
+
 def gate(base: Mapping[str, object], candidate: Mapping[str, object], config: str | None = None) -> dict[str, object]:
-    """Rule gate: no layer leaks more, none fails closed on more documents, and
-    at least one layer leaks less; or, for an FP-only fix, leaks are unchanged
-    everywhere and at least one layer's false-positive bytes fall."""
+    """Identity check, then `decide` on the production arm's layer totals."""
     base_identity = _layer_identity(base)
     candidate_identity = _layer_identity(candidate)
     if base_identity != candidate_identity:
         differing = sorted(k for k in base_identity if base_identity[k] != candidate_identity[k])
         return {"verdict": "not_comparable", "differing": differing, "layers": {}}
     config = config or production_config(candidate)
-    rows: dict[str, dict[str, int]] = {}
-    for layer in GATE_LAYERS:
-        before = _layer_run(base, layer, config)
-        after = _layer_run(candidate, layer, config)
-        rows[layer] = {
-            "leaked_base": before["metrics"]["utf8_bytes"]["leaked"],
-            "leaked_candidate": after["metrics"]["utf8_bytes"]["leaked"],
-            "false_positive_base": before["metrics"]["utf8_bytes"]["false_positive"],
-            "false_positive_candidate": after["metrics"]["utf8_bytes"]["false_positive"],
-            "failed_closed_base": before["pipeline_availability"]["failed_closed_documents"],
-            "failed_closed_candidate": after["pipeline_availability"]["failed_closed_documents"],
-        }
-    leak_rise = [l for l, r in rows.items() if r["leaked_candidate"] > r["leaked_base"]]
-    refusal_rise = [l for l, r in rows.items() if r["failed_closed_candidate"] > r["failed_closed_base"]]
-    leak_fall = [l for l, r in rows.items() if r["leaked_candidate"] < r["leaked_base"]]
-    fp_fall = [l for l, r in rows.items() if r["false_positive_candidate"] < r["false_positive_base"]]
-    if leak_rise or refusal_rise:
-        verdict = "fail"
-        reason = f"leaked bytes rose in {leak_rise}" if leak_rise else f"failed-closed documents rose in {refusal_rise}"
-    elif leak_fall:
-        verdict, reason = "pass", f"leaked bytes fell in {leak_fall}"
-    elif fp_fall:
-        verdict, reason = "pass", f"false-positive-only fix: FP bytes fell in {fp_fall}"
-    else:
-        verdict, reason = "fail", "no layer's leaked or false-positive bytes fell"
-    return {"verdict": verdict, "reason": reason, "config": config, "layers": rows}
+    result = decide(layer_totals(base, config), layer_totals(candidate, config))
+    return {**result, "config": config}
 
 
 def gate_markdown(result: Mapping[str, object]) -> str:
     lines = [f"Verdict: **{result['verdict']}** ({result.get('reason', result.get('differing'))})", ""]
     if result["layers"]:
-        lines += ["| Layer | Leaked base | Leaked cand | FP base | FP cand | Failed closed base | Failed closed cand |",
-                  "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
+        lines += ["| Layer | Leaked base | Leaked cand | FP base | FP cand | Failed closed base | Failed closed cand | Twin leak base | Twin leak cand |",
+                  "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
         for layer, r in result["layers"].items():
             lines.append(
                 f"| {layer} | {r['leaked_base']} | {r['leaked_candidate']} | {r['false_positive_base']} | "
-                f"{r['false_positive_candidate']} | {r['failed_closed_base']} | {r['failed_closed_candidate']} |"
+                f"{r['false_positive_candidate']} | {r['failed_closed_base']} | {r['failed_closed_candidate']} | "
+                f"{r['twin_leaked_base']} | {r['twin_leaked_candidate']} |"
             )
+        lines += ["", "Layer A leak is valid and unchecked gold; checksum-invalid twins are reported, not gated."]
     return "\n".join(lines) + "\n"
 
 
@@ -1688,6 +1737,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     measure_cmd.add_argument("--output", type=Path, required=True)
+    totals_cmd = commands.add_parser("totals", help="print the gate's per-layer totals of one scorecard")
+    totals_cmd.add_argument("scorecard", type=Path)
+    totals_cmd.add_argument("--config")
     gate_cmd = commands.add_parser("gate", help="apply the rule gate to a base/candidate pair")
     gate_cmd.add_argument("--base", type=Path, required=True)
     gate_cmd.add_argument("--candidate", type=Path, required=True)
@@ -1703,6 +1755,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps({p: manifest(p, generate(p)) for p in PARTITIONS}, indent=2))
         elif args.command == "measure":
             _measure(args)
+        elif args.command == "totals":
+            scorecard = _load_json(args.scorecard)
+            config = args.config or production_config(scorecard)
+            print(json.dumps(layer_totals(scorecard, config), indent=2, sort_keys=True))
         elif args.command == "grid":
             print(coverage_grid(_load_json(args.scorecard), args.config), end="")
         else:

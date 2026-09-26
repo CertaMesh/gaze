@@ -899,14 +899,27 @@ For each contract, the production arm's numbers must satisfy all of these:
 1. **No layer leaks more.** Leaked bytes do not rise in C, A, D or R.
 2. **No layer refuses more.** A refused document drops out of the leak count,
    so a rise in failed-closed documents in any layer fails the gate.
-3. **Something gets better.** At least one layer's leaked bytes fall. A
-   false-positive-only fix passes instead when leaked bytes stay unchanged
-   everywhere and at least one layer's false-positive bytes fall.
+3. **Net bytes improve.** At least one layer's leaked bytes fall, and the
+   false-positive bytes added, summed over all four layers, are fewer than the
+   leaked bytes saved, summed the same way. A false-positive-only fix passes
+   instead when no layer's leaked bytes change and the summed false-positive
+   bytes fall.
 
-The PR states false-positive bytes per layer either way. The gate exits `0` on
+Layer A's leak is gated on valid and unchecked gold only. Its checksum-invalid
+twins stay in the headline and are reported beside the gate but never gated,
+because only a rule without a checksum can reach them, and the layer D
+counterweights already price that kind of rule separately. This net-bytes
+limit is the user's decision of 2026-09-26. It is pinned by two real
+full-harness runs in
+[`gate-pin-mutants.json`](../../../scripts/bench/fixtures/agentic/gate-pin-mutants.json):
+the bare 9-digit rule saves 180 valid leaked bytes for 270 added
+false-positive bytes, and the spaced 16-digit rule saves none. Both fail.
+
+The gate prints every layer's numbers, twins included. It exits `0` on
 pass, `1` on fail, and `2` when the two scorecards differ in policy, arm
 set, Kiji dataset, corpus hash or contract file, because such a pair is not
-comparable. `agentic_layers.py grid <scorecard>` prints the family × surface
+comparable. `agentic_layers.py totals <scorecard>` prints the gated totals of
+one scorecard, and `agentic_layers.py grid <scorecard>` prints the family × surface
 coverage grid and the layer R table for a PR description. Multi-turn
 transcripts, restore round trips and token stability (the planned layer B) are
 not measured yet.

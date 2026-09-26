@@ -494,16 +494,29 @@ class PerCellTests(unittest.TestCase):
         self.assertEqual(cells["A|bsn|csv|valid"]["documents"], agentic.DOCS_PER_FAMILY)
 
 
-def _scorecard(leaks: dict[str, int], fps: dict[str, int] | None = None, refused: dict[str, int] | None = None) -> dict:
+def _scorecard(
+    leaks: dict[str, int],
+    fps: dict[str, int] | None = None,
+    refused: dict[str, int] | None = None,
+    twin_leak: int = 0,
+) -> dict:
+    """Layer A's `leaks` value is its valid gold; `twin_leak` adds twin bytes."""
     fps = fps or {}
     refused = refused or {}
 
     def run(layer: str) -> dict:
-        return {
+        leaked = leaks[layer] + (twin_leak if layer == "A" else 0)
+        block = {
             "config": "policy-file",
-            "metrics": {"utf8_bytes": {"leaked": leaks[layer], "false_positive": fps.get(layer, 0)}},
+            "metrics": {"utf8_bytes": {"leaked": leaked, "false_positive": fps.get(layer, 0)}},
             "pipeline_availability": {"failed_closed_documents": refused.get(layer, 0)},
         }
+        if layer == "A":
+            block["per_cell"] = {
+                "A|bsn|csv|valid": {"utf8_bytes": {"leaked": leaks["A"]}},
+                "A|bsn|csv|invalid": {"utf8_bytes": {"leaked": twin_leak}},
+            }
+        return block
 
     return {
         "parameters": {"configs": ["policy-file"], "policy_sha256": "p"},
@@ -557,11 +570,25 @@ class GateTests(unittest.TestCase):
     BASE = {"C": 100, "A": 50, "D": 0, "R": 30}
     FP = {"C": 10, "A": 5, "D": 7, "R": 3}
 
-    def verdict(self, candidate: dict) -> str:
-        return agentic.gate(_scorecard(self.BASE, self.FP), candidate)["verdict"]
+    def verdict(self, candidate: dict, base: dict | None = None) -> str:
+        return agentic.gate(base or _scorecard(self.BASE, self.FP), candidate)["verdict"]
 
-    def test_leak_falling_in_one_layer_and_rising_in_none_passes(self) -> None:
-        self.assertEqual(self.verdict(_scorecard({**self.BASE, "R": 10}, self.FP)), "pass")
+    def test_leak_fix_with_smaller_fp_rise_passes(self) -> None:
+        # 20 leaked bytes saved, 19 FP bytes added across layers: net better.
+        candidate = _scorecard({**self.BASE, "R": 10}, {**self.FP, "D": 7 + 19})
+        self.assertEqual(self.verdict(candidate), "pass")
+
+    def test_leak_fix_with_equal_or_larger_fp_rise_fails(self) -> None:
+        for fp_rise in (20, 21):
+            with self.subTest(fp_rise=fp_rise):
+                candidate = _scorecard({**self.BASE, "R": 10}, {**self.FP, "D": 7 + fp_rise})
+                self.assertEqual(self.verdict(candidate), "fail")
+
+    def test_fp_rise_is_summed_over_all_layers(self) -> None:
+        candidate = _scorecard({**self.BASE, "R": 10}, {"C": 20, "A": 15, "D": 7, "R": 3})
+        result = agentic.gate(_scorecard(self.BASE, self.FP), candidate)
+        self.assertEqual(result["summary"], {"leaked_bytes_decrease": 20, "false_positive_bytes_increase": 20})
+        self.assertEqual(result["verdict"], "fail")
 
     def test_leak_rising_in_any_layer_fails_even_if_another_falls(self) -> None:
         self.assertEqual(self.verdict(_scorecard({**self.BASE, "C": 101, "A": 10}, self.FP)), "fail")
@@ -576,6 +603,15 @@ class GateTests(unittest.TestCase):
 
     def test_no_movement_fails(self) -> None:
         self.assertEqual(self.verdict(_scorecard(self.BASE, self.FP)), "fail")
+
+    def test_checksum_invalid_twins_are_reported_not_gated(self) -> None:
+        base = _scorecard(self.BASE, self.FP, twin_leak=500)
+        # Tagging every twin saves 500 "leaked" bytes that no precise rule can reach.
+        candidate = _scorecard(self.BASE, {**self.FP, "D": 7 + 100}, twin_leak=0)
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["verdict"], "fail")
+        self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 500)
+        self.assertEqual(result["summary"]["leaked_bytes_decrease"], 0)
 
     def test_different_corpus_or_contract_is_not_comparable(self) -> None:
         for path in (("layers", "generator", "corpus_sha256"), ("scoring", "scored_label_contract", "file_sha256")):
@@ -592,6 +628,36 @@ class GateTests(unittest.TestCase):
         del candidate["layers"]
         with self.assertRaises(agentic.LayerError):
             agentic.gate(_scorecard(self.BASE), candidate)
+
+
+class MutantGatePinTests(unittest.TestCase):
+    """Real full-harness runs: main vs main plus each over-broad rule must fail.
+
+    `fixtures/agentic/gate-pin-mutants.json` holds `layer_totals` of three full
+    runs (provenance inside). A mutant changes the policy, so `gate` rightly
+    calls the pair not comparable; `decide` is the rule it would face.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        path = Path(__file__).resolve().parent / "fixtures/agentic/gate-pin-mutants.json"
+        cls.pin = json.loads(path.read_text(encoding="utf-8"))
+
+    def test_bare_nine_digit_mutant_fails_the_net_rule(self) -> None:
+        result = agentic.decide(self.pin["totals"]["main"], self.pin["totals"]["mutant_bare_nine_digits"])
+        self.assertEqual(result["verdict"], "fail")
+        self.assertIn("net bytes", result["reason"])
+        self.assertEqual(result["summary"], self.pin["expected"]["mutant_bare_nine_digits"])
+
+    def test_spaced_sixteen_digit_mutant_fails(self) -> None:
+        result = agentic.decide(self.pin["totals"]["main"], self.pin["totals"]["mutant_spaced_sixteen_digits"])
+        self.assertEqual(result["verdict"], "fail")
+        self.assertEqual(result["summary"], self.pin["expected"]["mutant_spaced_sixteen_digits"])
+
+    def test_pin_records_its_provenance(self) -> None:
+        provenance = self.pin["provenance"]
+        for key in ("harness_commit", "corpus_sha256", "policy_sha256", "binary_sha256", "commands"):
+            self.assertTrue(provenance.get(key), key)
 
 
 if __name__ == "__main__":
