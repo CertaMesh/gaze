@@ -150,6 +150,10 @@ stale
 stale
 <!-- END GENERATED: history -->
 
+<!-- BEGIN GENERATED: latency -->
+stale
+<!-- END GENERATED: latency -->
+
 Trailing prose.
 """
 
@@ -1562,6 +1566,121 @@ class DistinctResultGroupTest(unittest.TestCase):
             [render.group_label(g) for g in render.displayed_groups(committed)],
             ["v0.14.0", "v0.15.0 – v0.15.1"],
         )
+
+
+
+#: The committed v0.15.1 latency file: the real shape `cli-latency.py` writes.
+REAL_LATENCY = render.BENCH_DIR / "latency-v0.15.1.json"
+
+
+def latency_file(**pipeline_setup) -> dict:
+    value = json.loads(REAL_LATENCY.read_text(encoding="utf-8"))
+    value["pipeline"]["setup"]["warm_clean"].update(pipeline_setup)
+    return value
+
+
+class LatencySectionTest(unittest.TestCase):
+    """The committed latency files render; a release without one says so."""
+
+    def grouped(self) -> dict:
+        return releases(release("v0.14.0", 25000), release("v0.15.0"), release("v0.15.1"))
+
+    def test_every_rendered_latency_value_comes_from_the_file(self):
+        data = json.loads(REAL_LATENCY.read_text(encoding="utf-8"))
+        block = render.render_latency(self.grouped(), {"v0.15.1": data})
+        pipeline, cli = data["pipeline"], data["cli"]
+        for arm in ("setup", "setup_nym"):
+            row = pipeline[arm]
+            for value in (
+                row["warm_clean"]["p50_ms"],
+                row["warm_clean"]["p95_ms"],
+                row["cold_first_document_ms"],
+            ):
+                self.assertIn(render._fmt("ms", value), block, (arm, value))
+            self.assertIn(f"{row['peak_rss_mib']:.1f}", block)
+            for mode, stats in (("oneshot", "per_document"), ("daemon", "warm")):
+                for q in ("p50_ms", "p95_ms"):
+                    value = cli[f"{mode}_{arm}"][stats][q]
+                    self.assertIn(render._fmt("ms", value), block, (mode, arm, q))
+        self.assertIn("verdict `valid`", block)
+        self.assertIn(data["hardware"], block)
+        self.assertIn("[`latency-v0.15.1.json`](latency-v0.15.1.json)", block)
+
+    def test_each_latency_field_moves_the_document(self):
+        data = json.loads(REAL_LATENCY.read_text(encoding="utf-8"))
+        baseline = render.render_latency(self.grouped(), {"v0.15.1": data})
+        for path in (
+            ("pipeline", "setup", "warm_clean", "p50_ms"),
+            ("pipeline", "setup_nym", "warm_clean", "p95_ms"),
+            ("pipeline", "setup", "cold_first_document_ms"),
+            ("pipeline", "setup_nym", "peak_rss_mib"),
+            ("cli", "oneshot_setup", "per_document", "p95_ms"),
+            ("cli", "daemon_setup_nym", "warm", "p50_ms"),
+            ("verdict",),
+            ("hardware",),
+        ):
+            with self.subTest(path=_label(path)):
+                mutated = copy.deepcopy(data)
+                node = mutated
+                for key in path[:-1]:
+                    node = node[key]
+                node[path[-1]] = (
+                    node[path[-1]] + 1234.5
+                    if isinstance(node[path[-1]], float)
+                    else f"{node[path[-1]]}-changed"
+                )
+                self.assertNotEqual(
+                    baseline, render.render_latency(self.grouped(), {"v0.15.1": mutated})
+                )
+
+    def test_a_group_reads_its_newest_releases_file(self):
+        newest = latency_file(p50_ms=11.11)
+        older = latency_file(p50_ms=99.99)
+        block = render.render_latency(
+            self.grouped(), {"v0.15.0": older, "v0.15.1": newest}
+        )
+        self.assertIn("11.11", block)
+        self.assertNotIn("99.99", block)
+
+    def test_a_release_without_a_file_is_not_measured(self):
+        block = render.render_latency(self.grouped(), {})
+        rows = [line for line in block.splitlines() if line.startswith("| v0.14.0 ")]
+        self.assertTrue(rows)
+        for line in rows:
+            self.assertIn("not measured", line)
+        self.assertNotIn("| v0.14.0 | `gaze setup`", block)
+
+    def test_latency_is_not_part_of_the_sameness_key(self):
+        value = self.grouped()
+        # Different warm latency files for v0.15.0 and v0.15.1 do not split the group.
+        render.render_latency(
+            value, {"v0.15.0": latency_file(p50_ms=1.0), "v0.15.1": latency_file(p50_ms=2.0)}
+        )
+        self.assertEqual(
+            [render.group_label(g) for g in render.release_groups(value["releases"])],
+            ["v0.14.0", "v0.15.0 – v0.15.1"],
+        )
+
+    def test_a_smoke_file_is_refused(self):
+        data = latency_file()
+        data["smoke"] = True
+        with self.assertRaisesRegex(render.RenderError, "smoke"):
+            render.render_latency(self.grouped(), {"v0.15.1": data})
+
+    def test_a_non_numeric_latency_value_is_refused(self):
+        with self.assertRaises(render.RenderError):
+            render.render_latency(self.grouped(), {"v0.15.1": latency_file(p50_ms="n/a")})
+
+    def test_load_latency_reads_committed_files_and_skips_missing_ones(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        loaded = render.load_latency(render.BENCH_DIR, committed)
+        self.assertIn("v0.15.1", loaded)
+        self.assertNotIn("v0.14.0", loaded)
+
+    def test_committed_document_links_the_latency_section(self):
+        text = render.DEFAULT_DOC.read_text(encoding="utf-8")
+        self.assertNotIn("see the CHANGELOG for quiet-host latency", text)
+        self.assertIn("[Latency](#latency)", text)
 
 
 if __name__ == "__main__":

@@ -289,7 +289,7 @@ Two consequences worth stating plainly:
 
 **v0.15.1** — measured on the released tree.
 
-> `policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.1 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`, byte-identical to the v0.15.0 policy. Latency was measured on a shared host; see the CHANGELOG for quiet-host latency.
+> `policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.1 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`, byte-identical to the v0.15.0 policy. Latency was measured on a shared host; quiet-host latency is in [Latency](#latency).
 
 | Provenance | Value |
 | --- | --- |
@@ -416,6 +416,40 @@ the measured tree only in docs and version pins.
   holdout-side only: the A4 negative corpus did not move at all, in bytes,
   documents, or any of its eight categories. A gated run would put those 113
   bytes through the gold-noise ratchet exception above.
+
+---
+
+## Latency
+
+Quiet-host timing from the `latency-vX.Y.Z.json` file each release commits,
+produced by [`scripts/bench/cli-latency.py`](../../../scripts/bench/cli-latency.py).
+The `clean p95 ms` column in the tables above comes from the accuracy run on
+a loaded host, so read latency here. Rows follow the release groups of the
+history table; a group reads its newest release's file, and a release without
+one shows *not measured*. Latency never decides whether two releases share a
+row.
+
+<!-- BEGIN GENERATED: latency -->
+
+**In-process pipeline.** Warm is the per-document `clean` time once models are loaded; cold is the first document, model load included.
+
+| Release | Setup | Warm p50 ms ↓ | Warm p95 ms ↓ | Cold first document ms ↓ | Peak RSS MiB ↓ |
+| --- | --- | ---: | ---: | ---: | ---: |
+| v0.14.0 | not measured | — | — | — | — |
+| v0.15.0 – v0.15.1 | `gaze setup` without Nym (rules + NER) | 20.36 | 33.30 | 763.90 | 591.2 |
+| v0.15.0 – v0.15.1 | `gaze setup` (rules + NER + Nym) | 69.42 | 138.88 | 2126.90 | 1049.9 |
+
+**CLI.** One-shot starts `gaze clean` per document; the daemon (`gaze daemon`) loads once and serves every document after the first.
+
+| Release | Setup | One-shot p50 ms ↓ | One-shot p95 ms ↓ | Daemon warm p50 ms ↓ | Daemon warm p95 ms ↓ |
+| --- | --- | ---: | ---: | ---: | ---: |
+| v0.14.0 | not measured | — | — | — | — |
+| v0.15.0 – v0.15.1 | `gaze setup` without Nym (rules + NER) | 771.50 | 821.52 | 20.29 | 32.35 |
+| v0.15.0 – v0.15.1 | `gaze setup` (rules + NER + Nym) | 2140.15 | 2187.25 | 69.50 | 141.50 |
+
+- **v0.15.0 – v0.15.1:** [`latency-v0.15.1.json`](latency-v0.15.1.json), verdict `valid`, 30 documents, 1-minute load 1.77 at start. Host: Apple M5 Max, 18 cores, 64 GiB RAM, macOS-26.5-arm64-arm-64bit-Mach-O, ort 2.0.0-rc.12, Nym bundle 71f9023bcf86…, intra-op threads 1.
+
+<!-- END GENERATED: latency -->
 
 ---
 

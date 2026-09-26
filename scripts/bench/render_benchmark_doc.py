@@ -110,7 +110,7 @@ GOLD_GAP_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("Adjusted byte precision", "adjusted_precision", "rate"),
 )
 
-BLOCK_NAMES = ("current-release", "charts", "history")
+BLOCK_NAMES = ("current-release", "charts", "history", "latency")
 README_BLOCK_NAMES = ("readme-chart",)
 
 #: Plain-English chart labels for the arms a released row can carry. The table
@@ -1214,11 +1214,140 @@ def render_history_with_refusals(groups: Sequence[Sequence[Mapping[str, Any]]]) 
     return "\n".join(lines)
 
 
+# --------------------------------------------------------------------------
+# latency
+#
+# `cli-latency.py` writes one `latency-vX.Y.Z.json` per release on a quiet
+# host. It is separate evidence from the scorecard, whose `clean p95 ms` runs
+# on a loaded host, and it never feeds `result_key`: latency is host noise
+# for the question "did the results change".
+# --------------------------------------------------------------------------
+
+#: (label, pipeline and CLI key suffix) for the two setups the file measures.
+LATENCY_SETUPS: tuple[tuple[str, str], ...] = (
+    ("`gaze setup` without Nym (rules + NER)", "setup"),
+    ("`gaze setup` (rules + NER + Nym)", "setup_nym"),
+)
+
+
+def load_latency(directory: Path, history: Mapping[str, Any]) -> dict[str, Any]:
+    """Every committed `latency-<version>.json`; a release without one is absent."""
+    loaded: dict[str, Any] = {}
+    for entry in history["releases"]:
+        path = directory / f"latency-{entry['version']}.json"
+        if not path.exists():
+            continue
+        try:
+            loaded[entry["version"]] = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            raise RenderError(f"{path.name} is not valid JSON: {error}") from error
+    return loaded
+
+
+def _latency_number(data: Mapping[str, Any], path: Sequence[str], where: str) -> float:
+    value = _dig(data, path, where)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise RenderError(
+            f"{where}: {'.'.join(path)} must be a non-negative number, got {value!r}"
+        )
+    return float(value)
+
+
+def _latency_rows(
+    label: str, data: Mapping[str, Any] | None, version: str
+) -> tuple[list[str], list[str], str | None]:
+    """(pipeline rows, CLI rows, provenance line) for one displayed group."""
+    if data is None:
+        missing = "not measured"
+        return (
+            [f"| {label} | {missing} | — | — | — | — |"],
+            [f"| {label} | {missing} | — | — | — | — |"],
+            None,
+        )
+    where = f"latency-{version}.json"
+    if data.get("smoke") is not False:
+        raise RenderError(
+            f"{where}: a smoke run (or one without `smoke: false`) is never a "
+            "timing claim"
+        )
+    verdict = data.get("verdict")
+    hardware = data.get("hardware")
+    if not isinstance(verdict, str) or not isinstance(hardware, str):
+        raise RenderError(f"{where}: verdict and hardware must be strings")
+    pipeline, cli = [], []
+    for setup_label, key in LATENCY_SETUPS:
+        number = lambda *path: _latency_number(data, path, where)  # noqa: E731
+        pipeline.append(
+            f"| {label} | {setup_label} | "
+            f"{_fmt('ms', number('pipeline', key, 'warm_clean', 'p50_ms'))} | "
+            f"{_fmt('ms', number('pipeline', key, 'warm_clean', 'p95_ms'))} | "
+            f"{_fmt('ms', number('pipeline', key, 'cold_first_document_ms'))} | "
+            f"{number('pipeline', key, 'peak_rss_mib'):.1f} |"
+        )
+        cli.append(
+            f"| {label} | {setup_label} | "
+            f"{_fmt('ms', number('cli', f'oneshot_{key}', 'per_document', 'p50_ms'))} | "
+            f"{_fmt('ms', number('cli', f'oneshot_{key}', 'per_document', 'p95_ms'))} | "
+            f"{_fmt('ms', number('cli', f'daemon_{key}', 'warm', 'p50_ms'))} | "
+            f"{_fmt('ms', number('cli', f'daemon_{key}', 'warm', 'p95_ms'))} |"
+        )
+    documents = _require_nonneg_int(data.get("documents"), f"{where} documents")
+    load = _latency_number(data, ("host_before", "load_1m"), where)
+    note = (
+        f"- **{label}:** [`{where}`]({where}), verdict `{verdict}`, "
+        f"{documents} documents, 1-minute load {load:.2f} at start. Host: {hardware}."
+    )
+    return pipeline, cli, note
+
+
+def render_latency(
+    history: Mapping[str, Any], latency: Mapping[str, Any] | None = None
+) -> str:
+    """Quiet-host latency per displayed group, read from its newest release's file."""
+    if not history["releases"]:
+        return "> Latency renders once a release has been measured."
+    latency = latency or {}
+    pipeline = [
+        "| Release | Setup | Warm p50 ms ↓ | Warm p95 ms ↓ | "
+        "Cold first document ms ↓ | Peak RSS MiB ↓ |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+    ]
+    cli = [
+        "| Release | Setup | One-shot p50 ms ↓ | One-shot p95 ms ↓ | "
+        "Daemon warm p50 ms ↓ | Daemon warm p95 ms ↓ |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+    ]
+    notes = []
+    for group in displayed_groups(history):
+        version = group[-1]["version"]
+        rows = _latency_rows(group_label(group), latency.get(version), version)
+        pipeline.extend(rows[0])
+        cli.extend(rows[1])
+        if rows[2]:
+            notes.append(rows[2])
+    return "\n".join(
+        [
+            "**In-process pipeline.** Warm is the per-document `clean` time once "
+            "models are loaded; cold is the first document, model load included.",
+            "",
+            *pipeline,
+            "",
+            "**CLI.** One-shot starts `gaze clean` per document; the daemon "
+            "(`gaze daemon`) loads once and serves every document after the first.",
+            "",
+            *cli,
+            "",
+            *(notes or ["No release in this table has a latency file yet."]),
+        ]
+    )
+
+
 RENDERERS = {
     "current-release": render_current_release,
     "charts": render_charts,
     "history": render_history,
     "readme-chart": render_readme_chart,
+    "latency": render_latency,
 }
 
 
@@ -1234,8 +1363,13 @@ def apply_blocks(
     document: str,
     history: Mapping[str, Any],
     names: Sequence[str] = BLOCK_NAMES,
+    latency: Mapping[str, Any] | None = None,
 ) -> str:
-    """Replace each generated block in place, leaving all prose untouched."""
+    """Replace each generated block in place, leaving all prose untouched.
+
+    `latency` maps a version to its parsed latency file; only the latency
+    block reads it, and a version without one renders as not measured.
+    """
     for name in names:
         begin, end = begin_marker(name), end_marker(name)
         start = document.find(begin)
@@ -1244,7 +1378,11 @@ def apply_blocks(
             raise RenderError(f"document is missing the {name!r} generated block")
         if stop < start:
             raise RenderError(f"{name!r} markers are out of order")
-        body = RENDERERS[name](history)
+        body = (
+            render_latency(history, latency)
+            if name == "latency"
+            else RENDERERS[name](history)
+        )
         document = (
             document[: start + len(begin)] + "\n\n" + body + "\n\n" + document[stop:]
         )
@@ -1375,10 +1513,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         targets = [(args.doc, BLOCK_NAMES)]
         if readme is not None:
             targets.append((readme, README_BLOCK_NAMES))
+        latency = load_latency(args.history.parent, history)
         outputs = []
         for path, names in targets:
             original = path.read_text(encoding="utf-8")
-            outputs.append((path, original, apply_blocks(original, history, names)))
+            outputs.append(
+                (path, original, apply_blocks(original, history, names, latency))
+            )
 
         if args.check:
             drifted = [path for path, original, rendered in outputs if rendered != original]
