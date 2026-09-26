@@ -592,7 +592,7 @@ impl DaemonError {
                 CliError::SafetyNetFailure { variant } => variant,
                 CliError::SafetyNetConfigDetail(_) => "SafetyNetConfig",
                 CliError::PolicyConfigDetail(_) => "PolicyConfig",
-                CliError::PolicyOpen => "PolicyOpen",
+                CliError::PolicyOpen | CliError::PolicyOpenDetail(_) => "PolicyOpen",
                 CliError::Pipeline => "Pipeline",
                 CliError::Io => "Io",
                 _ => "CliError",

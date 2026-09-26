@@ -264,6 +264,9 @@ pub(crate) fn parse_cli_locales(
 pub(crate) fn map_policy_error(err: PolicyError) -> CliError {
     match err {
         PolicyError::Io(_) => CliError::PolicyOpen,
+        err @ PolicyError::ReadPermissionDenied { .. } => {
+            CliError::PolicyOpenDetail(err.to_string())
+        }
         PolicyError::UnsupportedRuleKind(_) => {
             CliError::PolicyConfigDetail("column rules not supported in CLI mode".to_string())
         }

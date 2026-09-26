@@ -232,6 +232,17 @@ pub enum PolicyError {
     TomlParse(#[source] toml::de::Error),
     #[error("failed to read policy file: {0}")]
     Io(#[source] std::io::Error),
+    /// The policy file exists but this account may not read it. `gaze setup` writes the policy
+    /// owner-only (0600), so a service account other than the one that ran setup hits this.
+    #[error(
+        "cannot read policy file `{}`: permission denied. `gaze setup` writes the policy owner-only (mode 0600). Grant the account that runs gaze read access, for example `chown <service-user> {}` or `chgrp <service-group> {} && chmod 0640 {}`",
+        path.display(), path.display(), path.display(), path.display()
+    )]
+    ReadPermissionDenied {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("unknown pii class: {0}")]
     UnknownClass(String),
     #[error("invalid regex for detector '{name}': {source}")]
@@ -295,7 +306,16 @@ pub enum PolicyError {
 
 impl Policy {
     pub fn load(path: &Path) -> Result<Policy, PolicyError> {
-        let raw = fs::read_to_string(path).map_err(PolicyError::Io)?;
+        let raw = fs::read_to_string(path).map_err(|source| {
+            if source.kind() == std::io::ErrorKind::PermissionDenied {
+                PolicyError::ReadPermissionDenied {
+                    path: path.to_path_buf(),
+                    source,
+                }
+            } else {
+                PolicyError::Io(source)
+            }
+        })?;
         let raw: RawPolicy = toml::from_str(&raw).map_err(PolicyError::TomlParse)?;
         raw.try_into()
     }
@@ -866,6 +886,41 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_policy_names_the_file_and_the_permission_fix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("gaze.toml");
+        fs::write(
+            &path,
+            "[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let err = Policy::load(&path).expect_err("an unreadable policy must fail closed");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+
+        assert!(
+            matches!(&err, PolicyError::ReadPermissionDenied { path: reported, .. } if reported == &path),
+            "{err:?}"
+        );
+        let message = err.to_string();
+        assert!(message.contains(&path.display().to_string()), "{message}");
+        assert!(message.contains("owner-only (mode 0600)"), "{message}");
+        assert!(message.contains("chown <service-user>"), "{message}");
+        assert!(message.contains("chmod 0640"), "{message}");
+    }
+
+    #[test]
+    fn missing_policy_stays_a_plain_io_error() {
+        let dir = tempdir().unwrap();
+        let err = Policy::load(&dir.path().join("absent.toml")).unwrap_err();
+        assert!(matches!(err, PolicyError::Io(_)), "{err:?}");
+    }
 
     #[test]
     fn omitted_bundled_key_keeps_core_but_explicit_empty_disables_it() {

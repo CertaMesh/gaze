@@ -1050,15 +1050,49 @@ behavior for session scope, session TTL, NER threshold/model/locale, active
 locale, bundled rulepacks, and rulepack paths. The audit found no runtime
 policy field missing a CLI flag.
 
+## Policy file permissions
+
+`gaze setup` writes the policy owner-only (mode `0600`): only the account that
+ran setup can read it. The policy holds no secrets, but it records local model
+paths, and nothing else needs to read it in a single-user install.
+
+If you run setup as one account and gaze as another (for example setup as an
+admin, then `gaze proxy` or `gaze daemon` as a service user), grant that account
+read access. Either hand the file over:
+
+```console
+chown <service-user> /etc/gaze/gaze.toml
+```
+
+or share it through a group:
+
+```console
+chgrp <service-group> /etc/gaze/gaze.toml
+chmod 0640 /etc/gaze/gaze.toml
+```
+
+Keep the policy unwritable by the service account. A policy it can rewrite lets
+that account turn detection off.
+
+Without read access, gaze refuses to start rather than running without the
+policy. `Policy::load` returns `PolicyError::ReadPermissionDenied { path, .. }`,
+and the CLI prints the `PolicyOpen` envelope with a `detail` that names the
+file and this fix:
+
+```console
+{"error":"PolicyOpen","exit":4,"detail":"cannot read policy file `/etc/gaze/gaze.toml`: permission denied. ..."}
+```
+
 ## Troubleshooting
 
 Each `PolicyError` variant maps to one exit code via `gaze clean`. The
-mapping lives at [`gaze-cli/src/main.rs::map_policy_error`](../../crates/gaze-cli/src/main.rs)
+mapping lives at [`gaze-cli/src/pipeline/build.rs::map_policy_error`](../../crates/gaze-cli/src/pipeline/build.rs)
 and is summarised here.
 
 | Symptom (stderr variant)                | `PolicyError`              | Exit | Common cause                                                                 |
 |-----------------------------------------|----------------------------|------|------------------------------------------------------------------------------|
-| `{"error":"PolicyOpen","exit":4}`       | `Io`                       | 4    | `--policy` path does not exist, is unreadable, or points at a directory.     |
+| `{"error":"PolicyOpen","exit":4}`       | `Io`                       | 4    | `--policy` path does not exist or points at a directory.                     |
+| `{"error":"PolicyOpen","exit":4,"detail":…}` | `ReadPermissionDenied` | 4    | The policy exists but this account may not read it. `gaze setup` writes it mode `0600`; see [Policy file permissions](#policy-file-permissions). |
 | `{"error":"PolicyConfig","exit":2}`     | `TomlParse`                | 2    | TOML syntax error, or an unknown key (`deny_unknown_fields` is on everywhere). Re-check field spelling. |
 | `{"error":"PolicyConfig","exit":2}`     | `UnknownClass(s)`          | 2    | A `class` value not in `{email, name, location, organization}` and not prefixed `custom:`. Or `"custom:"` with an empty name. |
 | `{"error":"PolicyConfig","exit":2}`     | `BadRegex { name, … }`     | 2    | `pattern` failed to compile. Watch for unsupported PCRE features (lookaround, backrefs). |

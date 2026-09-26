@@ -4614,6 +4614,44 @@ fn t17_missing_policy_path_emits_policy_open() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn t17b_unreadable_policy_names_the_file_and_the_permission_fix() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("gaze.toml");
+    fs::write(
+        &path,
+        "[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("clean")
+        .arg(format!("--policy={}", path.display()))
+        .write_stdin(b"Email alice@example.invalid now".to_vec())
+        .output()
+        .unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+
+    assert_eq!(out.status.code(), Some(4));
+    assert!(
+        out.stdout.is_empty(),
+        "an unreadable policy must fail closed"
+    );
+    let value = parse_stderr_variant(&out.stderr);
+    assert_eq!(value["error"], "PolicyOpen", "stderr={value}");
+    assert_eq!(value["exit"], 4, "stderr={value}");
+    let detail = value["detail"].as_str().expect("detail names the fix");
+    assert!(detail.contains(&path.display().to_string()), "{detail}");
+    assert!(detail.contains("owner-only (mode 0600)"), "{detail}");
+    assert!(detail.contains("chmod 0640"), "{detail}");
+    assert!(!detail.contains("alice@example.invalid"), "{detail}");
+}
+
 #[test]
 fn t18_malformed_policy_emits_policy_config() {
     let dir = tempdir().unwrap();

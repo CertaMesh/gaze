@@ -52,6 +52,12 @@ Setup prints the model card MIT licence, pinned upstream source and revision,
 the open [licence review](../explanation/safety-net/safety-nets.md#licence-review-open),
 and the `gaze setup --safety-net none` opt-out.
 
+Setup refuses to overwrite an existing policy without `--force`, and checks
+this before downloading anything. The written policy is owner-only (mode
+`0600`). If a different account runs gaze, grant it read access as described
+in [Policy file permissions](policy.md#policy-file-permissions); otherwise gaze
+fails closed with `PolicyOpen` and names the file.
+
 ## Safety-net selection
 
 `gaze clean` and `gaze daemon` read `[safety_net].backend` from their policy.
