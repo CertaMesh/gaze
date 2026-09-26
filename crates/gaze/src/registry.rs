@@ -333,6 +333,73 @@ mod tests {
     }
 
     #[test]
+    fn post_floor_recognizer_sees_raw_prior_candidates() {
+        struct NeedsPrior {
+            class: PiiClass,
+        }
+
+        impl Recognizer for NeedsPrior {
+            fn id(&self) -> &str {
+                "needs_prior"
+            }
+
+            fn supported_class(&self) -> &PiiClass {
+                &self.class
+            }
+
+            fn token_family(&self) -> &str {
+                "counter"
+            }
+
+            fn requires_prior_candidates(&self) -> bool {
+                true
+            }
+
+            fn detect(
+                &self,
+                _input: &str,
+                ctx: &DetectContext<'_>,
+            ) -> Result<Vec<Candidate>, DetectError> {
+                let prior = ctx.prior_candidates.expect("post-floor context");
+                assert_eq!(prior.len(), 1);
+                assert_eq!(prior[0].recognizer_id, "stub");
+                Ok(vec![Candidate::new(
+                    5..10,
+                    self.class.clone(),
+                    self.id(),
+                    1.0,
+                    0,
+                    None,
+                    self.token_family(),
+                    self.id(),
+                    ConflictTier::None,
+                    Vec::new(),
+                )])
+            }
+        }
+
+        let registry = RecognizerRegistry::builder()
+            .register(NeedsPrior {
+                class: PiiClass::Name,
+            })
+            .register(StubRecognizer {
+                class: PiiClass::Email,
+            })
+            .build();
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+        assert_eq!(registry.detect_all("1234567890", &ctx).unwrap().len(), 2);
+        assert_eq!(
+            registry
+                .detect_all_resolved("1234567890", &ctx)
+                .unwrap()
+                .0
+                .len(),
+            2
+        );
+    }
+
+    #[test]
     fn default_locale_is_global() {
         let recognizer = StubRecognizer {
             class: PiiClass::Email,
@@ -851,12 +918,37 @@ impl RecognizerRegistry {
         let locale_chain = LocaleChain::from(ctx.locale_chain);
         let mut candidates = Vec::new();
         for recognizer in self.entries.iter().filter(|recognizer| {
-            recognizer.locale_basis() == LocaleBasis::Format
-                || locale_chain.intersects(recognizer.locales())
+            !recognizer.requires_prior_candidates()
+                && (recognizer.locale_basis() == LocaleBasis::Format
+                    || locale_chain.intersects(recognizer.locales()))
         }) {
             candidates.extend(recognizer.detect(input, ctx)?);
         }
+        let post_candidates = self.detect_post_candidates(input, ctx, &candidates)?;
+        candidates.extend(post_candidates);
         Ok(candidates)
+    }
+
+    fn detect_post_candidates(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+        prior: &[Candidate],
+    ) -> Result<Vec<Candidate>, DetectError> {
+        let locale_chain = LocaleChain::from(ctx.locale_chain);
+        let mut prior_ctx =
+            DetectContext::new(ctx.locale_chain, ctx.dictionaries).with_prior_candidates(prior);
+        prior_ctx.source_spans = ctx.source_spans;
+        prior_ctx.degraded.set(ctx.degraded.get());
+        let mut added = Vec::new();
+        for recognizer in self.entries.iter().filter(|recognizer| {
+            recognizer.requires_prior_candidates()
+                && (recognizer.locale_basis() == LocaleBasis::Format
+                    || locale_chain.intersects(recognizer.locales()))
+        }) {
+            added.extend(recognizer.detect(input, &prior_ctx)?);
+        }
+        Ok(added)
     }
 
     pub fn detect_all_resolved(
@@ -929,6 +1021,7 @@ impl RecognizerRegistry {
                 .iter()
                 .filter(|recognizer| recognizer.supported_class() == &class)
                 .filter(|recognizer| recognizer.locale_basis() == LocaleBasis::Format)
+                .filter(|recognizer| !recognizer.requires_prior_candidates())
             {
                 candidates.extend(
                     recognizer
@@ -958,6 +1051,7 @@ impl RecognizerRegistry {
                     .enumerate()
                     .filter(|(_, recognizer)| recognizer.supported_class() == &class)
                     .filter(|(_, recognizer)| recognizer.locale_basis() == LocaleBasis::Document)
+                    .filter(|(_, recognizer)| !recognizer.requires_prior_candidates())
                     .filter(|(_, recognizer)| {
                         LocaleChain::from(locale_ctx.locale_chain).intersects(recognizer.locales())
                     })
@@ -995,6 +1089,13 @@ impl RecognizerRegistry {
                 candidates.extend(class_candidates);
             }
         }
+
+        let post_candidates = self.detect_post_candidates(input, ctx, &candidates)?;
+        candidates.extend(
+            post_candidates
+                .into_iter()
+                .filter(|candidate| candidate.score >= min_score(&candidate.class)),
+        );
 
         let (candidates, vetoed) =
             crate::validator_veto::apply(candidates, self, input, ctx.source_spans);

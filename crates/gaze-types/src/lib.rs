@@ -4044,6 +4044,11 @@ pub trait Recognizer: Send + Sync {
     fn detect_is_locale_invariant(&self) -> bool {
         false
     }
+
+    /// Run after ordinary recognizers when detection needs their raw candidates.
+    fn requires_prior_candidates(&self) -> bool {
+        false
+    }
 }
 
 /// Caller-visible recognizer detection failure.
@@ -4161,6 +4166,9 @@ pub struct DetectContext<'a> {
     /// see breaks normalization hid (a dropped ZERO WIDTH JOINER, fullwidth digits next to
     /// ASCII); `card.structural` does. `None` when the input is the source text itself.
     pub source_spans: Option<&'a [(usize, usize)]>,
+    /// Raw candidates found by ordinary recognizers, available only to a recognizer that
+    /// requests the post-floor pass. They have not passed validator veto or conflict resolution.
+    pub prior_candidates: Option<&'a [Candidate]>,
 }
 
 impl<'a> DetectContext<'a> {
@@ -4172,12 +4180,18 @@ impl<'a> DetectContext<'a> {
             fields: &(),
             degraded: Cell::new(false),
             source_spans: None,
+            prior_candidates: None,
         }
     }
 
     /// Records the source span of every input byte; see [`DetectContext::source_spans`].
     pub fn with_source_spans(mut self, source_spans: &'a [(usize, usize)]) -> Self {
         self.source_spans = Some(source_spans);
+        self
+    }
+
+    pub fn with_prior_candidates(mut self, candidates: &'a [Candidate]) -> Self {
+        self.prior_candidates = Some(candidates);
         self
     }
 }
