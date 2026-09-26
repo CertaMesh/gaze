@@ -52,6 +52,12 @@ The `clean_for_bench` producer derives a repeatable session prefix from each
 fixture ID by default. Set `GAZE_BENCH_RANDOM_SESSION=1` when measuring the
 effect of fresh random prefixes; record that setting with the scorecard.
 
+When the generated adjacency layers change, measure the displayed past releases
+with `agentic_layers.py measure`, then pass their scorecard files to
+`render_agentic_adjacency_doc.py --record <file>` (repeat `--record` for each
+release). That command writes the committed measurement ledger and its table
+in `docs/reference/benchmarks/README.md`; `--check` verifies both in CI.
+
 Planning estimates on a modern laptop are roughly 2–10 minutes for the default
 256-document quick profile and 30–120 minutes per measured full repetition.
 Thermals, CPU runtime, and filesystem cache state can move those estimates

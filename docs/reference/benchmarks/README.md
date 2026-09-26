@@ -1003,6 +1003,17 @@ Two options exist for v0.14.0 only, and the output records both:
 
 Both options are off by default.
 
+### Measured adjacency layer history
+
+The release rows below use generator v4's test partition and the setup policy.
+Record the three past-release `agentic_layers.py measure` outputs with
+`render_agentic_adjacency_doc.py --record`, then render this table from its
+committed ledger. Do not edit the rows by hand.
+
+<!-- BEGIN GENERATED: agentic-adjacency-v4 -->
+
+<!-- END GENERATED: agentic-adjacency-v4 -->
+
 ### Hardware spec template
 
 Fill this out for every published or PR-local benchmark run; the `--machine`
