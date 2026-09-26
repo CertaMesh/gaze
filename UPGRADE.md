@@ -590,7 +590,7 @@ permissions on Unix. Missing artifacts fail closed with typed
 `CliError::SafetyNetArtifactMissing` (exit `2`) before the subprocess
 spawns.
 
-Setup walkthrough: removed together with the backend; see the [removal section](#pending-unreleased-the-kiji-distilbert-safety-net-is-removed).
+Setup walkthrough: removed together with the backend; see the [removal section](#the-kiji-distilbert-safety-net-is-removed).
 
 **Action required:** none. The backend is opt-in. If you do not select
 it, your current SafetyNet configuration (OpenAI Privacy Filter or
