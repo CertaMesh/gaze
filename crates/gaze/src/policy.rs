@@ -232,6 +232,15 @@ pub enum PolicyError {
     TomlParse(#[source] toml::de::Error),
     #[error("failed to read policy file: {0}")]
     Io(#[source] std::io::Error),
+    /// A policy input (the policy itself or a `terms_file`) exists but this account may not read
+    /// it. `gaze setup` writes the policy owner-only (0600), so a service account other than the
+    /// one that ran setup hits this.
+    #[error("{}", permission_denied_message(.path))]
+    ReadPermissionDenied {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("unknown pii class: {0}")]
     UnknownClass(String),
     #[error("invalid regex for detector '{name}': {source}")]
@@ -295,7 +304,7 @@ pub enum PolicyError {
 
 impl Policy {
     pub fn load(path: &Path) -> Result<Policy, PolicyError> {
-        let raw = fs::read_to_string(path).map_err(PolicyError::Io)?;
+        let raw = read_policy_input(path).map_err(|err| err.into_policy_error(path))?;
         let raw: RawPolicy = toml::from_str(&raw).map_err(PolicyError::TomlParse)?;
         raw.try_into()
     }
@@ -676,7 +685,7 @@ fn parse_dictionary_detector(
     let mut terms = raw.terms;
     if let Some(path) = raw.terms_file {
         let path = expand_home(path)?;
-        let file = fs::read_to_string(&path).map_err(PolicyError::Io)?;
+        let file = read_policy_input(&path).map_err(|err| err.into_policy_error(&path))?;
         terms.extend(
             file.lines()
                 .map(str::trim)
@@ -842,6 +851,49 @@ fn expand_home(path: String) -> Result<PathBuf, PolicyError> {
     }
 }
 
+/// Why a policy-side input file (policy, `terms_file`, rulepack path) could not be read.
+/// Permission denial is split off so each caller can name the file and the fix.
+pub(crate) enum PolicyInputError {
+    PermissionDenied(std::io::Error),
+    Io(std::io::Error),
+}
+
+impl PolicyInputError {
+    fn into_policy_error(self, path: &Path) -> PolicyError {
+        match self {
+            Self::PermissionDenied(source) => PolicyError::ReadPermissionDenied {
+                path: path.to_path_buf(),
+                source,
+            },
+            Self::Io(source) => PolicyError::Io(source),
+        }
+    }
+}
+
+pub(crate) fn read_policy_input(path: &Path) -> Result<String, PolicyInputError> {
+    fs::read_to_string(path).map_err(|source| {
+        if source.kind() == std::io::ErrorKind::PermissionDenied {
+            PolicyInputError::PermissionDenied(source)
+        } else {
+            PolicyInputError::Io(source)
+        }
+    })
+}
+
+/// The shared permission-denied text for policy inputs and rulepack paths.
+pub(crate) fn permission_denied_message(path: &Path) -> String {
+    let quoted = shell_quote(&path.display().to_string());
+    format!(
+        "cannot read `{}`: permission denied. `gaze setup` writes the policy owner-only (mode 0600). Grant the account that runs gaze read access, for example `chown <service-user> {quoted}` or `chgrp <service-group> {quoted} && chmod 0640 {quoted}`",
+        path.display()
+    )
+}
+
+/// POSIX single-quote quoting, so a suggested command survives spaces and quotes in the path.
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
 fn parse_class(input: &str) -> Result<PiiClass, PolicyError> {
     PiiClass::from_policy_name(input).ok_or_else(|| PolicyError::UnknownClass(input.to_string()))
 }
@@ -866,6 +918,125 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    /// Root reads a mode-000 file, so a permission-denied test proves nothing there.
+    #[cfg(unix)]
+    fn running_as_root() -> bool {
+        // SAFETY: geteuid has no preconditions and cannot fail.
+        unsafe { libc::geteuid() == 0 }
+    }
+
+    #[cfg(unix)]
+    fn write_unreadable(path: &Path, contents: &str) {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::write(path, contents).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
+    }
+
+    #[cfg(unix)]
+    fn assert_names_file_and_fix(message: &str, path: &Path) {
+        let quoted = format!("'{}'", path.display());
+        assert!(
+            message.contains(&format!("`{}`", path.display())),
+            "{message}"
+        );
+        assert!(message.contains("owner-only (mode 0600)"), "{message}");
+        assert!(
+            message.contains(&format!("chown <service-user> {quoted}")),
+            "{message}"
+        );
+        assert!(
+            message.contains(&format!("chmod 0640 {quoted}")),
+            "{message}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_policy_names_the_file_and_the_permission_fix() {
+        if running_as_root() {
+            return;
+        }
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("gaze.toml");
+        write_unreadable(
+            &path,
+            "[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n",
+        );
+
+        let err = Policy::load(&path).expect_err("an unreadable policy must fail closed");
+
+        assert!(
+            matches!(&err, PolicyError::ReadPermissionDenied { path: reported, .. } if reported == &path),
+            "{err:?}"
+        );
+        assert_names_file_and_fix(&err.to_string(), &path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_terms_file_names_the_file_and_the_permission_fix() {
+        if running_as_root() {
+            return;
+        }
+        let dir = tempdir().unwrap();
+        let terms = dir.path().join("terms.txt");
+        write_unreadable(&terms, "Song A\n");
+        let path = dir.path().join("gaze.toml");
+        fs::write(
+            &path,
+            format!(
+                "[session]\nscope = \"ephemeral\"\n\n[[policy.custom_recognizers]]\nkind = \"dictionary\"\nname = \"songs\"\nclass = \"custom:song\"\nterms_file = \"{}\"\n\n[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n",
+                terms.display()
+            ),
+        )
+        .unwrap();
+
+        let err = Policy::load(&path).expect_err("an unreadable terms_file must fail closed");
+
+        assert!(
+            matches!(&err, PolicyError::ReadPermissionDenied { path: reported, .. } if reported == &terms),
+            "{err:?}"
+        );
+        assert_names_file_and_fix(&err.to_string(), &terms);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_rulepack_path_names_the_file_and_the_permission_fix() {
+        if running_as_root() {
+            return;
+        }
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("tenant-rulepack.toml");
+        write_unreadable(&path, "schema_version = \"1\"\n");
+
+        let err = crate::Rulepack::load(crate::RulepackSource::Path(path.clone()))
+            .expect_err("an unreadable rulepack must fail closed");
+
+        assert!(
+            matches!(&err, crate::RulepackError::ReadPermissionDenied { path: reported, .. } if reported == &path),
+            "{err:?}"
+        );
+        assert_names_file_and_fix(&err.to_string(), &path);
+    }
+
+    #[test]
+    fn suggested_commands_quote_the_path() {
+        let message = permission_denied_message(Path::new("/srv/it's here/gaze.toml"));
+        assert!(
+            message.contains("chown <service-user> '/srv/it'\\''s here/gaze.toml'"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn missing_policy_stays_a_plain_io_error() {
+        let dir = tempdir().unwrap();
+        let err = Policy::load(&dir.path().join("absent.toml")).unwrap_err();
+        assert!(matches!(err, PolicyError::Io(_)), "{err:?}");
+    }
 
     #[test]
     fn omitted_bundled_key_keeps_core_but_explicit_empty_disables_it() {

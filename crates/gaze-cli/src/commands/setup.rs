@@ -75,8 +75,11 @@ struct ResolvedSetupSafetyNet {
 }
 
 fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummary, CliError> {
-    let resolved_safety_net = resolve_safety_net(args.safety_net, args.non_interactive, opf_setup)?;
+    // Resolve and check the policy path before any model download, so an existing policy
+    // without --force fails fast instead of after fetching the NER and Nym bundles.
     let policy_path = resolve_policy_path(args.policy_out, args.non_interactive)?;
+    ensure_policy_writable(&policy_path, args.force)?;
+    let resolved_safety_net = resolve_safety_net(args.safety_net, args.non_interactive, opf_setup)?;
 
     let (model_dir, model_status) = install_ner_model(args.model_dir)?;
 
@@ -338,18 +341,23 @@ fn reject_symlink(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn write_policy(
-    policy_path: &Path,
-    model_dir: &Path,
-    nym_model_dir: Option<&Path>,
-    force: bool,
-) -> Result<tempfile::NamedTempFile, CliError> {
+fn ensure_policy_writable(policy_path: &Path, force: bool) -> Result<(), CliError> {
     if policy_path.exists() && !force {
         return Err(setup_error(format!(
             "policy `{}` already exists; pass --force to overwrite",
             policy_path.display()
         )));
     }
+    Ok(())
+}
+
+fn write_policy(
+    policy_path: &Path,
+    model_dir: &Path,
+    nym_model_dir: Option<&Path>,
+    force: bool,
+) -> Result<tempfile::NamedTempFile, CliError> {
+    ensure_policy_writable(policy_path, force)?;
     if let Some(parent) = policy_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             setup_error(format!(
@@ -371,6 +379,22 @@ fn write_policy(
             policy_path.display()
         ))
     })?;
+    // The published policy is owner-only (0600) by contract, not by tempfile's default: it
+    // records local model paths, and docs/reference/policy.md tells a separate service account
+    // how to get read access.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        staged
+            .as_file()
+            .set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|err| {
+                setup_error(format!(
+                    "cannot set owner-only mode on staged policy for `{}`: {err}",
+                    policy_path.display()
+                ))
+            })?;
+    }
     staged.write_all(policy.as_bytes()).map_err(|err| {
         setup_error(format!(
             "cannot write staged policy for `{}`: {err}",
@@ -1140,6 +1164,54 @@ mod tests {
         assert_eq!(clean, "doctor passed");
         assert!(fs::read_to_string(&policy_path).unwrap().contains("[ner]"));
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn published_policy_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("ner");
+        fs::create_dir_all(&model_dir).unwrap();
+        let policy_path = dir.path().join("gaze.toml");
+
+        write_verified_policy(&policy_path, &model_dir, None, false, |_| {
+            Ok("doctor passed".to_string())
+        })
+        .unwrap();
+
+        let mode = fs::metadata(&policy_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "published policy mode {mode:o}");
+    }
+
+    #[test]
+    fn existing_policy_without_force_fails_before_any_model_install() {
+        let dir = tempdir().unwrap();
+        let policy_path = dir.path().join("gaze.toml");
+        fs::write(&policy_path, b"old policy\n").unwrap();
+        // Neither model directory exists: reaching an install step would try a download and
+        // fail with a different error, or leave these directories behind.
+        let model_dir = dir.path().join("ner-not-installed");
+
+        let err = run_with_opf_setup(
+            Args {
+                safety_net: Some(SetupSafetyNet::None),
+                policy_out: Some(policy_path.clone()),
+                model_dir: Some(model_dir.clone()),
+                non_interactive: true,
+                force: false,
+            },
+            default_opf_setup(),
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(&err, CliError::SetupDetail(detail) if detail.contains("already exists; pass --force")),
+            "{err:?}"
+        );
+        assert!(!model_dir.exists());
+        assert_eq!(fs::read(&policy_path).unwrap(), b"old policy\n");
     }
 
     #[test]

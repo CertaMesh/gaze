@@ -308,7 +308,7 @@ impl FormatPolicy {
 /// Reviewed protocol, session, routing, and coverage declarations for an adapter.
 ///
 /// Fields are private so downstream code cannot assemble an unreviewed contract.
-/// Existing adapters obtain [`Self::legacy`] through the default trait method.
+/// Every adapter names its contract in [`ProviderAdapter::contract`]; there is no default.
 ///
 /// ```compile_fail
 /// use gaze_proxy::{AdapterContract, ProtocolContract};
@@ -414,12 +414,57 @@ impl<'a> AdapterContract<'a> {
     }
 }
 
+/// A provider the proxy forwards to.
+///
+/// Every adapter must declare its [`AdapterContract`]; the trait has no default, so an adapter
+/// that says nothing about its coverage does not compile:
+///
+/// ```compile_fail,E0046
+/// use gaze_proxy::{PiiSurface, ProviderAdapter, SseEvent};
+/// use http::Method;
+/// use serde_json::Value;
+/// use url::Url;
+///
+/// struct Silent(Url);
+///
+/// #[async_trait::async_trait]
+/// impl ProviderAdapter for Silent {
+///     fn name(&self) -> &'static str { "silent" }
+///     fn matches_path(&self, _: &Method, _: &str) -> bool { false }
+///     fn upstream_base(&self) -> &Url { &self.0 }
+///     fn request_pii_surfaces<'a>(&self, _: &'a mut Value) -> Vec<PiiSurface<'a>> { Vec::new() }
+///     fn response_pii_surfaces<'a>(&self, _: &'a mut Value) -> Vec<PiiSurface<'a>> { Vec::new() }
+///     fn sse_event_pii_surfaces<'a>(&self, _: &'a mut SseEvent) -> Vec<PiiSurface<'a>> { Vec::new() }
+/// }
+/// ```
+///
+/// Declaring [`AdapterContract::legacy`] opts into the string-surface path, where the proxy
+/// re-scans the whole outbound request body and refuses it if anything is left unprotected:
+///
+/// ```
+/// use gaze_proxy::{AdapterContract, PiiSurface, ProviderAdapter, SseEvent};
+/// use http::Method;
+/// use serde_json::Value;
+/// use url::Url;
+///
+/// struct Declared(Url);
+///
+/// #[async_trait::async_trait]
+/// impl ProviderAdapter for Declared {
+///     fn contract(&self) -> AdapterContract<'_> { AdapterContract::legacy() }
+///     fn name(&self) -> &'static str { "declared" }
+///     fn matches_path(&self, _: &Method, _: &str) -> bool { false }
+///     fn upstream_base(&self) -> &Url { &self.0 }
+///     fn request_pii_surfaces<'a>(&self, _: &'a mut Value) -> Vec<PiiSurface<'a>> { Vec::new() }
+///     fn response_pii_surfaces<'a>(&self, _: &'a mut Value) -> Vec<PiiSurface<'a>> { Vec::new() }
+///     fn sse_event_pii_surfaces<'a>(&self, _: &'a mut SseEvent) -> Vec<PiiSurface<'a>> { Vec::new() }
+/// }
+/// ```
 #[async_trait::async_trait]
 pub trait ProviderAdapter: Send + Sync + 'static {
-    /// Declares protocol and safety behavior while preserving old implementations.
-    fn contract(&self) -> AdapterContract<'_> {
-        AdapterContract::legacy()
-    }
+    /// Declares protocol, session, routing and coverage behavior. Required: a default here
+    /// would make every adapter that forgets it silently take the legacy path.
+    fn contract(&self) -> AdapterContract<'_>;
 
     fn name(&self) -> &'static str;
     fn matches_path(&self, method: &Method, path: &str) -> bool;

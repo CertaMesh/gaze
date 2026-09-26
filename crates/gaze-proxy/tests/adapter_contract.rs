@@ -21,6 +21,10 @@ struct OldStyleAdapter {
 
 #[async_trait::async_trait]
 impl ProviderAdapter for OldStyleAdapter {
+    fn contract(&self) -> AdapterContract<'_> {
+        AdapterContract::legacy()
+    }
+
     fn name(&self) -> &'static str {
         "old-style"
     }
@@ -65,7 +69,7 @@ fn assert_legacy(contract: AdapterContract<'_>) {
 }
 
 #[test]
-fn old_style_downstream_adapter_stays_object_safe_and_defaults_legacy() {
+fn downstream_adapter_declaring_legacy_stays_object_safe() {
     let adapter: Arc<dyn ProviderAdapter> = Arc::new(OldStyleAdapter {
         upstream: Url::parse("https://example.invalid").unwrap(),
     });
