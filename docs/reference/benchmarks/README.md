@@ -722,7 +722,11 @@ false-positive bytes:
 family. A test fails when a context-free-only cell has neither a counterweight
 nor a written exemption, or when a counterweight lacks one of its gold's
 display shapes. IBAN twins are exempt: an IBAN shape that fails mod-97 has no
-common benign use.
+common benign use. To check the counterweight end to end, append
+[`mutant-bare-nine-digits.toml`](../../../scripts/bench/fixtures/agentic/mutant-bare-nine-digits.toml)
+to the policy and run `agentic_layers.py measure`. The deliberately over-broad
+rule must lower layer A's leak and raise layer D's false-positive bytes on
+`ref_number_9`, where the unmodified policy has none.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split
