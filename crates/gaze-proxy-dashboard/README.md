@@ -2,9 +2,12 @@
 
 gaze-proxy-dashboard is the provider-neutral, memory-only inspection dashboard runtime for Gaze.
 It is deliberately absent by default. An adopter must explicitly construct the dashboard child,
-complete acknowledged local pairing, and create the pending consumer. Activation currently fails
-closed because `ActivatedInspectionConsumerV1` exposes no unforgeable registration identity. The
-remaining fix belongs in `gaze-inspection`; descriptor equality and caller assertions are not an
+complete acknowledged local pairing, and create the pending consumer. `ActivatedInspectionConsumerV1`
+itself exposes no registration identity, so identity comes from `gaze-inspection`: the pending
+consumer is created together with a one-shot `InspectionConsumerBindingV1`, which the dashboard
+retains. `PendingDashboardActivation::commit` binds the activated consumer against that binding
+before any socket, writer, runtime, or admission side effect; a consumer from a different
+registration fails with `ActivationFailed`. Descriptor equality and caller assertions are not an
 acceptable substitute.
 
 Among Gaze crates, the normal dependency closure is exactly:
@@ -39,17 +42,12 @@ outbound client, analytics, telemetry, or a crash-dump handler.
   `Child` plus `UnixStream` assembly API.
 - Inspection EOF, partial framing, oversize framing, or decode failure purges child state, stops
   HTTP/control service, exits the child, and causes parent disable/reap.
-- Once the identity blocker is resolved, purge ordering is fixed: close Track B admission, drain ingress, begin the registration-bound
+- Purge ordering is fixed: close Track B admission, drain ingress, begin the registration-bound
   purge, zeroize child store/auth/reveal/response state while holding the matching guard, then
   complete the guard and reopen only for its returned epoch.
 - Fatal disable is one-way and always terminates and reaps the sensitive child.
 
 ## Current typed limitations
-
-Dashboard activation is intentionally unavailable on the current dependency manifest. A sound
-commit requires authority to add an opaque registration receipt/match operation in
-`crates/gaze-inspection/src/lib.rs` and its UI/compile-fail tests. The dashboard's `commit` method
-disables the supplied handle, tears down the child, and returns `ActivationFailed` until then.
 
 The queue snapshot field is not measured and must be presented as unavailable, never as zero,
 empty, healthy, or no traffic. ProjectionFailedClosed is intentionally coarse and must not be
