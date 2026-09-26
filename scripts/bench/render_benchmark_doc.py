@@ -390,6 +390,8 @@ def _validate_contract_results(entry: Mapping[str, Any]) -> None:
                 raise RenderError(f"{where}/{arm}: missing fields {missing}")
         if shipped_default_arm(entry) not in arms:
             raise RenderError(f"{where}: the shipped default arm was not measured")
+        if "measurement" in result:
+            _validate_measurement(result["measurement"], f"{where} measurement")
 
 
 def contract_scorecard_name(version: str, contract_version: int) -> str:
@@ -441,12 +443,41 @@ def contract_result_from_scorecard(
                 f"{parent['version']}: contract result {label} {value!r} differs "
                 f"from the release row's {expected!r}"
             )
-    return {
+    result = {
         "scored_label_contract": contract,
         "scorecard": scorecard_filename,
         "scorecard_sha256": scorecard_sha256,
         "arms": projected["arms"],
     }
+    provenance = scorecard.get("runner_provenance") or {}
+    if provenance.get("entry_point") == PAST_RELEASE_ENTRY_POINT:
+        # A past release scored by today's harness: the row must say so.
+        result["measurement"] = {
+            "method": "past release, today's harness",
+            "entry_point": PAST_RELEASE_ENTRY_POINT,
+            "harness_revision": provenance.get("harness_revision"),
+            "binary_sha256": provenance.get("binary_sha256"),
+            "manifest_replacing_actions": provenance.get("manifest_replacing_actions"),
+        }
+        _validate_measurement(result["measurement"], f"{parent['version']}: measurement")
+    return result
+
+
+PAST_RELEASE_ENTRY_POINT = "scripts/bench/rescore_past_release.py"
+
+
+def _validate_measurement(value: Any, where: str) -> None:
+    if not isinstance(value, Mapping):
+        raise RenderError(f"{where} must be an object")
+    revision = value.get("harness_revision")
+    if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise RenderError(f"{where}.harness_revision must be a full commit sha")
+    _require_hex64(value.get("binary_sha256"), f"{where}.binary_sha256")
+    actions = value.get("manifest_replacing_actions")
+    if not isinstance(actions, list) or not actions or not all(
+        a in ("tokenize", "redact") for a in actions
+    ):
+        raise RenderError(f"{where}.manifest_replacing_actions must list tokenize/redact")
 
 
 def _validate_validator_recall(value: Any, version: str) -> None:
@@ -1539,7 +1570,30 @@ def render_history_by_contract(
             row += cells_by_version[version][index]
         row += [_fmt("pct", arm["restore_exact_rate"]), _fmt("ms", arm["clean_ms_p95"])]
         lines.append("| " + " | ".join(row) + " |")
+    notes = [
+        _measurement_note(member, result)
+        for group in groups
+        for member in group
+        for result in member.get("contract_results", ())
+        if "measurement" in result
+    ]
+    if notes:
+        lines += ["", *notes]
     return "\n".join(lines)
+
+
+def _measurement_note(entry: Mapping[str, Any], result: Mapping[str, Any]) -> str:
+    measurement = result["measurement"]
+    version = entry["version"]
+    actions = " and ".join(f"`{a}`" for a in measurement["manifest_replacing_actions"])
+    return (
+        f"- **{version}, scored labels v{result['scored_label_contract']['version']}:** "
+        f"{version}'s own `clean_for_bench` (sha256 `{measurement['binary_sha256'][:12]}…`, "
+        f"built from `{entry['commit'][:8]}`) scored by today's harness "
+        f"([`rescore_past_release.py`](../../../{PAST_RELEASE_ENTRY_POINT}) at "
+        f"`{measurement['harness_revision'][:8]}`); trace/manifest agreement checked "
+        f"with {actions} as manifest actions, the rule that release was built with."
+    )
 
 
 # --------------------------------------------------------------------------

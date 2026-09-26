@@ -1854,6 +1854,44 @@ class HeadlineContractTest(unittest.TestCase):
         with self.assertRaisesRegex(render.RenderError, "must be named"):
             releases(misnamed)
 
+    def past_release(self) -> dict:
+        row = release("v0.14.0", 25179)
+        card = v2_scorecard(row, leaked=22000)
+        card["runner_provenance"].update(
+            entry_point=render.PAST_RELEASE_ENTRY_POINT,
+            harness_revision="c" * 40,
+            binary_sha256="d" * 64,
+            manifest_replacing_actions=["tokenize"],
+        )
+        row["contract_results"] = [
+            render.contract_result_from_scorecard(
+                card,
+                row,
+                scorecard_filename=render.contract_scorecard_name("v0.14.0", 2),
+                scorecard_sha256="4" * 64,
+            )
+        ]
+        return row
+
+    def test_a_past_release_result_records_and_shows_how_it_was_measured(self):
+        row = self.past_release()
+        measurement = row["contract_results"][0]["measurement"]
+        self.assertEqual(measurement["harness_revision"], "c" * 40)
+        self.assertEqual(measurement["manifest_replacing_actions"], ["tokenize"])
+        value = releases(row, with_v2(release("v0.15.0")))
+        block = render.render_history(value)
+        self.assertIn("- **v0.14.0, scored labels v2:** v0.14.0's own `clean_for_bench`", block)
+        self.assertIn("at `cccccccc`", block)
+        self.assertIn("with `tokenize` as manifest actions", block)
+        # A result from the ordinary runner carries no measurement note.
+        self.assertNotIn("v0.15.0, scored labels v2", block)
+
+    def test_a_malformed_measurement_record_is_refused(self):
+        row = self.past_release()
+        row["contract_results"][0]["measurement"]["harness_revision"] = "HEAD"
+        with self.assertRaisesRegex(render.RenderError, "harness_revision"):
+            releases(row)
+
     def test_cli_appends_a_contract_result_and_requires_its_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
