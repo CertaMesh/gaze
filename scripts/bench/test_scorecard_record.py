@@ -262,6 +262,13 @@ class RecordReplayTests(unittest.TestCase):
             del broken["layers"]["gold_validity"]
             with self.assertRaisesRegex(agentic.LayerError, "gold-validity"):
                 agentic.gate(card, broken)
+            implicit_v1 = copy.deepcopy(replayed)
+            del implicit_v1["scoring"]["scored_label_contract"]
+            self.assertIn(agentic.gate(card, implicit_v1)["verdict"], {"pass", "fail"})
+            broken_identity = copy.deepcopy(replayed)
+            del broken_identity["scoring"]["scored_label_contract"]["id"]
+            with self.assertRaisesRegex(agentic.LayerError, "kiji_contract"):
+                agentic.gate(card, broken_identity)
 
 
 if __name__ == "__main__":
