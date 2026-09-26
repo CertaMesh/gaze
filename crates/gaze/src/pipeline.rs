@@ -1007,13 +1007,35 @@ impl Pipeline {
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
+        let mut whole = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
+        // House numbers are licensed by the final street spans, so they can only be
+        // found once resolution has settled; the pool is then resolved once more with
+        // them added. Every other candidate is unchanged, and a number overlapping an
+        // existing selection is never added.
+        let house_numbers = street_corroborated_house_numbers(
+            &whole.evidence,
+            &normalized.text,
+            &self.registry,
+            locale_chain,
+        );
+        if !house_numbers.is_empty() {
+            let mut originals = whole.evidence.originals;
+            originals.extend(house_numbers);
+            whole = recovery::plan(
+                crate::resolver::CandidatePool::new(originals),
+                &self.registry,
+                &normalized,
+                text,
+                locale_chain,
+            )?;
+        }
         let recovery::WholePlan {
             evidence,
             order,
             primary: resolved,
             recovered,
             ..
-        } = recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?;
+        } = whole;
         let residual_plan = if self.residual_coverage {
             let by_span = resolved
                 .iter()
@@ -4371,6 +4393,7 @@ pub struct PipelineBuilder {
     recognizers: Vec<Arc<dyn Recognizer>>,
     collision_memberships: Vec<(String, CollisionMembership)>,
     anchor_cue_bundles: Vec<(crate::LocaleTag, String, Vec<String>, Option<u16>)>,
+    street_lexicons: Vec<(crate::LocaleTag, crate::StreetNumberOrder, Vec<String>)>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     #[cfg(feature = "bundled-recognizers")]
@@ -4417,6 +4440,19 @@ impl PipelineBuilder {
     ) -> Self {
         self.anchor_cue_bundles
             .push((locale, anchor_key.into(), names, window_chars));
+        self
+    }
+
+    /// Registers the street words of `locale` that let a NER location span
+    /// license the house number beside it. Without a lexicon no house number
+    /// is ever tokenized by this path.
+    pub fn register_street_lexicon(
+        mut self,
+        locale: crate::LocaleTag,
+        order: crate::StreetNumberOrder,
+        names: Vec<String>,
+    ) -> Self {
+        self.street_lexicons.push((locale, order, names));
         self
     }
 
@@ -4491,6 +4527,9 @@ impl PipelineBuilder {
         }
         for (locale, anchor_key, names, window_chars) in self.anchor_cue_bundles {
             registry = registry.register_anchor_cue_bundle(locale, anchor_key, names, window_chars);
+        }
+        for (locale, order, names) in self.street_lexicons {
+            registry = registry.register_street_lexicon(locale, order, names);
         }
         Ok(Pipeline {
             registry: Arc::new(registry.build()),
@@ -4964,6 +5003,77 @@ fn translate_vetoed_candidate(
             reason: vetoed.reason,
         }
     })
+}
+
+/// House-number candidates licensed by winning NER location spans (todo 3670).
+///
+/// Reads the settled selections in normalized coordinates. A selection licenses
+/// a number only when a NER `Location` candidate is one of its members. Members
+/// are the winner's own evidence, never the losers it beat, so a street that
+/// lost to or sits inside another class licenses nothing. The number becomes its
+/// own candidate with its own recognizer id, tracing `ner` as its evidence.
+fn street_corroborated_house_numbers(
+    evidence: &occurrence::Segment,
+    text: &str,
+    registry: &RecognizerRegistry,
+    locale_chain: &[crate::LocaleTag],
+) -> Vec<Candidate> {
+    const NER_RECOGNIZER_ID: &str = "ner";
+    let lexicon = registry.street_lexicon();
+    if lexicon.is_empty() {
+        return Vec::new();
+    }
+    let selection_span = |selection: &occurrence::Selection| {
+        let spans = selection
+            .members
+            .iter()
+            .map(|&id| &evidence.originals[id].span);
+        let start = spans.clone().map(|span| span.start).min()?;
+        let end = spans.map(|span| span.end).max()?;
+        Some(start..end)
+    };
+    let claimed = evidence
+        .selections
+        .iter()
+        .filter_map(selection_span)
+        .collect::<Vec<_>>();
+    let mut found: Vec<Candidate> = Vec::new();
+    for selection in &evidence.selections {
+        let Some(ner) = selection
+            .members
+            .iter()
+            .map(|&id| &evidence.originals[id])
+            .find(|c| c.recognizer_id == NER_RECOGNIZER_ID && c.class == crate::PiiClass::Location)
+        else {
+            continue;
+        };
+        let Some(street) = selection_span(selection) else {
+            continue;
+        };
+        for number in lexicon.house_numbers(text, street, locale_chain) {
+            let overlaps = |span: &Range<usize>| span.start < number.end && number.start < span.end;
+            if claimed.iter().any(overlaps) || found.iter().any(|c| overlaps(&c.span)) {
+                continue;
+            }
+            let mut candidate = Candidate::new(
+                number,
+                crate::PiiClass::Location,
+                crate::HOUSE_NUMBER_RECOGNIZER_ID,
+                ner.score,
+                ner.priority,
+                None,
+                ner.token_family.clone(),
+                crate::HOUSE_NUMBER_RECOGNIZER_ID,
+                ConflictTier::None,
+                Vec::new(),
+            );
+            candidate
+                .source_recognizer_ids
+                .push(NER_RECOGNIZER_ID.to_string());
+            found.push(candidate);
+        }
+    }
+    found
 }
 
 fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<IndexedDetection> {

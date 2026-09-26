@@ -15,8 +15,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{"dob": "30.05.1971"}` in a tool result, `née le 02/11/1992`, and any
   month-name or two-digit-year date. `birth_date.cue` only read a line-start
   field record (`DOB: 1990-02-03`) and `born on` / `geboren am`.
+- **House numbers beside a street the NER model found are tokenized**
+  (solo todo #3670). Every release up to and including v0.15.1 tokenized
+  `Musterweg` in `Musterweg 17b` and `Example Street` in `17 Example Street`,
+  but sent the house number raw, because the location span ends at the
+  street word.
 
 ### Changed
+
+- **A NER street licenses the house number beside it.** After conflict
+  resolution, a winning NER location whose last word is a street word of an
+  active locale tokenizes the adjacent house number (`17`, `17b`, `9A`,
+  `12-14`, `12/3`) as its own `location` token with recognizer id
+  `address.house_number.street_corroborated`. German writes the number after
+  a street ending (`-straße`, `-weg`, `-platz`, …, from
+  `[locale.street_suffixes_number_after]` in `locale-de`); English writes it
+  before a street type (`Street`, `Road`, `Drive`, …, from
+  `[locale.street_types_number_before]` in `locale-en`). A city, a bare street
+  word, a number across a line break, tab or table border, a five-digit
+  number, and a decimal or time never qualify. Only policies that load a
+  locale pack with these lists and run NER change: `core` alone, or a policy
+  without `[ner]`, tokenizes exactly what it did before. Known limit: the
+  lexicon cannot tell a street from a title the NER model mislabels as a
+  location (`Chapter 12 Civil Court`), and a year right before an English
+  street (`In 2019 Abbey Road …`) is tokenized.
 
 - **`birth_date.cue` reads birth cues in prose, tool-call JSON and
   `key=value` logs.** Cues cover en, de, fr, nl, da and es (`DOB`,
