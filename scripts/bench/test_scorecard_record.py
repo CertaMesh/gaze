@@ -115,6 +115,7 @@ class RecordReplayTests(unittest.TestCase):
             self.assertNotIn("secret", body)
             rows = [json.loads(line) for line in body.splitlines()]
             self.assertNotIn("timing", rows[1]["response"])
+            self.assertNotIn("validator", rows[1])
             second = Path(temporary) / "second.jsonl.gz"
             self.make_record(second)
             with gzip.open(second, "rt", encoding="utf-8") as stream:
