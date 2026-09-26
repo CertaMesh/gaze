@@ -5008,9 +5008,10 @@ fn translate_vetoed_candidate(
 /// House-number candidates licensed by winning NER location spans (todo 3670).
 ///
 /// Reads the settled selections in normalized coordinates. A selection licenses
-/// a number only when it resolved to `Location` and the NER recognizer is one of
-/// its members; the number becomes its own candidate with its own recognizer id,
-/// tracing `ner` as the evidence it relied on.
+/// a number only when a NER `Location` candidate is one of its members. Members
+/// are the winner's own evidence, never the losers it beat, so a street that
+/// lost to or sits inside another class licenses nothing. The number becomes its
+/// own candidate with its own recognizer id, tracing `ner` as its evidence.
 fn street_corroborated_house_numbers(
     evidence: &occurrence::Segment,
     text: &str,
@@ -5038,9 +5039,6 @@ fn street_corroborated_house_numbers(
         .collect::<Vec<_>>();
     let mut found: Vec<Candidate> = Vec::new();
     for selection in &evidence.selections {
-        if selection.class != crate::PiiClass::Location {
-            continue;
-        }
         let Some(ner) = selection
             .members
             .iter()
