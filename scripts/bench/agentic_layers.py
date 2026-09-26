@@ -34,7 +34,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 
 
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -617,6 +617,14 @@ def _ref_number_11(rng: Rng, index: int) -> str:
     return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
 
 
+def _ref_number_16(rng: Rng, index: int) -> str:
+    """A space-grouped 16-digit voucher code that fails Luhn, the card twin's shape."""
+    while True:
+        digits = str(rng.between(1, 9)) + rng.digits(15)
+        if not luhn_valid(digits):
+            return " ".join(_by_four(digits))
+
+
 def _local_date(rng: Rng, index: int) -> str:
     """A non-birth date in a DOB display format: a recent or near-future year."""
     year, month, day = rng.between(2024, 2027), rng.between(1, 12), rng.between(1, 28)
@@ -630,6 +638,7 @@ INDEXED_LOOKALIKE_FAMILIES: dict[str, tuple[str, str, Callable[[Rng, int], str]]
     "ref_number_9": ("nl", "NL", _ref_number_9),
     "ref_number_10": ("en", "GB", _ref_number_10),
     "ref_number_11": ("de", "DE", _ref_number_11),
+    "ref_number_16": ("en", "US", _ref_number_16),
     "local_date": ("de", "DE", _local_date),
 }
 
@@ -656,7 +665,8 @@ LOOKALIKE_KEYS = {
         "order_id": "order", "tracking_id": "tracking", "uuid_fragment": "trace",
         "room_number": "location", "seat_number": "seat", "invoice_date": "invoice_date",
         "log_timestamp": "timestamp", "ref_number_9": "customer_no",
-        "ref_number_10": "ticket", "ref_number_11": "invoice_no", "local_date": "delivery_date",
+        "ref_number_10": "ticket", "ref_number_11": "invoice_no", "ref_number_16": "voucher",
+        "local_date": "delivery_date",
     },
     "test": {
         "amount_eur": "grandTotal", "amount_usd": "price", "sku_4x4": "itemCode",
@@ -665,7 +675,8 @@ LOOKALIKE_KEYS = {
         "room_number": "meetingRoom", "seat_number": "seatAssignment",
         "invoice_date": "invoiceDate", "log_timestamp": "occurredAt",
         "ref_number_9": "customerNumber", "ref_number_10": "caseId",
-        "ref_number_11": "invoiceNumber", "local_date": "dueDate",
+        "ref_number_11": "invoiceNumber", "ref_number_16": "voucherCode",
+        "local_date": "dueDate",
     },
 }
 # Prose for the date counterweight: a delivery or due date, never a birth date.
@@ -683,7 +694,7 @@ COUNTERWEIGHTS: dict[tuple[str, str, str], str] = {
     ("nhs", "prose_nocue", INVALID): "ref_number_10",
     ("steuer_id", "prose_nocue", INVALID): "ref_number_11",
     ("cpf", "prose_nocue", INVALID): "ref_number_11",
-    ("card", "prose_nocue", INVALID): "sku_4x4",
+    ("card", "prose_nocue", INVALID): "ref_number_16",
     ("dob", "prose_nocue", UNCHECKED): "local_date",
 }
 # Context-free cells with no counterweight, and why none is needed.
@@ -702,16 +713,15 @@ def is_context_free_only(family: str, surface: str, validity: str) -> bool:
 
 
 def display_shape(value: str) -> str:
-    """Digits as 9, letters as A, every separator as '-': what a shape rule sees."""
-    shape = []
-    for character in value:
-        if character.isdigit():
-            shape.append("9")
-        elif character.isalpha():
-            shape.append("A")
-        else:
-            shape.append("-")
-    return "".join(shape)
+    """Digits as 9, letters as A, every other character as written.
+
+    Separators stay exact: a rule for `9999 9999` never sees `9999-9999`, so a
+    counterweight has to carry the gold's own separators.
+    """
+    return "".join(
+        "9" if character.isdigit() else "A" if character.isalpha() else character
+        for character in value
+    )
 
 
 LOOKALIKE_TEMPLATES = {

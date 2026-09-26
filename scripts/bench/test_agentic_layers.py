@@ -22,8 +22,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "1266ca19668e1c24a4a46fffa52b2631e00364518792075a62c268465997b2a6",
-    "test": "6fe1c4735b1414d1490cfb37459e5fcfc5c8b2e1414372e3e3247d3dc82bb30a",
+    "dev": "4cab04e2418b5f6ffff482e84bd1c90bb523726f8d5b3aa560409071b49c8459",
+    "test": "c751da0b8b7d2e9e18663ad07458d75c70b26799b1c22d71004b3e0e351dd22b",
 }
 
 
@@ -243,7 +243,7 @@ class CounterweightTests(unittest.TestCase):
     def test_counterweight_values_fail_every_same_length_checksum(self) -> None:
         checks = {9: (agentic.bsn_valid,), 10: (agentic.nhs_valid,),
                   11: (agentic.steuer_id_valid, agentic.cpf_valid), 16: (agentic.luhn_valid,)}
-        for family in ("ref_number_9", "ref_number_10", "ref_number_11", "sku_4x4"):
+        for family in ("ref_number_9", "ref_number_10", "ref_number_11", "ref_number_16", "sku_4x4"):
             for value in self.lookalike_values(family):
                 digits = agentic._only_digits(value)
                 self.assertFalse(any(check(digits) for check in checks[len(digits)]), value)
@@ -253,6 +253,20 @@ class CounterweightTests(unittest.TestCase):
             if r.family == "local_date":
                 year = int(re.search(r"(20\d\d)", r.text).group(1))
                 self.assertGreaterEqual(year, 2024)
+
+    def test_display_shape_keeps_separators_exact(self) -> None:
+        self.assertEqual(agentic.display_shape("4111 1111-1111.1111"), "9999 9999-9999.9999")
+        self.assertNotEqual(agentic.display_shape("1234 5678"), agentic.display_shape("1234-5678"))
+        self.assertEqual(agentic.display_shape("DE89 3704"), "AA99 9999")
+
+    def test_a_spaced_sixteen_digit_rule_would_pay_for_its_catch_in_layer_d(self) -> None:
+        rule = re.compile(r"\b\d{4} \d{4} \d{4} \d{4}\b")
+        catches = [r for r in self.records
+                   if (r.family, r.surface, r.validity) == ("card", "prose_nocue", agentic.INVALID)
+                   and rule.search(r.text)]
+        costs = [r for r in self.records if r.family == "ref_number_16" and rule.search(r.text)]
+        self.assertEqual(len(catches), agentic.DOCS_PER_FAMILY)
+        self.assertEqual(len(costs), agentic.DOCS_PER_FAMILY * len(agentic.LOOKALIKE_SURFACES))
 
     def test_a_bare_nine_digit_rule_would_pay_for_its_catch_in_layer_d(self) -> None:
         # The model-free half of the mutant check: the over-broad shape rule

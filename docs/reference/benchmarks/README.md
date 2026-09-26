@@ -837,17 +837,25 @@ false-positive bytes:
 
 - reference numbers of 9, 10 and 11 digits, bare and in the NHS, Steuer-ID and
   CPF groupings, each failing every checksum of its length;
+- space-grouped 16-digit voucher codes that fail Luhn, the card twin's shape;
 - delivery and due dates in German and US format, dated 2024 to 2027.
 
 `COUNTERWEIGHTS` in `agentic_layers.py` maps each such gold cell to its D
 family. A test fails when a context-free-only cell has neither a counterweight
-nor a written exemption, or when a counterweight lacks one of its gold's
-display shapes. IBAN twins are exempt: an IBAN shape that fails mod-97 has no
-common benign use. To check the counterweight end to end, append
+nor a written exemption. It also fails when a counterweight lacks one of its
+gold's display shapes. A shape maps digits to `9` and letters to `A`, and keeps
+every other character exactly, because a rule for `9999 9999` never sees
+`9999-9999`. IBAN twins are exempt: an IBAN shape that fails mod-97 has no
+common benign use.
+
+Two deliberately over-broad rules check the counterweights end to end.
 [`mutant-bare-nine-digits.toml`](../../../scripts/bench/fixtures/agentic/mutant-bare-nine-digits.toml)
-to the policy and run `agentic_layers.py measure`. The deliberately over-broad
-rule must lower layer A's leak and raise layer D's false-positive bytes on
-`ref_number_9`, where the unmodified policy has none.
+tags every bare 9-digit run, and
+[`mutant-spaced-sixteen-digits.toml`](../../../scripts/bench/fixtures/agentic/mutant-spaced-sixteen-digits.toml)
+tags every space-grouped 16-digit run without a Luhn check. Append one to the
+policy and run `agentic_layers.py measure`. Each must lower layer A's leak and
+raise layer D's false-positive bytes on its counterweight (`ref_number_9` or
+`ref_number_16`), where the unmodified policy has none.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split
