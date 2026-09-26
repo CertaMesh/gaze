@@ -18,6 +18,7 @@ pub mod rulepack;
 mod safety_net_scan;
 mod sandbox;
 mod session;
+mod sweep;
 pub mod token_shape;
 mod types;
 mod validator_veto;
@@ -80,4 +81,5 @@ pub use session::{
     RestoreEventKind, RestoredTextWithProvenance, Scope, SensitiveSnapshot, Session,
     SessionSnapshotEntry, SessionTransaction, SessionTransactionError,
 };
+pub use sweep::ManifestSweepError;
 pub use types::{CleanDocument, RawDocument, Value};

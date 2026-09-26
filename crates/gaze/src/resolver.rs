@@ -496,13 +496,19 @@ fn evidence_tier(
             return EvidenceTier::Anchored;
         }
     }
-    if candidate.recognizer_id == "ner"
-        || candidate.source == "ner"
-        || candidate.source.starts_with("ner/")
-    {
+    if is_learned(candidate) {
         return EvidenceTier::Learned;
     }
     EvidenceTier::Pattern
+}
+
+/// A learned NER span (the `ner` recognizer, `ner/<backend>` source). The
+/// resolver's lowest evidence tier, and the one the repeat-value sweep never
+/// propagates.
+pub(crate) fn is_learned(candidate: &Candidate) -> bool {
+    candidate.recognizer_id == "ner"
+        || candidate.source == "ner"
+        || candidate.source.starts_with("ner/")
 }
 
 /// Detects the containment-precedence shape and says which side is the

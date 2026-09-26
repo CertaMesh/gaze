@@ -3,8 +3,8 @@
 //! `Session::export().into_bytes()` includes a fresh signing key, Ed25519 signature, session id,
 //! and `issued_at`, so the public API cannot produce byte-identical snapshots across runs without
 //! a test-only deterministic session constructor. This test therefore pins a checked-in legacy v3
-//! `manifest.bin` fixture and verifies it remains importable while current exports use the v5
-//! envelope that binds the emitted version byte into the signed preimage.
+//! `manifest.bin` fixture and verifies it remains importable while current exports use the v6
+//! envelope (v5 signing, plus the per-entry evidence tier the repeat-value sweep reads).
 //!
 //! Regenerate only when the current text-only payload contract intentionally changes:
 //! `GAZE_REGENERATE_SESSION_SNAPSHOT_FIXTURE=1 cargo test -p gaze-pii --test session_snapshot_byte_stability`.
@@ -45,14 +45,14 @@ fn checked_in_v3_text_only_snapshot_fixture_stays_importable_and_payload_shape_s
 }
 
 #[test]
-fn current_text_only_export_uses_v5_and_omits_document_extension() {
+fn current_text_only_export_uses_v6_and_omits_document_extension() {
     let session = Session::new(Scope::Conversation("byte-stability".to_string())).expect("session");
     let _ = session
         .tokenize(&PiiClass::Name, "Dr. Schmidt")
         .expect("token");
 
     let bytes = session.export().expect("text-only export").into_bytes();
-    assert_eq!(bytes[0], 5);
+    assert_eq!(bytes[0], 6);
 
     let payload: Value = serde_json::from_slice(&bytes[97..]).expect("snapshot payload json");
     assert!(payload.get("document").is_none());
@@ -64,6 +64,9 @@ fn current_text_only_export_uses_v5_and_omits_document_extension() {
     assert_eq!(payload["entries"][0]["class"], "Name");
     assert_eq!(payload["entries"][0]["raw"], "Dr. Schmidt");
     assert_eq!(payload["entries"][0]["family"], "counter");
+    // A value minted outside the pipeline has no recorded evidence, and an
+    // absent tier is omitted rather than written as null.
+    assert!(payload["entries"][0].get("evidence").is_none());
     assert_eq!(payload["next_by_class"], serde_json::json!([["Name", 1]]));
 }
 

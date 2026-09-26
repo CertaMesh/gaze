@@ -26,6 +26,7 @@ safety-net = ["gaze-recognizers/safety-net"]
 test-support = []
 
 [dependencies]
+aho-corasick = "1"
 anyhow = "1"
 base64 = "0.22"
 dashmap = "6"

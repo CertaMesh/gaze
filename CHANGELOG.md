@@ -15,6 +15,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{"dob": "30.05.1971"}` in a tool result, `née le 02/11/1992`, and any
   month-name or two-digit-year date. `birth_date.cue` only read a line-start
   field record (`DOB: 1990-02-03`) and `born on` / `geboren am`.
+- A value a rule found once is now tokenized everywhere it repeats. Before,
+  a copy was protected only when a recognizer fired at that exact spot, so a
+  name caught in an email header shipped raw in the body, in another case, or
+  in the next turn of a daemon or proxy session (solo todo 3849). See
+  [`docs/explanation/detection/manifest-sweep.md`](docs/explanation/detection/manifest-sweep.md).
+
+### Added
+
+- Repeat-value sweep after resolve and before the safety net. Byte-identical
+  copies reuse the token; other spellings and title-case name parts get a
+  sibling token. Only rule-found values propagate, never NER or safety-net
+  values. A lone lower-case name part stays raw (stated trade-off), as do
+  digit runs under six digits (a four-digit postcode depends on its city
+  anchor) and single surnames that are everyday words (`Richter`, `Grant`).
+  Stated gap: in `gaze proxy`, a copy in an earlier JSON field than its source
+  is not swept.
+- `ConflictTier::ManifestSweep` (`manifest_sweep`) and audit rows with
+  `provenance_stage = "manifest_sweep"` for every swept copy.
+- `Error::ManifestSweep` / `ManifestSweepError`: the request fails closed when
+  the sweep's value list passes its size cap or its matcher cannot be built.
 
 ### Changed
 
@@ -29,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   years, or month names in those six languages. A date without a birth cue
   is still left alone, so invoice, log and release dates are unchanged. Every
   value the old rule captured is still captured with the same span.
+- **Breaking:** `session_blob` / `SensitiveSnapshot` now use envelope version 6,
+  which records each manifest entry's evidence tier. Gaze v0.15 and older
+  refuse a v6 blob with `InvalidSnapshotVersion(6)`. v5 and older blobs still
+  import and restore, but their values do not seed the sweep.
 
 ## [0.15.1] - 2026-09-26
 
