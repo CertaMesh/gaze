@@ -28,7 +28,7 @@ error.
 
 ## Installation
 
-Until a first-class `gaze model fetch` CLI command ships, adapters should
-obtain the model files by running the install script shipped with the CLI or
-by copying these asset files from a pinned Gaze revision and fetching the
-ONNX files from the mirror path above.
+`gaze setup` downloads and SHA-verifies this pinned bundle (through
+`gaze_model_setup::install_ner_bundle`). Adapters that do not run `gaze setup`
+can copy these asset files from a pinned Gaze revision and fetch the ONNX
+files from the mirror path above.
