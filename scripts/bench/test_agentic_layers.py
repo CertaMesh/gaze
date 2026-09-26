@@ -23,6 +23,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
+    "dev": "45cd588fea7c6abb08a666d86f4bdfe2097191374d2ced75b168778c9739fbf6",
+    "test": "782052b31d9e6061a5e93961aeb245e482b34e3915d0dab5610331be33fed981",
+}
+PREVIOUS_CORPUS_SHA256 = {
     "dev": "4cab04e2418b5f6ffff482e84bd1c90bb523726f8d5b3aa560409071b49c8459",
     "test": "c751da0b8b7d2e9e18663ad07458d75c70b26799b1c22d71004b3e0e351dd22b",
 }
@@ -99,6 +103,47 @@ class GeneratorTests(unittest.TestCase):
                     agentic.manifest(partition, records)["corpus_sha256"],
                     PINNED_CORPUS_SHA256[partition],
                 )
+
+    def test_previous_partition_documents_are_byte_identical(self) -> None:
+        for partition, records in self.corpora.items():
+            previous = [r for r in records if not r.surface.startswith("adjacent_")]
+            self.assertEqual(
+                hashlib.sha256(agentic.corpus_bytes(previous)).hexdigest(),
+                PREVIOUS_CORPUS_SHA256[partition],
+            )
+
+    def test_adjacency_cases_cover_both_orders_separators_and_surfaces(self) -> None:
+        for partition, records in self.corpora.items():
+            adjacent = [r for r in records if r.surface.startswith("adjacent_")]
+            cases = (*agentic.ADJACENT_GOLD[partition], *agentic.ADJACENT_LOOKALIKES[partition])
+            self.assertEqual(len(adjacent), len(cases) * 2 * 4 * 4)
+            for case in cases:
+                layer = "A" if case in agentic.ADJACENT_GOLD[partition] else "D"
+                matching = [r for r in adjacent if r.family == case.family and r.layer == layer]
+                self.assertEqual(len(matching), 32, case.family)
+                self.assertEqual(
+                    {r.surface for r in matching}, set(agentic.ADJACENT_TEMPLATES), case.family
+                )
+                for record in matching:
+                    self.assertTrue(record.gold if layer == "A" else not record.gold, record.uid)
+
+    def test_adjacency_json_arrays_preserve_logical_single_separators(self) -> None:
+        for partition, records in self.corpora.items():
+            cases = {
+                ("A", c.family): c for c in agentic.ADJACENT_GOLD[partition]
+            } | {
+                ("D", c.family): c for c in agentic.ADJACENT_LOOKALIKES[partition]
+            }
+            for record in records:
+                if record.surface != "adjacent_json_array":
+                    continue
+                _, _, _, _, direction, separator_name, _ = record.uid.split("-", 6)
+                case = cases[(record.layer, record.family)]
+                values = case.values if direction == "forward" else case.values[::-1]
+                expected = agentic.ADJACENT_SEPARATORS[separator_name].join(
+                    value.prefix + value.value + value.suffix for value in values
+                )
+                self.assertEqual(json.loads(record.text)["items"], [expected], record.uid)
 
     def test_every_gold_span_selects_exactly_the_inserted_value(self) -> None:
         for records in self.corpora.values():
@@ -432,7 +477,7 @@ class ContractTests(unittest.TestCase):
             applied = agentic.apply_contract(self.documents(), contract)
         dob = [d for d in applied if d.excluded_spans]
         self.assertTrue(dob)
-        self.assertTrue(all(d.cell and "|dob|" in d.cell for d in dob))
+        self.assertTrue(all(d.cell and ("|dob|" in d.cell or "|birth_date_cue|" in d.cell) for d in dob))
 
 
 def _success_response(document: score.Document) -> dict[str, object]:
@@ -969,7 +1014,8 @@ class MutantGatePinTests(unittest.TestCase):
         provenance = self.pin["provenance"]
         for key in ("harness_commit", "corpus_sha256", "policy_sha256", "binary_sha256", "commands"):
             self.assertTrue(provenance.get(key), key)
-        self.assertEqual(provenance["generator_version"], agentic.GENERATOR_VERSION)
+        # The mutant pin is a published v3 measurement, retained as historical evidence.
+        self.assertEqual(provenance["generator_version"], 3)
 
 
 if __name__ == "__main__":

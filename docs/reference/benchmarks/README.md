@@ -784,10 +784,22 @@ model:
 - **Layer A families:** payment card; IBAN for DE (spaced and compact), AT,
   NL, FR and GB; Steuer-ID; BSN; NHS number; CPF; email; German and US phone
   numbers; dates of birth; and sender names in email headers, including
-  hyphenated surnames.
+  hyphenated surnames. The adjacency slice adds IPv4/IPv6 (including mapped
+  IPv4, three-address runs and documentation-range neighbours), four phone
+  recognizer shapes, AT/CH, CA and GB postcodes, and birth dates after a cue.
+  The setup policy excludes `secrets`, so `password.field` is not scored.
 - **Layer A surfaces:** prose with a cue, prose without a cue, NBSP-spaced,
   NARROW-NBSP-spaced, log `key=value`, CSV, and tool-call JSON. The tool-call
   JSON is the single-encoded `arguments` string that `gaze-proxy` cleans.
+  Adjacency cases place both orders of each pair (and a reversed triple)
+  across prose, log lines, quoted CSV fields and JSON arrays, with exactly
+  one space, comma, tab or NBSP between values. JSON escapes the tab in its
+  raw text; decoding the array yields one tab.
+- **Layer D adjacency counterweights:** adjacent versions, hex hashes, times,
+  four-digit room numbers, due dates, word-attached `::` paths and RFC 3849
+  documentation IPs. They carry no gold. The v3 documents remain byte
+  identical within each partition; the generator and both partition hashes
+  are pinned at v4.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -937,7 +949,8 @@ could turn valid PII into "failed its checksum" and drop it from the gated
 bytes. The gate then needs an explicit review decision.
 
 [`gate-pin-mutants.json`](../../../scripts/bench/fixtures/agentic/gate-pin-mutants.json)
-pins the true verdicts of two real full-harness runs against main:
+pins the true verdicts of two real full-harness runs against main on generator
+v3. It remains a historical pin for the gate arithmetic:
 
 - **The spaced 16-digit rule fails.** It saves 15 gated leaked bytes and adds
   551 false-positive bytes. Its 1,830 byte Kiji "gain" is entirely card and
