@@ -894,6 +894,17 @@ python3 scripts/bench/agentic_layers.py gate \
   --candidate target/bench-data/gate-cand-v2/full/scorecard-v4.json
 ```
 
+When a candidate intentionally adds policy sections, declare them in a separate
+TOML file and pass `--policy-delta <file.toml>` to the gate. This mode accepts
+any new top-level sections. It reads both policies from their scorecard
+provenance, requires their paths and SHA-256 values, verifies the file digests,
+and compares parsed TOML values and types. Missing metadata on either or both
+sides is refused. The candidate must equal the base plus exactly the declared
+sections; edits to existing sections or undeclared keys are not comparable
+(exit `2`). The gate names the delta file in the verdict and prints the base,
+candidate and delta file SHA-256 digests for review. Keep both policy files at
+their recorded paths until the gate runs.
+
 For each contract, the production arm's numbers must satisfy all of these:
 
 1. **No layer leaks more.** Leaked bytes do not rise in C, A, D or R. This

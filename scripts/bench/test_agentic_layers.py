@@ -2,6 +2,7 @@
 """Model-free tests for the agentic benchmark layers A and D."""
 
 import copy
+import hashlib
 import json
 import re
 import sys
@@ -757,6 +758,168 @@ class GateTests(unittest.TestCase):
         del candidate["layers"]
         with self.assertRaises(agentic.LayerError):
             agentic.gate(_scorecard(self.BASE), candidate)
+
+
+class PolicyDeltaGateTests(unittest.TestCase):
+    BASE_LEAKS = {"C": 100, "A": 50, "D": 0, "R": 30}
+
+    def compare(
+        self, base_text: str, candidate_text: str, delta_text: str,
+        missing_field: str | None = None,
+        tamper_policy: str | None = None,
+        remove_delta: bool = False,
+        wrong_digest: tuple[str, str] | None = None,
+    ) -> dict:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = {name: Path(directory) / f"{name}.toml" for name in ("base", "candidate", "delta")}
+            for name, contents in (("base", base_text), ("candidate", candidate_text), ("delta", delta_text)):
+                paths[name].write_text(contents, encoding="utf-8")
+            base = _scorecard(self.BASE_LEAKS)
+            candidate = _scorecard({**self.BASE_LEAKS, "R": 10})
+            for label, card in (("base", base), ("candidate", candidate)):
+                digest = hashlib.sha256(paths[label].read_bytes()).hexdigest()
+                card["parameters"]["policy_sha256"] = digest
+                card["runner_provenance"] = {"policy": {"path": str(paths[label]), "sha256": digest}}
+                if wrong_digest and wrong_digest[0] == label:
+                    altered = ("0" if digest[0] != "0" else "1") + digest[1:]
+                    self.assertRegex(altered, r"^[0-9a-f]{64}$")
+                    self.assertEqual(hashlib.sha256(paths[label].read_bytes()).hexdigest(), digest)
+                    if wrong_digest[1] == "provenance":
+                        card["runner_provenance"]["policy"]["sha256"] = altered
+                    else:
+                        card["parameters"]["policy_sha256"] = altered
+                if missing_field:
+                    field = missing_field.removesuffix("_none")
+                    target, key = {
+                        "scorecard_sha256": (card["parameters"], "policy_sha256"),
+                        "provenance_sha256": (card["runner_provenance"]["policy"], "sha256"),
+                        "provenance_path": (card["runner_provenance"]["policy"], "path"),
+                    }[field]
+                    if missing_field.endswith("_none"):
+                        target[key] = None
+                    else:
+                        del target[key]
+            if tamper_policy:
+                paths[tamper_policy].write_text(
+                    paths[tamper_policy].read_text(encoding="utf-8") + "# changed after measurement\n",
+                    encoding="utf-8",
+                )
+            if remove_delta:
+                paths["delta"].unlink()
+            return agentic.gate(base, candidate, policy_delta=paths["delta"])
+
+    def test_declared_new_section_passes_with_parsed_toml_equality(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[extension]\nthreshold = 0.5\n\n[rules]\nenabled=true\n",
+            "[extension]\nthreshold=0.5\n",
+        )
+        self.assertEqual(result["verdict"], "pass")
+        self.assertEqual(set(result["policy_digests"]), {"base", "candidate", "delta"})
+        self.assertIn("Policy SHA-256 digests", agentic.gate_markdown(result))
+        self.assertIn("delta.toml", agentic.gate_markdown(result).splitlines()[0])
+
+    def test_undeclared_extra_key_is_not_comparable(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[rules]\nenabled = true\nextra = true\n[extension]\nthreshold = 0.5\n",
+            "[extension]\nthreshold = 0.5\n",
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+        self.assertIn("policy_sha256", result["differing"])
+
+    def test_toml_type_change_is_not_comparable(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[rules]\nenabled = 1\n[extension]\nthreshold = 0.5\n",
+            "[extension]\nthreshold = 0.5\n",
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+
+    def test_delta_cannot_change_an_existing_base_section(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[rules]\nenabled = false\n",
+            "[rules]\nenabled = false\n",
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+        self.assertIn("existing base sections", result["policy_delta_reason"])
+
+    def test_missing_policy_identity_on_both_sides_is_refused(self) -> None:
+        for field in (
+            "scorecard_sha256", "scorecard_sha256_none",
+            "provenance_sha256", "provenance_sha256_none",
+            "provenance_path", "provenance_path_none",
+        ):
+            with self.subTest(field=field), self.assertRaises(agentic.LayerError):
+                self.compare(
+                    "[rules]\nenabled = true\n",
+                    "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                    "[extension]\nthreshold = 0.5\n",
+                    missing_field=field,
+                )
+
+    def test_policy_file_changed_after_measurement_is_refused(self) -> None:
+        for label in ("base", "candidate"):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                agentic.LayerError, f"{label} policy file differs from its scorecard SHA-256"
+            ):
+                self.compare(
+                    "[rules]\nenabled = true\n",
+                    "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                    "[extension]\nthreshold = 0.5\n",
+                    tamper_policy=label,
+                )
+
+    def test_wrong_provenance_digest_with_unchanged_policy_is_refused(self) -> None:
+        for label in ("base", "candidate"):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                agentic.LayerError, f"{label} policy file differs from its scorecard SHA-256"
+            ):
+                self.compare(
+                    "[rules]\nenabled = true\n",
+                    "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                    "[extension]\nthreshold = 0.5\n",
+                    wrong_digest=(label, "provenance"),
+                )
+
+    def test_wrong_parameters_digest_with_unchanged_policy_is_refused(self) -> None:
+        for label in ("base", "candidate"):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                agentic.LayerError, f"{label} policy file differs from its scorecard SHA-256"
+            ):
+                self.compare(
+                    "[rules]\nenabled = true\n",
+                    "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                    "[extension]\nthreshold = 0.5\n",
+                    wrong_digest=(label, "parameters"),
+                )
+
+    def test_empty_delta_is_not_comparable(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+            "",
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+        self.assertIn("at least one TOML section", result["policy_delta_reason"])
+
+    def test_missing_delta_file_is_refused(self) -> None:
+        with self.assertRaisesRegex(agentic.LayerError, "cannot read declared policy delta"):
+            self.compare(
+                "[rules]\nenabled = true\n",
+                "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                "[extension]\nthreshold = 0.5\n",
+                remove_delta=True,
+            )
+
+    def test_invalid_delta_toml_is_refused(self) -> None:
+        with self.assertRaisesRegex(agentic.LayerError, "invalid declared policy delta TOML"):
+            self.compare(
+                "[rules]\nenabled = true\n",
+                "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                "[extension\nthreshold = 0.5\n",
+            )
 
 
 class MutantGatePinTests(unittest.TestCase):

@@ -26,6 +26,7 @@ import argparse
 import hashlib
 import json
 import sys
+import tomllib
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -1670,20 +1671,113 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
     return {"verdict": verdict, "reason": reason, "summary": summary, "layers": rows}
 
 
-def gate(base: Mapping[str, object], candidate: Mapping[str, object], config: str | None = None) -> dict[str, object]:
+def _scorecard_policy(scorecard: Mapping[str, object], label: str) -> tuple[dict[str, object], str]:
+    provenance = scorecard.get("runner_provenance") or {}
+    policy = provenance.get("policy") or {}
+    parameters = scorecard.get("parameters") or {}
+    path = policy.get("path")
+    recorded = policy.get("sha256")
+    if not isinstance(path, str) or not isinstance(recorded, str):
+        raise LayerError(f"{label} scorecard has no policy path and SHA-256 provenance")
+    try:
+        raw = Path(path).read_bytes()
+    except OSError as error:
+        raise LayerError(f"cannot read {label} policy {path}: {error}") from error
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != recorded or digest != parameters.get("policy_sha256"):
+        raise LayerError(f"{label} policy file differs from its scorecard SHA-256")
+    try:
+        return tomllib.loads(raw.decode("utf-8")), digest
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise LayerError(f"invalid {label} policy TOML: {error}") from error
+
+
+def _toml_equal(left: object, right: object) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(
+            _toml_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _toml_equal(a, b) for a, b in zip(left, right, strict=True)
+        )
+    return left == right
+
+
+def _policy_delta_comparison(
+    base: Mapping[str, object], candidate: Mapping[str, object], delta_path: Path
+) -> tuple[bool, str, dict[str, str]]:
+    base_policy, base_sha = _scorecard_policy(base, "base")
+    candidate_policy, candidate_sha = _scorecard_policy(candidate, "candidate")
+    try:
+        raw = delta_path.read_bytes()
+    except OSError as error:
+        raise LayerError(f"cannot read declared policy delta {delta_path}: {error}") from error
+    digests = {
+        "base": base_sha,
+        "candidate": candidate_sha,
+        "delta": hashlib.sha256(raw).hexdigest(),
+    }
+    try:
+        delta = tomllib.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise LayerError(f"invalid declared policy delta TOML: {error}") from error
+    if not delta or any(not isinstance(section, dict) for section in delta.values()):
+        return False, "policy delta must declare at least one TOML section", digests
+    existing = sorted(base_policy.keys() & delta.keys())
+    if existing:
+        return False, f"policy delta changes existing base sections: {existing}", digests
+    if not _toml_equal(candidate_policy, {**base_policy, **delta}):
+        return False, "candidate policy differs beyond the declared new sections", digests
+    return True, "candidate policy equals base plus declared new sections", digests
+
+
+def gate(
+    base: Mapping[str, object], candidate: Mapping[str, object], config: str | None = None,
+    policy_delta: Path | None = None,
+) -> dict[str, object]:
     """Identity check, then `decide` on the production arm's layer totals."""
     base_identity = _layer_identity(base)
     candidate_identity = _layer_identity(candidate)
-    if base_identity != candidate_identity:
-        differing = sorted(k for k in base_identity if base_identity[k] != candidate_identity[k])
-        return {"verdict": "not_comparable", "differing": differing, "layers": {}}
+    delta_result: dict[str, object] = {}
+    policy_ok = True
+    if policy_delta is not None:
+        policy_ok, reason, digests = _policy_delta_comparison(base, candidate, policy_delta)
+        delta_result = {
+            "policy_digests": digests,
+            "policy_delta_reason": reason,
+            "policy_delta_path": str(policy_delta),
+        }
+    differing = sorted(
+        key for key in base_identity
+        if base_identity[key] != candidate_identity[key]
+        and (key != "policy_sha256" or policy_delta is None)
+    )
+    if not policy_ok or differing:
+        if not policy_ok:
+            differing.append("policy_sha256")
+        return {"verdict": "not_comparable", "differing": sorted(differing), "layers": {}, **delta_result}
     config = config or production_config(candidate)
     result = decide(layer_totals(base, config), layer_totals(candidate, config))
-    return {**result, "config": config}
+    return {**result, "config": config, **delta_result}
 
 
 def gate_markdown(result: Mapping[str, object]) -> str:
-    lines = [f"Verdict: **{result['verdict']}** ({result.get('reason', result.get('differing'))})", ""]
+    policy_differs = "policy_sha256" in result.get("differing", ()) and "policy_delta_reason" in result
+    explanation = (
+        f"{result['policy_delta_reason']}; differing: {result['differing']}"
+        if policy_differs else None
+    )
+    detail = explanation or result.get("reason", result.get("differing"))
+    if "policy_delta_path" in result:
+        detail = f"{detail}; policy delta: {result['policy_delta_path']}"
+    lines = [f"Verdict: **{result['verdict']}** ({detail})", ""]
+    if "policy_digests" in result:
+        lines += ["Policy SHA-256 digests:"]
+        lines += [f"- {name}: `{digest}`" for name, digest in result["policy_digests"].items()]
+        lines.append("")
     if result["layers"]:
         lines += ["| Layer | Leaked base | Leaked cand | FP base | FP cand | Failed closed base | Failed closed cand | Twin leak base | Twin leak cand |",
                   "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
@@ -1811,6 +1905,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     gate_cmd.add_argument("--base", type=Path, required=True)
     gate_cmd.add_argument("--candidate", type=Path, required=True)
     gate_cmd.add_argument("--config")
+    gate_cmd.add_argument("--policy-delta", type=Path, help="TOML sections added to the base policy")
     args = parser.parse_args(argv)
     try:
         if args.command == "generate":
@@ -1829,7 +1924,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "grid":
             print(coverage_grid(_load_json(args.scorecard), args.config), end="")
         else:
-            result = gate(_load_json(args.base), _load_json(args.candidate), args.config)
+            result = gate(_load_json(args.base), _load_json(args.candidate), args.config, args.policy_delta)
             print(gate_markdown(result), end="")
             return {"pass": 0, "fail": 1}.get(str(result["verdict"]), 2)
     except LayerError as error:
