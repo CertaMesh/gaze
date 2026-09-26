@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -17,6 +19,43 @@ latency = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(latency)
 
 ECHO_JSONL = "import sys\nfor line in sys.stdin:\n    sys.stdout.write(line)\n    sys.stdout.flush()\n"
+
+# A stand-in for `gaze proxy serve`: forwards chat requests to --upstream-openai and replies
+# with the upstream body. FAKE_PROXY_MODE=refuse answers 422 for texts containing REFUSE,
+# garble alters every reply, crash answers 500.
+FAKE_PROXY = """\
+import json, os, sys, urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
+args = sys.argv[1:]
+assert args[:2] == ["proxy", "serve"], args
+bind = args[args.index("--bind") + 1]
+upstream = args[args.index("--upstream-openai") + 1]
+mode = os.environ.get("FAKE_PROXY_MODE", "")
+class Proxy(BaseHTTPRequestHandler):
+    def reply(self, status, body):
+        self.send_response(status)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def do_GET(self):
+        self.reply(200, b"ok")
+    def do_POST(self):
+        raw = self.rfile.read(int(self.headers["Content-Length"]))
+        text = json.loads(raw)["messages"][-1]["content"]
+        if mode == "crash":
+            return self.reply(500, b"{}")
+        if mode == "refuse" and "REFUSE" in text:
+            return self.reply(422, b'{"error":"Refused"}')
+        request = urllib.request.Request(upstream + self.path, data=raw, headers={"Content-Type": "application/json"})
+        body = urllib.request.urlopen(request).read()
+        if mode == "garble":
+            body = body.replace(b"hello", b"HELLO")
+        self.reply(200, body)
+    def log_message(self, *_):
+        pass
+host, port = bind.split(":")
+HTTPServer((host, int(port)), Proxy).serve_forever()
+"""
 
 
 class SummaryTest(unittest.TestCase):
@@ -106,6 +145,41 @@ class ChildProcessTest(unittest.TestCase):
             child.close()
 
 
+class ProxyArmTest(unittest.TestCase):
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.gaze = Path(scratch.name) / "gaze"
+        self.gaze.write_text(f"#!{sys.executable}\n{FAKE_PROXY}", encoding="utf-8")
+        self.gaze.chmod(0o755)
+        self.policy = Path(scratch.name) / "policy.toml"
+
+    def run_arm(self, mode: str, texts: list[str]) -> dict[str, object]:
+        env = {**os.environ, "FAKE_PROXY_MODE": mode}
+        return latency.proxy_arm(self.gaze, self.policy, texts, env)
+
+    def test_first_request_is_cold_and_every_reply_restores(self) -> None:
+        result = self.run_arm("", ["hello one", "hello two", "hello three"])
+        self.assertIsNotNone(result["first_request_cold_ms"])
+        self.assertEqual(result["warm"]["n"], 3)
+        self.assertEqual(result["status_counts"], {"200": 3})
+        self.assertEqual(result["restored_exact"], 3)
+        self.assertGreater(result["peak_rss_mib"], 1.0)
+
+    def test_refusals_are_counted_not_restored(self) -> None:
+        result = self.run_arm("refuse", ["hello", "REFUSE this", "hello again"])
+        self.assertEqual(result["status_counts"], {"200": 2, "422": 1})
+        self.assertEqual(result["restored_exact"], 2)
+
+    def test_a_reply_that_does_not_restore_fails_the_run(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "did not restore"):
+            self.run_arm("garble", ["hello", "hello"])
+
+    def test_any_other_status_fails_the_run(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "answered 500"):
+            self.run_arm("crash", ["hello"])
+
+
 class ArgumentsTest(unittest.TestCase):
     def test_defaults(self) -> None:
         args = latency.parse_args(["--out", "x.json"])
@@ -114,14 +188,23 @@ class ArgumentsTest(unittest.TestCase):
         self.assertIsNone(args.baseline_root)
         self.assertTrue(latency.parse_args(["--out", "x.json", "--smoke"]).smoke)
 
-    def test_baseline_commit_is_the_v0_14_0_tag(self) -> None:
-        tag = subprocess.run(
-            ["git", "-C", str(REPO), "rev-parse", "--verify", "--quiet", "v0.14.0^{commit}"],
-            capture_output=True, text=True,
-        )
-        if tag.returncode != 0:
-            self.skipTest("tag v0.14.0 is not fetched in this checkout")
-        self.assertEqual(tag.stdout.strip(), latency.V0_14_0_COMMIT)
+    def test_baseline_version_selects_a_known_tag(self) -> None:
+        self.assertEqual(latency.parse_args(["--out", "x.json"]).baseline_version, "v0.14.0")
+        args = latency.parse_args(["--out", "x.json", "--baseline-version", "v0.15.0"])
+        self.assertEqual(args.baseline_version, "v0.15.0")
+        with self.assertRaises(SystemExit):
+            latency.parse_args(["--out", "x.json", "--baseline-version", "v0.13.0"])
+
+    def test_baseline_commits_are_the_release_tags(self) -> None:
+        for version, commit in latency.BASELINE_COMMITS.items():
+            with self.subTest(version=version):
+                tag = subprocess.run(
+                    ["git", "-C", str(REPO), "rev-parse", "--verify", "--quiet", f"{version}^{{commit}}"],
+                    capture_output=True, text=True,
+                )
+                if tag.returncode != 0:
+                    self.skipTest(f"tag {version} is not fetched in this checkout")
+                self.assertEqual(tag.stdout.strip(), commit)
 
 
 if __name__ == "__main__":
