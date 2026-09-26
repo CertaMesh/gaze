@@ -1323,6 +1323,8 @@ mod tests {
                 safety_net: Some(SetupSafetyNet::None),
                 policy_out: Some(policy_path.clone()),
                 model_dir: Some(model_dir.clone()),
+                dob_judge: false,
+                dob_model_dir: None,
                 non_interactive: true,
                 force: false,
             },
