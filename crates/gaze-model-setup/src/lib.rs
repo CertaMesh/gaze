@@ -9,8 +9,9 @@ use gaze_recognizers::safety_net::nym::{
 };
 pub use gaze_recognizers::safety_net::SafetyNetError;
 use gaze_recognizers::{
-    verify_davlan_ner_bundle, DAVLAN_NER_HF_COMMIT, DAVLAN_NER_HF_REPO, DAVLAN_NER_LABELS_JSON,
-    DAVLAN_NER_MODEL_DIR_NAME, DAVLAN_NER_SHA256SUMS,
+    verify_davlan_ner_bundle, verify_gliner_dob_bundle, DAVLAN_NER_HF_COMMIT, DAVLAN_NER_HF_REPO,
+    DAVLAN_NER_LABELS_JSON, DAVLAN_NER_MODEL_DIR_NAME, DAVLAN_NER_SHA256SUMS, GLINER_DOB_HF_COMMIT,
+    GLINER_DOB_HF_REPO, GLINER_DOB_MODEL_DIR_NAME, GLINER_DOB_SHA256SUMS,
 };
 
 const DEFAULT_NYM_MODEL_DIR_NAME: &str = "nym-small-int8";
@@ -159,6 +160,32 @@ const NYM_SMALL_INT8_MANIFEST: ArtifactManifest = ArtifactManifest {
     files: NYM_SMALL_INT8_FILES,
 };
 
+const GLINER_DOB_FILES: &[ArtifactFile] = &[
+    ArtifactFile {
+        source_path: Some("onnx/model_int8.onnx"),
+        file_name: "model.onnx",
+        inline_contents: None,
+    },
+    ArtifactFile {
+        source_path: Some("tokenizer.json"),
+        file_name: "tokenizer.json",
+        inline_contents: None,
+    },
+    ArtifactFile {
+        source_path: Some("gliner_config.json"),
+        file_name: "gliner_config.json",
+        inline_contents: None,
+    },
+];
+
+const GLINER_DOB_MANIFEST: ArtifactManifest = ArtifactManifest {
+    hf_repo: GLINER_DOB_HF_REPO,
+    hf_commit: GLINER_DOB_HF_COMMIT,
+    checksum_file_name: "SHA256SUMS",
+    sha256sums: GLINER_DOB_SHA256SUMS,
+    files: GLINER_DOB_FILES,
+};
+
 /// Default install directory of the primary NER bundle:
 /// `$XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl`, else `~/.local/share/gaze/models/davlan-mbert-ner-hrl`.
 pub fn default_ner_model_dir() -> Result<PathBuf, SetupError> {
@@ -169,6 +196,11 @@ pub fn default_ner_model_dir() -> Result<PathBuf, SetupError> {
 /// `$XDG_DATA_HOME/gaze/models/nym-small-int8`, else `~/.local/share/gaze/models/nym-small-int8`.
 pub fn default_nym_model_dir() -> Result<PathBuf, SetupError> {
     default_model_dir(DEFAULT_NYM_MODEL_DIR_NAME)
+}
+
+/// Default local directory for the opt-in GLiNER DOB bundle.
+pub fn default_gliner_dob_model_dir() -> Result<PathBuf, SetupError> {
+    default_model_dir(GLINER_DOB_MODEL_DIR_NAME)
 }
 
 fn default_model_dir(name: &str) -> Result<PathBuf, SetupError> {
@@ -241,6 +273,31 @@ pub fn install_nym_bundle_with_fetcher(
         &NYM_SMALL_INT8_MANIFEST,
         &model_dir,
         &verify_nym_bundle,
+        fetcher,
+    )?;
+    Ok(InstallOutcome::Installed { model_dir })
+}
+
+/// Install or verify the SHA-pinned GLiNER date-of-birth judge bundle.
+pub fn install_gliner_dob_bundle(model_dir: Option<&Path>) -> Result<InstallOutcome, SetupError> {
+    install_gliner_dob_bundle_with_fetcher(model_dir, &UreqFetcher)
+}
+
+pub fn install_gliner_dob_bundle_with_fetcher(
+    model_dir: Option<&Path>,
+    fetcher: &dyn ArtifactFetcher,
+) -> Result<InstallOutcome, SetupError> {
+    let model_dir = match model_dir {
+        Some(path) => absolute_path(path)?,
+        None => default_gliner_dob_model_dir()?,
+    };
+    if let Some(outcome) = reuse_existing_bundle(&model_dir, &verify_gliner_dob_bundle)? {
+        return Ok(outcome);
+    }
+    install_model_dir(
+        &GLINER_DOB_MANIFEST,
+        &model_dir,
+        &verify_gliner_dob_bundle,
         fetcher,
     )?;
     Ok(InstallOutcome::Installed { model_dir })
@@ -695,6 +752,37 @@ mod tests {
             ]
             .map(|path| format!(
                 "https://huggingface.co/Wismut/nym-pii-multilingual-small/resolve/4348999cd3c2e20c49615e9af7c6bbb45b64cd85/{path}"
+            ))
+        );
+    }
+
+    #[test]
+    fn gliner_install_fetches_pinned_artifacts_and_rejects_wrong_bytes() {
+        let root = tempfile::tempdir().unwrap();
+        let model_dir = root.path().join("gliner-multi-pii-dob-int8");
+        let fetcher = SyntheticFetcher {
+            calls: Mutex::new(Vec::new()),
+        };
+        let err = install_gliner_dob_bundle_with_fetcher(Some(&model_dir), &fetcher).unwrap_err();
+        assert!(matches!(
+            err,
+            SetupError::Verify(SafetyNetError::ModelIntegrityMismatch { .. })
+        ));
+        assert!(!model_dir.exists());
+        let urls = fetcher
+            .calls()
+            .into_iter()
+            .map(|(url, _)| url)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            urls,
+            [
+                "onnx/model_int8.onnx",
+                "tokenizer.json",
+                "gliner_config.json"
+            ]
+            .map(|path| format!(
+                "https://huggingface.co/{GLINER_DOB_HF_REPO}/resolve/{GLINER_DOB_HF_COMMIT}/{path}"
             ))
         );
     }

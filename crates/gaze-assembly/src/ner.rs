@@ -1,5 +1,5 @@
 use gaze::PolicyError;
-use gaze_recognizers::{NerOptions, NerRecognizer};
+use gaze_recognizers::{DobJudgeRecognizer, NerOptions, NerRecognizer};
 
 use crate::{registration::AssemblyBuilder, BuildError};
 
@@ -22,5 +22,18 @@ pub(crate) fn register_ner(
         }
     }
 
+    Ok(())
+}
+
+pub(crate) fn register_dob_judge(
+    builder: &mut AssemblyBuilder,
+    policy: &gaze::Policy,
+) -> Result<(), BuildError> {
+    if let Some(config) = &policy.dob_judge {
+        builder.recognizer(DobJudgeRecognizer::load(
+            &config.model_dir,
+            config.threshold,
+        )?);
+    }
     Ok(())
 }

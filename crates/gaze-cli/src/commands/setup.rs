@@ -5,8 +5,11 @@ use std::path::{Path, PathBuf};
 
 use clap::ValueEnum;
 use gaze::{CleanDocument, LocaleTag, RawDocument, Rulepack, Session};
-use gaze_model_setup::{install_ner_bundle, install_nym_bundle, InstallOutcome, SetupError};
+use gaze_model_setup::{
+    install_gliner_dob_bundle, install_ner_bundle, install_nym_bundle, InstallOutcome, SetupError,
+};
 use gaze_recognizers::safety_net::nym::{NYM_SMALL_HF_COMMIT, NYM_SMALL_HF_REPO};
+use gaze_recognizers::{GLINER_DOB_HF_COMMIT, GLINER_DOB_HF_REPO};
 use sha2::{Digest, Sha256};
 
 use crate::clean_overrides::CleanOverrides;
@@ -17,12 +20,15 @@ const DEFAULT_POLICY_FILE: &str = "gaze.toml";
 const OPF_UNAVAILABLE: &str = "OPF requires the `safety-net-openai` feature and a pinned checkpoint bundle in this build. Reinstall with `cargo install gaze-cli --features safety-net-openai` when a pinned bundle is available, or run `gaze setup` for the default Nym safety net.";
 const DOCTOR_INPUT: &str = "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd.\nPhone +1-555-0100\nIBAN AT61 1904 3002 3457 3201\nCard 4111 1111 1111 1111\nRouter IP 10.1.2.3"; // fixture-cited(crates/gaze-cli/src/commands/setup.rs:commands::setup::tests::generated_policy_tokenizes_with_clean_pipeline)
 const DOCTOR_NYM_INPUT: &str = "Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt."; // fixture-cited(crates/gaze-cli/tests/nym_cli.rs:live_nym_net_tokenizes_a_plate_the_rules_miss)
+const DOCTOR_DOB_INPUT: &str = "Helena (14.03.1987) is listed in the patient file.";
 
 #[derive(Debug)]
 pub(crate) struct Args {
     pub(crate) safety_net: Option<SetupSafetyNet>,
     pub(crate) policy_out: Option<PathBuf>,
     pub(crate) model_dir: Option<PathBuf>,
+    pub(crate) dob_judge: bool,
+    pub(crate) dob_model_dir: Option<PathBuf>,
     pub(crate) non_interactive: bool,
     pub(crate) force: bool,
 }
@@ -54,6 +60,7 @@ struct SetupSummary {
     doctor_clean_text: String,
     opf_checkpoint: Option<PathBuf>,
     nym_model_dir: Option<(PathBuf, ModelInstallStatus)>,
+    dob_model_dir: Option<(PathBuf, ModelInstallStatus)>,
 }
 
 #[derive(Clone, Copy)]
@@ -83,13 +90,32 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
 
     let (model_dir, model_status) = install_ner_model(args.model_dir)?;
 
-    let doctor_clean_text = write_verified_policy(
+    if args.dob_model_dir.is_some() && !args.dob_judge {
+        return Err(setup_error(
+            "--dob-model-dir requires --dob-judge".to_string(),
+        ));
+    }
+    let dob_model_dir = if args.dob_judge {
+        let outcome = install_gliner_dob_bundle(args.dob_model_dir.as_deref())
+            .map_err(|err| setup_error(format!("GLiNER DOB bundle setup failed: {err}")))?;
+        Some(match outcome {
+            InstallOutcome::AlreadyPresent { model_dir } => {
+                (model_dir, ModelInstallStatus::AlreadyPresent)
+            }
+            InstallOutcome::Installed { model_dir } => (model_dir, ModelInstallStatus::Downloaded),
+        })
+    } else {
+        None
+    };
+
+    let doctor_clean_text = write_verified_policy_with_dob(
         &policy_path,
         &model_dir,
         resolved_safety_net
             .nym_model_dir
             .as_ref()
             .map(|(path, _)| path.as_path()),
+        dob_model_dir.as_ref().map(|(path, _)| path.as_path()),
         args.force,
         doctor_check,
     )?;
@@ -101,6 +127,7 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
         doctor_clean_text,
         opf_checkpoint: resolved_safety_net.opf_checkpoint,
         nym_model_dir: resolved_safety_net.nym_model_dir,
+        dob_model_dir,
     })
 }
 
@@ -351,10 +378,21 @@ fn ensure_policy_writable(policy_path: &Path, force: bool) -> Result<(), CliErro
     Ok(())
 }
 
+#[cfg(test)]
 fn write_policy(
     policy_path: &Path,
     model_dir: &Path,
     nym_model_dir: Option<&Path>,
+    force: bool,
+) -> Result<tempfile::NamedTempFile, CliError> {
+    write_policy_with_dob(policy_path, model_dir, nym_model_dir, None, force)
+}
+
+fn write_policy_with_dob(
+    policy_path: &Path,
+    model_dir: &Path,
+    nym_model_dir: Option<&Path>,
+    dob_model_dir: Option<&Path>,
     force: bool,
 ) -> Result<tempfile::NamedTempFile, CliError> {
     ensure_policy_writable(policy_path, force)?;
@@ -369,7 +407,12 @@ fn write_policy(
 
     let model_dir = canonical_or_absolute(model_dir)?;
     let nym_model_dir = nym_model_dir.map(canonical_or_absolute).transpose()?;
-    let policy = setup_policy_toml(&model_dir, nym_model_dir.as_deref())?;
+    let dob_model_dir = dob_model_dir.map(canonical_or_absolute).transpose()?;
+    let policy = setup_policy_toml_with_dob(
+        &model_dir,
+        nym_model_dir.as_deref(),
+        dob_model_dir.as_deref(),
+    )?;
     let parent = policy_path
         .parent()
         .ok_or_else(|| setup_error("policy has no parent directory".to_string()))?;
@@ -410,6 +453,7 @@ fn write_policy(
     Ok(staged)
 }
 
+#[cfg(test)]
 fn write_verified_policy(
     policy_path: &Path,
     model_dir: &Path,
@@ -417,7 +461,19 @@ fn write_verified_policy(
     force: bool,
     doctor: impl FnOnce(&Path) -> Result<String, CliError>,
 ) -> Result<String, CliError> {
-    let staged = write_policy(policy_path, model_dir, nym_model_dir, force)?;
+    write_verified_policy_with_dob(policy_path, model_dir, nym_model_dir, None, force, doctor)
+}
+
+fn write_verified_policy_with_dob(
+    policy_path: &Path,
+    model_dir: &Path,
+    nym_model_dir: Option<&Path>,
+    dob_model_dir: Option<&Path>,
+    force: bool,
+    doctor: impl FnOnce(&Path) -> Result<String, CliError>,
+) -> Result<String, CliError> {
+    let staged =
+        write_policy_with_dob(policy_path, model_dir, nym_model_dir, dob_model_dir, force)?;
     let clean_text = doctor(staged.path())?;
     let published = if force {
         staged.persist(policy_path)
@@ -434,7 +490,16 @@ fn write_verified_policy(
     Ok(clean_text)
 }
 
+#[cfg(test)]
 fn setup_policy_toml(model_dir: &Path, nym_model_dir: Option<&Path>) -> Result<String, CliError> {
+    setup_policy_toml_with_dob(model_dir, nym_model_dir, None)
+}
+
+fn setup_policy_toml_with_dob(
+    model_dir: &Path,
+    nym_model_dir: Option<&Path>,
+    dob_model_dir: Option<&Path>,
+) -> Result<String, CliError> {
     let model_dir = toml_basic_string(&model_dir.to_string_lossy());
     let packs = gaze_recognizers::embedded_rulepacks()
         .filter(|(name, _)| *name != "secrets")
@@ -476,6 +541,12 @@ fn setup_policy_toml(model_dir: &Path, nym_model_dir: Option<&Path>) -> Result<S
             toml_basic_string(&dir.to_string_lossy())
         )
     });
+    let dob_judge = dob_model_dir.map_or(String::new(), |dir| {
+        format!(
+            "\n[dob_judge]\nenabled = true\nmodel_dir = \"{}\"\nthreshold = 0.5\n",
+            toml_basic_string(&dir.to_string_lossy())
+        )
+    });
     Ok(format!(
         r#"schema_version = "0.1.0"
 
@@ -488,7 +559,7 @@ active = [{active}]
 [ner]
 model_dir = "{model_dir}"
 threshold = 0.3
-{safety_net}
+{safety_net}{dob_judge}
 
 [policy.rulepacks]
 bundled = [{bundled}]
@@ -514,6 +585,7 @@ fn doctor_check(policy_path: &Path) -> Result<String, CliError> {
     let locale_chain = resolved.locale_chain;
     let dictionaries = resolved.dictionaries;
     let nym_enabled = policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym;
+    let dob_enabled = policy.dob_judge.is_some();
     if nym_enabled {
         pipeline = gaze_assembly::attach_nym_safety_net(pipeline, &policy, None, None, None)
             .map_err(|err| setup_error(format!("doctor Nym attachment failed: {err}")))?;
@@ -565,6 +637,27 @@ fn doctor_check(policy_path: &Path) -> Result<String, CliError> {
         };
         verify_doctor_nym(pipeline.safety_net_count(), &plate_text, &report)?;
     }
+    if dob_enabled {
+        let (dob, _, _) = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text(DOCTOR_DOB_INPUT.to_string()),
+                locale_chain.as_slice(),
+                &dictionaries,
+                gaze::SafetyNetPolicy::default(),
+            )
+            .map_err(|err| setup_error(format!("doctor DOB clean failed: {err}")))?;
+        let CleanDocument::Text(dob_text) = dob else {
+            return Err(setup_error(
+                "doctor DOB produced a non-text clean document".to_string(),
+            ));
+        };
+        if dob_text.contains("14.03.1987") || !dob_text.contains(":Custom:birth_date_") {
+            return Err(setup_error(
+                "doctor: GLiNER did not tokenize the synthetic birth date".to_string(),
+            ));
+        }
+    }
     Ok(clean_text)
 }
 
@@ -612,6 +705,14 @@ fn print_summary(summary: &SetupSummary) {
     if summary.nym_model_dir.is_some() {
         println!("doctor Nym pass: synthetic licence plate tokenized");
     }
+    if let Some((dob_model_dir, status)) = &summary.dob_model_dir {
+        let verb = match status {
+            ModelInstallStatus::AlreadyPresent => "verified",
+            ModelInstallStatus::Downloaded => "installed",
+        };
+        println!("GLiNER DOB bundle {verb} {}", dob_model_dir.display());
+        println!("doctor GLiNER pass: synthetic birth date tokenized");
+    }
     println!("Setup complete.");
     println!("Model: {}", summary.model_dir.display());
     println!("Policy: {}", summary.policy_path.display());
@@ -630,6 +731,10 @@ fn print_summary(summary: &SetupSummary) {
         );
         println!("Training-data licence review is open: https://github.com/CertaMesh/gaze/blob/main/docs/explanation/safety-net/safety-nets.md#licence-review-open");
         println!("Opt out: gaze setup --safety-net none");
+    }
+    if summary.dob_model_dir.is_some() {
+        println!("GLiNER model: {GLINER_DOB_HF_REPO} (model card licence: Apache-2.0)");
+        println!("Source: https://huggingface.co/{GLINER_DOB_HF_REPO} at revision {GLINER_DOB_HF_COMMIT}");
     }
     if let Some(opf_checkpoint) = &summary.opf_checkpoint {
         println!(
@@ -723,6 +828,8 @@ mod tests {
                 safety_net: Some(SetupSafetyNet::None),
                 policy_out: Some(policy_out.clone()),
                 model_dir: Some(model_dir),
+                dob_judge: false,
+                dob_model_dir: None,
                 non_interactive: true,
                 force: false,
             },
@@ -756,6 +863,8 @@ mod tests {
                 safety_net: Some(SetupSafetyNet::None),
                 policy_out: Some(policy_out.clone()),
                 model_dir: Some(model_dir.clone()),
+                dob_judge: false,
+                dob_model_dir: None,
                 non_interactive: true,
                 force: false,
             },
@@ -892,6 +1001,17 @@ mod tests {
     }
 
     #[test]
+    fn generated_policy_enables_dob_judge_only_when_selected() {
+        let ner = PathBuf::from("/tmp/synthetic-ner");
+        let dob = PathBuf::from("/tmp/synthetic-gliner");
+        let default = setup_policy_toml(&ner, None).unwrap();
+        assert!(!default.contains("[dob_judge]"));
+        let selected = setup_policy_toml_with_dob(&ner, None, Some(&dob)).unwrap();
+        assert!(selected.contains("[dob_judge]\nenabled = true"));
+        assert!(selected.contains("model_dir = \"/tmp/synthetic-gliner\""));
+    }
+
+    #[test]
     fn doctor_refuses_a_detached_or_inert_nym() {
         let report = gaze::LeakReport::default();
         let tokenized = "Kennzeichen <session:Custom:license_plate_1>";
@@ -1020,6 +1140,8 @@ mod tests {
                 safety_net: Some(SetupSafetyNet::Opf),
                 policy_out: Some(policy_out.clone()),
                 model_dir: Some(model_dir),
+                dob_judge: false,
+                dob_model_dir: None,
                 non_interactive: true,
                 force: false,
             },
@@ -1055,6 +1177,8 @@ mod tests {
                 safety_net: Some(SetupSafetyNet::Opf),
                 policy_out: Some(policy_out.clone()),
                 model_dir: Some(model_dir),
+                dob_judge: false,
+                dob_model_dir: None,
                 non_interactive: true,
                 force: false,
             },
@@ -1229,6 +1353,8 @@ mod tests {
                 safety_net: Some(SetupSafetyNet::None),
                 policy_out: Some(first_policy),
                 model_dir: Some(model_dir.clone()),
+                dob_judge: false,
+                dob_model_dir: None,
                 non_interactive: true,
                 force: false,
             },
@@ -1240,6 +1366,8 @@ mod tests {
                 safety_net: Some(SetupSafetyNet::None),
                 policy_out: Some(second_policy),
                 model_dir: Some(model_dir.clone()),
+                dob_judge: false,
+                dob_model_dir: None,
                 non_interactive: true,
                 force: false,
             },

@@ -57,9 +57,10 @@ pub use pipeline::{
     SafetyNetDecision, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
 };
 pub use policy::{
-    validate_ner_locale, DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec,
-    RulepackPolicy, SafetyNetBackendsPolicy, SafetyNetPolicyBackend, SessionPolicy, SessionScope,
-    DEFAULT_NER_THRESHOLD, DEFAULT_POLICY_SCHEMA_VERSION, SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR,
+    validate_ner_locale, DetectorKind, DetectorSpec, DobJudgePolicy, NerPolicy, Policy,
+    PolicyError, RuleSpec, RulepackPolicy, SafetyNetBackendsPolicy, SafetyNetPolicyBackend,
+    SessionPolicy, SessionScope, DEFAULT_NER_THRESHOLD, DEFAULT_POLICY_SCHEMA_VERSION,
+    SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR,
 };
 pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 pub use registry::{

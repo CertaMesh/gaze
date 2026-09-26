@@ -838,6 +838,24 @@ downloaded from `onnx/model_int8.onnx` and verified against the repository-root
 the canonical copy-paste policy block is
 [`crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml`](../../crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml).
 
+### `[dob_judge]` (optional)
+
+```toml
+[dob_judge]
+enabled = true
+model_dir = "/absolute/path/to/gliner-multi-pii-dob-int8"
+threshold = 0.5
+```
+
+The local GLiNER judge considers date-shaped spans that the rule floor has not
+already claimed as `birth_date`. It can emit a restorable `birth_date` token
+with the distinct `dob.gliner` source. It is disabled unless `enabled = true`;
+`gaze setup --dob-judge` installs the SHA-pinned int8 bundle and writes this
+block. An enabled block requires `model_dir`. Missing or corrupt bundle files,
+an invalid threshold, and inference errors fail closed. `threshold` defaults
+to `0.5` and must be in `0.0..=1.0`. Negative business-date contexts such as
+`Account opened` are excluded before model inference.
+
 ### `[safety_net]` and `[safety_net.nym]`
 
 `backend = "nym"` activates the opt-in Nym-small safety net for CLI commands

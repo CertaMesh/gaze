@@ -51,6 +51,8 @@ pub struct Policy {
     pub dictionaries: Vec<RulepackDict>,
     pub rules: Vec<RuleSpec>,
     pub ner: Option<NerPolicy>,
+    /// Optional local date-of-birth judge. Absent means disabled.
+    pub dob_judge: Option<DobJudgePolicy>,
     pub rulepacks: RulepackPolicy,
     pub locale: Option<Vec<LocaleTag>>,
     /// Safety-net selection and settings from `[safety_net]`.
@@ -73,6 +75,7 @@ impl Default for Policy {
             dictionaries: Vec::new(),
             rules: Vec::new(),
             ner: None,
+            dob_judge: None,
             rulepacks: RulepackPolicy::default(),
             locale: None,
             safety_net: SafetyNetBackendsPolicy::default(),
@@ -192,6 +195,13 @@ pub struct NerPolicy {
     pub threshold: f32,
 }
 
+/// `[dob_judge]`: local GLiNER scoring of rule-found, unclaimed dates.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DobJudgePolicy {
+    pub model_dir: PathBuf,
+    pub threshold: f32,
+}
+
 impl Default for NerPolicy {
     fn default() -> Self {
         Self {
@@ -275,6 +285,12 @@ pub enum PolicyError {
     NerLoad(String),
     #[error("ner.threshold must be between 0.0 and 1.0 inclusive, got {value}")]
     NerThresholdOutOfRange { value: f32 },
+    #[error("[dob_judge].enabled requires model_dir")]
+    DobJudgeModelDirMissing,
+    #[error("[dob_judge].threshold must be between 0.0 and 1.0 inclusive, got {value}")]
+    DobJudgeThresholdOutOfRange { value: f32 },
+    #[error("disabled [dob_judge] must not specify model_dir or threshold")]
+    DobJudgeDisabledSettings,
     #[error("session.scope must be one of ephemeral, conversation, persistent, got {value}")]
     SessionScopeUnknown { value: String },
     #[error("ner.locale must be a BCP47 locale tag, got {value}")]
@@ -336,6 +352,8 @@ struct RawPolicy {
     rules: Vec<RawRuleSpec>,
     #[serde(default)]
     ner: Option<RawNerPolicy>,
+    #[serde(default)]
+    dob_judge: Option<RawDobJudgePolicy>,
     #[serde(default)]
     locale: Option<RawLocalePolicy>,
     #[serde(default)]
@@ -407,6 +425,15 @@ struct RawNerPolicy {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RawDobJudgePolicy {
+    #[serde(default)]
+    enabled: bool,
+    model_dir: Option<String>,
+    threshold: Option<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawLocalePolicy {
     #[serde(default)]
     active: Vec<String>,
@@ -468,6 +495,7 @@ impl TryFrom<RawPolicy> for Policy {
         } = policy_tables;
 
         let ner = raw.ner.map(parse_ner).transpose()?;
+        let dob_judge = raw.dob_judge.map(parse_dob_judge).transpose()?.flatten();
         let mut detectors = Vec::with_capacity(custom_recognizers.len());
         let mut dictionaries = Vec::new();
         for detector in custom_recognizers {
@@ -542,6 +570,7 @@ impl TryFrom<RawPolicy> for Policy {
             dictionaries,
             rules,
             ner,
+            dob_judge,
             rulepacks,
             locale,
             safety_net,
@@ -785,6 +814,24 @@ fn parse_ner(raw: RawNerPolicy) -> Result<NerPolicy, PolicyError> {
         locale: raw.locale,
         threshold,
     })
+}
+
+fn parse_dob_judge(raw: RawDobJudgePolicy) -> Result<Option<DobJudgePolicy>, PolicyError> {
+    if !raw.enabled {
+        if raw.model_dir.is_some() || raw.threshold.is_some() {
+            return Err(PolicyError::DobJudgeDisabledSettings);
+        }
+        return Ok(None);
+    }
+    let model_dir = raw.model_dir.ok_or(PolicyError::DobJudgeModelDirMissing)?;
+    let threshold = raw.threshold.unwrap_or(0.5);
+    if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
+        return Err(PolicyError::DobJudgeThresholdOutOfRange { value: threshold });
+    }
+    Ok(Some(DobJudgePolicy {
+        model_dir: expand_home(model_dir)?,
+        threshold,
+    }))
 }
 
 pub fn validate_ner_locale(locale: &str) -> Result<(), PolicyError> {
@@ -1090,6 +1137,35 @@ action = "tokenize"
         let raw: RawPolicy = toml::from_str(&format!("{NYM_POLICY_BASE}\n{table}"))
             .map_err(PolicyError::TomlParse)?;
         Policy::try_from(raw)
+    }
+
+    #[test]
+    fn dob_judge_is_opt_in_and_requires_a_bundle_path() {
+        assert!(nym_policy("").unwrap().dob_judge.is_none());
+        assert!(nym_policy("[dob_judge]\nenabled = false\n")
+            .unwrap()
+            .dob_judge
+            .is_none());
+        let enabled = nym_policy(
+            "[dob_judge]\nenabled = true\nmodel_dir = \"/tmp/synthetic-gliner\"\nthreshold = 0.5\n",
+        )
+        .unwrap()
+        .dob_judge
+        .unwrap();
+        assert_eq!(enabled.model_dir, PathBuf::from("/tmp/synthetic-gliner"));
+        assert_eq!(enabled.threshold, 0.5);
+        assert!(matches!(
+            nym_policy("[dob_judge]\nenabled = true\n"),
+            Err(PolicyError::DobJudgeModelDirMissing)
+        ));
+        assert!(matches!(
+            nym_policy("[dob_judge]\nenabled = true\nmodel_dir = \"/tmp/x\"\nthreshold = 1.1\n"),
+            Err(PolicyError::DobJudgeThresholdOutOfRange { .. })
+        ));
+        assert!(matches!(
+            nym_policy("[dob_judge]\nmodel_dir = \"/tmp/x\"\n"),
+            Err(PolicyError::DobJudgeDisabledSettings)
+        ));
     }
 
     #[test]
