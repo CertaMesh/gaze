@@ -213,53 +213,6 @@ recognizer declares `mandatory_anchor` without a matching bundled cue block.
 Full contract:
 [`docs/explanation/detection/anchor-resolution.md`](../../docs/explanation/detection/anchor-resolution.md).
 
-## Adding recognizers here
-
-Add a recognizer to this crate when it is a built-in backend Gaze should ship
-for many adopters. The recognizer should implement `gaze::Recognizer` and
-provide deterministic metadata:
-
-- stable `id`
-- supported `PiiClass`
-- locale eligibility
-- score and priority
-- token family
-- canonical form when a validator proves one
-- source labels suitable for audit logs
-
-The detection entry point is **fallible** (P0 #908):
-
-```rust
-fn detect(&self, input: &str, ctx: &DetectContext<'_>)
-    -> Result<Vec<Candidate>, gaze_types::DetectError>;
-```
-
-A backend failure MUST surface as `DetectError::backend(self.id(), <message>)`,
-never as an empty `Vec`. Returning an empty candidate list means "no PII here",
-and the pipeline trusts it — so a backend that fails silently is an axis-1 leak.
-The registry short-circuits on `Err` and the pipeline aborts outbound redaction
-(`gaze::pipeline::Error::RecognizerDetect`) rather than emitting partially
-cleaned output. Recognizers whose logic cannot fail simply return
-`Ok(candidates)`. Full contract:
-[`docs/explanation/detection/ner-failclosed.md`](../../docs/explanation/detection/ner-failclosed.md).
-
-Add adopter-specific recognizers outside this crate when the behavior is tied
-to one tenant, one private schema, or one proprietary data source.
-
-The per-recognizer metadata surface (`id`, `supported_class`, `token_family`,
-`validator_kind`, `locales`), the SafetyNet benchmark-snapshot fields
-(strict-span leak rate, observer-residual recall, composability quad), and
-the `Candidate`/`CollisionMembership` audit-row linkage are cataloged in
-[`docs/reference/metrics.md`](../../docs/reference/metrics.md#3-safetynet-metrics-gaze-recognizers)
-(SafetyNet) and
-[`docs/reference/metrics.md`](../../docs/reference/metrics.md#4-recognizer-surface-gaze-recognizers--gaze)
-(recognizer surface).
-
-## Test support
-
-The crate has a `test-support` feature for tests that need additional support
-surface without making it part of the default public runtime.
-
 ## Explicit birth-date and credential fields
 
 The embedded `gaze-core` rulepack version **0.6.0** contains 40 recognizers.
@@ -349,3 +302,50 @@ candidate's own validator veto.
 These rules add deterministic coverage for supported text fields. Synthetic
 proofs do not establish a production leaked-byte reduction, zero rejects or
 latency nonregression. Additional regex work has not been benchmarked here.
+
+## Adding recognizers here
+
+Add a recognizer to this crate when it is a built-in backend Gaze should ship
+for many adopters. The recognizer should implement `gaze::Recognizer` and
+provide deterministic metadata:
+
+- stable `id`
+- supported `PiiClass`
+- locale eligibility
+- score and priority
+- token family
+- canonical form when a validator proves one
+- source labels suitable for audit logs
+
+The detection entry point is **fallible** (P0 #908):
+
+```rust
+fn detect(&self, input: &str, ctx: &DetectContext<'_>)
+    -> Result<Vec<Candidate>, gaze_types::DetectError>;
+```
+
+A backend failure MUST surface as `DetectError::backend(self.id(), <message>)`,
+never as an empty `Vec`. Returning an empty candidate list means "no PII here",
+and the pipeline trusts it — so a backend that fails silently is an axis-1 leak.
+The registry short-circuits on `Err` and the pipeline aborts outbound redaction
+(`gaze::pipeline::Error::RecognizerDetect`) rather than emitting partially
+cleaned output. Recognizers whose logic cannot fail simply return
+`Ok(candidates)`. Full contract:
+[`docs/explanation/detection/ner-failclosed.md`](../../docs/explanation/detection/ner-failclosed.md).
+
+Add adopter-specific recognizers outside this crate when the behavior is tied
+to one tenant, one private schema, or one proprietary data source.
+
+The per-recognizer metadata surface (`id`, `supported_class`, `token_family`,
+`validator_kind`, `locales`), the SafetyNet benchmark-snapshot fields
+(strict-span leak rate, observer-residual recall, composability quad), and
+the `Candidate`/`CollisionMembership` audit-row linkage are cataloged in
+[`docs/reference/metrics.md`](../../docs/reference/metrics.md#3-safetynet-metrics-gaze-recognizers)
+(SafetyNet) and
+[`docs/reference/metrics.md`](../../docs/reference/metrics.md#4-recognizer-surface-gaze-recognizers--gaze)
+(recognizer surface).
+
+## Test support
+
+The crate has a `test-support` feature for tests that need additional support
+surface without making it part of the default public runtime.
