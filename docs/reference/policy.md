@@ -1204,6 +1204,32 @@ that adds entries to `forward_markers`, `agent_recipient_cues`, or
 `footer_cues`. Keep cue additions narrow and add local regression fixtures
 before broadening a bucket.
 
+### Street lexicons and house numbers
+
+Two more locale buckets let a street the NER model found license the house
+number beside it (solo todo #3670). They are word lists, not recognizers: a
+number is tokenized only when a winning NER `location` span ends in one of
+these words.
+
+- `street_suffixes_number_after` (`locale-de`): word endings such as
+  `straße`, `weg`, `platz`. The span's last word must end in one, and the
+  house number follows it: `Musterweg 17b`.
+- `street_types_number_before` (`locale-en`): whole street-type words such as
+  `street`, `road`, `drive`. The span must have at least two words, end in
+  one, and the house number precedes it: `17 Example Street`.
+
+An entry with a trailing dot (`str.`, `st.`) is an abbreviation, so a dot may
+follow the word. One or two spaces separate street and number; a line break,
+tab or other character ends the match. A house number is one to four digits,
+one optional letter, and one optional `-`, `–` or `/` part (`12-14`, `12/3`).
+The token is a `location` token with recognizer id
+`address.house_number.street_corroborated` and trace sources
+`[address.house_number.street_corroborated, ner]`. Without NER, or without a
+locale pack that ships these buckets, nothing changes. A custom rulepack can
+add entries for a tenant's street vocabulary; measure both directions before
+broadening a list, because the NER span is the only evidence that the words
+form a street.
+
 ## Known spec drift
 
 Documented here so users get the truth while the gaps land on the
