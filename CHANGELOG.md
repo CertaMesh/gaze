@@ -52,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PolicyOpen` / exit 4 envelope with a `detail` that names the file and the
   `chown` / `chmod 0640` fix. It still fails closed. See
   [Policy file permissions](docs/reference/policy.md#policy-file-permissions).
+- **The release text scrub covers `UPGRADE.md` and allows two public link
+  shapes.** `xtask scrub-public-text` no longer flags links to this
+  repository's pull requests, issues and releases, or to the SemVer
+  specification. The host must match exactly and the whole path must fit a
+  fixed pattern, so any other URL, a lookalike host or free text in the path
+  still fails. The release preflight and the tag-push scrub steps in both
+  release workflows now include `UPGRADE.md`, and a workspace test keeps it
+  clean on every PR.
 
 ## [0.15.1] - 2026-09-26
 

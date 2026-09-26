@@ -12,6 +12,7 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
 - Builds and uploads platform binary artifacts plus a source tarball to the GitHub Releases page.
 - The GitHub Release body uses GitHub-generated release notes from the tag history.
 - `CHANGELOG.md` remains the curated human source for release highlights and is scrubbed before publication; committed `dist/release-notes/` files are intentionally not maintained.
+- `cargo run -p xtask -- scrub-public-text` scrubs the release text: the version's `CHANGELOG.md` section and `UPGRADE.md` on every tag push (in both the `release` and `publish` jobs, before anything is published), plus any release notes or PR body passed to the `workflow_dispatch` preflight. `UPGRADE.md` is also scrubbed on every PR by the `scrub_public_text_passes_upgrade_md` test. The gate tokenizes every URL except the shapes in `PUBLIC_URL_ALLOWLIST` (`crates/xtask/src/scrub_public_text.rs`): this repository's `pull/<n>`, `issues/<n>` and `releases` pages, and the SemVer specification (`spec/v<x.y.z>.html#spec-item-<n>`). The host must match exactly and the anchored pattern must cover the whole path, so a lookalike host or free text in the path fails.
 - Browse releases at <https://github.com/CertaMesh/gaze/releases>.
 
 ### crates.io
