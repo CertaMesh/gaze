@@ -67,7 +67,7 @@ Source anchors: [crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs),
 
 ## Crate Map
 
-The workspace currently has nine published-shape crates plus internal `xtask`.
+The workspace has 15 published crates plus internal `xtask`.
 For the fuller crate boundary table, see
 [docs/reference/crates.md](docs/reference/crates.md).
 
@@ -82,6 +82,12 @@ For the fuller crate boundary table, see
 | `gaze-mcp-core` | Transport-free MCP-shaped chokepoint runtime: tool registry, sealed context, envelope dispatch, manifest store, auth hook, session-id policy. | You are building an MCP tool host and need every tool call through Gaze before reaching a source system. |
 | `gaze-mcp-rmcp` | rmcp transport sink for `gaze-mcp-core`, with stdio default and opt-in streamable HTTP. | You want rmcp framing without reimplementing the transport adapter. |
 | `gaze-document` | OSS document ingestion: PNG/JPG/PDF to Tesseract OCR to Gaze redaction to `SafeBundle`. | You need `clean.md`, `manifest.json`, and `report.json` from scanned or rasterized documents. |
+| `gaze-proxy` | Feature-gated HTTP proxy runtime for LLM SDK base-URL swaps (OpenAI, Anthropic, Gemini); keeps each provider's native wire shape. | Your SDK or agent host calls a vendor LLM API with an API key and that traffic needs pseudonymization. |
+| `gaze-proxy-dashboard` | Opt-in, memory-only inspection dashboard runtime for `gaze proxy`, behind the default-off `gaze-cli` `dashboard` feature. | You operate the proxy and opt into local inspection of its traffic. |
+| `gaze-inspection` | Provider-neutral, bounded inspection delivery: zeroizing payload wrappers and the matched producer/consumer runtime. | You build an inspection consumer such as the dashboard. |
+| `gaze-model-setup` | Installs and verifies pinned Gaze model bundles; `gaze setup` uses it. | Your tooling installs the pinned model bundles itself. |
+| `gaze-mcp-bridge` | Optional policy-gated MCP bridge: agents see only tokens, downstream MCP tools receive restored PII only for explicitly allowed argument fields. | You put Gaze in front of existing downstream MCP tools. |
+| `gaze-token-bridge` | Experimental owner-side authorization and translation layer that lets an agent search redact-before-index corpora with session tokens. | An agent must search long-lived document corpora without seeing raw values. |
 | `xtask` | Internal gate runner plus detached Dylint workspace for protected-path enforcement. | You are adding or running repository gates and CI-only checks. |
 
 ## Three Execution Layers
@@ -222,9 +228,9 @@ shape in provider drivers while the proxy core owns pseudonymization, manifest
 handling, restore boundaries, and fail-closed behavior. Adapters ship for
 OpenAI, Anthropic, and Gemini API-key paths.
 
-Source anchors: [docs/explanation/mcp/mcp-runtime.md](docs/explanation/mcp/mcp-runtime.md),
-[crates/gaze-mcp-core/src/lib.rs](crates/gaze-mcp-core/src/lib.rs), and
-[crates/gaze-mcp-rmcp/src/lib.rs](crates/gaze-mcp-rmcp/src/lib.rs).
+Source anchors: [docs/explanation/proxy/proxy-runtime.md](docs/explanation/proxy/proxy-runtime.md),
+[crates/gaze-proxy/src/lib.rs](crates/gaze-proxy/src/lib.rs), and
+[crates/gaze-proxy/src/adapters](crates/gaze-proxy/src/adapters).
 
 ## Cross-Cutting Invariants
 
