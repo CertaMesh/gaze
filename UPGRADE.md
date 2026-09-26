@@ -422,9 +422,9 @@ exists today.)
 
 ---
 
-## v0.9.x → v0.10.0
+## v0.9.0 → v0.9.1
 
-Status: **unreleased.**
+Status: **shipped** in v0.9.1.
 
 ### TL;DR
 
