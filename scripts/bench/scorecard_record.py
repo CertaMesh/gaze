@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 import gaze_bench_score as score
+import agentic_layers as agentic
 
 
 SCHEMA_VERSION = 1
@@ -260,11 +261,27 @@ def _contract_documents(
     )
 
 
-def _evidence(row: Mapping[str, object]) -> dict[tuple[int, int, str], tuple[int, int, bool, tuple[tuple[int, int, str], ...]]]:
+def _evidence(
+    row: Mapping[str, object], document: score.Document, response: Mapping[str, object]
+) -> dict[tuple[int, int, str], tuple[int, int, bool, tuple[tuple[int, int, str], ...]]]:
     result = {}
+    gold = {(span.start, span.end, span.label) for span in _original_spans(document)}
     for start, end, label, trimmed_start, trimmed_end, boundary, matches in row.get("gold_gap_evidence", []):
         key = (start, end, label)
-        result[key] = (trimmed_start, trimmed_end, boundary, tuple(tuple(match) for match in matches))
+        if (key in result or type(trimmed_start) is not int or type(trimmed_end) is not int
+                or not start <= trimmed_start <= trimmed_end <= end
+                or type(boundary) is not bool):
+            raise RecordError(f"{document.uid}: invalid gold-gap evidence bounds")
+        identities = tuple(tuple(match) for match in matches)
+        if any(identity not in gold for identity in identities):
+            raise RecordError(f"{document.uid}: gold-gap evidence names unknown gold")
+        result[key] = (trimmed_start, trimmed_end, boundary, identities)
+    trace_keys = {
+        (item["raw_start"], item["raw_end"], item["class"])
+        for item in response["final_protection_trace"]
+    }
+    if set(result) != trace_keys or len(trace_keys) != len(response["final_protection_trace"]):
+        raise RecordError(f"{document.uid}: gold-gap evidence and trace disagree")
     return result
 
 
@@ -369,7 +386,8 @@ def rescore(
                         raise RecordError("invalid protection action")
             responses[document.uid] = response
             with_evidence.append(score.Document(**{
-                **document.__dict__, "gap_evidence": _evidence(row),
+                **document.__dict__, "gap_evidence": _evidence(row, document, response)
+                if "pipeline_error_code" not in response else None,
             }))
         measured_rows = {
             row["id"]: row for row in header["available"]
@@ -470,7 +488,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--scored-labels", type=Path)
     parser.add_argument("--agentic-scored-labels", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--expected-sha256", help="verify the published record digest")
     args = parser.parse_args(argv)
+    if args.expected_sha256 is not None and score.sha256_file(args.record) != args.expected_sha256:
+        raise RecordError("observation record SHA-256 mismatch")
     root = Path(__file__).resolve().parents[2]
     def load(path: Path) -> score.ScoredLabelContract:
         resolved = path if path.is_absolute() else root / path
@@ -480,7 +501,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             display = resolved.as_posix()
         return score.load_scored_label_contract(resolved, display_path=display)
     contract = load(args.scored_labels) if args.scored_labels else score.SCORED_LABEL_CONTRACT_V1
-    layer_contract = load(args.agentic_scored_labels) if args.agentic_scored_labels else None
+    layer_contract = (
+        agentic.load_contract(root, args.agentic_scored_labels)
+        if args.agentic_scored_labels else None
+    )
     card = rescore(args.record, contract, layer_contract)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(card, indent=2) + "\n", encoding="utf-8")
