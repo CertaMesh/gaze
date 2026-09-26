@@ -681,6 +681,35 @@ fn redaction_classes_reference_matches_loaded_code() {
     );
 }
 
+/// The prose count in the reference ("exactly N recognizer specs") drifted from 39 to a real 40
+/// once already; pin it to the loaded `core` rulepack.
+fn documented_core_recognizer_count(document: &str) -> usize {
+    const PREFIX: &str = "contains exactly ";
+    const SUFFIX: &str = " recognizer specs";
+    let start = document
+        .find(PREFIX)
+        .expect("reference states the core recognizer count")
+        + PREFIX.len();
+    let rest = &document[start..];
+    let end = rest
+        .find(SUFFIX)
+        .expect("count is followed by 'recognizer specs'");
+    rest[..end]
+        .trim()
+        .parse()
+        .expect("core recognizer count is a number")
+}
+
+#[test]
+fn documented_core_recognizer_count_matches_embedded_core() {
+    let document = read_workspace_file(DOC_PATH);
+    assert_eq!(
+        documented_core_recognizer_count(&document),
+        loaded_rulepack(CORE_RULEPACK).recognizers.len(),
+        "{DOC_PATH} states the wrong number of core recognizer specs"
+    );
+}
+
 #[test]
 fn embedded_alias_and_enum_parsers_are_behavioral_inputs_to_the_gate() {
     let core = gaze_recognizers::embedded(CORE_RULEPACK).expect("embedded core");

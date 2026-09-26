@@ -55,6 +55,8 @@ fn policy_md_minimal_working_example_loads() {
 
     let policy = Policy::load_for_cli(&path).expect("policy.md minimal example must load");
     assert_eq!(policy.session.scope, SessionScope::Persistent);
+    // The page says the omitted `[policy.rulepacks]` falls back to bundled `core`.
+    assert_eq!(policy.rulepacks.bundled, ["core"]);
     assert!(policy.rules.iter().any(|rule| matches!(
         rule,
         RuleSpec::Class {
