@@ -24,8 +24,8 @@ class RecordReplayTests(unittest.TestCase):
         text = f"{email} {email} secret"
         self.document = score.Document(
             "synthetic-1", text, "en", "US", "synthetic",
-            (score.Span(0, len(email), "EMAIL"),
-             score.Span(len(text) - 6, len(text), "PASSWORD")),
+            (score.Span(len(text) - 6, len(text), "PASSWORD"),
+             score.Span(0, len(email), "EMAIL")),
         )
         self.prediction = score.Span(len(email) + 1, len(email) * 2 + 1, "email")
         self.response = {

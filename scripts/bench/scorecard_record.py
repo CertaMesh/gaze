@@ -61,7 +61,7 @@ def _spans(spans: Sequence[score.Span]) -> list[list[object]]:
 
 
 def _original_spans(document: score.Document) -> tuple[score.Span, ...]:
-    return tuple(sorted((*document.spans, *document.excluded_spans), key=lambda s: (s.start, s.end, s.label)))
+    return (*document.spans, *document.excluded_spans)
 
 
 def _document_row(document: score.Document) -> dict[str, object]:
@@ -79,7 +79,7 @@ def _document_row(document: score.Document) -> dict[str, object]:
 
 def _gap_evidence(document: score.Document, predictions: Sequence[score.Span]) -> list[list[object]]:
     text = document.text.encode("utf-8")
-    gold = _original_spans(document)
+    gold = sorted(_original_spans(document), key=lambda span: (span.start, span.end, span.label))
     result: list[list[object]] = []
     for prediction in predictions:
         start, end = prediction.start, prediction.end
