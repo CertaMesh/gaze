@@ -2,6 +2,7 @@
 """Model-free tests for the agentic benchmark layers A and D."""
 
 import copy
+import hashlib
 import json
 import re
 import sys
@@ -757,6 +758,51 @@ class GateTests(unittest.TestCase):
         del candidate["layers"]
         with self.assertRaises(agentic.LayerError):
             agentic.gate(_scorecard(self.BASE), candidate)
+
+
+class PolicyDeltaGateTests(unittest.TestCase):
+    BASE_LEAKS = {"C": 100, "A": 50, "D": 0, "R": 30}
+
+    def compare(self, base_text: str, candidate_text: str, delta_text: str) -> dict:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = {name: Path(directory) / f"{name}.toml" for name in ("base", "candidate", "delta")}
+            for name, contents in (("base", base_text), ("candidate", candidate_text), ("delta", delta_text)):
+                paths[name].write_text(contents, encoding="utf-8")
+            base = _scorecard(self.BASE_LEAKS)
+            candidate = _scorecard({**self.BASE_LEAKS, "R": 10})
+            for label, card in (("base", base), ("candidate", candidate)):
+                digest = hashlib.sha256(paths[label].read_bytes()).hexdigest()
+                card["parameters"]["policy_sha256"] = digest
+                card["runner_provenance"] = {"policy": {"path": str(paths[label]), "sha256": digest}}
+            return agentic.gate(base, candidate, policy_delta=paths["delta"])
+
+    def test_declared_new_section_passes_with_parsed_toml_equality(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[extension]\nthreshold = 0.5\n\n[rules]\nenabled=true\n",
+            "[extension]\nthreshold=0.5\n",
+        )
+        self.assertEqual(result["verdict"], "pass")
+        self.assertEqual(set(result["policy_digests"]), {"base", "candidate", "delta"})
+        self.assertIn("Policy SHA-256 digests", agentic.gate_markdown(result))
+
+    def test_undeclared_extra_key_is_not_comparable(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[rules]\nenabled = true\nextra = true\n[extension]\nthreshold = 0.5\n",
+            "[extension]\nthreshold = 0.5\n",
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+        self.assertIn("policy_sha256", result["differing"])
+
+    def test_delta_cannot_change_an_existing_base_section(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[rules]\nenabled = false\n",
+            "[rules]\nenabled = false\n",
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+        self.assertIn("existing base sections", result["policy_delta_reason"])
 
 
 class MutantGatePinTests(unittest.TestCase):
