@@ -671,7 +671,10 @@ model:
   cross-checks it on every run.
 - **Invalid twins:** they stay scored gold, as in the Kiji validator gold
   census. `layers.A.validator_gold_census` and each run's
-  `validator_recall_by_label` split the result by validity.
+  `validator_recall_by_label` split the result by validity. That split uses
+  Gaze's validators, which reject NBSP and NARROW NBSP group separators, so an
+  NBSP-spaced valid IBAN, NHS number, Steuer-ID or phone number counts there as
+  validator-failed. The `per_cell` validity is the generator's own verdict.
 - **Gold spans:** they are the inserted values at their UTF-8 byte offsets.
 
 Every result is also reported per `layer|family|surface|validity` cell under
