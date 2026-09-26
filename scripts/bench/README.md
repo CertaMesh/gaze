@@ -108,7 +108,8 @@ keyed by corpus SHA-256, layer, config and document ID. It contains gold and
 protected byte offsets, class, source IDs, action, refusal and restore facts,
 and validator offsets. For v3, it stores which gold span matches a trimmed
 prediction and whether the word boundary passes. It contains no document or
-protected values. The record also holds the original scorecard metadata, so a
+protected values. Observation rows omit run-dependent timing; the header keeps
+the original scorecard timing. The record also holds scorecard metadata, so a
 re-score needs no corpus, binary or model:
 
 ```bash

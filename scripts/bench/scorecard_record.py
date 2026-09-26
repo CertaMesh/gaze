@@ -126,7 +126,6 @@ def _compact_response(response: Mapping[str, object]) -> dict[str, object]:
         "initial_safety_net_stats": response["initial_safety_net_stats"],
         "strict_would_reject": response["strict_would_reject"],
         "post_policy_safety_net_stats": response["post_policy_safety_net_stats"],
-        "timing": response["timing"],
     }
 
 
@@ -373,7 +372,10 @@ def rescore(
                 key: value for key, value in available_rows[document.uid].items() if key != "validator"
             }:
                 raise RecordError(f"{document.uid}: observation disagrees with corpus header")
-            response = row["response"]
+            response = {
+                **row["response"],
+                "timing": {"clean_ms": 0.0, "restore_ms": 0.0, "post_policy_scan_ms": None},
+            }
             if response["fixture_id"] != document.uid:
                 raise RecordError(f"{document.uid}: response ID mismatch")
             if response.get("refused") is not ("pipeline_error_code" in response):
