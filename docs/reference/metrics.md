@@ -293,8 +293,9 @@ SafetyNet modes layer on top of the resolver (after tokenization):
 - **`Redact`** — `--safety-net-mode redact` overwrote a suspect span with
   the redaction sentinel. Axis 2 (reversibility) is sacrificed for that
   span; the original bytes are gone.
-- **`Resolve`** — `--safety-net-mode resolve` promoted a suspect span into
-  a synthetic custom-recognizer match that the resolver tokenized normally.
+- **`Resolve`** — `--safety-net-mode resolve` tokenized a suspect span
+  directly as a restorable token of the suspect's class (family
+  `safety_net`); the conflict resolver does not re-run.
 - **`Fallback`** — the configured `--safety-net-fallback` policy decided
   the outcome after the primary mode could not honor the suspect. Paired
   with `fallback_triggered` (see §1.2).
