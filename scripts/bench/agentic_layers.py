@@ -1527,9 +1527,33 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
         "kiji_dataset": scorecard.get("dataset", {}).get("integrity"),
         "corpus_sha256": layers.get("generator", {}).get("corpus_sha256"),
         "layer_contract": layers.get("scored_label_contract", {}).get("file_sha256"),
+        "layer_c_gold_validity": layers.get("gold_validity", {}).get("C"),
         "configs": scorecard.get("parameters", {}).get("configs"),
         "policy_sha256": scorecard.get("parameters", {}).get("policy_sha256"),
     }
+
+
+def gold_validity_digest(
+    documents: Sequence[score.Document], validator_measurements: Mapping[str, object]
+) -> dict[str, object]:
+    """SHA-256 over every gold span's validator verdict (document, span, label).
+
+    Gold validity is a property of the gold, but the probe that decides it is
+    built from the measured tree. Two scorecards are gate-comparable only when
+    this digest matches, so a PR that changes a validator cannot relabel the
+    gold it now leaks as "failed its checksum" and drop it from the gate.
+    """
+    responses = validator_measurements["documents"]
+    rows = sorted(
+        [document.uid, span.start, span.end, span.label,
+         bool(validation["applicable"]), validation["validator_passed"] is True]
+        for document in documents
+        for span, validation in zip(
+            document.spans, responses[document.uid]["gold_validation"], strict=True
+        )
+    )
+    payload = json.dumps(rows, separators=(",", ":")).encode("utf-8")
+    return {"algorithm": "sha256", "entities": len(rows), "value": hashlib.sha256(payload).hexdigest()}
 
 
 def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict[str, int]]:
@@ -1565,6 +1589,7 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
                 if block.get("production_recall_by_gold_validity")
             )
         totals[layer] = {
+            "headline_leaked": utf8["leaked"],
             "leaked": utf8["leaked"] - twin_leaked,
             "twin_leaked": twin_leaked,
             "false_positive": utf8["false_positive"],
@@ -1576,13 +1601,15 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
 def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mapping[str, int]]) -> dict[str, object]:
     """The net-bytes rule gate (user decision 2026-09-26), per contract.
 
-    Fail when any layer leaks more or refuses more. A leak fix passes only when
+    Fail when any layer leaks more (gated or headline bytes) or refuses more. A leak fix passes only when
     its summed FP-byte increase over all layers is smaller than its summed
     leaked-byte decrease. With no leak change, an FP-only fix passes when the
     summed FP bytes fall.
     """
     rows = {
         layer: {
+            "headline_leaked_base": base[layer]["headline_leaked"],
+            "headline_leaked_candidate": candidate[layer]["headline_leaked"],
             "leaked_base": base[layer]["leaked"],
             "leaked_candidate": candidate[layer]["leaked"],
             "twin_leaked_base": base[layer]["twin_leaked"],
@@ -1594,7 +1621,13 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         }
         for layer in GATE_LAYERS
     }
-    leak_rise = [l for l, r in rows.items() if r["leaked_candidate"] > r["leaked_base"]]
+    # Any rise fails, on the gated bytes or on the headline (all gold): a
+    # regression must not hide inside gold the gate leaves out.
+    leak_rise = [
+        l for l, r in rows.items()
+        if r["leaked_candidate"] > r["leaked_base"]
+        or r["headline_leaked_candidate"] > r["headline_leaked_base"]
+    ]
     refusal_rise = [l for l, r in rows.items() if r["failed_closed_candidate"] > r["failed_closed_base"]]
     leak_drop = sum(r["leaked_base"] - r["leaked_candidate"] for r in rows.values())
     fp_rise = sum(r["false_positive_candidate"] - r["false_positive_base"] for r in rows.values())

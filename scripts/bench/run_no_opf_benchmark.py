@@ -1116,6 +1116,9 @@ def run(args: argparse.Namespace) -> int:
             measured_repetitions=args.measured_repetitions,
             policy_path=policy_path,
         )
+        candidate["layers"]["gold_validity"] = {
+            "C": agentic.gold_validity_digest(documents, validator_measurements)
+        }
 
     readiness_result = score.evaluate_release_readiness(
         candidate,

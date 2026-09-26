@@ -631,6 +631,43 @@ class GateTests(unittest.TestCase):
         self.assertEqual(result["layers"]["C"]["twin_leaked_base"], 400)
         self.assertEqual(result["layers"]["C"]["leaked_base"], self.BASE["C"])
 
+    def test_reviewer_demo_validator_regression_fails_on_headline_leak(self) -> None:
+        # REVIEW 666 G1: a phone-validator regression vetoes 140 B of valid
+        # gold; the candidate's own probe then calls that gold validator-failed,
+        # so the gated C leak stays flat while the headline goes 13,045 -> 13,185
+        # and 5 FP bytes disappear. It must not pass as an FP-only fix.
+        base = _scorecard({**self.BASE, "C": 7_793}, self.FP, c_invalid_leak=5_252)
+        candidate = _scorecard(
+            {**self.BASE, "C": 7_793}, {**self.FP, "C": self.FP["C"] - 5}, c_invalid_leak=5_392
+        )
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["layers"]["C"]["headline_leaked_base"], 13_045)
+        self.assertEqual(result["layers"]["C"]["headline_leaked_candidate"], 13_185)
+        self.assertEqual(result["layers"]["C"]["leaked_candidate"], result["layers"]["C"]["leaked_base"])
+        self.assertEqual(result["verdict"], "fail")
+        self.assertIn("leaked bytes rose in ['C']", result["reason"])
+
+    def test_a_different_gold_classification_is_not_comparable(self) -> None:
+        base = _scorecard(self.BASE, self.FP)
+        candidate = _scorecard(self.BASE, self.FP)
+        base["layers"]["gold_validity"] = {"C": {"algorithm": "sha256", "entities": 3, "value": "a" * 64}}
+        candidate["layers"]["gold_validity"] = {"C": {"algorithm": "sha256", "entities": 3, "value": "b" * 64}}
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["verdict"], "not_comparable")
+        self.assertIn("layer_c_gold_validity", result["differing"])
+
+    def test_gold_validity_digest_moves_with_any_single_verdict(self) -> None:
+        documents = [score.Document("d1", "Tel 0301234567", "de", "DE", "unit",
+                                    (score.Span(4, 14, "PHONENUMBER"),))]
+        def measurements(passed: bool) -> dict:
+            return {"documents": {"d1": {"gold_validation": [
+                {"label": "PHONENUMBER", "applicable": True, "validator_passed": passed}]}}}
+        passed = agentic.gold_validity_digest(documents, measurements(True))
+        failed = agentic.gold_validity_digest(documents, measurements(False))
+        self.assertEqual(passed, agentic.gold_validity_digest(documents, measurements(True)))
+        self.assertNotEqual(passed["value"], failed["value"])
+        self.assertEqual(passed["entities"], 1)
+
     def test_layer_c_without_a_validator_split_fails_closed(self) -> None:
         candidate = _scorecard(self.BASE, self.FP)
         del candidate["runs"][0]["validator_recall_by_label"]

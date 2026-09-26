@@ -896,7 +896,10 @@ python3 scripts/bench/agentic_layers.py gate \
 
 For each contract, the production arm's numbers must satisfy all of these:
 
-1. **No layer leaks more.** Leaked bytes do not rise in C, A, D or R.
+1. **No layer leaks more.** Leaked bytes do not rise in C, A, D or R. This
+   is checked twice: on the gated bytes below, and on the headline leaked
+   bytes over all gold. A regression cannot hide inside gold the gate leaves
+   out.
 2. **No layer refuses more.** A refused document drops out of the leak count,
    so a rise in failed-closed documents in any layer fails the gate.
 3. **Net bytes improve.** At least one layer's leaked bytes fall, and the
@@ -908,10 +911,19 @@ For each contract, the production arm's numbers must satisfy all of these:
 The gate counts only gold that a precise rule can reach. Layer A leaves out
 its checksum-invalid twins, and layer C leaves out the Kiji gold that fails its
 own validator (from the per-label validator split). Both kinds stay in the
-headline and the census, and the gate reports them beside its verdict but
-never gates them. Only a rule without a checksum can reach them, and the layer
+headline and the census, and the gate reports them beside its verdict. Their
+bytes are left out of the net-bytes credit, but a rise in them still fails
+rule 1. Only a rule without a checksum can reach them, and the layer
 D counterweights already price that kind of rule separately. This net-bytes
 limit is the user's decision of 2026-09-26.
+
+Gold validity is a property of the gold, but the validator probe that decides
+it is built from the measured tree. `layers.gold_validity.C` therefore records
+a SHA-256 over every layer C gold span's verdict, and the gate compares it. A
+candidate whose validators classify any Kiji gold span differently from the
+base is not comparable (exit `2`). Without this check, a validator regression
+could turn valid PII into "failed its checksum" and drop it from the gated
+bytes. The gate then needs an explicit review decision.
 
 [`gate-pin-mutants.json`](../../../scripts/bench/fixtures/agentic/gate-pin-mutants.json)
 pins the true verdicts of two real full-harness runs against main:

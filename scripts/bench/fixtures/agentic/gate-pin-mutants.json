@@ -38,24 +38,28 @@
       "A": {
         "failed_closed": 0,
         "false_positive": 556,
+        "headline_leaked": 15261,
         "leaked": 989,
         "twin_leaked": 14272
       },
       "C": {
         "failed_closed": 0,
         "false_positive": 30078,
+        "headline_leaked": 13045,
         "leaked": 7793,
         "twin_leaked": 5252
       },
       "D": {
         "failed_closed": 0,
         "false_positive": 604,
+        "headline_leaked": 0,
         "leaked": 0,
         "twin_leaked": 0
       },
       "R": {
         "failed_closed": 0,
         "false_positive": 403,
+        "headline_leaked": 374,
         "leaked": 374,
         "twin_leaked": 0
       }
@@ -64,24 +68,28 @@
       "A": {
         "failed_closed": 0,
         "false_positive": 556,
+        "headline_leaked": 14451,
         "leaked": 809,
         "twin_leaked": 13642
       },
       "C": {
         "failed_closed": 0,
         "false_positive": 30103,
+        "headline_leaked": 12602,
         "leaked": 7620,
         "twin_leaked": 4982
       },
       "D": {
         "failed_closed": 0,
         "false_positive": 874,
+        "headline_leaked": 0,
         "leaked": 0,
         "twin_leaked": 0
       },
       "R": {
         "failed_closed": 0,
         "false_positive": 403,
+        "headline_leaked": 374,
         "leaked": 374,
         "twin_leaked": 0
       }
@@ -90,24 +98,28 @@
       "A": {
         "failed_closed": 0,
         "false_positive": 539,
+        "headline_leaked": 10510,
         "leaked": 989,
         "twin_leaked": 9521
       },
       "C": {
         "failed_closed": 0,
         "false_positive": 30076,
+        "headline_leaked": 11215,
         "leaked": 7778,
         "twin_leaked": 3437
       },
       "D": {
         "failed_closed": 0,
         "false_positive": 1174,
+        "headline_leaked": 0,
         "leaked": 0,
         "twin_leaked": 0
       },
       "R": {
         "failed_closed": 0,
         "false_positive": 403,
+        "headline_leaked": 374,
         "leaked": 374,
         "twin_leaked": 0
       }
