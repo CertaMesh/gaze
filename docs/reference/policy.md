@@ -54,12 +54,6 @@ custom recognizers, dictionaries, or non-tokenize actions.
 scope = "persistent"
 ttl_secs = 86400
 
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
-
 [[rule]]
 kind = "class"
 class = "email"
@@ -76,6 +70,11 @@ Run it:
 $ echo "Email alice@example.invalid now" | gaze clean --policy=minimal.toml
 {"clean_text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
 ```
+
+The policy omits `[policy.rulepacks]`, so the bundled `core` rulepack
+supplies the email recognizer. Do not add a generic email regex as a custom
+recognizer: it also matches Gaze's own email-shaped tokens, and the loader
+rejects it with `TokenShapeShadow` ("shadows Gaze token shape sample").
 
 Add `--audit-db=redaction.sqlite` to persist the metadata-only SQLite
 redaction log for the invocation. Dictionary rows use
@@ -94,8 +93,8 @@ The v0.5 `gaze` audit feature shim has been removed in v0.6. Paths such as
 supported facade re-export for the trait, whose canonical home is
 `gaze_types::RedactionLogger`.
 
-This is the same fixture the CLI integration suite uses
-(`crates/gaze/tests/cli_pipe.rs::t16_clean_with_policy_tokenizes_email`).
+The test `policy_md_minimal_working_example_loads` in
+`crates/gaze/tests/policy_example.rs` loads this exact block.
 
 ## Classes
 
