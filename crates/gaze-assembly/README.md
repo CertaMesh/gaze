@@ -38,6 +38,36 @@ gaze-recognizers = { path = "../gaze-recognizers" }
 serde_json = "1"
 ```
 
+## Minimal flow
+
+```rust
+use std::collections::HashMap;
+
+use gaze::{Context, LocaleChain, Policy, Rulepack};
+
+let policy: Policy = Policy::load_for_cli(policy_path)?;
+let context = Context {
+    dictionaries: HashMap::new(),
+    class_map: HashMap::new(),
+    fields: serde_json::Map::new(),
+};
+let rulepacks: Vec<Rulepack> = Vec::new();
+let active_locales = LocaleChain::merge_policy_and_cli(None, None);
+
+let pipeline = gaze_assembly::build_pipeline(
+    &policy,
+    &context,
+    &rulepacks,
+    &active_locales,
+    None,
+)?;
+```
+
+Consumers that need CLI-equivalent behavior call `resolve_policy_inputs`
+first; it loads bundled/path rulepacks, builds the `DictionaryBundle`, and
+resolves locale precedence. They still choose a session. See
+`crates/gaze-cli/src/pipeline/build.rs` for the CLI's use of both calls.
+
 ## Public entry points
 
 [`src/lib.rs`](src/lib.rs) exposes, among others:
@@ -80,36 +110,6 @@ It returns a fully built `gaze::Pipeline`.
 
 The function fails closed with `BuildError` when policy, rulepack, recognizer,
 or pipeline construction fails.
-
-## Minimal flow
-
-```rust
-use std::collections::HashMap;
-
-use gaze::{Context, LocaleChain, Policy, Rulepack};
-
-let policy: Policy = Policy::load_for_cli(policy_path)?;
-let context = Context {
-    dictionaries: HashMap::new(),
-    class_map: HashMap::new(),
-    fields: serde_json::Map::new(),
-};
-let rulepacks: Vec<Rulepack> = Vec::new();
-let active_locales = LocaleChain::merge_policy_and_cli(None, None);
-
-let pipeline = gaze_assembly::build_pipeline(
-    &policy,
-    &context,
-    &rulepacks,
-    &active_locales,
-    None,
-)?;
-```
-
-Consumers that need CLI-equivalent behavior call `resolve_policy_inputs`
-first; it loads bundled/path rulepacks, builds the `DictionaryBundle`, and
-resolves locale precedence. They still choose a session. See
-`crates/gaze-cli/src/pipeline/build.rs` for the CLI's use of both calls.
 
 ## Class-map safety
 
