@@ -26,7 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repeat-value sweep after resolve and before the safety net. Byte-identical
   copies reuse the token; other spellings and title-case name parts get a
   sibling token. Only rule-found values propagate, never NER or safety-net
-  values. A lone lower-case name part stays raw (stated trade-off).
+  values. A lone lower-case name part stays raw (stated trade-off), as do
+  digit runs under six digits (a four-digit postcode depends on its city
+  anchor) and single surnames that are everyday words (`Richter`, `Grant`).
+  Stated gap: in `gaze proxy`, a copy in an earlier JSON field than its source
+  is not swept.
 - `ConflictTier::ManifestSweep` (`manifest_sweep`) and audit rows with
   `provenance_stage = "manifest_sweep"` for every swept copy.
 - `Error::ManifestSweep` / `ManifestSweepError`: the request fails closed when

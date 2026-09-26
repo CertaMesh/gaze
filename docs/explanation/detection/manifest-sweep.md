@@ -26,7 +26,20 @@ fragment that left `<Name_1>a`, wins and covers the whole copy. A document
 with no uncovered copy keeps its first resolution; the only extra cost is one
 linear scan.
 
-The proxy and the daemon clean whole request bodies, so no copy is cut by a
+**Order matters: a copy is swept only after its source was seen.** Within
+one text, all rule-found values of that text are sources for every copy in
+it, before or after. Across texts, a copy is swept only when its source was
+tokenized in an earlier text of the session. The daemon cleans one request
+per turn, so a later turn sees every earlier turn. The proxy protects each
+JSON string field of a request in order (message contents, tool results,
+tool arguments), each as its own text. **Stated gap:** a copy in an earlier
+field than its source leaks. Example: a user message `summarise maria
+schneider's mail` before the tool result that holds
+`From: Maria Schneider <…>`. Base behaviour is the same (not a regression); a
+second proxy pass that re-protects earlier fields when the sweep grew during
+the request is a tracked follow-up.
+
+The proxy and the daemon receive whole request bodies, so no copy is cut by a
 chunk boundary. A future streaming ingress must hold back
 (longest value − 1) bytes before it emits.
 
@@ -41,18 +54,28 @@ new false positives came from NER-tagged words such as "Government" and
 
 ## Matching rules
 
-| Value | Matches |
-|---|---|
-| Several words, or digits and punctuation (`Maria Schneider`, `DE44 5001`) | Any case; any whitespace run (space, tab, line break, NBSP) matches any whitespace run. At least 4 non-space characters. |
-| One alphabetic word (`Schneider`, `Albrecht-Quaye`) | Title case, or as written when it starts upper-case and is not all capitals (`McDonald`). At least 4 characters. |
-| A part of a multi-word `Name` value | Same as one word, at least 3 letters. |
-| A collision-family value (`family:<name>`) | Byte-exact only. |
+Each value has one shape, and each shape owns its precision floor.
+
+| Shape | Example | Matches |
+|---|---|---|
+| Multi-word, or letters mixed with digits or punctuation | `Maria Kowalski`, `DE44 5001`, `N1234567A` | Any case; any whitespace run (space, tab, line break, NBSP) matches any whitespace run. At least 4 non-space characters. |
+| Digit run (digits with spaces, `-`, `.`, `/` only) | `030 1234567`, `10115` | Any whitespace run matches any whitespace run. **At least 6 digits.** A four-digit AT/CH postcode or a bare five-digit postal code is found only through the cue or city next to it; that anchor is its whole precision, so copying the bare digits would turn years and room numbers into postcodes (`2024 Neuchâtel`, then `Im Jahr 2024`). |
+| One alphabetic word | `Kowalski`, `KOWALSKI`, `Albrecht-Quaye` | As written (a byte-identical copy carries the source's own evidence, so `KOWALSKI` sweeps `KOWALSKI`) and in title case (`Kowalski`). At least 4 characters. |
+| A part of a multi-word `Name` value | `Maria` of `Maria Kowalski` | As one word, but only in a spelling that starts upper-case, at least 3 letters. |
+| A collision-family value (`family:<name>`) | | Byte-exact only, at least 4 non-space characters. |
 
 Every copy must stand on word edges under the shared
 `gaze_types::is_inside_word` rule, and a copy inside a URL-shaped run
 (`://` or a leading `www.`) is skipped. A single word on a closed list of
-common words that are also names (months, weekdays, `Will`, `Mark`, `Rose`,
-`May`, `Sonne`, ...) is never swept.
+common words that are also names is never swept: months, weekdays, English
+names that are everyday words (`Will`, `Mark`, `Rose`, `May`), English
+surnames that are everyday verbs or nouns (`Grant`, `Price`, `Banks`,
+`Wells`), and German surnames that are everyday nouns (`Richter`, `Bauer`,
+`Fischer`, `Müller`, `Schneider`, `Weber`, ...). German capitalises every
+noun and English every sentence start, so title case alone cannot tell
+`Der Richter hat entschieden` or `Grant access to the repo.` from a name.
+The cost is recall: `Herr Richter` is not swept from a `Thomas Richter`
+header. The full value `Thomas Richter` still is.
 
 Case folding keeps a map from every folded byte back to the character it came
 from, and a copy must start and end on whole characters. Turkish `İ` lowers to
@@ -62,7 +85,10 @@ upper-case `I` in the copy.
 
 **Stated leaks.** A lone lower-case part (`thanks maria`) stays raw: matching
 lower-case single words would tokenize ordinary words that happen to be
-names. A value no rule found (only NER, or nothing) seeds no sweep.
+names. A surname part on the common-word list stays raw on its own. A digit
+run under six digits is not swept. A copy in an earlier proxy field than its
+source stays raw (see above). A value no rule found (only NER, or nothing)
+seeds no sweep.
 
 ## Token identity and restore
 
