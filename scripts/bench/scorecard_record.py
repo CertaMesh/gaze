@@ -293,7 +293,12 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
     header, observations = rows[0], rows[1:]
     if any(row.get("kind") != "observation" for row in observations):
         raise RecordError("unknown record row")
-    if header["scorecard"]["dataset"]["integrity"]["sha256"] != header["corpus_sha256"]:
+    card = header["scorecard"]
+    recorded_corpus = (
+        card["dataset"]["integrity"]["sha256"]
+        if card.get("runs") else card["layers"]["generator"]["corpus_sha256"]
+    )
+    if recorded_corpus != header["corpus_sha256"]:
         raise RecordError("record corpus digest disagrees with scorecard")
     return header, observations
 
@@ -419,14 +424,16 @@ def rescore(
             run[timing_key] = old[timing_key]
         return run
 
-    result["runs"] = [replay("C", run["config"], contract) for run in result["runs"]]
-    result["dataset"]["validator_gold_census"] = score.validator_gold_census(
-        available, _filtered_measurements(header["validator"], available_rows, available)
-    )
-    selected = [document for document in available if document.uid in {
-        row["document"]["id"] for row in groups[("C", result["runs"][0]["config"])]
-    }]
-    result["scoring"]["scored_label_contract"] = score.scored_label_contract_report(contract, selected)
+    selected: list[score.Document] = []
+    if result["runs"]:
+        result["runs"] = [replay("C", run["config"], contract) for run in result["runs"]]
+        result["dataset"]["validator_gold_census"] = score.validator_gold_census(
+            available, _filtered_measurements(header["validator"], available_rows, available)
+        )
+        selected = [document for document in available if document.uid in {
+            row["document"]["id"] for row in groups[("C", result["runs"][0]["config"])]
+        }]
+        result["scoring"]["scored_label_contract"] = score.scored_label_contract_report(contract, selected)
     if "layers" in result:
         layer_contract = layer_contract or _contract_from_row(header["layer_contract"])
         for layer in ("A", "D", "R"):
@@ -457,7 +464,8 @@ def rescore(
         ]
         layer_documents = score.apply_scored_label_contract(layer_documents, layer_contract)
         result["layers"]["scored_label_contract"] = score.scored_label_contract_report(layer_contract, layer_documents)
-        result["layers"]["gold_validity"]["C"] = _gold_validity_digest(selected, available_rows)
+        if "gold_validity" in result["layers"]:
+            result["layers"]["gold_validity"]["C"] = _gold_validity_digest(selected, available_rows)
     if header["add_reference"]:
         result["observation_record"] = {
             "file": path.name, "sha256": score.sha256_file(path),

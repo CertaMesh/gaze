@@ -192,11 +192,13 @@ class RecordReplayTests(unittest.TestCase):
                 extra_documents=layer_docs, layer_contract=layer_contract,
             )
             writer.add("C", "policy-file", self.document, self.response, self.measurements)
+            layer_responses = {}
             for layer, document in zip(("A", "D", "R"), layer_docs, strict=True):
                 response = copy.deepcopy(self.response)
                 response["fixture_id"] = document.uid
                 response["final_protection_trace"] = []
                 response["manifest_integrity"]["spans"] = 0
+                layer_responses[layer] = response
                 measurements = None if layer == "D" else layer_measurements
                 run = score.run_config(
                     Path("."), Path("."), "policy-file", [document], Path("."),
@@ -226,6 +228,28 @@ class RecordReplayTests(unittest.TestCase):
             record.pin_template(path, template_path, pinned_path, strip_layers=True)
             self.assertEqual(
                 record.rescore(pinned_path, score.SCORED_LABEL_CONTRACT_V1), template
+            )
+            layer_only = {
+                "schema_version": 4,
+                "parameters": card["parameters"],
+                "runs": [],
+                "layers": copy.deepcopy(card["layers"]),
+            }
+            del layer_only["layers"]["gold_validity"]
+            layer_writer = record.RecordWriter(
+                [], layer_measurements, corpus_sha256="2" * 64,
+                extra_documents=layer_docs, layer_contract=layer_contract,
+            )
+            for layer, document in zip(("A", "D", "R"), layer_docs, strict=True):
+                layer_writer.add(
+                    layer, "policy-file", document, layer_responses[layer],
+                    None if layer == "D" else layer_measurements,
+                )
+            layer_path = Path(temporary) / "layer-only.gz"
+            layer_writer.write(layer_path, layer_only, add_reference=False)
+            self.assertEqual(
+                record.rescore(layer_path, score.SCORED_LABEL_CONTRACT_V1),
+                layer_only,
             )
             broken = copy.deepcopy(replayed)
             del broken["layers"]["gold_validity"]
