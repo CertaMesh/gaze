@@ -120,7 +120,9 @@ birth_date_cases! {
     cue_nl_geboortedatum: "Mijn geboortedatum is 02-11-1992." => "02-11-1992";
     cue_da_fodt_den: "Lars Jensen, født den 02.11.1992, bor" => "02.11.1992";
     cue_da_fodselsdato: "Min fødselsdato er 02.11.1992." => "02.11.1992";
+    cue_da_fodselsdag: "Min fødselsdag er 02.11.1992." => "02.11.1992";
     cue_es_nacido_el: "Carlos Martínez, nacido el 02/11/1992, vive" => "02/11/1992";
+    cue_es_nacio: "Carlos nació el 02/11/1992 en Madrid." => "02/11/1992";
     cue_es_fecha_de_nacimiento: "Mi fecha de nacimiento es el 02/11/1992." => "02/11/1992";
 }
 
