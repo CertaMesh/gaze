@@ -333,14 +333,14 @@ Validator-backed labels on `policy-file`. Gold that fails its own checksum stays
 
 <!-- BEGIN GENERATED: charts -->
 
-**Leaked PII bytes — v0.15.1 against the previous release.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
+**Leaked PII bytes — v0.15.0 – v0.15.1 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
 
 ```mermaid
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v1 - lower is better"
-    x-axis ["v0.15.1 default (15.0%)", "v0.15.0 default (15.0%)"]
-    y-axis "Leaked PII bytes" 0 --> 22000
-    bar [19556, 19556]
+    x-axis ["v0.15.0 – v0.15.1 default (15.0%)", "v0.14.0 default (19.3%)", "v0.14.0 rules + NER (20.7%)", "v0.14.0 rules only (72.0%)"]
+    y-axis "Leaked PII bytes" 0 --> 104000
+    bar [19556, 25179, 27000, 93850]
 ```
 
 **Trend across releases — each release's shipped default.** Scored under scored labels v1. The shipped arm changes between releases; the history table names it per row.
@@ -348,17 +348,17 @@ xychart-beta horizontal
 ```mermaid
 xychart-beta
     title "Leaked PII bytes, shipped default - scored labels v1"
-    x-axis ["v0.14.0 (19.3%)", "v0.15.0 (15.0%)", "v0.15.1 (15.0%)"]
+    x-axis ["v0.14.0 (19.3%)", "v0.15.0 – v0.15.1 (15.0%)"]
     y-axis "Leaked PII bytes (lower is better)" 0 --> 28000
-    line [25179, 19556, 19556]
+    line [25179, 19556]
 ```
 
 ```mermaid
 xychart-beta
     title "False-positive bytes, shipped default - scored labels v1"
-    x-axis ["v0.14.0", "v0.15.0", "v0.15.1"]
+    x-axis ["v0.14.0", "v0.15.0 – v0.15.1"]
     y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 190000
-    line [168276, 30073, 30073]
+    line [168276, 30073]
 ```
 
 <!-- END GENERATED: charts -->
@@ -367,17 +367,22 @@ xychart-beta
 
 ## Release history
 
-One row per released version. Every row's numbers come from the
-`scorecard-vX.Y.Z.json` named in that row, which stays committed as the
-machine-readable evidence.
+Consecutive releases with the same results share one row, labelled oldest –
+newest: same results means the same shipped arm, refused documents, leaked PII
+bytes, false-positive bytes and restore-exact rate under the same scored-label
+contract, corpus and provisional status, while clean p95 latency, date, commit
+and machine are ignored because they vary with the host. The table and trend
+charts show the last three such rows, and a merged row shows its newest
+release. [`release-history.json`](release-history.json) keeps every release,
+and every row's numbers come from the `scorecard-vX.Y.Z.json` files it links,
+which stay committed as the machine-readable evidence.
 
 <!-- BEGIN GENERATED: history -->
 
 | Release | Measured | Commit | Machine | Scorecard | Shipped arm | Refused ↓ | Leaked PII bytes, all processed ↓ | Leaked PII bytes, common documents ↓ | False-positive bytes ↔ | Restore exact ↑ | clean p95 ms ↓ |
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | `full-stack-kiji-resolve` | 0 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
-| v0.15.0 | 2026-09-25 | `6fcba31` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | `policy-file` | 0 | 19,556 | 19,556 | 30,073 | 100.0000% | 124.23 |
-| v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json) | `policy-file` | 0 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
+| v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json) | `policy-file` | 0 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
 
 <!-- END GENERATED: history -->
 

@@ -418,6 +418,65 @@ def version_sort_key(version: str) -> tuple[Any, ...]:
     return numbers + (0, identifiers)
 
 
+#: How many distinct-result groups the history table and charts show. The
+#: history file keeps every release; only the display is capped.
+DISPLAYED_GROUPS = 3
+
+
+def result_key(entry: Mapping[str, Any]) -> tuple[Any, ...]:
+    """What makes two releases' benchmark results the same.
+
+    The shipped arm and its result numbers, read under one scored-label
+    contract on one corpus, and whether the row claims the released tree.
+    Latency, date, commit and machine are left out on purpose: p95 moves with
+    host load, so v0.15.0 (124 ms) and v0.15.1 (139 ms) on identical detection
+    output are one result. Leaked bytes on the common document set are derived
+    from refused and leaked bytes on one corpus, so they need no slot of their own.
+    """
+    arm_name = shipped_default_arm(entry)
+    arm = entry["arms"][arm_name]
+    dataset = entry["dataset"]
+    return (
+        _contract_key(entry),
+        dataset["integrity"]["sha256"],
+        dataset["evaluated_population"]["documents"],
+        bool(entry.get("provisional")),
+        arm_name,
+        arm["failed_closed_documents"],
+        arm["surviving_pii_utf8_bytes"],
+        arm["false_positive_utf8_bytes"],
+        arm["restore_exact_rate"],
+        json.dumps(arm.get("gold_gap"), sort_keys=True),
+    )
+
+
+def release_groups(
+    releases: Sequence[Mapping[str, Any]],
+) -> list[list[Mapping[str, Any]]]:
+    """Consecutive releases with an equal `result_key`, oldest first.
+
+    Only neighbours merge: a release that returns to an older result after a
+    different one starts a new group, so the display never hides a change.
+    """
+    groups: list[list[Mapping[str, Any]]] = []
+    for entry in releases:
+        if groups and result_key(groups[-1][-1]) == result_key(entry):
+            groups[-1].append(entry)
+        else:
+            groups.append([entry])
+    return groups
+
+
+def displayed_groups(history: Mapping[str, Any]) -> list[list[Mapping[str, Any]]]:
+    return release_groups(history["releases"])[-DISPLAYED_GROUPS:]
+
+
+def group_label(group: Sequence[Mapping[str, Any]]) -> str:
+    """`v0.15.0` for one release, `v0.15.0 – v0.15.1` (oldest – newest) for more."""
+    first, last = group[0]["version"], group[-1]["version"]
+    return first if len(group) == 1 else f"{first} – {last}"
+
+
 def write_history(path: Path, history: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
 
@@ -832,28 +891,31 @@ def render_validator_recall(entry: Mapping[str, Any]) -> list[str]:
 
 
 def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
-    """(label, leaked bytes) for the latest release against the one before it.
+    """(label, leaked bytes) for the latest result group against the one before it.
 
     Each label ends with that arm's leak rate, e.g. `v0.15.0 default (15.0%)`.
 
-    The latest release's default comes first, then the previous release's
-    default, then every other measured arm by leaked bytes. The previous
-    release joins only when it was scored on the same corpus under the same
+    The latest group's default comes first, then the previous group's default,
+    then every other measured arm by leaked bytes. A group is shown by its
+    newest release. The previous group always has different results
+    (`release_groups`), so an unchanged patch release never compares with
+    itself. It joins only when it was scored on the same corpus under the same
     label contract; otherwise a contract or corpus change would read as a leak
     change.
     """
-    releases = history["releases"]
-    latest = releases[-1]
+    groups = release_groups(history["releases"])
+    latest = groups[-1]
     rows = [latest]
-    if len(releases) > 1:
-        previous = releases[-2]
-        if _contract_key(previous) == _contract_key(latest) and (
-            previous["dataset"]["integrity"]["sha256"]
-            == latest["dataset"]["integrity"]["sha256"]
+    if len(groups) > 1:
+        previous = groups[-2]
+        if _contract_key(previous[-1]) == _contract_key(latest[-1]) and (
+            previous[-1]["dataset"]["integrity"]["sha256"]
+            == latest[-1]["dataset"]["integrity"]["sha256"]
         ):
             rows.append(previous)
     bars: list[tuple[str, int]] = []
-    for row in rows:
+    for group in rows:
+        row, label = group[-1], group_label(group)
         default_arm = shipped_default_arm(row)
         others = sorted(
             (arm for arm in row["arms"] if arm != default_arm),
@@ -861,7 +923,7 @@ def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
         )
         bars.append(
             (
-                _leak_pct_label(f"{row['version']} default", row["arms"][default_arm]),
+                _leak_pct_label(f"{label} default", row["arms"][default_arm]),
                 row["arms"][default_arm]["surviving_pii_utf8_bytes"],
             )
         )
@@ -869,7 +931,7 @@ def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
             bars.append(
                 (
                     _leak_pct_label(
-                        f"{row['version']} {ARM_CHART_LABELS.get(arm, arm)}",
+                        f"{label} {ARM_CHART_LABELS.get(arm, arm)}",
                         row["arms"][arm],
                     ),
                     row["arms"][arm]["surviving_pii_utf8_bytes"],
@@ -907,20 +969,20 @@ def _comparison_chart(history: Mapping[str, Any]) -> list[str]:
 def shipped_default_trend(
     history: Mapping[str, Any], field: str
 ) -> list[tuple[str, Any]]:
-    """(version, value) of each release's OWN shipped default arm.
+    """(group label, value) of each displayed group's OWN shipped default arm.
 
     Keyed per row, not by the latest default: the default changed between
     releases, and a row that never measured today's default arm still shipped
-    one. Only rows under the latest row's label contract are kept, because one
-    line across two contracts would show a change in what counts as gold as a
-    change in leaks.
+    one. A group reads its newest release. Only groups under the latest
+    group's label contract are kept, because one line across two contracts
+    would show a change in what counts as gold as a change in leaks.
     """
-    releases = history["releases"]
-    latest_contract = _contract_key(releases[-1])
+    groups = displayed_groups(history)
+    latest_contract = _contract_key(groups[-1][-1])
     return [
-        (item["version"], item["arms"][shipped_default_arm(item)][field])
-        for item in releases
-        if _contract_key(item) == latest_contract
+        (group_label(group), group[-1]["arms"][shipped_default_arm(group[-1])][field])
+        for group in groups
+        if _contract_key(group[-1]) == latest_contract
     ]
 
 
@@ -961,8 +1023,10 @@ def render_charts(history: Mapping[str, Any]) -> str:
             "[`release-history.json`](release-history.json)."
         )
     entry = releases[-1]
+    groups = displayed_groups(history)
     lines = [
-        f"**Leaked PII bytes — {entry['version']} against the previous release.** "
+        f"**Leaked PII bytes — {group_label(groups[-1])} against the previous "
+        "release with different results.** "
         f"Lower is better; the goal is zero. Scored under {contract_label(entry)}; "
         "every bar is a measured arm in "
         "[`release-history.json`](release-history.json). "
@@ -980,13 +1044,13 @@ def render_charts(history: Mapping[str, Any]) -> str:
             "between releases; the history table names it per row.",
         ]
     )
-    if len(trend_rows) < len(releases):
+    if len(trend_rows) < len(groups):
         lines.extend(
             [
                 "",
                 f"> Only rows measured under {contract_label(entry)} are on "
                 "these lines; "
-                f"{len(releases) - len(trend_rows)} row(s) under another contract are "
+                f"{len(groups) - len(trend_rows)} row(s) under another contract are "
                 "in the history table.",
             ]
         )
@@ -1046,15 +1110,17 @@ def render_history(history: Mapping[str, Any]) -> str:
         )
     # Rows that record their own shipped arm were appended with the refusal-aware
     # layout. A history of legacy rows alone keeps the original table byte for byte.
+    groups = displayed_groups(history)
     if any("shipped_default_arm" in entry for entry in releases):
-        return render_history_with_refusals(releases)
+        return render_history_with_refusals(groups)
     latest_default_arm = shipped_default_arm(releases[-1])
     lines = [
         "| Release | Measured | Commit | Machine | Scorecard | "
         "Surviving PII bytes ↓ |",
         "| --- | --- | --- | --- | --- | ---: |",
     ]
-    for entry in releases:
+    for group in groups:
+        entry = group[-1]
         # Each row reports the arm it shipped; name it when that differs from
         # the latest default so a changed default never reads as a leak change.
         default_arm = shipped_default_arm(entry)
@@ -1062,20 +1128,29 @@ def render_history(history: Mapping[str, Any]) -> str:
         if default_arm != latest_default_arm:
             surviving += f" (`{default_arm}`)"
         lines.append(
-            f"| {_history_version_cell(entry)} | {entry['date']} | `{entry['commit'][:7]}` | "
-            f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "
+            f"| {_history_version_cell(group)} | {entry['date']} | `{entry['commit'][:7]}` | "
+            f"{entry['machine']} | {_scorecard_links(group)} | "
             f"{surviving} |"
         )
     return "\n".join(lines)
 
 
-def _history_version_cell(entry: Mapping[str, Any]) -> str:
-    version = entry["version"]
+def _history_version_cell(group: Sequence[Mapping[str, Any]]) -> str:
+    """The group label; every member shares the flags, since both are in the key."""
+    entry = group[-1]
+    version = group_label(group)
     if entry.get("provisional"):
         version += " *(provisional)*"
     if entry.get("scored_label_contract"):
         version += f" · {contract_label(entry)}"
     return version
+
+
+def _scorecard_links(group: Sequence[Mapping[str, Any]]) -> str:
+    """Every member's scorecard: the merged row stands on all of them."""
+    return ", ".join(
+        f"[`{entry['scorecard']}`]({entry['scorecard']})" for entry in group
+    )
 
 
 def common_set_surviving_bytes(releases: Sequence[Mapping[str, Any]]) -> list[int]:
@@ -1115,8 +1190,8 @@ def common_set_surviving_bytes(releases: Sequence[Mapping[str, Any]]) -> list[in
     ]
 
 
-def render_history_with_refusals(releases: Sequence[Mapping[str, Any]]) -> str:
-    common = common_set_surviving_bytes(releases)
+def render_history_with_refusals(groups: Sequence[Sequence[Mapping[str, Any]]]) -> str:
+    common = common_set_surviving_bytes([group[-1] for group in groups])
     lines = [
         "| Release | Measured | Commit | Machine | Scorecard | Shipped arm | "
         "Refused ↓ | Leaked PII bytes, all processed ↓ | "
@@ -1124,12 +1199,13 @@ def render_history_with_refusals(releases: Sequence[Mapping[str, Any]]) -> str:
         "Restore exact ↑ | clean p95 ms ↓ |",
         "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for entry, common_bytes in zip(releases, common):
+    for group, common_bytes in zip(groups, common):
+        entry = group[-1]
         default_arm = shipped_default_arm(entry)
         arm = entry["arms"][default_arm]
         lines.append(
-            f"| {_history_version_cell(entry)} | {entry['date']} | `{entry['commit'][:7]}` | "
-            f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "
+            f"| {_history_version_cell(group)} | {entry['date']} | `{entry['commit'][:7]}` | "
+            f"{entry['machine']} | {_scorecard_links(group)} | "
             f"`{default_arm}` | {_fmt('int', arm['failed_closed_documents'])} | "
             f"{_fmt('int', arm['surviving_pii_utf8_bytes'])} | {_fmt('int', common_bytes)} | "
             f"{_fmt('int', arm['false_positive_utf8_bytes'])} | "
