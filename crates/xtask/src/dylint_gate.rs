@@ -1,4 +1,4 @@
-//! The scheduled `dylint.yml` workflow sets `GAZE_DYLINT_REQUIRED=1` and must
+//! The dedicated `dylint.yml` workflow sets `GAZE_DYLINT_REQUIRED=1` and must
 //! fail closed if cargo-dylint is unavailable. Other callers still verify the
 //! UI fixture shape, but report that the compiled lint run is deferred.
 
@@ -13,7 +13,7 @@ use crate::repo::repo_root;
 
 const EXPECTED_UI_FIXTURES: usize = 18;
 const DYLINT_REQUIRED_ENV: &str = "GAZE_DYLINT_REQUIRED";
-const DEFERRED_MESSAGE: &str = "dylint_gate: ui-fixture-shape passed; cargo-dylint DEFERRED to the scheduled dylint.yml workflow (solo todo #1870)";
+const DEFERRED_MESSAGE: &str = "dylint_gate: ui-fixture-shape passed; cargo-dylint DEFERRED to the dedicated dylint.yml workflow (runs on PRs to main)";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DylintDisposition {
@@ -147,7 +147,7 @@ mod tests {
         );
         assert_eq!(
             DEFERRED_MESSAGE,
-            "dylint_gate: ui-fixture-shape passed; cargo-dylint DEFERRED to the scheduled dylint.yml workflow (solo todo #1870)"
+            "dylint_gate: ui-fixture-shape passed; cargo-dylint DEFERRED to the dedicated dylint.yml workflow (runs on PRs to main)"
         );
     }
 

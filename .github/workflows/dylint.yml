@@ -1,41 +1,64 @@
-# dylint runs on a weekly schedule (Mondays 08:00 UTC) and manual dispatch.
-# PR trigger blocked on solo todo #1870.
-# Per-push triggers were dropped 2026-04-29 to reduce CI minute pressure.
-# Devs do not need nightly-2025-09-18 installed locally; trigger manually with:
-#   gh workflow run dylint.yml
+# Run on every PR to main so protected paths and their dependencies stay covered.
+# Keep the weekly run to detect toolchain or infrastructure drift.
 name: dylint
 
 on:
+  pull_request:
+    branches: [main]
   schedule:
     - cron: '0 8 * * 1'   # Mondays 08:00 UTC
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   dylint:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
+        with:
+          toolchain: 1.96.0
       - name: Install nightly toolchain for dylint
         run: rustup toolchain install nightly-2025-09-18 --component rustc-dev,rust-src,llvm-tools-preview
-      - name: Install cargo-dylint
-        run: cargo install --locked cargo-dylint dylint-link
       - name: Cache cargo registry and git
         uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: dylint-cargo-${{ runner.os }}-${{ hashFiles('lint/dylint/Cargo.lock') }}
-      - name: Cache dylint target
+          key: dylint-cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'lint/dylint/Cargo.lock') }}
+          restore-keys: |
+            dylint-cargo-${{ runner.os }}-
+      - name: Cache Dylint tools
+        id: dylint-tools
         uses: actions/cache@v5
         with:
-          path: lint/dylint/target
-          key: dylint-target-${{ runner.os }}-${{ hashFiles('lint/dylint/Cargo.lock') }}
+          path: |
+            ~/.cargo/bin/cargo-dylint
+            ~/.cargo/bin/dylint-link
+          key: dylint-tools-${{ runner.os }}-${{ runner.arch }}-rust-1.96.0-dylint-6.0.4
+      - name: Install cargo-dylint
+        if: steps.dylint-tools.outputs.cache-hit != 'true'
+        run: cargo install --locked --version 6.0.4 cargo-dylint dylint-link
+      - name: Cache lint, driver, and workspace targets
+        uses: actions/cache@v5
+        with:
+          path: |
+            lint/dylint/target
+            target
+            ~/.dylint_drivers
+          key: dylint-target-${{ runner.os }}-${{ runner.arch }}-6.0.4-${{ hashFiles('Cargo.lock', 'lint/dylint/Cargo.lock', 'rust-toolchain.toml', 'lint/dylint/rust-toolchain.toml') }}
       - name: UI fixtures
         working-directory: lint/dylint
-        run: cargo test --test ui
+        run: cargo test --locked --test ui
       - name: Run dylint gate
         env:
           GAZE_DYLINT_REQUIRED: "1"
-        run: cargo run -p xtask -- dylint-gate
+        run: cargo run -p xtask --locked -- dylint-gate
