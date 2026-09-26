@@ -289,8 +289,9 @@ Flags:
 | `--safety-net-fallback <strict\|tolerant\|redact>` | Residual action for `--safety-net-mode resolve`, and **only** for `resolve`: what happens when the resolve pass cannot honor a suspect (validator-veto, missing mandatory anchor) or the post-resolve re-run still reports one (residual suspect). `strict` rejects the document and exits `3`; `tolerant` ships the residual bytes; `redact` replaces them with a one-way `[REDACTED:<class>]` marker. Defaults to `redact`. Ignored by `strict`, `tolerant`, and `redact` modes — those are terminal per suspect and their failure paths are typed errors that fail closed, not a cascade. One-hop only. `tolerant` requires `GAZE_ALLOW_TOLERANT=1`. Lowering table and audit rows: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md#the-fallback-applies-only-under-resolve). |
 | `--safety-net-resolve-threshold <float>` | Confidence threshold for `--safety-net-mode resolve`. Suspects below threshold are dropped before candidate construction. Defaults to `0.7`. `0.0` disables filtering; `1.0` disables resolve entirely. |
 
-When `--policy` is omitted, the CLI runs a stub email pipeline so the process
-surface can be exercised. Production use should pass `--policy`.
+When `--policy` is omitted, the CLI runs the bundled `core` rulepack, the same
+as `--rulepack-bundled core`, and tokenizes every class it activates.
+Production use should pass `--policy`.
 
 ### Safety net
 
