@@ -101,7 +101,7 @@ of a span.** Two resolver changes from solo todo #3740, both breaking in
    `containment_precedence`.
 2. **`preserve` keeps a class's characters unless the same characters are
    also PII of a class you protect.** With `custom:url = preserve` and
-   `email = tokenize` the email inside a URL now leaves as one `<Email_1>`
+   `email = tokenize` the email inside a URL now leaves as one `<Email_n>`
    fragment inside the otherwise raw URL; with `custom:postal_code =
    preserve` a postal code that is also part of a protected IBAN is
    protected. The fragment takes the protected class's own action (`redact`
