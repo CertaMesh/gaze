@@ -1139,7 +1139,10 @@ GATE_LAYERS = ("C", LAYER_IDENTIFIERS, LAYER_LOOKALIKES)
 def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
     layers = scorecard.get("layers")
     if not isinstance(layers, dict):
-        raise LayerError("scorecard has no agentic layers; re-run without --no-agentic-layers")
+        raise LayerError(
+            "scorecard has no agentic layers: it predates them or was run with "
+            "--no-agentic-layers; measure the base again on this harness"
+        )
     return {
         "kiji_contract": score.scorecard_scored_label_contract_identity(scorecard),
         "kiji_dataset": scorecard.get("dataset", {}).get("integrity"),
