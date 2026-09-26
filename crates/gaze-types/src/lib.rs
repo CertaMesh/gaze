@@ -590,6 +590,10 @@ pub enum ValidatorFailReason {
     Ipv4ParseFailed,
     /// IPv6 parser rejected the candidate.
     Ipv6ParseFailed,
+    /// Built-in IPv4 rule excluded an RFC 5737 documentation address.
+    Ipv4DocumentationRange,
+    /// Built-in IPv6 rule excluded an RFC 3849 or embedded RFC 5737 address.
+    Ipv6DocumentationRange,
     /// EIP-55 Ethereum checksum validation failed.
     EthEip55ChecksumFailed,
     /// Aadhaar Verhoeff checksum validation failed.
@@ -653,6 +657,10 @@ pub enum ValidatorKind {
     Ipv4Parse,
     /// RFC 4291 / RFC 5952 IPv6 textual parser.
     Ipv6Parse,
+    /// IPv4 parser that excludes RFC 5737 documentation ranges.
+    Ipv4ParseNonDocumentation,
+    /// IPv6 parser that excludes RFC 3849 and embedded RFC 5737 ranges.
+    Ipv6ParseNonDocumentation,
     /// EIP-55 Ethereum address checksum validator.
     EthEip55,
     /// Indian Aadhaar Verhoeff checksum validator.
@@ -697,6 +705,8 @@ impl ValidatorKind {
             "iban_mod97" => Ok(Self::IbanMod97),
             "ipv4_parse" => Ok(Self::Ipv4Parse),
             "ipv6_parse" => Ok(Self::Ipv6Parse),
+            "ipv4_parse_non_documentation" => Ok(Self::Ipv4ParseNonDocumentation),
+            "ipv6_parse_non_documentation" => Ok(Self::Ipv6ParseNonDocumentation),
             "eth_eip55" => Ok(Self::EthEip55),
             "aadhaar_verhoeff" => Ok(Self::AadhaarVerhoeff),
             "fr_nir_mod97" => Ok(Self::FrNirMod97),
@@ -732,7 +742,15 @@ impl ValidatorKind {
                 canonical_form: Some(canonical_form),
             },
             None => ValidatorOutcome::Fail {
-                reason: self.fail_reason(),
+                reason: match self {
+                    Self::Ipv4ParseNonDocumentation if ipv4_parse_check(input) => {
+                        ValidatorFailReason::Ipv4DocumentationRange
+                    }
+                    Self::Ipv6ParseNonDocumentation if ipv6_parse_check(input) => {
+                        ValidatorFailReason::Ipv6DocumentationRange
+                    }
+                    _ => self.fail_reason(),
+                },
             },
         }
     }
@@ -749,6 +767,16 @@ impl ValidatorKind {
             Self::IbanMod97 => iban_mod97_check(input).then(|| input.to_string()),
             Self::Ipv4Parse => ipv4_parse_check(input).then(|| input.to_string()),
             Self::Ipv6Parse => ipv6_parse_check(input).then(|| input.to_string()),
+            Self::Ipv4ParseNonDocumentation => input
+                .parse::<std::net::Ipv4Addr>()
+                .ok()
+                .filter(|address| !ipv4_is_documentation(*address))
+                .map(|_| input.to_string()),
+            Self::Ipv6ParseNonDocumentation => input
+                .parse::<std::net::Ipv6Addr>()
+                .ok()
+                .filter(|address| !ipv6_is_documentation(*address))
+                .map(|_| input.to_string()),
             Self::EthEip55 => eth_eip55_check(input).then(|| input.to_string()),
             Self::AadhaarVerhoeff => {
                 canonical_ascii_digits::<12>(input).filter(|_| aadhaar_verhoeff_check(input))
@@ -772,7 +800,8 @@ impl ValidatorKind {
         }
     }
 
-    /// Returns the audit reason emitted when validation fails.
+    /// Returns the ordinary parse or checksum failure reason. Input-dependent
+    /// exclusions report their own reason through [`Self::validate`].
     pub fn fail_reason(self) -> ValidatorFailReason {
         match self {
             Self::EmailRfc => ValidatorFailReason::EmailRfcRejected,
@@ -784,6 +813,8 @@ impl ValidatorKind {
             Self::IbanMod97 => ValidatorFailReason::IbanMod97Failed,
             Self::Ipv4Parse => ValidatorFailReason::Ipv4ParseFailed,
             Self::Ipv6Parse => ValidatorFailReason::Ipv6ParseFailed,
+            Self::Ipv4ParseNonDocumentation => ValidatorFailReason::Ipv4ParseFailed,
+            Self::Ipv6ParseNonDocumentation => ValidatorFailReason::Ipv6ParseFailed,
             Self::EthEip55 => ValidatorFailReason::EthEip55ChecksumFailed,
             Self::AadhaarVerhoeff => ValidatorFailReason::AadhaarVerhoeffFailed,
             Self::FrNirMod97 => ValidatorFailReason::FrNirMod97Failed,
@@ -855,7 +886,8 @@ fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
 /// It checks the ASCII digits. Whitespace (any Unicode `White_Space`, as the card patterns'
 /// `\s`), `-` and non-ASCII digits (which the card patterns' `\d` matches but no card number is
 /// written in) are skipped; any other character fails the check, and so does an ASCII digit count
-/// outside 13 to 19. Fullwidth digits reach it already folded to ASCII by normalization.
+/// outside 13 to 19 or an all-zero number. Fullwidth digits reach it already folded to ASCII by
+/// normalization.
 pub(crate) fn luhn_check(input: &str) -> bool {
     let mut digits = Vec::new();
     for ch in input.chars() {
@@ -867,7 +899,7 @@ pub(crate) fn luhn_check(input: &str) -> bool {
         }
         digits.push(ch as u8 - b'0');
     }
-    if !(13..=19).contains(&digits.len()) {
+    if !(13..=19).contains(&digits.len()) || digits.iter().all(|digit| *digit == 0) {
         return false;
     }
 
@@ -1055,6 +1087,17 @@ fn ipv4_parse_check(input: &str) -> bool {
 
 fn ipv6_parse_check(input: &str) -> bool {
     input.parse::<std::net::Ipv6Addr>().is_ok()
+}
+
+fn ipv4_is_documentation(address: std::net::Ipv4Addr) -> bool {
+    let [a, b, c, _] = address.octets();
+    matches!((a, b, c), (192, 0, 2) | (198, 51, 100) | (203, 0, 113))
+}
+
+fn ipv6_is_documentation(address: std::net::Ipv6Addr) -> bool {
+    let segments = address.segments();
+    (segments[0] == 0x2001 && segments[1] == 0x0db8)
+        || address.to_ipv4().is_some_and(ipv4_is_documentation)
 }
 
 fn eth_eip55_check(input: &str) -> bool {

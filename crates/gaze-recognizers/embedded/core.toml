@@ -409,7 +409,7 @@ kind = "regex"
 pattern = '''\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b'''
 
 [recognizers.validator]
-kind = "ipv4_parse"
+kind = "ipv4_parse_non_documentation"
 
 [recognizers.scoring]
 base = 0.70
@@ -468,7 +468,7 @@ pattern = '''(?ix)
 capture_groups = [1]
 
 [recognizers.validator]
-kind = "ipv6_parse"
+kind = "ipv6_parse_non_documentation"
 
 [recognizers.scoring]
 base = 0.70

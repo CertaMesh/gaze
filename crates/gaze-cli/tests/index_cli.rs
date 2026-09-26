@@ -438,8 +438,8 @@ fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
         },
         CoreCase {
             class: "ip_address/v6",
-            line: "Router IPv6 2001:db8::1",
-            raw: "2001:db8::1",
+            line: "Router IPv6 2001:db9::1",
+            raw: "2001:db9::1",
             token: ":Custom:ip_address_",
         },
         CoreCase {
