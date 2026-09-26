@@ -19,7 +19,7 @@ compatibility name for the same embedded `core.toml` bytes
 (`crates/gaze-recognizers/src/lib.rs:45-55`,
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
-The shared payload currently contains exactly 39 recognizer specs
+The shared payload currently contains exactly 40 recognizer specs
 (`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
 
 The opt-in `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
