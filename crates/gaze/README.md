@@ -77,7 +77,7 @@ The full re-export list lives in [`src/lib.rs`](src/lib.rs).
 - **Fail closed** on unknown rulepack validators or normalizers — typed errors at load, no silent degradation.
 - **Fail closed** on recognizer backend failure at runtime — `Recognizer::detect` returns `Result<Vec<Candidate>, DetectError>`, so a backend error surfaces as `Error::RecognizerDetect` and aborts outbound redaction instead of emitting partially cleaned output ([P0 #908](https://github.com/CertaMesh/gaze/blob/main/docs/explanation/detection/ner-failclosed.md)).
 - **Reversible by design.** Tokens are session-scoped and counted by class; restore goes through the signed snapshot, not string substitution.
-- **Deterministic detection** as the floor. NER and the OpenAI-filter SafetyNet are opt-in observers and cannot mutate the manifest.
+- **Deterministic detection** as the floor. NER is an opt-in recognizer. Safety nets are opt-in observers: a net only reports suspects, and the pipeline acts on the report (the default `resolve` mode tokenizes a suspect as a restorable token).
 - **Auditable.** Every emitted token traces to a recognizer + rule. Conflict losers are logged with `decided_by: ConflictTier`.
 
 Full project north star + five-axis contract: [AGENTS.md](https://github.com/CertaMesh/gaze/blob/main/AGENTS.md#project-north-star).

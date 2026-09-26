@@ -298,8 +298,11 @@ The policy `[safety_net].backend = "nym"` or a `--safety-net=<kind>` flag
 activates the observer-only safety net documented in
 [docs/explanation/safety-net/safety-nets.md](../../docs/explanation/safety-net/safety-nets.md).
 The safety net runs after the deterministic clean and reports suspected
-leaks against the manifest of emitted tokens. It cannot mutate the clean
-text and cannot affect restore.
+leaks against the manifest of emitted tokens. The net itself never edits the
+text; the pipeline acts on its report according to `--safety-net-mode`:
+`resolve` (default) tokenizes a suspect as a restorable token, `redact` writes
+a one-way `[REDACTED:<class>]` marker, `strict` rejects the document, and
+`tolerant` only warns.
 
 #### Safety-net backends
 

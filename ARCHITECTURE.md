@@ -15,8 +15,9 @@ to integrate without becoming a PII-domain specialist.
 ## Pipeline
 
 The core pipeline turns source content into safe content plus a restore
-manifest. SafetyNet runs after tokenization as an observer, not as a mutating
-redaction stage.
+manifest. SafetyNet runs after tokenization as an observer: it reports
+suspects, and the pipeline acts on that report according to the safety-net
+mode.
 
 ```text
 Raw text / structured document
@@ -203,8 +204,11 @@ and [docs/explanation/detection/anchor-resolution.md](docs/explanation/detection
 ### KDD-7: Pass-3 SafetyNet Is Observer-Only
 
 SafetyNet runs after tokenization against already-clean output and the runtime
-manifest. It may emit `LeakSuspect` metadata, warnings, or strict-mode failures,
-but it must not mutate clean text or add restore mappings.
+manifest. The net itself only reports: it emits `LeakSuspect` metadata and never
+edits clean text or the manifest. The pipeline then acts on that report per
+mode: the default `resolve` tokenizes a suspect into the manifest as a
+restorable token, `redact` writes a one-way marker, `strict` fails, and
+`tolerant` warns.
 
 Source anchors: [docs/explanation/safety-net/safety-nets.md](docs/explanation/safety-net/safety-nets.md),
 [crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs),
