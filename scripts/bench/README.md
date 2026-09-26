@@ -102,6 +102,28 @@ still counts as protection where it covers scored gold; its other bytes are
 ignored instead of counted as false positive, and are reported per run under
 `neutral_prediction_utf8_bytes_outside_scored_gold`.
 
+Every run writes `observations-v1.jsonl.gz` beside `scorecard-v4.json` and pins
+its SHA-256 in `scorecard.observation_record`. Each gzip JSONL observation is
+keyed by corpus SHA-256, layer, config and document ID. It contains gold and
+protected byte offsets, class, source IDs, action, refusal and restore facts,
+and validator offsets. For v3, it stores which gold span matches a trimmed
+prediction and whether the word boundary passes. It contains no document or
+protected values. The record also holds the original scorecard metadata, so a
+re-score needs no corpus, binary or model:
+
+```bash
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/no-opf/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v3.json \
+  --output target/bench-data/no-opf/scorecard-v3.json
+```
+
+Omit `--scored-labels` for v1. Use `--agentic-scored-labels` to change the
+generated layer contract too; otherwise replay uses the layer contract pinned
+inside the record. The same scoring accumulators compute the new scorecard.
+The record must be committed beside a release scorecard or its SHA-256 and
+retrieval location must be pinned in the release history.
+
 The scorecard records the contract under `scoring.scored_label_contract`: its
 id, version, file SHA-256, excluded labels, scored and excluded gold counts, and
 `scored_gold_digest` over every scored `(document, start, end, label)`. The
