@@ -768,6 +768,7 @@ class PolicyDeltaGateTests(unittest.TestCase):
         missing_field: str | None = None,
         tamper_policy: str | None = None,
         remove_delta: bool = False,
+        wrong_digest: tuple[str, str] | None = None,
     ) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             paths = {name: Path(directory) / f"{name}.toml" for name in ("base", "candidate", "delta")}
@@ -779,6 +780,14 @@ class PolicyDeltaGateTests(unittest.TestCase):
                 digest = hashlib.sha256(paths[label].read_bytes()).hexdigest()
                 card["parameters"]["policy_sha256"] = digest
                 card["runner_provenance"] = {"policy": {"path": str(paths[label]), "sha256": digest}}
+                if wrong_digest and wrong_digest[0] == label:
+                    altered = ("0" if digest[0] != "0" else "1") + digest[1:]
+                    self.assertRegex(altered, r"^[0-9a-f]{64}$")
+                    self.assertEqual(hashlib.sha256(paths[label].read_bytes()).hexdigest(), digest)
+                    if wrong_digest[1] == "provenance":
+                        card["runner_provenance"]["policy"]["sha256"] = altered
+                    else:
+                        card["parameters"]["policy_sha256"] = altered
                 if missing_field:
                     field = missing_field.removesuffix("_none")
                     target, key = {
@@ -860,6 +869,30 @@ class PolicyDeltaGateTests(unittest.TestCase):
                     "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
                     "[extension]\nthreshold = 0.5\n",
                     tamper_policy=label,
+                )
+
+    def test_wrong_provenance_digest_with_unchanged_policy_is_refused(self) -> None:
+        for label in ("base", "candidate"):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                agentic.LayerError, f"{label} policy file differs from its scorecard SHA-256"
+            ):
+                self.compare(
+                    "[rules]\nenabled = true\n",
+                    "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                    "[extension]\nthreshold = 0.5\n",
+                    wrong_digest=(label, "provenance"),
+                )
+
+    def test_wrong_parameters_digest_with_unchanged_policy_is_refused(self) -> None:
+        for label in ("base", "candidate"):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                agentic.LayerError, f"{label} policy file differs from its scorecard SHA-256"
+            ):
+                self.compare(
+                    "[rules]\nenabled = true\n",
+                    "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                    "[extension]\nthreshold = 0.5\n",
+                    wrong_digest=(label, "parameters"),
                 )
 
     def test_empty_delta_is_not_comparable(self) -> None:
