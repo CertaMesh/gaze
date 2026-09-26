@@ -95,6 +95,35 @@ fn ipv6_parse_validator_reports_pass_and_fail() {
 }
 
 #[test]
+fn bundled_ip_validators_name_documentation_vetoes_without_changing_parsing() {
+    let ipv4 = ValidatorKind::parse("ipv4_parse_non_documentation").unwrap();
+    for address in ["192.0.2.0", "192.0.2.255", "198.51.100.7", "203.0.113.1"] {
+        assert_fail(ipv4, address, ValidatorFailReason::Ipv4DocumentationRange);
+        assert_pass(ValidatorKind::Ipv4Parse, address);
+    }
+    for address in ["192.0.3.1", "192.168.1.1", "198.51.101.7"] {
+        assert_pass(ipv4, address);
+    }
+    assert_fail(ipv4, "192.000.2.1", ValidatorFailReason::Ipv4ParseFailed);
+
+    let ipv6 = ValidatorKind::parse("ipv6_parse_non_documentation").unwrap();
+    for address in [
+        "2001:db8::1",
+        "2001:0DB8:ffff::1",
+        "2001:db8:0:0:0:0:0:1",
+        "::ffff:192.0.2.1",
+        "::192.0.2.1",
+    ] {
+        assert_fail(ipv6, address, ValidatorFailReason::Ipv6DocumentationRange);
+        assert_pass(ValidatorKind::Ipv6Parse, address);
+    }
+    for address in ["2001:db9::1", "fe80::1", "::1", "::ffff:192.0.3.1"] {
+        assert_pass(ipv6, address);
+    }
+    assert_fail(ipv6, "2001::1::2", ValidatorFailReason::Ipv6ParseFailed);
+}
+
+#[test]
 fn eth_eip55_validator_reports_pass_and_fail() {
     assert_pass(
         ValidatorKind::EthEip55,

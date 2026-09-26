@@ -719,16 +719,16 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         vec!["::1".to_string()]
     );
     assert_eq!(
-        detect_recognizer(&rulepack, "ip.v6", "Host 2001:db8::1.", LocaleTag::EnUs),
-        vec!["2001:db8::1".to_string()]
+        detect_recognizer(&rulepack, "ip.v6", "Host 2001:db9::1.", LocaleTag::EnUs),
+        vec!["2001:db9::1".to_string()]
     );
     for (input, expected) in [
-        ("Host ::ffff:192.0.2.128.", "::ffff:192.0.2.128"),
+        ("Host ::ffff:192.0.3.128.", "::ffff:192.0.3.128"),
         ("Host ::ffff:0.0.0.0.", "::ffff:0.0.0.0"),
-        ("Host ::192.0.2.1.", "::192.0.2.1"),
-        ("Host 2001:db8::192.0.2.1.", "2001:db8::192.0.2.1"),
+        ("Host ::192.0.3.1.", "::192.0.3.1"),
+        ("Host 2001:db9::192.0.3.1.", "2001:db9::192.0.3.1"),
         ("Host fe80::ffff:1.2.3.4.", "fe80::ffff:1.2.3.4"),
-        ("Host 0:0:0:0:0:ffff:192.0.2.1.", "0:0:0:0:0:ffff:192.0.2.1"),
+        ("Host 0:0:0:0:0:ffff:192.0.3.1.", "0:0:0:0:0:ffff:192.0.3.1"),
     ] {
         assert_eq!(
             detect_recognizer(&rulepack, "ip.v6", input, LocaleTag::EnUs),
@@ -759,28 +759,28 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     let cleaned = clean_text(
         &pipeline,
         &session,
-        "Server ::ffff:192.0.2.1 logged",
+        "Server ::ffff:192.0.3.1 logged",
         LocaleTag::EnUs,
     );
     assert_eq!(
         restore_tokens(&session, &cleaned),
-        "Server ::ffff:192.0.2.1 logged",
+        "Server ::ffff:192.0.3.1 logged",
         "IPv4-embedded IPv6 wrapper must redact and restore as one unit"
     );
     assert!(
-        !cleaned.contains("192.0.2.1"),
+        !cleaned.contains("192.0.3.1"),
         "cleaned text leaked inner IPv4 octets: {cleaned:?}"
     );
 
     {
-        let input = "Server 192.0.2.1 logged";
+        let input = "Server 192.0.3.1 logged";
         let matches = detect_recognizer(&rulepack, "ip.v4", input, LocaleTag::EnUs);
-        assert_eq!(matches, vec!["192.0.2.1".to_string()]);
+        assert_eq!(matches, vec!["192.0.3.1".to_string()]);
     }
     {
-        let input = "Forwarding ::ffff:198.51.100.7 to upstream";
+        let input = "Forwarding ::ffff:192.0.3.7 to upstream";
         let matches = detect_recognizer(&rulepack, "ip.v6", input, LocaleTag::EnUs);
-        assert_eq!(matches, vec!["::ffff:198.51.100.7".to_string()]);
+        assert_eq!(matches, vec!["::ffff:192.0.3.7".to_string()]);
     }
     // drift-ack: v0.6.5 validator bundle adds eth.address and parser-backed
     // IP fixture coverage to the core/core-extended no-policy drift snapshots.
@@ -1677,7 +1677,7 @@ fn every_phase1_recognizer_round_trips_through_restore() {
         ("Call +1 555 0100", LocaleTag::EnUs),
         ("Host 192.168.1.1", LocaleTag::EnUs),
         ("Loopback ::1", LocaleTag::EnUs),
-        ("Host 2001:db8::1", LocaleTag::EnUs),
+        ("Host 2001:db9::1", LocaleTag::EnUs),
         (
             "Wallet 0x52908400098527886E0F7030069857D2E4169EE7",
             LocaleTag::EnUs,

@@ -421,6 +421,8 @@ fn validator_variant_name(kind: ValidatorKind) -> &'static str {
         ValidatorKind::IbanMod97 => "IbanMod97",
         ValidatorKind::Ipv4Parse => "Ipv4Parse",
         ValidatorKind::Ipv6Parse => "Ipv6Parse",
+        ValidatorKind::Ipv4ParseNonDocumentation => "Ipv4ParseNonDocumentation",
+        ValidatorKind::Ipv6ParseNonDocumentation => "Ipv6ParseNonDocumentation",
         ValidatorKind::EthEip55 => "EthEip55",
         ValidatorKind::AadhaarVerhoeff => "AadhaarVerhoeff",
         ValidatorKind::FrNirMod97 => "FrNirMod97",

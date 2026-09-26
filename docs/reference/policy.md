@@ -327,7 +327,11 @@ gaze clean --rulepack-bundled core --locale=en-US --policy ./policy.toml
   candidates that pass `luhn`. Its pattern takes a whole digit run; the
   recognizer finds the card inside it, so a CVV, expiry or number touching the
   card does not hide it (`gaze_types::payment_card::scan_card_run`).
-- `ip.v4` and `ip.v6` emit `custom:ip_address`.
+- `ip.v4` and `ip.v6` emit `custom:ip_address` for parsed addresses outside
+  RFC 5737 IPv4 documentation ranges and RFC 3849 IPv6 documentation range.
+  IPv4-compatible and IPv4-mapped forms of RFC 5737 addresses are also excluded.
+  The ordinary `ipv4_parse` and `ipv6_parse` validators remain available to
+  custom rules that intentionally protect documentation addresses.
 - `postal.de` emits `custom:postal_code` only under active locale `de-DE`.
 - `postal.us` emits `custom:postal_code` only under active locale `en-US`.
   Plain `en` does not activate `postal.us`.
@@ -417,6 +421,8 @@ kind = "luhn"
 | `iban_mod97` | IBAN-like alphanumeric candidates | ISO 7064 mod-97 check at the country's ISO 13616 registry length. Input is canonicalized as uppercase with ASCII whitespace removed before validation. Recognizers with this validator also get the identifier-run trailing boundary: the word run after the candidate may be empty or letters only (`gaze_types::word_run_extends_identifier`), so their pattern must not end in `\b`. |
 | `ipv4_parse` | IPv4-like candidates | `std::net::Ipv4Addr` parser validation. Rejects leading-zero octets, hex forms, short forms, and out-of-range octets. |
 | `ipv6_parse` | IPv6-like candidates | `std::net::Ipv6Addr` parser validation for RFC 4291 textual forms, including IPv4-embedded addresses. Rejects bracketed URI literals and zone-id suffixes. |
+| `ipv4_parse_non_documentation` | Bundled `ip.v4` candidates | Same IPv4 parser, then excludes RFC 5737 documentation ranges with a typed audit veto. |
+| `ipv6_parse_non_documentation` | Bundled `ip.v6` candidates | Same IPv6 parser, then excludes RFC 3849 and IPv4-embedded RFC 5737 documentation ranges with a typed audit veto. |
 | `eth_eip55` | Ethereum address candidates | EIP-55 checksum validation using Keccak-256. Mixed-case addresses must satisfy the checksum; all-lower and all-upper legacy forms are accepted. |
 | `aadhaar_verhoeff` | Aadhaar candidates | Verhoeff checksum validation for cue-anchored Indian Aadhaar recognizers. |
 | `fr_nir_mod97` | French NIR candidates | French NIR two-digit MOD-97 key validation. |

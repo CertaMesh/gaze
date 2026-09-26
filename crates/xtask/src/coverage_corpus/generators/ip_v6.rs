@@ -22,14 +22,14 @@ impl Generator for Ipv6Generator {
         let mut rng = StdRng::seed_from_u64(seed);
         if seed.is_multiple_of(2) {
             format!(
-                "2001:db8:{:x}:{:x}::{:x}",
+                "2001:db9:{:x}:{:x}::{:x}",
                 rng.gen_range(1..=0xffff_u16),
                 rng.gen_range(1..=0xffff_u16),
                 rng.gen_range(1..=0xffff_u16)
             )
         } else {
             format!(
-                "2001:db8::{:x}:192.0.2.{}",
+                "2001:db9::{:x}:192.0.3.{}",
                 rng.gen_range(1..=0xffff_u16),
                 rng.gen_range(1..=254)
             )

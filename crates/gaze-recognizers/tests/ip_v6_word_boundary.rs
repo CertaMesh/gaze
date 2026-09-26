@@ -17,8 +17,8 @@
 //! A standalone `a::b` still tokenizes: with nothing on either side it is indistinguishable from
 //! the address it literally is, and refusing it would cost real recall.
 //!
-//! Fixture addresses are documentation ranges (RFC 3849 `2001:db8::/32`, link-local `fe80::`,
-//! loopback `::1`) and RFC 5737 `192.0.2.0/24`; none routes anywhere.
+//! Boundary probes use the adjacent non-documentation prefixes `2001:db9::/32` and
+//! `192.0.3.0/24`, plus link-local `fe80::` and loopback `::1`.
 
 use gaze::Context;
 use gaze::{
@@ -104,6 +104,48 @@ fn assert_tokenized(text: &str, address: &str, surviving_context: &[&str]) {
     }
 }
 
+#[test]
+fn documentation_addresses_stay_untouched_and_adjacent_ranges_restore() {
+    for address in [
+        "192.0.2.1",
+        "198.51.100.7",
+        "203.0.113.255",
+        "2001:db8::1",
+        "2001:0DB8:ffff::1",
+        "::ffff:192.0.2.1",
+        "::192.0.2.1",
+    ] {
+        assert_untouched(&format!("host {address} connected"));
+    }
+
+    let pipeline = pipeline();
+    for address in [
+        "192.0.3.1",
+        "192.168.1.1",
+        "2001:db9::1",
+        "fd00::1",
+        "::ffff:192.0.3.1",
+    ] {
+        let raw = format!("host {address} connected");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, manifest, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(raw.clone()),
+                &LOCALES,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(clean) = clean else {
+            panic!("expected text");
+        };
+        assert_eq!(manifest.len(), 1, "one address token expected: {address}");
+        assert!(!clean.contains(address), "address survived: {address}");
+        let token = &clean[manifest[0].clean_span.clone()];
+        assert_eq!(session.restore(token).as_deref(), Some(address));
+    }
+}
+
 // ============================================== the defect: `::` paths must not fire (todo 3710)
 
 // drift-ack: the drift corpus gained a Rust scope-separator line so the bundled no-policy gate
@@ -159,10 +201,10 @@ fn bare_addresses_still_tokenize() {
         "::1",
         "::",
         "fe80::1",
-        "2001:db8::a",
-        "2001:0db8:0000:0000:0000:ff00:0042:8329",
-        "::ffff:192.0.2.1",
-        "2001:db8::1",
+        "2001:db9::a",
+        "2001:0db9:0000:0000:0000:ff00:0042:8329",
+        "::ffff:192.0.3.1",
+        "2001:db9::1",
     ] {
         let cleaned = clean(address);
         assert!(!cleaned.contains(address), "bare address survived cleaning");
@@ -172,21 +214,21 @@ fn bare_addresses_still_tokenize() {
 #[test]
 fn addresses_in_the_usual_delimiters_still_tokenize() {
     assert_tokenized("loopback ::1 here", "::1", &["loopback ", " here"]);
-    assert_tokenized("[2001:db8::1]:443", "2001:db8::1", &["[", "]:443"]);
+    assert_tokenized("[2001:db9::1]:443", "2001:db9::1", &["[", "]:443"]);
     assert_tokenized(
-        "{\"ip\":\"2001:db8::1\"}",
-        "2001:db8::1",
+        "{\"ip\":\"2001:db9::1\"}",
+        "2001:db9::1",
         &["{\"ip\":\"", "\"}"],
     );
-    assert_tokenized("addr=2001:db8::1", "2001:db8::1", &["addr="]);
-    assert_tokenized("ping(2001:db8::1)", "2001:db8::1", &["ping(", ")"]);
-    assert_tokenized("host 2001:db8::1.", "2001:db8::1", &["host ", "."]);
+    assert_tokenized("addr=2001:db9::1", "2001:db9::1", &["addr="]);
+    assert_tokenized("ping(2001:db9::1)", "2001:db9::1", &["ping(", ")"]);
+    assert_tokenized("host 2001:db9::1.", "2001:db9::1", &["host ", "."]);
     assert_tokenized(
-        "host 2001:db8::1, next",
-        "2001:db8::1",
+        "host 2001:db9::1, next",
+        "2001:db9::1",
         &["host ", ", next"],
     );
-    assert_tokenized("prefix 2001:db8::/32", "2001:db8::", &["prefix ", "/32"]);
+    assert_tokenized("prefix 2001:db9::/32", "2001:db9::", &["prefix ", "/32"]);
 }
 
 #[test]
@@ -222,12 +264,12 @@ fn a_standalone_all_hex_path_still_tokenizes() {
 #[test]
 fn glued_cue_addresses_are_protected() {
     for (text, address, context) in [
-        ("Address:2001:db8::1", "2001:db8::1", "Address:"),
+        ("Address:2001:db9::1", "2001:db9::1", "Address:"),
         ("IP:fe80::1", "fe80::1", "IP:"),
-        ("ipv6:2001:db8::a", "2001:db8::a", "ipv6:"),
-        ("host:2001:db8::1", "2001:db8::1", "host:"),
-        ("Adresse:2001:db8::1", "2001:db8::1", "Adresse:"),
-        ("{\"ip\":\"2001:db8::1\"}", "2001:db8::1", "{\"ip\":\""),
+        ("ipv6:2001:db9::a", "2001:db9::a", "ipv6:"),
+        ("host:2001:db9::1", "2001:db9::1", "host:"),
+        ("Adresse:2001:db9::1", "2001:db9::1", "Adresse:"),
+        ("{\"ip\":\"2001:db9::1\"}", "2001:db9::1", "{\"ip\":\""),
     ] {
         assert_tokenized(text, address, &[context]);
     }
@@ -238,16 +280,16 @@ fn glued_cue_manifest_spans_cover_only_the_address() {
     for locales in [&LOCALES[..], &DE_LOCALES[..]] {
         let pipeline = pipeline_for_locales(locales);
         for (prefix, address, suffix) in [
-            ("Address:", "2001:db8::1", ""),
-            ("address:", "2001:db8::1", ""),
-            ("ADDRESS:", "2001:db8::1", ""),
+            ("Address:", "2001:db9::1", ""),
+            ("address:", "2001:db9::1", ""),
+            ("ADDRESS:", "2001:db9::1", ""),
             ("IP:", "fe80::1", ""),
-            ("ipv6:", "2001:db8::a", ""),
-            ("ip=", "2001:db8::1", ""),
-            ("host:", "2001:db8::1", ""),
-            ("addr:", "2001:db8::1", ""),
-            ("Adresse:", "2001:db8::1", ""),
-            ("{\"ip\":\"", "2001:db8::1", "\"}"),
+            ("ipv6:", "2001:db9::a", ""),
+            ("ip=", "2001:db9::1", ""),
+            ("host:", "2001:db9::1", ""),
+            ("addr:", "2001:db9::1", ""),
+            ("Adresse:", "2001:db9::1", ""),
+            ("{\"ip\":\"", "2001:db9::1", "\"}"),
         ] {
             let raw = format!("{prefix}{address}{suffix}");
             let session = Session::new(Scope::Ephemeral).expect("session");
