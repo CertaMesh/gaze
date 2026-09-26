@@ -1372,6 +1372,7 @@ dependencies = [
 name = "gaze-pii"
 version = "0.15.1"
 dependencies = [
+ "aho-corasick",
  "anyhow",
  "base64 0.22.1",
  "dashmap",

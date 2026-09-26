@@ -92,7 +92,7 @@ Your agent never sees a real email, phone number, or order ID. Your server keeps
 1. **Normalize.** Tidy Unicode and spacing, and keep a map back to the original bytes.
 2. **Recognize.** 40 bundled rules (formats, checksums, cue words) plus one NER model (a model that spots names and places) each propose candidates.
 3. **Resolve.** Where candidates overlap, one wins; a whole entity takes precedence over pieces inside it. The losers are logged.
-4. **Swap.** Each winner becomes a placeholder plus a manifest entry. The same value always gets the same placeholder.
+4. **Swap.** Each winner becomes a placeholder plus a manifest entry. The same value always gets the same placeholder, and other copies of a rule-found value in the document or session are swept in too ([repeat-value sweep](detection/manifest-sweep.md)).
 5. **Safety net (on by default: Nym; OPF opt-in).** It rereads the output and turns PII it catches into a normal restorable placeholder.
 6. **Output check.** Each suspect becomes a placeholder, is replaced with a one-way `[REDACTED:<class>]` marker as a last resort, or the whole document is refused, depending on the mode below.
 7. **Restore.** Placeholders in the reply become the originals. A placeholder Gaze never issued is refused, never guessed.

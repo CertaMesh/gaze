@@ -759,6 +759,7 @@ mod tests {
             ConflictTier::Redact,
             ConflictTier::Resolve,
             ConflictTier::Fallback,
+            ConflictTier::ManifestSweep,
         ] {
             assert_logged_column(
                 &logger,
