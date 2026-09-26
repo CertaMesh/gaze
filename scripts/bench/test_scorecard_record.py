@@ -131,6 +131,23 @@ class RecordReplayTests(unittest.TestCase):
                 after["runs"][0]["metrics"]["utf8_bytes"],
             )
 
+    def test_historical_template_requires_exact_correctness(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, template, pinned = (
+                root / "capture.gz", root / "committed.json", root / "pinned.gz"
+            )
+            card = self.make_record(source)
+            template.write_text(json.dumps(card), encoding="utf-8")
+            record.pin_template(source, template, pinned)
+            self.assertEqual(
+                record.rescore(pinned, score.SCORED_LABEL_CONTRACT_V1), card
+            )
+            card["runs"][0]["metrics"]["utf8_bytes"]["leaked"] += 1
+            template.write_text(json.dumps(card), encoding="utf-8")
+            with self.assertRaisesRegex(record.RecordError, "correctness"):
+                record.pin_template(source, template, pinned)
+
     def test_rescored_layers_reach_gate_and_missing_identity_refuses(self):
         layer_contract = agentic.load_contract(ROOT)
         layer_docs = [
