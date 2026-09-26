@@ -1,4 +1,4 @@
-use gaze::{CollisionMembership, LocaleTag, PipelineBuilder, Recognizer, Rule};
+use gaze::{CollisionMembership, LocaleTag, PipelineBuilder, Recognizer, Rule, StreetNumberOrder};
 
 /// [`PipelineBuilder`] wrapper that counts every recognizer it registers.
 ///
@@ -48,6 +48,15 @@ impl AssemblyBuilder {
         self.map(|builder| {
             builder.register_anchor_cue_bundle(locale, anchor_key, names, window_chars)
         });
+    }
+
+    pub(crate) fn register_street_lexicon(
+        &mut self,
+        locale: LocaleTag,
+        order: StreetNumberOrder,
+        names: Vec<String>,
+    ) {
+        self.map(|builder| builder.register_street_lexicon(locale, order, names));
     }
 
     pub(crate) fn rule<R>(&mut self, rule: R)

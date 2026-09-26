@@ -16,6 +16,12 @@ names = ["antwortest", "antworte", "schreibst", "reply to", "respond to", "draft
 [locale.footer_cues]
 names = ["Gesendet von", "Gesendet durch", "Sent by", "Sent via", "On behalf of", "via"]
 
+# Street-word endings that let a NER location span license the house number
+# written after it (`Musterweg 17b`). Used only when NER marked the whole street;
+# a bare city never qualifies. A trailing dot marks an abbreviation (todo 3670).
+[locale.street_suffixes_number_after]
+names = ["straße", "strasse", "str.", "gasse", "weg", "platz", "allee", "ring", "damm", "ufer", "chaussee", "steig", "stieg", "pfad", "zeile", "graben", "promenade", "kai"]
+
 [locale.cues.iban]
 names = ["IBAN", "IBAN:", "Konto", "Kontonummer", "Bankverbindung"]
 window_chars = 64

@@ -90,6 +90,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::anchor_resolver::AnchorResolver;
+use crate::house_number::{StreetLexicon, StreetNumberOrder};
 pub use gaze_types::{Candidate, DetectContext, DetectError, Recognizer};
 use gaze_types::{CollisionMembership, LocaleBasis, LocaleChain, LocaleTag, PiiClass};
 
@@ -117,6 +118,7 @@ pub struct RecognizerRegistry {
     canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
     family_policy: FamilyPolicyTable,
     anchor_resolver: AnchorResolver,
+    street_lexicon: StreetLexicon,
 }
 
 impl std::fmt::Debug for RecognizerRegistry {
@@ -1001,6 +1003,10 @@ impl RecognizerRegistry {
         Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }
 
+    pub(crate) fn street_lexicon(&self) -> &StreetLexicon {
+        &self.street_lexicon
+    }
+
     pub fn recognizer(&self, id: &str) -> Option<&Arc<dyn Recognizer>> {
         self.recognizers_by_id.get(id)
     }
@@ -1047,6 +1053,7 @@ pub struct RecognizerRegistryBuilder {
     entries: Vec<Arc<dyn Recognizer>>,
     collision_memberships: HashMap<String, CollisionMembership>,
     anchor_resolver: AnchorResolver,
+    street_lexicon: StreetLexicon,
 }
 
 impl RecognizerRegistryBuilder {
@@ -1082,6 +1089,18 @@ impl RecognizerRegistryBuilder {
         self
     }
 
+    /// Registers street words whose NER location span licenses an adjacent
+    /// house number in `locale` (todo 3670).
+    pub fn register_street_lexicon(
+        mut self,
+        locale: LocaleTag,
+        order: StreetNumberOrder,
+        names: Vec<String>,
+    ) -> Self {
+        self.street_lexicon.register(locale, order, names);
+        self
+    }
+
     pub fn build(self) -> RecognizerRegistry {
         let recognizers_by_id = self
             .entries
@@ -1095,6 +1114,7 @@ impl RecognizerRegistryBuilder {
             canonicalizers: HashMap::new(),
             family_policy: FamilyPolicyTable::from_memberships(self.collision_memberships),
             anchor_resolver: self.anchor_resolver,
+            street_lexicon: self.street_lexicon,
         }
     }
 }
