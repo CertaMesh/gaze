@@ -898,7 +898,8 @@ When a candidate intentionally adds policy sections, declare them in a separate
 TOML file and pass `--policy-delta <file.toml>` to the gate. This mode accepts
 any new top-level sections. It reads both policies from their scorecard
 provenance, requires their paths and SHA-256 values, verifies the file digests,
-and compares parsed TOML. Missing metadata on either or both sides is refused.
+and compares parsed TOML values and types. Missing metadata on either or both
+sides is refused.
 The candidate must equal the base plus exactly the declared sections; edits to
 existing sections or undeclared keys are not comparable (exit `2`). The gate
 prints the base, candidate and delta file SHA-256 digests for review. Keep the

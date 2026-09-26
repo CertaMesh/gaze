@@ -809,6 +809,14 @@ class PolicyDeltaGateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "not_comparable")
         self.assertIn("policy_sha256", result["differing"])
 
+    def test_toml_type_change_is_not_comparable(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled = true\n",
+            "[rules]\nenabled = 1\n[extension]\nthreshold = 0.5\n",
+            "[extension]\nthreshold = 0.5\n",
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+
     def test_delta_cannot_change_an_existing_base_section(self) -> None:
         result = self.compare(
             "[rules]\nenabled = true\n",

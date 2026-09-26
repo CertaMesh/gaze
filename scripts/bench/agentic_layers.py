@@ -1692,6 +1692,20 @@ def _scorecard_policy(scorecard: Mapping[str, object], label: str) -> tuple[dict
         raise LayerError(f"invalid {label} policy TOML: {error}") from error
 
 
+def _toml_equal(left: object, right: object) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(
+            _toml_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _toml_equal(a, b) for a, b in zip(left, right, strict=True)
+        )
+    return left == right
+
+
 def _policy_delta_comparison(
     base: Mapping[str, object], candidate: Mapping[str, object], delta_path: Path
 ) -> tuple[bool, str, dict[str, str]]:
@@ -1715,7 +1729,7 @@ def _policy_delta_comparison(
     existing = sorted(base_policy.keys() & delta.keys())
     if existing:
         return False, f"policy delta changes existing base sections: {existing}", digests
-    if candidate_policy != {**base_policy, **delta}:
+    if not _toml_equal(candidate_policy, {**base_policy, **delta}):
         return False, "candidate policy differs beyond the declared new sections", digests
     return True, "candidate policy equals base plus declared new sections", digests
 
