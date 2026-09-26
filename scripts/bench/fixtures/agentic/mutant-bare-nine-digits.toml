@@ -1,0 +1,9 @@
+# Deliberately over-broad rule for the layer D counterweight check (M1 of the
+# PR #666 review). Appended to a policy, it tags every bare 9-digit run: it
+# must lower layer A's leak on BSN twins in prose without a cue AND raise
+# layer D's false-positive bytes on `ref_number_9`. Never ship this rule.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_bare_nine_digits"
+pattern = '\b\d{9}\b'
+class = "custom:mutant_nine_digits"

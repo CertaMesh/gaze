@@ -1,0 +1,10 @@
+# Deliberately over-broad rule for the layer D counterweight check (L4 of the
+# PR #666 re-verify). Appended to a policy, it tags every space-grouped
+# 16-digit run with no Luhn check: it must lower layer A's leak on card twins
+# in prose without a cue AND raise layer D's false-positive bytes on
+# `ref_number_16`. Never ship this rule.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_spaced_sixteen_digits"
+pattern = '\b\d{4} \d{4} \d{4} \d{4}\b'
+class = "custom:mutant_sixteen_digits"
