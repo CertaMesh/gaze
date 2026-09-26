@@ -289,7 +289,7 @@ Two consequences worth stating plainly:
 
 **v0.15.1** — measured on the released tree.
 
-> `policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.1 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`, byte-identical to the v0.15.0 policy. Latency was measured on a shared host; see the CHANGELOG for quiet-host latency.
+> `policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.1 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`, byte-identical to the v0.15.0 policy. Latency was measured on a shared host; quiet-host latency is in [Latency](#latency).
 
 | Provenance | Value |
 | --- | --- |
@@ -333,14 +333,14 @@ Validator-backed labels on `policy-file`. Gold that fails its own checksum stays
 
 <!-- BEGIN GENERATED: charts -->
 
-**Leaked PII bytes — v0.15.1 against the previous release.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
+**Leaked PII bytes — v0.15.0 – v0.15.1 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v1; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes.
 
 ```mermaid
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v1 - lower is better"
-    x-axis ["v0.15.1 default (15.0%)", "v0.15.0 default (15.0%)"]
-    y-axis "Leaked PII bytes" 0 --> 22000
-    bar [19556, 19556]
+    x-axis ["v0.15.0 – v0.15.1 default (15.0%)", "v0.14.0 default (19.3%)", "v0.14.0 rules + NER (20.7%)", "v0.14.0 rules only (72.0%)"]
+    y-axis "Leaked PII bytes" 0 --> 104000
+    bar [19556, 25179, 27000, 93850]
 ```
 
 **Trend across releases — each release's shipped default.** Scored under scored labels v1. The shipped arm changes between releases; the history table names it per row.
@@ -348,17 +348,17 @@ xychart-beta horizontal
 ```mermaid
 xychart-beta
     title "Leaked PII bytes, shipped default - scored labels v1"
-    x-axis ["v0.14.0 (19.3%)", "v0.15.0 (15.0%)", "v0.15.1 (15.0%)"]
+    x-axis ["v0.14.0 (19.3%)", "v0.15.0 – v0.15.1 (15.0%)"]
     y-axis "Leaked PII bytes (lower is better)" 0 --> 28000
-    line [25179, 19556, 19556]
+    line [25179, 19556]
 ```
 
 ```mermaid
 xychart-beta
     title "False-positive bytes, shipped default - scored labels v1"
-    x-axis ["v0.14.0", "v0.15.0", "v0.15.1"]
+    x-axis ["v0.14.0", "v0.15.0 – v0.15.1"]
     y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 190000
-    line [168276, 30073, 30073]
+    line [168276, 30073]
 ```
 
 <!-- END GENERATED: charts -->
@@ -367,17 +367,23 @@ xychart-beta
 
 ## Release history
 
-One row per released version. Every row's numbers come from the
-`scorecard-vX.Y.Z.json` named in that row, which stays committed as the
-machine-readable evidence.
+Consecutive releases with the same results share one row, labelled oldest –
+newest: same results means the same shipped arm, refused documents, leaked PII
+bytes, false-positive bytes, restore-exact rate and gold-gap diagnostic (when
+the contract reports one) under the same scored-label contract, corpus and
+provisional status, while clean p95 latency, date, commit and machine are
+ignored because they vary with the host. The table and trend
+charts show the last three such rows, and a merged row shows its newest
+release. [`release-history.json`](release-history.json) keeps every release,
+and every row's numbers come from the `scorecard-vX.Y.Z.json` files it links,
+which stay committed as the machine-readable evidence.
 
 <!-- BEGIN GENERATED: history -->
 
 | Release | Measured | Commit | Machine | Scorecard | Shipped arm | Refused ↓ | Leaked PII bytes, all processed ↓ | Leaked PII bytes, common documents ↓ | False-positive bytes ↔ | Restore exact ↑ | clean p95 ms ↓ |
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | `full-stack-kiji-resolve` | 0 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
-| v0.15.0 | 2026-09-25 | `6fcba31` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json) | `policy-file` | 0 | 19,556 | 19,556 | 30,073 | 100.0000% | 124.23 |
-| v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json) | `policy-file` | 0 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
+| v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json) | `policy-file` | 0 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
 
 <!-- END GENERATED: history -->
 
@@ -411,6 +417,40 @@ the measured tree only in docs and version pins.
   holdout-side only: the A4 negative corpus did not move at all, in bytes,
   documents, or any of its eight categories. A gated run would put those 113
   bytes through the gold-noise ratchet exception above.
+
+---
+
+## Latency
+
+Quiet-host timing from the `latency-vX.Y.Z.json` file each release commits,
+produced by [`scripts/bench/cli-latency.py`](../../../scripts/bench/cli-latency.py).
+The `clean p95 ms` column in the tables above comes from the accuracy run on
+a loaded host, so read latency here. Rows follow the release groups of the
+history table; a group reads its newest release's file, and a release without
+one shows *not measured*. Latency never decides whether two releases share a
+row.
+
+<!-- BEGIN GENERATED: latency -->
+
+**In-process pipeline.** Warm is the per-document `clean` time once models are loaded; cold is the first document, model load included.
+
+| Release | Setup | Warm p50 ms ↓ | Warm p95 ms ↓ | Cold first document ms ↓ | Peak RSS MiB ↓ |
+| --- | --- | ---: | ---: | ---: | ---: |
+| v0.14.0 | not measured | — | — | — | — |
+| v0.15.0 – v0.15.1 | `gaze setup` without Nym (rules + NER) | 20.36 | 33.30 | 763.90 | 591.2 |
+| v0.15.0 – v0.15.1 | `gaze setup` (rules + NER + Nym) | 69.42 | 138.88 | 2126.90 | 1049.9 |
+
+**CLI.** One-shot starts `gaze clean` per document; the daemon (`gaze daemon`) loads once and serves every document after the first.
+
+| Release | Setup | One-shot p50 ms ↓ | One-shot p95 ms ↓ | Daemon warm p50 ms ↓ | Daemon warm p95 ms ↓ |
+| --- | --- | ---: | ---: | ---: | ---: |
+| v0.14.0 | not measured | — | — | — | — |
+| v0.15.0 – v0.15.1 | `gaze setup` without Nym (rules + NER) | 771.50 | 821.52 | 20.29 | 32.35 |
+| v0.15.0 – v0.15.1 | `gaze setup` (rules + NER + Nym) | 2140.15 | 2187.25 | 69.50 | 141.50 |
+
+- **v0.15.0 – v0.15.1:** [`latency-v0.15.1.json`](latency-v0.15.1.json), verdict `valid`, 30 documents, 1-minute load 1.77 at start. Host: Apple M5 Max, 18 cores, 64 GiB RAM, macOS-26.5-arm64-arm-64bit-Mach-O, ort 2.0.0-rc.12, Nym bundle 71f9023bcf86…, intra-op threads 1.
+
+<!-- END GENERATED: latency -->
 
 ---
 

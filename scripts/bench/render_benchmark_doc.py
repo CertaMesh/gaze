@@ -110,7 +110,7 @@ GOLD_GAP_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("Adjusted byte precision", "adjusted_precision", "rate"),
 )
 
-BLOCK_NAMES = ("current-release", "charts", "history")
+BLOCK_NAMES = ("current-release", "charts", "history", "latency")
 README_BLOCK_NAMES = ("readme-chart",)
 
 #: Plain-English chart labels for the arms a released row can carry. The table
@@ -416,6 +416,67 @@ def version_sort_key(version: str) -> tuple[Any, ...]:
         for part in prerelease.split(".")
     )
     return numbers + (0, identifiers)
+
+
+#: How many distinct-result groups the history table and charts show. The
+#: history file keeps every release; only the display is capped.
+DISPLAYED_GROUPS = 3
+
+
+def result_key(entry: Mapping[str, Any]) -> tuple[Any, ...]:
+    """What makes two releases' benchmark results the same.
+
+    The shipped arm and its result numbers (including the contract v3
+    gold-gap diagnostic), read under one scored-label contract on one corpus,
+    and whether the row claims the released tree. The rule sentence above the
+    history table in the benchmark doc must list the same fields.
+    Latency, date, commit and machine are left out on purpose: p95 moves with
+    host load, so v0.15.0 (124 ms) and v0.15.1 (139 ms) on identical detection
+    output are one result. Leaked bytes on the common document set are derived
+    from refused and leaked bytes on one corpus, so they need no slot of their own.
+    """
+    arm_name = shipped_default_arm(entry)
+    arm = entry["arms"][arm_name]
+    dataset = entry["dataset"]
+    return (
+        _contract_key(entry),
+        dataset["integrity"]["sha256"],
+        dataset["evaluated_population"]["documents"],
+        bool(entry.get("provisional")),
+        arm_name,
+        arm["failed_closed_documents"],
+        arm["surviving_pii_utf8_bytes"],
+        arm["false_positive_utf8_bytes"],
+        arm["restore_exact_rate"],
+        json.dumps(arm.get("gold_gap"), sort_keys=True),
+    )
+
+
+def release_groups(
+    releases: Sequence[Mapping[str, Any]],
+) -> list[list[Mapping[str, Any]]]:
+    """Consecutive releases with an equal `result_key`, oldest first.
+
+    Only neighbours merge: a release that returns to an older result after a
+    different one starts a new group, so the display never hides a change.
+    """
+    groups: list[list[Mapping[str, Any]]] = []
+    for entry in releases:
+        if groups and result_key(groups[-1][-1]) == result_key(entry):
+            groups[-1].append(entry)
+        else:
+            groups.append([entry])
+    return groups
+
+
+def displayed_groups(history: Mapping[str, Any]) -> list[list[Mapping[str, Any]]]:
+    return release_groups(history["releases"])[-DISPLAYED_GROUPS:]
+
+
+def group_label(group: Sequence[Mapping[str, Any]]) -> str:
+    """`v0.15.0` for one release, `v0.15.0 – v0.15.1` (oldest – newest) for more."""
+    first, last = group[0]["version"], group[-1]["version"]
+    return first if len(group) == 1 else f"{first} – {last}"
 
 
 def write_history(path: Path, history: Mapping[str, Any]) -> None:
@@ -832,28 +893,31 @@ def render_validator_recall(entry: Mapping[str, Any]) -> list[str]:
 
 
 def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
-    """(label, leaked bytes) for the latest release against the one before it.
+    """(label, leaked bytes) for the latest result group against the one before it.
 
     Each label ends with that arm's leak rate, e.g. `v0.15.0 default (15.0%)`.
 
-    The latest release's default comes first, then the previous release's
-    default, then every other measured arm by leaked bytes. The previous
-    release joins only when it was scored on the same corpus under the same
+    The latest group's default comes first, then the previous group's default,
+    then every other measured arm by leaked bytes. A group is shown by its
+    newest release. The previous group always has different results
+    (`release_groups`), so an unchanged patch release never compares with
+    itself. It joins only when it was scored on the same corpus under the same
     label contract; otherwise a contract or corpus change would read as a leak
     change.
     """
-    releases = history["releases"]
-    latest = releases[-1]
+    groups = release_groups(history["releases"])
+    latest = groups[-1]
     rows = [latest]
-    if len(releases) > 1:
-        previous = releases[-2]
-        if _contract_key(previous) == _contract_key(latest) and (
-            previous["dataset"]["integrity"]["sha256"]
-            == latest["dataset"]["integrity"]["sha256"]
+    if len(groups) > 1:
+        previous = groups[-2]
+        if _contract_key(previous[-1]) == _contract_key(latest[-1]) and (
+            previous[-1]["dataset"]["integrity"]["sha256"]
+            == latest[-1]["dataset"]["integrity"]["sha256"]
         ):
             rows.append(previous)
     bars: list[tuple[str, int]] = []
-    for row in rows:
+    for group in rows:
+        row, label = group[-1], group_label(group)
         default_arm = shipped_default_arm(row)
         others = sorted(
             (arm for arm in row["arms"] if arm != default_arm),
@@ -861,7 +925,7 @@ def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
         )
         bars.append(
             (
-                _leak_pct_label(f"{row['version']} default", row["arms"][default_arm]),
+                _leak_pct_label(f"{label} default", row["arms"][default_arm]),
                 row["arms"][default_arm]["surviving_pii_utf8_bytes"],
             )
         )
@@ -869,7 +933,7 @@ def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
             bars.append(
                 (
                     _leak_pct_label(
-                        f"{row['version']} {ARM_CHART_LABELS.get(arm, arm)}",
+                        f"{label} {ARM_CHART_LABELS.get(arm, arm)}",
                         row["arms"][arm],
                     ),
                     row["arms"][arm]["surviving_pii_utf8_bytes"],
@@ -907,20 +971,20 @@ def _comparison_chart(history: Mapping[str, Any]) -> list[str]:
 def shipped_default_trend(
     history: Mapping[str, Any], field: str
 ) -> list[tuple[str, Any]]:
-    """(version, value) of each release's OWN shipped default arm.
+    """(group label, value) of each displayed group's OWN shipped default arm.
 
     Keyed per row, not by the latest default: the default changed between
     releases, and a row that never measured today's default arm still shipped
-    one. Only rows under the latest row's label contract are kept, because one
-    line across two contracts would show a change in what counts as gold as a
-    change in leaks.
+    one. A group reads its newest release. Only groups under the latest
+    group's label contract are kept, because one line across two contracts
+    would show a change in what counts as gold as a change in leaks.
     """
-    releases = history["releases"]
-    latest_contract = _contract_key(releases[-1])
+    groups = displayed_groups(history)
+    latest_contract = _contract_key(groups[-1][-1])
     return [
-        (item["version"], item["arms"][shipped_default_arm(item)][field])
-        for item in releases
-        if _contract_key(item) == latest_contract
+        (group_label(group), group[-1]["arms"][shipped_default_arm(group[-1])][field])
+        for group in groups
+        if _contract_key(group[-1]) == latest_contract
     ]
 
 
@@ -961,8 +1025,10 @@ def render_charts(history: Mapping[str, Any]) -> str:
             "[`release-history.json`](release-history.json)."
         )
     entry = releases[-1]
+    groups = displayed_groups(history)
     lines = [
-        f"**Leaked PII bytes — {entry['version']} against the previous release.** "
+        f"**Leaked PII bytes — {group_label(groups[-1])} against the previous "
+        "release with different results.** "
         f"Lower is better; the goal is zero. Scored under {contract_label(entry)}; "
         "every bar is a measured arm in "
         "[`release-history.json`](release-history.json). "
@@ -980,13 +1046,13 @@ def render_charts(history: Mapping[str, Any]) -> str:
             "between releases; the history table names it per row.",
         ]
     )
-    if len(trend_rows) < len(releases):
+    if len(trend_rows) < len(groups):
         lines.extend(
             [
                 "",
                 f"> Only rows measured under {contract_label(entry)} are on "
                 "these lines; "
-                f"{len(releases) - len(trend_rows)} row(s) under another contract are "
+                f"{len(groups) - len(trend_rows)} row(s) under another contract are "
                 "in the history table.",
             ]
         )
@@ -1046,15 +1112,17 @@ def render_history(history: Mapping[str, Any]) -> str:
         )
     # Rows that record their own shipped arm were appended with the refusal-aware
     # layout. A history of legacy rows alone keeps the original table byte for byte.
+    groups = displayed_groups(history)
     if any("shipped_default_arm" in entry for entry in releases):
-        return render_history_with_refusals(releases)
+        return render_history_with_refusals(groups)
     latest_default_arm = shipped_default_arm(releases[-1])
     lines = [
         "| Release | Measured | Commit | Machine | Scorecard | "
         "Surviving PII bytes ↓ |",
         "| --- | --- | --- | --- | --- | ---: |",
     ]
-    for entry in releases:
+    for group in groups:
+        entry = group[-1]
         # Each row reports the arm it shipped; name it when that differs from
         # the latest default so a changed default never reads as a leak change.
         default_arm = shipped_default_arm(entry)
@@ -1062,20 +1130,29 @@ def render_history(history: Mapping[str, Any]) -> str:
         if default_arm != latest_default_arm:
             surviving += f" (`{default_arm}`)"
         lines.append(
-            f"| {_history_version_cell(entry)} | {entry['date']} | `{entry['commit'][:7]}` | "
-            f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "
+            f"| {_history_version_cell(group)} | {entry['date']} | `{entry['commit'][:7]}` | "
+            f"{entry['machine']} | {_scorecard_links(group)} | "
             f"{surviving} |"
         )
     return "\n".join(lines)
 
 
-def _history_version_cell(entry: Mapping[str, Any]) -> str:
-    version = entry["version"]
+def _history_version_cell(group: Sequence[Mapping[str, Any]]) -> str:
+    """The group label; every member shares the flags, since both are in the key."""
+    entry = group[-1]
+    version = group_label(group)
     if entry.get("provisional"):
         version += " *(provisional)*"
     if entry.get("scored_label_contract"):
         version += f" · {contract_label(entry)}"
     return version
+
+
+def _scorecard_links(group: Sequence[Mapping[str, Any]]) -> str:
+    """Every member's scorecard: the merged row stands on all of them."""
+    return ", ".join(
+        f"[`{entry['scorecard']}`]({entry['scorecard']})" for entry in group
+    )
 
 
 def common_set_surviving_bytes(releases: Sequence[Mapping[str, Any]]) -> list[int]:
@@ -1115,8 +1192,8 @@ def common_set_surviving_bytes(releases: Sequence[Mapping[str, Any]]) -> list[in
     ]
 
 
-def render_history_with_refusals(releases: Sequence[Mapping[str, Any]]) -> str:
-    common = common_set_surviving_bytes(releases)
+def render_history_with_refusals(groups: Sequence[Sequence[Mapping[str, Any]]]) -> str:
+    common = common_set_surviving_bytes([group[-1] for group in groups])
     lines = [
         "| Release | Measured | Commit | Machine | Scorecard | Shipped arm | "
         "Refused ↓ | Leaked PII bytes, all processed ↓ | "
@@ -1124,12 +1201,13 @@ def render_history_with_refusals(releases: Sequence[Mapping[str, Any]]) -> str:
         "Restore exact ↑ | clean p95 ms ↓ |",
         "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for entry, common_bytes in zip(releases, common):
+    for group, common_bytes in zip(groups, common):
+        entry = group[-1]
         default_arm = shipped_default_arm(entry)
         arm = entry["arms"][default_arm]
         lines.append(
-            f"| {_history_version_cell(entry)} | {entry['date']} | `{entry['commit'][:7]}` | "
-            f"{entry['machine']} | [`{entry['scorecard']}`]({entry['scorecard']}) | "
+            f"| {_history_version_cell(group)} | {entry['date']} | `{entry['commit'][:7]}` | "
+            f"{entry['machine']} | {_scorecard_links(group)} | "
             f"`{default_arm}` | {_fmt('int', arm['failed_closed_documents'])} | "
             f"{_fmt('int', arm['surviving_pii_utf8_bytes'])} | {_fmt('int', common_bytes)} | "
             f"{_fmt('int', arm['false_positive_utf8_bytes'])} | "
@@ -1138,11 +1216,142 @@ def render_history_with_refusals(releases: Sequence[Mapping[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+# --------------------------------------------------------------------------
+# latency
+#
+# `cli-latency.py` writes one `latency-vX.Y.Z.json` per release on a quiet
+# host. It is separate evidence from the scorecard, whose `clean p95 ms` runs
+# on a loaded host, and it never feeds `result_key`: latency is host noise
+# for the question "did the results change".
+# --------------------------------------------------------------------------
+
+#: (label, pipeline and CLI key suffix) for the two setups the file measures.
+LATENCY_SETUPS: tuple[tuple[str, str], ...] = (
+    ("`gaze setup` without Nym (rules + NER)", "setup"),
+    ("`gaze setup` (rules + NER + Nym)", "setup_nym"),
+)
+
+
+def load_latency(directory: Path, history: Mapping[str, Any]) -> dict[str, Any]:
+    """Every committed `latency-<version>.json`; a release without one is absent."""
+    loaded: dict[str, Any] = {}
+    for entry in history["releases"]:
+        path = directory / f"latency-{entry['version']}.json"
+        if not path.exists():
+            continue
+        try:
+            loaded[entry["version"]] = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            raise RenderError(f"{path.name} is not valid JSON: {error}") from error
+    return loaded
+
+
+def _latency_number(data: Mapping[str, Any], path: Sequence[str], where: str) -> float:
+    value = _dig(data, path, where)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise RenderError(
+            f"{where}: {'.'.join(path)} must be a non-negative number, got {value!r}"
+        )
+    return float(value)
+
+
+def _latency_rows(
+    label: str, data: Mapping[str, Any] | None, version: str
+) -> tuple[list[str], list[str], str | None]:
+    """(pipeline rows, CLI rows, provenance line) for one displayed group."""
+    if data is None:
+        missing = "not measured"
+        return (
+            [f"| {label} | {missing} | — | — | — | — |"],
+            [f"| {label} | {missing} | — | — | — | — |"],
+            None,
+        )
+    where = f"latency-{version}.json"
+    if data.get("smoke") is not False:
+        raise RenderError(
+            f"{where}: a smoke run (or one without `smoke: false`) is never a "
+            "timing claim"
+        )
+    verdict = data.get("verdict")
+    hardware = data.get("hardware")
+    if not isinstance(verdict, str) or not isinstance(hardware, str):
+        raise RenderError(f"{where}: verdict and hardware must be strings")
+    def number(*path: str) -> float:
+        return _latency_number(data, path, where)
+
+    pipeline, cli = [], []
+    for setup_label, key in LATENCY_SETUPS:
+        pipeline.append(
+            f"| {label} | {setup_label} | "
+            f"{_fmt('ms', number('pipeline', key, 'warm_clean', 'p50_ms'))} | "
+            f"{_fmt('ms', number('pipeline', key, 'warm_clean', 'p95_ms'))} | "
+            f"{_fmt('ms', number('pipeline', key, 'cold_first_document_ms'))} | "
+            f"{number('pipeline', key, 'peak_rss_mib'):.1f} |"
+        )
+        cli.append(
+            f"| {label} | {setup_label} | "
+            f"{_fmt('ms', number('cli', f'oneshot_{key}', 'per_document', 'p50_ms'))} | "
+            f"{_fmt('ms', number('cli', f'oneshot_{key}', 'per_document', 'p95_ms'))} | "
+            f"{_fmt('ms', number('cli', f'daemon_{key}', 'warm', 'p50_ms'))} | "
+            f"{_fmt('ms', number('cli', f'daemon_{key}', 'warm', 'p95_ms'))} |"
+        )
+    documents = _require_nonneg_int(data.get("documents"), f"{where} documents")
+    load = _latency_number(data, ("host_before", "load_1m"), where)
+    note = (
+        f"- **{label}:** [`{where}`]({where}), verdict `{verdict}`, "
+        f"{documents} documents, 1-minute load {load:.2f} at start. Host: {hardware}."
+    )
+    return pipeline, cli, note
+
+
+def render_latency(
+    history: Mapping[str, Any], latency: Mapping[str, Any] | None = None
+) -> str:
+    """Quiet-host latency per displayed group, read from its newest release's file."""
+    if not history["releases"]:
+        return "> Latency renders once a release has been measured."
+    latency = latency or {}
+    pipeline = [
+        "| Release | Setup | Warm p50 ms ↓ | Warm p95 ms ↓ | "
+        "Cold first document ms ↓ | Peak RSS MiB ↓ |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+    ]
+    cli = [
+        "| Release | Setup | One-shot p50 ms ↓ | One-shot p95 ms ↓ | "
+        "Daemon warm p50 ms ↓ | Daemon warm p95 ms ↓ |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+    ]
+    notes = []
+    for group in displayed_groups(history):
+        version = group[-1]["version"]
+        rows = _latency_rows(group_label(group), latency.get(version), version)
+        pipeline.extend(rows[0])
+        cli.extend(rows[1])
+        if rows[2]:
+            notes.append(rows[2])
+    return "\n".join(
+        [
+            "**In-process pipeline.** Warm is the per-document `clean` time once "
+            "models are loaded; cold is the first document, model load included.",
+            "",
+            *pipeline,
+            "",
+            "**CLI.** One-shot starts `gaze clean` per document; the daemon "
+            "(`gaze daemon`) loads once and serves every document after the first.",
+            "",
+            *cli,
+            "",
+            *(notes or ["No release in this table has a latency file yet."]),
+        ]
+    )
+
+
 RENDERERS = {
     "current-release": render_current_release,
     "charts": render_charts,
     "history": render_history,
     "readme-chart": render_readme_chart,
+    "latency": render_latency,
 }
 
 
@@ -1158,8 +1367,13 @@ def apply_blocks(
     document: str,
     history: Mapping[str, Any],
     names: Sequence[str] = BLOCK_NAMES,
+    latency: Mapping[str, Any] | None = None,
 ) -> str:
-    """Replace each generated block in place, leaving all prose untouched."""
+    """Replace each generated block in place, leaving all prose untouched.
+
+    `latency` maps a version to its parsed latency file; only the latency
+    block reads it, and a version without one renders as not measured.
+    """
     for name in names:
         begin, end = begin_marker(name), end_marker(name)
         start = document.find(begin)
@@ -1168,7 +1382,11 @@ def apply_blocks(
             raise RenderError(f"document is missing the {name!r} generated block")
         if stop < start:
             raise RenderError(f"{name!r} markers are out of order")
-        body = RENDERERS[name](history)
+        body = (
+            render_latency(history, latency)
+            if name == "latency"
+            else RENDERERS[name](history)
+        )
         document = (
             document[: start + len(begin)] + "\n\n" + body + "\n\n" + document[stop:]
         )
@@ -1299,10 +1517,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         targets = [(args.doc, BLOCK_NAMES)]
         if readme is not None:
             targets.append((readme, README_BLOCK_NAMES))
+        latency = load_latency(args.history.parent, history)
         outputs = []
         for path, names in targets:
             original = path.read_text(encoding="utf-8")
-            outputs.append((path, original, apply_blocks(original, history, names)))
+            outputs.append(
+                (path, original, apply_blocks(original, history, names, latency))
+            )
 
         if args.check:
             drifted = [path for path, original, rendered in outputs if rendered != original]

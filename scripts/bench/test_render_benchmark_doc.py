@@ -150,6 +150,10 @@ stale
 stale
 <!-- END GENERATED: history -->
 
+<!-- BEGIN GENERATED: latency -->
+stale
+<!-- END GENERATED: latency -->
+
 Trailing prose.
 """
 
@@ -760,14 +764,25 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             for row in committed["releases"]
         }
 
-    def test_committed_history_trend_has_every_release(self):
-        committed = render.load_history(render.DEFAULT_HISTORY)
+    def committed_group_defaults(self, committed):
+        """Each displayed group's label and its newest release's default arm."""
         defaults = self.committed_default_arms(committed)
+        return {
+            render.group_label(group): defaults[group[-1]["version"]]
+            for group in render.displayed_groups(committed)
+        }
+
+    def test_committed_history_trend_has_every_distinct_result(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
         expected = [
-            (version, arm["surviving_pii_utf8_bytes"]) for version, arm in defaults.items()
+            (label, arm["surviving_pii_utf8_bytes"])
+            for label, arm in self.committed_group_defaults(committed).items()
         ]
-        # The first two releases shipped different default arms; both must be on the line.
-        self.assertEqual(expected[:2], [("v0.14.0", 25179), ("v0.15.0", 19556)])
+        # The first two results shipped different default arms; both must be on
+        # the line, and v0.15.1 repeats v0.15.0's numbers so it joins its point.
+        self.assertEqual(
+            expected[:2], [("v0.14.0", 25179), ("v0.15.0 – v0.15.1", 19556)]
+        )
         self.assertEqual(
             render.shipped_default_trend(committed, "surviving_pii_utf8_bytes"), expected
         )
@@ -803,14 +818,14 @@ class ShippedDefaultChartsTest(unittest.TestCase):
 
     def test_comparison_bars_lead_with_the_latest_committed_release(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
-        defaults = self.committed_default_arms(committed)
+        defaults = self.committed_group_defaults(committed)
         latest, previous = list(defaults)[-1], list(defaults)[-2]
         bars = render.comparison_bars(committed)
-        for (label, value), version in zip(bars, (latest, previous)):
-            arm = defaults[version]
+        for (label, value), group in zip(bars, (latest, previous)):
+            arm = defaults[group]
             self.assertEqual(
                 (label, value),
-                (f"{version} default ({pct(arm['leak_rate'])})", arm["surviving_pii_utf8_bytes"]),
+                (f"{group} default ({pct(arm['leak_rate'])})", arm["surviving_pii_utf8_bytes"]),
             )
 
     def test_previous_release_under_another_contract_leaves_the_comparison(self):
@@ -849,6 +864,9 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         for version, arm in self.committed_default_arms(committed).items():
             arms[f"{version} default"] = arm
             arms[version] = arm
+        for label, arm in self.committed_group_defaults(committed).items():
+            arms[f"{label} default"] = arm
+            arms[label] = arm
         for arm in arms.values():
             self.assertEqual(
                 round(arm["leak_rate"] * 100, 1),
@@ -1400,6 +1418,296 @@ class CheckDoorTest(unittest.TestCase):
             result = self._run_check(root)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("is in sync", result.stdout)
+
+
+
+def release(version: str, leaked: int = 19556, *, p95: float = 124.0, **fields) -> dict:
+    """A `policy-file` release row whose shipped-arm results are set by hand."""
+    row = RefusalAwareHistoryTest.policy_entry(RefusalAwareHistoryTest())
+    row.update(
+        version=version,
+        scorecard=f"scorecard-{version}.json",
+        commit=(version.replace(".", "")[1:] * 40)[:40],
+    )
+    arm = row["arms"]["policy-file"]
+    arm["surviving_pii_utf8_bytes"] = leaked
+    arm["clean_ms_p95"] = p95
+    arm.update(fields)
+    return row
+
+
+def releases(*rows: dict) -> dict:
+    value = render.empty_history()
+    value["releases"].extend(rows)
+    render.validate_history(value)
+    return value
+
+
+def history_labels(block: str) -> list[str]:
+    """The Release cell of every data row in a rendered history table."""
+    return [line.split(" | ")[0][2:] for line in block.splitlines()[2:]]
+
+
+class DistinctResultGroupTest(unittest.TestCase):
+    """Consecutive releases with identical benchmark results show as one entry.
+
+    v0.15.1 scored byte-for-byte what v0.15.0 scored; two rows and two chart
+    points for one result hide the release that actually changed the numbers.
+    """
+
+    def test_equal_results_merge_into_one_group(self):
+        value = releases(release("v0.15.0"), release("v0.15.1"))
+        groups = render.release_groups(value["releases"])
+        self.assertEqual([[row["version"] for row in g] for g in groups], [["v0.15.0", "v0.15.1"]])
+        self.assertEqual(render.group_label(groups[0]), "v0.15.0 – v0.15.1")
+
+    def test_latency_and_provenance_differences_still_merge(self):
+        newer = release("v0.15.1", p95=138.72)
+        newer.update(date="2099-01-01", machine="Another host", scorecard_sha256="1" * 64)
+        value = releases(release("v0.15.0", p95=124.23), newer)
+        self.assertEqual(len(render.release_groups(value["releases"])), 1)
+
+    def test_any_result_number_difference_splits(self):
+        contract = {
+            "id": "scored-labels-v2",
+            "version": 2,
+            "file_sha256": "1" * 64,
+            "excluded_labels": [],
+        }
+        for field, change in (
+            ("failed_closed_documents", lambda arm, row: arm.update(failed_closed_documents=1)),
+            ("surviving_pii_utf8_bytes", lambda arm, row: arm.update(surviving_pii_utf8_bytes=19557)),
+            ("false_positive_utf8_bytes", lambda arm, row: arm.update(false_positive_utf8_bytes=1)),
+            ("restore_exact_rate", lambda arm, row: arm.update(restore_exact_rate=0.99)),
+            ("scored_label_contract", lambda arm, row: row.update(scored_label_contract=contract)),
+            ("corpus", lambda arm, row: row["dataset"]["integrity"].update(sha256="2" * 64)),
+            ("provisional", lambda arm, row: row.update(provisional=True)),
+        ):
+            with self.subTest(field=field):
+                newer = release("v0.15.1")
+                change(newer["arms"]["policy-file"], newer)
+                value = releases(release("v0.15.0"), newer)
+                self.assertEqual(len(render.release_groups(value["releases"])), 2)
+
+    def test_a_gold_gap_only_difference_splits(self):
+        contract = {
+            "id": "scored-labels-v3",
+            "version": 3,
+            "file_sha256": "3" * 64,
+            "excluded_labels": [],
+        }
+
+        def gold_gap(protected: int) -> dict:
+            return {
+                "gold_gap_protected_bytes": protected,
+                "false_positive_bytes_after_gold_gap": 100,
+                "adjusted_precision": 0.9,
+                "gold_gap_protected_bytes_by_label": {"EMAIL": protected},
+            }
+
+        rows = []
+        for version, protected in (("v0.15.0", 10), ("v0.15.1", 10), ("v0.15.2", 11)):
+            row = release(version)
+            row["scored_label_contract"] = contract
+            row["arms"]["policy-file"]["gold_gap"] = gold_gap(protected)
+            rows.append(row)
+        groups = render.release_groups(releases(*rows)["releases"])
+        self.assertEqual(
+            [render.group_label(g) for g in groups], ["v0.15.0 – v0.15.1", "v0.15.2"]
+        )
+
+    def test_a_different_shipped_arm_splits(self):
+        newer = release("v0.15.1")
+        newer["arms"]["pass2-ner"] = copy.deepcopy(newer["arms"]["policy-file"])
+        newer["shipped_default_arm"] = "pass2-ner"
+        value = releases(release("v0.15.0"), newer)
+        self.assertEqual(len(render.release_groups(value["releases"])), 2)
+
+    def test_equal_results_do_not_merge_across_a_different_release(self):
+        value = releases(release("v0.15.0"), release("v0.15.1", 1000), release("v0.15.2"))
+        groups = render.release_groups(value["releases"])
+        self.assertEqual([render.group_label(g) for g in groups], ["v0.15.0", "v0.15.1", "v0.15.2"])
+
+    def test_a_group_row_shows_the_newest_release_and_links_every_scorecard(self):
+        value = releases(release("v0.15.0", p95=124.23), release("v0.15.1", p95=138.72))
+        [line] = render.render_history(value).splitlines()[2:]
+        self.assertTrue(line.startswith("| v0.15.0 – v0.15.1 | "), line)
+        self.assertIn(f"`{'0151' * 10}"[:8], line)
+        self.assertNotIn(f"`{'0150' * 10}"[:8], line)
+        self.assertIn("| 138.72 |", line)
+        for version in ("v0.15.0", "v0.15.1"):
+            self.assertIn(f"[`scorecard-{version}.json`](scorecard-{version}.json)", line)
+
+    def test_only_the_last_three_groups_are_displayed(self):
+        value = releases(
+            release("v0.13.0", 30000),
+            release("v0.14.0", 25000),
+            release("v0.15.0", 20000),
+            release("v0.15.1", 20000),
+            release("v0.16.0", 15000),
+        )
+        expected = ["v0.14.0", "v0.15.0 – v0.15.1", "v0.16.0"]
+        self.assertEqual(history_labels(render.render_history(value)), expected)
+        self.assertEqual(
+            [label for label, _ in render.shipped_default_trend(value, "surviving_pii_utf8_bytes")],
+            expected,
+        )
+        charts = render.render_charts(value)
+        self.assertNotIn("v0.13.0", charts)
+        self.assertIn("line [25000, 20000, 15000]", charts)
+        # The data file keeps every release; only the display is capped.
+        self.assertEqual(len(value["releases"]), 5)
+
+    def test_fewer_than_three_groups_render_every_group(self):
+        value = releases(release("v0.14.0", 25000), release("v0.15.0"), release("v0.15.1"))
+        self.assertEqual(
+            history_labels(render.render_history(value)), ["v0.14.0", "v0.15.0 – v0.15.1"]
+        )
+        charts = render.render_charts(value)
+        self.assertIn("line [25000, 19556]", charts)
+        self.assertEqual(charts.count("xychart-beta"), 3)
+
+    def test_one_group_renders_no_trend(self):
+        value = releases(release("v0.15.0"), release("v0.15.1"))
+        charts = render.render_charts(value)
+        self.assertIn("One measured release so far", charts)
+        self.assertEqual(charts.count("xychart-beta"), 1)
+
+    def test_comparison_skips_the_equal_release_for_the_previous_different_one(self):
+        value = releases(release("v0.14.0", 25000), release("v0.15.0"), release("v0.15.1"))
+        labels = [label for label, _ in render.comparison_bars(value)]
+        self.assertEqual(
+            [label.rsplit(" (", 1)[0] for label in labels],
+            ["v0.15.0 – v0.15.1 default", "v0.14.0 default"],
+        )
+        charts = render.render_charts(value)
+        self.assertIn(
+            "**Leaked PII bytes — v0.15.0 – v0.15.1 against the previous release "
+            "with different results.**",
+            charts,
+        )
+
+    def test_committed_history_displays_v0_14_0_and_the_v0_15_group(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        self.assertEqual(
+            [render.group_label(g) for g in render.displayed_groups(committed)],
+            ["v0.14.0", "v0.15.0 – v0.15.1"],
+        )
+
+
+
+#: The committed v0.15.1 latency file: the real shape `cli-latency.py` writes.
+REAL_LATENCY = render.BENCH_DIR / "latency-v0.15.1.json"
+
+
+def latency_file(**pipeline_setup) -> dict:
+    value = json.loads(REAL_LATENCY.read_text(encoding="utf-8"))
+    value["pipeline"]["setup"]["warm_clean"].update(pipeline_setup)
+    return value
+
+
+class LatencySectionTest(unittest.TestCase):
+    """The committed latency files render; a release without one says so."""
+
+    def grouped(self) -> dict:
+        return releases(release("v0.14.0", 25000), release("v0.15.0"), release("v0.15.1"))
+
+    def test_every_rendered_latency_value_comes_from_the_file(self):
+        data = json.loads(REAL_LATENCY.read_text(encoding="utf-8"))
+        block = render.render_latency(self.grouped(), {"v0.15.1": data})
+        pipeline, cli = data["pipeline"], data["cli"]
+        for arm in ("setup", "setup_nym"):
+            row = pipeline[arm]
+            for value in (
+                row["warm_clean"]["p50_ms"],
+                row["warm_clean"]["p95_ms"],
+                row["cold_first_document_ms"],
+            ):
+                self.assertIn(render._fmt("ms", value), block, (arm, value))
+            self.assertIn(f"{row['peak_rss_mib']:.1f}", block)
+            for mode, stats in (("oneshot", "per_document"), ("daemon", "warm")):
+                for q in ("p50_ms", "p95_ms"):
+                    value = cli[f"{mode}_{arm}"][stats][q]
+                    self.assertIn(render._fmt("ms", value), block, (mode, arm, q))
+        self.assertIn("verdict `valid`", block)
+        self.assertIn(data["hardware"], block)
+        self.assertIn("[`latency-v0.15.1.json`](latency-v0.15.1.json)", block)
+
+    def test_each_latency_field_moves_the_document(self):
+        data = json.loads(REAL_LATENCY.read_text(encoding="utf-8"))
+        baseline = render.render_latency(self.grouped(), {"v0.15.1": data})
+        for path in (
+            ("pipeline", "setup", "warm_clean", "p50_ms"),
+            ("pipeline", "setup_nym", "warm_clean", "p95_ms"),
+            ("pipeline", "setup", "cold_first_document_ms"),
+            ("pipeline", "setup_nym", "peak_rss_mib"),
+            ("cli", "oneshot_setup", "per_document", "p95_ms"),
+            ("cli", "daemon_setup_nym", "warm", "p50_ms"),
+            ("verdict",),
+            ("hardware",),
+        ):
+            with self.subTest(path=_label(path)):
+                mutated = copy.deepcopy(data)
+                node = mutated
+                for key in path[:-1]:
+                    node = node[key]
+                node[path[-1]] = (
+                    node[path[-1]] + 1234.5
+                    if isinstance(node[path[-1]], float)
+                    else f"{node[path[-1]]}-changed"
+                )
+                self.assertNotEqual(
+                    baseline, render.render_latency(self.grouped(), {"v0.15.1": mutated})
+                )
+
+    def test_a_group_reads_its_newest_releases_file(self):
+        newest = latency_file(p50_ms=11.11)
+        older = latency_file(p50_ms=99.99)
+        block = render.render_latency(
+            self.grouped(), {"v0.15.0": older, "v0.15.1": newest}
+        )
+        self.assertIn("11.11", block)
+        self.assertNotIn("99.99", block)
+
+    def test_a_release_without_a_file_is_not_measured(self):
+        block = render.render_latency(self.grouped(), {})
+        rows = [line for line in block.splitlines() if line.startswith("| v0.14.0 ")]
+        self.assertTrue(rows)
+        for line in rows:
+            self.assertIn("not measured", line)
+        self.assertNotIn("| v0.14.0 | `gaze setup`", block)
+
+    def test_latency_is_not_part_of_the_sameness_key(self):
+        value = self.grouped()
+        # Different warm latency files for v0.15.0 and v0.15.1 do not split the group.
+        render.render_latency(
+            value, {"v0.15.0": latency_file(p50_ms=1.0), "v0.15.1": latency_file(p50_ms=2.0)}
+        )
+        self.assertEqual(
+            [render.group_label(g) for g in render.release_groups(value["releases"])],
+            ["v0.14.0", "v0.15.0 – v0.15.1"],
+        )
+
+    def test_a_smoke_file_is_refused(self):
+        data = latency_file()
+        data["smoke"] = True
+        with self.assertRaisesRegex(render.RenderError, "smoke"):
+            render.render_latency(self.grouped(), {"v0.15.1": data})
+
+    def test_a_non_numeric_latency_value_is_refused(self):
+        with self.assertRaises(render.RenderError):
+            render.render_latency(self.grouped(), {"v0.15.1": latency_file(p50_ms="n/a")})
+
+    def test_load_latency_reads_committed_files_and_skips_missing_ones(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        loaded = render.load_latency(render.BENCH_DIR, committed)
+        self.assertIn("v0.15.1", loaded)
+        self.assertNotIn("v0.14.0", loaded)
+
+    def test_committed_document_links_the_latency_section(self):
+        text = render.DEFAULT_DOC.read_text(encoding="utf-8")
+        self.assertNotIn("see the CHANGELOG for quiet-host latency", text)
+        self.assertIn("[Latency](#latency)", text)
 
 
 if __name__ == "__main__":

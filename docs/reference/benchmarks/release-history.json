@@ -128,7 +128,7 @@
         "ner_threshold": 0.3
       },
       "provisional": false,
-      "note": "`policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.0 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`. Latency was measured on a shared host; see the CHANGELOG for quiet-host latency.",
+      "note": "`policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.0 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`. Latency was measured on a shared host; quiet-host latency is in [Latency](#latency).",
       "shipped_default_arm": "policy-file",
       "arms": {
         "policy-file": {
@@ -246,7 +246,7 @@
         "ner_threshold": 0.3
       },
       "provisional": false,
-      "note": "`policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.1 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`, byte-identical to the v0.15.0 policy. Latency was measured on a shared host; see the CHANGELOG for quiet-host latency.",
+      "note": "`policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.1 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`, byte-identical to the v0.15.0 policy. Latency was measured on a shared host; quiet-host latency is in [Latency](#latency).",
       "shipped_default_arm": "policy-file",
       "arms": {
         "policy-file": {
