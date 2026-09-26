@@ -1538,7 +1538,11 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
     }
     missing = [
         key for key, value in identity.items()
-        if value is None or (key == "kiji_contract" and None in value)
+        if value is None or (
+            key == "kiji_contract"
+            and None in value
+            and value != (score.SCORED_LABEL_CONTRACT_V1_ID, 1, None)
+        )
     ]
     if missing:
         raise LayerError(

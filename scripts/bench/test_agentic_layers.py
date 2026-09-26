@@ -679,6 +679,31 @@ class GateTests(unittest.TestCase):
         with self.assertRaisesRegex(agentic.LayerError, "predates the gold-validity digest"):
             agentic.gate(base, candidate)
 
+    def test_implicit_v1_contract_pair_reaches_a_verdict(self) -> None:
+        base = _scorecard(self.BASE, self.FP)
+        candidate = _scorecard(self.BASE, self.FP)
+        for card in (base, candidate):
+            del card["scoring"]["scored_label_contract"]
+        self.assertEqual(agentic.gate(base, candidate)["verdict"], "fail")
+
+    def test_v1_and_v2_contracts_are_not_comparable(self) -> None:
+        base = _scorecard(self.BASE, self.FP)
+        candidate = _scorecard(self.BASE, self.FP)
+        del base["scoring"]["scored_label_contract"]
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["verdict"], "not_comparable")
+        self.assertIn("kiji_contract", result["differing"])
+
+    def test_other_contracts_with_missing_file_sha_are_refused(self) -> None:
+        for contract_id, version in ((score.SCORED_LABEL_CONTRACT_V1_ID, 2), ("scored-labels-v2", 1)):
+            with self.subTest(contract_id=contract_id, version=version):
+                candidate = _scorecard(self.BASE, self.FP)
+                candidate["scoring"]["scored_label_contract"] = {
+                    "id": contract_id, "version": version, "file_sha256": None,
+                }
+                with self.assertRaisesRegex(agentic.LayerError, "no gate identity for kiji_contract"):
+                    agentic.gate(_scorecard(self.BASE, self.FP), candidate)
+
     def test_missing_other_gate_identity_is_refused(self) -> None:
         for path in (
             ("dataset", "integrity"),
