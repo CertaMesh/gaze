@@ -96,6 +96,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--binary-profile", choices=("debug", "release"), required=True)
     parser.add_argument("--configs", required=True)
+    parser.add_argument("--policy", type=Path, help="policy for the policy-file config")
     parser.add_argument("--model-env", action="append", default=[])
     parser.add_argument("--model-bundle", action="append", default=[])
     parser.add_argument(
@@ -132,6 +133,11 @@ def run(args: argparse.Namespace) -> Path:
     configs = tuple(c for c in args.configs.split(",") if c)
     if not configs or any("opf" in c.lower() for c in configs):
         raise PastReleaseError("configs must be non-empty and OPF-free")
+    if ("policy-file" in configs) != (args.policy is not None):
+        raise PastReleaseError("policy-file requires --policy, and --policy requires policy-file")
+    policy = args.policy.resolve() if args.policy is not None else None
+    if policy is not None and not policy.is_file():
+        raise PastReleaseError(f"policy is missing: {policy}")
     # Read before anything runs: the scorecard names the harness that scored it,
     # not whatever the checkout holds when the run ends.
     harness = subprocess.run(
@@ -207,6 +213,7 @@ def run(args: argparse.Namespace) -> Path:
             warmup_count=args.warmups,
             validator_measurements=measurements,
             replacing_actions=frozenset(args.manifest_actions.split(",")),
+            policy_path=policy,
             record_document=(lambda config, document, response, measurements:
                 record_writer.add("C", config, document, response, measurements)),
         )
@@ -224,6 +231,7 @@ def run(args: argparse.Namespace) -> Path:
             "profile": "full" if args.max_documents is None else "sampled",
             "configs": list(configs),
             "binary_profile": args.binary_profile,
+            "policy_sha256": _sha256(policy) if policy is not None else None,
             "max_documents": args.max_documents,
             "sampling_seed": args.seed,
             "ner_threshold": args.threshold,
@@ -244,6 +252,7 @@ def run(args: argparse.Namespace) -> Path:
         "harness_revision": harness,
         "manifest_replacing_actions": sorted(args.manifest_actions.split(",")),
         "binary_sha256": _sha256(binary),
+        "policy": {"path": str(policy), "sha256": _sha256(policy)} if policy is not None else None,
         "profile": card["parameters"]["profile"],
         "model_bundles": bundles,
         "hardware": platform.platform() + "; " + platform.processor(),
