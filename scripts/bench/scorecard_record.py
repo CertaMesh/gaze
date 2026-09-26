@@ -28,7 +28,7 @@ def _write_rows(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     with path.open("wb") as raw:
         with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0, compresslevel=9) as zipped:
             for row in rows:
-                zipped.write(json.dumps(row, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n")
+                zipped.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n")
 
 
 def _contract_row(contract: score.ScoredLabelContract | None) -> dict[str, object] | None:
@@ -358,6 +358,13 @@ def rescore(
         )
     if set(groups) != expected_groups:
         raise RecordError("observation layer/config population mismatch")
+    if "layers" in result and layer_contract is not None:
+        generated = [
+            _document_from_row(row["document"])
+            for layer in ("A", "D", "R")
+            for row in groups[(layer, result["layers"][layer]["runs"][0]["config"])]
+        ]
+        agentic.apply_contract(generated, layer_contract)
 
     def replay(layer: str, config: str, selected_contract: score.ScoredLabelContract) -> dict[str, object]:
         rows = groups[(layer, config)]

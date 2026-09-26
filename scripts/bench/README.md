@@ -126,6 +126,18 @@ inside the record. The same scoring accumulators compute the new scorecard.
 The record must be committed beside a release scorecard or its SHA-256 and
 retrieval location must be pinned in the release history.
 
+The committed v0.15.1 C record proves exact v1/v2 replay except timing and
+valid v3 scoring. `observations-v0.15.1-agentic.jsonl.gz` also replays A/D/R:
+
+```bash
+uv run --project scripts/bench python scripts/bench/verify_record_scorecards.py \
+  docs/reference/benchmarks/observations-v0.15.1.jsonl.gz \
+  --v1 docs/reference/benchmarks/scorecard-v0.15.1.json \
+  --v2 docs/reference/benchmarks/scorecard-v0.15.1-scored-labels-v2.json \
+  --v2-contract docs/reference/benchmarks/scored-labels-v2.json \
+  --v3-contract docs/reference/benchmarks/scored-labels-v3.json
+```
+
 The scorecard records the contract under `scoring.scored_label_contract`: its
 id, version, file SHA-256, excluded labels, scored and excluded gold counts, and
 `scored_gold_digest` over every scored `(document, start, end, label)`. The

@@ -353,6 +353,11 @@ def validate_history(history: Mapping[str, Any]) -> None:
         _require_model_bundles(entry.get("provenance") or {}, f"{version}: history")
         _validate_validator_recall(entry.get("validator_recall"), version)
         _validate_observation_record(entry.get("observation_record"), entry, version)
+        agentic_layers = entry.get("agentic_layers")
+        if isinstance(agentic_layers, Mapping):
+            _validate_observation_record(
+                agentic_layers.get("observation_record"), entry, f"{version}: agentic layers"
+            )
         shipped_default_arm(entry)
         _validate_contract_results(entry)
 

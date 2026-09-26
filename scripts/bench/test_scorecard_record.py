@@ -13,12 +13,48 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gaze_bench_score as score
 import agentic_layers as agentic
 import scorecard_record as record
+import verify_record_scorecards as proof
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class RecordReplayTests(unittest.TestCase):
+    def test_committed_v0151_record_replays_all_contracts(self):
+        bench = ROOT / "docs/reference/benchmarks"
+        release = next(item for item in json.loads(
+            (bench / "release-history.json").read_text(encoding="utf-8")
+        )["releases"] if item["version"] == "v0.15.1")
+        for pointer in (
+            release["observation_record"],
+            release["agentic_layers"]["observation_record"],
+        ):
+            path = bench / pointer["file"]
+            self.assertEqual(score.sha256_file(path), pointer["sha256"])
+            self.assertEqual(path.stat().st_size, pointer["bytes"])
+        self.assertEqual(
+            proof.verify(
+                bench / release["observation_record"]["file"],
+                bench / "scorecard-v0.15.1.json",
+                bench / "scorecard-v0.15.1-scored-labels-v2.json",
+                bench / "scored-labels-v2.json",
+                bench / "scored-labels-v3.json",
+            ),
+            {"v1_exact_except_timing": True, "v2_exact_except_timing": True,
+             "v3_valid": True},
+        )
+        full_record = bench / release["agentic_layers"]["observation_record"]["file"]
+        for contract in (
+            score.SCORED_LABEL_CONTRACT_V1,
+            score.load_scored_label_contract(bench / "scored-labels-v2.json"),
+        ):
+            card = record.rescore(full_record, contract)
+            self.assertEqual(agentic.gate(card, card)["verdict"], "fail")
+            broken = copy.deepcopy(card)
+            del broken["scoring"]["scored_label_contract"]["id"]
+            with self.assertRaisesRegex(agentic.LayerError, "kiji_contract"):
+                agentic.gate(card, broken)
+
     def setUp(self):
         email = "alice@example.invalid"
         text = f"{email} {email} secret"
@@ -227,6 +263,22 @@ class RecordReplayTests(unittest.TestCase):
             writer.write(path, card, add_reference=False)
             replayed = record.rescore(path, score.SCORED_LABEL_CONTRACT_V1)
             self.assertEqual(agentic.gate(card, replayed)["verdict"], "fail")
+            alternate = score.ScoredLabelContract(
+                "synthetic-layer-exclusion", 2, "synthetic.json", "3" * 64,
+                frozenset(), frozenset({"EMAIL"}),
+            )
+            rescored_layers = record.rescore(
+                path, score.SCORED_LABEL_CONTRACT_V1, alternate
+            )
+            self.assertEqual(
+                rescored_layers["layers"]["A"]["runs"][0]["metrics"]["utf8_bytes"]["leaked"], 0
+            )
+            stale = score.ScoredLabelContract(
+                "synthetic-layer-stale", 2, "stale.json", "4" * 64,
+                frozenset(), frozenset({"EMAIL", "ABSENT"}),
+            )
+            with self.assertRaisesRegex(agentic.LayerError, "never emits"):
+                record.rescore(path, score.SCORED_LABEL_CONTRACT_V1, stale)
             template = copy.deepcopy(card)
             del template["layers"]
             template_path, pinned_path = (
