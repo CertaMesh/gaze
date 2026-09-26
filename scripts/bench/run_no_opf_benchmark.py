@@ -635,6 +635,8 @@ def measure_agentic_layers(
             agentic.LAYER_IDENTIFIERS: full_identifier_measurements,
             agentic.LAYER_REPEATS: full_repeat_measurements,
         })
+        if not record_writer.available:
+            record_writer.measurements = full_identifier_measurements
     layers: dict[str, object] = {
         "schema_version": 1,
         "generator": prepared.manifest,
