@@ -105,7 +105,7 @@ def load_history(path: Path) -> dict:
     if value.get("contract_sha256") != sha256(CONTRACT):
         raise HistoryError("adjacency history contract differs")
     rows = value.get("rows")
-    if not isinstance(rows, list) or {(row.get("version"), row.get("arm")) for row in rows} != set(EXPECTED_ROWS):
+    if not isinstance(rows, list) or len(rows) != len(EXPECTED_ROWS) or {(row.get("version"), row.get("arm")) for row in rows} != set(EXPECTED_ROWS):
         raise HistoryError("adjacency history needs exactly the displayed release arms")
     for row in rows:
         _hex64(row.get("binary_sha256"), "binary_sha256")
