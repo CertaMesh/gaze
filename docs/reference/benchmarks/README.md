@@ -687,7 +687,10 @@ model:
   `Will you`, `Grant approved`, `Page 3`, `the Court hearing`), words and file
   names that contain a name part (`Annual` for Ann, `Heidelberg` for Berg), and
   digit runs shared with a repeated identifier. Any byte predicted over a decoy
-  counts as a false positive. The JSONL output records the decoy spans. This
+  counts as a false positive. A given name and a surname are separate gold
+  spans, as in Kiji, so a single token over the full name also counts the
+  separator between them (1 byte for a space, 2 for an NBSP) as a false
+  positive. The JSONL output records the decoy spans. This
   slice is the baseline for a change that re-finds known values across a
   document: it has to lower R's leaked bytes without raising R's
   false-positive bytes. The value makers take a partition, so a layer B

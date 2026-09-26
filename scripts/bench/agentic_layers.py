@@ -1061,7 +1061,9 @@ WORD_NAMES = {
         ("S", "Court", "Court", "The {W} hearing moved, the Government portal has details."),
     ),
 }
-# (slot, name, containing word, sentence); the file name repeats the word.
+# (slot, name, containing word, sentence); the file name repeats the word. A
+# containing word must not be PII itself: a city (Heidelberg for Berg) is
+# location gold in Kiji, so it cannot serve as a decoy.
 SUBSTRING_NAMES = {
     "dev": (
         ("G", "Art", "Article", "{W} 5 applies, see files/{WL}_2026.pdf."),
@@ -1074,7 +1076,7 @@ SUBSTRING_NAMES = {
         ("G", "Ann", "Annual", "The {W} report is due, see files/{WL}_2026.pdf."),
         ("G", "Eva", "Evaluation", "{W} results are attached as files/{WL}_2026.pdf."),
         ("G", "Max", "Maximum", "{W} load was reached, log in files/{WL}_2026.pdf."),
-        ("S", "Berg", "Heidelberg", "The office in {W} is closed, see files/{WL}_2026.pdf."),
+        ("S", "Berg", "Iceberg", "The {W} lettuce is out of stock, see files/{WL}_2026.pdf."),
         ("S", "Hamm", "Hammer", "Bring the {W} tomorrow, list in files/{WL}_2026.pdf."),
     ),
 }

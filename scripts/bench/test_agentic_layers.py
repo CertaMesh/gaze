@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
     "dev": "8a707e9f36d33ffda37c0fab104500353d52dabd7ba1cb9ddd6c2594e314a718",
-    "test": "f01361b64ec349201f2269797939df313c126561f53295e05e35b336ad7a8dd6",
+    "test": "253af8e0a65b730b8da58625bb7066bedf0dce813a6d40d1e43732891c9c2608",
 }
 
 
