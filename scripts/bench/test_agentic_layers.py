@@ -763,7 +763,10 @@ class GateTests(unittest.TestCase):
 class PolicyDeltaGateTests(unittest.TestCase):
     BASE_LEAKS = {"C": 100, "A": 50, "D": 0, "R": 30}
 
-    def compare(self, base_text: str, candidate_text: str, delta_text: str) -> dict:
+    def compare(
+        self, base_text: str, candidate_text: str, delta_text: str,
+        missing_field: str | None = None,
+    ) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             paths = {name: Path(directory) / f"{name}.toml" for name in ("base", "candidate", "delta")}
             for name, contents in (("base", base_text), ("candidate", candidate_text), ("delta", delta_text)):
@@ -774,6 +777,17 @@ class PolicyDeltaGateTests(unittest.TestCase):
                 digest = hashlib.sha256(paths[label].read_bytes()).hexdigest()
                 card["parameters"]["policy_sha256"] = digest
                 card["runner_provenance"] = {"policy": {"path": str(paths[label]), "sha256": digest}}
+                if missing_field:
+                    field = missing_field.removesuffix("_none")
+                    target, key = {
+                        "scorecard_sha256": (card["parameters"], "policy_sha256"),
+                        "provenance_sha256": (card["runner_provenance"]["policy"], "sha256"),
+                        "provenance_path": (card["runner_provenance"]["policy"], "path"),
+                    }[field]
+                    if missing_field.endswith("_none"):
+                        target[key] = None
+                    else:
+                        del target[key]
             return agentic.gate(base, candidate, policy_delta=paths["delta"])
 
     def test_declared_new_section_passes_with_parsed_toml_equality(self) -> None:
@@ -803,6 +817,20 @@ class PolicyDeltaGateTests(unittest.TestCase):
         )
         self.assertEqual(result["verdict"], "not_comparable")
         self.assertIn("existing base sections", result["policy_delta_reason"])
+
+    def test_missing_policy_identity_on_both_sides_is_refused(self) -> None:
+        for field in (
+            "scorecard_sha256", "scorecard_sha256_none",
+            "provenance_sha256", "provenance_sha256_none",
+            "provenance_path", "provenance_path_none",
+        ):
+            with self.subTest(field=field), self.assertRaises(agentic.LayerError):
+                self.compare(
+                    "[rules]\nenabled = true\n",
+                    "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
+                    "[extension]\nthreshold = 0.5\n",
+                    missing_field=field,
+                )
 
 
 class MutantGatePinTests(unittest.TestCase):
