@@ -12,7 +12,7 @@ struct NerStreet(&'static str);
 
 impl Recognizer for NerStreet {
     fn id(&self) -> &str {
-        "ner"
+        gaze::NER_RECOGNIZER_ID
     }
     fn supported_class(&self) -> &PiiClass {
         &PiiClass::Location
@@ -31,7 +31,7 @@ impl Recognizer for NerStreet {
                 Candidate::new(
                     start..start + self.0.len(),
                     PiiClass::Location,
-                    "ner",
+                    gaze::NER_RECOGNIZER_ID,
                     0.99,
                     0,
                     None,

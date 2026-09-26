@@ -22,6 +22,8 @@ const MAX_DIGITS: usize = 4;
 /// Spaces allowed between street and number. Normalization already folded
 /// NBSP and NARROW NBSP into ASCII space; tabs and line breaks never join.
 const MAX_SEPARATOR_SPACES: usize = 2;
+/// Longest house number read backwards: two four-digit parts with letters and a spaced joiner.
+const MAX_NUMBER_CHARS: usize = 13;
 
 /// Where a locale writes the house number relative to the street.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -161,28 +163,40 @@ fn number_after(text: &str, street_end: usize) -> Option<Range<usize>> {
     let start = street_end + separator_len(text[street_end..].bytes())?;
     let len = house_number_len(&text[start..])?;
     let end = start + len;
+    // `Bahnhofstraße 2025 wird umgebaut`, `Nürburgring 2024`: a bare year after a street is a
+    // date, and a German-order house number that high is practically nonexistent.
+    if is_bare_year(&text[start..end]) {
+        return None;
+    }
     ends_cleanly(text, end).then_some(start..end)
+}
+
+/// A lone four-digit 1900-2099 with no letter or range part.
+fn is_bare_year(number: &str) -> bool {
+    number.len() == 4
+        && number.bytes().all(|b| b.is_ascii_digit())
+        && (number.starts_with("19") || number.starts_with("20"))
 }
 
 fn number_before(text: &str, street_start: usize) -> Option<Range<usize>> {
     let end = street_start - separator_len(text[..street_start].bytes().rev())?;
-    // The token is the non-space run ending at `end`; it must be exactly one
-    // house number, so `Chapter 12` style prefixes are judged on their own.
-    let start = text[..end]
+    // Walk back over the characters a house number may contain (a spaced range included) and
+    // keep the longest start at which the text up to `end` is exactly one house number, so
+    // `12 - 14 Harbor Road` covers the whole range and `Chapter 12` is judged as `12` alone.
+    text[..end]
         .char_indices()
         .rev()
-        .take_while(|(_, ch)| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '–' | '/'))
+        .take(MAX_NUMBER_CHARS)
+        .take_while(|(_, ch)| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '–' | '/' | ' '))
+        .map(|(index, _)| index)
+        .filter(|&start| house_number_len(&text[start..end]) == Some(end - start))
+        .filter(|&start| {
+            // `1.200 Example Street` or `v2.17 Example Street`: part of a larger number.
+            let before = text[..start].chars().next_back();
+            !before.is_some_and(|ch| ch.is_alphanumeric() || matches!(ch, '.' | ',' | ':'))
+        })
         .last()
-        .map(|(index, _)| index)?;
-    if house_number_len(&text[start..end])? != end - start {
-        return None;
-    }
-    let before = text[..start].chars().next_back();
-    if before.is_some_and(|ch| ch.is_alphanumeric() || matches!(ch, '.' | ',' | ':')) {
-        // `1.200 Example Street` or `v2.17 Example Street`: part of a larger number.
-        return None;
-    }
-    Some(start..end)
+        .map(|start| start..end)
 }
 
 /// A number followed by `.`, `,` or `:` and a digit is a decimal, time or
@@ -286,6 +300,26 @@ mod tests {
         );
         assert_eq!(numbers("12-14 Mill St. today", "Mill St."), ["12-14"]);
         assert_eq!(numbers("Unit 4, 17B Oak Drive", "Oak Drive"), ["17B"]);
+    }
+
+    #[test]
+    fn a_bare_year_after_a_german_street_is_not_a_house_number() {
+        assert!(numbers("Die Bahnhofstraße 2025 wird umgebaut", "Bahnhofstraße").is_empty());
+        assert!(numbers("Rennen am Musterweg 1999", "Musterweg").is_empty());
+        assert_eq!(numbers("Musterweg 2025a", "Musterweg"), ["2025a"]);
+        assert_eq!(numbers("Musterweg 1899", "Musterweg"), ["1899"]);
+        assert_eq!(numbers("Musterweg 210", "Musterweg"), ["210"]);
+    }
+
+    #[test]
+    fn a_spaced_range_before_an_english_street_is_covered_whole() {
+        assert_eq!(
+            numbers("at 12 - 14 Harbor Road", "Harbor Road"),
+            ["12 - 14"]
+        );
+        assert_eq!(numbers("at 12 -14 Harbor Road", "Harbor Road"), ["12 -14"]);
+        assert_eq!(numbers("Suite 5 12 Harbor Road", "Harbor Road"), ["12"]);
+        assert_eq!(numbers("2024 Main Street", "Main Street"), ["2024"]);
     }
 
     #[test]

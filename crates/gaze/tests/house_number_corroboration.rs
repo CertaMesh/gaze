@@ -50,7 +50,7 @@ impl Recognizer for Spans {
 
 fn ner(words: &[&'static str]) -> Spans {
     Spans {
-        id: "ner",
+        id: NER_RECOGNIZER_ID,
         class: PiiClass::Location,
         words: words.to_vec(),
     }

@@ -5160,7 +5160,6 @@ fn street_corroborated_house_numbers(
     registry: &RecognizerRegistry,
     locale_chain: &[crate::LocaleTag],
 ) -> Vec<Candidate> {
-    const NER_RECOGNIZER_ID: &str = "ner";
     let lexicon = registry.street_lexicon();
     if lexicon.is_empty() {
         return Vec::new();
@@ -5185,7 +5184,9 @@ fn street_corroborated_house_numbers(
             .members
             .iter()
             .map(|&id| &evidence.originals[id])
-            .find(|c| c.recognizer_id == NER_RECOGNIZER_ID && c.class == crate::PiiClass::Location)
+            .find(|c| {
+                c.recognizer_id == crate::NER_RECOGNIZER_ID && c.class == crate::PiiClass::Location
+            })
         else {
             continue;
         };
@@ -5211,7 +5212,7 @@ fn street_corroborated_house_numbers(
             );
             candidate
                 .source_recognizer_ids
-                .push(NER_RECOGNIZER_ID.to_string());
+                .push(crate::NER_RECOGNIZER_ID.to_string());
             found.push(candidate);
         }
     }
