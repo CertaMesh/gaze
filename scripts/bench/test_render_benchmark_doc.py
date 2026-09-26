@@ -750,27 +750,40 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         kiji_fp = value["releases"][0]["arms"][self.KIJI]["false_positive_utf8_bytes"]
         self.assertIn(f"line [{kiji_fp}, {policy['false_positive_utf8_bytes']}]", charts)
 
-    def test_committed_history_trend_has_both_releases(self):
+    def committed_default_arms(self, committed):
+        """Each committed row's default arm, read by name, not through the resolver under test:
+        v0.14.0 predates `shipped_default_arm` and shipped Kiji; every later row records it."""
+        return {
+            row["version"]: row["arms"][
+                self.KIJI if row["version"] == "v0.14.0" else row["shipped_default_arm"]
+            ]
+            for row in committed["releases"]
+        }
+
+    def test_committed_history_trend_has_every_release(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
-        rows = {row["version"]: row for row in committed["releases"]}
-        # Read each row's default arm by name, not through the resolver under test.
+        defaults = self.committed_default_arms(committed)
         expected = [
-            ("v0.14.0", rows["v0.14.0"]["arms"][self.KIJI]["surviving_pii_utf8_bytes"]),
-            (
-                "v0.15.0",
-                rows["v0.15.0"]["arms"][rows["v0.15.0"]["shipped_default_arm"]][
-                    "surviving_pii_utf8_bytes"
-                ],
-            ),
+            (version, arm["surviving_pii_utf8_bytes"]) for version, arm in defaults.items()
         ]
+        # The first two releases shipped different default arms; both must be on the line.
+        self.assertEqual(expected[:2], [("v0.14.0", 25179), ("v0.15.0", 19556)])
         self.assertEqual(
             render.shipped_default_trend(committed, "surviving_pii_utf8_bytes"), expected
         )
         charts = render.render_charts(committed)
-        self.assertIn(f"line [{expected[0][1]}, {expected[1][1]}]", charts)
+        self.assertIn(f"line [{', '.join(str(value) for _, value in expected)}]", charts)
 
     def test_comparison_bars_on_committed_history(self):
         committed = render.load_history(render.DEFAULT_HISTORY)
+        # Frozen at v0.15.0 so the previous release's other arms stay in the pin;
+        # the live history is covered by the latest-release test below.
+        committed = {
+            **committed,
+            "releases": [
+                row for row in committed["releases"] if row["version"] in ("v0.14.0", "v0.15.0")
+            ],
+        }
         rows = {row["version"]: row for row in committed["releases"]}
         old = rows["v0.14.0"]["arms"]
         new = rows["v0.15.0"]["arms"]["policy-file"]
@@ -787,6 +800,18 @@ class ShippedDefaultChartsTest(unittest.TestCase):
                 bar("v0.14.0 rules only", old["rule-floor-extended"]),
             ],
         )
+
+    def test_comparison_bars_lead_with_the_latest_committed_release(self):
+        committed = render.load_history(render.DEFAULT_HISTORY)
+        defaults = self.committed_default_arms(committed)
+        latest, previous = list(defaults)[-1], list(defaults)[-2]
+        bars = render.comparison_bars(committed)
+        for (label, value), version in zip(bars, (latest, previous)):
+            arm = defaults[version]
+            self.assertEqual(
+                (label, value),
+                (f"{version} default ({pct(arm['leak_rate'])})", arm["surviving_pii_utf8_bytes"]),
+            )
 
     def test_previous_release_under_another_contract_leaves_the_comparison(self):
         value = self.mixed()
@@ -816,15 +841,14 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         leaked / gold bytes), rounded to one decimal."""
         committed = render.load_history(render.DEFAULT_HISTORY)
         rows = {row["version"]: row for row in committed["releases"]}
-        old, new = rows["v0.14.0"]["arms"], rows["v0.15.0"]["arms"]
+        old = rows["v0.14.0"]["arms"]
         arms = {
-            "v0.15.0 default": new["policy-file"],
-            "v0.14.0 default": old[self.KIJI],
             "v0.14.0 rules + NER": old["pass2-ner"],
             "v0.14.0 rules only": old["rule-floor-extended"],
-            "v0.14.0": old[self.KIJI],
-            "v0.15.0": new["policy-file"],
         }
+        for version, arm in self.committed_default_arms(committed).items():
+            arms[f"{version} default"] = arm
+            arms[version] = arm
         for arm in arms.values():
             self.assertEqual(
                 round(arm["leak_rate"] * 100, 1),

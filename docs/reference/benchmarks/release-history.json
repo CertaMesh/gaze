@@ -204,6 +204,124 @@
           "leaked_utf8_bytes_validator_failed_gold": 1822
         }
       }
+    },
+    {
+      "version": "v0.15.1",
+      "commit": "f769f823b281022a080725faef4f61ae2561d975",
+      "date": "2026-09-26",
+      "scorecard": "scorecard-v0.15.1.json",
+      "scorecard_sha256": "350f10a0a7a02006f16d5aab69512c5f7f63e69f8f69e263f4ae5d4c0670a1c4",
+      "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+      "harness_entry": "scripts/bench/run_no_opf_benchmark.py",
+      "dataset": {
+        "repository": "DataikuNLP/kiji-pii-training-data+gaze",
+        "revision": "0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1",
+        "integrity": {
+          "sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "component_sha256": {
+            "dataiku": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+            "negative_corpus": "d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116"
+          }
+        },
+        "evaluated_population": {
+          "documents": 2910,
+          "entities": 14719
+        }
+      },
+      "provenance": {
+        "model_bundles": [
+          {
+            "model_id": "davlan-mbert-ner-hrl-onnx",
+            "expected_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16"
+          },
+          {
+            "model_id": "nym-small-int8",
+            "expected_sha256": "71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767"
+          }
+        ]
+      },
+      "parameters": {
+        "profile": "full",
+        "sampling_seed": 20260710,
+        "ner_threshold": 0.3
+      },
+      "provisional": false,
+      "note": "`policy-file` is the exact policy `gaze setup --non-interactive` writes in v0.15.1 (every bundled PII rulepack except `secrets`, their locales, the pinned Davlan NER model and the Nym safety net), SHA-256 `f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe`, byte-identical to the v0.15.0 policy. Latency was measured on a shared host; see the CHANGELOG for quiet-host latency.",
+      "shipped_default_arm": "policy-file",
+      "arms": {
+        "policy-file": {
+          "gold_pii_utf8_bytes": 130282,
+          "surviving_pii_utf8_bytes": 19556,
+          "leak_rate": 0.1501051565066548,
+          "false_positive_utf8_bytes": 30073,
+          "byte_precision": 0.7864118353113303,
+          "zero_leak_document_rate": 0.5041237113402062,
+          "restore_exact_rate": 1.0,
+          "manifest_valid_document_rate": 1.0,
+          "availability_completion_rate": 1.0,
+          "failed_closed_documents": 0,
+          "clean_ms_p95": 138.71747119999998
+        }
+      },
+      "validator_recall": {
+        "CREDITCARDNUMBER": {
+          "validator_kinds": [
+            "luhn"
+          ],
+          "gold_spans": 126,
+          "validator_failed_gold_spans": 96,
+          "validator_backed_full_coverage_recall": 0.23809523809523808,
+          "shape_only_full_coverage_recall": 0.9841269841269841,
+          "leaked_utf8_bytes_validator_passed_gold": 0,
+          "leaked_utf8_bytes_validator_failed_gold": 1396
+        },
+        "EMAIL": {
+          "validator_kinds": [
+            "email_rfc"
+          ],
+          "gold_spans": 375,
+          "validator_failed_gold_spans": 0,
+          "validator_backed_full_coverage_recall": 0.9946666666666667,
+          "shape_only_full_coverage_recall": 0.9946666666666667,
+          "leaked_utf8_bytes_validator_passed_gold": 19,
+          "leaked_utf8_bytes_validator_failed_gold": 0
+        },
+        "IBAN": {
+          "validator_kinds": [
+            "iban_mod97"
+          ],
+          "gold_spans": 207,
+          "validator_failed_gold_spans": 67,
+          "validator_backed_full_coverage_recall": 0.004830917874396135,
+          "shape_only_full_coverage_recall": 0.22705314009661837,
+          "leaked_utf8_bytes_validator_passed_gold": 0,
+          "leaked_utf8_bytes_validator_failed_gold": 1580
+        },
+        "PHONENUMBER": {
+          "validator_kinds": [
+            "e164_phone",
+            "e164_phone_national_de",
+            "e164_phone_national_us"
+          ],
+          "gold_spans": 359,
+          "validator_failed_gold_spans": 41,
+          "validator_backed_full_coverage_recall": 0.754874651810585,
+          "shape_only_full_coverage_recall": 0.9080779944289693,
+          "leaked_utf8_bytes_validator_passed_gold": 526,
+          "leaked_utf8_bytes_validator_failed_gold": 454
+        },
+        "TAXNUM": {
+          "validator_kinds": [
+            "de_steuer_id_mod1110"
+          ],
+          "gold_spans": 212,
+          "validator_failed_gold_spans": 210,
+          "validator_backed_full_coverage_recall": 0.0,
+          "shape_only_full_coverage_recall": 0.04716981132075472,
+          "leaked_utf8_bytes_validator_passed_gold": 28,
+          "leaked_utf8_bytes_validator_failed_gold": 1822
+        }
+      }
     }
   ]
 }
