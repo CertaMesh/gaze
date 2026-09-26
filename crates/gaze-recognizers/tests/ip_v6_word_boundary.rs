@@ -83,6 +83,34 @@ fn clean(text: &str) -> String {
     }
 }
 
+fn assert_adjacent_addresses(raw: &str, protected: &[&str]) {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let (clean, manifest, _) = pipeline()
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(raw.to_string()),
+            &LOCALES,
+            &DictionaryBundle::default(),
+        )
+        .expect("clean");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text");
+    };
+    for address in protected {
+        assert!(
+            !clean.contains(address),
+            "{address:?} leaked from {raw:?}: {clean:?}"
+        );
+        assert!(
+            manifest
+                .iter()
+                .any(|entry| &raw[entry.raw_span.clone()] == *address),
+            "{address:?} had no exact manifest span in {raw:?}"
+        );
+    }
+    assert_eq!(session.restore_strict_text(&clean).expect("restore"), raw);
+}
+
 const LOCALES: [LocaleTag; 1] = [LocaleTag::EnUs];
 const DE_LOCALES: [LocaleTag; 1] = [LocaleTag::DeDe];
 
@@ -187,6 +215,44 @@ fn addresses_in_the_usual_delimiters_still_tokenize() {
         &["host ", ", next"],
     );
     assert_tokenized("prefix 2001:db8::/32", "2001:db8::", &["prefix ", "/32"]);
+}
+
+#[test]
+fn adjacent_ipv6_addresses_both_tokenize_with_one_separator() {
+    for (left, right) in [
+        ("::1", "fe80::1"),
+        ("fe80::1", "::1"),
+        ("::ffff:127.0.0.1", "fe80::1"),
+        ("fe80::1", "::ffff:127.0.0.1"),
+    ] {
+        for separator in [" ", ",", "\t", "\u{00a0}"] {
+            assert_adjacent_addresses(
+                &format!("host {left}{separator}{right} done"),
+                &[left, right],
+            );
+        }
+    }
+    assert_adjacent_addresses(
+        "host ::1 fe80::1 ::ffff:127.0.0.1 done",
+        &["::1", "fe80::1", "::ffff:127.0.0.1"],
+    );
+}
+
+#[test]
+fn adjacent_ipv4_and_ipv6_addresses_both_tokenize_in_either_order() {
+    for (left, right) in [("127.0.0.1", "fe80::1"), ("fe80::1", "127.0.0.1")] {
+        assert_adjacent_addresses(&format!("host {left} {right} done"), &[left, right]);
+    }
+}
+
+#[test]
+fn documentation_range_neighbor_cannot_hide_a_real_address() {
+    for raw in [
+        "host 2001:db8::1 fe80::1 done",
+        "host fe80::1 2001:db8::1 done",
+    ] {
+        assert_adjacent_addresses(raw, &["fe80::1"]);
+    }
 }
 
 #[test]
