@@ -262,7 +262,7 @@ surface without making it part of the default public runtime.
 
 ## Explicit birth-date and credential fields
 
-The embedded `gaze-core` rulepack version **0.6.0** contains 39 recognizers.
+The embedded `gaze-core` rulepack version **0.6.0** contains 40 recognizers.
 Two project-authored `safe_default` rules with `locales = ["global"]` add narrow EN/DE
 field recognition through the existing assembly and `RegexDetector` machinery,
 once their bundle is loaded.
