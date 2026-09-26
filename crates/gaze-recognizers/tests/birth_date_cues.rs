@@ -306,7 +306,15 @@ fn rule_captures_every_value_the_retired_field_record_rule_captured() {
     ];
     let leads = ["", "  ", "\t", "x\n", "Name: A\r\n"];
     let separators = [
-        ":", "=", " : ", "\t=\t", ":   ", " ", "  ", "\t", ":          ",
+        ":",
+        "=",
+        " : ",
+        "\t=\t",
+        ":   ",
+        " ",
+        "  ",
+        "\t",
+        ":          ",
     ];
     let dates = [
         "1990-02-03",
@@ -320,7 +328,17 @@ fn rule_captures_every_value_the_retired_field_record_rule_captured() {
         "02/03/1990",
     ];
     let quotes = [("", ""), ("\"", "\""), ("'", "'")];
-    let tails = ["", "\n", "\r\n", "  \n", ".", ". Next", ", then", " ok", "\nnext line"];
+    let tails = [
+        "",
+        "\n",
+        "\r\n",
+        "  \n",
+        ".",
+        ". Next",
+        ", then",
+        " ok",
+        "\nnext line",
+    ];
     for cue in cues {
         for lead in leads {
             for sep in separators {

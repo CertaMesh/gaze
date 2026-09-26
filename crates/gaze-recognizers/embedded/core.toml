@@ -1388,7 +1388,8 @@ license = "Apache-2.0"
 # with `.` or `-`, day- or month-first with `/`, two-digit years in the numeric forms, and month
 # names in en/de/fr/nl/da/es (`14 March 1987`, `March 14, 1987`, `14. März 1987`,
 # `1er mars 1984`, `12 de marzo de 1987`, `12-Mar-1984`). Spaces inside the date may be NBSP or
-# NARROW NBSP. The trailing `\b` rejects a date glued to a longer word run (`1987x`, `1987_2`).
+# NARROW NBSP. As before, a date may be followed only by a non-word character or one final
+# period: a longer run (`1987x`, `1987_2`, `1990-02-03-04`, `1990-02-03.4`) is no date at all.
 #
 # `anchored_match` and locale cue buckets cannot carry this: `anchored_match` captures person
 # names only, and `[locale.cues.*]` feeds collision-family anchors, not a numeric capture. The
@@ -1455,7 +1456,7 @@ pattern = '''
   | (?:0?[1-9]|[12][0-9]|3[01])(?:st|nd|rd|th|er)?\.?[\x20\t\x{A0}\x{202F}]+(?:(?:of|de)[\x20\t\x{A0}\x{202F}]+)?(?:january|february|march|april|may|june|july|august|september|october|november|december|januar|jänner|februar|märz|mai|juni|juli|oktober|dezember|janvier|février|fevrier|mars|avril|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre|januari|februari|maart|mei|augustus|marts|maj|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|janv|févr|avr|juil|jan|feb|mär|mrz|mar|apr|jun|jul|aug|sept|sep|okt|oct|nov|dez|dec|déc)\.?,?[\x20\t\x{A0}\x{202F}]+(?:de[\x20\t\x{A0}\x{202F}]+)?[0-9]{4}
   | (?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\.?[\x20\t\x{A0}\x{202F}]+(?:0?[1-9]|[12][0-9]|3[01])(?:st|nd|rd|th)?,?[\x20\t\x{A0}\x{202F}]+[0-9]{4}
   | (?:0?[1-9]|[12][0-9]|3[01])-(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|mär|mrz|mai|okt|dez)-[0-9]{4}
-)\b
+)(?:[^\w./-]|\.(?:[^\w./-]|\z)|\z)
 |
 \bam[\x20\t\x{A0}\x{202F}]+
 (
