@@ -9,7 +9,7 @@ clean Markdown + a restorable `gaze::Manifest` + an OCR/PII report. Powers
 the `gaze document clean` CLI verb on top of the same `gaze-pii` runtime
 that handles streaming and structured inputs.
 
-The crate inherits the project's [north star](../../CLAUDE.md): zero PII
+The crate inherits the project's [north star](../../AGENTS.md#project-north-star): zero PII
 leaks from agent to data owner, deterministic detection, and a manifest
 contract that always restores. OCR is a subprocess call to the standard
 `tesseract` binary so adopters never need a native build toolchain.
