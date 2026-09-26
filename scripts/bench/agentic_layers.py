@@ -1168,6 +1168,7 @@ ADJACENT_GOLD = {
     "dev": (
         AdjacencyCase("ip_v6", "en", "US", (AdjacentValue("fe80::d1", "IPADDRESS"), AdjacentValue("::d2", "IPADDRESS"))),
         AdjacencyCase("ip_v6_mapped", "en", "US", (AdjacentValue("fe80::d3", "IPADDRESS"), AdjacentValue("::ffff:127.0.0.2", "IPADDRESS"))),
+        AdjacencyCase("ip_v4", "en", "US", (AdjacentValue("127.0.0.6", "IPADDRESS"), AdjacentValue("127.0.0.7", "IPADDRESS"))),
         AdjacencyCase("ip_v4_v6", "en", "US", (AdjacentValue("127.0.0.4", "IPADDRESS"), AdjacentValue("fe80::d4", "IPADDRESS"))),
         AdjacencyCase("ip_documentation_neighbor", "en", "US", (AdjacentValue("2001:db8::d5"), AdjacentValue("fe80::d5", "IPADDRESS"))),
         AdjacencyCase("phone_structural", "en", "US", (AdjacentValue("+12025550100", "TELEPHONENUM"), AdjacentValue("+12025550101", "TELEPHONENUM"))),
@@ -1183,6 +1184,7 @@ ADJACENT_GOLD = {
     "test": (
         AdjacencyCase("ip_v6", "en", "US", (AdjacentValue("fe80::a1", "IPADDRESS"), AdjacentValue("::a2", "IPADDRESS"))),
         AdjacencyCase("ip_v6_mapped", "en", "US", (AdjacentValue("fe80::a3", "IPADDRESS"), AdjacentValue("::ffff:127.0.0.3", "IPADDRESS"))),
+        AdjacencyCase("ip_v4", "en", "US", (AdjacentValue("127.0.0.8", "IPADDRESS"), AdjacentValue("127.0.0.9", "IPADDRESS"))),
         AdjacencyCase("ip_v4_v6", "en", "US", (AdjacentValue("127.0.0.5", "IPADDRESS"), AdjacentValue("fe80::a4", "IPADDRESS"))),
         AdjacencyCase("ip_documentation_neighbor", "en", "US", (AdjacentValue("2001:db8::a5"), AdjacentValue("fe80::a5", "IPADDRESS"))),
         AdjacencyCase("phone_structural", "en", "US", (AdjacentValue("+12025550102", "TELEPHONENUM"), AdjacentValue("+12025550103", "TELEPHONENUM"))),
