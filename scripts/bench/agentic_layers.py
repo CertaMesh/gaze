@@ -1614,6 +1614,8 @@ def _measure(args: argparse.Namespace) -> None:
         measured_repetitions=1,
         policy_path=policy,
         configs=args.config,
+        replacing_actions=frozenset(args.manifest_actions.split(",")),
+        split_composite_source_ids=args.split_composite_source_ids,
     )
     result = {
         "schema_version": score.SCORECARD_SCHEMA_VERSION,
@@ -1625,6 +1627,8 @@ def _measure(args: argparse.Namespace) -> None:
             "configs": list(args.config),
             "policy_sha256": score.sha256_file(policy) if policy else None,
             "ner_threshold": args.threshold,
+            "manifest_replacing_actions": sorted(args.manifest_actions.split(",")),
+            "split_composite_source_ids": args.split_composite_source_ids,
         },
         "hardware": platform.platform(),
         "runs": [],
@@ -1654,6 +1658,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     measure_cmd.add_argument("--model-dir", type=Path, default=Path("~/.local/share/gaze/models/davlan-mbert-ner-hrl"))
     measure_cmd.add_argument("--threshold", type=float, default=0.3)
     measure_cmd.add_argument("--label", required=True, help="e.g. v0.15.1; recorded in the output")
+    measure_cmd.add_argument(
+        "--manifest-actions",
+        choices=("tokenize,redact", "tokenize"),
+        default="tokenize,redact",
+        help="trace actions that are manifest entries; 'tokenize' for a release before #623",
+    )
+    measure_cmd.add_argument(
+        "--split-composite-source-ids",
+        action="store_true",
+        help="check each part of an `a+b` source ID, as v0.14.0 emits them",
+    )
     measure_cmd.add_argument(
         "--vocabulary-root",
         type=Path,

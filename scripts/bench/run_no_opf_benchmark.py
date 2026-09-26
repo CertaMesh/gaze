@@ -496,6 +496,8 @@ def execute_measurements(
     source_environment: Mapping[str, str] | None = None,
     policy_path: Path | None = None,
     configs: Sequence[str] | None = None,
+    replacing_actions: frozenset[str] = score.MANIFEST_REPLACING_ACTIONS,
+    split_composite_source_ids: bool = False,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if measured_repetitions <= 0:
         raise CandidateError("measured repetitions must be positive")
@@ -526,6 +528,8 @@ def execute_measurements(
                 warmup_count=warmup_count,
                 validator_measurements=validator_measurements,
                 policy_path=policy_path,
+                replacing_actions=replacing_actions,
+                split_composite_source_ids=split_composite_source_ids,
             )
             current.append(run)
         repetition_runs.append(current)
@@ -589,6 +593,8 @@ def measure_agentic_layers(
     measured_repetitions: int,
     policy_path: Path | None,
     configs: Sequence[str] | None = None,
+    replacing_actions: frozenset[str] = score.MANIFEST_REPLACING_ACTIONS,
+    split_composite_source_ids: bool = False,
 ) -> dict[str, object]:
     """Score layers A, D and R as separate cells next to the Kiji/A4 layer C.
 
@@ -646,6 +652,8 @@ def measure_agentic_layers(
             validator_measurements=measurements,
             policy_path=policy_path,
             configs=configs,
+            replacing_actions=replacing_actions,
+            split_composite_source_ids=split_composite_source_ids,
         )
         block: dict[str, object] = {
             "description": description,

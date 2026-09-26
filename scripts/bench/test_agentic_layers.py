@@ -506,6 +506,39 @@ def _scorecard(leaks: dict[str, int], fps: dict[str, int] | None = None, refused
     }
 
 
+class CompositeSourceIdTests(unittest.TestCase):
+    """v0.14.0 emits `email.header.name+ner`; only an explicit opt-in accepts it."""
+
+    def response(self, source_id: str) -> tuple[score.Document, dict]:
+        document = score.Document("t1", "From: Anna Weber <a@b.de>", "en", "US", "unit",
+                                  (score.Span(6, 10, "GIVENNAME"),))
+        response = _success_response(document)
+        response["clean_text"] = "From: <tok> Weber <a@b.de>"
+        response["manifest_spans"] = [
+            {"raw_start": 6, "raw_end": 10, "clean_start": 6, "clean_end": 11, "class": "name"}
+        ]
+        response["manifest_integrity"]["spans"] = 1
+        response["final_protection_trace"] = [{
+            "raw_start": 6, "raw_end": 10, "class": "name", "action": "tokenize",
+            "provenance": {"stage": "primary_pipeline", "decision": "policy", "source_ids": [source_id]},
+        }]
+        return document, response
+
+    def test_composite_id_is_refused_by_default(self) -> None:
+        document, response = self.response("email.header.name+ner")
+        with self.assertRaisesRegex(score.ResponseValidationError, "stable identifier"):
+            score.validate_response(document, response)
+
+    def test_opt_in_accepts_a_composite_of_valid_ids(self) -> None:
+        document, response = self.response("email.header.name+ner")
+        score.validate_response(document, response, split_composite_source_ids=True)
+
+    def test_opt_in_still_checks_every_part(self) -> None:
+        document, response = self.response("email.header.name+Anna")
+        with self.assertRaisesRegex(score.ResponseValidationError, "stable identifier"):
+            score.validate_response(document, response, split_composite_source_ids=True)
+
+
 class GateTests(unittest.TestCase):
     BASE = {"C": 100, "A": 50, "D": 0, "R": 30}
     FP = {"C": 10, "A": 5, "D": 7, "R": 3}

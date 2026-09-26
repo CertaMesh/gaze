@@ -921,6 +921,18 @@ python3 scripts/bench/agentic_layers.py measure --label v0.15.1 \
 The output has `layers` and an empty `runs`. The release's committed
 scorecard already holds its layer C numbers.
 
+Two options exist for v0.14.0 only, and the output records both:
+
+- `--manifest-actions tokenize` applies the manifest rule from before #623,
+  the same one `rescore_past_release.py` uses.
+- `--split-composite-source-ids` handles v0.14.0's joined source IDs such as
+  `email.header.name+ner`. The source-ID grammar refuses the `+`, and that
+  grammar is also in v0.14.0's own harness; the Kiji corpus never contains the
+  email-header shape that triggers it. With the option, each part is checked
+  on its own against the grammar and the release's vocabulary.
+
+Both options are off by default.
+
 ### Hardware spec template
 
 Fill this out for every published or PR-local benchmark run; the `--machine`

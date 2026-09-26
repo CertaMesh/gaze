@@ -1046,6 +1046,7 @@ def _validate_final_protection_trace(
     value: object,
     manifest: Sequence[object],
     replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
+    split_composite_source_ids: bool = False,
 ) -> list[Span]:
     trace = _expect_list(value, "final_protection_trace")
     original_text = document.text.encode("utf-8")
@@ -1096,8 +1097,12 @@ def _validate_final_protection_trace(
             )
         for source_index, source_id in enumerate(source_ids):
             source_context = f"{context}.provenance.source_ids[{source_index}]"
-            _validate_source_id(source_id, source_context)
-            source_identifiers.append((source_id, source_context))
+            # v0.14.0 joins agreeing sources as `a+b` (`email.header.name+ner`);
+            # scoring its own binary checks each part like any other ID.
+            parts = source_id.split("+") if split_composite_source_ids else [source_id]
+            for part in parts:
+                _validate_source_id(part, source_context)
+                source_identifiers.append((part, source_context))
         if source_ids != sorted(source_ids) or len(source_ids) != len(set(source_ids)):
             raise ResponseValidationError(
                 f"{context}.provenance.source_ids: expected sorted duplicate-free IDs"
@@ -1161,6 +1166,7 @@ def validate_response(
     value: object,
     *,
     replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
+    split_composite_source_ids: bool = False,
 ) -> dict[str, object]:
     _check_replacing_actions(replacing_actions)
     response = _expect_object(value, f"{document.uid}: response")
@@ -1251,7 +1257,11 @@ def validate_response(
             )
         _validate_success_timing(response["timing"], "timing")
         _validate_final_protection_trace(
-            document, response["final_protection_trace"], manifest, replacing_actions
+            document,
+            response["final_protection_trace"],
+            manifest,
+            replacing_actions,
+            split_composite_source_ids,
         )
         if (
             any(
@@ -2336,6 +2346,7 @@ def run_config(
     validator_measurements: Mapping[str, object] | None = None,
     policy_path: Path | None = None,
     replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
+    split_composite_source_ids: bool = False,
 ) -> dict[str, object]:
     # Checked before the subprocess starts, not on the first response.
     _check_replacing_actions(replacing_actions)
@@ -2396,7 +2407,10 @@ def run_config(
         }
         request_started = time.perf_counter()
         response = validate_response(
-            document, process.exchange(request), replacing_actions=replacing_actions
+            document,
+            process.exchange(request),
+            replacing_actions=replacing_actions,
+            split_composite_source_ids=split_composite_source_ids,
         )
         process.check_message_deadline()
         validated_at = time.perf_counter()
