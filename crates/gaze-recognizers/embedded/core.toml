@@ -1428,14 +1428,12 @@ pattern = '''
     | geboren
     | geboortedatum
     | date[\x20_-]de[\x20_-]naissance
-    | naissance
     | née
     | né
     | fødselsdato
     | fødselsdag
     | født
     | fecha[\x20_-]de[\x20_-]nacimiento
-    | nacimiento
     | nacid[oa]
     | naci[óo]
   )\b

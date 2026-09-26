@@ -259,6 +259,8 @@ Keys may be snake, camel or kebab case (`date_of_birth`, `dateOfBirth`,
 `birth-date`) and may carry an underscore prefix (`customer_dob`). Up to eight
 filler tokens may sit between cue and date: separators, quotes, and short link
 words such as `is`, `ist der`, `est le`, `er`, `op`, `el`, `am`, `den`, `on`.
+Line breaks count as separators, so a form label on one line and the date on
+the next (`Date of birth:\n14.03.1987`) is still read as one field.
 `anniversaire` and `since` are not cues: both name other dates as often as a
 birth date.
 

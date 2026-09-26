@@ -6,8 +6,9 @@
 //! `née le 02/11/1992`, month-name dates, two-digit years.
 //!
 //! A bare date is never tokenized: invoices, logs and release notes are full of dates, so the
-//! birth cue is the whole precision story. Every positive case below has its own test, so dropping
-//! one cue from the rulepack turns exactly that test red.
+//! birth cue is the whole precision story. Every cue alternative in the rulepack has a test of
+//! its own, and no alternative is shadowed by another, so dropping one cue turns red only the tests
+//! that use it (`born` is shared by `born` and `born on`).
 
 use gaze::Context;
 use gaze::{
