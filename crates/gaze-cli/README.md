@@ -159,6 +159,10 @@ the model card MIT licence, upstream revision, the open [training-data licence
 review](../../docs/explanation/safety-net/safety-nets.md#licence-review-open),
 and the opt-out. The doctor checks that Nym catches a synthetic licence plate.
 
+The policy is written owner-only (mode `0600`). When setup and gaze run as
+different accounts, see
+[Policy file permissions](../../docs/reference/policy.md#policy-file-permissions).
+
 ## Daemon mode
 
 `gaze daemon` is a stdio server in the LSP / MCP tradition, not a Unix daemon
