@@ -1868,7 +1868,11 @@ impl Pipeline {
                         // re-scan flagging the value next to the last token) outran the one
                         // follow-up round and ended here deleting a value that was never at
                         // risk (todo 3879). Anything the planner refuses is deleted as before.
+                        // Only a residual the post-resolution re-run found: a first-pass refusal
+                        // is the resolver declining those suspects, and the fallback does not
+                        // overrule it.
                         let tokenized = matches!(on_residual, SafetyNetFallback::Redact)
+                            && residual_report.is_some()
                             && !actionable.is_empty()
                             && self.tokenize_fallback_residuals(
                                 target,
