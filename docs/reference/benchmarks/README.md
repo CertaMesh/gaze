@@ -926,8 +926,9 @@ pins the true verdicts of two real full-harness runs against main:
   valid BSN, and 173 of Kiji driver-licence, ID-card, national-ID, SSN and
   building numbers. It adds 295 false-positive bytes.
 
-**The gate is necessary, not sufficient.** It measures only these corpora.
-Review still judges precision. A bare 9-digit rule would be refused in review
+**The gate is necessary, not sufficient**
+([Benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate), rule 5). It
+measures only these corpora. A bare 9-digit rule would be refused in review
 for the false positives it causes on reference numbers outside the corpus,
 even though it passes here.
 
