@@ -369,9 +369,10 @@ xychart-beta
 
 Consecutive releases with the same results share one row, labelled oldest –
 newest: same results means the same shipped arm, refused documents, leaked PII
-bytes, false-positive bytes and restore-exact rate under the same scored-label
-contract, corpus and provisional status, while clean p95 latency, date, commit
-and machine are ignored because they vary with the host. The table and trend
+bytes, false-positive bytes, restore-exact rate and gold-gap diagnostic (when
+the contract reports one) under the same scored-label contract, corpus and
+provisional status, while clean p95 latency, date, commit and machine are
+ignored because they vary with the host. The table and trend
 charts show the last three such rows, and a merged row shows its newest
 release. [`release-history.json`](release-history.json) keeps every release,
 and every row's numbers come from the `scorecard-vX.Y.Z.json` files it links,

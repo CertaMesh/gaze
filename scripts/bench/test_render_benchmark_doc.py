@@ -1489,6 +1489,33 @@ class DistinctResultGroupTest(unittest.TestCase):
                 value = releases(release("v0.15.0"), newer)
                 self.assertEqual(len(render.release_groups(value["releases"])), 2)
 
+    def test_a_gold_gap_only_difference_splits(self):
+        contract = {
+            "id": "scored-labels-v3",
+            "version": 3,
+            "file_sha256": "3" * 64,
+            "excluded_labels": [],
+        }
+
+        def gold_gap(protected: int) -> dict:
+            return {
+                "gold_gap_protected_bytes": protected,
+                "false_positive_bytes_after_gold_gap": 100,
+                "adjusted_precision": 0.9,
+                "gold_gap_protected_bytes_by_label": {"EMAIL": protected},
+            }
+
+        rows = []
+        for version, protected in (("v0.15.0", 10), ("v0.15.1", 10), ("v0.15.2", 11)):
+            row = release(version)
+            row["scored_label_contract"] = contract
+            row["arms"]["policy-file"]["gold_gap"] = gold_gap(protected)
+            rows.append(row)
+        groups = render.release_groups(releases(*rows)["releases"])
+        self.assertEqual(
+            [render.group_label(g) for g in groups], ["v0.15.0 – v0.15.1", "v0.15.2"]
+        )
+
     def test_a_different_shipped_arm_splits(self):
         newer = release("v0.15.1")
         newer["arms"]["pass2-ner"] = copy.deepcopy(newer["arms"]["policy-file"])

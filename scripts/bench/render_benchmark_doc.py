@@ -426,8 +426,10 @@ DISPLAYED_GROUPS = 3
 def result_key(entry: Mapping[str, Any]) -> tuple[Any, ...]:
     """What makes two releases' benchmark results the same.
 
-    The shipped arm and its result numbers, read under one scored-label
-    contract on one corpus, and whether the row claims the released tree.
+    The shipped arm and its result numbers (including the contract v3
+    gold-gap diagnostic), read under one scored-label contract on one corpus,
+    and whether the row claims the released tree. The rule sentence above the
+    history table in the benchmark doc must list the same fields.
     Latency, date, commit and machine are left out on purpose: p95 moves with
     host load, so v0.15.0 (124 ms) and v0.15.1 (139 ms) on identical detection
     output are one result. Leaked bytes on the common document set are derived
