@@ -259,7 +259,10 @@ justifies weakening the current synthetic holdout gate.
 These numbers score one synthetic EN/DE holdout. A perfect row here is evidence
 about **this corpus**, not proof that a recognizer is complete — shapes the
 corpus does not contain are unmeasured. Recall claims about a rule change need a
-direct differential probe, not a scorecard row.
+direct differential probe, not a scorecard row. The generated
+[agentic layers](#agentic-layers-and-the-rule-gate) cover some of the agent
+shapes this corpus lacks, and they have the same limit: they measure only the
+families and surfaces they generate.
 
 Two consequences worth stating plainly:
 
@@ -638,6 +641,94 @@ validated response are Python-runner provenance; response latency consumes the
 producer's honest `clean_ms`. See
 [`scripts/bench/README.md`](../../../scripts/bench/README.md) for model
 locations, planning runtime, and the guarded baseline-acceptance command.
+
+### Agentic layers and the rule gate
+
+The Kiji/A4 corpus is prose. It contains no tool-call JSON, no `key=value`
+logs, no CSV and no NBSP, which are the shapes agents actually send. A rule fix
+for one of those shapes cannot move the Kiji numbers, so the runner also scores
+two generated layers beside it:
+
+| Layer | What it is | Where it lives in the scorecard |
+| --- | --- | --- |
+| C | Kiji EN/DE holdout plus the A4 negative corpus | `runs[]` (unchanged) |
+| A | Generated identifiers in agentic surfaces, each checksum value with a checksum-invalid twin | `layers.A.runs[]` |
+| D | Generated benign lookalikes: amounts, SKUs, `#RRGGBB`, `L99 9999`, versions, order and tracking IDs, UUID fragments, room and seat numbers, invoice and log dates | `layers.D.runs[]` |
+
+[`scripts/bench/agentic_layers.py`](../../../scripts/bench/agentic_layers.py)
+generates both layers deterministically, with no network access and no
+model:
+
+- **Layer A families:** payment card; IBAN for DE (spaced and compact), AT,
+  NL, FR and GB; Steuer-ID; BSN; NHS number; CPF; email; German and US phone
+  numbers; dates of birth; and sender names in email headers, including
+  hyphenated surnames.
+- **Layer A surfaces:** prose with a cue, prose without a cue, NBSP-spaced,
+  NARROW-NBSP-spaced, log `key=value`, CSV, and tool-call JSON. The tool-call
+  JSON is the single-encoded `arguments` string that `gaze-proxy` cleans.
+- **Checksum code:** written from the published standards, not from Gaze's
+  validators. Standard test vectors pin it, and the validator probe
+  cross-checks it on every run.
+- **Invalid twins:** they stay scored gold, as in the Kiji validator gold
+  census. `layers.A.validator_gold_census` and each run's
+  `validator_recall_by_label` split the result by validity.
+- **Gold spans:** they are the inserted values at their UTF-8 byte offsets.
+
+Every result is also reported per `layer|family|surface|validity` cell under
+`per_cell`. [`scored-labels-agentic.json`](scored-labels-agentic.json) rules on
+every generated label, and it fails closed on a label it does not list, on a
+ruling for a label the generator no longer emits, and on a generator version
+mismatch. Layers A and D use this contract in every run, so `--scored-labels`
+changes layer C only.
+
+**Held-out protocol.** Templates, cue words, machine keys, name pools, email
+domains, phone prefixes and seeds are split into a `dev` and a `test`
+partition before anything is generated. Every perturbation (the NBSP variants
+and the invalid twin) comes from its parent document inside that parent's
+partition. The runner scores `test` only. Use `dev` for rule work:
+
+```bash
+python3 scripts/bench/agentic_layers.py generate --partition dev \
+  --output target/bench-data/agentic-dev.jsonl
+```
+
+`layers.generator` records the generator version, the seed and the corpus
+SHA-256. `scripts/bench/test_agentic_layers.py` pins both partition hashes, so
+a generator change must bump `GENERATOR_VERSION`, the contract's
+`generator_version` and the pins together. Once a test generation has been
+published, its failures belong in the next dev generation.
+
+**The rule gate.** A pull request that adds or widens a detection rule merges
+only on a fresh base-versus-candidate pair of full-profile runs: the base is
+the merge base on `main`, the candidate is the PR head, and both use the same
+policy, seed and corpus. The pair is scored under contract v2 and again under
+v1:
+
+```bash
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
+  --seed 20260710 --no-download --release --policy <gaze-setup-policy.toml> \
+  --scored-labels docs/reference/benchmarks/scored-labels-v2.json \
+  --output-dir target/bench-data/gate-base-v2   # then candidate, then both under v1
+python3 scripts/bench/agentic_layers.py gate \
+  --base target/bench-data/gate-base-v2/full/scorecard-v4.json \
+  --candidate target/bench-data/gate-cand-v2/full/scorecard-v4.json
+```
+
+For each contract, the production arm's numbers must satisfy all of these:
+
+1. **No layer leaks more.** Leaked bytes do not rise in C, A or D.
+2. **No layer refuses more.** A refused document drops out of the leak count,
+   so a rise in failed-closed documents in any layer fails the gate.
+3. **Something gets better.** At least one layer's leaked bytes fall. A
+   false-positive-only fix passes instead when leaked bytes stay unchanged
+   everywhere and at least one layer's false-positive bytes fall.
+
+The PR states false-positive bytes per layer either way. The gate exits `0` on
+pass, `1` on fail, and `2` when the two scorecards differ in policy, arm
+set, Kiji dataset, corpus hash or contract file, because such a pair is not
+comparable. `agentic_layers.py grid <scorecard>` prints the family × surface
+coverage grid for a PR description. Multi-turn transcripts, restore round
+trips and token stability (the planned layer B) are not measured yet.
 
 ### Hardware spec template
 
