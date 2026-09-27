@@ -874,6 +874,10 @@ kind = "regex"
 pattern = '''(?:(?i:\b(?:plz|postleitzahl|post[ \t]?code|postal[ \t]code|zip(?:[ \t]?code)?))[ \t]*[:#.]?[ \u{00A0}\u{202F}]*((?:(?:A|CH|FL)-)?\d{4})\b|(?:\A|[^#])\b((?:(?:A|CH|FL)-)?\d{4}),?[ \u{00A0}\u{202F}]{1,3}(?:\p{Lu}[\p{L}\-]{2,}|St(?:\.[ \u{00A0}\u{202F}]?|[ \u{00A0}\u{202F}])\p{Lu}))'''
 capture_groups = [1, 2]
 
+[recognizers.context]
+# Let postal.au protect the state and postcode even when de-AT/de-CH appears first.
+reject_prefix_regex = '''\b(?:NSW|VIC|QLD|SA|WA|TAS|NT|ACT)[ \t\u{00A0}\u{202F}\n,|]{1,4}\z'''
+
 [recognizers.scoring]
 base = 0.70
 priority = 70
@@ -890,6 +894,9 @@ license = "Apache-2.0"
 # boundary (punctuation, end, or a table separator). The first keeps "Melbourne VIC 3065 next month";
 # the second keeps "QLD 4072, Australia" without treating "VIC 3000 people" as an address.
 # The capture includes the state abbreviation so neither its gold STATE span nor the postcode leaks.
+# A preceding EN/DE function word alone is refused as an address anchor. Any other capitalised
+# word of three or more letters, including German nouns, can anchor it. The terminal branch also
+# accepts table/CSV state-and-number cells, including year-shaped NSW values.
 # This range check avoids an exhaustive postcode registry; cross-border postcodes outside the
 # declared state's published range may still need another detector. New Zealand needs a different
 # anchor. https://collectables.auspost.com.au/community-and-events/articles/postcodes-turn-50
@@ -904,8 +911,12 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?:(?:\A|[^#\p{L}\p{N}_])\p{Lu}[\p{L}'-]{2,}(?:[ \t\u{00A0}\u{202F}]+\p{Lu}[\p{L}'-]{2,}){0,2}[ \t\u{00A0}\u{202F}\n,|]{1,4}((?:NSW[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:1\d{3}|2[0-5]\d{2}|26[2-9]\d|2[78]\d{2}|29(?:2[1-9]|[3-9]\d))|VIC[ \t\u{00A0}\u{202F}\n,|]{1,4}[38]\d{3}|QLD[ \t\u{00A0}\u{202F}\n,|]{1,4}[49]\d{3}|SA[ \t\u{00A0}\u{202F}\n,|]{1,4}5\d{3}|WA[ \t\u{00A0}\u{202F}\n,|]{1,4}6\d{3}|TAS[ \t\u{00A0}\u{202F}\n,|]{1,4}7\d{3}|NT[ \t\u{00A0}\u{202F}\n,|]{1,4}0[89]\d{2}|ACT[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:02\d{2}|26[01]\d|29(?:[01]\d|20))))\b|(?:\A|[^#\p{L}\p{N}_])((?:NSW[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:1\d{3}|2[0-5]\d{2}|26[2-9]\d|2[78]\d{2}|29(?:2[1-9]|[3-9]\d))|VIC[ \t\u{00A0}\u{202F}\n,|]{1,4}[38]\d{3}|QLD[ \t\u{00A0}\u{202F}\n,|]{1,4}[49]\d{3}|SA[ \t\u{00A0}\u{202F}\n,|]{1,4}5\d{3}|WA[ \t\u{00A0}\u{202F}\n,|]{1,4}6\d{3}|TAS[ \t\u{00A0}\u{202F}\n,|]{1,4}7\d{3}|NT[ \t\u{00A0}\u{202F}\n,|]{1,4}0[89]\d{2}|ACT[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:02\d{2}|26[01]\d|29(?:[01]\d|20))))\b[ \t\u{00A0}\u{202F}]{0,3}(?:\z|[,.;!?|\n)]))'''
+pattern = '''(?:(?:\A|[^#\p{L}\p{N}_])\p{Lu}[\p{L}'-]{2,}(?:[ \t\u{00A0}\u{202F}]+\p{Lu}[\p{L}'-]{2,}){0,2}[ \t\u{00A0}\u{202F}\n,|]{1,4}((?:NSW[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:1\d{3}|2[0-5]\d{2}|26(?:19|[2-9]\d)|2[78]\d{2}|29(?:2[1-9]|[3-9]\d))|VIC[ \t\u{00A0}\u{202F}\n,|]{1,4}[38]\d{3}|QLD[ \t\u{00A0}\u{202F}\n,|]{1,4}[49]\d{3}|SA[ \t\u{00A0}\u{202F}\n,|]{1,4}5\d{3}|WA[ \t\u{00A0}\u{202F}\n,|]{1,4}6\d{3}|TAS[ \t\u{00A0}\u{202F}\n,|]{1,4}7\d{3}|NT[ \t\u{00A0}\u{202F}\n,|]{1,4}0[89]\d{2}|ACT[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:02\d{2}|26(?:0\d|1[0-8])|29(?:[01]\d|20))))\b|(?:\A|[^#\p{L}\p{N}_])((?:NSW[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:1\d{3}|2[0-5]\d{2}|26(?:19|[2-9]\d)|2[78]\d{2}|29(?:2[1-9]|[3-9]\d))|VIC[ \t\u{00A0}\u{202F}\n,|]{1,4}[38]\d{3}|QLD[ \t\u{00A0}\u{202F}\n,|]{1,4}[49]\d{3}|SA[ \t\u{00A0}\u{202F}\n,|]{1,4}5\d{3}|WA[ \t\u{00A0}\u{202F}\n,|]{1,4}6\d{3}|TAS[ \t\u{00A0}\u{202F}\n,|]{1,4}7\d{3}|NT[ \t\u{00A0}\u{202F}\n,|]{1,4}0[89]\d{2}|ACT[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:02\d{2}|26(?:0\d|1[0-8])|29(?:[01]\d|20))))\b[ \t\u{00A0}\u{202F}]{0,3}(?:\z|[,.;!?|\n)]))'''
 capture_groups = [1, 2]
+
+[recognizers.context]
+# Reject a lone EN/DE function word as locality. Multiword locality names remain eligible.
+reject_match_regex = '''(?i)\A(?:[^#\p{L}\p{N}_])?(?:the|this|these|those|our|your|for|and|from|with|die|der|das|den|dem|des|ein|eine|einer|einem|einen|unser|unsere|ihr|ihre|zum|zur)[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:NSW|VIC|QLD|SA|WA|TAS|NT|ACT)[ \t\u{00A0}\u{202F}\n,|]{1,4}\d{4}\b'''
 
 [recognizers.scoring]
 base = 0.70

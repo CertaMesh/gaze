@@ -28,7 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   postcode together whenever `en-AU` is in the effective locale chain, so
   these spans no longer rely on Nym context. The no-policy `core-extended`
   chain includes `en-AU` on every document. New Zealand postcodes remain
-  outside this rule.
+  outside this rule. `postal.at_ch` now yields when an Australian state directly
+  precedes the code, preserving the joined token under the shipped locale
+  chains. The address anchor refuses common English and German function words,
+  but other capitalised words, including German nouns, can still trigger it;
+  terminal CSV/table state-and-number cells, including years, can also match.
 
 - **Dates of birth after a birth cue are tokenized** (solo todo #3651).
   Every release up to and including v0.15.1 sent these raw through

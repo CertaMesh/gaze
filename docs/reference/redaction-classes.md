@@ -119,8 +119,8 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `pan.in` | `regex` | Cue-anchored Indian Permanent Account Numbers in the ten-character PAN shape | `custom:pan` | `en-IN, hi-IN` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `postal.de` | `regex` | Bare five-digit German postal-code shapes | `custom:postal_code` | `de-DE` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
 | `core, core-extended` | `postal.us` | `regex` | US five-digit ZIP or ZIP+4 shapes | `custom:postal_code` | `en-US` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
-| `core, core-extended` | `postal.at_ch` | `regex` | Austrian and Swiss four-digit postal codes, optionally `A-`/`CH-`/`FL-` prefixed, only directly after a postal cue (`PLZ`, `Postleitzahl`, `Postcode`, `ZIP`) or directly before a city-shaped token (uppercase start, or `St.` / `St` before a capitalised name) across a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; a city-anchored code is not matched when preceded by `#` | `custom:postal_code` | `de-AT, de-CH` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
-| `core, core-extended` | `postal.au` | `regex` | Australian state or territory abbreviation plus four-digit postcode in Australia Post's published state range, after a capitalized locality or address word, or before a terminal field boundary; the state and code are one restorable token | `custom:postal_code` | `en-AU` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
+| `core, core-extended` | `postal.at_ch` | `regex` | Austrian and Swiss four-digit postal codes, optionally `A-`/`CH-`/`FL-` prefixed, only directly after a postal cue (`PLZ`, `Postleitzahl`, `Postcode`, `ZIP`) or directly before a city-shaped token (uppercase start, or `St.` / `St` before a capitalised name) across a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; a city-anchored code is not matched when preceded by `#` or directly preceded by an Australian state abbreviation | `custom:postal_code` | `de-AT, de-CH` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
+| `core, core-extended` | `postal.au` | `regex` | Australian state or territory abbreviation plus four-digit postcode in Australia Post's published state range, after a capitalized word of three or more letters other than a listed EN/DE function word, or before a terminal field boundary; the state and code are one restorable token | `custom:postal_code` | `en-AU` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
 | `core, core-extended` | `postal.ca` | `regex` | Canadian `A9A 9A9` postal codes, hyphenated, compact, or separated by a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; not matched when preceded by `#` | `custom:postal_code` | `en-CA` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.gb` | `regex` | UK postcodes across all six Royal Mail outward forms plus `GIR 0AA`, followed by a `9AA` inward code over the official inward alphabet; space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE separator; not matched when preceded by `#` | `custom:postal_code` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.ie` | `regex` | Irish Eircodes: routing key including `D6W`, plus a four-character identifier over the restricted Eircode alphabet that must carry at least one letter | `custom:postal_code` | `en-IE` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
@@ -417,11 +417,16 @@ Its measured false-positive class is a four-digit number followed by a
 capitalised German noun (`1500 Euro`); every such token restores losslessly.
 `postal.au` uses the Australian state or territory abbreviation and
 [Australia Post's published postcode ranges](https://collectables.auspost.com.au/community-and-events/articles/postcodes-turn-50).
-A capitalized locality or address word before
-the state admits prose after the code; without that context, punctuation, a
-table boundary, or the end of input must follow. Its token contains both the
-state and postcode, which protects both parts of the address and restores them
-together. The rule is document-basis `en-AU`: it runs when `en-AU` is in the
+A preceding capitalised word of three or more letters admits prose after the
+code. A listed English or German function word alone (`The`, `Our`, `Die`,
+`Der`, and others) is refused, but nouns such as `Model` and `Modell` still
+qualify. Without that context, punctuation, a table boundary, or the end of
+input must follow. Thus CSV and table cells such as `NSW,1234` and
+`| NSW | 2024 |` can be tokenized even when the number is a count or year.
+Its token contains both state and postcode, which protects both parts of an
+address and restores them together. `postal.at_ch` refuses a city-anchored
+code directly preceded by an Australian state abbreviation so the AU token
+wins under either shipped locale chain order. The rule is document-basis `en-AU`: it runs when `en-AU` is in the
 effective locale chain, including for every document under the broad setup
 policy or the no-policy `core-extended` compatibility chain. An explicit
 `global` or `en-NZ` only chain does not run it. New Zealand needs a separate rule because

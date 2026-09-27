@@ -1,5 +1,6 @@
 //! Australian state-anchored postcode fixtures. All example strings are synthetic.
 
+use gaze::RawMatch;
 use gaze::{
     Action, CleanDocument, Context, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
     RawDocument, RuleSpec, Rulepack, RulepackSource, Scope, Session,
@@ -36,14 +37,14 @@ fn pipeline_for(locales: &[LocaleTag]) -> Pipeline {
     gaze_assembly::build_pipeline(&policy, &context, &[rulepack], &chain, None).expect("pipeline")
 }
 
-fn clean_and_restore(locale: LocaleTag, original: &str) -> String {
-    let pipeline = pipeline_for(std::slice::from_ref(&locale));
+fn clean_and_restore_with_chain(locales: &[LocaleTag], original: &str) -> String {
+    let pipeline = pipeline_for(locales);
     let session = Session::new(Scope::Ephemeral).expect("session");
     let (clean, _, _) = pipeline
         .clean_with_safety_net_detect_context(
             &session,
             RawDocument::Text(original.to_string()),
-            &[locale],
+            locales,
             &DictionaryBundle::default(),
         )
         .expect("clean");
@@ -57,6 +58,10 @@ fn clean_and_restore(locale: LocaleTag, original: &str) -> String {
         original
     );
     cleaned
+}
+
+fn clean_and_restore(locale: LocaleTag, original: &str) -> String {
+    clean_and_restore_with_chain(&[locale], original)
 }
 
 #[test]
@@ -109,6 +114,103 @@ fn terminal_field_branch_uses_the_same_ranges_for_all_states() {
         clean_and_restore(LocaleTag::EnAu, "Sydney NSW 2601."),
         "Sydney NSW 2601."
     );
+    assert_ne!(
+        clean_and_restore(LocaleTag::EnAu, "Jerrabomberra NSW 2619."),
+        "Jerrabomberra NSW 2619."
+    );
+    assert_ne!(
+        clean_and_restore(LocaleTag::EnAu, "Canberra ACT 2618."),
+        "Canberra ACT 2618."
+    );
+    assert_eq!(
+        clean_and_restore(LocaleTag::EnAu, "Canberra ACT 2619."),
+        "Canberra ACT 2619."
+    );
+}
+
+#[test]
+fn au_state_and_postcode_win_under_shipped_locale_orders() {
+    let setup_chain = [
+        LocaleTag::EnUs,
+        LocaleTag::DeDe,
+        LocaleTag::DeAt,
+        LocaleTag::DeCh,
+        LocaleTag::EnGb,
+        LocaleTag::EnIe,
+        LocaleTag::EnAu,
+    ];
+    let core_extended_chain = [
+        LocaleTag::Global,
+        LocaleTag::EnUs,
+        LocaleTag::DeDe,
+        LocaleTag::DeAt,
+        LocaleTag::DeCh,
+        LocaleTag::EnAu,
+    ];
+    for locales in [&setup_chain[..], &core_extended_chain[..]] {
+        for original in [
+            "Brisbane QLD 4072, Australia",
+            "Canberra ACT\u{202F}2601 Australia",
+            "Adelaide SA 5000 Australia",
+        ] {
+            let cleaned = clean_and_restore_with_chain(locales, original);
+            let visible = without_tokens(&cleaned);
+            assert!(
+                !visible.contains("QLD") && !visible.contains("ACT") && !visible.contains("SA"),
+                "state survived under {locales:?}: {cleaned:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn function_words_do_not_anchor_prose() {
+    for original in [
+        "The NSW 2023 election result.",
+        "Our NSW 2025 plan.",
+        "Der WA 6100 Bericht.",
+        "Die SA 5000 Stellen.",
+    ] {
+        assert_eq!(clean_and_restore(LocaleTag::EnAu, original), original);
+    }
+    assert_ne!(
+        clean_and_restore(LocaleTag::EnAu, "The Rocks NSW 2000."),
+        "The Rocks NSW 2000."
+    );
+}
+
+#[test]
+fn locality_and_terminal_branches_accept_identical_state_ranges() {
+    let rulepack = Rulepack::load(RulepackSource::Embedded(
+        embedded("core").expect("core rulepack"),
+    ))
+    .expect("core loads");
+    let spec = rulepack
+        .recognizers
+        .iter()
+        .find(|spec| spec.id == "postal.au")
+        .expect("postal.au");
+    let RawMatch::Regex { pattern, .. } = &spec.matcher else {
+        panic!("postal.au must be a regex");
+    };
+    let regex = regex::Regex::new(pattern.as_deref().expect("postal.au pattern"))
+        .expect("valid postal.au regex");
+    for state in ["NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT"] {
+        for code in 0..10_000 {
+            let pair = format!("{state} {code:04}");
+            let locality = format!("Sample {pair} people");
+            let terminal = format!("{pair}.");
+            let first = regex
+                .captures(&locality)
+                .and_then(|captures| captures.get(1))
+                .is_some();
+            let second = regex
+                .captures(&terminal)
+                .and_then(|captures| captures.get(2))
+                .is_some();
+            assert_eq!(first, second, "branch range drift for {pair}");
+        }
+    }
 }
 
 #[test]
