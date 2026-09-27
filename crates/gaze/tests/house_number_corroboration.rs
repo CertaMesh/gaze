@@ -238,3 +238,39 @@ fn a_ner_street_inside_an_organization_licenses_no_number() {
         ["Bäckerei am Musterweg"]
     );
 }
+
+#[test]
+fn a_house_number_is_never_swept_to_other_copies() {
+    // The repeat-value sweep propagates rule-found values. A house number rests on NER
+    // evidence, so another `123a` (long enough for the sweep, which skips shorter
+    // values) in the document or in the next turn stays raw.
+    let pipeline = builder(vec![ner(&["Musterweg"])], &Rows::default())
+        .build()
+        .unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    for (raw, expected) in [
+        (
+            "Musterweg 123a; Zimmer 123a ist frei.",
+            vec!["Musterweg", "123a"],
+        ),
+        ("Zimmer 123a ist frei.", vec![]),
+    ] {
+        let (clean, spans, _) = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text(raw.into()),
+                &[LocaleTag::DeDe, LocaleTag::EnUs],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        let CleanDocument::Text(text) = clean else {
+            panic!("text document")
+        };
+        let tokenized = spans
+            .into_iter()
+            .map(|span| raw[span.raw_span].to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(tokenized, expected, "{text}");
+    }
+}
