@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import compare
+import render
 
 
 def test_native_character_offsets_become_utf8_bytes() -> None:
@@ -53,3 +54,18 @@ def test_contract_v3_uses_reviewed_native_mapping_for_repeat_credit() -> None:
 def test_unmapped_tool_label_fails_closed() -> None:
     with pytest.raises(ValueError, match="unmapped"):
         compare.validate_labels([compare.score.Span(0, 1, "UNKNOWN")], {})
+
+
+def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
+    row = {
+        "leaked_bytes": 1,
+        "false_positive_bytes": 2,
+        "false_positive_bytes_after_gold_gap": None,
+        "latency": {"p50_ms": 3, "p95_ms": 4},
+    }
+    report = {
+        "corpus": {"layers": {"A": {}}},
+        "gaze": {version: {"layers": {"A": row}} for version in ("v1", "v2", "v3")},
+        "tools": {},
+    }
+    assert "| v3 | A | gaze | 1 | 2 | 3.0 | 4.0 |" in render.render(report, "comparison.json")
