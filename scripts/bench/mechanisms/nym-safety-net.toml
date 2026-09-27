@@ -3,4 +3,4 @@
 backend = "nym"
 
 [safety_net.nym]
-model_dir = "/Users/krishankoenig/.local/share/gaze/models/nym-small-int8"
+model_dir = "~/.local/share/gaze/models/nym-small-int8"

@@ -601,6 +601,34 @@ class ModelValidationTests(unittest.TestCase):
 
 
 class PolicyNerSettingsTests(unittest.TestCase):
+    def test_policy_without_ner_records_no_threshold_or_bundle(self) -> None:
+        with mock.patch.object(runner, "validate_required_models") as validate:
+            self.assertEqual(
+                runner.policy_ner_provenance(
+                    Path("/synthetic"), Path("/synthetic/missing-davlan"), 0.3, {}
+                ),
+                (None, []),
+            )
+            validate.assert_not_called()
+
+    def test_policy_with_ner_records_threshold_and_validated_bundle(self) -> None:
+        bundle = {"model_id": "davlan-mbert-ner-hrl-onnx", "observed_sha256": "a" * 64}
+        with mock.patch.object(runner, "validate_required_models", return_value=[bundle]) as validate:
+            self.assertEqual(
+                runner.policy_ner_provenance(
+                    Path("/synthetic"), Path("/synthetic/davlan"), 0.42, {"ner": {}}
+                ),
+                (0.42, [bundle]),
+            )
+            validate.assert_called_once()
+
+    def test_legacy_run_still_requires_davlan(self) -> None:
+        with mock.patch.object(runner, "validate_required_models", side_effect=runner.ModelBundleError("missing")):
+            with self.assertRaisesRegex(runner.ModelBundleError, "missing"):
+                runner.policy_ner_provenance(
+                    Path("/synthetic"), Path("/synthetic/missing-davlan"), 0.3, None
+                )
+
     def test_policy_without_ner_keeps_cli_defaults(self) -> None:
         model = Path("/synthetic/default-davlan")
         self.assertEqual(

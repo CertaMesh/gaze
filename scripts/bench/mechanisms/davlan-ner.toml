@@ -1,4 +1,4 @@
 # Section `gaze setup` adds for the default Davlan NER model.
 [ner]
-model_dir = "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl"
+model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
 threshold = 0.3

@@ -151,7 +151,7 @@
       "added_in": "v0.15",
       "policy_delta": {
         "file": "scripts/bench/mechanisms/nym-safety-net.toml",
-        "sha256": "b905300f927d2e9d14d156ecdacc69346ed479a678caad1e794e2e1abc0acf00"
+        "sha256": "8cb106627a4a7ff5effb7a94731039a26a893fa0807d7d73d386322044e3c88f"
       },
       "measurements": [
         {
@@ -339,7 +339,7 @@
       "availability_basis": "setup default",
       "policy_delta": {
         "file": "scripts/bench/mechanisms/davlan-ner.toml",
-        "sha256": "250c36638da9d6681ed966c6d37929463e082a785a6a208cd72036e9030c6d24"
+        "sha256": "612362b0a1cada762ed4aaf84052c3263c5952a4c51474b8f7f8d190b6eabc8b"
       },
       "measurements": [
         {
