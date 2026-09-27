@@ -713,6 +713,23 @@ COUNTERWEIGHT_EXEMPT: dict[tuple[str, str, str], str] = {
 }
 
 
+# The counterweight families that price a checksum-less rule for each label in
+# CREDITABLE_INVALID_LABELS. Crediting invalid gold must never pay for false
+# positives on its benign twin shape, so `decide` fails any rise there with no
+# net-bytes offset. Derived from COUNTERWEIGHTS: card -> ref_number_16; IBAN has
+# none by design (its COUNTERWEIGHT_EXEMPT reason: a mod-97-failing IBAN shape
+# has no common benign use).
+CREDIT_GUARD_FAMILIES: dict[str, tuple[str, ...]] = {
+    label: tuple(sorted({
+        counterweight
+        for (family, _surface, validity), counterweight in COUNTERWEIGHTS.items()
+        if validity == INVALID
+        and next(f.label for f in IDENTIFIER_FAMILIES if f.name == family) == label
+    }))
+    for label in sorted(CREDITABLE_INVALID_LABELS)
+}
+
+
 def is_context_free_only(family: str, surface: str, validity: str) -> bool:
     """Layer A gold that no cue and no passing validator can anchor."""
     return surface == "prose_nocue" and (validity == INVALID or family == "dob")
@@ -1863,8 +1880,11 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
     per label from the validator split. Layers D and R have no such gold.
     The labels in `CREDITABLE_INVALID_LABELS` are the exception: their
     invalid gold is gated like valid gold (user ruling 2026-09-27).
+    Each row also carries `guard_false_positive`: layer D false-positive bytes
+    per CREDIT_GUARD_FAMILIES family (empty for other layers).
     """
     family_labels = {family.name: family.label for family in IDENTIFIER_FAMILIES}
+    guard_families = sorted({f for families in CREDIT_GUARD_FAMILIES.values() for f in families})
     totals: dict[str, dict[str, int]] = {}
     for layer in GATE_LAYERS:
         run = _layer_run(scorecard, layer, config)
@@ -1909,6 +1929,16 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
                 if block.get("production_recall_by_gold_validity")
                 and label not in CREDITABLE_INVALID_LABELS
             )
+        guard_false_positive: dict[str, int] = {}
+        if layer == LAYER_LOOKALIKES:
+            cells = run.get("per_cell")
+            if not isinstance(cells, dict):
+                raise LayerError("layer D has no per_cell; the credit guard cannot be checked")
+            for family in guard_families:
+                blocks = [block for cell, block in cells.items() if cell.split("|")[1] == family]
+                if not blocks:
+                    raise LayerError(f"layer D has no {family} cells; the credit guard cannot be checked")
+                guard_false_positive[family] = sum(block["utf8_bytes"]["false_positive"] for block in blocks)
         totals[layer] = {
             "attempted": availability["attempted_documents"],
             "documents": contract["documents"],
@@ -1919,8 +1949,27 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
             "failed_closed": availability["failed_closed_documents"],
             "restore_exact": contract["restore_exact_documents"],
             "manifest_valid": contract["manifest_valid_documents"],
+            "guard_false_positive": guard_false_positive,
         }
     return totals
+
+
+def credit_guard_rise(base: Mapping[str, Mapping[str, object]],
+                      candidate: Mapping[str, Mapping[str, object]]) -> list[str]:
+    """CREDIT_GUARD_FAMILIES families whose layer D FP bytes rose. Fails closed
+    when either side lacks a guarded family's count."""
+    rose = []
+    for label, families in sorted(CREDIT_GUARD_FAMILIES.items()):
+        for family in families:
+            counts = []
+            for side, totals in (("base", base), ("candidate", candidate)):
+                guard = totals[LAYER_LOOKALIKES].get("guard_false_positive")
+                if not isinstance(guard, Mapping) or type(guard.get(family)) is not int:
+                    raise LayerError(f"{side} has no layer D {family} FP count; the credit guard cannot be checked")
+                counts.append(guard[family])
+            if counts[1] > counts[0]:
+                rose.append(f"{family} ({label}: {counts[0]} -> {counts[1]})")
+    return rose
 
 
 def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mapping[str, int]]) -> dict[str, object]:
@@ -1966,6 +2015,7 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         or r["headline_leaked_candidate"] > r["headline_leaked_base"]
     ]
     refusal_rise = [l for l, r in rows.items() if r["failed_closed_candidate"] > r["failed_closed_base"]]
+    guard_rise = credit_guard_rise(base, candidate)
     restore_drop = [l for l, r in rows.items() if r["restore_exact_candidate"] < r["restore_exact_base"]]
     manifest_drop = [l for l, r in rows.items() if r["manifest_valid_candidate"] < r["manifest_valid_base"]]
     restore_failure_rise = [l for l, r in rows.items()
@@ -1995,6 +2045,11 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         verdict, reason = "fail", f"invalid-manifest documents rose in {manifest_failure_rise}"
     elif leak_rise:
         verdict, reason = "fail", f"leaked bytes rose in {leak_rise}"
+    elif guard_rise:
+        verdict, reason = "fail", (
+            f"credit guard: FP bytes rose on {guard_rise}, the benign twin of credited "
+            "checksum-invalid gold; no net-bytes gain offsets it"
+        )
     elif leak_drop > 0:
         if fp_rise < leak_drop:
             verdict, reason = "pass", f"leaked bytes fell by {leak_drop}, FP bytes changed by {fp_rise:+d}"
@@ -2019,7 +2074,13 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         verdict, reason = "fail", f"failed-closed documents fell in {refusal_drop}, without an eligible gain"
     else:
         verdict, reason = "fail", "no layer's leaked bytes fell and FP bytes did not fall"
-    return {"verdict": verdict, "reason": reason, "summary": summary, "layers": rows}
+    credit_guard = {
+        family: {"base": base[LAYER_LOOKALIKES]["guard_false_positive"][family],
+                 "candidate": candidate[LAYER_LOOKALIKES]["guard_false_positive"][family]}
+        for families in CREDIT_GUARD_FAMILIES.values() for family in families
+    }
+    return {"verdict": verdict, "reason": reason, "summary": summary, "layers": rows,
+            "credit_guard": credit_guard}
 
 
 def _scorecard_policy(scorecard: Mapping[str, object], label: str) -> tuple[dict[str, object], str]:
@@ -2164,6 +2225,12 @@ def gate_markdown(result: Mapping[str, object]) -> str:
                 f"{r['manifest_valid_base']} | {r['manifest_valid_candidate']} | "
                 f"{r['twin_leaked_base']} | {r['twin_leaked_candidate']} |"
             )
+        guard = result.get("credit_guard", {})
+        if guard:
+            lines += ["", "Credit guard (layer D FP bytes on the benign twin of credited "
+                      "checksum-invalid gold; any rise fails): " + ", ".join(
+                          f"{family} {counts['base']} -> {counts['candidate']}"
+                          for family, counts in guard.items())]
         lines += ["", "Gated leak excludes gold that fails its checksum (layer A twins, layer C "
                   "validator-failed Kiji gold), except IBAN and card numbers, which are gated; "
                   "the excluded bytes are reported in the twin columns. "
