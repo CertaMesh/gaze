@@ -586,14 +586,21 @@ impl Session {
         let Some(matcher) = build_sweep_matcher(&captured)? else {
             return Ok(None);
         };
+        let generation = captured.generation;
+        // Release the snapshot so installing the cache can skip the copy.
+        drop(captured);
         let mut boundary = self
             .state
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if boundary.generation == captured.generation {
-            let mut next = (**boundary).clone();
-            next.sweep_matcher_cache = Some(Arc::clone(&matcher));
-            *boundary = Arc::new(next);
+        if boundary.generation == generation {
+            if let Some(state) = Arc::get_mut(&mut boundary) {
+                state.sweep_matcher_cache = Some(Arc::clone(&matcher));
+            } else {
+                let mut next = (**boundary).clone();
+                next.sweep_matcher_cache = Some(Arc::clone(&matcher));
+                *boundary = Arc::new(next);
+            }
         }
         Ok(Some(matcher))
     }
@@ -2555,6 +2562,31 @@ mod tests {
             ManifestEvidence::Anchored,
         );
         assert!(session.sweep_matcher().expect("matcher").is_some());
+    }
+
+    /// Installing the sweep-matcher cache must not copy the session state
+    /// when no reader holds a snapshot (todo 3895).
+    #[test]
+    fn sweep_matcher_cache_installs_in_place() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        session
+            .tokenize(&PiiClass::Name, "Anna Weber")
+            .expect("token");
+        session.record_evidence(
+            None,
+            &PiiClass::Name,
+            "Anna Weber",
+            ManifestEvidence::Anchored,
+        );
+        let before = Arc::as_ptr(&session.state_snapshot());
+        let built = session.sweep_matcher().expect("matcher").expect("some");
+        let state = session.state_snapshot();
+        assert_eq!(Arc::as_ptr(&state), before);
+        let cached = state.sweep_matcher_cache.as_ref().expect("cached");
+        assert!(Arc::ptr_eq(cached, &built));
+        drop(state);
+        let again = session.sweep_matcher().expect("matcher").expect("some");
+        assert!(Arc::ptr_eq(&again, &built));
     }
 
     #[test]
