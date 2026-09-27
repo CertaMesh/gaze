@@ -35,7 +35,7 @@ pub(crate) fn lower_pattern_template(
             .into());
         };
         let placeholder = &after[..end];
-        if !is_template_placeholder(placeholder) {
+        if is_unicode_class_escape(&lowered) || !is_template_placeholder(placeholder) {
             lowered.push('{');
             lowered.push_str(placeholder);
             lowered.push('}');
@@ -68,6 +68,19 @@ pub(crate) fn lower_pattern_template(
     }
     lowered.push_str(rest);
     Ok(lowered)
+}
+
+/// True when `lowered` ends in the `\p` or `\P` of a regex Unicode class (`\p{Lu}`), so the
+/// brace that follows opens the class name, not a placeholder. An even run of backslashes
+/// before the `p` is escaped backslashes and a literal `p`.
+fn is_unicode_class_escape(lowered: &str) -> bool {
+    let Some(head) = lowered
+        .strip_suffix('p')
+        .or_else(|| lowered.strip_suffix('P'))
+    else {
+        return false;
+    };
+    head.bytes().rev().take_while(|byte| *byte == b'\\').count() % 2 == 1
 }
 
 fn is_template_placeholder(value: &str) -> bool {

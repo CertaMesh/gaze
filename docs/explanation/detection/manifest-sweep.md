@@ -87,13 +87,28 @@ Each value has one shape, and each shape owns its precision floor.
 |---|---|---|
 | Multi-word, or letters mixed with digits or punctuation | `Maria Kowalski`, `DE44 5001`, `N1234567A` | Any case; any whitespace run (space, tab, line break, NBSP) matches any whitespace run. At least 4 non-space characters. |
 | Digit run (digits with spaces, `-`, `.`, `/` only) | `030 1234567`, `10115` | Any whitespace run matches any whitespace run. **At least 6 digits.** A four-digit AT/CH postcode or a bare five-digit postal code is found only through the cue or city next to it; that anchor is its whole precision, so copying the bare digits would turn years and room numbers into postcodes (`2024 Neuchâtel`, then `Im Jahr 2024`). |
-| One alphabetic word | `Kowalski`, `KOWALSKI`, `Albrecht-Quaye` | As written (a byte-identical copy carries the source's own evidence, so `KOWALSKI` sweeps `KOWALSKI`) and in title case (`Kowalski`). At least 4 characters. |
-| A part of a multi-word `Name` value | `Maria` of `Maria Kowalski` | As one word, but only in a spelling that starts upper-case, at least 3 letters. |
+| One alphabetic word | `Kowalski`, `KOWALSKI`, `Albrecht-Quaye` | As written (a byte-identical copy carries the source's own evidence, so `KOWALSKI` sweeps `KOWALSKI`), in title case (`Kowalski`) and in upper case (`KOWALSKI`). At least 4 characters. |
+| A part of a multi-word `Name` value | `Maria` of `Maria Kowalski` | As one word, but only in a spelling that starts upper-case (as written, title case, upper case), at least 3 letters. |
+| A run of two or more adjacent parts of a multi-word `Name` value | `Tobias Brenner` of `Herr Tobias Brenner` | Like a multi-word value: any case, any whitespace run. At least one part of the run must be a name on its own (3+ letters, not on the common-word list), so `grace hall` of `Grace Hall Kowalski` is not swept. Built for values of up to six parts. |
 | A collision-family value (`family:<name>`) | | Byte-exact only, at least 4 non-space characters. |
 
 Every copy must stand on word edges under the shared
 `gaze_types::is_inside_word` rule, and a copy inside a URL-shaped run
-(a URL scheme or web prefix) is skipped. A single word on a closed list of
+(a URL scheme or web prefix) is skipped. A `Name` copy then grows over name
+parts glued to it by a hyphen or apostrophe
+(`gaze_types::extend_over_name_joiners`): `jorunn vasquez-ellery` is one copy
+of `Jorunn Vasquez`, and `O'Brien` one copy of the part `Brien`. Stopping at
+the source's edge would ship `-ellery` raw. A forward continuation needs two
+letters, so a possessive `'s` stays outside the token; a continuation that
+runs into a digit is not taken. The growth does not ask whether the glued word
+is a name, so `Kowalski-follow-up` becomes one token over `-follow-up` too:
+fail-closed, a few bytes (review F3 on #691).
+
+Why runs: a cue-found value keeps its cue's honorific
+(`From: Herr Tobias Brenner <…>` yields `Herr Tobias Brenner`), so the bare
+name `tobias brenner` or `TOBIAS BRENNER` is not a spelling of the whole
+value. Before runs, only title-case parts matched, and the all-caps copy
+shipped raw (solo todo 3897). A single word on a closed list of
 common words that are also names is never swept: months, weekdays, English
 names that are everyday words (`Will`, `Mark`, `Rose`, `May`), English
 surnames that are everyday verbs or nouns (`Grant`, `Price`, `Banks`,
@@ -104,18 +119,57 @@ noun and English every sentence start, so title case alone cannot tell
 The cost is recall: `Herr Richter` is not swept from a `Thomas Richter`
 header. The full value `Thomas Richter` still is.
 
+Two more closed lists make a word ordinary, so it is never a part on its own
+and never the distinctive part of a run:
+
+- **Particles and articles**, compiled per naming convention for every
+  setup-policy locale and the common particle cultures: German (`von`, `zu`,
+  `der`, `auf`, ...), Dutch tussenvoegsels (`van`, `de`, `het`, `op`, `ter`,
+  `uit`, ...), French (`de`, `du`, `la`, `le`), Spanish and Catalan (`del`,
+  `las`, `los`, `y`), Portuguese (`da`, `dos`, `e`), Italian (`di`, `della`,
+  `degli`, ...), Scandinavian (`af`, `av`), Arabic and Hebrew (`al`, `bin`,
+  `ibn`, `abu`, ...), Gaelic and Welsh (`mac`, `ap`, ...). The full list and
+  its sources are on `PARTICLES` in `crates/gaze/src/sweep.rs`; a test
+  enumerates every particle and particle pair. `Anna von der Heide` must not
+  turn every German `von der`, nor `Carmen de los Rios` every `de los`, into
+  a token. `von der Leyen` is still swept in any case through its distinctive
+  `leyen`. `ben` and `nic` are left off: `Ben` and `Nic` are common given
+  names, and a particle never sweeps alone. The cost: `VAN DER BERG` has no
+  distinctive part (`berg` is a common word), so a lower-case or all-caps copy
+  relies on NER.
+- **Organization and role words** (`support`, `team`, `service`, `info`,
+  `paket`, `kundenservice`, `noreply`, `newsletter`, also as a hyphen piece
+  as in `IT-Support`).
+
+A value shaped like an organization never sweeps single parts: a CamelCase
+part (`GitHub`), or all-caps parts mixed with others (`DHL Paket`). The whole
+value and its runs still sweep, so `DHL Paket` is found again but `Paket` is
+not. A CamelCase single word keeps its written and title-case spellings but
+gets no upper case (`GitHub` does not sweep `GITHUB`). A wholly all-caps value
+(`MARIA KOWALSKI`) is a shouted personal name and keeps its parts, so a
+wholly all-caps organization of unlisted words (`BLUE HARBOR`) also sweeps
+its parts (`Blue`): fail-closed, accepted to keep `Thanks, Maria` protected. The cost:
+a CamelCase surname (`Ronald McDonald`) sweeps as a whole and in runs, not
+as `McDonald` alone.
+
 Case folding keeps a map from every folded byte back to the character it came
 from, and a copy must start and end on whole characters. Turkish `İ` lowers to
 two scalars; the copy still covers exactly its own bytes. Default Unicode case
 mapping lowers `I` to `i`, so a dotless `ı` in a value does not match an
 upper-case `I` in the copy.
 
-**Stated leaks.** A lone lower-case part (`thanks maria`) stays raw: matching
+**Stated leaks.** A lone lower-case or mixed-case part (`thanks maria`,
+`tOBIAS`) stays raw: matching
 lower-case single words would tokenize ordinary words that happen to be
 names. A surname part on the common-word list stays raw on its own. A digit
 run under six digits is not swept. A copy in an earlier proxy field than its
 source stays raw (see above). A value no rule found (only NER, or nothing)
-seeds no sweep.
+seeds no sweep. An honorific plus a name made only of common words stays raw
+in lower case: `From: Herr Frank Wolf <…>` then `frank wolf` has no
+distinctive part, so no run, and the whole-value match needs `herr`
+(same for `Mr Bill Gates`). A French-convention name with an all-caps surname
+(`Jean DUPONT`) reads as organization-shaped, so `DUPONT a signé` stays raw
+unless NER finds it (as before this rule).
 
 ## Token identity and restore
 
@@ -145,7 +199,8 @@ but none of its values seed the sweep, because their tier is unknown.
 Every swept copy writes one audit row with `recognizer_id` and
 `provenance_stage` `manifest_sweep`, `decided_by: manifest_sweep`
 (`ConflictTier::ManifestSweep`), and `provenance_merged_from` naming the link:
-`manifest_sweep:exact`, `manifest_sweep:variant` or `manifest_sweep:part`.
+`manifest_sweep:exact`, `manifest_sweep:variant` or `manifest_sweep:part`
+(a part or a run of parts).
 The row never carries the source token or value, per the audit contract. The
 daemon overwrites `provenance_stage` with `daemon` as it does for every row;
 `decided_by` still names the sweep.

@@ -2129,6 +2129,75 @@ pub fn is_inside_word(text: &str, at: usize) -> bool {
     before.is_some_and(is_word_char) && after.is_some_and(is_word_char)
 }
 
+/// `span` grown outward until neither edge cuts a word under [`is_inside_word`].
+///
+/// A model reports spans on sub-word pieces; an edge between two pieces leaves the rest of the
+/// word raw (`jorunn vas` of `jorunn vasquez`). Out-of-range or off-boundary spans come back
+/// unchanged.
+pub fn expand_to_word_edges(text: &str, span: Range<usize>) -> Range<usize> {
+    if span.start > span.end
+        || !text.is_char_boundary(span.start)
+        || !text.is_char_boundary(span.end)
+    {
+        return span;
+    }
+    let mut start = span.start;
+    while is_inside_word(text, start) {
+        start -= text[..start].chars().next_back().map_or(0, char::len_utf8);
+    }
+    let mut end = span.end;
+    while is_inside_word(text, end) {
+        end += text[end..].chars().next().map_or(0, char::len_utf8);
+    }
+    start..end
+}
+
+/// `span` grown over the name parts glued to it by a hyphen or apostrophe.
+///
+/// A double surname or a particle is one name: a copy or model span that stops at
+/// `Vasquez` in `Vasquez-Ellery` or starts at `Brien` in `O'Brien` leaves the rest raw.
+/// Forward, a continuation needs at least two letters, so a possessive `'s` is not taken.
+/// Backward, one letter is enough (`O'`, `d'`). A continuation that runs into a digit is not
+/// a name part and is not taken. Out-of-range or off-boundary spans come back unchanged.
+pub fn extend_over_name_joiners(text: &str, span: Range<usize>) -> Range<usize> {
+    const JOINERS: [char; 3] = ['-', '\'', '\u{2019}'];
+    if span.start > span.end
+        || !text.is_char_boundary(span.start)
+        || !text.is_char_boundary(span.end)
+    {
+        return span;
+    }
+    let mut end = span.end;
+    loop {
+        let mut rest = text[end..].chars();
+        if !rest.next().is_some_and(|ch| JOINERS.contains(&ch)) {
+            break;
+        }
+        let letters = rest.take_while(|ch| ch.is_alphabetic()).collect::<Vec<_>>();
+        let joiner_len = text[end..].chars().next().map_or(0, char::len_utf8);
+        let next = end + joiner_len + letters.iter().map(|ch| ch.len_utf8()).sum::<usize>();
+        if letters.len() < 2 || is_inside_word(text, next) {
+            break;
+        }
+        end = next;
+    }
+    let mut start = span.start;
+    loop {
+        let mut back = text[..start].chars().rev();
+        if !back.next().is_some_and(|ch| JOINERS.contains(&ch)) {
+            break;
+        }
+        let letters = back.take_while(|ch| ch.is_alphabetic()).collect::<Vec<_>>();
+        let joiner_len = text[..start].chars().next_back().map_or(0, char::len_utf8);
+        let prev = start - joiner_len - letters.iter().map(|ch| ch.len_utf8()).sum::<usize>();
+        if letters.is_empty() || is_inside_word(text, prev) {
+            break;
+        }
+        start = prev;
+    }
+    start..end
+}
+
 /// The one word-character rule behind [`is_inside_word`] and
 /// [`word_run_extends_identifier`]: Unicode alphanumeric. Both edge checks must agree on what a
 /// word is, so neither may grow its own predicate.
@@ -4335,5 +4404,72 @@ mod emitted_token_origin_tests {
         let whole = EmittedTokenSpan::new(12..18, 27..33, PiiClass::Email);
         let fragment = EmittedTokenSpan::residual_fragment(12..18, 27..33, PiiClass::Email);
         assert_ne!(whole, fragment);
+    }
+}
+
+#[cfg(test)]
+mod name_edge_tests {
+    use super::{expand_to_word_edges, extend_over_name_joiners};
+
+    fn grown(
+        text: &str,
+        part: &str,
+        grow: fn(&str, std::ops::Range<usize>) -> std::ops::Range<usize>,
+    ) -> String {
+        let start = text.find(part).expect("part in text");
+        text[grow(text, start..start + part.len())].to_string()
+    }
+
+    #[test]
+    fn word_edges_take_the_whole_word_and_nothing_past_it() {
+        assert_eq!(
+            grown(
+                "ping jorunn vasquez-ellery",
+                "jorunn vas",
+                expand_to_word_edges
+            ),
+            "jorunn vasquez"
+        );
+        assert_eq!(grown("x JORUNN y", "ORUNN", expand_to_word_edges), "JORUNN");
+        assert_eq!(
+            grown("Müllerstraße 5", "llerstr", expand_to_word_edges),
+            "Müllerstraße"
+        );
+        assert_eq!(grown("a b", "a", expand_to_word_edges), "a");
+        assert_eq!(expand_to_word_edges("abc", 5..9), 5..9);
+    }
+
+    #[test]
+    fn joiners_take_glued_name_parts_on_either_side() {
+        let grow = extend_over_name_joiners;
+        assert_eq!(
+            grown("ping vasquez-ellery now", "vasquez", grow),
+            "vasquez-ellery"
+        );
+        assert_eq!(
+            grown("ping ellery-vasquez now", "vasquez", grow),
+            "ellery-vasquez"
+        );
+        assert_eq!(
+            grown("Anna-Lena Kim-Park", "Lena Kim", grow),
+            "Anna-Lena Kim-Park"
+        );
+        assert_eq!(grown("O'Brien said", "Brien", grow), "O'Brien");
+        assert_eq!(
+            grown("d\u{2019}Artagnan", "Artagnan", grow),
+            "d\u{2019}Artagnan"
+        );
+    }
+
+    #[test]
+    fn joiners_refuse_possessives_digits_and_bare_joiners() {
+        let grow = extend_over_name_joiners;
+        assert_eq!(grown("Vasquez's desk", "Vasquez", grow), "Vasquez");
+        assert_eq!(grown("Vasquez\u{2019}s desk", "Vasquez", grow), "Vasquez");
+        assert_eq!(grown("Vasquez-2024", "Vasquez", grow), "Vasquez");
+        assert_eq!(grown("Vasquez-ab12", "Vasquez", grow), "Vasquez");
+        assert_eq!(grown("Vasquez - Ellery", "Vasquez", grow), "Vasquez");
+        assert_eq!(grown("Vasquez-", "Vasquez", grow), "Vasquez");
+        assert_eq!(grown("1-Vasquez", "Vasquez", grow), "Vasquez");
     }
 }

@@ -496,6 +496,9 @@ pattern_template = '''(?m)^(?:{locale.salutations}):\s+([A-Z][a-z]+)$'''
 capture_groups = [1]
 ```
 
+A regex Unicode class keeps its braces: `\p{Lu}` and `\P{L}` in a template
+are passed to the regex unchanged, not read as placeholders.
+
 If a template references an unknown locale bucket, assembly fails closed with
 `PolicyError::UnknownLocaleBucket`. The legacy `{locale_email_headers}`
 placeholder remains a v0.4.2 compatibility alias for

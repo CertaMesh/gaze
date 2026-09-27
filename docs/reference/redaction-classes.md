@@ -91,7 +91,7 @@ remaining column is checked against the loaded rulepack by
 | Embedded names | Recognizer id | Matcher | What it matches | Class | Locales | Validator | Normalizer | Safety tier | safe_default | Base | Priority |
 |---|---|---|---|---|---|---|---|---|---|---:|---:|
 | `core, core-extended` | `email.global` | `regex` | Structurally valid email addresses, including reserved synthetic example domains | `Email` | `global` | `email_rfc` | `email_canonical` | `safe_default` | yes | 0.70 | 90 |
-| `core, core-extended` | `email.header.name` | `regex` | Quoted or capitalized display names before an angle-bracket address in email headers | `Name` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 100 |
+| `core, core-extended` | `email.header.name` | `regex` | Quoted or capitalized display names (all-caps, diacritic, hyphen- or apostrophe-joined parts) before an angle-bracket address in email headers | `Name` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 100 |
 | `core, core-extended` | `email.header.name.paren` | `regex` | Parenthesized display names following an email address in headers or address lists | `Name` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 100 |
 | `core, core-extended` | `name.forward_marker` | `anchored_match` | Person-name-shaped text after locale-provided forwarded-message cues | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
 | `core, core-extended` | `name.agent_recipient` | `anchored_match` | Person-name-shaped text after locale-provided agent-recipient cues | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
