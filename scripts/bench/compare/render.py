@@ -66,6 +66,9 @@ def render(report: dict[str, object], source: str) -> str:
     versions = ("v3", "v2", "v1")
     if set(gaze) != set(versions):
         raise ValueError("public comparison needs a Gaze scorecard for v3, v2, and v1")
+    required = {"presidio-en", "presidio-en-de", "gliner"}
+    if not required.issubset(tools) or ("opf" not in tools and "opf" not in report.get("skipped", {})):
+        raise ValueError("public comparison needs every configured competitor or an explicit OPF skip")
     layer_ids = list(report["corpus"]["layers"])
     for version in versions:
         for layer in layer_ids:
