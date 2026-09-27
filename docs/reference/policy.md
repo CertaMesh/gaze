@@ -380,6 +380,11 @@ emitted. This guard sees text outside `capture_groups`; an invalid guard
 regex fails pipeline assembly. It is unavailable in
 `[[policy.custom_recognizers]]`.
 
+When same-class spans strictly contain one another, the longer span wins
+regardless of score or rule priority. This protects every byte of the shorter
+match but can also include surrounding text. Exact and partial overlaps keep
+their normal precedence rules.
+
 `locale_basis` accepts two values:
 
 | Value | Meaning |

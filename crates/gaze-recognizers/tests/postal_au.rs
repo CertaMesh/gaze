@@ -2,10 +2,12 @@
 
 use gaze::RawMatch;
 use gaze::{
-    Action, CleanDocument, Context, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
-    RawDocument, RuleSpec, Rulepack, RulepackSource, Scope, Session,
+    Action, CleanDocument, ConflictTier, Context, DictionaryBundle, LocaleChain, LocaleTag,
+    PiiClass, Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec,
+    Rulepack, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
+use std::sync::{Arc, Mutex};
 
 #[path = "support/token_assertions.rs"]
 mod token_assertions;
@@ -62,6 +64,15 @@ fn clean_and_restore_with_chain(locales: &[LocaleTag], original: &str) -> String
 
 fn clean_and_restore(locale: LocaleTag, original: &str) -> String {
     clean_and_restore_with_chain(&[locale], original)
+}
+
+struct CapturingLogger(Arc<Mutex<Vec<RedactionEntry>>>);
+
+impl RedactionLogger for CapturingLogger {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        self.0.lock().expect("log lock").push(entry.clone());
+        Ok(())
+    }
 }
 
 #[test]
@@ -166,6 +177,45 @@ fn au_state_and_postcode_win_under_shipped_locale_orders() {
             "postal.at_ch must still protect an out-of-range AU code under {locales:?}: {invalid_act:?}"
         );
     }
+}
+
+#[test]
+fn shipped_chain_audits_the_enclosed_postal_loser() {
+    let locales = [LocaleTag::DeAt, LocaleTag::EnAu];
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline =
+        pipeline_for(&locales).with_redaction_logger(CapturingLogger(Arc::clone(&entries)));
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let original = "Brisbane QLD 4072, Australia";
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(original.to_string()),
+            &locales,
+            &DictionaryBundle::default(),
+        )
+        .expect("clean");
+    let CleanDocument::Text(cleaned) = clean else {
+        panic!("expected text");
+    };
+    assert!(!without_tokens(&cleaned).contains("QLD 4072"));
+    assert_eq!(
+        pipeline
+            .restore_strict_text(&session, &cleaned)
+            .expect("restore"),
+        original
+    );
+    let entries = entries.lock().expect("log lock");
+    assert!(entries
+        .iter()
+        .any(|entry| !entry.conflict_loser && entry.recognizer_id.as_deref() == Some("postal.au")));
+    let loser = entries
+        .iter()
+        .find(|entry| {
+            entry.conflict_loser && entry.recognizer_id.as_deref() == Some("postal.at_ch")
+        })
+        .expect("audit row for enclosed postcode");
+    assert_eq!(loser.decided_by, ConflictTier::SameClassContainment);
 }
 
 #[test]
