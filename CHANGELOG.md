@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the next turn of a daemon or proxy session (solo todo 3849). See
   [`docs/explanation/detection/manifest-sweep.md`](docs/explanation/detection/manifest-sweep.md).
 
+- **House numbers beside a street the NER model found are tokenized**
+  (solo todo #3670). Every release up to and including v0.15.1 tokenized
+  `Musterweg` in `Musterweg 17b` and `Example Street` in `17 Example Street`,
+  but sent the house number raw, because the location span ends at the
+  street word.
+
 ### Added
 
 - Repeat-value sweep after resolve and before the safety net. Byte-identical
@@ -55,6 +61,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **[bundle-tokenization-drift] `core` excludes documentation IPs.** The
   no-policy snapshot drops RFC 5737 IPv4 and RFC 3849 IPv6 detections; nearby
   non-documentation addresses still tokenize and restore.
+- **A NER street licenses the house number beside it.** After conflict
+  resolution, a winning NER location whose last word is a street word of an
+  active locale tokenizes the adjacent house number (`17`, `17b`, `9A`,
+  `12-14`, `12/3`) as its own `location` token with recognizer id
+  `address.house_number.street_corroborated`. German writes the number after
+  a street ending (`-straße`, `-weg`, `-platz`, …, from
+  `[locale.street_suffixes_number_after]` in `locale-de`); English writes it
+  before a street type (`Street`, `Road`, `Drive`, …, from
+  `[locale.street_types_number_before]` in `locale-en`). A city, a bare street
+  word, a number across a line break, tab or table border, a five-digit
+  number, a bare year (1900–2099) after a German street (`Bahnhofstraße
+  2025`), and a decimal or time never qualify. A spaced range before an
+  English street (`12 - 14 Harbor Road`) is covered whole. Only policies that load a
+  locale pack with these lists and run NER change: `core` alone, or a policy
+  without `[ner]`, tokenizes exactly what it did before. Known limit: the
+  lexicon cannot tell a street from a title the NER model mislabels as a
+  location (`Chapter 12 Civil Court`), and a year right before an English
+  street (`In 2019 Abbey Road …`) is tokenized.
 
 - **`birth_date.cue` reads birth cues in prose, tool-call JSON and
   `key=value` logs.** Cues cover en, de, fr, nl, da and es (`DOB`,

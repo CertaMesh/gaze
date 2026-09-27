@@ -13,6 +13,23 @@ struct TestSupportBackend;
 
 struct ErrorBackend;
 
+/// Marks the street `Musterweg` as a location wherever it occurs, for house-number tests that
+/// must run through the real `NerRecognizer` and its real recognizer id.
+struct StreetBackend;
+
+impl NerBackend for StreetBackend {
+    fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+        Ok(input
+            .match_indices("Musterweg")
+            .map(|(start, street)| NerSpanResult {
+                span: start..start + street.len(),
+                class: PiiClass::Location,
+                score: 0.90,
+            })
+            .collect())
+    }
+}
+
 /// Stands in for the pinned Davlan bundle in `gaze index` tests: fixed person and organization
 /// names, found wherever they occur.
 struct IndexFixtureBackend;
@@ -78,6 +95,7 @@ pub(crate) fn load_test_support_recognizer(
         Some("__gaze_test_fixed_ner") => Arc::new(TestSupportBackend),
         Some("__gaze_test_error_ner") => Arc::new(ErrorBackend),
         Some("__gaze_test_index_ner") => Arc::new(IndexFixtureBackend),
+        Some("__gaze_test_street_ner") => Arc::new(StreetBackend),
         _ => return None,
     };
 

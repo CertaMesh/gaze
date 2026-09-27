@@ -59,7 +59,9 @@ pub use defaults::CorePipeline;
 pub use defaults::CorePipelineConfig;
 pub use error::BuildError;
 pub use locale::locale_gated_activation_locales;
-pub(crate) use locale::{merged_locale_vocab, register_anchor_cue_bundles};
+pub(crate) use locale::{
+    merged_locale_vocab, register_anchor_cue_bundles, register_street_lexicons,
+};
 pub use policy_inputs::{resolve_policy_inputs, ResolvedPolicyInputs};
 
 /// Assemble a pipeline from a loaded [`gaze::Policy`], matching the CLI code path.
@@ -225,6 +227,7 @@ pub fn build_pipeline_builder(
         &registered_dictionaries,
     )?;
     register_anchor_cue_bundles(&mut builder, rulepacks, active_locales);
+    register_street_lexicons(&mut builder, rulepacks, active_locales);
     ner::register_ner(&mut builder, policy, ner_threshold)?;
 
     if builder.registered_recognizers() == 0 {
