@@ -108,15 +108,39 @@ const COMMON_WORDS: &[&str] = &[
     "short", "spring", "steel", "swift", "walker", "street", "gates", "means",
 ];
 
-/// Name particles and articles (`von der`, `van den`, `de la`). They sit inside
-/// names but are everyday words on their own, so a part or a run made only of
-/// them is never a name: `von der` of `Anna von der Heide` must not sweep
-/// `Unterlagen von der Bank` (review F1 on #691).
+/// Name particles and articles. They sit inside names but are everyday words
+/// on their own, so a part or a run made only of them is never a name:
+/// `von der` of `Anna von der Heide` must not sweep `Unterlagen von der Bank`
+/// (review F1 and re-verify R1 on #691).
+///
+/// Compiled per naming convention, covering every setup-policy locale and the
+/// common particle cultures. Each is a closed grammatical set, so the list
+/// is by convention, not by corpus frequency:
+/// - German nobiliary and locative particles: von, vom, zu, zum, zur, am, an,
+///   auf, im, in, der, den, dem, des.
+/// - Dutch and Flemish tussenvoegsels: van, de, der, den, het, 't, ten, ter,
+///   te, op, in, uit, aan, bij, over, voor, onder.
+/// - French: de, du, des, la, le, les (`d'` is a joiner, not a part).
+/// - Spanish and Catalan: de, del, la, las, los, y, i.
+/// - Portuguese: da, das, do, dos, de, e.
+/// - Italian: di, da, dal, dalla, dalle, dei, degli, del, della, delle, dello,
+///   lo.
+/// - Scandinavian: af, av.
+/// - Arabic and Hebrew patronymics and articles: al, el, bin, ibn, bint, abu,
+///   abd, bat, bar. Not `ben`: `Ben` is a common English given name, and a
+///   particle is never swept alone, so listing it would ship `Thanks, Ben`
+///   raw; lower-case `ben` is not an everyday word to protect.
+/// - Gaelic and Welsh patronymics: mac, mc, ni, ap, ab, ferch. Not `nic`,
+///   for the same reason as `ben` (`Nic` is a given name).
 #[rustfmt::skip]
 const PARTICLES: &[&str] = &[
-    "von", "van", "der", "den", "dem", "des", "del", "della", "dos", "das", "da",
-    "de", "di", "du", "la", "le", "ter", "ten", "zu", "zur", "vom", "y", "bin",
-    "ibn", "al", "el",
+    "von", "vom", "zu", "zum", "zur", "am", "an", "auf", "im", "in", "der",
+    "den", "dem", "des", "van", "de", "het", "'t", "ten", "ter", "te", "op",
+    "uit", "aan", "bij", "over", "voor", "onder", "du", "la", "le", "les",
+    "del", "las", "los", "y", "i", "da", "das", "do", "dos", "e", "di", "dal",
+    "dalla", "dalle", "dei", "degli", "della", "delle", "dello", "lo", "af",
+    "av", "al", "el", "bin", "ibn", "bint", "abu", "abd", "bat", "bar",
+    "mac", "mc", "ni", "ap", "ab", "ferch",
 ];
 
 /// Organization and role words in sender names (`SUPPORT TEAM`, `DHL Paket`).
@@ -922,6 +946,78 @@ mod tests {
         // The distinctive part still carries every run and its own spellings.
         assert_eq!(found(leyen.clone(), "an VON DER LEYEN"), ["VON DER LEYEN"]);
         assert_eq!(found(leyen, "frau von der leyen"), ["von der leyen"]);
+    }
+
+    #[test]
+    fn ben_stays_a_given_name() {
+        assert_eq!(found(vec![name("Ben Kowalski")], "Thanks, Ben"), ["Ben"]);
+        assert_eq!(found(vec![name("Nic Kowalski")], "Thanks, Nic"), ["Nic"]);
+    }
+
+    /// Re-verify R1 (#691): the particle rule covers the class, not the
+    /// listed instances. Every particle and every particle pair from a
+    /// sender `Maria P Q Kowalski` must stay raw in ordinary text, in lower,
+    /// title and upper case.
+    #[test]
+    fn every_particle_and_particle_pair_stays_raw() {
+        // The reference set lives here, not in `PARTICLES`, so a particle
+        // dropped from the production list fails this test.
+        #[rustfmt::skip]
+        let words = [
+            "von", "vom", "zu", "zum", "zur", "der", "den", "dem", "des", "van",
+            "de", "het", "ten", "ter", "te", "op", "uit", "aan", "du", "la",
+            "le", "les", "del", "las", "los", "y", "da", "das", "do", "dos", "e",
+            "di", "dal", "dalla", "dei", "degli", "della", "delle", "dello", "af",
+            "av", "al", "el", "bin", "ibn", "bint", "abu", "bar", "mac",
+            "ap",
+        ];
+        let mut swept = Vec::new();
+        for first in &words {
+            for second in &words {
+                let matcher = SweepMatcher::build(vec![
+                    name(&format!("Maria {first} {second} Kowalski")),
+                    name(&format!("Maria {first} Kowalski")),
+                ])
+                .unwrap()
+                .unwrap();
+                let lower = format!("go {first} {second} home");
+                for text in [
+                    lower.clone(),
+                    title_case_words(&lower),
+                    lower.to_uppercase(),
+                ] {
+                    for hit in matcher.find(&text) {
+                        swept.push(text[hit.span].to_string());
+                    }
+                }
+            }
+        }
+        assert!(swept.is_empty(), "particles swept: {swept:?}");
+    }
+
+    fn title_case_words(text: &str) -> String {
+        text.split(' ')
+            .map(title_case)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn spanish_and_dutch_particle_runs_stay_raw() {
+        assert!(found(
+            vec![name("Carmen de los Rios")],
+            "Vamos de los Angeles, DE LOS ANDES"
+        )
+        .is_empty());
+        assert!(found(
+            vec![name("Gerrit op het Veld")],
+            "Zet het op het bord. OP HET PLEIN."
+        )
+        .is_empty());
+        assert_eq!(
+            found(vec![name("Gerrit op het Veld")], "met gerrit op het veld"),
+            ["gerrit op het veld"]
+        );
     }
 
     /// Review F2 (#691): an org-shaped sender (a CamelCase part, or all-caps

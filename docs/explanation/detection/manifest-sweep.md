@@ -122,11 +122,21 @@ header. The full value `Thomas Richter` still is.
 Two more closed lists make a word ordinary, so it is never a part on its own
 and never the distinctive part of a run:
 
-- **Particles and articles** (`von`, `van`, `der`, `den`, `de`, `la`, `y`,
-  `bin`, `al`, ...). `Anna von der Heide` must not turn every German
-  `von der` into a token. `von der Leyen` is still swept in any case through
-  its distinctive `leyen`. The cost: `VAN DER BERG` has no distinctive part
-  (`berg` is a common word), so a lower-case or all-caps copy relies on NER.
+- **Particles and articles**, compiled per naming convention for every
+  setup-policy locale and the common particle cultures: German (`von`, `zu`,
+  `der`, `auf`, ...), Dutch tussenvoegsels (`van`, `de`, `het`, `op`, `ter`,
+  `uit`, ...), French (`de`, `du`, `la`, `le`), Spanish and Catalan (`del`,
+  `las`, `los`, `y`), Portuguese (`da`, `dos`, `e`), Italian (`di`, `della`,
+  `degli`, ...), Scandinavian (`af`, `av`), Arabic and Hebrew (`al`, `bin`,
+  `ibn`, `abu`, ...), Gaelic and Welsh (`mac`, `ap`, ...). The full list and
+  its sources are on `PARTICLES` in `crates/gaze/src/sweep.rs`; a test
+  enumerates every particle and particle pair. `Anna von der Heide` must not
+  turn every German `von der`, nor `Carmen de los Rios` every `de los`, into
+  a token. `von der Leyen` is still swept in any case through its distinctive
+  `leyen`. `ben` and `nic` are left off: `Ben` and `Nic` are common given
+  names, and a particle never sweeps alone. The cost: `VAN DER BERG` has no
+  distinctive part (`berg` is a common word), so a lower-case or all-caps copy
+  relies on NER.
 - **Organization and role words** (`support`, `team`, `service`, `info`,
   `paket`, `kundenservice`, `noreply`, `newsletter`, also as a hyphen piece
   as in `IT-Support`).
@@ -136,7 +146,9 @@ part (`GitHub`), or all-caps parts mixed with others (`DHL Paket`). The whole
 value and its runs still sweep, so `DHL Paket` is found again but `Paket` is
 not. A CamelCase single word keeps its written and title-case spellings but
 gets no upper case (`GitHub` does not sweep `GITHUB`). A wholly all-caps value
-(`MARIA KOWALSKI`) is a shouted personal name and keeps its parts. The cost:
+(`MARIA KOWALSKI`) is a shouted personal name and keeps its parts, so a
+wholly all-caps organization of unlisted words (`BLUE HARBOR`) also sweeps
+its parts (`Blue`): fail-closed, accepted to keep `Thanks, Maria` protected. The cost:
 a CamelCase surname (`Ronald McDonald`) sweeps as a whole and in runs, not
 as `McDonald` alone.
 
@@ -155,7 +167,9 @@ source stays raw (see above). A value no rule found (only NER, or nothing)
 seeds no sweep. An honorific plus a name made only of common words stays raw
 in lower case: `From: Herr Frank Wolf <…>` then `frank wolf` has no
 distinctive part, so no run, and the whole-value match needs `herr`
-(same for `Mr Bill Gates`).
+(same for `Mr Bill Gates`). A French-convention name with an all-caps surname
+(`Jean DUPONT`) reads as organization-shaped, so `DUPONT a signé` stays raw
+unless NER finds it (as before this rule).
 
 ## Token identity and restore
 

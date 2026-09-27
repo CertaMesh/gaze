@@ -401,6 +401,14 @@ fn particles_and_org_senders_do_not_sweep_ordinary_words() {
             "From: SUPPORT TEAM <st@example.invalid>\n",
             "Contact Support or the Team.\n",
         ),
+        (
+            "From: \"Carmen de los Rios\" <cr@example.invalid>\n",
+            "Vamos de los Angeles, DE LOS ANDES.\n",
+        ),
+        (
+            "From: \"Gerrit op het Veld\" <gv@example.invalid>\n",
+            "Zet het op het bord. OP HET PLEIN.\n",
+        ),
         ("From: GitHub <gh@example.invalid>\n", "GITHUB is down.\n"),
         (
             "From: DHL Express <dx@example.invalid>\n",
