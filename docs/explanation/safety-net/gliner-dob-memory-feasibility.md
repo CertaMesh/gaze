@@ -17,15 +17,15 @@ Single-threaded ONNX Runtime 1.24.2 load probes on this Apple M5 Max measured
 diagnostic model with only one embedding row. Thus the embedding accounts for
 about 511 MiB of load RSS in this probe, while the rest of the model and
 runtime account for about 493 MiB. The one-row model is load-only and cannot
-run valid inputs. RSS attribution ran on a busy host, as allowed by the Solo
-10752 amendment; the recorded `uptime` load average was 11.25/9.77/9.28.
+run valid inputs. RSS attribution ran on a busy host, because peak RSS does not depend on CPU
+load; the recorded `uptime` load average was 11.25/9.77/9.28.
 
 ## Tested candidates
 
 All load probes used ONNX Runtime 1.24.2 with one intra-op thread and graph
 optimization enabled. These are process load deltas, not the Gaze pipeline's
 peak RSS. The [shipped Gaze mechanism test](../../reference/benchmarks/mechanisms/gliner-dob-judge-latency.json)
-measured 1,076 → 1,740 MiB, an added 664 MiB, on a quiet host.
+measured 1,076 → 1,740 MiB, an added 664 MiB, on a host that was quiet when the run started.
 
 | Model | Load RSS added | Decision evidence |
 | --- | ---: | --- |
@@ -39,8 +39,8 @@ The 20,000-piece cut retains 241,617 embedding rows and saves only about
 13 MiB of load RSS beyond the full-vocabulary BASIC model. In the primary
 corpus, 45 of 294 documents containing scanner-shaped dates have words whose
 original token pieces this cut removes. Byte-identical observation records
-are therefore unproven. The independent 30-line held-out TSV is Solo project 4
-scratchpad 10722, SHA-256
+are therefore unproven. The independent 30-line held-out TSV is kept outside the
+repository so rules are not tuned to it; its SHA-256 is
 `493ae864f8d545f490a2d6d4290ec92bf94356b6dedba1498452b67d3b412d70`.
 The 11 probes cover de/fr/es/it/pt/nl/pl/tr/ar/zh/ja dates in prose.
 
