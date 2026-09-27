@@ -311,6 +311,21 @@ class MechanismArmsTest(unittest.TestCase):
             mech.refresh(ledger, self.fixture.root)
         self.assertEqual(mech.measured_contracts(ledger["mechanisms"][0]["measurements"][0]), [4, 3, 2, 1])
 
+    def test_refresh_preserves_delta_pin_after_file_changes(self) -> None:
+        ledger = copy.deepcopy(self.ledger)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        delta_row = ledger["mechanisms"][0]["policy_delta"]
+        pinned = delta_row["sha256"]
+        delta = root / delta_row["file"]
+        delta.write_text(self.fixture.delta.read_text(encoding="utf-8") + "# changed after measurement\n", encoding="utf-8")
+        with mock.patch.object(mech, "derive", return_value={}):
+            mech.refresh(ledger, root)
+        self.assertEqual(delta_row["sha256"], pinned)
+        with self.assertRaisesRegex(mech.MechanismError, "missing or differs from its SHA-256"):
+            mech.validate(ledger, root)
+
     def test_required_contracts_come_from_the_repository(self) -> None:
         self.assertEqual(mech.required_contracts(), (3, 2, 1))
         tmp = tempfile.TemporaryDirectory()

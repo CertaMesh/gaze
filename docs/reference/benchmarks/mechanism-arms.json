@@ -151,7 +151,7 @@
       "added_in": "v0.15",
       "policy_delta": {
         "file": "scripts/bench/mechanisms/nym-safety-net.toml",
-        "sha256": "8cb106627a4a7ff5effb7a94731039a26a893fa0807d7d73d386322044e3c88f"
+        "sha256": "899d4a161f4fa1dbd7f22034c758df37b3ee0b2396dc1b4d607d74e848acbe52"
       },
       "measurements": [
         {

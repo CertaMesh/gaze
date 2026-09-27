@@ -731,8 +731,6 @@ def check_evidence(ledger: Mapping[str, Any], root: Path = ROOT) -> None:
 def refresh(ledger: dict[str, Any], root: Path = ROOT) -> None:
     """Re-derive every row from its committed records under today's contracts."""
     for entry in ledger["mechanisms"]:
-        delta = root / entry["policy_delta"]["file"]
-        entry["policy_delta"]["sha256"] = sha256(delta)
         for measurement in entry["measurements"]:
             measurement.update(derive(
                 root / measurement["records"]["base"]["file"],
