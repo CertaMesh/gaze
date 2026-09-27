@@ -69,6 +69,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The contract v3 gold-gap audit passed** (solo todo #3696): 3 of 200
+  sampled credits failed (one-sided 95 % bound 3.83 %, limit 5 %), each in a
+  different document. Three model judges (Claude Opus, Codex, TypeSafe)
+  agreed on 188 cards; the user decided the 12 contested ones. Verdicts are
+  recorded per entry in `gold-gap-sample-v3.json`, and
+  `gold_gap_evidence.py accept` recomputes the result. The v2 headline is
+  unchanged here.
 - Rulepack regex recognizers can set `[recognizers.context] reject_match_regex`
   to refuse a full regex match before emitting its capture. This field is
   unavailable in `[[policy.custom_recognizers]]`; invalid guard regexes fail

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Contract v3 gold-gap evidence: replay saved predictions, draw the audit sample.
 
-The gold-gap column is a diagnostic until a human audit passes, so this script
-does three things, all from the same saved predictions (no model runs):
+The gold-gap column is a diagnostic until the sample audit passes, so this
+script does four things; the first three read the same saved predictions (no
+model runs):
 
   replay   score one per-document trace under v2 and v3 and prove the leaked,
            true-positive and false-positive bytes are identical, then print the
@@ -11,6 +12,9 @@ does three things, all from the same saved predictions (no model runs):
            final eligibility set and write it without any document text.
   sheet    render a local audit sheet (value plus context) for the person who
            fills the verdicts; it goes under target/, never into the repo.
+  accept   score the committed sample once every entry carries a verdict:
+           failure count, exact bound, per-document failures and a
+           document-cluster design effect. Exits 1 when the audit fails.
 
 The trace is JSON Lines, one document per line, as the bench triage recorded
 it: uid, language, negative_category, text, gold and excluded spans as
@@ -39,6 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 V2_PATH = "docs/reference/benchmarks/scored-labels-v2.json"
 V3_PATH = "docs/reference/benchmarks/scored-labels-v3.json"
 SAMPLE_PATH = "docs/reference/benchmarks/gold-gap-sample-v3.json"
+TIEBREAK_PATH = "scripts/bench/fixtures/gold-gap-tiebreak-v3.json"
 
 SAMPLE_SEED = 20260922
 SAMPLE_SIZE = 200
@@ -461,8 +466,9 @@ def draw_sample(trace_path: Path, wordlist: Path) -> dict[str, object]:
         "schema_version": 1,
         "contract": "scored-labels-v3",
         "purpose": (
-            "Human audit of the contract v3 gold-gap rule. The column stays a "
-            "diagnostic beside the v2 headline until this audit passes."
+            "Model-judged audit (three judges plus TypeSafe tiebreak) of the "
+            "contract v3 gold-gap rule. The column stays a diagnostic beside the "
+            "v2 headline until this audit passes."
         ),
         "status": "awaiting_verdicts",
         "source": {
@@ -557,6 +563,126 @@ def sheet(trace_path: Path, sample_path: Path) -> str:
     return "\n".join(lines)
 
 
+VERDICTS = ("yes", "no", "uncertain")
+
+
+def cluster_design_effect(entries: Sequence[dict[str, object]], failed: Sequence[bool]) -> float:
+    """Design effect of the failure rate with documents as clusters.
+
+    Ratio-estimator variance over document clusters divided by the binomial
+    variance, both with the same n/(n-1) small-sample correction, so a sample
+    with one entry per document scores exactly 1. Above 1, failures bunch in
+    documents and the sample carries less information than its size; at or
+    below 1 clustering does not widen the bound.
+    """
+    n = len(entries)
+    rate = sum(failed) / n
+    if rate in (0.0, 1.0):
+        return 1.0
+    sizes: dict[str, int] = defaultdict(int)
+    failures: dict[str, int] = defaultdict(int)
+    for entry, fail in zip(entries, failed, strict=True):
+        sizes[entry["document_id"]] += 1
+        failures[entry["document_id"]] += fail
+    clusters = len(sizes)
+    if clusters < 2:
+        return float("inf")
+    residuals = sum((failures[doc] - rate * size) ** 2 for doc, size in sizes.items())
+    clustered = clusters / (clusters - 1) * residuals / n**2
+    return clustered / (rate * (1 - rate) / (n - 1))
+
+
+def check_adjudication(sample: dict[str, object], tiebreak: Sequence[dict[str, object]]) -> None:
+    """Refuse a sample whose verdicts do not follow from the judges and the tiebreak.
+
+    Every contested card must appear in the tiebreak results with the same
+    three verdicts, rule and re-ask answer. A recorded `user_verdict`
+    overrides the models; otherwise a unanimous card's verdict is the judges'
+    shared verdict and a contested card's is the tiebreak's final verdict.
+    """
+    rows = {row["id"]: row for row in tiebreak}
+    problems = []
+    for entry in sample["entries"]:
+        adjudication = entry.get("adjudication") or {}
+        judges = (adjudication.get("opus"), adjudication.get("codex"), adjudication.get("typesafe"))
+        row = rows.pop(entry["id"], None)
+        user = adjudication.get("user_verdict")
+        if user is not None and user not in VERDICTS:
+            problems.append(f"{entry['id']}: user verdict is not one of {VERDICTS}")
+        if len(set(judges)) == 1 and judges[0] in VERDICTS:
+            if row is not None:
+                problems.append(f"{entry['id']}: unanimous but listed in the tiebreak")
+            elif entry.get("verdict") != (user or judges[0]):
+                problems.append(f"{entry['id']}: verdict differs from the unanimous judges")
+            continue
+        if row is None:
+            problems.append(f"{entry['id']}: contested but missing from the tiebreak")
+            continue
+        expected = {key: row[key] for key in ("opus", "codex", "typesafe", "rule")}
+        if {key: adjudication.get(key) for key in expected} != expected:
+            problems.append(f"{entry['id']}: judges or rule differ from the tiebreak")
+        if row["tiebreak"] is not None:
+            recorded = adjudication.get("typesafe_tiebreak") or {}
+            keys = ("score", "confidence", "probabilities", "argmax")
+            if any(recorded.get(key) != row["tiebreak"][key] for key in keys):
+                problems.append(f"{entry['id']}: re-ask answer differs from the tiebreak")
+        if entry.get("verdict") != (user or row["final"]):
+            problems.append(f"{entry['id']}: verdict differs from the tiebreak's final verdict")
+    problems += [f"{cid}: in the tiebreak but not in the sample" for cid in sorted(rows)]
+    if problems:
+        raise SystemExit("adjudication does not match the tiebreak record:\n  " + "\n  ".join(problems))
+
+
+def acceptance(sample: dict[str, object]) -> dict[str, object]:
+    """Score a sample whose every entry carries a verdict against the declared rule."""
+    entries = sample["entries"]
+    missing = [entry["id"] for entry in entries if entry.get("verdict") not in VERDICTS]
+    if missing:
+        raise SystemExit(f"{len(missing)} entries have no verdict: {', '.join(missing[:10])}")
+    failed = [entry["verdict"] != "yes" for entry in entries]
+    n, k = len(entries), sum(failed)
+    bound = clopper_pearson_upper(k, n)
+    deff = cluster_design_effect(entries, failed)
+    effective_n = n if deff <= 1 else math.floor(n / deff)
+    # Conservative: keep every failure, shrink only the sample size.
+    clustered_bound = clopper_pearson_upper(k, effective_n) if effective_n > k else 1.0
+    per_document: dict[str, list[str]] = defaultdict(list)
+    for entry, fail in zip(entries, failed, strict=True):
+        if fail:
+            per_document[entry["document_id"]].append(entry["id"])
+    weight = sum(entry["design_weight"] for entry in entries)
+    byte_weight = sum(entry["design_weight"] * (entry["byte_end"] - entry["byte_start"]) for entry in entries)
+    passes = k <= MAX_FAILURES and bound <= MAX_UPPER_BOUND and clustered_bound <= MAX_UPPER_BOUND
+    return {
+        "sample_size": n,
+        "verdicts": {verdict: sum(e["verdict"] == verdict for e in entries) for verdict in VERDICTS},
+        "failures": k,
+        "max_failures": MAX_FAILURES,
+        "failed_entries": [entry["id"] for entry, fail in zip(entries, failed, strict=True) if fail],
+        "one_sided_95_upper_bound": round(bound, 6),
+        "documents": len({entry["document_id"] for entry in entries}),
+        "failures_by_document": dict(sorted(per_document.items())),
+        "documents_with_failure": len(per_document),
+        "cluster_design_effect": round(deff, 6),
+        "cluster_effective_sample_size": effective_n,
+        "cluster_adjusted_upper_bound": round(clustered_bound, 6),
+        "design_weighted_failure_rate": round(
+            sum(e["design_weight"] for e, fail in zip(entries, failed, strict=True) if fail) / weight, 6
+        ),
+        "byte_weighted_failure_rate": round(
+            sum(
+                e["design_weight"] * (e["byte_end"] - e["byte_start"])
+                for e, fail in zip(entries, failed, strict=True)
+                if fail
+            )
+            / byte_weight,
+            6,
+        ),
+        "max_upper_bound": MAX_UPPER_BOUND,
+        "passes": passes,
+    }
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -569,7 +695,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     sub.choices["sheet"].add_argument(
         "--out", type=Path, default=REPO_ROOT / "target/gold-gap-audit/sheet.md"
     )
+    accept = sub.add_parser("accept")
+    accept.add_argument("--sample", type=Path, default=REPO_ROOT / SAMPLE_PATH)
+    accept.add_argument("--tiebreak", type=Path, default=REPO_ROOT / TIEBREAK_PATH)
     args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.command == "accept":
+        sample = json.loads(args.sample.read_text(encoding="utf-8"))
+        check_adjudication(sample, json.loads(args.tiebreak.read_text(encoding="utf-8")))
+        result = acceptance(sample)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0 if result["passes"] else 1
     if args.command == "replay":
         print(json.dumps(replay(args.trace), indent=2, sort_keys=True))
     elif args.command == "sample":

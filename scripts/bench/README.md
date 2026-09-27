@@ -93,13 +93,23 @@ unlabelled byte-identical repeats of a gold value in the same document as
 Every `gold_gap` setting has one supported value and every scored label must be
 ruled on once (in `compatible_labels` or `not_creditable`); anything else fails
 closed, and v1/v2 never run the step. To compare contracts on the same saved
-predictions without re-running a model, and to draw or render the human audit
-sample:
+predictions without re-running a model, to draw or render the audit sample,
+and to score the audit once every entry has a verdict:
 
 ```bash
 python scripts/bench/gold_gap_evidence.py replay --trace <trace.jsonl>
 python scripts/bench/gold_gap_evidence.py sample --trace <trace.jsonl>
 python scripts/bench/gold_gap_evidence.py sheet  --trace <trace.jsonl>  # local only
+python scripts/bench/gold_gap_evidence.py accept  # exits 1 if the audit fails
+```
+
+`accept` first checks every verdict against the judges recorded in the sample
+and the tiebreak results in `fixtures/gold-gap-tiebreak-v3.json`, written by
+`gold_gap_tiebreak.py`. The tiebreak's inputs quote document text and live in
+the private audit archive, not in this repo:
+
+```bash
+python scripts/bench/gold_gap_tiebreak.py --archive <audit archive> --payloads-only <out.json>
 ```
 
 v2 also lists `neutral_prediction_classes` (`custom:password`,
