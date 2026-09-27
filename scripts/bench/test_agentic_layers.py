@@ -969,6 +969,53 @@ class GateTests(unittest.TestCase):
         self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 500)
         self.assertEqual(result["summary"]["leaked_bytes_decrease"], 0)
 
+    @staticmethod
+    def _with_invalid(scorecard: dict, a_cell: str, c_label: str, leaked: int) -> dict:
+        """Add `leaked` checksum-invalid bytes to one layer A twin cell and one layer C label."""
+        scorecard = copy.deepcopy(scorecard)
+        run_a = scorecard["layers"]["A"]["runs"][0]
+        run_a["per_cell"][a_cell] = {"utf8_bytes": {"leaked": leaked}}
+        run_a["metrics"]["utf8_bytes"]["leaked"] += leaked
+        run_c = scorecard["runs"][0]
+        run_c["validator_recall_by_label"][c_label] = {"production_recall_by_gold_validity": {
+            "validator_passed_gold": {"leaked_utf8_bytes": 0},
+            "validator_failed_gold": {"leaked_utf8_bytes": leaked},
+        }}
+        run_c["metrics"]["utf8_bytes"]["leaked"] += leaked
+        return scorecard
+
+    def test_checksum_invalid_iban_and_card_gold_is_gated(self) -> None:
+        # User ruling 2026-09-27: IBAN and card numbers are tokenized without a
+        # checksum, so their invalid gold counts like valid gold.
+        for a_cell, c_label in (("A|iban_de|prose_cue|invalid", "IBAN"),
+                                ("A|card|csv|invalid", "CREDITCARDNUMBER")):
+            with self.subTest(label=c_label):
+                base = self._with_invalid(_scorecard(self.BASE, self.FP), a_cell, c_label, 300)
+                candidate = self._with_invalid(
+                    _scorecard(self.BASE, {**self.FP, "D": 7 + 100}), a_cell, c_label, 0)
+                result = agentic.gate(base, candidate)
+                self.assertEqual(result["layers"]["A"]["leaked_base"], self.BASE["A"] + 300)
+                self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 0)
+                self.assertEqual(result["layers"]["C"]["leaked_base"], self.BASE["C"] + 300)
+                self.assertEqual(result["layers"]["C"]["twin_leaked_base"], 0)
+                self.assertEqual(result["summary"]["leaked_bytes_decrease"], 600)
+                self.assertEqual(result["verdict"], "pass")
+
+    def test_checksum_invalid_gold_of_other_labels_stays_ungated(self) -> None:
+        base = self._with_invalid(_scorecard(self.BASE, self.FP), "A|steuer_id|csv|invalid", "TAXNUM", 300)
+        candidate = self._with_invalid(
+            _scorecard(self.BASE, {**self.FP, "D": 7 + 100}), "A|steuer_id|csv|invalid", "TAXNUM", 0)
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 300)
+        self.assertEqual(result["layers"]["C"]["twin_leaked_base"], 300)
+        self.assertEqual(result["summary"]["leaked_bytes_decrease"], 0)
+        self.assertEqual(result["verdict"], "fail")
+
+    def test_creditable_invalid_labels_are_exactly_iban_and_card(self) -> None:
+        self.assertEqual(agentic.CREDITABLE_INVALID_LABELS, {"IBAN", "CREDITCARDNUMBER"})
+        labels = {family.label for family in agentic.IDENTIFIER_FAMILIES}
+        self.assertLessEqual(agentic.CREDITABLE_INVALID_LABELS, labels)
+
     def test_kiji_gold_that_fails_its_validator_is_reported_not_gated(self) -> None:
         base = _scorecard(self.BASE, self.FP, c_invalid_leak=400)
         candidate = _scorecard(self.BASE, {**self.FP, "D": 7 + 100}, c_invalid_leak=0)
@@ -1315,6 +1362,43 @@ class PolicyDeltaGateTests(unittest.TestCase):
                 "[rules]\nenabled = true\n[extension]\nthreshold = 0.5\n",
                 "[extension\nthreshold = 0.5\n",
             )
+
+
+class ReleaseGateCreditTests(unittest.TestCase):
+    """The displayed releases re-scored from their committed records under the
+    IBAN/card credit (user ruling 2026-09-27): only IBAN and card bytes move
+    from the twin column into gated leaks; the headline never changes."""
+
+    BENCH = REPO_ROOT / "docs/reference/benchmarks"
+    # release: (C gated before, C gated after, A gated before, A gated after), contract v2.
+    EXPECTED = {
+        "v0.14.0": (17_009, 19_832, 7_397, 19_409),
+        "v0.15.0": (8_067, 11_043, 1_227, 12_835),
+        "v0.15.1": (8_067, 11_043, 1_227, 12_662),
+    }
+
+    def totals(self, release: str, creditable: frozenset[str]) -> dict:
+        import gzip
+        layers = json.loads(gzip.open(self.BENCH / f"agentic-layers-{release}.json.gz").read())["layers"]
+        scorecard = json.loads((self.BENCH / f"scorecard-{release}-scored-labels-v2.json").read_text())
+        with mock.patch.object(agentic, "CREDITABLE_INVALID_LABELS", creditable):
+            # Each release is gated on the arm it shipped, recorded on its layer runs.
+            config = layers["A"]["runs"][0]["config"]
+            return agentic.layer_totals({**scorecard, "layers": layers}, config)
+
+    def test_release_totals_before_and_after_the_credit(self) -> None:
+        for release, (c_before, c_after, a_before, a_after) in self.EXPECTED.items():
+            with self.subTest(release=release):
+                before = self.totals(release, frozenset())
+                after = self.totals(release, agentic.CREDITABLE_INVALID_LABELS)
+                self.assertEqual((before["C"]["leaked"], after["C"]["leaked"]), (c_before, c_after))
+                self.assertEqual((before["A"]["leaked"], after["A"]["leaked"]), (a_before, a_after))
+                for layer in agentic.GATE_LAYERS:
+                    self.assertEqual(before[layer]["headline_leaked"], after[layer]["headline_leaked"])
+                    self.assertEqual(
+                        before[layer]["leaked"] + before[layer]["twin_leaked"],
+                        after[layer]["leaked"] + after[layer]["twin_leaked"],
+                    )
 
 
 class MutantGatePinTests(unittest.TestCase):

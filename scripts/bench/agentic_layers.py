@@ -67,6 +67,11 @@ VALID = "valid"
 INVALID = "invalid"
 UNCHECKED = "unchecked"
 BENIGN = "benign"
+# Labels whose checksum-invalid gold the gate credits like valid gold. User
+# ruling 2026-09-27: IBAN and payment card numbers are tokenized even when
+# mod-97 or Luhn fails, so a leaked invalid one is a real leak. Every other
+# label's checksum-invalid gold stays reported, not gated (ruling 2026-09-26).
+CREDITABLE_INVALID_LABELS = frozenset({"IBAN", "CREDITCARDNUMBER"})
 
 
 class LayerError(ValueError):
@@ -1856,7 +1861,10 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
     and never gated (user decision 2026-09-26). Layer A excludes its
     checksum-invalid twins; layer C excludes Kiji gold its validator fails,
     per label from the validator split. Layers D and R have no such gold.
+    The labels in `CREDITABLE_INVALID_LABELS` are the exception: their
+    invalid gold is gated like valid gold (user ruling 2026-09-27).
     """
+    family_labels = {family.name: family.label for family in IDENTIFIER_FAMILIES}
     totals: dict[str, dict[str, int]] = {}
     for layer in GATE_LAYERS:
         run = _layer_run(scorecard, layer, config)
@@ -1886,6 +1894,7 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
                 block["utf8_bytes"]["leaked"]
                 for cell, block in run["per_cell"].items()
                 if cell.split("|")[3] == INVALID
+                and family_labels.get(cell.split("|")[1]) not in CREDITABLE_INVALID_LABELS
             )
         elif layer == "C":
             by_label = run.get("validator_recall_by_label")
@@ -1896,8 +1905,9 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
                 )
             twin_leaked = sum(
                 block["production_recall_by_gold_validity"]["validator_failed_gold"]["leaked_utf8_bytes"]
-                for block in by_label.values()
+                for label, block in by_label.items()
                 if block.get("production_recall_by_gold_validity")
+                and label not in CREDITABLE_INVALID_LABELS
             )
         totals[layer] = {
             "attempted": availability["attempted_documents"],
@@ -2155,7 +2165,8 @@ def gate_markdown(result: Mapping[str, object]) -> str:
                 f"{r['twin_leaked_base']} | {r['twin_leaked_candidate']} |"
             )
         lines += ["", "Gated leak excludes gold that fails its checksum (layer A twins, layer C "
-                  "validator-failed Kiji gold); it is reported in the twin columns, not gated. "
+                  "validator-failed Kiji gold), except IBAN and card numbers, which are gated; "
+                  "the excluded bytes are reported in the twin columns. "
                   "The gate is necessary, not sufficient: review still judges precision."]
     return "\n".join(lines) + "\n"
 
