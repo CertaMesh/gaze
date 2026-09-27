@@ -35,7 +35,6 @@ python scripts/bench/compare/compare.py \
   --gliner-model /path/to/gliner_multi_pii-v1 \
   --opf-python /path/to/opf-venv/bin/python \
   --opf-checkpoint /path/to/privacy_filter \
-  --pack-dir docs/reference/benchmarks/variant-packs \
   --gaze-scorecard-v1 target/bench-data/gaze-v1/scorecard-v4.json \
   --gaze-scorecard-v2 target/bench-data/gaze-v2/scorecard-v4.json \
   --gaze-scorecard-v3 target/bench-data/gaze-v3/scorecard-v4.json \
