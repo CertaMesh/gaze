@@ -8001,7 +8001,7 @@ mod tests {
         let loser = entries.iter().find(|e| e.conflict_loser).expect("loser");
         assert_eq!(winner.source, "ner/gliner", "longer span should win");
         assert_eq!(loser.source, "ner/bert", "shorter span should lose");
-        assert_eq!(loser.decided_by, ConflictTier::SpanLength);
+        assert_eq!(loser.decided_by, ConflictTier::SameClassContainment);
     }
 
     #[test]

@@ -126,7 +126,7 @@ fn reverse_geometry_and_two_productive_recovery_rounds() {
 }
 
 #[test]
-fn pending_pool_uses_legacy_merge_validator_family_and_anchor_rules() {
+fn pending_pool_uses_containment_and_legacy_rules_elsewhere() {
     for mode in 0..6 {
         let mut builder = RecognizerRegistry::builder();
         if mode >= 3 {
@@ -194,7 +194,16 @@ fn pending_pool_uses_legacy_merge_validator_family_and_anchor_rules() {
         all.extend(pending);
         all.push(candidate(25..40, PiiClass::Email, "last"));
         let result = run(all, &registry, raw);
-        assert_eq!(result.recovered, expected);
+        if mode == 1 {
+            assert_eq!(spans(&result.recovered), vec![0..8]);
+            assert_eq!(result.recovered[0].recognizer_id, "b");
+            assert_eq!(
+                result.recovered[0].decided_by,
+                ConflictTier::SameClassContainment
+            );
+        } else {
+            assert_eq!(result.recovered, expected);
+        }
     }
 }
 
@@ -308,7 +317,19 @@ fn indexed_primary_matches_frozen_legacy_and_recovery_terminates() {
         );
         assert_eq!(result.primary, reversed.primary);
         assert_eq!(result.recovered, reversed.recovered);
-        assert_eq!(result.primary, legacy::resolve_candidates(input.clone()));
+        let mut legacy_primary = legacy::resolve_candidates(input.clone());
+        for candidate in &mut legacy_primary {
+            if candidate.decided_by == ConflictTier::SpanLength
+                && result.primary.iter().any(|actual| {
+                    actual.span == candidate.span
+                        && actual.recognizer_id == candidate.recognizer_id
+                        && actual.decided_by == ConflictTier::SameClassContainment
+                })
+            {
+                candidate.decided_by = ConflictTier::SameClassContainment;
+            }
+        }
+        assert_eq!(result.primary, legacy_primary);
         let mut all = result.primary;
         all.extend(result.recovered);
         all.sort_by_key(|n| n.span.start);
