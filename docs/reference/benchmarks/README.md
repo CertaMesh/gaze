@@ -558,6 +558,54 @@ the measured tree only in docs and version pins.
 
 ---
 
+## Per-mechanism arms
+
+A release row measures the whole shipped stack, so it cannot say what one
+mechanism is worth. A mechanism arm can: it is the stack with that mechanism
+versus the stack without it, on the same binary, corpus and seed. The
+mechanism is a policy delta file under
+[`scripts/bench/mechanisms/`](../../../scripts/bench/mechanisms/): the TOML
+sections the candidate policy adds to the base and nothing else. For a
+mechanism `gaze setup` already turns on, the base is the setup policy minus
+those sections. When the mechanism ships on by default, the release headline
+already includes its effect; this table isolates it and does not add to it.
+
+[`scripts/bench/mechanism_arms.py`](../../../scripts/bench/mechanism_arms.py)
+`record` takes the four runner outputs (base and candidate, contracts v2 and
+v1) and refuses them unless the candidate policy is exactly base plus delta,
+every run shares one commit, clean tree, corpus, seed and scored population,
+and each v1 run equals the v1 re-score of its v2 run's observation record.
+It commits both v2 observation records under
+[`mechanisms/`](mechanisms/); v3 is re-scored from them. `check` re-derives
+every number below from those records and runs on every pull request. Every
+row must carry every scored-label contract the repository has; after a new
+`scored-labels-v<N>.json` lands, `refresh` re-derives all rows from the same
+records, with no new benchmark run.
+
+<!-- BEGIN GENERATED: mechanism-arms -->
+
+Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v3 headline counts false-positive bytes after gold-gap credit.
+
+| Mechanism | Measured at | Contract | Leaked bytes, without → with | FP bytes, without → with | Gate |
+| --- | --- | --- | ---: | ---: | --- |
+| GLiNER date-of-birth judge | `35c4fc79377d` (unreleased) | v3 | 11,909 → 11,824 (-85) | 13,768 → 13,768 (0) | not gated: re-scored from the v2 records |
+| GLiNER date-of-birth judge | `35c4fc79377d` (unreleased) | v2 | 11,909 → 11,824 (-85) | 25,480 → 25,480 (0) | pass |
+| GLiNER date-of-birth judge | `35c4fc79377d` (unreleased) | v1 | 18,155 → 18,070 (-85) | 25,480 → 25,480 (0) | pass |
+
+What moved, per label (contract v2; v1 adds only the credential labels):
+
+- **GLiNER date-of-birth judge** ships opt-in (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk (todo 3905), then default-on. Cost on a quiet host (median of 3 rounds, 200 documents): warm p50 +0.4 ms, p95 +22.5 ms, cold first document +1.6 s, peak RSS +664 MiB ([evidence](mechanisms/gliner-dob-judge-latency.json)). Leaked bytes by gold label: DATEOFBIRTH -85. FP bytes by predicted class: none. Agentic layers: A leaked -20, FP 0; D leaked 0, FP 0; R leaked 0, FP 0. Policy delta [`gliner-dob-judge.toml`](../../../scripts/bench/mechanisms/gliner-dob-judge.toml); evidence [base](mechanisms/gliner-dob-judge-35c4fc79377d-base.jsonl.gz) and [candidate](mechanisms/gliner-dob-judge-35c4fc79377d-candidate.jsonl.gz) observation records. Attested, not re-derivable: `crates/` tree `d23a92523325`, binary `0ecb1cddab03`, MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
+
+Shipped releases, one column per release:
+
+| Mechanism | `v0.15.1` | `v0.15.0` | `v0.14.0` |
+| --- | --- | --- | --- |
+| GLiNER date-of-birth judge | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
+
+<!-- END GENERATED: mechanism-arms -->
+
+---
+
 ## Latency
 
 Quiet-host timing from the `latency-vX.Y.Z.json` file each release commits,

@@ -1,0 +1,7 @@
+# GLiNER date-of-birth judge: the one section `gaze setup --dob-judge` adds to
+# the setup policy. The benchmark candidate policy is the base policy plus
+# exactly this; scripts/bench/mechanism_arms.py refuses any other difference.
+[dob_judge]
+enabled = true
+model_dir = "~/.local/share/gaze/models/gliner-multi-pii-dob-int8"
+threshold = 0.5

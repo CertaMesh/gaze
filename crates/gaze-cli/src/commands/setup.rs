@@ -47,7 +47,7 @@ pub(crate) fn run(args: Args) -> Result<(), CliError> {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum ModelInstallStatus {
+pub(crate) enum ModelInstallStatus {
     AlreadyPresent,
     Downloaded,
 }
@@ -90,23 +90,11 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
 
     let (model_dir, model_status) = install_ner_model(args.model_dir)?;
 
-    if args.dob_model_dir.is_some() && !args.dob_judge {
-        return Err(setup_error(
-            "--dob-model-dir requires --dob-judge".to_string(),
-        ));
-    }
-    let dob_model_dir = if args.dob_judge {
-        let outcome = install_gliner_dob_bundle(args.dob_model_dir.as_deref())
-            .map_err(|err| setup_error(format!("GLiNER DOB bundle setup failed: {err}")))?;
-        Some(match outcome {
-            InstallOutcome::AlreadyPresent { model_dir } => {
-                (model_dir, ModelInstallStatus::AlreadyPresent)
-            }
-            InstallOutcome::Installed { model_dir } => (model_dir, ModelInstallStatus::Downloaded),
-        })
-    } else {
-        None
-    };
+    let dob_model_dir = resolve_dob_judge(
+        args.dob_judge,
+        args.dob_model_dir.as_deref(),
+        install_gliner_dob_bundle,
+    )?;
 
     let doctor_clean_text = write_verified_policy_with_dob(
         &policy_path,
@@ -129,6 +117,36 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
         nym_model_dir: resolved_safety_net.nym_model_dir,
         dob_model_dir,
     })
+}
+
+/// Installs (or re-verifies) the GLiNER bundle when setup runs with `--dob-judge`;
+/// `None` otherwise: the judge is opt-in until its bundle is shrunk (todo 3905).
+/// The installer is a parameter so the mapping from flags to policy is testable
+/// without the network.
+pub(crate) fn resolve_dob_judge(
+    enabled: bool,
+    model_dir: Option<&Path>,
+    install: impl FnOnce(Option<&Path>) -> Result<InstallOutcome, SetupError>,
+) -> Result<Option<(PathBuf, ModelInstallStatus)>, CliError> {
+    if model_dir.is_some() && !enabled {
+        return Err(setup_error(
+            "--dob-model-dir requires --dob-judge".to_string(),
+        ));
+    }
+    if !enabled {
+        return Ok(None);
+    }
+    let outcome = install(model_dir).map_err(|err| {
+        setup_error(format!(
+            "GLiNER DOB bundle setup failed: {err}. Remediation: check network access to huggingface.co and re-run `gaze setup --dob-judge`, or run `gaze setup` without `--dob-judge` to write a policy without the date-of-birth judge."
+        ))
+    })?;
+    Ok(Some(match outcome {
+        InstallOutcome::AlreadyPresent { model_dir } => {
+            (model_dir, ModelInstallStatus::AlreadyPresent)
+        }
+        InstallOutcome::Installed { model_dir } => (model_dir, ModelInstallStatus::Downloaded),
+    }))
 }
 
 fn install_ner_model(
@@ -495,7 +513,7 @@ fn setup_policy_toml(model_dir: &Path, nym_model_dir: Option<&Path>) -> Result<S
     setup_policy_toml_with_dob(model_dir, nym_model_dir, None)
 }
 
-fn setup_policy_toml_with_dob(
+pub(crate) fn setup_policy_toml_with_dob(
     model_dir: &Path,
     nym_model_dir: Option<&Path>,
     dob_model_dir: Option<&Path>,

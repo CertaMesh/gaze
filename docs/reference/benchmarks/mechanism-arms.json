@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "comment": "Per-mechanism benchmark arms: the stack with one mechanism versus without it. Written by scripts/bench/mechanism_arms.py record; checked by its check command.",
+  "mechanisms": [
+    {
+      "id": "gliner-dob-judge",
+      "title": "GLiNER date-of-birth judge",
+      "added_in": "v0.16",
+      "shipped": "opt-in (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk (todo 3905), then default-on",
+      "latency": {
+        "file": "docs/reference/benchmarks/mechanisms/gliner-dob-judge-latency.json",
+        "sha256": "838cfd64c0e33e3b7b0504347ba3a968041ed10f887732c60b9cf5dcbe9266d9"
+      },
+      "policy_delta": {
+        "file": "scripts/bench/mechanisms/gliner-dob-judge.toml",
+        "sha256": "e46b73f7d76025d1e88306786e2c1bd06acf57a9e2ec9db1127d151d56f1673f"
+      },
+      "measurements": [
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/gliner-dob-judge-35c4fc79377d-base.jsonl.gz",
+              "sha256": "801f1ce82fafff59ce90d69c45894402be2b788df854449c7dabf7e3865c9a0a"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/gliner-dob-judge-35c4fc79377d-candidate.jsonl.gz",
+              "sha256": "ba1821b59e0fe9f46ad60a7c78ecb5def1d991ea64f8d3b920203932bd4fee1a"
+            }
+          },
+          "revision": "35c4fc79377dce474dc93c320c94c259cd4fcdc0",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+          "candidate_policy_sha256": "343cf1cceb38d0b8210bbca01130ca07b06d564b2dad94a31d04b06598129cab",
+          "contracts": {
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 11909,
+                "false_positive": 13768,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 11824,
+                "false_positive": 13768,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "DATEOFBIRTH": -85
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 11909,
+                "false_positive": 25480,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 11824,
+                "false_positive": 25480,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "DATEOFBIRTH": -85
+              },
+              "false_positive_by_class_delta": {}
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 18155,
+                "false_positive": 25480,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 18070,
+                "false_positive": 25480,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "DATEOFBIRTH": -85
+              },
+              "false_positive_by_class_delta": {}
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 2549,
+                "false_positive": 884,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 2529,
+                "false_positive": 884,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 3544,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 3544,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 280,
+                "false_positive": 416,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 280,
+                "false_positive": 416,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 105, FP bytes changed by +0"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 105, FP bytes changed by +0"
+            }
+          },
+          "attested": {
+            "binary_sha256": "0ecb1cddab0326cb29dcbe4af550aeaa765fd4d929465a9d52bc25df0f9c7885",
+            "crates_tree": "d23a925233253226ff68f6ec700e89c45ea1c950",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
+        }
+      ]
+    }
+  ]
+}

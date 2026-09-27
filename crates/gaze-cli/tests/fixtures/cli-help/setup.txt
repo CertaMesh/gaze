@@ -16,6 +16,12 @@ Options:
       --model-dir <MODEL_DIR>
           NER model install directory. Defaults to $XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl
 
+      --dob-judge
+          Install and enable the pinned local GLiNER date-of-birth judge (opt-in)
+
+      --dob-model-dir <DOB_MODEL_DIR>
+          GLiNER bundle directory; requires --dob-judge
+
       --non-interactive
           Use defaults without prompts
 

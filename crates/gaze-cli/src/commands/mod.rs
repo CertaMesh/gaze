@@ -90,7 +90,7 @@ enum Cmd {
         /// NER model install directory. Defaults to $XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl.
         #[arg(long)]
         model_dir: Option<PathBuf>,
-        /// Install and enable the pinned local GLiNER date-of-birth judge.
+        /// Install and enable the pinned local GLiNER date-of-birth judge (opt-in).
         #[arg(long)]
         dob_judge: bool,
         /// GLiNER bundle directory; requires --dob-judge.
@@ -698,7 +698,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             dob_model_dir,
             non_interactive,
             force,
-        } => setup::run(setup::Args {
+        } => setup::run(setup_args(
             safety_net,
             policy_out,
             model_dir,
@@ -706,7 +706,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             dob_model_dir,
             non_interactive,
             force,
-        }),
+        )),
         #[cfg(feature = "document")]
         Cmd::Document { command } => match command {
             DocumentCmd::Clean {
@@ -889,6 +889,29 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
     }
 }
 
+/// `gaze setup` flags to setup arguments. The GLiNER DOB judge is opt-in
+/// (`--dob-judge`) until its bundle is shrunk (todo 3905).
+#[cfg(feature = "setup")]
+fn setup_args(
+    safety_net: Option<setup::SetupSafetyNet>,
+    policy_out: Option<PathBuf>,
+    model_dir: Option<PathBuf>,
+    dob_judge: bool,
+    dob_model_dir: Option<PathBuf>,
+    non_interactive: bool,
+    force: bool,
+) -> setup::Args {
+    setup::Args {
+        safety_net,
+        policy_out,
+        model_dir,
+        dob_judge,
+        dob_model_dir,
+        non_interactive,
+        force,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
@@ -939,6 +962,109 @@ mod tests {
         for sub in cmd.get_subcommands() {
             walk(sub, format!("{path} {}", sub.get_name()), out);
         }
+    }
+
+    /// `(dob_judge, dob_model_dir)` of the setup arguments `gaze setup <extra>`
+    /// dispatches with, through the same `setup_args` the dispatcher calls.
+    #[cfg(feature = "setup")]
+    fn setup_dob_flags(extra: &[&str]) -> Result<(bool, Option<PathBuf>), clap::Error> {
+        let cli = Cli::try_parse_from(["gaze", "setup"].iter().chain(extra))?;
+        let Cmd::Setup {
+            safety_net,
+            policy_out,
+            model_dir,
+            dob_judge,
+            dob_model_dir,
+            non_interactive,
+            force,
+        } = cli.cmd
+        else {
+            unreachable!("expected setup command");
+        };
+        let args = setup_args(
+            safety_net,
+            policy_out,
+            model_dir,
+            dob_judge,
+            dob_model_dir,
+            non_interactive,
+            force,
+        );
+        Ok((args.dob_judge, args.dob_model_dir))
+    }
+
+    #[cfg(feature = "setup")]
+    #[test]
+    fn setup_leaves_the_dob_judge_off_unless_asked() {
+        assert_eq!(setup_dob_flags(&[]).unwrap(), (false, None));
+        assert_eq!(setup_dob_flags(&["--dob-judge"]).unwrap(), (true, None));
+        assert_eq!(
+            setup_dob_flags(&["--dob-judge", "--dob-model-dir", "/tmp/gliner"]).unwrap(),
+            (true, Some(PathBuf::from("/tmp/gliner")))
+        );
+        let err = setup_dob_flags(&["--dob-model-dir", "/tmp/gliner"]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+        let err = setup_dob_flags(&["--no-dob-judge"]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
+    }
+
+    /// Flags to the written policy, both directions, with a fake installer: no env,
+    /// no network, no model. The live path is covered by tests/setup_policy.rs.
+    #[cfg(feature = "setup")]
+    #[test]
+    fn setup_flags_decide_whether_the_policy_carries_the_dob_judge() {
+        use gaze_model_setup::InstallOutcome;
+
+        let ner = PathBuf::from("/tmp/synthetic-ner");
+        for (flags, expect_judge) in [(&[][..], false), (&["--dob-judge"][..], true)] {
+            let (dob_judge, dob_model_dir) = setup_dob_flags(flags).unwrap();
+            let mut installs = 0;
+            let resolved = setup::resolve_dob_judge(dob_judge, dob_model_dir.as_deref(), |dir| {
+                installs += 1;
+                assert_eq!(dir, None, "{flags:?}");
+                Ok(InstallOutcome::AlreadyPresent {
+                    model_dir: PathBuf::from("/tmp/synthetic-gliner"),
+                })
+            })
+            .unwrap();
+            assert_eq!(installs, usize::from(expect_judge), "{flags:?}");
+            let policy = setup::setup_policy_toml_with_dob(
+                &ner,
+                None,
+                resolved.as_ref().map(|(dir, _)| dir.as_path()),
+            )
+            .unwrap();
+            assert_eq!(
+                policy.contains("[dob_judge]\nenabled = true"),
+                expect_judge,
+                "{flags:?}: {policy}"
+            );
+        }
+    }
+
+    #[cfg(feature = "setup")]
+    #[test]
+    fn failed_dob_install_says_how_to_retry_or_skip() {
+        let err = setup::resolve_dob_judge(true, None, |_| {
+            Err(gaze_model_setup::SetupError::PathResolve {
+                message: "offline".to_string(),
+            })
+        })
+        .unwrap_err();
+        assert!(
+            matches!(&err, CliError::SetupDetail(detail)
+                if detail.contains("gaze setup --dob-judge") && detail.contains("without `--dob-judge`")),
+            "{err:?}"
+        );
+        let err =
+            setup::resolve_dob_judge(false, Some(std::path::Path::new("/tmp/gliner")), |_| {
+                unreachable!("a disabled judge must not install")
+            })
+            .unwrap_err();
+        assert!(
+            matches!(&err, CliError::SetupDetail(detail) if detail.contains("requires --dob-judge")),
+            "{err:?}"
+        );
     }
 
     #[test]
