@@ -62,6 +62,15 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def policy_dependencies(policy: Path | None, release_root: Path) -> dict[str, object] | None:
+    if policy is None:
+        return None
+    try:
+        return agentic.policy_dependency_provenance(policy, release_root)
+    except agentic.LayerError as error:
+        raise PastReleaseError(f"policy dependencies: {error}") from error
+
+
 def _key_value(value: str, flag: str) -> tuple[str, str]:
     key, sep, rest = value.partition("=")
     if not sep or not key or not rest:
@@ -169,6 +178,7 @@ def run(args: argparse.Namespace) -> Path:
     davlan = args.model_dir.expanduser().resolve()
     bundles = runner.validate_required_models(HARNESS_ROOT, davlan)
     bundles += [model_bundle(value) for value in args.model_bundle]
+    dependency_provenance = policy_dependencies(policy, release_root)
 
     contract = runner.load_scored_label_contract(HARNESS_ROOT, args.scored_labels)
     dataset_path = runner.repo_path(HARNESS_ROOT, args.dataset)
@@ -267,6 +277,7 @@ def run(args: argparse.Namespace) -> Path:
         "policy": {"path": str(policy), "sha256": _sha256(policy)} if policy is not None else None,
         "profile": card["parameters"]["profile"],
         "model_bundles": bundles,
+        "policy_dependencies": dependency_provenance,
         "hardware": platform.platform() + "; " + platform.processor(),
         "warmup_count": args.warmups,
         "measured_repetitions": 1,

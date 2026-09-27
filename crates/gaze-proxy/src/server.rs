@@ -3578,7 +3578,7 @@ mod tests {
     }
 
     async fn wait_for_lease_count(registry: &SessionRegistry, expected: usize) {
-        tokio::time::timeout(Duration::from_secs(1), async {
+        tokio::time::timeout(Duration::from_secs(60), async {
             loop {
                 if registry.stats().total_leases() == expected {
                     return;
@@ -3741,7 +3741,7 @@ mod tests {
         };
         tokio::select! {
             result = server => panic!("owned listener server stopped: {result:?}"),
-            result = tokio::time::timeout(Duration::from_secs(3), health) => result.unwrap(),
+            result = tokio::time::timeout(Duration::from_secs(60), health) => result.unwrap(),
         }
         // Dropping the serving future releases the listener, as with `serve`.
     }

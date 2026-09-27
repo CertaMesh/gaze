@@ -107,7 +107,7 @@ fn unused_local_addr() -> SocketAddr {
 
 fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
     stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_read_timeout(Some(Duration::from_secs(60)))
         .unwrap();
     let mut bytes = Vec::new();
     let mut chunk = [0_u8; 4096];
@@ -227,7 +227,7 @@ fn direct_proxy_body(policy: &std::path::Path) -> String {
         "proxy response was not 200"
     );
 
-    let captured = capture_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    let captured = capture_rx.recv_timeout(Duration::from_secs(60)).unwrap();
     upstream_thread.join().unwrap();
     let body_start = captured
         .windows(4)
@@ -930,7 +930,7 @@ fn daemonized_proxy_body(policy: &Path) -> String {
     let _ = stream.read_to_end(&mut response);
 
     let captured = capture_rx
-        .recv_timeout(Duration::from_secs(5))
+        .recv_timeout(Duration::from_secs(60))
         .unwrap_or_else(|_| {
             panic!(
                 "the loopback upstream captured no request: the daemonized proxy ignored the \

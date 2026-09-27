@@ -66,6 +66,7 @@ if mode.startswith('witness'):
             publish('.error', repr(error))
             os._exit(95)
         time.sleep(0.005)
+    publish('.released')
     os._exit(92)
 
 if mode.startswith('hold'):

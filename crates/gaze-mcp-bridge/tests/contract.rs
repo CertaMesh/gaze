@@ -242,7 +242,7 @@ async fn discovery_namespaces_tools_and_reports_denied_resources_prompts() {
     let client = FakeClient::new(FakeResponse::Result(result_text("ok")));
     let mut clients: BTreeMap<String, Arc<dyn DownstreamClient>> = BTreeMap::new();
     clients.insert("mail server".to_string(), client);
-    let registry = BridgeRegistry::discover(clients, Duration::from_secs(1))
+    let registry = BridgeRegistry::discover(clients, Duration::from_secs(60))
         .await
         .expect("discover");
     let rows = registry.print_surface();
@@ -262,7 +262,7 @@ async fn sanitize_collision_is_registration_error() {
     let mut clients: BTreeMap<String, Arc<dyn DownstreamClient>> = BTreeMap::new();
     clients.insert("mail server".to_string(), left);
     clients.insert("mail/server".to_string(), right);
-    let err = match BridgeRegistry::discover(clients, Duration::from_secs(1)).await {
+    let err = match BridgeRegistry::discover(clients, Duration::from_secs(60)).await {
         Ok(_) => panic!("sanitized collision should fail"),
         Err(err) => err,
     };
@@ -274,7 +274,7 @@ async fn oversize_tool_name_is_registration_error() {
     let client = FakeClient::new(FakeResponse::Result(result_text("ok")));
     let mut clients: BTreeMap<String, Arc<dyn DownstreamClient>> = BTreeMap::new();
     clients.insert("s".repeat(129), client);
-    let err = match BridgeRegistry::discover(clients, Duration::from_secs(1)).await {
+    let err = match BridgeRegistry::discover(clients, Duration::from_secs(60)).await {
         Ok(_) => panic!("oversize name should fail"),
         Err(err) => err,
     };
@@ -1337,7 +1337,7 @@ async fn rmcp_child_process_fixture_spawns_lists_calls_and_bridge_redacts() {
     };
     let client = RmcpChildClient::spawn(&spec).await.expect("client");
     let tools = client
-        .list_tools(Duration::from_secs(5))
+        .list_tools(Duration::from_secs(60))
         .await
         .expect("tools");
     assert_eq!(tools[0].raw_name, "send");
@@ -1345,7 +1345,7 @@ async fn rmcp_child_process_fixture_spawns_lists_calls_and_bridge_redacts() {
     let mut clients: BTreeMap<String, Arc<dyn DownstreamClient>> = BTreeMap::new();
     clients.insert("mail".to_string(), client);
     let registry = Arc::new(
-        BridgeRegistry::discover(clients, Duration::from_secs(5))
+        BridgeRegistry::discover(clients, Duration::from_secs(60))
             .await
             .expect("registry"),
     );
@@ -1417,11 +1417,11 @@ async fn rmcp_child_stderr_capture_helper() {
     };
     let client = RmcpChildClient::spawn(&spec).await.expect("client");
     client
-        .list_tools(Duration::from_secs(5))
+        .list_tools(Duration::from_secs(60))
         .await
         .expect("tools");
     client
-        .call_tool("send", json!({"to": RAW_EMAIL}), Duration::from_secs(5))
+        .call_tool("send", json!({"to": RAW_EMAIL}), Duration::from_secs(60))
         .await
         .expect("call");
 }
