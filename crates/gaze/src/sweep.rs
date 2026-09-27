@@ -400,6 +400,39 @@ impl SweepMatcher {
     }
 }
 
+/// Winner spans, answering "does one span contain this range" in O(log n).
+///
+/// Asking every winner for every sweep hit made a document that repeats one
+/// value N times cost O(N^2) (todo 3895). A span containing `range` starts
+/// at or before `range.start`, so it exists exactly when the largest end
+/// among those spans reaches `range.end`.
+pub(crate) struct Coverage {
+    starts: Vec<usize>,
+    /// `max_end[i]` is the largest end among the first `i + 1` spans.
+    max_end: Vec<usize>,
+}
+
+impl Coverage {
+    pub(crate) fn new(spans: impl Iterator<Item = Range<usize>>) -> Self {
+        let mut spans = spans.collect::<Vec<_>>();
+        spans.sort_by_key(|span| span.start);
+        let starts = spans.iter().map(|span| span.start).collect();
+        let max_end = spans
+            .iter()
+            .scan(0, |max, span| {
+                *max = span.end.max(*max);
+                Some(*max)
+            })
+            .collect();
+        Self { starts, max_end }
+    }
+
+    pub(crate) fn contains(&self, range: &Range<usize>) -> bool {
+        let before = self.starts.partition_point(|&start| start <= range.start);
+        before > 0 && self.max_end[before - 1] >= range.end
+    }
+}
+
 /// Leftmost-longest non-overlapping cover of `hits`.
 pub(crate) fn select(mut hits: Vec<SweepHit>) -> Vec<SweepHit> {
     hits.sort_by(|a, b| {
@@ -688,6 +721,43 @@ fn fold(input: &str) -> Folded {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `Coverage` replaced a scan of every winner per sweep hit (todo 3895).
+    /// Pin it against that scan on random, overlapping and empty spans.
+    #[test]
+    fn coverage_matches_the_full_scan() {
+        fn next(state: &mut u64) -> u64 {
+            *state ^= *state << 13;
+            *state ^= *state >> 7;
+            *state ^= *state << 17;
+            *state
+        }
+        fn span(state: &mut u64) -> Range<usize> {
+            let start = (next(state) % 50) as usize;
+            start..start + (next(state) % 12) as usize
+        }
+        let mut state = 0x3895_u64;
+        let (mut inside, mut outside) = (0, 0);
+        for _ in 0..5_000 {
+            let spans = (0..next(&mut state) % 10)
+                .map(|_| span(&mut state))
+                .collect::<Vec<_>>();
+            let coverage = Coverage::new(spans.iter().cloned());
+            for _ in 0..8 {
+                let range = span(&mut state);
+                let expected = spans
+                    .iter()
+                    .any(|span| span.start <= range.start && range.end <= span.end);
+                assert_eq!(coverage.contains(&range), expected, "{spans:?} {range:?}");
+                if expected {
+                    inside += 1;
+                } else {
+                    outside += 1;
+                }
+            }
+        }
+        assert!(inside > 1_000 && outside > 1_000, "{inside} / {outside}");
+    }
 
     fn name(raw: &str) -> SweepSource {
         SweepSource {

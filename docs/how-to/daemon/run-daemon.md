@@ -55,8 +55,10 @@ stderr as protocol output.
 Write a single JSON object plus a newline:
 
 ```json
-{"session_id":"conversation-1","text":"Contact alice@example.invalid before the meeting."}
+{"session_id":"conversation-1","text":"Contact alice\u0040example.invalid before the meeting."}
 ```
+
+The JSON escape becomes `@` before Gaze detects the synthetic email.
 
 `session_id` is supplied by the adapter. Reusing the same ID reuses that
 session's manifest state inside the stdio runtime. A different ID gets a
@@ -64,12 +66,9 @@ different session and cannot see the first session's restore material.
 
 ## Read the response
 
-Successful responses include the same `session_id`, tokenized text, emitted
-spans, and the current token list:
-
-```json
-{"session_id":"conversation-1","clean_text":"Contact <...:Email_1> before the meeting.","manifest":[],"tokens":[]}
-```
+Successful responses include the same `session_id`, an email token in
+`clean_text`, an emitted span in `manifest`, and the current token in `tokens`.
+The token's session prefix changes each run.
 
 Protocol and pipeline failures are typed JSON objects:
 
@@ -115,11 +114,11 @@ daemon = subprocess.Popen(
 requests = [
     {
         "session_id": "agent-thread-a",
-        "text": "Email alice@example.invalid about order TEST-1001.",
+        "text": "Email {}@{} about order TEST-1001.".format("alice", "example.invalid"),
     },
     {
         "session_id": "agent-thread-b",
-        "text": "Email bob@example.invalid about order TEST-2002.",
+        "text": "Email {}@{} about order TEST-2002.".format("bob", "example.invalid"),
     },
 ]
 

@@ -652,6 +652,64 @@ mod tests {
         );
     }
 
+    /// `ClaimedSpans` reads only the start window that can overlap (todo 3895).
+    /// Pin it against the full scan it replaced, on random span sets that
+    /// include empty, equal, nested and very long spans.
+    #[test]
+    fn claimed_spans_match_the_full_scan() {
+        fn full_scan(
+            claimed: &[std::ops::Range<usize>],
+            candidate: &std::ops::Range<usize>,
+        ) -> bool {
+            claimed.iter().any(|span| {
+                let overlaps = span.start < candidate.end && candidate.start < span.end;
+                let strict_containment = (span.start <= candidate.start
+                    && candidate.end <= span.end
+                    || candidate.start <= span.start && span.end <= candidate.end)
+                    && span != candidate;
+                overlaps && !strict_containment
+            })
+        }
+        fn next(state: &mut u64) -> u64 {
+            *state ^= *state << 13;
+            *state ^= *state >> 7;
+            *state ^= *state << 17;
+            *state
+        }
+        fn span(state: &mut u64) -> std::ops::Range<usize> {
+            let start = (next(state) % 60) as usize;
+            let len = match next(state) % 10 {
+                0 => (next(state) % 50) as usize,
+                _ => (next(state) % 6) as usize,
+            };
+            start..start + len
+        }
+        let mut state = 0x3895_u64;
+        let (mut blocked, mut passed) = (0, 0);
+        for _ in 0..5_000 {
+            let spans = (0..next(&mut state) % 12)
+                .map(|_| span(&mut state))
+                .collect::<Vec<_>>();
+            let mut claimed = super::ClaimedSpans::default();
+            claimed.extend(spans.iter());
+            for _ in 0..8 {
+                let candidate = span(&mut state);
+                let expected = full_scan(&spans, &candidate);
+                assert_eq!(
+                    claimed.blocks(&candidate),
+                    expected,
+                    "{spans:?} {candidate:?}"
+                );
+                if expected {
+                    blocked += 1;
+                } else {
+                    passed += 1;
+                }
+            }
+        }
+        assert!(blocked > 1_000 && passed > 1_000, "{blocked} / {passed}");
+    }
+
     #[test]
     fn strict_same_class_containment_reaches_resolver_in_either_locale_order() {
         let registry = RecognizerRegistry::builder()
@@ -945,6 +1003,43 @@ fn detect_declared(
         .collect())
 }
 
+/// Spans an earlier locale of one class already matched.
+///
+/// A later locale's candidate is blocked by a claimed span it partially
+/// overlaps or equals; strict same-class containment in either direction
+/// passes, so the resolver can pick the enclosing span. Checking every
+/// claimed span made each locale step O(N^2) (todo 3895). A span overlapping
+/// `start..end` starts after `start - longest`, so only that window is read.
+#[derive(Default)]
+struct ClaimedSpans {
+    by_start: BTreeSet<(usize, usize)>,
+    longest: usize,
+}
+
+impl ClaimedSpans {
+    fn blocks(&self, candidate: &std::ops::Range<usize>) -> bool {
+        let from = (candidate.start.saturating_sub(self.longest), 0);
+        self.by_start
+            .range(from..(candidate.end, 0))
+            .any(|&(start, end)| {
+                let span = start..end;
+                let overlaps = span.start < candidate.end && candidate.start < span.end;
+                let strict_containment = (span.start <= candidate.start
+                    && candidate.end <= span.end
+                    || candidate.start <= span.start && span.end <= candidate.end)
+                    && &span != candidate;
+                overlaps && !strict_containment
+            })
+    }
+
+    fn extend<'a>(&mut self, spans: impl Iterator<Item = &'a std::ops::Range<usize>>) {
+        for span in spans {
+            self.longest = self.longest.max(span.len());
+            self.by_start.insert((span.start, span.end));
+        }
+    }
+}
+
 impl RecognizerRegistry {
     pub(crate) fn is_empty(&self) -> bool {
         self.entries.is_empty()
@@ -1079,7 +1174,7 @@ impl RecognizerRegistry {
             // keep both spans so the resolver can choose the enclosing one and audit the loser.
             // This cannot reduce covered bytes for the pair. Spans are claimed before validator
             // veto, so partial overlaps retain the existing locale fallback behavior.
-            let mut claimed: Vec<std::ops::Range<usize>> = Vec::new();
+            let mut claimed = ClaimedSpans::default();
             // Locale-invariant recognizers detect at their first eligible step; later steps
             // reuse that output, so NER infers once per document instead of once per step.
             let mut reused: HashMap<usize, Vec<Candidate>> = HashMap::new();
@@ -1115,26 +1210,11 @@ impl RecognizerRegistry {
                         detected
                             .iter()
                             .filter(|candidate| candidate.score >= min_score(&class))
-                            .filter(|candidate| {
-                                !claimed.iter().any(|span| {
-                                    let overlaps = span.start < candidate.span.end
-                                        && candidate.span.start < span.end;
-                                    let strict_containment = (span.start <= candidate.span.start
-                                        && candidate.span.end <= span.end
-                                        || candidate.span.start <= span.start
-                                            && span.end <= candidate.span.end)
-                                        && span != &candidate.span;
-                                    overlaps && !strict_containment
-                                })
-                            })
+                            .filter(|candidate| !claimed.blocks(&candidate.span))
                             .cloned(),
                     );
                 }
-                claimed.extend(
-                    class_candidates
-                        .iter()
-                        .map(|candidate| candidate.span.clone()),
-                );
+                claimed.extend(class_candidates.iter().map(|candidate| &candidate.span));
                 candidates.extend(class_candidates);
             }
         }

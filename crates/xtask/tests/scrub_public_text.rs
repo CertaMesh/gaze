@@ -18,11 +18,31 @@ fn run_gate(root: &Path, fixture: &str) -> Output {
 }
 
 fn run_gate_on(root: &Path, path: &str) -> Output {
+    run_gate_on_files(root, &[PathBuf::from(path)])
+}
+
+fn run_gate_on_files(root: &Path, paths: &[PathBuf]) -> Output {
     Command::new("cargo")
-        .args(["run", "-p", "xtask", "--", "scrub-public-text", path])
+        .args(["run", "-p", "xtask", "--", "scrub-public-text"])
+        .args(paths)
         .current_dir(root)
         .output()
         .expect("run scrub-public-text gate")
+}
+
+fn run_published_gate(root: &Path) -> Output {
+    Command::new("cargo")
+        .args([
+            "run",
+            "-p",
+            "xtask",
+            "--",
+            "scrub-public-text",
+            "--published",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("run published public-text gate")
 }
 
 fn output_text(output: &Output) -> String {
@@ -97,13 +117,15 @@ fn scrub_public_text_fails_lookalike_semver_host() {
     assert!(text.contains("gaze clean emitted"), "{text}");
 }
 
-/// UPGRADE.md is public release text, so every PR keeps it scrub-clean, not only a release run.
+/// These files ship through GitHub Releases or crates.io, or are linked from their READMEs.
+/// The workspace test job runs this gate on every PR, before a release tag exists.
 #[test]
-fn scrub_public_text_passes_upgrade_md() {
-    let output = run_gate_on(&workspace_root(), "UPGRADE.md");
+fn scrub_public_text_passes_published_and_linked_docs() {
+    let root = workspace_root();
+    let output = run_published_gate(&root);
     assert!(
         output.status.success(),
-        "UPGRADE.md must pass the public-text scrub; {}",
+        "published and linked Markdown must pass the public-text scrub; {}",
         output_text(&output)
     );
 }
@@ -128,4 +150,22 @@ fn scrub_public_text_fails_free_text_path_on_allowlisted_host() {
         "an allowlisted host must not carry free text past the scrub; {text}"
     );
     assert!(text.contains("gaze clean emitted"), "{text}");
+}
+
+#[test]
+fn scrub_public_text_resolves_paths_from_the_workspace_root() {
+    let subdir = workspace_root().join("crates");
+    let clean = run_gate(&subdir, "clean.md");
+    assert!(
+        clean.status.success(),
+        "root-relative paths must resolve from a subdirectory; {}",
+        output_text(&clean)
+    );
+    let dirty = run_gate(&subdir, "dirty.md");
+    let text = output_text(&dirty);
+    assert!(!dirty.status.success(), "dirty text must fail; {text}");
+    assert!(
+        text.contains("existing gaze token <Email_1>"),
+        "the failure must be a finding, not a read error; {text}"
+    );
 }

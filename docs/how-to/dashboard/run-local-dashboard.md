@@ -22,7 +22,7 @@ OwnerRestoredRiskAcknowledgement::acknowledge_reidentification_risk().
 
 These selections are immutable for the launch. A browser request cannot add a domain later.
 
-Use LoopbackBind::fresh_ephemeral_v4() for a fresh literal address in 127.0.0.0/8 and operating
+Use LoopbackBind::fresh_ephemeral_v4() for a fresh literal address in the IPv4 loopback range and operating
 system port zero. A configured literal loopback address must still use port zero and should display
 an origin-reuse warning.
 

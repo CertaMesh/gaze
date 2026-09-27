@@ -22,14 +22,14 @@
      issue: "delayed refund" }
        ↓
 5. gaze clean — pseudonymizes the bundle:
-   { name: "<Name_1>", order_id: "<OrderId_1>",
-     amount: "<Amount_1>", refund_processed: "<Date_1>",
+   { name: "<Name_N>", order_id: "<OrderId_N>",
+     amount: "<Amount_N>", refund_processed: "<Date_N>",
      issue: "delayed refund" }
    + per-session manifest stored
        ↓
 6. LLM drafts reply (sees only tokens + facts):
-   "Hi <Name_1>, your refund of <Amount_1> for order <OrderId_1>
-    was processed on <Date_1>. Please allow 3-5 business days to
+   "Hi <Name_N>, your refund of <Amount_N> for order <OrderId_N>
+    was processed on <Date_N>. Please allow 3-5 business days to
     appear on your statement."
        ↓
 7. gaze restore rehydrates draft:
@@ -43,6 +43,8 @@ LLM never saw "Alice Schmidt", "#INV-2026-04-1872", "€128.40", "2026-05-12".
 App owns the lookup. gaze owns the manifest. LLM owns the prose.
 Each layer's role is what it is built for.
 ```
+
+The `_N` suffix stands for each token's session-specific numeric ordinal.
 
 `OrderId` and refund-amount shapes are tenant-specific custom recognizers in the host policy; email, names, IBAN, phone, postal, and credit-card shapes come from the bundled `core` rulepack.
 

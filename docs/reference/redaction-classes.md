@@ -103,7 +103,7 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `iban.structural` | `regex` | Space-tolerant IBAN shapes at the country's ISO 13616 registry length that pass MOD-97 after canonicalization; no trailing word boundary in the pattern, the code boundary accepts a glued label and refuses a glued digit or underscore | `custom:iban` | `global` | `iban_mod97` | `iban_canonical` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `card.structural` | `regex` | a digit run with optional spaces or dashes; all-zero card windows are excluded; the recognizer finds the Luhn-valid 13 to 19 digit card inside it (the old 13-19 window or a group-aligned card layout: compact, 4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4; overlapping Luhn-valid windows are one token over their union), so a touching CVV, expiry or number does not hide it | `custom:credit_card` | `global` | `luhn` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `ip.v4` | `regex` | Decimal dotted-quad IPv4 addresses with octets from 0 through 255, excluding RFC 5737 documentation ranges | `custom:ip_address` | `global` | `ipv4_parse_non_documentation` | `none` | `safe_default` | yes | 0.70 | 80 |
-| `core, core-extended` | `ip.v6` | `regex` | Full, compressed (including bare `::`), and IPv4-embedded IPv6 textual forms at every locale, excluding RFC 3849 and embedded RFC 5737 documentation ranges. The word guard excludes an address adjacent to an identifier character, so Rust and C++ `::` paths survive; an explicit `Address:`, `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` cue admits a glued address after full IPv6 parsing (case-insensitive cues; `global` document-basis activation; todos #3710 and #3762, superseding #2402). `_2001:db9::1` remains outside the cue rule. A standalone path whose segments are all short hex words and which has no surrounding context (`a::b`, `abc::def`) is still an address | `custom:ip_address` | `global` | `ipv6_parse_non_documentation` | `none` | `safe_default` | yes | 0.70 | 80 |
+| `core, core-extended` | `ip.v6` | `regex` | Full, compressed (including the bare double-colon form), and IPv4-embedded IPv6 textual forms at every locale, excluding RFC 3849 and embedded RFC 5737 documentation ranges. The word guard excludes an address adjacent to an identifier character, so Rust and C++ double-colon paths survive; an explicit `Address:`, `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` cue admits a glued address after full IPv6 parsing (case-insensitive cues; `global` document-basis activation; todos #3710 and #3762, superseding #2402). `_2001:db9::1` remains outside the cue rule. A standalone path whose segments are all short hex words and which has no surrounding context is still an address | `custom:ip_address` | `global` | `ipv6_parse_non_documentation` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `eth.address` | `regex` | Forty-hex-digit Ethereum addresses prefixed by 0x and accepted by EIP-55 rules | `custom:eth_address` | `global` | `eth_eip55` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `aadhaar.in` | `regex` | Cue-anchored Indian Aadhaar or UID values containing 12 digits and passing Verhoeff | `custom:aadhaar` | `en-IN, hi-IN` | `aadhaar_verhoeff` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `nir.fr` | `regex` | Cue-anchored French NIR social-security values with 15 digits and a valid MOD-97 key | `custom:nir` | `fr-FR` | `fr_nir_mod97` | `none` | `safe_default` | yes | 0.88 | 86 |
@@ -121,10 +121,10 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `postal.us` | `regex` | US five-digit ZIP or ZIP+4 shapes | `custom:postal_code` | `en-US` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
 | `core, core-extended` | `postal.at_ch` | `regex` | Austrian and Swiss four-digit postal codes, optionally `A-`/`CH-`/`FL-` prefixed, only directly after a postal cue (`PLZ`, `Postleitzahl`, `Postcode`, `ZIP`) or directly before a city-shaped token (uppercase start, or `St.` / `St` before a capitalised name) across a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; a city-anchored code is not matched when preceded by `#` or directly preceded by an Australian state abbreviation | `custom:postal_code` | `de-AT, de-CH` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
 | `core, core-extended` | `postal.au` | `regex` | Australian state or territory abbreviation plus four-digit postcode in Australia Post's published state range, after a capitalized word of three or more letters other than a listed EN/DE function word, or before a terminal field boundary; the state and code are one restorable token | `custom:postal_code` | `en-AU` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
-| `core, core-extended` | `postal.ca` | `regex` | Canadian `A9A 9A9` postal codes, hyphenated, compact, or separated by a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; not matched when preceded by `#` | `custom:postal_code` | `en-CA` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
-| `core, core-extended` | `postal.gb` | `regex` | UK postcodes across all six Royal Mail outward forms plus `GIR 0AA`, followed by a `9AA` inward code over the official inward alphabet; space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE separator; not matched when preceded by `#` | `custom:postal_code` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
+| `core, core-extended` | `postal.ca` | `regex` | Canadian six-character postal codes alternating letter and digit, starting with a letter; hyphenated, compact, or separated by a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; not matched when preceded by `#` | `custom:postal_code` | `en-CA` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
+| `core, core-extended` | `postal.gb` | `regex` | UK postcodes across all six Royal Mail outward forms plus the special GIR outward code, followed by an inward code of one digit and two letters from the official inward alphabet; space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE separator; not matched when preceded by `#` | `custom:postal_code` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.ie` | `regex` | Irish Eircodes: routing key including `D6W`, plus a four-character identifier over the restricted Eircode alphabet that must carry at least one letter | `custom:postal_code` | `en-IE` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
-| `core, core-extended` | `url.anchored` | `regex` | URLs beginning with `http://`, `https://`, or `www.` through the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 |
+| `core, core-extended` | `url.anchored` | `regex` | URLs beginning with an HTTP(S) scheme or web prefix through the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 |
 | `core, core-extended` | `ssn.de_cue` | `regex` | Cue-anchored SSN values after German social-insurance cues (Sozialversicherungsnummer, SV-Nummer) in dashed, dotted, or 9 to 11 digit form; format basis; DACH provenance describes cue vocabulary until native SVNR/AHV shapes ship in #2926 | `custom:ssn` | `de-DE, de-AT, de-CH` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `tax_number.cue_anchored` | `regex` | Cue-anchored tax numbers with a three-digit lead and separated digit groups after German or English tax cues; bare digit runs and the checksummed 2-3-3-3 Steuer-ID shape are excluded | `custom:tax_number` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 |
 | `core, core-extended` | `driver_license.cue_anchored` | `regex` | Letter-led alphanumeric licence numbers after German or English driving-licence cues | `custom:driver_license` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 83 |
@@ -139,12 +139,12 @@ remaining column is checked against the loaded rulepack by
 
 Every cue-anchored identifier rule above (`aadhaar.in` through `pan.in`,
 `ssn.de_cue`, and the `*.cue_anchored` rules) accepts its cue as prose
-(`BSN: 111222333`), as a JSON key in double, single, or backslash-escaped
-quotes (`{"bsn":"111222333"}`, `{"bsn":111222333}`), and as a `key=value` or
+(a labelled nine-digit BSN), as a JSON key in double, single, or backslash-escaped
+quotes (a JSON string or numeric `bsn` field), and as a `key=value` or
 `key: value` log field. Keys may be snake, camel, or kebab case (`steuer_id`,
 `steuerId`, `nhs_number`) and may carry an underscore prefix (`customer_ssn`).
 A camelCase prefix (`customerSsn`) is not matched. `birth_date.cue` reads the
-same key shapes (`{"dob": "30.05.1971"}`, `date_of_birth=1971-05-30`) and prose
+same key shapes (a JSON `dob` field or a `date_of_birth` log field) and prose
 cues; it is pinned by `crates/gaze-recognizers/tests/birth_date_cues.rs`. The
 identifier rules are pinned by
 `crates/gaze-recognizers/tests/structured_cue_shapes.rs`.
@@ -445,7 +445,7 @@ who must not tokenize Canadian, UK, or Irish postal codes cannot suppress them
 with a locale chain and has to disable the recognizer.
 
 `iban.structural` carries a leading word boundary but no trailing one. A compact IBAN
-glued to the next label (`IBAN AT611904300234573201BIC`, the dense footer
+glued to the next label (an Austrian compact IBAN glued to `BIC`, the dense footer
 `IBAN:<value>BIC:<value>`) is therefore a candidate, and the trailing boundary
 is decided in code by `gaze_types::word_run_extends_identifier`, which reads
 the word run after a validated registry-length candidate with the same word
@@ -465,12 +465,13 @@ The Dataiku EN/DE holdout, the A4 negative corpus and `docs/**/*.md` are
 byte-identical under either rule (the A4 corpus contains no registry-shaped
 mod-97-valid token), so the evidence for the rule is the synthetic enumeration
 in `scripts/bench/iban_trailing_word_enumeration.py` (solo todo #3756).
-One related shape is only partly covered: a label glued to a spaced German
-IBAN (`IBAN DE89 3704 0044 0532 0130 00BIC`) is a candidate, but
+One related shape is only partly covered: a spaced German example IBAN glued
+to `BIC` is a candidate, but
 `phone.national.de` (priority 85) still claims the `0532 0130` sub-run, because
 its 22-character IBAN-consuming branch keeps its trailing `\b` and stops
 consuming at the glued label; with `custom:phone` tokenized every byte is
-covered as `<iban_1><phone_1><iban_2>`, with it preserved the IBAN stays raw
+covered as `[IBAN fragment][phone fragment][IBAN fragment]`; with it preserved
+the IBAN stays raw
 as before (solo todo #3764). Compact German IBANs glued to a label tokenize whole.
 
 ## Residual coverage
@@ -508,7 +509,7 @@ its resolved action is protective (`Action::is_protective`: anything but
   `custom:family:<name> = preserve` rule still leaves the ambiguous span raw.
 - **One claimant, one fragment per uncovered run.** Adjacent cells of the same
   representative and class merge even where an inner candidate starts or
-  ends, so an email inside a preserved URL leaves as one `<Email_1>`.
+  ends, so an email inside a preserved URL leaves as one email token.
 - A cell emits under **its claimant's own action**: `tokenize` and
   `format_preserve` mint a reversible class token (a fragment has no format
   to preserve), `redact` writes the one-way `[REDACTED:<class>]` marker,
@@ -530,7 +531,7 @@ runtime verdict is not second-guessed; such an original is not admitted.
 
 **One recognized value can produce more than one replacement**, although
 containment precedence now folds a wholly contained rival into the container
-(the reference letter `IBAN PL56 0942 8981 7280 5663 2200 4500 BIC` is one
+(a spaced Polish example IBAN followed by `BIC` in the reference letter is one
 IBAN token; fragments remain for partial overlaps and for claims inside a
 preserved winner). Adopters counting manifest entries are counting
 *replacements*, not distinct recognized values. See

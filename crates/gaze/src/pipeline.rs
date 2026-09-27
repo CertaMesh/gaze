@@ -1411,17 +1411,12 @@ impl Pipeline {
         if let Some(matcher) = target.sweep_matcher()? {
             hits.extend(matcher.find(&normalized.text));
         }
-        let covered = winners
-            .map(|winner| winner.span.clone())
-            .collect::<Vec<_>>();
+        let covered = crate::sweep::Coverage::new(winners.map(|winner| winner.span.clone()));
         let mut uncovered = Vec::new();
         for hit in hits {
             let raw = crate::normalize::raw_range(hit.span.clone(), &normalized.spans)
                 .ok_or_else(|| clean_to_raw_mapping_error("unmappable sweep geometry"))?;
-            if !covered
-                .iter()
-                .any(|span| span.start <= raw.start && raw.end <= span.end)
-            {
+            if !covered.contains(&raw) {
                 uncovered.push(hit);
             }
         }

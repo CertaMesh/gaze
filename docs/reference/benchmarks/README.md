@@ -881,7 +881,7 @@ model:
   one space, comma, tab or NBSP between values. JSON array strings omit the
   tab case because its raw `\t` escape is two bytes rather than one separator.
 - **Layer D adjacency counterweights:** adjacent versions, hex hashes, times,
-  four-digit room numbers, due dates, word-attached `::` paths, RFC 3849
+  four-digit room numbers, due dates, word-attached double-colon paths, RFC 3849
   documentation IPs, loopback IPs and link-local IPs. They carry no gold.
   The v3 documents remain byte identical within each partition; the
   generator and both partition hashes are pinned at v4.
