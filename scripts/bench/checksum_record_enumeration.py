@@ -95,6 +95,11 @@ CONTEXTS = [
     ("no_cue", "Rechnung Nr. ", " bezahlt."),
     ("no_cue", "", ""),
     ("no_cue", 'data: {"orderRef": "', '"}'),
+    # Review of #694, round 4: a copula or parenthetical that does not directly follow the cue.
+    ("no_cue", "The card game score is: ", ""),
+    ("no_cue", "Your Visa interview reference is: ", ""),
+    ("no_cue", "Card game id (optional): ", ""),
+    ("no_cue", "card (qty 4000): ", ""),
 ]
 
 

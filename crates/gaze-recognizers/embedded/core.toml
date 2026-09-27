@@ -410,7 +410,7 @@ pattern = '''
 # cue-window:start
 (?:
   ["'\x20]*:\x20*\{\x20*"(?:number|num|pan|value|iban)"\x20*:\x20*"
-| ["'\x20]*,?[^\d\n.;!?:,=]{0,24}?(?:\b(?:is|ist|lautet|are|bitte|please)\b|\([^)\n]{0,24}\))\x20*:\x20*
+| ["'\x20]*,?\x20*(?:\b(?:is|ist|lautet|are|bitte|please)\b|\([^)\d\n]{0,24}\))\x20*:\x20*
 | ["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
 )
 # cue-window:end
@@ -513,7 +513,7 @@ pattern = '''
 # cue-window:start
 (?:
   ["'\x20]*:\x20*\{\x20*"(?:number|num|pan|value|iban)"\x20*:\x20*"
-| ["'\x20]*,?[^\d\n.;!?:,=]{0,24}?(?:\b(?:is|ist|lautet|are|bitte|please)\b|\([^)\n]{0,24}\))\x20*:\x20*
+| ["'\x20]*,?\x20*(?:\b(?:is|ist|lautet|are|bitte|please)\b|\([^)\d\n]{0,24}\))\x20*:\x20*
 | ["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
 )
 # cue-window:end

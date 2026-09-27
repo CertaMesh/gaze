@@ -451,6 +451,16 @@ fn luhn_failing_digits_without_a_card_shape_or_cue_stay_raw() {
     assert_raw_card_run("Karte: Menü ", "1234 5678 9012 3456", "");
     assert_raw_card_run("Visa application number ", "1234567890123456", "");
     assert_raw_card_run("Your Visa interview reference: ", "4000 1234 5678 9011", "");
+    // Review of #694, round 4: the copula or parenthetical must directly follow the cue, and a
+    // parenthetical holds no digits.
+    assert_raw_card_run("The card game score is: ", "4000 1234 5678 9011", "");
+    assert_raw_card_run(
+        "Your Visa interview reference is: ",
+        "4000 1234 5678 9011",
+        "",
+    );
+    assert_raw_card_run("Card game id (optional): ", "4000 1234 5678 9011", "");
+    assert_raw_card_run("card (qty 4000): ", "1234 5678 9012 3456", "");
     // Cue, but the number is past the 32-character window.
     assert_raw_card_run(
         "card on file, see the attached billing statement ",
