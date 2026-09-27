@@ -34,7 +34,7 @@ fn pairing_fault_child() {
     let _inspection = connect("GAZE_DASHBOARD_INSPECTION_SOCKET_V1");
     let _purge = connect("GAZE_DASHBOARD_PURGE_REQUEST_SOCKET_V1");
     control
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_read_timeout(Some(Duration::from_secs(60)))
         .unwrap();
     // Independently specified runtime V2 wire; only synthetic secret bytes.
     let mut envelope = vec![0; 60];

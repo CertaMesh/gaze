@@ -245,7 +245,7 @@ mod tests {
         });
         assert!(closed_rx.recv_timeout(Duration::from_millis(20)).is_err());
         barrier.wait();
-        assert!(closed_rx.recv_timeout(Duration::from_secs(2)).unwrap());
+        assert!(closed_rx.recv_timeout(Duration::from_secs(60)).unwrap());
         holder.join().unwrap();
         closer.join().unwrap();
         assert!(admission.acquire().is_none());

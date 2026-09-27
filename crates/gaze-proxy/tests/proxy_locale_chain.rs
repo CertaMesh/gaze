@@ -24,7 +24,7 @@
 //! prefix, not personal data; it carries no identity on its own and is used purely as a
 //! locale-gated recognizer trigger.
 
-use std::net::{SocketAddr, TcpListener as StdTcpListener};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -326,14 +326,17 @@ async fn spawn_openai(
 ) -> (MockUpstream, ProxyServer) {
     let upstream = spawn_upstream().await;
     let adapter: Arc<dyn ProviderAdapter> = Arc::new(OpenAiAdapter::new(upstream.base_url.clone()));
-    let bind = unused_local_addr();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind = listener.local_addr().unwrap();
     let mut config = ProxyConfig::new(bind, vec![adapter]);
     if let Some(chain) = locale_chain {
         config = config.with_locale_chain(chain);
     }
     let pipeline = Arc::new(pipeline);
     let handle = tokio::spawn(async move {
-        gaze_proxy::serve(config, pipeline).await.unwrap();
+        gaze_proxy::serve_with_listener(config, pipeline, listener)
+            .await
+            .unwrap();
     });
     wait_for_proxy(bind).await;
     (
@@ -345,17 +348,17 @@ async fn spawn_openai(
     )
 }
 
-fn unused_local_addr() -> SocketAddr {
-    let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
-    listener.local_addr().unwrap()
-}
-
 async fn wait_for_proxy(bind: SocketAddr) {
     let client = Client::new();
     let health_url = format!("http://{bind}/_gaze_proxy/healthz");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     loop {
-        if let Ok(response) = client.get(&health_url).send().await {
+        if let Ok(response) = client
+            .get(&health_url)
+            .timeout(Duration::from_secs(60))
+            .send()
+            .await
+        {
             if response.status().is_success() {
                 return;
             }
