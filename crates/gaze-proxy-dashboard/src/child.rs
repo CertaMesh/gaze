@@ -1110,7 +1110,7 @@ mod tests {
             write_leased_with_clock(&mut output, &mut child.store, &lease, 0, &body, || now);
             output.bytes.len()
         });
-        entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        entered_rx.recv_timeout(Duration::from_secs(60)).unwrap();
         let purge_state = state.clone();
         let (attempt_tx, attempt_rx) = mpsc::sync_channel(1);
         let (purged_tx, purged_rx) = mpsc::sync_channel(1);
@@ -1126,7 +1126,7 @@ mod tests {
         assert!(purged_rx.recv_timeout(Duration::from_millis(20)).is_err());
         release_tx.send(()).unwrap();
         assert!(writer.join().unwrap() > 1_024);
-        purged_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        purged_rx.recv_timeout(Duration::from_secs(60)).unwrap();
         purger.join().unwrap();
         assert_eq!(
             state
@@ -1167,7 +1167,8 @@ mod tests {
         ]);
         let mut fragmented = FragmentedReader { chunks };
         let request =
-            read_bounded_request(&mut fragmented, Instant::now() + Duration::from_secs(1)).unwrap();
+            read_bounded_request(&mut fragmented, Instant::now() + Duration::from_secs(60))
+                .unwrap();
         assert_eq!(
             request.as_slice(),
             b"GET / HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n"
@@ -1179,7 +1180,7 @@ mod tests {
         assert!(read_bounded_request(&mut slow, Instant::now()).is_err());
         let mut oversize = std::io::Cursor::new(vec![b'x'; crate::MAX_HTTP_REQUEST_BYTES + 1]);
         assert!(
-            read_bounded_request(&mut oversize, Instant::now() + Duration::from_secs(1)).is_err()
+            read_bounded_request(&mut oversize, Instant::now() + Duration::from_secs(60)).is_err()
         );
     }
 

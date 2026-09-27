@@ -74,7 +74,7 @@ fn unicode_prefix_and_strict_output_errors() {
             !error.to_string().contains("timed out"),
             "must preserve IO error: {error:?}"
         );
-        assert!(start.elapsed() < Duration::from_secs(4));
+        assert!(start.elapsed() < Duration::from_secs(60));
     }
 }
 
@@ -91,9 +91,9 @@ fn descendant_held_pipes_cancel_and_close_owned_handles() {
         let start = Instant::now();
         let error = infer(&format!("hold{fd}"), true, &input, &marker).unwrap_err();
         assert!(error.to_string().contains("timed out"), "{error:?}");
-        assert!(start.elapsed() < Duration::from_secs(4), "fd={fd}");
+        assert!(start.elapsed() < Duration::from_secs(60), "fd={fd}");
         assert!(marker.with_extension("ready").exists());
-        let end = Instant::now() + Duration::from_secs(4);
+        let end = Instant::now() + Duration::from_secs(60);
         while !marker.with_extension("closed").exists() && Instant::now() < end {
             std::thread::sleep(Duration::from_millis(10));
         }

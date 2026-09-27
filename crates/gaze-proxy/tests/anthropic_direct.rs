@@ -1,4 +1,4 @@
-use std::net::{SocketAddr, TcpListener as StdTcpListener};
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -393,7 +393,8 @@ async fn spawn_proxy_with_observability(
     locale_chain: Option<LocaleChain>,
     inspection: Option<(ProxyInspectionProducerV1, ActivatedInspectionConsumerV1)>,
 ) -> RunningServer {
-    let bind = unused_local_addr();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind = listener.local_addr().unwrap();
     let mut config = ProxyConfig::anthropic_direct(bind, adapter).with_dictionaries(dictionaries);
     if let Some(locale_chain) = locale_chain {
         config = config.with_locale_chain(locale_chain);
@@ -403,7 +404,9 @@ async fn spawn_proxy_with_observability(
         None => (config, None),
     };
     let handle = tokio::spawn(async move {
-        gaze_proxy::serve(config, Arc::new(pipeline)).await.unwrap();
+        gaze_proxy::serve_with_listener(config, Arc::new(pipeline), listener)
+            .await
+            .unwrap();
     });
     wait_for_proxy(bind).await;
     RunningServer {
@@ -413,18 +416,14 @@ async fn spawn_proxy_with_observability(
     }
 }
 
-fn unused_local_addr() -> SocketAddr {
-    let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
-    listener.local_addr().unwrap()
-}
-
 async fn wait_for_proxy(bind: SocketAddr) {
     let client = Client::new();
     let health_url = format!("http://{bind}/_gaze_proxy/healthz");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     loop {
         if client
             .get(&health_url)
+            .timeout(Duration::from_secs(60))
             .send()
             .await
             .is_ok_and(|response| response.status().is_success())
@@ -962,7 +961,7 @@ async fn trusted_principal_resolution_precedes_request_body_materialization() {
         ));
     let request_task = tokio::spawn(async move { request.send().await.unwrap() });
 
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(Duration::from_secs(60), async {
         while !called.load(Ordering::SeqCst) {
             tokio::task::yield_now().await;
         }

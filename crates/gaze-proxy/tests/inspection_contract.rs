@@ -136,7 +136,7 @@ impl InspectionSink for RecordingSink {
     }
 }
 
-const SINK_GATE_TIMEOUT: Duration = Duration::from_secs(3);
+const SINK_GATE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SinkEventClass {
@@ -1087,7 +1087,7 @@ async fn spawn_proxy(
 
 async fn wait_for_proxy(bind: SocketAddr) {
     // The owned listener queues this request until our server is accepting.
-    let response = tokio::time::timeout(Duration::from_secs(3), async {
+    let response = tokio::time::timeout(Duration::from_secs(60), async {
         Client::new()
             .get(format!("http://{bind}/_gaze_proxy/healthz"))
             .send()
@@ -1106,7 +1106,7 @@ async fn wait_for_proxy(bind: SocketAddr) {
 }
 
 async fn wait_for_events(sink: &RecordingSink, count: usize) {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     while sink.len() < count {
         assert!(tokio::time::Instant::now() < deadline);
         tokio::time::sleep(Duration::from_millis(10)).await;

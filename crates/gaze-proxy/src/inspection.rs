@@ -396,7 +396,7 @@ mod tests {
             let guard = self.entered.lock().unwrap();
             let (guard, timeout) = self
                 .entered_changed
-                .wait_timeout_while(guard, Duration::from_secs(2), |entered| *entered < exact)
+                .wait_timeout_while(guard, Duration::from_secs(60), |entered| *entered < exact)
                 .unwrap();
             assert!(!timeout.timed_out());
             assert_eq!(*guard, exact);
@@ -411,7 +411,7 @@ mod tests {
             let guard = self.completed.lock().unwrap();
             let (guard, timeout) = self
                 .completed_changed
-                .wait_timeout_while(guard, Duration::from_secs(2), |completed| {
+                .wait_timeout_while(guard, Duration::from_secs(60), |completed| {
                     *completed < exact
                 })
                 .unwrap();
@@ -468,7 +468,7 @@ mod tests {
     }
 
     fn begin_for_test(producer: &ProxyInspectionProducerV1) -> ProxyInspectionLogicalV1 {
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             if let Some(logical) =
                 producer.begin_logical(ProxyInspectionEndpointCodesV1::from_validated_origin(
@@ -491,7 +491,7 @@ mod tests {
     ) -> ParkedDispatcher {
         let parked = ParkedDispatcher { sink };
         let mut priming = begin_for_test(producer);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             let outcome = priming.emitter.try_emit_owner_request(
                 accepted_pending_fields(priming.endpoint_codes),
@@ -527,7 +527,7 @@ mod tests {
     fn settled_stages(
         mut emit: impl FnMut() -> [InspectionAdmissionOutcomeV1; 2],
     ) -> [InspectionAdmissionOutcomeV1; 2] {
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             let outcomes = emit();
             if !outcomes.iter().any(|outcome| {

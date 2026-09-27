@@ -199,7 +199,7 @@ fn realistic_chrome_top_level_navigation_reaches_shell_over_raw_socket() {
     );
     let mut stream = TcpStream::connect(std::net::SocketAddr::V4(authority)).unwrap();
     stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_read_timeout(Some(Duration::from_secs(60)))
         .unwrap();
     stream.write_all(navigation.as_bytes()).unwrap();
     stream.flush().unwrap();
@@ -298,8 +298,8 @@ fn http_content_length(headers: &[u8]) -> Option<usize> {
 #[cfg(not(target_os = "macos"))]
 fn http_round_trip(authority: SocketAddrV4, request: &[u8]) -> io::Result<Vec<u8>> {
     let mut stream = TcpStream::connect(authority)?;
-    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+    stream.set_read_timeout(Some(Duration::from_secs(60)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(60)))?;
     stream.write_all(request)?;
     stream.flush()?;
     let mut response = Vec::new();

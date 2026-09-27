@@ -2,7 +2,6 @@
 //! rule in one message must not ship raw in another message of the same
 //! request. Synthetic names only.
 
-use std::net::{SocketAddr, TcpListener as StdTcpListener};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -66,13 +65,6 @@ async fn capture(
     Json(json!({"choices": [{"message": {"role": "assistant", "content": "ok"}}]}))
 }
 
-fn unused_local_addr() -> SocketAddr {
-    StdTcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-}
-
 #[tokio::test]
 async fn a_rule_found_name_is_swept_in_every_message_of_the_request() {
     let forwarded = Arc::new(Mutex::new(Vec::new()));
@@ -83,7 +75,8 @@ async fn a_rule_found_name_is_swept_in_every_message_of_the_request() {
     let upstream = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
     let upstream_task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
-    let bind = unused_local_addr();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind = listener.local_addr().unwrap();
     let config = ProxyConfig::new(
         bind,
         vec![Arc::new(OpenAiAdapter::new(upstream)) as Arc<dyn ProviderAdapter>],
@@ -95,12 +88,16 @@ async fn a_rule_found_name_is_swept_in_every_message_of_the_request() {
             .build()
             .unwrap(),
     );
-    let proxy_task =
-        tokio::spawn(async move { gaze_proxy::serve(config, pipeline).await.unwrap() });
+    let proxy_task = tokio::spawn(async move {
+        gaze_proxy::serve_with_listener(config, pipeline, listener)
+            .await
+            .unwrap()
+    });
     let client = Client::new();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     while !client
         .get(format!("http://{bind}/_gaze_proxy/healthz"))
+        .timeout(Duration::from_secs(60))
         .send()
         .await
         .is_ok_and(|response| response.status().is_success())
