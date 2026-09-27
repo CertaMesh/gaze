@@ -155,7 +155,7 @@ fn non_address_numbers_and_hash_prefixed_values_remain_raw() {
 }
 
 #[test]
-fn australian_rule_requires_australian_document_locale() {
+fn australian_rule_requires_en_au_in_explicit_locale_chain() {
     let original = "Brisbane QLD 4072.";
     assert_ne!(clean_and_restore(LocaleTag::EnAu, original), original);
     for locale in [

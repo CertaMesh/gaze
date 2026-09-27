@@ -421,8 +421,10 @@ A capitalized locality or address word before
 the state admits prose after the code; without that context, punctuation, a
 table boundary, or the end of input must follow. Its token contains both the
 state and postcode, which protects both parts of the address and restores them
-together. The rule is document-basis `en-AU`, so a policy that activates only
-`global` or `en-NZ` does not run it. New Zealand needs a separate rule because
+together. The rule is document-basis `en-AU`: it runs when `en-AU` is in the
+effective locale chain, including for every document under the broad setup
+policy or the no-policy `core-extended` compatibility chain. An explicit
+`global` or `en-NZ` only chain does not run it. New Zealand needs a separate rule because
 its postcode has no Australian state abbreviation. The state range filter can
 miss postcodes used across state boundaries; a `#` before a locality can still
 leave an inner state and postcode match.
