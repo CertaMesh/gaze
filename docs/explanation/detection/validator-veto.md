@@ -40,7 +40,7 @@ precision; shape and context take its place:
 | --- | --- |
 | `iban.structural` | A registry country code at that country's exact ISO 13616 length, with or without a cue |
 | `iban.cued` | A country code outside the IBAN registry, two digits and a BBAN (up to four letters then 6 to 26 digits compact, or three to eight digit-bearing groups) within 32 characters after the word `IBAN` on the same line. Registry countries stay with `iban.structural`, which knows their exact length, so a registry IBAN with a dropped digit is not covered |
-| `card.cued` | A card layout (4-4-4-4, 4-6-5, 4-6-4, compact 13 to 19 digits) within 32 characters after a card cue (`card`, `Karte` compounds, card brands) on the same line; one trailing 3- or 4-digit group (a CVV) stays outside the token, and any further digits refuse the match |
+| `card.cued` | A card layout (4-4-4-4, 4-6-5, 4-6-4, compact 13 to 19 digits) within 32 characters after a card cue (`card`, `Karte` compounds, card brands) on the same line; one trailing 3-digit group (a CVV) stays outside the token, and any further digits refuse the match |
 
 `card.structural` keeps vetoing a Luhn failure. It offers every digit run in
 the text, and without a cue a 16-digit run is as likely an order, voucher or

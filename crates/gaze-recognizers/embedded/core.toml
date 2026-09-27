@@ -469,7 +469,7 @@ locale_basis = "document"
 # and number/no/nr/holder, in any `_`/`-`/space/camelCase spelling), German `Karte` compounds
 # (Kreditkarte, Kartennummer, EC-Karte, ...) and the card brands. The number must follow on the
 # same line within 32 characters with no digit in between, in a card layout: 4-4-4-4, 4-6-5,
-# 4-6-4 or compact 13 to 19 digits. One trailing group of 3 or 4 digits (a CVV) may follow and
+# 4-6-4 or compact 13 to 19 digits. One trailing group of exactly 3 digits (a CVV) may follow and
 # stays outside the token, as `card.structural` scopes it; any further digits refuse the match,
 # so a longer reference number after a cue never yields a card-shaped prefix.
 [recognizers.match]
@@ -487,7 +487,7 @@ pattern = '''
 | \d{4}[\x20\x{00A0}\x{202F}-]\d{6}[\x20\x{00A0}\x{202F}-]\d{4,5}
 | \d{13,19}
 )
-(?:[\x20\x{00A0}\x{202F}-]\d{3,4})?
+(?:[\x20\x{00A0}\x{202F}-]\d{3})?
 (?:[^\d\x20\x{00A0}\x{202F}-]|[\x20\x{00A0}\x{202F}-][^\d]|[\x20\x{00A0}\x{202F}-]?\z)
 '''
 capture_groups = [1]

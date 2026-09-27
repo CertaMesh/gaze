@@ -274,6 +274,8 @@ fn luhn_failing_digits_without_a_card_shape_or_cue_stay_raw() {
     assert_raw_card_run("Tracking: ", "4532781234567890", "");
     // Cue, but the run continues past a card layout: a longer reference, not a card.
     assert_raw_card_run("card reference ", "4532 7812 3456 7890 5555 5", "");
+    // Five groups of four after a cue: the fifth group is no CVV, so no card-shaped prefix.
+    assert_raw_card_run("credit card number ", "8818 1900 5934 6058 1769", ".");
     // Cue, but grouped like an amount or a phone number, not a card.
     assert_raw_card_run("card fee ", "1 234 567 890 123", " EUR");
     // Cue words inside other words are not cues.
