@@ -5920,12 +5920,12 @@
           },
           "observation_record": {
             "file": "observations-v0.15.1.jsonl.gz",
-            "sha256": "81dc62b932c75ba9b474a7fb1dfe8a8fcc58558f03ff9511f40b773e5907cfb4",
+            "sha256": "c2922a2c6cede4e4ad7ab261e3212234122d07f29506734cb62ed523699e5ca3",
             "format": "gzip-jsonl",
             "schema_version": 1,
             "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
             "observations": 2910,
-            "bytes": 834384
+            "bytes": 724906
           }
         }
       ],
@@ -6275,22 +6275,22 @@
         "source_bytes": 25029,
         "observation_record": {
           "file": "observations-v0.15.1-agentic.jsonl.gz",
-          "sha256": "262c5182d69b86b9105fd6d6a17852c801d2303d94773eeb9677dc67af397692",
+          "sha256": "8c5ea0f675f8c7ed330741cea018b7ffb4410139b363cdee2431892e73f345de",
           "format": "gzip-jsonl",
           "schema_version": 1,
           "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
           "observations": 5440,
-          "bytes": 940744
+          "bytes": 823171
         }
       },
       "observation_record": {
         "file": "observations-v0.15.1.jsonl.gz",
-        "sha256": "81dc62b932c75ba9b474a7fb1dfe8a8fcc58558f03ff9511f40b773e5907cfb4",
+        "sha256": "c2922a2c6cede4e4ad7ab261e3212234122d07f29506734cb62ed523699e5ca3",
         "format": "gzip-jsonl",
         "schema_version": 1,
         "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
         "observations": 2910,
-        "bytes": 834384
+        "bytes": 724906
       }
     }
   ]

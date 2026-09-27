@@ -152,6 +152,8 @@ class RecordReplayTests(unittest.TestCase):
             rows = [json.loads(line) for line in body.splitlines()]
             self.assertNotIn("timing", rows[1]["response"])
             self.assertNotIn("validator", rows[1])
+            self.assertEqual(rows[1]["document_id"], self.document.uid)
+            self.assertEqual(rows[0]["documents"][0]["gold"], [[44, 50, "PASSWORD"], [0, 21, "EMAIL"]])
             second = Path(temporary) / "second.jsonl.gz"
             self.make_record(second)
             with gzip.open(second, "rt", encoding="utf-8") as stream:
@@ -167,7 +169,7 @@ class RecordReplayTests(unittest.TestCase):
                 rows = [json.loads(line) for line in stream]
             rows[1]["response"]["final_protection_trace"][0]["raw_start"] = 0
             rows[1]["response"]["final_protection_trace"][0]["raw_end"] = 21
-            rows[1]["gold_gap_evidence"][0][:5] = [0, 21, "email", 0, 21]
+            rows[1]["response"]["gold_gap_evidence"][0][:5] = [0, 21, "email", 0, 21]
             with gzip.open(path, "wt", encoding="utf-8") as stream:
                 for row in rows:
                     stream.write(json.dumps(row) + "\n")
@@ -223,7 +225,8 @@ class RecordReplayTests(unittest.TestCase):
             card = self.make_record(path)
             card["parameters"]["policy_sha256"] = "1" * 64
             card["layers"] = {
-                "generator": {"corpus_sha256": "2" * 64},
+                "generator": {"corpus_sha256": "2" * 64, "generator_version": 3,
+                              "documents": 3, "documents_by_layer": {"A": 1, "D": 1, "R": 1}},
                 "scored_label_contract": score.scored_label_contract_report(
                     layer_contract, layer_docs
                 ),
@@ -261,6 +264,39 @@ class RecordReplayTests(unittest.TestCase):
                     writer.layer_measurements[layer] = measurements
                 writer.add(layer, "policy-file", document, response, measurements)
             writer.write(path, card, add_reference=False)
+            with gzip.open(path, "rt", encoding="utf-8") as stream:
+                stored = [json.loads(line) for line in stream]
+
+            def tampered(name):
+                rows = copy.deepcopy(stored)
+                header = rows[0]
+                if name == "generator-sha":
+                    header["scorecard"]["layers"]["generator"]["corpus_sha256"] = "9" * 64
+                elif name == "generator-version":
+                    header["scorecard"]["layers"]["generator"]["generator_version"] = 4
+                elif name == "layer-gold":
+                    descriptor = next(row for row in header["documents"] if row["layer"] == "A")
+                    descriptor["gold"][0] = [0, 20, "EMAIL"]
+                elif name == "missing-contract":
+                    header.pop("layer_contract")
+                elif name == "null-contract":
+                    header["layer_contract"] = None
+                output = Path(temporary) / f"{name}.gz"
+                with gzip.open(output, "wt", encoding="utf-8") as stream:
+                    for row in rows:
+                        stream.write(json.dumps(row) + "\n")
+                return output
+
+            for name in ("generator-sha", "generator-version", "layer-gold"):
+                with self.subTest(name=name), self.assertRaisesRegex(record.RecordError, "layer identity"):
+                    record.rescore(tampered(name), score.SCORED_LABEL_CONTRACT_V1)
+            for name in ("missing-contract", "null-contract"):
+                broken = tampered(name)
+                with self.subTest(name=name), self.assertRaisesRegex(record.RecordError, "missing layer contract"):
+                    record.rescore(broken, score.SCORED_LABEL_CONTRACT_V1)
+                with self.subTest(name=f"{name}-override"), self.assertRaisesRegex(record.RecordError, "missing layer contract"):
+                    record.rescore(broken, score.SCORED_LABEL_CONTRACT_V1, layer_contract)
+                self.assertEqual(record.main([str(broken), "--output", str(Path(temporary) / "unused.json")]), 2)
             replayed = record.rescore(path, score.SCORED_LABEL_CONTRACT_V1)
             self.assertEqual(agentic.gate(card, replayed)["verdict"], "fail")
             alternate = score.ScoredLabelContract(

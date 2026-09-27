@@ -103,14 +103,16 @@ ignored instead of counted as false positive, and are reported per run under
 `neutral_prediction_utf8_bytes_outside_scored_gold`.
 
 Every run writes `observations-v1.jsonl.gz` beside `scorecard-v4.json` and pins
-its SHA-256 in `scorecard.observation_record`. Each gzip JSONL observation is
-keyed by corpus SHA-256, layer, config and document ID. It contains gold and
-protected byte offsets, class, source IDs, action, refusal and restore facts,
-and validator offsets. For v3, it stores which gold span matches a trimmed
-prediction and whether the word boundary passes. It contains no document or
-protected values. Observation rows omit run-dependent timing; the header keeps
-the original scorecard timing. The record also holds scorecard metadata, so a
-re-score needs no corpus, binary or model:
+its SHA-256 in `scorecard.observation_record`. The gzip JSONL header contains
+one canonical descriptor per document: layer, gold byte offsets and class,
+validator offsets, and corpus and generator identity. A digest binds the A/D/R
+document IDs and gold spans to the generator version and corpus SHA-256.
+Observation rows contain only the layer, config, document ID, and response:
+protected byte offsets, class, source IDs, action, refusal and restore facts.
+For v3, the response records which gold span matches a trimmed prediction and
+whether the word boundary passes. Neither header nor rows contain document or
+protected values. Rows omit run-dependent timing; the header keeps the original
+scorecard timing. A re-score needs no corpus, binary or model:
 
 ```bash
 uv run --project scripts/bench python scripts/bench/rescore.py \
@@ -123,8 +125,12 @@ uv run --project scripts/bench python scripts/bench/rescore.py \
 Omit `--scored-labels` for v1. Use `--agentic-scored-labels` to change the
 generated layer contract too; otherwise replay uses the layer contract pinned
 inside the record. The same scoring accumulators compute the new scorecard.
-The record must be committed beside a release scorecard or its SHA-256 and
-retrieval location must be pinned in the release history.
+The v0.15.1 records remain committed as replay proof. Starting with v0.16.0,
+upload release records as assets on the matching GitHub release, using
+`observations-vX.Y.Z.jsonl.gz` and, when generated layers are measured,
+`observations-vX.Y.Z-agentic.jsonl.gz`. Pin each asset's filename, SHA-256,
+byte size, and release URL in `docs/reference/benchmarks/release-history.json`.
+Download from that release and verify byte size and SHA-256 before re-scoring.
 
 The committed v0.15.1 C record proves exact v1/v2 replay except timing and
 valid v3 scoring. `observations-v0.15.1-agentic.jsonl.gz` also replays A/D/R:

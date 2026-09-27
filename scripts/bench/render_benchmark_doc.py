@@ -415,6 +415,10 @@ def _validate_observation_record(
     if not isinstance(name, str) or Path(name).name != name:
         raise RenderError(f"{where}: observation record file must be a basename")
     _require_hex64(record.get("sha256"), f"{where} observation record sha256")
+    if type(record.get("bytes")) is not int or record["bytes"] <= 0:
+        raise RenderError(f"{where}: observation record needs a positive byte size")
+    if type(record.get("observations")) is not int or record["observations"] <= 0:
+        raise RenderError(f"{where}: observation record needs an observation count")
     if record.get("corpus_sha256") != entry["dataset"]["integrity"]["sha256"]:
         raise RenderError(f"{where}: observation record corpus digest mismatch")
 

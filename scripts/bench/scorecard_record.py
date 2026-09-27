@@ -8,6 +8,7 @@ import copy
 import gzip
 import hashlib
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -45,16 +46,21 @@ def _contract_row(contract: score.ScoredLabelContract | None) -> dict[str, objec
     }
 
 
-def _contract_from_row(row: Mapping[str, object]) -> score.ScoredLabelContract:
-    return score.ScoredLabelContract(
-        contract_id=row["id"], version=row["version"], path=row["path"],
-        sha256=row["sha256"],
-        scored_labels=frozenset(row["scored"]) if row["scored"] is not None else None,
-        excluded_labels=frozenset(row["excluded"]),
-        neutral_prediction_classes=frozenset(row["neutral"]),
-        gold_gap=score.GoldGapRule(frozenset(tuple(pair) for pair in row["gold_gap"]))
-        if row["gold_gap"] is not None else None,
-    )
+def _contract_from_row(row: object) -> score.ScoredLabelContract:
+    if not isinstance(row, Mapping):
+        raise RecordError("missing layer contract")
+    try:
+        return score.ScoredLabelContract(
+            contract_id=row["id"], version=row["version"], path=row["path"],
+            sha256=row["sha256"],
+            scored_labels=frozenset(row["scored"]) if row["scored"] is not None else None,
+            excluded_labels=frozenset(row["excluded"]),
+            neutral_prediction_classes=frozenset(row["neutral"]),
+            gold_gap=score.GoldGapRule(frozenset(tuple(pair) for pair in row["gold_gap"]))
+            if row["gold_gap"] is not None else None,
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise RecordError("invalid layer contract") from error
 
 
 def _spans(spans: Sequence[score.Span]) -> list[list[object]]:
@@ -76,6 +82,32 @@ def _document_row(document: score.Document) -> dict[str, object]:
         "cell": document.cell,
         "gold": _spans(_original_spans(document)),
     }
+
+
+def _layer_identity(
+    generator: Mapping[str, object], documents: Sequence[Mapping[str, object]]
+) -> dict[str, object]:
+    try:
+        corpus = generator["corpus_sha256"]
+        version = generator["generator_version"]
+        population = generator["documents_by_layer"]
+        layer_rows = sorted(
+            ([row["layer"], row["id"], row["gold"]]
+             for row in documents if row["layer"] in {"A", "D", "R"}),
+            key=lambda item: (item[0], item[1]),
+        )
+        counts = {layer: sum(row[0] == layer for row in layer_rows) for layer in ("A", "D", "R")}
+        if counts != population or len(layer_rows) != generator["documents"]:
+            raise RecordError("layer documents disagree with generator population")
+        payload = {"generator_corpus_sha256": corpus, "generator_version": version,
+                   "documents": layer_rows}
+        digest = hashlib.sha256(json.dumps(
+            payload, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
+        return {"generator_corpus_sha256": corpus, "generator_version": version,
+                "documents": len(layer_rows), "sha256": digest}
+    except (KeyError, TypeError, ValueError) as error:
+        raise RecordError("invalid generator or layer document identity") from error
 
 
 def _gap_evidence(document: score.Document, predictions: Sequence[score.Span]) -> list[list[object]]:
@@ -139,10 +171,13 @@ class RecordWriter:
         extra_documents: Sequence[score.Document] = (),
         layer_contract: score.ScoredLabelContract | None = None,
     ) -> None:
-        self.available = tuple(available)
         self.documents = {document.uid: document for document in (*available, *extra_documents)}
         if len(self.documents) != len(available) + len(extra_documents):
             raise RecordError("available document IDs are not unique")
+        self.document_layers = {document.uid: "C" for document in available}
+        self.document_validators = {
+            document.uid: measurements["documents"][document.uid] for document in available
+        }
         self.measurements = measurements
         self.corpus_sha256 = corpus_sha256
         self.layer_contract = layer_contract
@@ -157,31 +192,42 @@ class RecordWriter:
         response: Mapping[str, object],
         validator_measurements: Mapping[str, object] | None = None,
     ) -> None:
-        original = self.documents[document.uid]
-        row = {
-            "kind": "observation",
-            "corpus_sha256": self.corpus_sha256,
-            "layer": layer,
-            "config": config,
-            "document": _document_row(original),
-            "response": _compact_response(response),
-        }
+        original = self.documents.get(document.uid)
+        if original is None:
+            raise RecordError(f"unknown observation document {document.uid}")
+        prior_layer = self.document_layers.setdefault(document.uid, layer)
+        if prior_layer != layer:
+            raise RecordError(f"{document.uid}: observation layer changed")
         measurement = self.layer_measurements.get(layer, validator_measurements)
         if layer != "C" and measurement is not None:
-            row["validator"] = measurement["documents"][document.uid]
+            validator = measurement["documents"][document.uid]
+            previous = self.document_validators.setdefault(document.uid, validator)
+            if previous != validator:
+                raise RecordError(f"{document.uid}: validator evidence changed")
+        compact = _compact_response(response)
         if "pipeline_error_code" not in response:
-            row["gold_gap_evidence"] = _gap_evidence(
+            compact["gold_gap_evidence"] = _gap_evidence(
                 original, score.final_trace_predictions(original, dict(response))
             )
+        row = {
+            "kind": "observation",
+            "layer": layer,
+            "config": config,
+            "document_id": document.uid,
+            "response": compact,
+        }
         self.rows.append(row)
 
     def write(self, path: Path, scorecard: Mapping[str, object], *, add_reference: bool) -> dict[str, object]:
-        available = [
+        if set(self.document_layers) != set(self.documents):
+            raise RecordError("some generated documents have no observation layer")
+        documents = [
             {
                 **_document_row(document),
-                "validator": self.measurements["documents"][document.uid],
+                "layer": self.document_layers[document.uid],
+                "validator": self.document_validators.get(document.uid),
             }
-            for document in sorted(self.available, key=lambda item: item.uid)
+            for document in sorted(self.documents.values(), key=lambda item: item.uid)
         ]
         header = {
             "kind": "header",
@@ -193,7 +239,9 @@ class RecordWriter:
                 key: value for key, value in self.measurements.items() if key != "documents"
             },
             "layer_contract": _contract_row(self.layer_contract),
-            "available": available,
+            "documents": documents,
+            "layer_identity": _layer_identity(scorecard["layers"]["generator"], documents)
+            if "layers" in scorecard else None,
         }
         rows = [header, *self.rows]
         _write_rows(path, rows)
@@ -261,11 +309,11 @@ def _contract_documents(
 
 
 def _evidence(
-    row: Mapping[str, object], document: score.Document, response: Mapping[str, object]
+    recorded_response: Mapping[str, object], document: score.Document, response: Mapping[str, object]
 ) -> dict[tuple[int, int, str], tuple[int, int, bool, tuple[tuple[int, int, str], ...]]]:
     result = {}
     gold = {(span.start, span.end, span.label) for span in _original_spans(document)}
-    for start, end, label, trimmed_start, trimmed_end, boundary, matches in row.get("gold_gap_evidence", []):
+    for start, end, label, trimmed_start, trimmed_end, boundary, matches in recorded_response.get("gold_gap_evidence", []):
         key = (start, end, label)
         if (key in result or type(trimmed_start) is not int or type(trimmed_end) is not int
                 or not start <= trimmed_start <= trimmed_end <= end
@@ -299,6 +347,18 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
     )
     if recorded_corpus != header["corpus_sha256"]:
         raise RecordError("record corpus digest disagrees with scorecard")
+    documents = header.get("documents")
+    if not isinstance(documents, list):
+        raise RecordError("missing document inventory")
+    if len({row["id"] for row in documents}) != len(documents):
+        raise RecordError("duplicate document ID")
+    if "layers" in card:
+        expected = _layer_identity(card["layers"]["generator"], documents)
+        if header.get("layer_identity") != expected:
+            raise RecordError("layer identity disagrees with generator or gold spans")
+        _contract_from_row(header.get("layer_contract"))
+    elif header.get("layer_identity") is not None:
+        raise RecordError("layer identity without generated layers")
     return header, observations
 
 
@@ -324,6 +384,8 @@ def pin_template(
     if strip_layers:
         capture.pop("layers", None)
         observations = [row for row in observations if row["layer"] == "C"]
+        header["documents"] = [row for row in header["documents"] if row["layer"] == "C"]
+        header["layer_identity"] = None
         header["layer_contract"] = None
     header["capture_scorecard"] = capture
     header["scorecard"] = expected
@@ -338,14 +400,14 @@ def rescore(
 ) -> dict[str, object]:
     header, observations = _read(path)
     result = copy.deepcopy(header["scorecard"])
-    available_rows = {row["id"]: row for row in header["available"]}
-    if len(available_rows) != len(header["available"]):
-        raise RecordError("duplicate available document ID")
+    document_rows = {row["id"]: row for row in header["documents"]}
+    available_rows = {uid: row for uid, row in document_rows.items() if row["layer"] == "C"}
     available = _contract_documents(available_rows, contract)
     groups: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
     for row in observations:
-        if row["corpus_sha256"] != header["corpus_sha256"]:
-            raise RecordError("observation corpus digest mismatch")
+        descriptor = document_rows.get(row["document_id"])
+        if descriptor is None or descriptor["layer"] != row["layer"]:
+            raise RecordError("observation document or layer disagrees with inventory")
         groups[(row["layer"], row["config"])].append(row)
     if not groups:
         raise RecordError("record has no observations")
@@ -360,7 +422,7 @@ def rescore(
         raise RecordError("observation layer/config population mismatch")
     if "layers" in result and layer_contract is not None:
         generated = [
-            _document_from_row(row["document"])
+            _document_from_row(document_rows[row["document_id"]])
             for layer in ("A", "D", "R")
             for row in groups[(layer, result["layers"][layer]["runs"][0]["config"])]
         ]
@@ -368,19 +430,17 @@ def rescore(
 
     def replay(layer: str, config: str, selected_contract: score.ScoredLabelContract) -> dict[str, object]:
         rows = groups[(layer, config)]
-        raw_documents = [_document_from_row(row["document"]) for row in rows]
+        raw_documents = [_document_from_row(document_rows[row["document_id"]]) for row in rows]
         documents = score.apply_scored_label_contract(raw_documents, selected_contract)
         if len({document.uid for document in documents}) != len(documents):
             raise RecordError(f"{layer}/{config}: duplicate document ID")
         responses: dict[str, dict[str, object]] = {}
         with_evidence = []
         for document, row in zip(documents, rows, strict=True):
-            if layer == "C" and row["document"] != {
-                key: value for key, value in available_rows[document.uid].items() if key != "validator"
-            }:
-                raise RecordError(f"{document.uid}: observation disagrees with corpus header")
+            recorded_response = row["response"]
             response = {
-                **row["response"],
+                **{key: value for key, value in recorded_response.items()
+                   if key != "gold_gap_evidence"},
                 "timing": {"clean_ms": 0.0, "restore_ms": 0.0, "post_policy_scan_ms": None},
             }
             if response["fixture_id"] != document.uid:
@@ -400,16 +460,10 @@ def rescore(
                         raise RecordError("invalid protection action")
             responses[document.uid] = response
             with_evidence.append(score.Document(**{
-                **document.__dict__, "gap_evidence": _evidence(row, document, response)
+                **document.__dict__, "gap_evidence": _evidence(recorded_response, document, response)
                 if "pipeline_error_code" not in response else None,
             }))
-        measured_rows = {
-            row["id"]: row for row in header["available"]
-        } if layer == "C" else {
-            row["document"]["id"]: {
-                **row["document"], "validator": row.get("validator"),
-            } for row in rows
-        }
+        measured_rows = {document.uid: document_rows[document.uid] for document in documents}
         validator = None
         if all(measured_rows[document.uid].get("validator") is not None for document in documents):
             validator = _filtered_measurements(header["validator"], measured_rows, documents)
@@ -440,11 +494,11 @@ def rescore(
             available, _filtered_measurements(header["validator"], available_rows, available)
         )
         selected = [document for document in available if document.uid in {
-            row["document"]["id"] for row in groups[("C", result["runs"][0]["config"])]
+            row["document_id"] for row in groups[("C", result["runs"][0]["config"])]
         }]
         result["scoring"]["scored_label_contract"] = score.scored_label_contract_report(contract, selected)
     if "layers" in result:
-        layer_contract = layer_contract or _contract_from_row(header["layer_contract"])
+        layer_contract = layer_contract or _contract_from_row(header.get("layer_contract"))
         for layer in ("A", "D", "R"):
             result["layers"][layer]["runs"] = [
                 replay(layer, run["config"], layer_contract)
@@ -453,21 +507,18 @@ def rescore(
             first_config = result["layers"][layer]["runs"][0]["config"]
             layer_rows = groups[(layer, first_config)]
             layer_docs = score.apply_scored_label_contract(
-                [_document_from_row(row["document"]) for row in layer_rows],
+                [_document_from_row(document_rows[row["document_id"]]) for row in layer_rows],
                 layer_contract,
             )
             result["layers"][layer]["population"] = score.population_summary(layer_docs)
             if "validator_gold_census" in result["layers"][layer]:
-                row_index = {
-                    row["document"]["id"]: {
-                        "validator": row["validator"]
-                    } for row in layer_rows
-                }
+                row_index = {row["document_id"]: document_rows[row["document_id"]]
+                             for row in layer_rows}
                 result["layers"][layer]["validator_gold_census"] = score.validator_gold_census(
                     layer_docs, _filtered_measurements(header["validator"], row_index, layer_docs)
                 )
         layer_documents = [
-            _document_from_row(row["document"])
+            _document_from_row(document_rows[row["document_id"]])
             for (layer, config), rows in groups.items() if layer in {"A", "D", "R"}
             for row in rows if config == result["layers"][layer]["runs"][0]["config"]
         ]
@@ -507,8 +558,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--expected-sha256", help="verify the published record digest")
     args = parser.parse_args(argv)
-    if args.expected_sha256 is not None and score.sha256_file(args.record) != args.expected_sha256:
-        raise RecordError("observation record SHA-256 mismatch")
     root = Path(__file__).resolve().parents[2]
     def load(path: Path) -> score.ScoredLabelContract:
         resolved = path if path.is_absolute() else root / path
@@ -517,12 +566,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         except ValueError:
             display = resolved.as_posix()
         return score.load_scored_label_contract(resolved, display_path=display)
-    contract = load(args.scored_labels) if args.scored_labels else score.SCORED_LABEL_CONTRACT_V1
-    layer_contract = (
-        agentic.load_contract(root, args.agentic_scored_labels)
-        if args.agentic_scored_labels else None
-    )
-    card = rescore(args.record, contract, layer_contract)
+    try:
+        if args.expected_sha256 is not None and score.sha256_file(args.record) != args.expected_sha256:
+            raise RecordError("observation record SHA-256 mismatch")
+        contract = load(args.scored_labels) if args.scored_labels else score.SCORED_LABEL_CONTRACT_V1
+        layer_contract = (
+            agentic.load_contract(root, args.agentic_scored_labels)
+            if args.agentic_scored_labels else None
+        )
+        card = rescore(args.record, contract, layer_contract)
+    except RecordError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(card, indent=2) + "\n", encoding="utf-8")
     return 0
