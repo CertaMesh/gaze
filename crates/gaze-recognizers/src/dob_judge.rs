@@ -2,7 +2,6 @@
 //! Prompt tokenization, word masks, and span tensors are adapted from gline-rs
 //! by Frédérik Bilhaut (Apache-2.0), commit f1f8923a7af972855909302a843063d958f69d95.
 
-use std::collections::{hash_map::Entry, HashMap};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::Mutex;
@@ -58,10 +57,10 @@ const DATE_PATTERN: &str = r"(?ix)
     (?:january|february|march|april|may|june|july|august|september|october|november|december
       |januar|jänner|februar|märz|mai|juni|juli|oktober|dezember
       |janvier|février|fevrier|mars|avril|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre
-      |jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec|mär|mrz|okt|dez|févr|déc)\.?,?
+      |jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|mär|mrz|okt|dez|févr|déc)\.?,?
     [\x20\t\x{A0}\x{202F}]+(?:de[\x20\t\x{A0}\x{202F}]+)?(?:19|20)[0-9]{2}
   | (?:january|february|march|april|may|june|july|august|september|october|november|december
-      |jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\.?
+      |jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\.?
     [\x20\t\x{A0}\x{202F}]+(?:0?[1-9]|[12][0-9]|3[01])(?:st|nd|rd|th)?,?
     [\x20\t\x{A0}\x{202F}]+(?:19|20)[0-9]{2}
 )\b";
@@ -89,6 +88,11 @@ pub fn verify_gliner_dob_bundle(model_dir: &Path) -> Result<(), gaze_types::Safe
 struct Word {
     span: Range<usize>,
     ids: Vec<i64>,
+}
+
+struct ModelWindow {
+    word_range: Range<usize>,
+    logits: Option<Vec<f32>>,
 }
 
 pub struct DobJudgeRecognizer {
@@ -169,6 +173,64 @@ impl DobJudgeRecognizer {
         (birth >= threshold && birth - generic.max(event) >= DOB_SCORE_MARGIN).then_some(birth)
     }
 
+    fn word_bounds(words: &[Word], span: &Range<usize>) -> Result<(usize, usize), DetectError> {
+        let start = words
+            .iter()
+            .position(|word| word.span.start == span.start)
+            .ok_or_else(|| DetectError::backend(ID, "date start is not word-aligned"))?;
+        let end = words
+            .iter()
+            .position(|word| word.span.end == span.end)
+            .map(|index| index + 1)
+            .ok_or_else(|| DetectError::backend(ID, "date end is not word-aligned"))?;
+        Ok((start, end))
+    }
+
+    fn tile_words(words: &[Word], prompt_ids: &[i64]) -> Result<Vec<ModelWindow>, DetectError> {
+        let budget = MAX_SUBTOKENS
+            .checked_sub(prompt_ids.len() + 1)
+            .filter(|budget| *budget > 0)
+            .ok_or_else(|| DetectError::backend(ID, "prompt exceeds model token budget"))?;
+        let overlap_tokens = budget / 4;
+        let mut windows = Vec::new();
+        let mut start = 0;
+        while start < words.len() {
+            // An unrelated oversized word cannot prevent later dates from being judged.
+            if words[start].ids.len() > budget {
+                start += 1;
+                continue;
+            }
+            let mut end = start;
+            let mut used = 0;
+            while end < words.len() && words[end].ids.len() <= budget - used {
+                used += words[end].ids.len();
+                end += 1;
+            }
+            windows.push(ModelWindow {
+                word_range: start..end,
+                logits: None,
+            });
+            if end == words.len() || words[end].ids.len() > budget {
+                start = end;
+                continue;
+            }
+            let mut next_start = end;
+            let mut overlap_used = 0;
+            while next_start > start + 1 {
+                let size = words[next_start - 1].ids.len();
+                if size > budget - overlap_used
+                    || (overlap_used >= overlap_tokens && end - next_start >= MAX_WIDTH - 1)
+                {
+                    break;
+                }
+                next_start -= 1;
+                overlap_used += size;
+            }
+            start = next_start;
+        }
+        Ok(windows)
+    }
+
     fn proposed_dates(&self, input: &str, prior: &[Candidate]) -> Vec<Range<usize>> {
         self.date_regex
             .find_iter(input)
@@ -200,54 +262,29 @@ impl DobJudgeRecognizer {
         start: usize,
         end: usize,
         prompt_ids: &[i64],
-        window_logits: &mut HashMap<(usize, usize), Vec<f32>>,
+        windows: &mut [ModelWindow],
     ) -> Result<[f32; 3], DetectError> {
         if words.is_empty() || start >= end || end > words.len() || end - start > MAX_WIDTH {
             return Err(DetectError::backend(ID, "date span exceeds model width"));
         }
-        let budget = MAX_SUBTOKENS.saturating_sub(prompt_ids.len() + 1);
-        let all_subtokens: usize = words.iter().map(|word| word.ids.len()).sum();
-        let (window_start, window_end) = if all_subtokens <= budget {
-            (0, words.len())
-        } else {
-            let own: usize = words[start..end].iter().map(|word| word.ids.len()).sum();
-            if own > budget {
-                return Err(DetectError::backend(ID, "date exceeds model token budget"));
-            }
-            let (mut left, mut right, mut used) = (start, end, own);
-            while left > 0 || right < words.len() {
-                let before = left
-                    .checked_sub(1)
-                    .filter(|index| used + words[*index].ids.len() <= budget);
-                let after = (right < words.len() && used + words[right].ids.len() <= budget)
-                    .then_some(right);
-                let choice = match (before, after) {
-                    (Some(a), Some(b)) if start - a <= b - end => Some((true, a)),
-                    (Some(_), Some(b)) => Some((false, b)),
-                    (Some(a), None) => Some((true, a)),
-                    (None, Some(b)) => Some((false, b)),
-                    (None, None) => None,
-                };
-                let Some((take_before, index)) = choice else {
-                    break;
-                };
-                used += words[index].ids.len();
-                if take_before {
-                    left -= 1;
-                } else {
-                    right += 1;
-                }
-            }
-            (left, right)
-        };
-        let key = (window_start, window_end);
-        let logits = match window_logits.entry(key) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => {
-                entry.insert(self.infer_window(&words[window_start..window_end], prompt_ids)?)
-            }
-        };
-        let relative_start = start - window_start;
+        let index = windows
+            .iter()
+            .enumerate()
+            .filter(|(_, window)| window.word_range.start <= start && end <= window.word_range.end)
+            .max_by_key(|(_, window)| {
+                (start - window.word_range.start).min(window.word_range.end - end)
+            })
+            .map(|(index, _)| index)
+            .ok_or_else(|| DetectError::backend(ID, "date span exceeds tiled model window"))?;
+        let window = &mut windows[index];
+        if window.logits.is_none() {
+            window.logits = Some(self.infer_window(&words[window.word_range.clone()], prompt_ids)?);
+        }
+        let logits = window
+            .logits
+            .as_ref()
+            .ok_or_else(|| DetectError::backend(ID, "window logits unavailable"))?;
+        let relative_start = start - window.word_range.start;
         let width = end - start - 1;
         let offset = (relative_start * MAX_WIDTH + width) * LABELS.len();
         let selected = logits
@@ -351,19 +388,11 @@ impl Recognizer for DobJudgeRecognizer {
         }
         let words = self.encode_words(input)?;
         let prompt_ids = self.prompt_ids()?;
-        let mut window_logits = HashMap::new();
+        let mut windows = Self::tile_words(&words, &prompt_ids)?;
         let mut candidates = Vec::new();
         for span in dates {
-            let start = words
-                .iter()
-                .position(|word| word.span.start == span.start)
-                .ok_or_else(|| DetectError::backend(ID, "date start is not word-aligned"))?;
-            let end = words
-                .iter()
-                .position(|word| word.span.end == span.end)
-                .map(|index| index + 1)
-                .ok_or_else(|| DetectError::backend(ID, "date end is not word-aligned"))?;
-            let scores = self.score_span(&words, start, end, &prompt_ids, &mut window_logits)?;
+            let (start, end) = Self::word_bounds(&words, &span)?;
+            let scores = self.score_span(&words, start, end, &prompt_ids, &mut windows)?;
             if let Some(score) = Self::birth_date_score(scores, self.threshold) {
                 candidates.push(
                     Candidate::new(
@@ -437,6 +466,8 @@ mod tests {
             "3 June 1990",
             "14. März 1987",
             "1er mars 1984",
+            "2 Sept 2015",
+            "2 sept. 2024",
         ] {
             let found = scanner.find(text).expect(text);
             assert_eq!(found.as_str(), text);
@@ -449,31 +480,51 @@ mod tests {
     }
 
     #[test]
+    fn fixed_tiles_cover_date_spans_across_boundaries() {
+        let prompt = vec![1; 20];
+        let budget = MAX_SUBTOKENS - prompt.len() - 1;
+        let words: Vec<_> = (0..160)
+            .map(|index| Word {
+                span: index..index + 1,
+                ids: vec![1; 10],
+            })
+            .collect();
+        let windows = DobJudgeRecognizer::tile_words(&words, &prompt).unwrap();
+        assert!(windows.len() < 10);
+        for window in &windows {
+            let subtokens: usize = words[window.word_range.clone()]
+                .iter()
+                .map(|word| word.ids.len())
+                .sum();
+            assert!(subtokens <= budget);
+        }
+        for start in 0..=words.len() - MAX_WIDTH {
+            assert!(windows.iter().any(|window| {
+                window.word_range.start <= start && start + MAX_WIDTH <= window.word_range.end
+            }));
+        }
+    }
+
+    /// Run: `GAZE_GLINER_DOB_TEST_BUNDLE="$HOME/.local/share/gaze/models/gliner-multi-pii-dob-int8" cargo test -p gaze-recognizers --lib dob_judge::tests::live_model_separates_birth_dates_from_business_dates_without_keyword_filter -- --ignored --exact`.
+    #[test]
+    #[ignore = "requires the locally installed, pinned GLiNER ONNX bundle"]
     fn live_model_separates_birth_dates_from_business_dates_without_keyword_filter() {
-        let Some(bundle) = std::env::var_os("GAZE_GLINER_DOB_TEST_BUNDLE") else {
-            return;
-        };
+        let bundle = std::env::var_os("GAZE_GLINER_DOB_TEST_BUNDLE")
+            .expect("set GAZE_GLINER_DOB_TEST_BUNDLE to the pinned bundle directory");
         let judge = DobJudgeRecognizer::load(&PathBuf::from(bundle), 0.5).unwrap();
         let prompt = judge.prompt_ids().unwrap();
         let score_dates = |input: &str| {
             let words = judge.encode_words(input).unwrap();
-            let mut window_logits = HashMap::new();
+            let mut windows = DobJudgeRecognizer::tile_words(&words, &prompt).unwrap();
             judge
                 .date_regex
                 .find_iter(input)
                 .filter(|found| date_boundary_is_valid(input, &found.range()))
                 .map(|found| {
-                    let start = words
-                        .iter()
-                        .position(|word| word.span.start == found.start())
-                        .unwrap();
-                    let end = words
-                        .iter()
-                        .position(|word| word.span.end == found.end())
-                        .unwrap()
-                        + 1;
+                    let (start, end) =
+                        DobJudgeRecognizer::word_bounds(&words, &found.range()).unwrap();
                     let scores = judge
-                        .score_span(&words, start, end, &prompt, &mut window_logits)
+                        .score_span(&words, start, end, &prompt, &mut windows)
                         .unwrap();
                     DobJudgeRecognizer::birth_date_score(scores, 0.5).is_some()
                 })
@@ -527,83 +578,75 @@ mod tests {
         let spans: Vec<_> = judge
             .date_regex
             .find_iter(table_row)
-            .map(|found| {
-                let start = words
-                    .iter()
-                    .position(|word| word.span.start == found.start())
-                    .unwrap();
-                let end = words
-                    .iter()
-                    .position(|word| word.span.end == found.end())
-                    .unwrap()
-                    + 1;
-                (start, end)
-            })
+            .map(|found| DobJudgeRecognizer::word_bounds(&words, &found.range()).unwrap())
             .collect();
         let baseline: Vec<_> = spans
             .iter()
             .map(|&(start, end)| {
+                let mut fresh = DobJudgeRecognizer::tile_words(&words, &prompt).unwrap();
                 judge
-                    .score_span(&words, start, end, &prompt, &mut HashMap::new())
+                    .score_span(&words, start, end, &prompt, &mut fresh)
                     .unwrap()
                     .map(f32::to_bits)
             })
             .collect();
-        let mut shared_logits = HashMap::new();
+        let mut shared = DobJudgeRecognizer::tile_words(&words, &prompt).unwrap();
         let cached: Vec<_> = spans
             .iter()
             .map(|&(start, end)| {
                 judge
-                    .score_span(&words, start, end, &prompt, &mut shared_logits)
+                    .score_span(&words, start, end, &prompt, &mut shared)
                     .unwrap()
                     .map(f32::to_bits)
             })
             .collect();
         assert_eq!(baseline, cached);
-        assert_eq!(shared_logits.len(), 1);
+        assert_eq!(
+            shared
+                .iter()
+                .filter(|window| window.logits.is_some())
+                .count(),
+            1
+        );
     }
 
+    /// Run: `GAZE_GLINER_DOB_TEST_BUNDLE="$HOME/.local/share/gaze/models/gliner-multi-pii-dob-int8" cargo test --release -p gaze-recognizers --lib dob_judge::tests::live_forty_row_table_reuses_tiled_windows -- --ignored --exact --nocapture`.
     #[test]
-    fn live_forty_row_table_reuses_one_window() {
-        let Some(bundle) = std::env::var_os("GAZE_GLINER_DOB_TEST_BUNDLE") else {
-            return;
-        };
+    #[ignore = "requires the locally installed, pinned GLiNER ONNX bundle"]
+    fn live_forty_row_table_reuses_tiled_windows() {
+        let bundle = std::env::var_os("GAZE_GLINER_DOB_TEST_BUNDLE")
+            .expect("set GAZE_GLINER_DOB_TEST_BUNDLE to the pinned bundle directory");
         let judge = DobJudgeRecognizer::load(&PathBuf::from(bundle), 0.5).unwrap();
         let table = (0..40)
-            .map(|index| format!("P{index} 14.03.1987\n"))
+            .map(|index| format!(
+                "| Kunde {index}: Maximilian Hoffmann-Schneider | 14.03.1987 | Musterstraße {index}, 10115 Berlin | Kundennummer 8841{index} |\n"
+            ))
             .collect::<String>();
         let words = judge.encode_words(&table).unwrap();
         let prompt = judge.prompt_ids().unwrap();
+        let budget = MAX_SUBTOKENS - prompt.len() - 1;
+        let subtokens: usize = words.iter().map(|word| word.ids.len()).sum();
+        assert!(subtokens > budget);
         let spans: Vec<_> = judge
             .date_regex
             .find_iter(&table)
-            .map(|found| {
-                let start = words
-                    .iter()
-                    .position(|word| word.span.start == found.start())
-                    .unwrap();
-                let end = words
-                    .iter()
-                    .position(|word| word.span.end == found.end())
-                    .unwrap()
-                    + 1;
-                (start, end)
-            })
+            .map(|found| DobJudgeRecognizer::word_bounds(&words, &found.range()).unwrap())
             .collect();
         assert_eq!(spans.len(), 40);
 
         let mut baseline = Vec::new();
         let started = Instant::now();
         for &(start, end) in &spans {
+            let mut fresh = DobJudgeRecognizer::tile_words(&words, &prompt).unwrap();
             baseline.push(
                 judge
-                    .score_span(&words, start, end, &prompt, &mut HashMap::new())
+                    .score_span(&words, start, end, &prompt, &mut fresh)
                     .unwrap()
                     .map(f32::to_bits),
             );
         }
         let repeated_time = started.elapsed();
-        let mut shared = HashMap::new();
+        let mut shared = DobJudgeRecognizer::tile_words(&words, &prompt).unwrap();
         let started = Instant::now();
         let cached: Vec<_> = spans
             .iter()
@@ -616,7 +659,24 @@ mod tests {
             .collect();
         let cached_time = started.elapsed();
         assert_eq!(baseline, cached);
-        assert_eq!(shared.len(), 1);
-        eprintln!("40-row repeated={repeated_time:?} cached={cached_time:?}");
+        let inferred_windows = shared
+            .iter()
+            .filter(|window| window.logits.is_some())
+            .count();
+        assert!(
+            inferred_windows < 10,
+            "expected fixed tiling to reduce 40 inferences"
+        );
+
+        let dictionaries = gaze_types::DictionaryBundle::default();
+        let prior = [];
+        let ctx = DetectContext::new(&[], &dictionaries).with_prior_candidates(&prior);
+        let started = Instant::now();
+        judge.detect(&table, &ctx).unwrap();
+        let detect_time = started.elapsed();
+        eprintln!(
+            "40-row subtokens={subtokens} tiles={} inferences={inferred_windows} repeated={repeated_time:?} cached={cached_time:?} detect={detect_time:?}",
+            shared.len()
+        );
     }
 }

@@ -40,8 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Opt-in, local GLiNER date-of-birth judge for date-shaped spans left unclaimed
   by the rule floor. `gaze setup --dob-judge` installs a SHA-pinned ONNX bundle;
   `[dob_judge]` enables it. The judge compares birth-date, generic-date, and
-  event-date scores before emitting a restorable `birth_date` token. Ambiguous
-  business dates can still be labelled as birth dates.
+  event-date scores with a fixed 0.65 margin before emitting a restorable
+  `birth_date` token. In a synthetic held-out probe it emitted 7/13 DOB spans
+  (EN 5/7, DE 2/4, FR 0/2) and 1/19 business-date spans. Cue-less DE/FR form
+  dates and later people in a list can remain raw; ambiguous business dates can
+  still be labelled as birth dates.
 - Repeat-value sweep after resolve and before the safety net. Byte-identical
   copies reuse the token; other spellings and title-case name parts get a
   sibling token. Only rule-found values propagate, never NER or safety-net

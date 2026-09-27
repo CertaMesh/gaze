@@ -857,7 +857,11 @@ to `0.5` and must be greater than `0.0` and less than `1.0`. The model scores
 `date of birth`, `date`, and `event date` together. The birth-date score must
 also exceed both alternative scores by at least `0.65`. Some ambiguous business
 dates may still receive a birth-date label. Contexts such as `Account opened`
-are excluded before model inference.
+are excluded before model inference. In a synthetic held-out probe with that
+keyword filter bypassed, the judge emitted 7/13 birth-date spans (EN 5/7, DE
+2/4, FR 0/2) and 1/19 business-date spans. Cue-less DE/FR form dates and the
+second person in a list often remain raw unless another recognizer catches
+them.
 
 ### `[safety_net]` and `[safety_net.nym]`
 

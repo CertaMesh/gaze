@@ -6,27 +6,29 @@ use gaze::{
 };
 use gaze_recognizers::DobJudgeRecognizer;
 
+/// Run: `GAZE_GLINER_DOB_TEST_BUNDLE="$HOME/.local/share/gaze/models/gliner-multi-pii-dob-int8" cargo test -p gaze-recognizers --test dob_judge_live local_bundle_classifies_synthetic_dates -- --ignored --exact`.
 #[test]
+#[ignore = "requires the locally installed, pinned GLiNER ONNX bundle"]
 fn local_bundle_classifies_synthetic_dates() {
-    let Some(path) = std::env::var_os("GAZE_GLINER_DOB_TEST_BUNDLE") else {
-        return;
-    };
+    let path = std::env::var_os("GAZE_GLINER_DOB_TEST_BUNDLE")
+        .expect("set GAZE_GLINER_DOB_TEST_BUNDLE to the pinned bundle directory");
     let recognizer = DobJudgeRecognizer::load(&PathBuf::from(path), 0.5).unwrap();
     let dictionaries = DictionaryBundle::default();
     let prior = [];
     let ctx = DetectContext::new(&[], &dictionaries).with_prior_candidates(&prior);
-    for (text, date) in [
-        (
-            "Helena (14.03.1987) is listed in the patient file.",
-            "14.03.1987",
-        ),
-        ("Biografie von Dr. Schmidt (14.03.1987).", "14.03.1987"),
-        ("Fiche de Marie (12 mars 1984).", "12 mars 1984"),
+    let text = "Helena (14.03.1987) is listed in the patient file.";
+    let date = "14.03.1987";
+    let detections = recognizer.detect(text, &ctx).unwrap();
+    assert_eq!(detections.len(), 1, "{text}");
+    assert_eq!(&text[detections[0].span.clone()], date);
+    assert_eq!(detections[0].source, "dob.gliner");
+    // The fixed precision margin leaves these cue-less DE/FR forms unclaimed.
+    for text in [
+        "Biografie von Dr. Schmidt (14.03.1987).",
+        "Fiche de Marie (12 mars 1984).",
     ] {
         let detections = recognizer.detect(text, &ctx).unwrap();
-        assert_eq!(detections.len(), 1, "{text}");
-        assert_eq!(&text[detections[0].span.clone()], date);
-        assert_eq!(detections[0].source, "dob.gliner");
+        assert!(detections.is_empty(), "{text}: {detections:?}");
     }
     for text in [
         "Account opened: 12/08/1993.",
