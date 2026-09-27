@@ -753,7 +753,7 @@ fn write_temp_rulepack(name: &str, contents: &str) -> std::path::PathBuf {
 }
 
 // The derived set for the bundled `core` recognizers equals the literal list
-// the CLI/daemon/library used to carry (`en-US, de-DE, de-AT, de-CH`) — this is
+// the CLI/daemon/library used to carry (`en-US, de-DE, de-AT, de-CH, en-AU`) — this is
 // the derived-set == pack-union assertion; it also gates the bundle: a new
 // bundled `locale_gated` recognizer changes this set and must update the pin
 // plus the "Shipped default activation" reference table.
@@ -768,6 +768,7 @@ fn locale_gated_activation_locales_for_core_bundle_match_compat_list() {
             LocaleTag::DeDe,
             LocaleTag::DeAt,
             LocaleTag::DeCh,
+            LocaleTag::EnAu,
         ]
     );
 }
@@ -857,6 +858,7 @@ pattern = '''BR-E-[0-9]{6}'''
             LocaleTag::DeDe,
             LocaleTag::DeAt,
             LocaleTag::DeCh,
+            LocaleTag::EnAu,
             LocaleTag::EnGb,
             es,
         ],
@@ -865,8 +867,7 @@ pattern = '''BR-E-[0-9]{6}'''
 }
 
 // Pins the shipped compatibility chain: for the bundled `core` recognizers the
-// derived activation set is exactly the v0.6 alias order, so S10-F2 changes no
-// shipped behaviour.
+// derived activation set follows compatibility order before new locale tags.
 #[test]
 fn core_extended_alias_locale_chain_is_compat_order() {
     let core = CorePipelineConfig::new()
@@ -882,6 +883,7 @@ fn core_extended_alias_locale_chain_is_compat_order() {
             LocaleTag::DeDe,
             LocaleTag::DeAt,
             LocaleTag::DeCh,
+            LocaleTag::EnAu,
         ]
     );
 }

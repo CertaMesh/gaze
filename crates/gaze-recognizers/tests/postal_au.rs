@@ -81,8 +81,7 @@ fn all_eight_states_and_territories_protect_state_and_postcode() {
 #[test]
 fn terminal_field_branch_uses_the_same_ranges_for_all_states() {
     for state_and_code in [
-        "NSW 2000", "VIC 3000", "QLD 4072", "SA 5000", "WA 6000", "TAS 7000", "NT 0800",
-        "ACT 2601",
+        "NSW 2000", "VIC 3000", "QLD 4072", "SA 5000", "WA 6000", "TAS 7000", "NT 0800", "ACT 2601",
     ] {
         let original = format!("{state_and_code}.");
         let cleaned = clean_and_restore(LocaleTag::EnAu, &original);
