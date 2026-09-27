@@ -767,8 +767,8 @@ priority = 86
 #     DOCUMENT-locale gate is the only thing standing in for that missing structure, which is why
 #     these stay gated. `postal.at_ch` matches four digits only behind a cue or before a city-shaped
 #     token; see its own note. Document-basis rules of one class resolve PER SPAN across the
-#     chain: an earlier locale wins partial overlaps, while strict same-class containment goes
-#     to the larger span. Thus under
+#     chain: an earlier locale wins partial overlaps, while strict same-class containment prefers
+#     the larger span when it preserves prior byte coverage. Thus under
 #     [de-AT, de-DE] a de-AT match (true or false) does not switch `postal.de` off for a German
 #     code elsewhere in the document (pinned in `postal_at_ch.rs`). The loader lint warns, and fails strict mode, on the co-firing five-digit pair.
 #

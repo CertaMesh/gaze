@@ -41,7 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   these spans no longer rely on Nym context. The no-policy `core-extended`
   chain includes `en-AU` on every document. New Zealand postcodes remain
   outside this rule. For strict same-class overlaps, the containing span wins
-  and the enclosed candidate is audited as a loser. This gives the joined AU
+  and the enclosed candidate is audited as a loser when doing so preserves
+  every byte covered by prior arbitration of that candidate pool. This gives the joined AU
   token precedence under shipped locale chains while `postal.at_ch` still
   protects an out-of-range code or a code on a chain without `en-AU`.
   The address anchor refuses common English and German function words,

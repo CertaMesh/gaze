@@ -380,16 +380,17 @@ emitted. This guard sees text outside `capture_groups`; an invalid guard
 regex fails pipeline assembly. It is unavailable in
 `[[policy.custom_recognizers]]`.
 
-When same-class spans strictly contain one another, the longer span wins
-regardless of score or rule priority. This protects every byte of the shorter
-match but can also include surrounding text. Exact and partial overlaps keep
-their normal precedence rules.
+When same-class spans strictly contain one another, the resolver prefers the
+longer span regardless of evidence tier, score, or rule priority. If that
+choice would expose bytes covered by the prior arbitration of the entire
+candidate pool, the resolver keeps the prior result. Exact and partial
+overlaps keep their normal precedence rules.
 
 `locale_basis` accepts two values:
 
 | Value | Meaning |
 |-------|---------|
-| `"document"` | `locales` gates eligibility against the resolved document locale chain. The registry walks the chain per class; an earlier locale wins partial and exact overlaps. Strict same-class containment reaches the resolver, which selects the containing span and audits the loser ([Locale Chain](../explanation/policy/locale-chain.md)). This is the legacy default when an external/adopter rulepack omits the field. |
+| `"document"` | `locales` gates eligibility against the resolved document locale chain. The registry walks the chain per class; an earlier locale wins partial and exact overlaps. Strict same-class containment reaches the resolver, which prefers the containing span when it preserves prior byte coverage and audits the loser ([Locale Chain](../explanation/policy/locale-chain.md)). This is the legacy default when an external/adopter rulepack omits the field. |
 | `"format"` | `locales` records format provenance only. Assembly registers the recognizer regardless of document locale, and the registry runs it once outside locale fallback before ordinary conflict resolution. |
 
 Bundled rulepacks must state `locale_basis` explicitly for every recognizer.
