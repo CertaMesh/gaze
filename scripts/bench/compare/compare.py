@@ -287,6 +287,12 @@ def package_version(name: str) -> str:
     return importlib.metadata.version(name)
 
 
+def crates_tree(revision: str) -> str:
+    return subprocess.check_output(
+        ["git", "rev-parse", f"{revision}:crates"], cwd=REPO, text=True,
+    ).strip()
+
+
 def model_info(path: Path) -> dict[str, str]:
     meta = json.loads((path / "meta.json").read_text(encoding="utf-8"))
     return {"version": meta["version"], "license": meta["license"], "sha256": digest_tree(path)}
@@ -447,6 +453,8 @@ def main() -> int:
         "harness_dirty": bool(subprocess.check_output(
             ["git", "status", "--porcelain"], cwd=REPO, text=True
         ).strip()),
+        "gaze_crates_tree": crates_tree("HEAD"),
+        "runner_sha256": digest_file(BENCH / "run_no_opf_benchmark.py"),
         "scorer_sha256": digest_file(BENCH / "gaze_bench_score.py"),
         "mapping_sha256": digest_file(MAP_PATH),
         "contracts": {
@@ -466,6 +474,8 @@ def main() -> int:
     for key in ("gaze_revision", "policy_sha256", "hardware"):
         if len({row[key] for row in report["gaze"].values()}) > 1:
             raise ValueError(f"Gaze scorecards for the three contracts use different {key}")
+    if any(crates_tree(row["gaze_revision"]) != report["gaze_crates_tree"] for row in report["gaze"].values()):
+        raise ValueError("Gaze scorecards were not measured on this detection tree")
     with tempfile.TemporaryDirectory(prefix="gaze-comparison-") as temporary:
         for name in selected:
             backend = None
