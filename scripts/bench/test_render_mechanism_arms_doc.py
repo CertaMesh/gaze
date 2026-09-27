@@ -324,11 +324,12 @@ class MechanismArmsTest(unittest.TestCase):
         fixture.record(ledger)
         body = mech.render(ledger, ["v0.15.1"], root)
         titles = [entry["title"] for entry in ledger["mechanisms"]]
-        self.assertEqual(titles, ["GLiNER date-of-birth judge", "Synthetic drop"])
+        expected = [entry["title"] for entry in LEDGER["mechanisms"]] + ["Synthetic drop"]
+        self.assertEqual(titles, expected)
         for title in titles:
             self.assertEqual(body.count(f"| {title} | `"), 3, title)
-            self.assertIn(f"| {title} | not available: mechanism added in v0.16 |", body)
             self.assertIn(f"- **{title}** ships ", body)
+        self.assertIn("| Synthetic drop | not available: mechanism added in v0.16 |", body)
 
     def test_ledger_validation_rejects_bad_shapes(self) -> None:
         cases = {
