@@ -1383,4 +1383,160 @@ mod tests {
         assert!(second.doctor_clean_text.contains(":Name_"));
         assert!(second.doctor_clean_text.contains(":Email_"));
     }
+
+    /// `resolver::is_learned` as it stood on main before todo 3884, frozen here. Declared
+    /// evidence replaced it; every shipped emitter must declare what it inferred, so the move
+    /// changed no sweep decision.
+    fn main_is_learned(recognizer_id: &str, source: &str) -> bool {
+        recognizer_id == gaze::NER_RECOGNIZER_ID
+            || source == "ner"
+            || source.starts_with("ner/")
+            || recognizer_id == "dob.gliner"
+            || recognizer_id == gaze::HOUSE_NUMBER_RECOGNIZER_ID
+    }
+
+    /// An adopter recognizer that declares nothing.
+    struct Undeclared;
+
+    impl gaze::Recognizer for Undeclared {
+        fn id(&self) -> &str {
+            "adopter.undeclared"
+        }
+        fn supported_class(&self) -> &gaze::PiiClass {
+            &gaze::PiiClass::Name
+        }
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+        fn detect(
+            &self,
+            input: &str,
+            _: &gaze::DetectContext<'_>,
+        ) -> Result<Vec<gaze::Candidate>, gaze::DetectError> {
+            Ok(input
+                .find("Quentin Probe")
+                .map(|start| {
+                    gaze::Candidate::new(
+                        start..start + "Quentin Probe".len(),
+                        gaze::PiiClass::Name,
+                        self.id(),
+                        0.9,
+                        0,
+                        None,
+                        "counter",
+                        self.id(),
+                        gaze::ConflictTier::None,
+                        Vec::new(),
+                    )
+                    // Claims rule evidence on the candidate itself: the registry must
+                    // overwrite it with the recognizer's (default) declaration.
+                    .with_evidence(gaze::EvidenceKind::Rule)
+                })
+                .into_iter()
+                .collect())
+        }
+    }
+
+    const EVIDENCE_PROBE: &str = "From: Alice Example <alice@example.com>\n\
+        Tel +49 30 1234567, Handy 0171 2345678, (555) 123-4567\n\
+        IBAN DE89 3704 0044 0532 0130 00, card 4111 1111 1111 1111\n\
+        Musterweg 12, 10115 Berlin; 1600 Pennsylvania Ave NW, Washington, DC 20500\n\
+        SSN 123-45-6789, Steuer-ID 12 345 678 901, born 14.03.1987\n\
+        order class-alpha-4242 for Quentin Probe, server 192.168.10.20, https://example.org/a\n";
+
+    /// Todo 3884: every recognizer in every shipped registry (no policy, `core`,
+    /// `core-extended` plus an adopter custom rule, and the `gaze setup` policy with NER)
+    /// declares the evidence main inferred from its id, statically and on every candidate
+    /// the registry emits; an adopter recognizer that declares nothing is learned.
+    #[test]
+    fn every_shipped_recognizer_declares_the_evidence_main_inferred() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        write_synthetic_ner_dir(&model_dir);
+        let setup = dir.path().join("setup.toml");
+        write_policy(&setup, &model_dir, None, false)
+            .unwrap()
+            .persist(&setup)
+            .unwrap();
+        let bundled = |name: &str| {
+            let path = dir.path().join(format!("{name}.toml"));
+            fs::write(
+                &path,
+                format!(
+                    "[session]\nscope = \"persistent\"\nttl_secs = 86400\n\n\
+                     [policy.rulepacks]\nbundled = [\"{name}\"]\n\n\
+                     [[policy.custom_recognizers]]\nkind = \"regex\"\nname = \"class_alpha\"\n\
+                     pattern = 'class-alpha-[0-9]+'\nclass = \"custom:class_alpha\"\n\n\
+                     [[rule]]\nkind = \"default\"\naction = \"tokenize\"\n"
+                ),
+            )
+            .unwrap();
+            path
+        };
+        let policies = [
+            None,
+            Some(bundled("core")),
+            Some(bundled("core-extended")),
+            Some(setup),
+        ];
+
+        let mut declared = BTreeSet::new();
+        let mut emitted = BTreeSet::new();
+        for policy in &policies {
+            let resolved = crate::pipeline::build::resolve_pipeline_builder(
+                policy.as_deref(),
+                &CleanOverrides::default(),
+                &[],
+                None,
+                None,
+            )
+            .unwrap();
+            let pipeline = resolved.builder.recognizer(Undeclared).build().unwrap();
+            let registry = pipeline.registry();
+            for id in registry.recognizer_ids() {
+                let evidence = registry.recognizer(id).unwrap().evidence();
+                let expected = if id == "adopter.undeclared" || main_is_learned(id, id) {
+                    gaze::EvidenceKind::Learned
+                } else {
+                    gaze::EvidenceKind::Rule
+                };
+                assert_eq!(evidence, expected, "{policy:?}: recognizer {id}");
+                declared.insert((id.to_string(), evidence == gaze::EvidenceKind::Learned));
+            }
+            let ctx =
+                gaze::DetectContext::new(resolved.locale_chain.as_slice(), &resolved.dictionaries);
+            for candidate in registry.detect_all(EVIDENCE_PROBE, &ctx).unwrap() {
+                let learned = candidate.recognizer_id == "adopter.undeclared"
+                    || main_is_learned(&candidate.recognizer_id, &candidate.source);
+                assert_eq!(
+                    candidate.evidence == gaze::EvidenceKind::Learned,
+                    learned,
+                    "{policy:?}: candidate {} from {} ({})",
+                    &EVIDENCE_PROBE[candidate.span.clone()],
+                    candidate.recognizer_id,
+                    candidate.source,
+                );
+                emitted.insert((candidate.recognizer_id, learned));
+            }
+        }
+
+        // Guard against a vacuous pass: both kinds were declared and emitted, and the
+        // shipped rule floor, the adopter custom rule, NER and the undeclared recognizer
+        // were all seen.
+        for set in [&declared, &emitted] {
+            assert!(
+                set.contains(&(gaze::NER_RECOGNIZER_ID.to_string(), true)),
+                "{set:?}"
+            );
+            assert!(
+                set.contains(&("adopter.undeclared".to_string(), true)),
+                "{set:?}"
+            );
+            assert!(set.contains(&("class_alpha".to_string(), false)), "{set:?}");
+            assert!(
+                set.iter().filter(|(_, learned)| !learned).count() >= 10,
+                "{set:?}"
+            );
+        }
+    }
 }

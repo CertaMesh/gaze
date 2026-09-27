@@ -67,6 +67,11 @@ pub fn run(args: Args) -> Result<()> {
 struct FixtureEmailDetector;
 
 impl Detector for FixtureEmailDetector {
+    /// An exact fixture value is rule evidence.
+    fn evidence(&self) -> gaze::EvidenceKind {
+        gaze::EvidenceKind::Rule
+    }
+
     fn detect(&self, input: &str) -> Vec<Detection> {
         input
             .match_indices(RAW_EMAIL)

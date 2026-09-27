@@ -25,6 +25,9 @@ impl Recognizer for Header {
     fn id(&self) -> &str {
         "header"
     }
+    fn evidence(&self) -> gaze::EvidenceKind {
+        gaze::EvidenceKind::Rule
+    }
     fn supported_class(&self) -> &PiiClass {
         &PiiClass::Name
     }
