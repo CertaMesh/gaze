@@ -363,6 +363,42 @@ def validate_required_models(
     ]
 
 
+def validate_gliner_dob_bundle(
+    repo_root: Path, policy_path: Path, policy_data: dict[str, object]
+) -> dict[str, object] | None:
+    config = policy_data.get("dob_judge")
+    if config is None:
+        return None
+    if not isinstance(config, dict) or not isinstance(config.get("enabled", False), bool):
+        raise CandidateError("policy GLiNER DOB settings are invalid")
+    if not config.get("enabled", False):
+        return None
+    model_dir = config.get("model_dir")
+    if not isinstance(model_dir, str) or not model_dir:
+        raise CandidateError("policy GLiNER DOB model_dir is missing or invalid")
+    model_path = Path(model_dir).expanduser()
+    if not model_path.is_absolute():
+        model_path = policy_path.parent / model_path
+    source_path = repo_root / "crates/gaze-recognizers/src/dob_judge.rs"
+    try:
+        source = source_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise ModelBundleError(f"GLiNER DOB pin source cannot be read: {error}") from error
+    match = re.search(
+        r'GLINER_DOB_BUNDLE_SHA256: &str =\s*"([0-9a-f]{64})"', source
+    )
+    if match is None:
+        raise ModelBundleError("GLiNER DOB bundle pin is missing from recognizer source")
+    return validate_model_bundle(
+        ModelPin(
+            "gliner-multi-pii-dob-int8",
+            model_path.resolve(),
+            "SHA256SUMS",
+            match.group(1),
+        )
+    )
+
+
 def load_negative_documents(
     path: Path,
 ) -> tuple[list[score.Document], dict[str, object]]:
@@ -961,6 +997,7 @@ def run(args: argparse.Namespace) -> int:
     policy_sha = None
     nym_bundle_sha = None
     nym_expected_sha = None
+    gliner_bundle_provenance = None
     effective_threshold = args.threshold
     if policy_path is not None:
         if not policy_path.is_file():
@@ -1007,6 +1044,9 @@ def run(args: argparse.Namespace) -> int:
                 raise ModelBundleError(
                     f"Nym bundle digest mismatch: expected {nym_expected_sha}, got {nym_bundle_sha}"
                 )
+        gliner_bundle_provenance = validate_gliner_dob_bundle(
+            repo_root, policy_path, policy_data
+        )
     scored_label_contract = load_scored_label_contract(repo_root, args.scored_labels)
     try:
         agentic_prepared = (
@@ -1027,6 +1067,8 @@ def run(args: argparse.Namespace) -> int:
                 "observed_sha256": nym_bundle_sha,
             }
         )
+    if gliner_bundle_provenance is not None:
+        model_provenance.append(gliner_bundle_provenance)
     if dataset_path.is_file():
         dataiku.verify_dataset(dataset_path)
     elif args.no_download:

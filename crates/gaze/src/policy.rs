@@ -287,7 +287,7 @@ pub enum PolicyError {
     NerThresholdOutOfRange { value: f32 },
     #[error("[dob_judge].enabled requires model_dir")]
     DobJudgeModelDirMissing,
-    #[error("[dob_judge].threshold must be between 0.0 and 1.0 inclusive, got {value}")]
+    #[error("[dob_judge].threshold must be greater than 0.0 and less than 1.0, got {value}")]
     DobJudgeThresholdOutOfRange { value: f32 },
     #[error("disabled [dob_judge] must not specify model_dir or threshold")]
     DobJudgeDisabledSettings,
@@ -825,7 +825,7 @@ fn parse_dob_judge(raw: RawDobJudgePolicy) -> Result<Option<DobJudgePolicy>, Pol
     }
     let model_dir = raw.model_dir.ok_or(PolicyError::DobJudgeModelDirMissing)?;
     let threshold = raw.threshold.unwrap_or(0.5);
-    if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
+    if !threshold.is_finite() || threshold <= 0.0 || threshold >= 1.0 {
         return Err(PolicyError::DobJudgeThresholdOutOfRange { value: threshold });
     }
     Ok(Some(DobJudgePolicy {
@@ -1162,6 +1162,15 @@ action = "tokenize"
             nym_policy("[dob_judge]\nenabled = true\nmodel_dir = \"/tmp/x\"\nthreshold = 1.1\n"),
             Err(PolicyError::DobJudgeThresholdOutOfRange { .. })
         ));
+        for threshold in ["0.0", "1.0"] {
+            let policy = format!(
+                "[dob_judge]\nenabled = true\nmodel_dir = \"/tmp/x\"\nthreshold = {threshold}\n"
+            );
+            assert!(matches!(
+                nym_policy(&policy),
+                Err(PolicyError::DobJudgeThresholdOutOfRange { .. })
+            ));
+        }
         assert!(matches!(
             nym_policy("[dob_judge]\nmodel_dir = \"/tmp/x\"\n"),
             Err(PolicyError::DobJudgeDisabledSettings)

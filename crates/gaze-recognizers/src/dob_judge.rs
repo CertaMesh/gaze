@@ -1,5 +1,8 @@
 //! Opt-in, local GLiNER judge for dates the rule floor has not identified as birth dates.
+//! Prompt tokenization, word masks, and span tensors are adapted from gline-rs
+//! by Frédérik Bilhaut (Apache-2.0), commit f1f8923a7af972855909302a843063d958f69d95.
 
+use std::collections::{hash_map::Entry, HashMap};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::Mutex;
@@ -38,7 +41,8 @@ const BUNDLE_SPEC: BundleSpec = BundleSpec {
     required: REQUIRED_GLINER_DOB_ARTIFACTS,
 };
 const ID: &str = "dob.gliner";
-const LABEL: &str = "date of birth";
+const LABELS: [&str; 3] = ["date of birth", "date", "event date"];
+const DOB_SCORE_MARGIN: f32 = 0.65;
 const MAX_SUBTOKENS: usize = 384;
 const MAX_WIDTH: usize = 12;
 
@@ -72,7 +76,7 @@ pub enum DobJudgeLoadError {
     Tokenizer,
     #[error("GLiNER DOB model could not load")]
     Model,
-    #[error("GLiNER DOB threshold must be between zero and one")]
+    #[error("GLiNER DOB threshold must be greater than zero and less than one")]
     Threshold,
     #[error("GLiNER DOB scanner could not compile")]
     Scanner,
@@ -99,7 +103,7 @@ pub struct DobJudgeRecognizer {
 
 impl DobJudgeRecognizer {
     pub fn load(model_dir: &Path, threshold: f32) -> Result<Self, DobJudgeLoadError> {
-        if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
+        if !threshold.is_finite() || threshold <= 0.0 || threshold >= 1.0 {
             return Err(DobJudgeLoadError::Threshold);
         }
         verify_gliner_dob_bundle(model_dir)?;
@@ -143,7 +147,11 @@ impl DobJudgeRecognizer {
 
     fn prompt_ids(&self) -> Result<Vec<i64>, DetectError> {
         let mut ids = vec![1];
-        for part in ["<<ENT>>", LABEL, "<<SEP>>"] {
+        for part in LABELS
+            .iter()
+            .flat_map(|label| ["<<ENT>>", *label])
+            .chain(["<<SEP>>"])
+        {
             ids.extend(
                 self.tokenizer
                     .encode(part, false)
@@ -154,6 +162,11 @@ impl DobJudgeRecognizer {
             );
         }
         Ok(ids)
+    }
+
+    fn birth_date_score(scores: [f32; 3], threshold: f32) -> Option<f32> {
+        let [birth, generic, event] = scores;
+        (birth >= threshold && birth - generic.max(event) >= DOB_SCORE_MARGIN).then_some(birth)
     }
 
     fn proposed_dates(&self, input: &str, prior: &[Candidate]) -> Vec<Range<usize>> {
@@ -187,7 +200,8 @@ impl DobJudgeRecognizer {
         start: usize,
         end: usize,
         prompt_ids: &[i64],
-    ) -> Result<f32, DetectError> {
+        window_logits: &mut HashMap<(usize, usize), Vec<f32>>,
+    ) -> Result<[f32; 3], DetectError> {
         if words.is_empty() || start >= end || end > words.len() || end - start > MAX_WIDTH {
             return Err(DetectError::backend(ID, "date span exceeds model width"));
         }
@@ -226,7 +240,29 @@ impl DobJudgeRecognizer {
             }
             (left, right)
         };
-        let window = &words[window_start..window_end];
+        let key = (window_start, window_end);
+        let logits = match window_logits.entry(key) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                entry.insert(self.infer_window(&words[window_start..window_end], prompt_ids)?)
+            }
+        };
+        let relative_start = start - window_start;
+        let width = end - start - 1;
+        let offset = (relative_start * MAX_WIDTH + width) * LABELS.len();
+        let selected = logits
+            .get(offset..offset + LABELS.len())
+            .ok_or_else(|| DetectError::backend(ID, "date logits unavailable"))?;
+        if selected.iter().any(|logit| !logit.is_finite()) {
+            return Err(DetectError::backend(ID, "non-finite logits"));
+        }
+        let selected: [f32; 3] = selected
+            .try_into()
+            .map_err(|_| DetectError::backend(ID, "invalid logits width"))?;
+        Ok(selected.map(|logit| 1.0 / (1.0 + (-logit).exp())))
+    }
+
+    fn infer_window(&self, window: &[Word], prompt_ids: &[i64]) -> Result<Vec<f32>, DetectError> {
         let mut ids = prompt_ids.to_vec();
         let mut word_mask = vec![0i64; ids.len()];
         for (index, word) in window.iter().enumerate() {
@@ -280,17 +316,11 @@ impl DobJudgeRecognizer {
             || shape[0] != 1
             || shape[1] != num_words as i64
             || shape[2] != MAX_WIDTH as i64
-            || shape[3] != 1
+            || shape[3] != LABELS.len() as i64
         {
             return Err(DetectError::backend(ID, "invalid logits shape"));
         }
-        let relative_start = start - window_start;
-        let width = end - start - 1;
-        let logit = logits[relative_start * MAX_WIDTH + width];
-        if !logit.is_finite() {
-            return Err(DetectError::backend(ID, "non-finite logits"));
-        }
-        Ok(1.0 / (1.0 + (-logit).exp()))
+        Ok(logits.to_vec())
     }
 }
 
@@ -321,6 +351,7 @@ impl Recognizer for DobJudgeRecognizer {
         }
         let words = self.encode_words(input)?;
         let prompt_ids = self.prompt_ids()?;
+        let mut window_logits = HashMap::new();
         let mut candidates = Vec::new();
         for span in dates {
             let start = words
@@ -332,8 +363,8 @@ impl Recognizer for DobJudgeRecognizer {
                 .position(|word| word.span.end == span.end)
                 .map(|index| index + 1)
                 .ok_or_else(|| DetectError::backend(ID, "date end is not word-aligned"))?;
-            let score = self.score_span(&words, start, end, &prompt_ids)?;
-            if score >= self.threshold {
+            let scores = self.score_span(&words, start, end, &prompt_ids, &mut window_logits)?;
+            if let Some(score) = Self::birth_date_score(scores, self.threshold) {
                 candidates.push(
                     Candidate::new(
                         span,
@@ -375,6 +406,8 @@ fn date_boundary_is_valid(input: &str, span: &Range<usize>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use std::time::Instant;
 
     #[test]
     fn pinned_bundle_digest_matches_checksum_manifest() {
@@ -382,6 +415,16 @@ mod tests {
             crate::bundle::hex_sha256(GLINER_DOB_SHA256SUMS.as_bytes()),
             GLINER_DOB_BUNDLE_SHA256
         );
+    }
+
+    #[test]
+    fn dob_threshold_requires_a_model_yes() {
+        for threshold in [0.0, 1.0, f32::NAN, f32::INFINITY] {
+            assert!(matches!(
+                DobJudgeRecognizer::load(Path::new("/missing"), threshold),
+                Err(DobJudgeLoadError::Threshold)
+            ));
+        }
     }
 
     #[test]
@@ -403,5 +446,177 @@ mod tests {
                 .find(text)
                 .is_none_or(|found| !date_boundary_is_valid(text, &found.range())));
         }
+    }
+
+    #[test]
+    fn live_model_separates_birth_dates_from_business_dates_without_keyword_filter() {
+        let Some(bundle) = std::env::var_os("GAZE_GLINER_DOB_TEST_BUNDLE") else {
+            return;
+        };
+        let judge = DobJudgeRecognizer::load(&PathBuf::from(bundle), 0.5).unwrap();
+        let prompt = judge.prompt_ids().unwrap();
+        let score_dates = |input: &str| {
+            let words = judge.encode_words(input).unwrap();
+            let mut window_logits = HashMap::new();
+            judge
+                .date_regex
+                .find_iter(input)
+                .filter(|found| date_boundary_is_valid(input, &found.range()))
+                .map(|found| {
+                    let start = words
+                        .iter()
+                        .position(|word| word.span.start == found.start())
+                        .unwrap();
+                    let end = words
+                        .iter()
+                        .position(|word| word.span.end == found.end())
+                        .unwrap()
+                        + 1;
+                    let scores = judge
+                        .score_span(&words, start, end, &prompt, &mut window_logits)
+                        .unwrap();
+                    DobJudgeRecognizer::birth_date_score(scores, 0.5).is_some()
+                })
+                .collect::<Vec<_>>()
+        };
+        let positives = [
+            "Helena (14.03.1987) is listed in the patient file.",
+            "Anna Weber, 03/07/1992, attended the appointment.",
+            "Mr. John Smith (born in Leeds) - 12 June 1985 - joined the team.",
+            "Participant: Maria Lopez, June 3, 1990, female.",
+            "Herr Müller, 14. März 1987, wohnhaft in Berlin.",
+            "Frau Schulz (geb. Meier), 02.11.1979, Stuttgart.",
+            "Madame Dupont, 1er mars 1984, domiciliée à Lyon.",
+            "Jean Martin, né le 12 mars 1984 à Paris.",
+            "Name: Peter Brown\n1985-06-12\nAddress: 1 High Street",
+        ];
+        let negatives = [
+            "Contract signed 14.03.1987 between the parties.",
+            "Delivery scheduled for 03/07/1992 to the warehouse.",
+            "The conference took place on 12 June 1985 in Berlin.",
+            "Event: Summer party, June 3, 1990, main hall.",
+            "Vertrag vom 14. März 1987, Laufzeit zwei Jahre.",
+            "Lieferung am 02.11.1979 an das Lager.",
+            "Réunion du 1er mars 1984 au siège.",
+            "Contrat signé le 12 mars 1984 à Paris.",
+            "Order #4411, 1985-06-12, qty 3, total 40 EUR.",
+            "Customer since 03/07/1992, tier gold.",
+            "Anna Weber, 03/07/1992, placed an order for 3 chairs.",
+            "Helena Schmidt (14.03.1987 - 20.05.1990) served as CFO.",
+            "Build 20240115 passed on CI.",
+        ];
+        let positive_scores: Vec<bool> = positives
+            .iter()
+            .flat_map(|text| score_dates(text))
+            .collect();
+        let negative_scores: Vec<bool> = negatives
+            .iter()
+            .flat_map(|text| score_dates(text))
+            .collect();
+        assert_eq!(positive_scores.len(), 9);
+        assert_eq!(negative_scores.len(), 14);
+        assert!(positive_scores.iter().filter(|&&emitted| emitted).count() >= 8);
+        assert!(negative_scores.iter().filter(|&&emitted| emitted).count() <= 2);
+
+        let filtered = "Invoice issued on 1990-12-05.";
+        assert!(judge.proposed_dates(filtered, &[]).is_empty());
+        assert_eq!(score_dates(filtered), vec![false]);
+
+        let table_row = negatives[11];
+        let words = judge.encode_words(table_row).unwrap();
+        let spans: Vec<_> = judge
+            .date_regex
+            .find_iter(table_row)
+            .map(|found| {
+                let start = words
+                    .iter()
+                    .position(|word| word.span.start == found.start())
+                    .unwrap();
+                let end = words
+                    .iter()
+                    .position(|word| word.span.end == found.end())
+                    .unwrap()
+                    + 1;
+                (start, end)
+            })
+            .collect();
+        let baseline: Vec<_> = spans
+            .iter()
+            .map(|&(start, end)| {
+                judge
+                    .score_span(&words, start, end, &prompt, &mut HashMap::new())
+                    .unwrap()
+                    .map(f32::to_bits)
+            })
+            .collect();
+        let mut shared_logits = HashMap::new();
+        let cached: Vec<_> = spans
+            .iter()
+            .map(|&(start, end)| {
+                judge
+                    .score_span(&words, start, end, &prompt, &mut shared_logits)
+                    .unwrap()
+                    .map(f32::to_bits)
+            })
+            .collect();
+        assert_eq!(baseline, cached);
+        assert_eq!(shared_logits.len(), 1);
+    }
+
+    #[test]
+    fn live_forty_row_table_reuses_one_window() {
+        let Some(bundle) = std::env::var_os("GAZE_GLINER_DOB_TEST_BUNDLE") else {
+            return;
+        };
+        let judge = DobJudgeRecognizer::load(&PathBuf::from(bundle), 0.5).unwrap();
+        let table = (0..40)
+            .map(|index| format!("P{index} 14.03.1987\n"))
+            .collect::<String>();
+        let words = judge.encode_words(&table).unwrap();
+        let prompt = judge.prompt_ids().unwrap();
+        let spans: Vec<_> = judge
+            .date_regex
+            .find_iter(&table)
+            .map(|found| {
+                let start = words
+                    .iter()
+                    .position(|word| word.span.start == found.start())
+                    .unwrap();
+                let end = words
+                    .iter()
+                    .position(|word| word.span.end == found.end())
+                    .unwrap()
+                    + 1;
+                (start, end)
+            })
+            .collect();
+        assert_eq!(spans.len(), 40);
+
+        let mut baseline = Vec::new();
+        let started = Instant::now();
+        for &(start, end) in &spans {
+            baseline.push(
+                judge
+                    .score_span(&words, start, end, &prompt, &mut HashMap::new())
+                    .unwrap()
+                    .map(f32::to_bits),
+            );
+        }
+        let repeated_time = started.elapsed();
+        let mut shared = HashMap::new();
+        let started = Instant::now();
+        let cached: Vec<_> = spans
+            .iter()
+            .map(|&(start, end)| {
+                judge
+                    .score_span(&words, start, end, &prompt, &mut shared)
+                    .unwrap()
+                    .map(f32::to_bits)
+            })
+            .collect();
+        let cached_time = started.elapsed();
+        assert_eq!(baseline, cached);
+        assert_eq!(shared.len(), 1);
+        eprintln!("40-row repeated={repeated_time:?} cached={cached_time:?}");
     }
 }

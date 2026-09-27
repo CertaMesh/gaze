@@ -853,8 +853,11 @@ with the distinct `dob.gliner` source. It is disabled unless `enabled = true`;
 `gaze setup --dob-judge` installs the SHA-pinned int8 bundle and writes this
 block. An enabled block requires `model_dir`. Missing or corrupt bundle files,
 an invalid threshold, and inference errors fail closed. `threshold` defaults
-to `0.5` and must be in `0.0..=1.0`. Negative business-date contexts such as
-`Account opened` are excluded before model inference.
+to `0.5` and must be greater than `0.0` and less than `1.0`. The model scores
+`date of birth`, `date`, and `event date` together. The birth-date score must
+also exceed both alternative scores by at least `0.65`. Some ambiguous business
+dates may still receive a birth-date label. Contexts such as `Account opened`
+are excluded before model inference.
 
 ### `[safety_net]` and `[safety_net.nym]`
 
