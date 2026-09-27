@@ -91,12 +91,12 @@
           "agentic_layers": {
             "A": {
               "base": {
-                "leaked": 2549,
+                "leaked": 13984,
                 "false_positive": 884,
                 "failed_closed": 0
               },
               "candidate": {
-                "leaked": 2529,
+                "leaked": 13964,
                 "false_positive": 884,
                 "failed_closed": 0
               }
