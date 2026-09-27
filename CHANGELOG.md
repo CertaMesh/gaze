@@ -43,13 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **The contract v3 gold-gap audit passed** (solo todo #3696): 4 of 200
-  sampled credits failed (one-sided 95 % bound 4.52 %, limit 5 %), each in a
+- **The contract v3 gold-gap audit passed** (solo todo #3696): 3 of 200
+  sampled credits failed (one-sided 95 % bound 3.83 %, limit 5 %), each in a
   different document. Three model judges (Claude Opus, Codex, TypeSafe)
-  agreed on 188 cards; the 12 contested ones were settled by a TypeSafe
-  tiebreak fixed before it ran. Verdicts are recorded per entry in
-  `gold-gap-sample-v3.json`, and `gold_gap_evidence.py accept` recomputes the
-  result. The v2 headline is unchanged here.
+  agreed on 188 cards; the user decided the 12 contested ones. Verdicts are
+  recorded per entry in `gold-gap-sample-v3.json`, and
+  `gold_gap_evidence.py accept` recomputes the result. The v2 headline is
+  unchanged here.
 - Opt-in, local GLiNER date-of-birth judge for date-shaped spans left unclaimed
   by the rule floor. `gaze setup --dob-judge` installs a SHA-pinned ONNX bundle;
   `[dob_judge]` enables it. The judge compares birth-date, generic-date, and

@@ -209,7 +209,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -237,7 +237,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -265,7 +265,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -294,7 +294,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -320,7 +320,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -348,7 +348,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -376,7 +376,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -404,7 +404,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -432,7 +432,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -485,7 +485,7 @@
         "codex": "yes",
         "typesafe": "yes",
         "rule": "unanimous model consensus",
-        "user_confirmed": true
+        "user_verdict": "yes"
       }
     },
     {
@@ -537,7 +537,8 @@
         "opus": "yes",
         "codex": "no",
         "typesafe": "yes",
-        "rule": "1: TypeSafe in 2-of-3 majority"
+        "rule": "1: TypeSafe in 2-of-3 majority",
+        "user_verdict": "yes"
       }
     },
     {
@@ -850,7 +851,7 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": "yes",
+      "verdict": "uncertain",
       "second_adjudicator_verdict": null,
       "note": null,
       "id": "gg-025",
@@ -868,7 +869,8 @@
             "yes": 0.95
           },
           "argmax": "yes"
-        }
+        },
+        "user_verdict": "uncertain"
       }
     },
     {
@@ -1058,7 +1060,8 @@
         "opus": "yes",
         "codex": "no",
         "typesafe": "yes",
-        "rule": "1: TypeSafe in 2-of-3 majority"
+        "rule": "1: TypeSafe in 2-of-3 majority",
+        "user_verdict": "yes"
       }
     },
     {
@@ -1228,7 +1231,8 @@
             "yes": 0.9
           },
           "argmax": "yes"
-        }
+        },
+        "user_verdict": "yes"
       }
     },
     {
@@ -1416,7 +1420,8 @@
         "opus": "yes",
         "codex": "no",
         "typesafe": "yes",
-        "rule": "1: TypeSafe in 2-of-3 majority"
+        "rule": "1: TypeSafe in 2-of-3 majority",
+        "user_verdict": "yes"
       }
     },
     {
@@ -1773,7 +1778,7 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": "yes",
+      "verdict": "uncertain",
       "second_adjudicator_verdict": null,
       "note": null,
       "id": "gg-059",
@@ -1781,7 +1786,8 @@
         "opus": "yes",
         "codex": "no",
         "typesafe": "yes",
-        "rule": "1: TypeSafe in 2-of-3 majority"
+        "rule": "1: TypeSafe in 2-of-3 majority",
+        "user_verdict": "uncertain"
       }
     },
     {
@@ -2528,7 +2534,8 @@
             "yes": 0.61
           },
           "argmax": "yes"
-        }
+        },
+        "user_verdict": "yes"
       }
     },
     {
@@ -3365,7 +3372,7 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": "uncertain",
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
       "id": "gg-121",
@@ -3383,7 +3390,8 @@
             "yes": 0.51
           },
           "argmax": "yes"
-        }
+        },
+        "user_verdict": "yes"
       }
     },
     {
@@ -4380,7 +4388,7 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": "no",
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
       "id": "gg-160",
@@ -4398,7 +4406,8 @@
             "yes": 0.01
           },
           "argmax": "no"
-        }
+        },
+        "user_verdict": "yes"
       }
     },
     {
@@ -5333,7 +5342,8 @@
         "opus": "yes",
         "codex": "no",
         "typesafe": "yes",
-        "rule": "1: TypeSafe in 2-of-3 majority"
+        "rule": "1: TypeSafe in 2-of-3 majority",
+        "user_verdict": "yes"
       }
     },
     {
@@ -5400,7 +5410,7 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": "no",
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
       "id": "gg-199",
@@ -5418,7 +5428,8 @@
             "yes": 0.06
           },
           "argmax": "no"
-        }
+        },
+        "user_verdict": "yes"
       }
     },
     {
@@ -5443,13 +5454,14 @@
         "opus": "yes",
         "codex": "no",
         "typesafe": "yes",
-        "rule": "1: TypeSafe in 2-of-3 majority"
+        "rule": "1: TypeSafe in 2-of-3 majority",
+        "user_verdict": "yes"
       }
     }
   ],
   "adjudication": {
-    "method": "Three model judges (Claude Opus drafted first; Codex and TypeSafe judged afterwards, their files sealed by SHA-256 before reading the Opus proposals). 188 cards unanimous. The 12 contested cards were settled by a rule fixed before any re-ask: where TypeSafe sided with a 2-of-3 majority, the majority stands; where TypeSafe was the lone dissent, one fresh TypeSafe Score call (jev-latest, levels no / uncertain / yes, the other two judges' reasons as context) decides at confidence >= 0.8, otherwise the Opus + Codex majority stands. The user confirmed 10 consensus cards by hand; every confirmation matched.",
-    "delegation": "User 2026-09-27, asked how to finish the 12 unclicked contested cards: \"Weren't you supposed to use typesafe ai\".",
+    "method": "Three model judges (Claude Opus drafted first; Codex and TypeSafe judged afterwards, their files sealed by SHA-256 before reading the Opus proposals). 188 cards unanimous. The 12 contested cards were first settled by a TypeSafe tiebreak, a rule fixed before any re-ask: where TypeSafe sided with a 2-of-3 majority, the majority stands; where TypeSafe was the lone dissent, one fresh TypeSafe Score call (jev-latest, levels no / uncertain / yes, the other two judges' reasons as context) decides at confidence >= 0.8, otherwise the Opus + Codex majority stands. The user then decided all 12 contested cards on the audit page and confirmed 10 consensus cards; a user verdict overrides the models. The tiebreak record is kept for comparison (user and tiebreak differ on gg-025, gg-059, gg-121, gg-160, gg-199).",
+    "delegation": "User 2026-09-27, asked how to finish the 12 unclicked contested cards: \"Weren't you supposed to use typesafe ai\". The tiebreak ran on that delegation; the user afterwards answered all 12 cards directly, and those answers are the verdicts.",
     "blinding_limitation": "The Codex judge's brief disclosed the Opus aggregate counts and its four no/uncertain card IDs, not the reasons, before judging. TypeSafe saw only the rubric and the card contexts.",
     "judge_files_sha256": {
       "codex": "dd0c86fcb9f1b4bd6e795c6902e1d9deaf4c43c1368eb7596d590788620e5a31",
@@ -5460,7 +5472,7 @@
       "sha256": "780a6a5f589f3154a00af1f08179ea650728317d858b0fed9d07784ad21f2634",
       "script": "scripts/bench/gold_gap_tiebreak.py"
     },
-    "document_text": "Judge reasons, proposals and tiebreak prompts quote synthetic Dataiku document text, so they stay out of this public repo: they are archived in the private CertaMesh/business repo under audits/benchmark/v3-gold-gap-2026-09-27/. This file carries verdict labels, rules and tiebreak probabilities only; `gold_gap_evidence.py accept` checks them against the tiebreak results file.",
+    "document_text": "Judge reasons, proposals, tiebreak prompts and the user's notes quote synthetic Dataiku document text, so they stay out of this public repo: they are archived in the private CertaMesh/business repo under audits/benchmark/v3-gold-gap-2026-09-27/. This file carries verdict labels, rules and tiebreak probabilities only; `gold_gap_evidence.py accept` checks them against the tiebreak results file.",
     "trace_note": "The trace this sample was drawn from (sha256 e715a7e9...) is no longer on disk, so the draw cannot be regenerated today. All 200 entries were re-verified against the pinned Dataiku parquet (sha256 916c6379...): the attributed span is gold with the entry's label, the candidate's trimmed bytes equal the gold value, and the candidate overlaps no gold."
   }
 }

@@ -595,9 +595,10 @@ def cluster_design_effect(entries: Sequence[dict[str, object]], failed: Sequence
 def check_adjudication(sample: dict[str, object], tiebreak: Sequence[dict[str, object]]) -> None:
     """Refuse a sample whose verdicts do not follow from the judges and the tiebreak.
 
-    A unanimous card's verdict must be the judges' shared verdict; every other
-    card must appear in the tiebreak results with the same three verdicts,
-    rule, re-ask answer and final verdict.
+    Every contested card must appear in the tiebreak results with the same
+    three verdicts, rule and re-ask answer. A recorded `user_verdict`
+    overrides the models; otherwise a unanimous card's verdict is the judges'
+    shared verdict and a contested card's is the tiebreak's final verdict.
     """
     rows = {row["id"]: row for row in tiebreak}
     problems = []
@@ -605,10 +606,13 @@ def check_adjudication(sample: dict[str, object], tiebreak: Sequence[dict[str, o
         adjudication = entry.get("adjudication") or {}
         judges = (adjudication.get("opus"), adjudication.get("codex"), adjudication.get("typesafe"))
         row = rows.pop(entry["id"], None)
+        user = adjudication.get("user_verdict")
+        if user is not None and user not in VERDICTS:
+            problems.append(f"{entry['id']}: user verdict is not one of {VERDICTS}")
         if len(set(judges)) == 1 and judges[0] in VERDICTS:
             if row is not None:
                 problems.append(f"{entry['id']}: unanimous but listed in the tiebreak")
-            elif entry.get("verdict") != judges[0]:
+            elif entry.get("verdict") != (user or judges[0]):
                 problems.append(f"{entry['id']}: verdict differs from the unanimous judges")
             continue
         if row is None:
@@ -622,7 +626,7 @@ def check_adjudication(sample: dict[str, object], tiebreak: Sequence[dict[str, o
             keys = ("score", "confidence", "probabilities", "argmax")
             if any(recorded.get(key) != row["tiebreak"][key] for key in keys):
                 problems.append(f"{entry['id']}: re-ask answer differs from the tiebreak")
-        if entry.get("verdict") != row["final"]:
+        if entry.get("verdict") != (user or row["final"]):
             problems.append(f"{entry['id']}: verdict differs from the tiebreak's final verdict")
     problems += [f"{cid}: in the tiebreak but not in the sample" for cid in sorted(rows)]
     if problems:

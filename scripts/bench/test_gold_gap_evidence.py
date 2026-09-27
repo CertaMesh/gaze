@@ -277,9 +277,15 @@ class StatisticsTests(unittest.TestCase):
             ]}
 
         evidence.check_adjudication(sample(), tiebreak)
+        overridden = sample()
+        overridden["entries"][2]["adjudication"]["user_verdict"] = "yes"
+        overridden["entries"][2]["verdict"] = "yes"
+        evidence.check_adjudication(overridden, tiebreak)
         mutations = {
+            "user verdict is not": lambda s: s["entries"][1]["adjudication"].update(user_verdict="maybe"),
             "unanimous judges": lambda s: s["entries"][0].update(verdict="no"),
             "final verdict": lambda s: s["entries"][2].update(verdict="yes"),
+            "differs from the unanimous": lambda s: s["entries"][0]["adjudication"].update(user_verdict="no"),
             "judges or rule": lambda s: s["entries"][1]["adjudication"].update(rule="2b"),
             "re-ask answer": lambda s: s["entries"][2]["adjudication"]["typesafe_tiebreak"].update(confidence=0.7),
             "missing from the tiebreak": lambda s: s["entries"][0]["adjudication"].update(codex="no"),

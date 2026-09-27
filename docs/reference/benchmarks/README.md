@@ -162,24 +162,24 @@ which is **at most 4** "no" or "uncertain" of 200 (bound 4.52 %; 5 would give
 5.18 %), with document-clustered counts reported. Scoring and sampling:
 `scripts/bench/gold_gap_evidence.py`.
 
-**Audit result (2026-09-27): passed, 4 of 200.** Three model judges ruled on
+**Audit result (2026-09-27): passed, 3 of 200.** Three model judges ruled on
 every card: Claude Opus first, then Codex and TypeSafe, whose verdict files were
 sealed by SHA-256 before either read the Opus proposals. 188 cards were
-unanimous. The 12 contested cards were settled by a TypeSafe tiebreak, a rule
-fixed before any re-ask ran. Where TypeSafe sided with a 2-of-3 majority, the
-majority stands. Where TypeSafe was the lone dissent, one fresh TypeSafe Score
-call decides at confidence 0.8 or above, and otherwise the Opus + Codex
-majority stands. The user delegated this settlement and confirmed 10 consensus
-cards by hand, each matching the settled verdict. The Codex judge's brief
-disclosed the Opus counts and failing card IDs (not reasons) before it judged.
-The four failures (`gg-121` uncertain; `gg-160`, `gg-190`, `gg-199` no) sit in
-four different documents, and the document-cluster design effect is 0.98, so
-clustering does not widen the 4.52 % bound. Each failure is real PII the corpus
-leaves unlabelled, attributed to the wrong gold (a spouse, a different contact,
-another address's ZIP, an unclear addressee). Design-weighted failure rate
-1.78 %, byte-weighted 1.17 %. Every entry's verdict and how it was reached are
-in the sample file. The tiebreak run is `scripts/bench/gold_gap_tiebreak.py`,
-its text-free results `scripts/bench/fixtures/gold-gap-tiebreak-v3.json`, and
+unanimous. The user decided the 12 contested cards on the audit page and
+confirmed 10 consensus cards; a user verdict overrides the models. Before the
+user answered, a TypeSafe tiebreak (a rule fixed before any re-ask ran) had
+settled the 12 at 4 failures; its record is kept, and it differs from the
+user on five cards. The Codex judge's brief disclosed the Opus counts and
+failing card IDs (not reasons) before it judged. The three failures sit in
+three different documents, and the document-cluster design effect is 0.99, so
+clustering does not widen the 3.83 % bound: `gg-025` and `gg-059` are
+uncertain because the corpus put the gold label on the wrong occurrence (the
+`Wien` inside a street name, a date where it is not the birth date), and
+`gg-190` is no (a spouse credited as the labelled person). Design-weighted
+failure rate 1.13 %, byte-weighted 0.72 %. Every entry's verdict and how it
+was reached are in the sample file. The tiebreak run is
+`scripts/bench/gold_gap_tiebreak.py`, its text-free results
+`scripts/bench/fixtures/gold-gap-tiebreak-v3.json`, and
 `gold_gap_evidence.py accept` checks every verdict against them before it
 recomputes the result.
 
