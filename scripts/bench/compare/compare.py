@@ -360,7 +360,9 @@ def gaze_row(path: Path, version: str, corpus: dict[str, object]) -> dict[str, o
         if table[layer]["documents"] != corpus["layers"][layer]["documents"]:
             raise ValueError(f"{path}: Gaze and competitor document counts differ in {layer}")
     return {"scorecard": path.as_posix(), "scorecard_sha256": digest_file(path),
-            "gaze_revision": card["gaze"]["revision"], "layers": table}
+            "gaze_revision": card["gaze"]["revision"],
+            "policy_sha256": card["parameters"]["policy_sha256"],
+            "hardware": card["runner_provenance"]["hardware"], "layers": table}
 
 
 def measure(
@@ -461,9 +463,9 @@ def main() -> int:
         path = getattr(args, f"gaze_scorecard_{version}")
         if path is not None:
             report["gaze"][version] = gaze_row(path, version, corpus)
-    gaze_revisions = {row["gaze_revision"] for row in report["gaze"].values()}
-    if len(gaze_revisions) > 1:
-        raise ValueError("Gaze scorecards for the three contracts use different revisions")
+    for key in ("gaze_revision", "policy_sha256", "hardware"):
+        if len({row[key] for row in report["gaze"].values()}) > 1:
+            raise ValueError(f"Gaze scorecards for the three contracts use different {key}")
     with tempfile.TemporaryDirectory(prefix="gaze-comparison-") as temporary:
         for name in selected:
             backend = None
