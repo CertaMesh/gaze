@@ -95,9 +95,9 @@ fn evidence(&self) -> gaze::EvidenceKind {
 
 The same tier ranks cross-class containment in the resolver. A span from an
 undeclared emitter no longer swallows an enclosed rule candidate of another
-class: the tokens split around the rule span (for example
-`<Organization_1><Email_1><Organization_2>` where v0.15 emitted one
-`<Organization_1>`). No raw bytes ship and restore stays exact, but the token
+class: the tokens split around the rule span (for example an organization
+token, an email token and a second organization token where v0.15 emitted a
+single organization token). No raw bytes ship and restore stays exact, but the token
 stream and audit rows change. Declaring `Rule` keeps the v0.15 behaviour.
 
 Leave the default for anything model-backed or heuristic. The registry
