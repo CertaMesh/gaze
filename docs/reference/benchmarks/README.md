@@ -582,11 +582,11 @@ row must carry every scored-label contract the repository has; after a new
 `scored-labels-v<N>.json` lands, `refresh` re-derives all rows from the same
 records, with no new benchmark run.
 
-Three requested mechanisms have no policy-delta row. The repeat-value sweep
+Three mechanisms have no policy-delta row. The repeat-value sweep
 has no policy switch. `core-extended` is an alias for `core`, while `gaze setup`
 selects the locale rulepacks separately, so there is no separate
 `core-extended` default to remove. OPF is already measured by the opt-in
-`full-stack-opf-resolve` benchmark arm. It has no new policy-delta row here
+[`full-stack-opf-resolve`](#the-arms) benchmark arm. It has no new policy-delta row here
 because its CLI runtime option cannot be expressed as an additive policy
 section. These omissions do not imply that the mechanisms have zero effect.
 
@@ -618,7 +618,7 @@ Shipped releases, one column per release:
 | --- | --- | --- | --- |
 | GLiNER date-of-birth judge | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
 | Nym safety net | not measured for this release | not measured for this release | not available: mechanism added in v0.15 |
-| Davlan NER | not measured for this release | not measured for this release | not available: mechanism added in v0.15 |
+| Davlan NER | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
 
 <!-- END GENERATED: mechanism-arms -->
 

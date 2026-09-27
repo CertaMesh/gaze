@@ -336,6 +336,7 @@
       "id": "davlan-ner",
       "title": "Davlan NER",
       "added_in": "v0.15",
+      "availability_basis": "setup default",
       "policy_delta": {
         "file": "scripts/bench/mechanisms/davlan-ner.toml",
         "sha256": "250c36638da9d6681ed966c6d37929463e082a785a6a208cd72036e9030c6d24"

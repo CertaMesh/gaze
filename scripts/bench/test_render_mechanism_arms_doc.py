@@ -192,6 +192,13 @@ class MechanismArmsTest(unittest.TestCase):
         )
         self.assertTrue(mech.release_cell(entry, "v0.15.1").startswith("not available"))
 
+    def test_older_davlan_cell_names_setup_default(self) -> None:
+        entry = next(item for item in LEDGER["mechanisms"] if item["id"] == "davlan-ner")
+        self.assertEqual(
+            mech.release_cell(entry, "v0.14.0"),
+            "not available: setup default added in v0.15",
+        )
+
     def test_tampered_ledger_number_fails_the_evidence_check(self) -> None:
         ledger = copy.deepcopy(self.ledger)
         ledger["mechanisms"][0]["measurements"][0]["contracts"]["2"]["base"]["leaked"] += 1
