@@ -461,7 +461,8 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
         // Two or more adjacent parts are a name in any case: a cue-found
         // value carries its honorific (`Herr Tobias Brenner`), so the bare
         // `tobias brenner` is a run of its parts, not a spelling of the value.
-        // A run needs one distinctive part, so `herr richter` is not a name.
+        // A run needs one distinctive part, so the `grace hall` of
+        // `Grace Hall Kowalski` (a venue) is not a name.
         if parts.len() <= MAX_RUN_PARTS {
             for len in 2..parts.len() {
                 for run in parts.windows(len) {
@@ -788,9 +789,9 @@ mod tests {
 
     #[test]
     fn runs_need_a_distinctive_part() {
-        // `Herr Thomas Richter`: `herr` and `richter` are common words, so a
-        // lower-case `herr richter` is not a name on its own.
-        assert!(found(vec![name("Herr Thomas Richter")], "der herr richter sagt").is_empty());
+        // `grace` and `hall` are common words, so the adjacent run of
+        // `Grace Hall Kowalski` is a venue, not a name.
+        assert!(found(vec![name("Grace Hall Kowalski")], "book the grace hall").is_empty());
         // Runs are made of whole parts; a lone lower-case part stays raw.
         assert!(found(vec![name("Herr Tobias Brenner")], "thanks tobias").is_empty());
     }

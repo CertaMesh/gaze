@@ -450,10 +450,11 @@ fn recall_probes_glued_name_continuations() {
 #[test]
 fn precision_probes_runs_and_continuations() {
     for (header, body) in [
-        // No distinctive part: `herr` and `richter` are common words.
+        // An adjacent run without a distinctive part: `grace` and `hall` are
+        // common words, so the venue is not a name.
         (
-            "From: Herr Thomas Richter <t@example.invalid>\n",
-            "der herr richter hat entschieden.",
+            "From: Grace Hall Kowalski <g@example.invalid>\n",
+            "book the grace hall for friday.",
         ),
         // A lone lower-case part stays raw (stated leak, unchanged).
         (
