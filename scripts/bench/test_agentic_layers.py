@@ -658,6 +658,37 @@ class GateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "fail")
         self.assertIn("failed-closed documents rose", result["reason"])
 
+    def test_refusal_fix_cannot_hide_new_restore_or_manifest_failure(self) -> None:
+        for field, reason in (("restore", "exact-restore failures rose"),
+                              ("manifests", "invalid-manifest documents rose")):
+            with self.subTest(field=field):
+                base = _scorecard(self.BASE, self.FP, refused={"C": 1})
+                candidate = _scorecard({**self.BASE, "C": 98}, self.FP,
+                                       **{field: {"C": 9}})
+                result = agentic.gate(base, candidate)
+                self.assertEqual(result["verdict"], "fail")
+                self.assertIn(reason, result["reason"])
+                self.assertEqual(result["layers"]["C"]["restore_failures_base"], 0)
+                self.assertEqual(result["layers"]["C"]["manifest_invalid_base"], 0)
+
+    def test_missing_availability_counts_fail_closed_on_both_sides(self) -> None:
+        for side in ("base", "candidate"):
+            for layer in agentic.GATE_LAYERS:
+                for field in ("attempted_documents", "completed_documents", "failed_closed_documents"):
+                    with self.subTest(side=side, layer=layer, field=field):
+                        cards = {name: _scorecard(self.BASE, self.FP) for name in ("base", "candidate")}
+                        agentic._layer_run(cards[side], layer, "policy-file")["pipeline_availability"].pop(field)
+                        with self.assertRaisesRegex(agentic.LayerError, f"layer {layer}.*{field}"):
+                            agentic.gate(cards["base"], cards["candidate"])
+
+    def test_inconsistent_availability_counts_fail_closed(self) -> None:
+        for field, value in (("completed_documents", 9), ("attempted_documents", 11)):
+            with self.subTest(field=field):
+                candidate = _scorecard(self.BASE, self.FP)
+                candidate["runs"][0]["pipeline_availability"][field] = value
+                with self.assertRaisesRegex(agentic.LayerError, "pipeline document counts disagree"):
+                    agentic.gate(_scorecard(self.BASE, self.FP), candidate)
+
     def test_attempted_population_change_fails(self) -> None:
         candidate = _scorecard(self.BASE, self.FP)
         candidate["runs"][0]["pipeline_availability"]["attempted_documents"] = 11

@@ -1667,8 +1667,12 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
             "failed_closed_candidate": candidate[layer]["failed_closed"],
             "restore_exact_base": base[layer]["restore_exact"],
             "restore_exact_candidate": candidate[layer]["restore_exact"],
+            "restore_failures_base": base[layer]["documents"] - base[layer]["restore_exact"],
+            "restore_failures_candidate": candidate[layer]["documents"] - candidate[layer]["restore_exact"],
             "manifest_valid_base": base[layer]["manifest_valid"],
             "manifest_valid_candidate": candidate[layer]["manifest_valid"],
+            "manifest_invalid_base": base[layer]["documents"] - base[layer]["manifest_valid"],
+            "manifest_invalid_candidate": candidate[layer]["documents"] - candidate[layer]["manifest_valid"],
         }
         for layer in GATE_LAYERS
     }
@@ -1682,6 +1686,10 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
     refusal_rise = [l for l, r in rows.items() if r["failed_closed_candidate"] > r["failed_closed_base"]]
     restore_drop = [l for l, r in rows.items() if r["restore_exact_candidate"] < r["restore_exact_base"]]
     manifest_drop = [l for l, r in rows.items() if r["manifest_valid_candidate"] < r["manifest_valid_base"]]
+    restore_failure_rise = [l for l, r in rows.items()
+                            if r["restore_failures_candidate"] > r["restore_failures_base"]]
+    manifest_failure_rise = [l for l, r in rows.items()
+                             if r["manifest_invalid_candidate"] > r["manifest_invalid_base"]]
     restore_gain = [l for l, r in rows.items() if r["documents_candidate"] == r["documents_base"]
                     and r["restore_exact_candidate"] > r["restore_exact_base"]]
     manifest_gain = [l for l, r in rows.items() if r["documents_candidate"] == r["documents_base"]
@@ -1699,6 +1707,10 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         verdict, reason = "fail", f"exact-restore documents fell in {restore_drop}"
     elif manifest_drop:
         verdict, reason = "fail", f"valid-manifest documents fell in {manifest_drop}"
+    elif restore_failure_rise:
+        verdict, reason = "fail", f"exact-restore failures rose in {restore_failure_rise}"
+    elif manifest_failure_rise:
+        verdict, reason = "fail", f"invalid-manifest documents rose in {manifest_failure_rise}"
     elif leak_rise:
         verdict, reason = "fail", f"leaked bytes rose in {leak_rise}"
     elif leak_drop > 0:
