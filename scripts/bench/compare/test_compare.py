@@ -70,6 +70,16 @@ def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
     report = {
         "corpus": {"layers": {"A": {}}},
         "gaze": {version: {"layers": {"A": row}} for version in ("v1", "v2", "v3")},
-        "tools": {},
+        "tools": {
+            name: {"contracts": {version: {"A": row} for version in ("v1", "v2", "v3")}}
+            for name in ("presidio-en", "presidio-en-de", "gliner")
+        },
+        "skipped": {"opf": "synthetic test"},
     }
     assert "| v3 | A | gaze | 1 | 2 | 3.0 | 4.0 |" in render.render(report, "comparison.json")
+
+
+def test_public_page_rejects_partial_competitor_run() -> None:
+    with pytest.raises(ValueError, match="every configured competitor"):
+        render.render({"gaze": {version: {} for version in ("v1", "v2", "v3")},
+                       "tools": {}, "corpus": {"layers": {}}}, "comparison.json")
