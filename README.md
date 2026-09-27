@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/CertaMesh/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/CertaMesh/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/CertaMesh/gaze?style=social)](https://github.com/CertaMesh/gaze/stargazers)
 
-**Gaze swaps the personal details in your text for placeholders before an AI model sees it, then swaps the real details back into the model's reply.** The model works with a name token; only your server can restore the original name.
+**Gaze swaps the personal details in your text for placeholders before an AI model sees it, then swaps the real details back into the model's reply.** The model works with a name token such as `<Name_N>`; only your server knows that it means Ada Example.
 
 Gaze pseudonymizes: every placeholder can be restored, and the manifest that restores it never leaves your server. The goal is that no byte of personal data reaches the model outside that contract.
 
@@ -80,20 +80,21 @@ Install the CLI, write the default policy, then clean and restore a synthetic co
 ```sh
 cargo install gaze-cli --version 0.15.1
 gaze setup
-printf 'Email %s@%s' demo example.invalid | gaze clean --policy gaze.toml > clean.json
+printf 'From: %s %s <%s@%s>' Ada Example ada example.invalid | gaze clean --policy gaze.toml > clean.json
 jq -r .clean_text clean.json
 jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text
 ```
 
-Here is the output, with the token spelling and restored address normalized
-for publication. The first line is what the model sees; the second is what
+Here is the real output. The two `sed` filters only normalize it for
+publication: the first drops the per-session token prefix, the second writes
+`@` as ` [at] `. The first line is what the model sees; the second is what
 the owner restores:
 
 ```console
-$ jq -r .clean_text clean.json | sed -E 's/<[^>]+>/<Email_N>/g'
-Email <Email_N>
+$ jq -r .clean_text clean.json | sed -E 's/<[0-9a-f]{8}:([A-Za-z]+)_[0-9]+>/<\1_N>/g'
+From: <Name_N> <<Email_N>>
 $ jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text | sed 's/@/ [at] /'
-Email demo [at] example.invalid
+From: Ada Example <ada [at] example.invalid>
 ```
 
 `gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a NER-only policy.

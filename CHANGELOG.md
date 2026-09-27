@@ -324,7 +324,7 @@ pipeline.
   defaults to the `redact` fallback: when the nets' re-run flags something
   new, it tokenizes that in a second reversible batch and deletes what is left
   one way. The proxy refuses such a request instead (for example
-  a user identifier followed by a birth date under the `gaze setup` policy).
+  `user <handle> born <ISO date>` under the `gaze setup` policy).
   Spans that no
   net flags and no rule detects, such as a `DD.MM.YYYY` date without a cue,
   still reach the provider raw, exactly as `gaze clean` prints them. The old

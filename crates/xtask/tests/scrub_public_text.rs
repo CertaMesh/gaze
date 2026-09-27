@@ -151,3 +151,21 @@ fn scrub_public_text_fails_free_text_path_on_allowlisted_host() {
     );
     assert!(text.contains("gaze clean emitted"), "{text}");
 }
+
+#[test]
+fn scrub_public_text_resolves_paths_from_the_workspace_root() {
+    let subdir = workspace_root().join("crates");
+    let clean = run_gate(&subdir, "clean.md");
+    assert!(
+        clean.status.success(),
+        "root-relative paths must resolve from a subdirectory; {}",
+        output_text(&clean)
+    );
+    let dirty = run_gate(&subdir, "dirty.md");
+    let text = output_text(&dirty);
+    assert!(!dirty.status.success(), "dirty text must fail; {text}");
+    assert!(
+        text.contains("existing gaze token <Email_1>"),
+        "the failure must be a finding, not a read error; {text}"
+    );
+}

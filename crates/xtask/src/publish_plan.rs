@@ -68,6 +68,13 @@ fn workspace_members_from_metadata(metadata: &Metadata) -> Result<Vec<WorkspaceM
     Ok(members)
 }
 
+pub(crate) fn published_package_names(root: &Path) -> Result<Vec<String>> {
+    Ok(build_publish_plan(&cargo_metadata_at(root)?)?
+        .into_iter()
+        .map(|package| package.name)
+        .collect())
+}
+
 fn build_publish_plan(metadata: &Metadata) -> Result<Vec<PublishPackage>> {
     let packages_by_id: HashMap<String, &Package> = metadata
         .packages

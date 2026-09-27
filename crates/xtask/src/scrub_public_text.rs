@@ -21,7 +21,6 @@ pub(crate) struct Args {
 
 pub(crate) struct PublishedFiles {
     pub(crate) paths: Vec<PathBuf>,
-    pub(crate) crate_readmes: usize,
     pub(crate) published_crates: usize,
 }
 
@@ -52,18 +51,23 @@ pub(crate) fn run(args: Args) -> Result<()> {
     files.extend(args.files);
     if args.published {
         let published = published_files(&root)?;
-        if published.crate_readmes != published.published_crates {
-            bail!("published crate README count does not match published crate count");
+        // Each published crate must contribute a README; a manifest shape the scan misreads
+        // (for example a `publish` list) would silently drop one from the set.
+        if published.published_crates != crate::publish_plan::published_package_names(&root)?.len()
+        {
+            bail!("published crate count differs from the cargo publish plan");
         }
+        // Published paths are root-relative, so the gate also works from a subdirectory.
         files.extend(published.paths);
     }
 
     for file in &files {
-        let text = fs::read_to_string(file)
+        let text = fs::read_to_string(root.join(file))
             .with_context(|| format!("failed to read {}", file.display()))?;
         findings.extend(scan_user_paths(file, &text)?);
         findings.extend(scan_existing_tokens(file, &text)?);
-        let masked = mask_known_loopback_bind(&mask_allowlisted_urls(&text)?)?;
+        let masked =
+            mask_example_names(&mask_known_loopback_bind(&mask_allowlisted_urls(&text)?)?)?;
         findings.extend(scan_with_gaze_clean(file, &masked)?);
     }
 
@@ -99,7 +103,6 @@ pub(crate) fn published_files(root: &Path) -> Result<PublishedFiles> {
     ]);
     let readme = Regex::new(r#"(?m)^readme\s*=\s*"([^"]+)""#)?;
     let unpublished = Regex::new(r"(?m)^publish\s*=\s*false\s*$")?;
-    let mut crate_readmes = 0;
     let mut published_crates = 0;
 
     for entry in fs::read_dir(root.join("crates")).context("list workspace crates")? {
@@ -122,9 +125,6 @@ pub(crate) fn published_files(root: &Path) -> Result<PublishedFiles> {
                 bail!("published crate has no README: {}", manifest.display());
             }
             continue;
-        }
-        if is_published {
-            crate_readmes += 1;
         }
         paths.insert(crate_readme.strip_prefix(root)?.to_path_buf());
     }
@@ -150,7 +150,6 @@ pub(crate) fn published_files(root: &Path) -> Result<PublishedFiles> {
 
     Ok(PublishedFiles {
         paths: paths.into_iter().collect(),
-        crate_readmes,
         published_crates,
     })
 }
@@ -227,6 +226,11 @@ const PUBLIC_URL_ALLOWLIST: &[(&str, &str)] = &[
     ),
     ("huggingface.co", r"^/Wismut/nym-pii-multilingual-small$"),
     (
+        "huggingface.co",
+        r"^/datasets/DataikuNLP/kiji-pii-training-data$",
+    ),
+    ("diataxis.fr", r"^/$"),
+    (
         "collectables.auspost.com.au",
         r"^/community-and-events/articles/postcodes-turn-50$",
     ),
@@ -268,14 +272,23 @@ const PUBLIC_GITHUB_BLOBS: &[&str] = &[
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025g-edfb167-scorecard.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025u-bfcf264-scorecard.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-en-de-whole-pipeline-baseline.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-government-id-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-kiji-decoder-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-locale-basis-drain-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-no-opf-error-buckets.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-openpii-baseline.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-opf-daemon-sample.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-post-wave-a8f7182-scorecard.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-benchmark.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md#L32-L58",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-gaze-pipeline-benchmark.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-ner-model-leaderboard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-runtime-comparison.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-safety-net-benchmark.md",
     "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9.0-rc1-combined-revalidation.md",
+    "/CertaMesh/gaze/blob/v0.14.0/docs/reference/benchmarks/README.md#ner-model-leaderboard",
     "/PIInuts/business/blob/main/research/v0.4.4-date-posture.md",
     "/PIInuts/business/blob/main/research/v0.4.4-phonenumber-audit.md",
     "/PIInuts/business/blob/main/research/v0.5-dylint-audit-gate.md",
@@ -305,6 +318,22 @@ fn mask_known_loopback_bind(text: &str) -> Result<String> {
     let mut masked = text.to_string();
     for hit in bind.find_iter(text) {
         masked.replace_range(hit.range(), &" ".repeat(hit.len()));
+    }
+    Ok(masked)
+}
+
+/// Fictional names the README quickstart shows being tokenized and restored. Only the exact,
+/// case-sensitive whole name is masked; any other name, or this one extended, still reaches
+/// `gaze clean`, and the rules' repeat-value sweep cannot spread from a masked copy.
+const PUBLIC_EXAMPLE_NAMES: &[&str] = &["Ada Example"];
+
+fn mask_example_names(text: &str) -> Result<String> {
+    let mut masked = text.to_string();
+    for name in PUBLIC_EXAMPLE_NAMES {
+        let exact = Regex::new(&format!(r"\b{}\b", regex::escape(name)))?;
+        for hit in exact.find_iter(text) {
+            masked.replace_range(hit.range(), &" ".repeat(hit.len()));
+        }
     }
     Ok(masked)
 }
@@ -439,8 +468,8 @@ mod tests {
     fn published_set_covers_crate_readmes_and_one_hop_of_links() {
         let root = crate::repo::repo_root().expect("workspace root");
         let files = published_files(&root).expect("published Markdown");
-        assert!(files.published_crates >= 15, "published crate count fell");
-        assert_eq!(files.crate_readmes, files.published_crates);
+        let published = crate::publish_plan::published_package_names(&root).expect("publish plan");
+        assert_eq!(files.published_crates, published.len());
         for path in [
             "docs/explanation/how-gaze-works.md",
             "docs/tutorials/getting-started.md",
@@ -474,6 +503,9 @@ mod tests {
             "https://nationalnanpa.com/number_resource_info/555_numbers.html",
             "https://huggingface.co/Wismut/nym-pii-multilingual-small",
             "https://collectables.auspost.com.au/community-and-events/articles/postcodes-turn-50",
+            "https://huggingface.co/datasets/DataikuNLP/kiji-pii-training-data",
+            "https://diataxis.fr/",
+            "https://github.com/CertaMesh/gaze/blob/v0.14.0/docs/reference/benchmarks/README.md#ner-model-leaderboard",
         ] {
             assert!(is_allowlisted_public_url(url), "{url} must be allowed");
         }
@@ -499,6 +531,9 @@ mod tests {
             "https://example.org/",
             "https://auspost.com.au/community-and-events/articles/postcodes-turn-50",
             "https://collectables.auspost.com.au/community-and-events/articles/postcodes-turn-50/x",
+            "https://diataxis.fr/jane-doe",
+            "https://huggingface.co/datasets/DataikuNLP/other",
+            "https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/unlisted.md",
             // Free text in the path or fragment of an allowlisted host.
             "https://semver.org/DE89370400440532013000",
             "https://semver.org/spec/v2.0.0.html#4915112345678",
@@ -525,6 +560,31 @@ mod tests {
         ] {
             assert!(!is_allowlisted_public_url(url), "{url} must be refused");
         }
+    }
+
+    #[test]
+    fn crate_url_slugs_match_the_publish_plan() {
+        let root = crate::repo::repo_root().expect("workspace root");
+        let published = crate::publish_plan::published_package_names(&root).expect("publish plan");
+        let published: BTreeSet<&str> = published.iter().map(String::as_str).collect();
+        let slugs: BTreeSet<&str> = PUBLIC_CRATE_SLUGS.iter().copied().collect();
+        assert_eq!(slugs, published);
+    }
+
+    #[test]
+    fn example_name_mask_is_exact_and_keeps_offsets() {
+        let text = "Ada Example; Ada Examples; ada example; XAda Example; Ada Exampleton";
+        let masked = mask_example_names(text).expect("mask example names");
+        assert!(masked.starts_with("           ;"));
+        for kept in [
+            "Ada Examples",
+            "ada example",
+            "XAda Example",
+            "Ada Exampleton",
+        ] {
+            assert!(masked.contains(kept), "{kept} must stay visible");
+        }
+        assert_eq!(masked.len(), text.len());
     }
 
     #[test]

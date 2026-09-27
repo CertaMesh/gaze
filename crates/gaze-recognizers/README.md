@@ -255,14 +255,14 @@ a raw-source size bound nor a bound on the cost of scanning a document.
 
 `birth_date.cue` is cue-anchored, not line-anchored: a date is captured only
 after a birth cue, and a date without one stays raw. The cue may be prose
-(a German prose birth date), a JSON key in plain, single or backslash-escaped
+(`geboren am` followed by the date), a JSON key in plain, single or backslash-escaped
 quotes (a JSON `dob` key with a day-first date), or a `key=value` / `key: value` log field.
 Keys may be snake, camel or kebab case (`date_of_birth`, `dateOfBirth`,
 `birth-date`) and may carry an underscore prefix (`customer_dob`). Up to eight
 filler tokens may sit between cue and date: separators, quotes, and short link
 words such as `is`, `ist der`, `est le`, `er`, `op`, `el`, `am`, `den`, `on`.
 Line breaks count as separators, so a form label on one line and the date on
-the next (a birth-date field split across a newline) is still read as one field.
+the next (`Date of birth:` on one line, the date on the next) is still read as one field.
 `anniversaire` and `since` are not cues: both name other dates as often as a
 birth date.
 

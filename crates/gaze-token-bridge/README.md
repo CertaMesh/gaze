@@ -8,7 +8,7 @@ agent search long-lived, policy-scoped document corpora while keeping raw values
 the owner side of the bridge.
 
 An agent works in a short-lived [`RedactionSession`](src/session.rs) whose only
-vocabulary is *session tokens* (for example, a name token). When it wants to search a corpus,
+vocabulary is *session tokens* (e.g. `<…:Name_1>`). When it wants to search a corpus,
 the bridge — running entirely owner-side — resolves the token, checks policy
 (default-deny), mints a single-use, entity-bound capability, runs the search against a
 **redact-before-index** corpus, and translates the owner-side hits back into the
@@ -69,8 +69,9 @@ audit events recorded: 3
 > **Note on the token prefix.** The 8-hex prefix is a **per-session salt** and will
 > differ on every run — that is the point: a token minted
 > in one session is meaningless (`UnknownToken`) in another, so tokens cannot be
-> correlated across sessions. The support and admin lines represent different
-> token namespaces because they are different sessions.
+> correlated across sessions. Only the structure after the prefix, the class plus
+> ordinal suffix (`:Name_1>`, `:Email_1>`, …), is stable. The support and admin
+> lines use different prefixes because they are different sessions.
 
 ### What each step demonstrates
 
