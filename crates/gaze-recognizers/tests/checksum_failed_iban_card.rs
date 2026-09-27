@@ -13,10 +13,12 @@
 //! - `card.cued`: a card layout (4-4-4-4-3 whole, 4-4-4-4, 4-6-5, 4-6-4, compact 16 to 19 from
 //!   2-6, compact 14 to 15 from 3) within 32 characters after a card cue (`card`, German card
 //!   compounds, card brands) on the same line. A span that starts with a Luhn-valid card is
-//!   narrowed to it, so a valid card's CVV stays outside, as `card.structural` scopes it.
+//!   kept whole, so a cued 4-4-4-4-3 number is one token (without a cue `card.structural` still
+//!   keeps a valid card's CVV outside, todo 3843).
 //!
-//! In both cued rules one `:`, `,` or `=` may follow the cue directly; any later `.`, `;`, `!`,
-//! `?`, `:`, `,` or `=` ends the window (review of #694).
+//! Both cued rules share one cue window: one `:`, `,` or `=` right after the cue, one nested JSON
+//! key, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or
+//! `=` ends it (review of #694, rounds 2 and 3).
 //!
 //! `card.structural` still vetoes a Luhn failure: without a cue a 16-digit run is as likely an
 //! order, voucher or tracking number. Every failed value keeps its reason on the audit row and is
@@ -278,13 +280,104 @@ fn iban_cued_country_class_is_iso_3166_minus_the_registry() {
             let matched = regex.is_match(&text);
             let registry = gaze_types::iban_registry_length(&country).is_some();
             let iso = ISO_3166_ALPHA_2.contains(&country.as_str());
+            // `UK` is how people mistype a GB IBAN (ISO-reserved); `EU` is not taken.
+            let mistyped_gb = country == "UK";
             assert_eq!(
                 matched,
-                iso && !registry,
+                (iso || mistyped_gb) && !registry,
                 "{country}: iso={iso} registry={registry}"
             );
         }
     }
+}
+
+/// The cue window is one rule written twice (`iban.cued` and `card.cued`); a fix to one copy
+/// must reach the other (review of #694, cleanup).
+#[test]
+fn the_cue_window_is_byte_identical_in_both_cued_rules() {
+    let core = Rulepack::load(RulepackSource::Embedded(embedded("core").expect("core")))
+        .expect("core loads");
+    let window = |id: &str| -> String {
+        let spec = core
+            .recognizers
+            .iter()
+            .find(|recognizer| recognizer.id == id)
+            .unwrap_or_else(|| panic!("{id}"));
+        let gaze::RawMatch::Regex {
+            pattern: Some(pattern),
+            ..
+        } = &spec.matcher
+        else {
+            panic!("{id} is a regex recognizer");
+        };
+        let start = pattern.find("# cue-window:start").expect("start marker");
+        let end = pattern.find("# cue-window:end").expect("end marker");
+        pattern[start..end].to_string()
+    };
+    assert_eq!(window("iban.cued"), window("card.cued"));
+}
+
+/// Review of #694, round 3: the window reaches a value behind one nested JSON key, or behind one
+/// `label:` after a copula or a parenthetical, as round 1 did; other clauses stay closed.
+#[test]
+fn the_cue_window_reaches_nested_json_and_a_copula_label() {
+    for (prefix, value, trailer, class) in [
+        (
+            "{\"credit_card\": {\"number\": \"",
+            "4111 1111 1111 1112",
+            "\"}}",
+            "credit_card",
+        ),
+        (
+            "{\"card\": {\"number\": \"",
+            "4111111111111112",
+            "\", \"cvc\": \"123\"}}",
+            "credit_card",
+        ),
+        (
+            "{\"bank\": {\"iban\": {\"value\": \"",
+            "US12345678901234567",
+            "\"}}}",
+            "iban",
+        ),
+        ("Card number is: ", "4111 1111 1111 1112", "", "credit_card"),
+        (
+            "Card number (see below): ",
+            "4111 1111 1111 1112",
+            "",
+            "credit_card",
+        ),
+        ("IBAN is: ", "US12 3456 7890 1234 5678", "", "iban"),
+        (
+            "IBAN (USD account): ",
+            "US12 3456 7890 1234 5678",
+            "",
+            "iban",
+        ),
+        ("IBAN, bitte: ", "US12 3456 7890 1234 5678", "", "iban"),
+        ("Karte, Nummer ", "4111 1111 1111 1112", "", "credit_card"),
+        ("IBAN ", "UK12 3456 7890 1234 5678", "", "iban"),
+    ] {
+        assert_tokenized(prefix, value, trailer, class);
+    }
+}
+
+/// Review of #694, round 3: a 4-4-4-4-3 number after a card cue is one token even when its first
+/// 16 digits pass Luhn: it may be a mistyped 19-digit card, and a CVV is sensitive too.
+#[test]
+fn a_cued_four_four_four_four_three_number_is_one_token() {
+    assert_tokenized(
+        "Maestro card ",
+        "6759 6498 2643 8453 012",
+        "",
+        "credit_card",
+    );
+    assert_tokenized(
+        "credit card number ",
+        "4111 1111 1111 1111 123",
+        ".",
+        "credit_card",
+    );
 }
 
 // ------------------------------------------------------------------ cards

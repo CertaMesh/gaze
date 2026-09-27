@@ -55,10 +55,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still someone's financial data. `iban.structural` now keeps a
   registry-shaped IBAN that fails mod-97; the new `iban.cued` tokenizes an
   IBAN-structured value after the word `IBAN` whose country code is a real
-  ISO 3166-1 code outside the IBAN registry; the new `card.cued` tokenizes a card layout after a card cue
+  ISO 3166-1 code (or `UK`) outside the IBAN registry; the new `card.cued` tokenizes a card layout after a card cue
   (`card`, `Karte` compounds, card brands) when it fails Luhn.
   `card.structural` keeps its Luhn veto, so an uncued 16-digit order or
-  voucher number stays untouched. The winner's audit row carries
+  voucher number stays untouched. After a card cue a 4-4-4-4-3 number is one
+  token. Known limitation: a Luhn-failing 13- or 15-digit compact card number
+  not starting with 3 stays raw, because those shapes are phone numbers and
+  epoch-millisecond timestamps as often. The winner's audit row carries
   `validator_fail_reason`, and a checksum-failed value is never swept to other
   copies. Rulepacks gain `[recognizers.validator] on_fail = "record"`, which
   the loader accepts only for `iban_mod97` and `luhn`. `Candidate` gains

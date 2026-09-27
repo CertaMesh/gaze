@@ -98,6 +98,24 @@ CONTEXTS = [
 ]
 
 
+# Checksum-failed values the candidate must protect whole (review of #694, round 3): a nested
+# JSON key, a `label:` after a copula or a parenthetical, `Karte, Nummer`, a cued 4-4-4-4-3 whose
+# first 16 digits pass Luhn, and the `UK` mistyping of a GB IBAN. (kind, prefix, value, trailer)
+RECALL_ROWS = [
+    ("nested json card", '{"credit_card": {"number": "', "4111 1111 1111 1112", '"}}'),
+    ("nested json card", '{"card": {"number": "', "4111111111111112", '", "cvc": "123"}}'),
+    ("nested json iban", '{"bank": {"iban": {"value": "', "US12345678901234567", '"}}}'),
+    ("copula label card", "Card number is: ", "4111 1111 1111 1112", ""),
+    ("parenthetical label card", "Card number (see below): ", "4111 1111 1111 1112", ""),
+    ("copula label iban", "IBAN is: ", "US12 3456 7890 1234 5678", ""),
+    ("parenthetical label iban", "IBAN (USD account): ", "US12 3456 7890 1234 5678", ""),
+    ("polite label iban", "IBAN, bitte: ", "US12 3456 7890 1234 5678", ""),
+    ("karte comma nummer", "Karte, Nummer ", "4111 1111 1111 1112", ""),
+    ("cued 4-4-4-4-3", "Maestro card ", "6759 6498 2643 8453 012", ""),
+    ("uk iban", "IBAN ", "UK12 3456 7890 1234 5678", ""),
+]
+
+
 def luhn_ok(digits: str) -> bool:
     total = 0
     for index, char in enumerate(reversed(digits)):
@@ -251,6 +269,20 @@ def main() -> int:
                 failures.append(("non-registry IBAN shape tokenized without an IBAN cue", doc["kind"], doc["context"]))
         else:
             unchanged[key] += 1
+
+    recall_docs = [
+        {"kind": kind, "context": "recall", "text": prefix + value + trailer,
+         "span": (len(prefix.encode()), len((prefix + value).encode()))}
+        for kind, prefix, value, trailer in RECALL_ROWS
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        policy = Path(tmp) / "policy.toml"
+        policy.write_text(POLICY, encoding="utf-8")
+        recall = base_enum.run(cand_bin, policy, recall_docs)
+    for doc, response in zip(recall_docs, recall, strict=True):
+        span = doc["span"][1] - doc["span"][0]
+        if response is None or protected_bytes(response, doc["span"]) != span:
+            failures.append(("recall row not protected whole", doc["kind"], doc["context"]))
 
     rows = [
         {"kind": kind, "checksum_valid": valid, "context": context,

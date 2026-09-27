@@ -40,31 +40,23 @@ pub fn apply(
         // (`gaze_types::payment_card::scan_card_run`), which fails Luhn as a whole. It passes
         // when the run still holds a card; a span holding none fails exactly as before.
         //
-        // A recording (cue-anchored) card recognizer passes only when its span STARTS with the
-        // card, and is narrowed to it, so a valid card is scoped exactly as `card.structural`
-        // scopes it (a trailing CVV stays outside, todo 3843). Otherwise it stays a recorded
-        // failure over its whole span: a Luhn-failing 4-4-4-4-3 card is one token, never a
-        // partial one, and a card-shaped window deeper in the span never leaves leading digits
-        // raw (solo todo 3906).
+        // A recording (cue-anchored) card candidate passes the same way and keeps its WHOLE span:
+        // after a card cue, a 4-4-4-4-3 number whose first 16 digits pass Luhn may be a mistyped
+        // 19-digit card or a card and its CVV, and the digits cannot tell which, so both stay in
+        // one token (the CVV is sensitive too). Its longer span then wins the same-class
+        // containment over `card.structural`'s card; without a cue `card.structural` still
+        // scopes a card exactly (todo 3843). Solo todo 3906, review of #694 round 3.
         let outcome = match kind.validate(raw) {
-            ValidatorOutcome::Fail { reason } if kind == ValidatorKind::Luhn => {
-                let cards = gaze_types::payment_card::scan_card_run(
-                    input,
-                    candidate.span.clone(),
-                    source_spans,
-                )
-                .cards;
-                match cards.first().zip(cards.last()) {
-                    Some(_) if !records => ValidatorOutcome::Pass {
-                        canonical_form: Some(raw.to_string()),
-                    },
-                    Some((first, last)) if first.start == candidate.span.start => {
-                        candidate.span = first.start..last.end;
-                        ValidatorOutcome::Pass {
-                            canonical_form: Some(input[candidate.span.clone()].to_string()),
-                        }
-                    }
-                    _ => ValidatorOutcome::Fail { reason },
+            ValidatorOutcome::Fail { .. }
+                if kind == ValidatorKind::Luhn
+                    && gaze_types::payment_card::holds_card(
+                        input,
+                        candidate.span.clone(),
+                        source_spans,
+                    ) =>
+            {
+                ValidatorOutcome::Pass {
+                    canonical_form: Some(raw.to_string()),
                 }
             }
             outcome => outcome,
@@ -210,34 +202,21 @@ mod tests {
         }
     }
 
-    /// A recording card candidate that starts with a Luhn-valid card is narrowed to that card, so
-    /// a valid card's CVV stays outside as `card.structural` scopes it (todo 3843).
+    /// A recording card span that holds a card is kept WHOLE, never narrowed: a 4-4-4-4-3
+    /// number whose first 16 digits pass Luhn may be a mistyped 19-digit card (review of #694,
+    /// round 3). A valid window deeper in the span keeps the whole span too.
     #[test]
-    fn a_recorded_card_span_starting_with_a_valid_card_is_narrowed_to_it() {
-        let text = "4111 1111 1111 1111 123";
-        let (kept, vetoed) = veto(ValidatorKind::Luhn, ValidatorOnFail::Record, text);
-        assert!(vetoed.is_empty());
-        assert_eq!(kept[0].span, 0..19);
-        assert_eq!(kept[0].validator_fail_reason, None);
-    }
-
-    /// A card-shaped window deeper in the span must not narrow it: the leading digits would ship
-    /// raw. The whole span stays one recorded failure (review of #694, F3).
-    #[test]
-    fn a_valid_window_deeper_in_a_recorded_span_keeps_the_whole_span() {
-        let text = "1234 4111 1111 1111 1111";
-        let cards = gaze_types::payment_card::scan_card_run(text, 0..text.len(), None).cards;
-        assert!(
-            cards.first().is_some_and(|card| card.start > 0),
-            "fixture needs a card that does not start the span: {cards:?}"
-        );
-        let (kept, vetoed) = veto(ValidatorKind::Luhn, ValidatorOnFail::Record, text);
-        assert!(vetoed.is_empty());
-        assert_eq!(kept[0].span, 0..text.len());
-        assert_eq!(
-            kept[0].validator_fail_reason,
-            Some(ValidatorFailReason::LuhnFailed)
-        );
+    fn a_recorded_card_span_holding_a_card_stays_whole() {
+        for text in [
+            "6759 6498 2643 8453 012",
+            "4111 1111 1111 1111 123",
+            "1234 4111 1111 1111 1111",
+        ] {
+            let (kept, vetoed) = veto(ValidatorKind::Luhn, ValidatorOnFail::Record, text);
+            assert!(vetoed.is_empty(), "{text}");
+            assert_eq!(kept[0].span, 0..text.len(), "{text}");
+            assert_eq!(kept[0].validator_fail_reason, None, "{text}");
+        }
     }
 
     #[test]

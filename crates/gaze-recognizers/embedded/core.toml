@@ -388,13 +388,14 @@ locale_basis = "document"
 # account number the writer calls an IBAN, from a country without IBANs (solo todo 3906).
 # Registry countries belong to `iban.structural`, which knows each country's exact length and
 # refuses a glued identifier; a registry country here would let a trailing group or glued label
-# ride into the token. A two-letter pair that is no country (`XY`) is not an IBAN. The class is
-# pinned to the ISO list minus `gaze_types::iban_registry_length` by
+# ride into the token. A two-letter pair that is no country (`XY`, `EU`) is not an IBAN; `UK`,
+# the common mistyping of a GB IBAN, is the one ISO-reserved exception. The class is pinned to
+# the ISO list (plus `UK`) minus `gaze_types::iban_registry_length` by
 # `iban_cued_country_class_is_iso_3166_minus_the_registry` in
 # `crates/gaze-recognizers/tests/checksum_failed_iban_card.rs`.
 # The cue carries the precision: the value follows `IBAN` (optionally `IBAN number` / `IBAN-Nr`)
-# on the same line within 32 characters with no digit in between; one `:`, `,` or `=` may follow
-# the cue directly, and any later `.`, `;`, `!`, `?`, `:`, `,` or `=` ends the window. The BBAN
+# on the same line within 32 characters with no digit in between, through the shared cue window
+# described at `card.cued`. The BBAN
 # is either compact (up to four bank-code letters, then 6 to 26 digits) or three to eight
 # separated groups that each hold a digit, after at most one letters-only bank-code group, so a
 # following `BIC`, `and` or other word is never absorbed. As for `iban.structural`, there is no
@@ -406,9 +407,15 @@ kind = "regex"
 pattern = '''
 (?x)
 (?i:\biban(?:[\x20_-]?(?:number|no|nr|nummer|code))?)\b\.?
-["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
+# cue-window:start
+(?:
+  ["'\x20]*:\x20*\{\x20*"(?:number|num|pan|value|iban)"\x20*:\x20*"
+| ["'\x20]*,?[^\d\n.;!?:,=]{0,24}?(?:\b(?:is|ist|lautet|are|bitte|please)\b|\([^)\n]{0,24}\))\x20*:\x20*
+| ["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
+)
+# cue-window:end
 \b(
-  (?:A[FGIMOQ-SUWX]|B[BDFJL-OQSTVWZ]|C[ACDFGIK-OU-X]|D[MZ]|E[CHRT]|F[JM]|G[ADF-HMNPQSUWY]|H[KMT]|I[DM-OR]|J[EMP]|K[EG-IMNPRY]|L[AKRS]|M[AF-HLMO-QSV-Z]|N[ACE-GPRUZ]|P[AE-HMNRWY]|R[EW]|S[BGHJLNRSX-Z]|T[CDF-HJKMOTVWZ]|U[GMSYZ]|V[CEINU]|W[FS]|YT|Z[AMW])\d{2}
+  (?:A[FGIMOQ-SUWX]|B[BDFJL-OQSTVWZ]|C[ACDFGIK-OU-X]|D[MZ]|E[CHRT]|F[JM]|G[ADF-HMNPQSUWY]|H[KMT]|I[DM-OR]|J[EMP]|K[EG-IMNPRY]|L[AKRS]|M[AF-HLMO-QSV-Z]|N[ACE-GPRUZ]|P[AE-HMNRWY]|R[EW]|S[BGHJLNRSX-Z]|T[CDF-HJKMOTVWZ]|U[GKMSYZ]|V[CEINU]|W[FS]|YT|Z[AMW])\d{2}
   (?:
     [A-Z]{0,4}\d{6,26}
   | (?:[\x20\x{00A0}\x{202F}-][A-Z]{1,4})?
@@ -476,17 +483,22 @@ locale_basis = "document"
 # and number/no/nr/holder, in any `_`/`-`/space/camelCase spelling), German card compounds
 # (Kreditkarte, EC-Karte, Kartennummer, ...; a bare `Karte` counts only with `Nummer`/`Nr`
 # after it, because it also means a map or a menu) and the card brands.
-# The number follows on the same line within 32 characters with no digit in between. One `:`,
-# `,` or `=` (after optional quotes) may follow the cue directly; any later `.`, `;`, `!`, `?`,
-# `:`, `,` or `=` ends the window, so the cue never reaches into another clause or field.
+# The number follows on the same line within 32 characters with no digit in between. The cue
+# window (`# cue-window` block, byte-identical in `iban.cued`, pinned by test) allows one `:`,
+# `,` or `=` right after the cue, one nested JSON key (`{"number": "`, also `num`, `pan`,
+# `value`, `iban`), or one `label:` after a copula (`is`, `ist`, `lautet`, `are`, `bitte`,
+# `please`) or a parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it, so the
+# cue never reaches into another clause or field.
 # Layouts: 4-4-4-4-3 (whole: a 19-digit card, or a card and its CVV, both inside one token),
 # 4-4-4-4, 4-6-5, 4-6-4, and compact 16 to 19 digits starting 2-6 or compact 14 to 15 digits
 # starting 3 (Diners, Amex). Compact 13 to 15 digit numbers otherwise are phone numbers (E.164
-# has at most 15 digits) or epoch-millisecond timestamps, not cards. One trailing 3-digit group
-# may follow the other layouts; any further digits refuse the match, so a longer reference
-# after a cue never yields a card-shaped prefix. When the span starts with a Luhn-valid card,
-# validator veto narrows it to that card, so a valid card with its CVV is scoped exactly as
-# `card.structural` scopes it (todo 3843).
+# has at most 15 digits) or epoch-millisecond timestamps, not cards; a Luhn-failing 13- or
+# 15-digit compact card not starting with 3 therefore stays raw (disclosed limitation). One
+# trailing 3-digit group may follow the other layouts; any further digits refuse the match, so a
+# longer reference after a cue never yields a card-shaped prefix. A span that holds a card stays
+# whole: after a cue a 4-4-4-4-3 number is one token even when its first 16 digits pass Luhn
+# (a mistyped 19-digit card cannot be told from a card and its CVV). Without a cue
+# `card.structural` still scopes a card exactly (todo 3843).
 [recognizers.match]
 kind = "regex"
 pattern = '''
@@ -495,10 +507,16 @@ pattern = '''
   \b(?:(?:credit|debit|payment|bank|prepaid|gift)[\x20_-]?)?cards?(?:[\x20_-]?(?:number|num|no|nr|holder))?\b\.?
 | \b(?:kredit|debit|bank|ec|giro|geld|prepaid)[\x20-]?karten?(?:nummer|nummern|daten|nr)?\b\.?
 | \bkarten?(?:nummer|nummern|nr)\b\.?
-| \bkarten?\b[^\d\n.;!?:,=]{0,24}?\b(?:nummer|nr)\b\.?
+| \bkarten?\b[^\d\n.;!?:=]{0,24}?\b(?:nummer|nr)\b\.?
 | \b(?:visa|mastercard|master\x20card|amex|american\x20express|maestro|diners(?:\x20club)?|jcb|unionpay|girocard)\b
 )
-["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
+# cue-window:start
+(?:
+  ["'\x20]*:\x20*\{\x20*"(?:number|num|pan|value|iban)"\x20*:\x20*"
+| ["'\x20]*,?[^\d\n.;!?:,=]{0,24}?(?:\b(?:is|ist|lautet|are|bitte|please)\b|\([^)\n]{0,24}\))\x20*:\x20*
+| ["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
+)
+# cue-window:end
 \b(
   \d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{3}
 | \d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}
