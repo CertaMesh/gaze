@@ -1005,6 +1005,15 @@ committed ledger. Do not edit the rows by hand.
 
 <!-- BEGIN GENERATED: agentic-adjacency-v4 -->
 
+| Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `v0.15.1` `policy-file` | 18,064 / 48,508 | 1,196 | 3,454 | 374 / 5,142 | 403 |
+| `v0.15.0` `policy-file` | 18,237 / 48,508 | 1,196 | 3,454 | 374 / 5,142 | 403 |
+| `v0.14.0` `full-stack-kiji-resolve` | 26,765 / 48,508 | 3,673 | 2,473 | 525 / 5,142 | 190 |
+| `v0.14.0` `pass2-ner` | 27,185 / 48,508 | 886 | 2,328 | 550 / 5,142 | 140 |
+
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v4-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v4, test corpus `387a35ac1551…`, setup policy `f909a23aecac…`.
+
 <!-- END GENERATED: agentic-adjacency-v4 -->
 
 ### Hardware spec template
