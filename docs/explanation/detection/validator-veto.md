@@ -25,8 +25,8 @@ For each candidate:
    resolution and returns `VetoedCandidate { candidate, reason }` for audit
    emission.
 
-`resolver::resolve_candidates` is unchanged. Existing
-`ConflictTier::Validator` still means the same-class containment tie-breaker.
+`ConflictTier::Validator` means the same-class containment tie-breaker when
+the byte-coverage safeguard retains prior arbitration.
 `ConflictTier::ValidatorVeto` is only used for this pre-resolver drop.
 
 ## Audit shape

@@ -262,10 +262,10 @@ The end-to-end order is:
 2. Validator veto removes validator-backed failures before any overlap is
    resolved (`crates/gaze/src/registry.rs:382-390`). The detailed typed audit
    contract is [Validator Veto](../explanation/detection/validator-veto.md).
-3. For an overlap, collision-family precedence is consulted first, then
-   mandatory-anchor context, then containment precedence, then structured
-   containment, then the generic tiers (`arbitrate` in
-   `crates/gaze/src/resolver.rs`).
+3. For a strict same-class containment overlap, the enclosing span is
+   preferred first. Other overlaps consult collision-family precedence,
+   mandatory-anchor context, containment precedence, structured containment,
+   then the generic tiers (`arbitrate` in `crates/gaze/src/resolver.rs`).
 4. Containment precedence (one entity, one token): when a span wholly
    contains a span of a different class, the container wins the whole span
    and the contained candidate is recorded as a merged source, unless the
@@ -281,7 +281,7 @@ The end-to-end order is:
    candidates keep loser rows (`containment_precedence` in
    `crates/gaze/src/resolver.rs`). Geometry and tiers decide, never arrival
    order. Partial overlaps keep the rungs below; nested chains resolve
-   outermost-first; same-class containment keeps step 7. Because the rung
+   outermost-first; same-class containment uses step 7. Because the rung
    sits after collision-family policy and the anchor rung, a declared
    rivalry (card inside IBAN) keeps its family verdict and a cue-anchored
    identifier inside an adopter regex keeps its own token.
@@ -296,12 +296,13 @@ The end-to-end order is:
 6. The generic tiers are **class priority > rule priority > score > span length
    > lexicographically smaller recognizer id**
    (`compare_base_ladder` in `crates/gaze/src/resolver.rs`).
-7. Same-class containment has one extra check before those generic tiers: a
-   candidate with a validator-produced canonical form defeats an otherwise
-   equivalent unvalidated candidate (the same-class containment branch of
-   `arbitrate` in `crates/gaze/src/resolver.rs`). This is
-   `ConflictTier::Validator`, distinct from the pre-resolver
-   `ValidatorVeto`.
+7. Strict same-class containment prefers the enclosing span before evidence,
+   validator, and generic tiers, recording `SameClassContainment`. The resolver
+   also computes the prior arbitration for that candidate pool. If the new
+   selection would expose any byte the prior selection covered, it retains
+   the prior selection and its audit events. In that fallback, a
+   validator-produced canonical form can still decide a same-class pair as
+   `ConflictTier::Validator`, distinct from pre-resolver `ValidatorVeto`.
 8. Replacement removes every overlap with the winner, so multi-overlap inputs
    converge to a disjoint fixed point rather than leaving a candidate that
    overlapped an earlier loser (`insert_candidate` and `remove_overlaps` in
@@ -424,8 +425,9 @@ qualify. Without that context, punctuation, a table boundary, or the end of
 input must follow. Thus CSV and table cells such as `NSW,1234` and
 `| NSW | 2024 |` can be tokenized even when the number is a count or year.
 Its token contains both state and postcode, which protects both parts of an
-address and restores them together. Strict same-class containment makes the AU
-token win under either shipped locale chain order. `postal.at_ch` still
+address and restores them together. Strict same-class containment prefers the AU
+token under either shipped locale chain order when prior byte coverage is
+preserved. `postal.at_ch` still
 protects an out-of-range code or a code in a chain without `en-AU`; the state
 can remain raw in those cases. The rule is document-basis `en-AU`: it runs when `en-AU` is in the
 effective locale chain, including for every document under the broad setup

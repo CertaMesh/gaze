@@ -265,8 +265,9 @@ the first tier to produce a decision wins. The order is part of
 3. **`RulePriority`** — declared rule priority within class.
 4. **`Score`** — recognizer confidence score.
 5. **`SpanLength`** — longer span wins.
-6. **`Validator`** — same-class containment validator tiebreak (distinct
-   from pre-resolver `ValidatorVeto`).
+6. **`Validator`** — same-class containment validator tiebreak retained when
+   the byte-coverage safeguard selects prior arbitration (distinct from
+   pre-resolver `ValidatorVeto`).
 7. **`CollisionPolicy`** — cross-class family precedence for declared
    collision families.
 8. **`AnchoredContext`** — mandatory-anchor missing → family-level
