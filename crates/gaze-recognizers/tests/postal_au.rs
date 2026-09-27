@@ -160,6 +160,11 @@ fn au_state_and_postcode_win_under_shipped_locale_orders() {
                 "state survived under {locales:?}: {cleaned:?}"
             );
         }
+        assert_eq!(
+            clean_and_restore_with_chain(locales, "Canberra ACT 2619 Australia"),
+            "Canberra ACT 2619 Australia",
+            "ACT 2619 is outside the ACT range under {locales:?}"
+        );
     }
 }
 
