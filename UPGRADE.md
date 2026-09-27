@@ -56,7 +56,9 @@ re-tokenize stored manifests.
    count markers.
 4. **Custom recognizers declare their evidence.** A `Recognizer` or
    `Detector` you implement yourself no longer seeds the repeat-value sweep
-   unless it returns `EvidenceKind::Rule` from `evidence()`.
+   unless it returns `EvidenceKind::Rule` from `evidence()`. It also ranks
+   lower in cross-class containment, so its spans no longer swallow an
+   enclosed rule match of another class.
 
 ### Changed: `SafetyNetFallback::Redact` tokenizes a resolvable residual
 
@@ -90,6 +92,13 @@ fn evidence(&self) -> gaze::EvidenceKind {
     gaze::EvidenceKind::Rule
 }
 ```
+
+The same tier ranks cross-class containment in the resolver. A span from an
+undeclared emitter no longer swallows an enclosed rule candidate of another
+class: the tokens split around the rule span (for example
+`<Organization_1><Email_1><Organization_2>` where v0.15 emitted one
+`<Organization_1>`). No raw bytes ship and restore stays exact, but the token
+stream and audit rows change. Declaring `Rule` keeps the v0.15 behaviour.
 
 Leave the default for anything model-backed or heuristic. The registry
 overwrites `Candidate::evidence` with the declaration, so setting it per

@@ -70,6 +70,12 @@ or heuristic emitter cannot start spreading its values by accident.
 | A swept copy of a rule value | `Rule` |
 | A collision-family tie | `Rule` only if both sides are `Rule` |
 
+The declaration is also the resolver's evidence tier for cross-class
+containment: a `Learned` span never swallows an enclosed `Rule` candidate of
+another class, so an undeclared emitter's container splits into tokens around
+the rule span instead of covering it with one token. Recovery covers the
+remainder, so no raw bytes ship.
+
 Safety-net values (Nym, OPF) are not candidates. Their tokens record no
 evidence in the session, so they never propagate either.
 

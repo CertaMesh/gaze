@@ -18,7 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   house-number id) as rule evidence and propagate it. Bundled and policy
   custom rulepack recognizers declare `Rule`, so their behaviour is unchanged.
   An adopter `Recognizer` or `Detector` that declares nothing stops seeding
-  the sweep. See UPGRADE.md.
+  the sweep, and in cross-class containment its span no longer swallows an
+  enclosed rule candidate of another class (the tokens split around it; no
+  raw bytes ship). Declare `Rule` to keep v0.15 behaviour. See UPGRADE.md.
 - **`gaze_proxy::ProviderAdapter::contract()` is required** (solo todo
   #2400). The default body, which silently gave every third-party adapter
   `AdapterContract::legacy()`, is gone; an adapter that declares no contract
