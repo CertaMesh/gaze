@@ -558,6 +558,37 @@ the measured tree only in docs and version pins.
 
 ---
 
+## Per-mechanism arms
+
+A release row measures the whole shipped stack, so it cannot say what one
+mechanism is worth. A mechanism arm can: it is the stack with that mechanism
+versus the stack without it, on the same binary, corpus and seed. The
+mechanism is a policy delta file under
+[`scripts/bench/mechanisms/`](../../../scripts/bench/mechanisms/): the TOML
+sections the candidate policy adds to the base and nothing else. For a
+mechanism `gaze setup` already turns on, the base is the setup policy minus
+those sections. When the mechanism ships on by default, the release headline
+already includes its effect; this table isolates it and does not add to it.
+
+[`scripts/bench/mechanism_arms.py`](../../../scripts/bench/mechanism_arms.py)
+`record` takes the four runner outputs (base and candidate, contracts v2 and
+v1) and refuses them unless the candidate policy is exactly base plus delta,
+every run shares one commit, clean tree, corpus, seed and scored population,
+and each v1 run equals the v1 re-score of its v2 run's observation record.
+It commits both v2 observation records under
+[`mechanisms/`](mechanisms/); v3 is re-scored from them. `check` re-derives
+every number below from those records and runs on every pull request.
+
+<!-- BEGIN GENERATED: mechanism-arms -->
+
+Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v3 headline counts false-positive bytes after gold-gap credit.
+
+No mechanism has been measured on its own yet.
+
+<!-- END GENERATED: mechanism-arms -->
+
+---
+
 ## Latency
 
 Quiet-host timing from the `latency-vX.Y.Z.json` file each release commits,
