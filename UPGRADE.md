@@ -54,6 +54,9 @@ re-tokenize stored manifests.
 3. **The `Redact` safety-net fallback tokenizes when it can.** Expect fewer
    `[REDACTED:<class>]` markers and more tokens; nothing to change unless you
    count markers.
+4. **Custom recognizers declare their evidence.** A `Recognizer` or
+   `Detector` you implement yourself no longer seeds the repeat-value sweep
+   unless it returns `EvidenceKind::Rule` from `evidence()`.
 
 ### Changed: `SafetyNetFallback::Redact` tokenizes a resolvable residual
 
@@ -71,6 +74,28 @@ value the session does not own. A first-pass refusal still redacts.
   `fallback_triggered`, so an audit query can tell them from the resolve
   rounds' rows.
 - The number of safety-net scans per document is unchanged.
+
+### Breaking: the repeat-value sweep reads declared evidence
+
+**Action required only if you implement `gaze::Recognizer` or
+`gaze::Detector` yourself** and rely on the sweep copying its values to other
+occurrences and later turns. Until v0.15.x every candidate whose recognizer id
+was not `ner`, `dob.gliner` or the house-number id counted as rule evidence and
+was swept. Now each emitter declares it, and one that declares nothing is
+`Learned`, which is recorded but never swept. If your emitter is a
+deterministic rule a reviewer can read, say so:
+
+```rust
+fn evidence(&self) -> gaze::EvidenceKind {
+    gaze::EvidenceKind::Rule
+}
+```
+
+Leave the default for anything model-backed or heuristic. The registry
+overwrites `Candidate::evidence` with the declaration, so setting it per
+candidate has no effect. Rulepack recognizers (bundled packs and
+`[[policy.custom_recognizers]]`) declare `Rule` already and need no action.
+Session blobs are unchanged: v6 already stored each entry's evidence tier.
 
 ### Breaking: `ProviderAdapter::contract()` has no default
 

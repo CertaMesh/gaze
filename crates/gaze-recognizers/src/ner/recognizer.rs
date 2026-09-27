@@ -39,6 +39,11 @@ impl NerRecognizer {
 }
 
 impl Recognizer for NerRecognizer {
+    /// A model span: recorded, never swept.
+    fn evidence(&self) -> gaze_types::EvidenceKind {
+        gaze_types::EvidenceKind::Learned
+    }
+
     fn id(&self) -> &str {
         gaze_types::NER_RECOGNIZER_ID
     }

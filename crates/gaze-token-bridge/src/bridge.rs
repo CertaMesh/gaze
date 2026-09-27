@@ -479,6 +479,11 @@ impl SyntheticCorpusDetector {
 }
 
 impl Detector for SyntheticCorpusDetector {
+    /// An exact known value is rule evidence.
+    fn evidence(&self) -> gaze::EvidenceKind {
+        gaze::EvidenceKind::Rule
+    }
+
     fn detect(&self, input: &str) -> Vec<Detection> {
         let mut detections = Vec::new();
         let mut claimed: Vec<Range<usize>> = Vec::new();

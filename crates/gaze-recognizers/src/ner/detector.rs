@@ -148,6 +148,11 @@ impl NerDetector {
 }
 
 impl Detector for NerDetector {
+    /// A model span: recorded, never swept.
+    fn evidence(&self) -> gaze_types::EvidenceKind {
+        gaze_types::EvidenceKind::Learned
+    }
+
     fn detect(&self, input: &str) -> Vec<Detection> {
         self.try_detect(input)
             .expect("ner detector backend failure is fail-closed")

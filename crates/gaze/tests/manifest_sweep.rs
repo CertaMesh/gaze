@@ -16,6 +16,9 @@ impl Recognizer for Header {
     fn id(&self) -> &str {
         "header"
     }
+    fn evidence(&self) -> EvidenceKind {
+        EvidenceKind::Rule
+    }
     fn supported_class(&self) -> &PiiClass {
         &PiiClass::Name
     }
@@ -41,6 +44,9 @@ struct Ner(Vec<&'static str>);
 impl Recognizer for Ner {
     fn id(&self) -> &str {
         "ner"
+    }
+    fn evidence(&self) -> EvidenceKind {
+        EvidenceKind::Learned
     }
     fn supported_class(&self) -> &PiiClass {
         &PiiClass::Name
@@ -68,6 +74,9 @@ struct LearnedDob(PiiClass);
 impl Recognizer for LearnedDob {
     fn id(&self) -> &str {
         "dob.gliner"
+    }
+    fn evidence(&self) -> EvidenceKind {
+        EvidenceKind::Learned
     }
     fn supported_class(&self) -> &PiiClass {
         &self.0

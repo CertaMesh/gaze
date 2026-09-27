@@ -13,6 +13,7 @@ fn local_bundle_classifies_synthetic_dates() {
     let path = std::env::var_os("GAZE_GLINER_DOB_TEST_BUNDLE")
         .expect("set GAZE_GLINER_DOB_TEST_BUNDLE to the pinned bundle directory");
     let recognizer = DobJudgeRecognizer::load(&PathBuf::from(path), 0.5).unwrap();
+    assert_eq!(recognizer.evidence(), gaze::EvidenceKind::Learned);
     let dictionaries = DictionaryBundle::default();
     let prior = [];
     let ctx = DetectContext::new(&[], &dictionaries).with_prior_candidates(&prior);

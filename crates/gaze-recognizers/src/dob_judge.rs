@@ -106,6 +106,11 @@ pub struct DobJudgeRecognizer {
 }
 
 impl DobJudgeRecognizer {
+    /// A model-confirmed birth date: a later copy of the same date may be a business date,
+    /// so the repeat-value sweep must never spread it. A const, so a test pins it without the
+    /// model bundle.
+    pub(crate) const EVIDENCE: gaze_types::EvidenceKind = gaze_types::EvidenceKind::Learned;
+
     pub fn load(model_dir: &Path, threshold: f32) -> Result<Self, DobJudgeLoadError> {
         if !threshold.is_finite() || threshold <= 0.0 || threshold >= 1.0 {
             return Err(DobJudgeLoadError::Threshold);
@@ -362,6 +367,10 @@ impl DobJudgeRecognizer {
 }
 
 impl Recognizer for DobJudgeRecognizer {
+    fn evidence(&self) -> gaze_types::EvidenceKind {
+        Self::EVIDENCE
+    }
+
     fn id(&self) -> &str {
         ID
     }
@@ -443,6 +452,14 @@ mod tests {
         assert_eq!(
             crate::bundle::hex_sha256(GLINER_DOB_SHA256SUMS.as_bytes()),
             GLINER_DOB_BUNDLE_SHA256
+        );
+    }
+
+    #[test]
+    fn a_model_confirmed_birth_date_is_learned_evidence() {
+        assert_eq!(
+            DobJudgeRecognizer::EVIDENCE,
+            gaze_types::EvidenceKind::Learned
         );
     }
 
