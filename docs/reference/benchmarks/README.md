@@ -795,7 +795,7 @@ model:
   Adjacency cases place both orders of each pair (and a reversed triple)
   across prose, log lines, quoted CSV fields and JSON arrays, with exactly
   one space, comma, tab or NBSP between values. JSON array strings omit the
-  tab case because its raw `\\t` escape is two bytes rather than one separator.
+  tab case because its raw `\t` escape is two bytes rather than one separator.
 - **Layer D adjacency counterweights:** adjacent versions, hex hashes, times,
   four-digit room numbers, due dates, word-attached `::` paths, RFC 3849
   documentation IPs, loopback IPs and link-local IPs. They carry no gold.
