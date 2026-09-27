@@ -60,7 +60,11 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern_template = '''(?m)^(?:{locale.email_headers}):\s*(?:"([^"]+)"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}))\s+<[^>]+>'''
+# A name part starts upper-case and may be all caps, carry diacritics, or join
+# more parts with a hyphen or apostrophe (`Vasquez-Ellery`, `O'Brien`,
+# `MÜLLER`). The `From: ... <address>` frame is the precision; an ASCII
+# title-case-only part let NER fragments decide these names (todo 3897).
+pattern_template = '''(?m)^(?:{locale.email_headers}):\s*(?:"([^"]+)"|(\p{Lu}[\p{L}\p{M}]*(?:['\x{2019}-]\p{L}[\p{L}\p{M}]*)*(?:\s+\p{Lu}[\p{L}\p{M}]*(?:['\x{2019}-]\p{L}[\p{L}\p{M}]*)*){0,3}))\s+<[^>]+>'''
 capture_groups = [1, 2]
 
 [recognizers.scoring]
