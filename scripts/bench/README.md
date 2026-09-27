@@ -108,6 +108,48 @@ still counts as protection where it covers scored gold; its other bytes are
 ignored instead of counted as false positive, and are reported per run under
 `neutral_prediction_utf8_bytes_outside_scored_gold`.
 
+Every run writes `observations-v1.jsonl.gz` beside `scorecard-v4.json` and pins
+its SHA-256 in `scorecard.observation_record`. The gzip JSONL header contains
+one canonical descriptor per document: layer, gold byte offsets and class,
+validator offsets, and corpus and generator identity. A digest binds the A/D/R
+document IDs and gold spans to the generator version and corpus SHA-256.
+Observation rows contain only the layer, config, document ID, and response:
+protected byte offsets, class, source IDs, action, refusal and restore facts.
+For v3, the response records which gold span matches a trimmed prediction and
+whether the word boundary passes. Neither header nor rows contain document or
+protected values. Rows omit run-dependent timing; the header keeps the original
+scorecard timing. A re-score needs no corpus, binary or model:
+
+```bash
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/no-opf/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v3.json \
+  --expected-sha256 HASH_FROM_SCORECARD \
+  --output target/bench-data/no-opf/scorecard-v3.json
+```
+
+Omit `--scored-labels` for v1. Use `--agentic-scored-labels` to change the
+generated layer contract too; otherwise replay uses the layer contract pinned
+inside the record. The same scoring accumulators compute the new scorecard.
+The v0.15.1 records remain committed as replay proof. Starting with v0.16.0,
+upload release records as assets on the matching GitHub release, using
+`observations-vX.Y.Z.jsonl.gz` and, when generated layers are measured,
+`observations-vX.Y.Z-agentic.jsonl.gz`. Pin each asset's filename, SHA-256,
+byte size, and release URL in `docs/reference/benchmarks/release-history.json`.
+Download from that release and verify byte size and SHA-256 before re-scoring.
+
+The committed v0.15.1 C record proves exact v1/v2 replay except timing and
+valid v3 scoring. `observations-v0.15.1-agentic.jsonl.gz` also replays A/D/R:
+
+```bash
+uv run --project scripts/bench python scripts/bench/verify_record_scorecards.py \
+  docs/reference/benchmarks/observations-v0.15.1.jsonl.gz \
+  --v1 docs/reference/benchmarks/scorecard-v0.15.1.json \
+  --v2 docs/reference/benchmarks/scorecard-v0.15.1-scored-labels-v2.json \
+  --v2-contract docs/reference/benchmarks/scored-labels-v2.json \
+  --v3-contract docs/reference/benchmarks/scored-labels-v3.json
+```
+
 The scorecard records the contract under `scoring.scored_label_contract`: its
 id, version, file SHA-256, excluded labels, scored and excluded gold counts, and
 `scored_gold_digest` over every scored `(document, start, end, label)`. The
