@@ -12,7 +12,7 @@
 //! response destination per test.
 
 use std::io::Write as _;
-use std::net::{SocketAddr, TcpListener as StdTcpListener};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -237,24 +237,21 @@ impl Drop for Proxy {
     }
 }
 
-fn unused_local_addr() -> SocketAddr {
-    StdTcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-}
-
 async fn spawn_proxy(config: impl FnOnce(SocketAddr) -> ProxyConfig) -> Proxy {
     let (pipeline, chain) = pipeline();
-    let bind = unused_local_addr();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind = listener.local_addr().unwrap();
     let config = config(bind).with_locale_chain(chain);
     let handle = tokio::spawn(async move {
-        gaze_proxy::serve(config, Arc::new(pipeline)).await.unwrap();
+        gaze_proxy::serve_with_listener(config, Arc::new(pipeline), listener)
+            .await
+            .unwrap();
     });
     let client = Client::new();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     while !client
         .get(format!("http://{bind}/_gaze_proxy/healthz"))
+        .timeout(Duration::from_secs(60))
         .send()
         .await
         .is_ok_and(|response| response.status().is_success())

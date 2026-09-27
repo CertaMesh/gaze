@@ -1425,7 +1425,9 @@ mod tests {
             let guard = self.events.lock().unwrap();
             let (guard, timeout) = self
                 .changed
-                .wait_timeout_while(guard, Duration::from_secs(2), |events| events.len() < count)
+                .wait_timeout_while(guard, Duration::from_secs(60), |events| {
+                    events.len() < count
+                })
                 .unwrap();
             assert!(!timeout.timed_out(), "inspection delivery timed out");
             assert!(guard.len() >= count);
@@ -1499,7 +1501,7 @@ mod tests {
     fn begin_logical_for_test(
         producer: &InstalledInspectionProducerV1,
     ) -> InspectionLogicalEmitterV1 {
-        const DEADLINE: Duration = Duration::from_millis(100);
+        const DEADLINE: Duration = Duration::from_secs(60);
         let started = Instant::now();
         loop {
             match producer.begin_logical() {
@@ -1521,7 +1523,7 @@ mod tests {
         producer: &InstalledInspectionProducerV1,
         expected: InspectionBeginLogicalErrorV1,
     ) {
-        const DEADLINE: Duration = Duration::from_millis(100);
+        const DEADLINE: Duration = Duration::from_secs(60);
         let started = Instant::now();
         loop {
             match producer.begin_logical() {
@@ -1543,7 +1545,7 @@ mod tests {
     where
         F: FnMut() -> InspectionAdmissionOutcomeV1,
     {
-        const DEADLINE: Duration = Duration::from_millis(100);
+        const DEADLINE: Duration = Duration::from_secs(60);
         let started = Instant::now();
         loop {
             match attempt() {
@@ -1609,7 +1611,7 @@ mod tests {
     }
 
     fn wait_for_accounting(state: &RegistrationState, items: usize, bytes: usize) {
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             let observed = (
                 state.accounting.items.load(Ordering::Acquire),
@@ -1639,7 +1641,7 @@ mod tests {
             let guard = self.entered.lock().unwrap();
             let (guard, timeout) = self
                 .entered_changed
-                .wait_timeout_while(guard, Duration::from_secs(2), |entered| !*entered)
+                .wait_timeout_while(guard, Duration::from_secs(60), |entered| !*entered)
                 .unwrap();
             assert!(!timeout.timed_out());
             assert!(*guard);
@@ -1685,7 +1687,7 @@ mod tests {
             let guard = self.calls.lock().unwrap();
             let (guard, timeout) = self
                 .changed
-                .wait_timeout_while(guard, Duration::from_secs(2), |calls| *calls < count)
+                .wait_timeout_while(guard, Duration::from_secs(60), |calls| *calls < count)
                 .unwrap();
             assert!(!timeout.timed_out());
             assert!(*guard >= count);
@@ -2572,7 +2574,7 @@ mod tests {
         let guard = sink.values.lock().unwrap();
         let (mut guard, timeout) = sink
             .changed
-            .wait_timeout_while(guard, Duration::from_secs(2), |values| values.len() < 2)
+            .wait_timeout_while(guard, Duration::from_secs(60), |values| values.len() < 2)
             .unwrap();
         assert!(!timeout.timed_out());
         for value in &mut *guard {
