@@ -81,3 +81,129 @@ pub fn apply(
 
     (kept, vetoed)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gaze_types::{ConflictTier, DetectContext, DetectError, PiiClass, Recognizer};
+
+    struct Probe {
+        kind: ValidatorKind,
+        on_fail: ValidatorOnFail,
+        class: PiiClass,
+    }
+
+    impl Recognizer for Probe {
+        fn id(&self) -> &str {
+            "probe"
+        }
+        fn supported_class(&self) -> &PiiClass {
+            &self.class
+        }
+        fn detect(
+            &self,
+            _: &str,
+            _: &DetectContext<'_>,
+        ) -> std::result::Result<Vec<Candidate>, DetectError> {
+            Ok(Vec::new())
+        }
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+        fn validator_kind(&self) -> Option<ValidatorKind> {
+            Some(self.kind)
+        }
+        fn validator_on_fail(&self) -> ValidatorOnFail {
+            self.on_fail
+        }
+    }
+
+    fn veto(
+        kind: ValidatorKind,
+        on_fail: ValidatorOnFail,
+        text: &str,
+    ) -> (Vec<Candidate>, Vec<VetoedCandidate>) {
+        let class = PiiClass::custom("probe").expect("class");
+        let registry = RecognizerRegistry::builder()
+            .register(Probe {
+                kind,
+                on_fail,
+                class: class.clone(),
+            })
+            .build();
+        let candidate = Candidate::new(
+            0..text.len(),
+            class,
+            "probe",
+            0.9,
+            80,
+            None,
+            "counter",
+            "probe",
+            ConflictTier::None,
+            Vec::new(),
+        )
+        .with_evidence(EvidenceKind::Rule);
+        apply(vec![candidate], &registry, text, None)
+    }
+
+    #[test]
+    fn a_recorded_failure_keeps_the_candidate_as_learned_evidence() {
+        for (kind, text, reason) in [
+            (
+                ValidatorKind::Luhn,
+                "4111 1111 1111 1112",
+                ValidatorFailReason::LuhnFailed,
+            ),
+            (
+                ValidatorKind::IbanMod97,
+                "DE99 3704 0044 0532 0130 00",
+                ValidatorFailReason::IbanMod97Failed,
+            ),
+        ] {
+            let (kept, vetoed) = veto(kind, ValidatorOnFail::Record, text);
+            assert!(vetoed.is_empty(), "{kind:?}");
+            assert_eq!(kept.len(), 1, "{kind:?}");
+            assert_eq!(kept[0].validator_fail_reason, Some(reason));
+            assert_eq!(kept[0].evidence, EvidenceKind::Learned, "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn a_passing_candidate_keeps_its_evidence_and_records_nothing() {
+        let (kept, _) = veto(
+            ValidatorKind::Luhn,
+            ValidatorOnFail::Record,
+            "4111 1111 1111 1111",
+        );
+        assert_eq!(kept[0].validator_fail_reason, None);
+        assert_eq!(kept[0].evidence, EvidenceKind::Rule);
+    }
+
+    /// A recognizer can declare `Record` through the trait without going through the rulepack
+    /// loader; veto still honours it only for IBAN and Luhn.
+    #[test]
+    fn record_is_ignored_for_every_other_validator() {
+        for (kind, text) in [
+            (ValidatorKind::BsnMod11, "123456780"),
+            (ValidatorKind::DeSteuerIdMod1110, "86095742718"),
+            (ValidatorKind::UkNhsMod11, "943 476 5918"),
+            (ValidatorKind::EmailRfc, "alice@example"),
+        ] {
+            let (kept, vetoed) = veto(kind, ValidatorOnFail::Record, text);
+            assert!(kept.is_empty(), "{kind:?} must still veto");
+            assert_eq!(vetoed.len(), 1, "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn veto_is_the_default() {
+        let (kept, vetoed) = veto(
+            ValidatorKind::Luhn,
+            ValidatorOnFail::Veto,
+            "4111 1111 1111 1112",
+        );
+        assert!(kept.is_empty());
+        assert_eq!(vetoed[0].reason, ValidatorFailReason::LuhnFailed);
+    }
+}

@@ -1056,6 +1056,44 @@ mod tests {
         .with_evidence(evidence)
     }
 
+    /// A canonical form proves a validator passed only when no failure was recorded: an IBAN or
+    /// card kept by `ValidatorOnFail::Record` must not rank as validated (solo todo 3906).
+    #[test]
+    fn a_recorded_checksum_failure_is_not_validated_evidence() {
+        let class = PiiClass::custom("iban").expect("class");
+        let mut failed = candidate(0..4, class.clone(), 0.7, "iban.structural");
+        failed.canonical_form = Some("DE99".into());
+        assert!(is_validated(&failed));
+        failed.validator_fail_reason = Some(gaze_types::ValidatorFailReason::IbanMod97Failed);
+        assert!(!is_validated(&failed));
+        let policy = crate::RecognizerRegistry::builder().build();
+        assert_eq!(
+            evidence_tier(&failed, policy.family_policy(), None),
+            EvidenceTier::Pattern
+        );
+    }
+
+    #[test]
+    fn a_merge_keeps_a_recorded_checksum_failure_from_either_side() {
+        let class = PiiClass::custom("iban").expect("class");
+        let mut failed = candidate(0..4, class.clone(), 0.7, "iban.cued");
+        failed.validator_fail_reason = Some(gaze_types::ValidatorFailReason::IbanMod97Failed);
+        let clean = candidate(0..4, class, 0.7, "iban.structural");
+
+        let mut existing = clean.clone();
+        merge_same_span_same_class(&mut existing, failed.clone());
+        assert_eq!(
+            existing.validator_fail_reason,
+            Some(gaze_types::ValidatorFailReason::IbanMod97Failed)
+        );
+        let mut existing = failed;
+        merge_same_span_same_class(&mut existing, clean);
+        assert_eq!(
+            existing.validator_fail_reason,
+            Some(gaze_types::ValidatorFailReason::IbanMod97Failed)
+        );
+    }
+
     /// Two variants of one collision family at equal precedence: the shape
     /// `family_tie_candidate` recognises as a precedence tie.
     fn tenant_document_registry() -> crate::RecognizerRegistry {

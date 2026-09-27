@@ -356,6 +356,7 @@ fn a_checksum_failed_value_is_never_swept_to_an_uncued_copy() {
     // The cued IBAN carries a canonical form from its normalizer although mod-97 never passed; a
     // canonical form alone must not make it `Validated` evidence the sweep spreads.
     let iban = "US29 1234 5678 9012 3456 7890 12";
+    fails(ValidatorKind::IbanMod97, iban);
     let cleaned = clean(&format!("IBAN {iban}. Ticket {iban} closed."));
     assert_eq!(cleaned.matches(":Custom:iban_").count(), 1, "{cleaned}");
     assert!(

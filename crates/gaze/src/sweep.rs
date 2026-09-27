@@ -590,6 +590,32 @@ fn fold(input: &str) -> Folded {
 mod tests {
     use super::*;
 
+    /// A value kept although its checksum failed is never swept, whatever evidence it carries and
+    /// even with a canonical form (solo todo 3906).
+    #[test]
+    fn a_recorded_checksum_failure_is_learned_evidence() {
+        let mut candidate = Candidate::new(
+            0..4,
+            PiiClass::custom("iban").expect("class"),
+            "iban.structural",
+            0.7,
+            80,
+            Some("DE99".into()),
+            "counter",
+            "iban.structural",
+            gaze_types::ConflictTier::None,
+            Vec::new(),
+        )
+        .with_evidence(EvidenceKind::Rule);
+        assert_eq!(
+            ManifestEvidence::of(&candidate),
+            ManifestEvidence::Validated
+        );
+        candidate.validator_fail_reason = Some(gaze_types::ValidatorFailReason::IbanMod97Failed);
+        assert_eq!(ManifestEvidence::of(&candidate), ManifestEvidence::Learned);
+        assert!(!ManifestEvidence::of(&candidate).propagates());
+    }
+
     /// `Coverage` replaced a scan of every winner per sweep hit (todo 3895).
     /// Pin it against that scan on random, overlapping and empty spans.
     #[test]
