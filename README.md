@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/CertaMesh/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/CertaMesh/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/CertaMesh/gaze?style=social)](https://github.com/CertaMesh/gaze/stargazers)
 
-**Gaze swaps the personal details in your text for placeholders before an AI model sees it, then swaps the real details back into the model's reply.** The model works with `<Name_1>`; only your server knows that means Laura Meyer.
+**Gaze swaps the personal details in your text for placeholders before an AI model sees it, then swaps the real details back into the model's reply.** The model works with a name token; only your server can restore the original name.
 
 Gaze pseudonymizes: every placeholder can be restored, and the manifest that restores it never leaves your server. The goal is that no byte of personal data reaches the model outside that contract.
 
@@ -80,17 +80,13 @@ Install the CLI, write the default policy, then clean and restore a synthetic co
 ```sh
 cargo install gaze-cli --version 0.15.1
 gaze setup
-printf '%s' 'From: Ada Example <ada@example.invalid>' | gaze clean --policy gaze.toml > clean.json
+printf 'Email %s@%s' demo example.invalid | gaze clean --policy gaze.toml > clean.json
 jq -r .clean_text clean.json
 jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text
 ```
 
-Real output from the built CLI. The first line is what the model sees; the second is the restore (the session prefix changes each run):
-
-```text
-From: <7589e7a1:Name_1> <<7589e7a1:Email_1>>
-From: Ada Example <ada@example.invalid>
-```
+The first `jq` command prints clean text with an email token for the model.
+The second restores the synthetic email address on the owner side.
 
 `gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a NER-only policy.
 

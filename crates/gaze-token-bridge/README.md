@@ -8,7 +8,7 @@ agent search long-lived, policy-scoped document corpora while keeping raw values
 the owner side of the bridge.
 
 An agent works in a short-lived [`RedactionSession`](src/session.rs) whose only
-vocabulary is *session tokens* (e.g. `<…:Name_1>`). When it wants to search a corpus,
+vocabulary is *session tokens* (for example, a name token). When it wants to search a corpus,
 the bridge — running entirely owner-side — resolves the token, checks policy
 (default-deny), mints a single-use, entity-bound capability, runs the search against a
 **redact-before-index** corpus, and translates the owner-side hits back into the
@@ -50,27 +50,27 @@ Ingested 5 synthetic docs into two policy-scoped domains:
 
 === Step 2 - mint a lookup token ===
 owner-side synthetic input: name = "Markus Gottschaue"
-session token passed to the bridge: <0cd5a5d9:Name_1>
+session token passed to the bridge: [session A name token]
 
 === Step 3 - support searches customer docs ===
 ALLOWED. target_domain = tenant_demo/customer_docs/v1
-  [cust-001] Customer profile <0cd5a5d9:Name_1> / <0cd5a5d9:Email_1> / <0cd5a5d9:Custom:customer_id_1> is linked to <0cd5a5d9:Organization_1>.
+  [cust-001] Customer profile [session A name token] / [session A email token] / [session A customer ID token] is linked to [session A organization token].
 
 === Step 4 - support searches legal docs ===
 DENIED (authorization failed)
 
 === Step 5 - admin searches legal docs ===
 ALLOWED. target_domain = tenant_demo/legal_docs/v1
-  [cust-001] Legal matter references <48904f81:Name_1> at <48904f81:Organization_1>; contact route <48904f81:Email_1>.
+  [cust-001] Legal matter references [session B name token] at [session B organization token]; contact route [session B email token].
 
 audit events recorded: 3
 ```
 
-> **Note on the token prefix.** The 8-hex prefix (`0cd5a5d9`, `48904f81`, …) is a
-> **per-session salt** and will differ on every run — that is the point: a token minted
+> **Note on the token prefix.** The 8-hex prefix is a **per-session salt** and will
+> differ on every run — that is the point: a token minted
 > in one session is meaningless (`UnknownToken`) in another, so tokens cannot be
-> correlated across sessions. Only the structure (`:Name_1>`, `:Email_1>`, …) is stable.
-> The support and admin lines use different prefixes because they are different sessions.
+> correlated across sessions. The support and admin lines represent different
+> token namespaces because they are different sessions.
 
 ### What each step demonstrates
 

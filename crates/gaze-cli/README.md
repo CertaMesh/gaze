@@ -73,7 +73,7 @@ Audit logging is captured on `clean` via `--audit-db <path>`; the
 ## `clean`
 
 ```console
-$ printf '%s' 'Email alice@example.invalid now' \
+$ printf 'Email %s@%s now' alice example.invalid \
   | gaze clean --policy policy.toml
 ```
 
@@ -179,8 +179,10 @@ for the terminology note.
 `gaze daemon --policy policy.toml` keeps one pipeline alive and reads one JSON
 request per stdin line:
 
+Replace the bracketed label below with a synthetic email address when trying it.
+
 ```json
-{"session_id":"conversation-1","text":"Contact alice@example.invalid"}
+{"session_id":"conversation-1","text":"Contact [synthetic email]"}
 ```
 
 Each stdout line is either a clean response:
@@ -288,7 +290,7 @@ corpora:
 $ gaze setup
 $ export GAZE_NER_MODEL_DIR=~/.local/share/gaze/models/davlan-mbert-ner-hrl
 $ cargo run -p gaze-cli --features index -- index ingest ./notes
-$ cargo run -p gaze-cli --features index -- index search "alice@example.invalid" --class email
+$ cargo run -p gaze-cli --features index -- index search "$(printf '%s@%s' alice example.invalid)" --class email
 ```
 
 `index ingest` runs the same deterministic floor as `gaze clean` without a
@@ -461,7 +463,7 @@ errors do not retry on every clean.
 ### Synthetic example — strict mode
 
 ```console
-$ printf '%s' 'Email alice@example.invalid or call 555-0100 now' \
+$ printf 'Email %s@%s or call 555-%s now' alice example.invalid 0100 \
   | gaze clean \
       --policy=policy.toml \
       --safety-net=openai-filter \
@@ -495,7 +497,7 @@ Exit code `0` and `suspect_count = 0` is the contract for "no leaks".
 ### Synthetic example — tolerant mode
 
 ```console
-$ printf '%s' 'Sender: Bob Example, phone +44 113 496 0123' \
+$ printf 'Sender: %s, phone +44 7700 900%s' 'Sample Sender' 123 \
   | gaze clean \
       --policy=policy.toml \
       --safety-net=openai-filter \

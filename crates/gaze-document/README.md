@@ -143,7 +143,7 @@ common artifact in practice (and the most dangerous for axis-1
 reliability) is a single space inserted next to the `@` of an email:
 
 ```text
-jane.doe@example.invalid   →   "jane.doe @example.invalid"
+[synthetic email]   →   "jane.doe @example.invalid"
 ```
 
 The corrupted form is still unmistakably an email to a human or LLM but

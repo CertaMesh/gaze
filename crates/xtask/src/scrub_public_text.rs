@@ -43,7 +43,8 @@ pub(crate) fn run(args: Args) -> Result<()> {
             .with_context(|| format!("failed to read {}", file.display()))?;
         findings.extend(scan_user_paths(file, &text)?);
         findings.extend(scan_existing_tokens(file, &text)?);
-        findings.extend(scan_with_gaze_clean(file, &mask_allowlisted_urls(&text)?)?);
+        let masked = mask_known_loopback_bind(&mask_allowlisted_urls(&text)?)?;
+        findings.extend(scan_with_gaze_clean(file, &masked)?);
     }
 
     if findings.is_empty() {
@@ -121,12 +122,73 @@ fn scan_existing_tokens(file: &Path, text: &str) -> Result<Vec<Finding>> {
 const PUBLIC_URL_ALLOWLIST: &[(&str, &str)] = &[
     (
         "github.com",
-        r"^/CertaMesh/gaze(/(pull|issues)/\d+|/releases(/tag/v\d+\.\d+\.\d+)?)?$",
+        r"^/CertaMesh/gaze(\.git|#license|/(pull|issues)/\d+|/releases(/tag/v\d+\.\d+\.\d+)?|/actions/workflows/test\.yml(/badge\.svg)?|/stargazers|/labels/good%20first%20issue|/compare/v\d+\.\d+\.\d+(-rc\.\d+)?\.\.\.(HEAD|v\d+\.\d+\.\d+(-rc\.\d+)?))?$",
     ),
+    ("github.com", r"^/CertaMesh/gaze-ghostwriter$"),
+    ("github.com", r"^/bblanchon/pdfium-binaries$"),
+    ("github.com", r"^/openai/privacy-filter$"),
+    (
+        "github.com",
+        r"^/EmpireTwo/gaze/(compare/v\d+\.\d+\.\d+(-rc\.\d+)?\.\.\.v\d+\.\d+\.\d+(-rc\.\d+)?|releases/tag/v\d+\.\d+\.\d+(-rc\.\d+)?)$",
+    ),
+    ("keepachangelog.com", r"^/en/1\.1\.0/$"),
+    ("api.openai.com", r"^/?$"),
+    ("api.anthropic.com", r"^/?$"),
+    ("generativelanguage.googleapis.com", r"^/?$"),
+    (
+        "nationalnanpa.com",
+        r"^/number_resource_info/555_numbers\.html$",
+    ),
+    ("huggingface.co", r"^/Wismut/nym-pii-multilingual-small$"),
+    ("127.0.0.1:8787", r"^(/v1)?$"),
     (
         "semver.org",
         r"^(/|/spec/v\d+\.\d+\.\d+\.html)?(#spec-item-\d+)?$",
     ),
+];
+
+const PUBLIC_CRATE_SLUGS: &[&str] = &[
+    "gaze-pii",
+    "gaze-types",
+    "gaze-audit",
+    "gaze-inspection",
+    "gaze-recognizers",
+    "gaze-assembly",
+    "gaze-model-setup",
+    "gaze-mcp-core",
+    "gaze-mcp-rmcp",
+    "gaze-mcp-bridge",
+    "gaze-document",
+    "gaze-proxy",
+    "gaze-proxy-dashboard",
+    "gaze-token-bridge",
+    "gaze-cli",
+];
+
+/// Historical release citations and crate-page source links have exact paths. A generic
+/// `blob/...` rule would let arbitrary PII-shaped path segments bypass the scrub.
+const PUBLIC_GITHUB_BLOBS: &[&str] = &[
+    "/CertaMesh/gaze/blob/main/AGENTS.md#project-north-star",
+    "/CertaMesh/gaze/blob/main/LICENSE-APACHE",
+    "/CertaMesh/gaze/blob/main/LICENSE-MIT",
+    "/CertaMesh/gaze/blob/main/docs/explanation/detection/ner-failclosed.md",
+    "/CertaMesh/gaze/blob/main/docs/reference/metrics.md",
+    "/CertaMesh/gaze/blob/main/docs/tutorials/getting-started.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025a-cfb3aed-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025g-edfb167-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025u-bfcf264-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-government-id-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-post-wave-a8f7182-scorecard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-benchmark.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md#L32-L58",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-ner-model-leaderboard.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-safety-net-benchmark.md",
+    "/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9.0-rc1-combined-revalidation.md",
+    "/PIInuts/business/blob/main/research/v0.4.4-date-posture.md",
+    "/PIInuts/business/blob/main/research/v0.4.4-phonenumber-audit.md",
+    "/PIInuts/business/blob/main/research/v0.5-dylint-audit-gate.md",
 ];
 
 /// Blanks every allowlisted URL with spaces before detection, keeping byte offsets. Any other URL,
@@ -146,12 +208,36 @@ fn mask_allowlisted_urls(text: &str) -> Result<String> {
     Ok(masked)
 }
 
+/// The shipped proxy example binds to loopback. Mask only this complete TOML assignment;
+/// other IPs and URLs still reach the detector.
+fn mask_known_loopback_bind(text: &str) -> Result<String> {
+    let bind = Regex::new(r#"(?m)^[ \t]*bind[ \t]*=[ \t]*"127\.0\.0\.1:8787"[ \t]*$"#)?;
+    let mut masked = text.to_string();
+    for hit in bind.find_iter(text) {
+        masked.replace_range(hit.range(), &" ".repeat(hit.len()));
+    }
+    Ok(masked)
+}
+
 fn is_allowlisted_public_url(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("https://") else {
+    let (rest, loopback_http) = if let Some(rest) = url.strip_prefix("https://") {
+        (rest, false)
+    } else if let Some(rest) = url.strip_prefix("http://") {
+        (rest, true)
+    } else {
         return false;
     };
     let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let (host, path) = rest.split_at(authority_end);
+    if loopback_http && host != "127.0.0.1:8787" {
+        return false;
+    }
+    if host == "github.com" && PUBLIC_GITHUB_BLOBS.contains(&path) {
+        return true;
+    }
+    if is_allowlisted_crate_url(host, path) {
+        return true;
+    }
     PUBLIC_URL_ALLOWLIST
         .iter()
         .any(|(allowed_host, path_pattern)| {
@@ -160,6 +246,34 @@ fn is_allowlisted_public_url(url: &str) -> bool {
                     .expect("allowlist path patterns are valid")
                     .is_match(path)
         })
+}
+
+fn is_allowlisted_crate_url(host: &str, path: &str) -> bool {
+    match host {
+        "crates.io" => path.strip_prefix("/crates/").is_some_and(|slug| {
+            PUBLIC_CRATE_SLUGS.contains(&slug) || matches!(slug, "pdfium-render" | "rmcp")
+        }),
+        "docs.rs" => {
+            if path == "/regex" {
+                return true;
+            }
+            let Some(slug) = path.strip_prefix('/') else {
+                return false;
+            };
+            let slug = slug.strip_suffix("/badge.svg").unwrap_or(slug);
+            PUBLIC_CRATE_SLUGS.contains(&slug)
+        }
+        "img.shields.io" => {
+            if path == "/github/stars/CertaMesh/gaze?style=social" {
+                return true;
+            }
+            path.strip_prefix("/crates/v/")
+                .or_else(|| path.strip_prefix("/crates/l/"))
+                .and_then(|slug| slug.strip_suffix(".svg"))
+                .is_some_and(|slug| PUBLIC_CRATE_SLUGS.contains(&slug))
+        }
+        _ => false,
+    }
 }
 
 fn scan_with_gaze_clean(file: &Path, text: &str) -> Result<Vec<Finding>> {
@@ -232,7 +346,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn allowlist_accepts_the_project_repo_and_semver_only() {
+    fn allowlist_accepts_fixed_public_release_links() {
         for url in [
             "https://github.com/CertaMesh/gaze",
             "https://github.com/CertaMesh/gaze/pull/203",
@@ -242,6 +356,18 @@ mod tests {
             "https://semver.org",
             "https://semver.org/",
             "https://semver.org/spec/v2.0.0.html#spec-item-4",
+            "https://github.com/CertaMesh/gaze/blob/main/docs/reference/metrics.md",
+            "https://github.com/CertaMesh/gaze/compare/v0.14.0...HEAD",
+            "https://crates.io/crates/gaze-pii",
+            "https://docs.rs/gaze-pii/badge.svg",
+            "https://docs.rs/regex",
+            "https://img.shields.io/crates/v/gaze-pii.svg",
+            "https://img.shields.io/github/stars/CertaMesh/gaze?style=social",
+            "http://127.0.0.1:8787/v1",
+            "https://api.openai.com/",
+            "https://api.anthropic.com",
+            "https://nationalnanpa.com/number_resource_info/555_numbers.html",
+            "https://huggingface.co/Wismut/nym-pii-multilingual-small",
         ] {
             assert!(is_allowlisted_public_url(url), "{url} must be allowed");
         }
@@ -263,6 +389,7 @@ mod tests {
             "https://github.com:8443/CertaMesh/gaze",
             "https://github.com/CertaMesh/gaze/issues?author=someone",
             "https://github.com/CertaMesh/gaze/blob/main/a%40b",
+            "https://github.com/CertaMesh/gaze/blob/main/docs/123456789.md",
             "https://example.org/",
             // Free text in the path or fragment of an allowlisted host.
             "https://semver.org/DE89370400440532013000",
@@ -273,8 +400,44 @@ mod tests {
             "https://github.com/CertaMesh/gaze/pull/+4915112345678",
             "https://github.com/CertaMesh/gaze/tree/DE89370400440532013000",
             "https://github.com/CertaMesh/gaze/releases/tag/v1.2.3-DE89370400440532013000",
+            "https://github.com/CertaMesh/gaze/compare/v0.1.0...vAlice",
+            "https://github.com/CertaMesh/gaze/blob/main/docs/alice@example.invalid.md",
+            "https://github.com/CertaMesh/gaze/compare/v0.1.0...alice@example.invalid",
+            "https://crates.io/crates/gaze-pii/alice@example.invalid",
+            "https://crates.io/crates/gaze-alice",
+            "https://docs.rs/gaze-pii/alice@example.invalid",
+            "https://docs.rs/gaze-alice/badge.svg",
+            "https://docs.rs/regex/alice@example.invalid",
+            "https://img.shields.io/crates/v/gaze-pii/alice@example.invalid",
+            "https://img.shields.io/crates/v/gaze-alice.svg",
+            "http://127.0.0.1:8787/alice@example.invalid",
+            "https://api.openai.com/alice@example.invalid",
+            "https://huggingface.co/Wismut/nym-pii-multilingual-small/alice@example.invalid",
+            "http://api.openai.com/",
         ] {
             assert!(!is_allowlisted_public_url(url), "{url} must be refused");
+        }
+    }
+
+    #[test]
+    fn loopback_bind_mask_does_not_hide_other_ip_text() {
+        let text = "bind = \"127.0.0.1:8787\"\nupstream = \"http://127.0.0.1:8787/private\"\npeer = \"192.0.2.12\"\n";
+        let masked = mask_known_loopback_bind(text).expect("mask loopback bind");
+        assert!(!masked.contains("bind = \"127.0.0.1:8787\""));
+        assert!(masked.contains("http://127.0.0.1:8787/private"));
+        assert!(masked.contains("192.0.2.12"));
+        assert_eq!(masked.len(), text.len());
+    }
+
+    #[test]
+    fn changelog_public_links_fit_the_allowlist() {
+        let changelog = include_str!("../../../CHANGELOG.md");
+        let url = Regex::new(r#"https?://[^\s<>()\[\]"'`]+"#).expect("URL pattern");
+        for hit in url.find_iter(changelog) {
+            let candidate = hit
+                .as_str()
+                .trim_end_matches(['.', ',', ';', ':', '!', '?']);
+            assert!(is_allowlisted_public_url(candidate), "{candidate}");
         }
     }
 

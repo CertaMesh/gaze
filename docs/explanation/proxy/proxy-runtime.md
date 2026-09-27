@@ -89,7 +89,7 @@ This is where the proxy differs from plain `gaze clean`. Clean's default
 `redact` fallback goes further when the nets' re-run flags something new: it
 runs a second reversible tokenize batch and deletes what is still left one way
 as `[REDACTED:<class>]`. A network boundary never does either. For example,
-under the `gaze setup` policy, `user jweber84 born 1984-03-12` comes out of
+under the `gaze setup` policy, a user identifier followed by a birth date comes out of
 `gaze clean` as three tokens, while the proxy refuses it with
 `residual_suspect` for `custom:date` and `custom:username`.
 

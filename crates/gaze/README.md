@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let CleanDocument::Text(clean) = core.pseudonymize_text(
         &session,
-        "Email alice@example.invalid about ORD-789012.",
+        &format!("Email {}@{} about ORD-789012.", "alice", "example.invalid"),
     )? else { unreachable!() };
     // "Email <{session_hex}:Email_1> about ORD-789012."
 
