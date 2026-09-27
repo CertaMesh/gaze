@@ -19,6 +19,7 @@ from typing import Mapping, Sequence
 import agentic_layers as agentic
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
+import scorecard_record as records
 
 
 QUICK_DOCUMENTS = 256
@@ -498,6 +499,8 @@ def execute_measurements(
     configs: Sequence[str] | None = None,
     replacing_actions: frozenset[str] = score.MANIFEST_REPLACING_ACTIONS,
     split_composite_source_ids: bool = False,
+    record_writer: records.RecordWriter | None = None,
+    record_layer: str = "C",
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if measured_repetitions <= 0:
         raise CandidateError("measured repetitions must be positive")
@@ -530,6 +533,11 @@ def execute_measurements(
                 policy_path=policy_path,
                 replacing_actions=replacing_actions,
                 split_composite_source_ids=split_composite_source_ids,
+                record_document=(
+                    (lambda config, document, response, measurements:
+                        record_writer.add(record_layer, config, document, response, measurements))
+                    if record_writer is not None and repetition == 1 else None
+                ),
             )
             current.append(run)
         repetition_runs.append(current)
@@ -595,18 +603,40 @@ def measure_agentic_layers(
     configs: Sequence[str] | None = None,
     replacing_actions: frozenset[str] = score.MANIFEST_REPLACING_ACTIONS,
     split_composite_source_ids: bool = False,
+    record_writer: records.RecordWriter | None = None,
 ) -> dict[str, object]:
     """Score layers A, D and R as separate cells next to the Kiji/A4 layer C.
 
     Layer C stays the top-level `runs`: the generated documents never enter
     those cells, so their numbers are unchanged by this block.
     """
-    identifier_measurements, repeat_measurements = (
+    raw_by_id = {
+        document.uid: document
+        for document in (
+            record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)
+        )
+    }
+    full_identifier_measurements, full_repeat_measurements = (
         score.collect_validator_measurements(
-            validator_probe, documents, (document.uid for document in documents)
+            validator_probe,
+            [raw_by_id[document.uid] for document in documents],
+            (document.uid for document in documents),
         )
         for documents in (prepared.identifiers, prepared.repeats)
     )
+    identifier_measurements = records.filter_measurements(
+        full_identifier_measurements, prepared.identifiers
+    )
+    repeat_measurements = records.filter_measurements(
+        full_repeat_measurements, prepared.repeats
+    )
+    if record_writer is not None:
+        record_writer.layer_measurements.update({
+            agentic.LAYER_IDENTIFIERS: full_identifier_measurements,
+            agentic.LAYER_REPEATS: full_repeat_measurements,
+        })
+        if not any(layer == "C" for layer in record_writer.document_layers.values()):
+            record_writer.measurements = full_identifier_measurements
     layers: dict[str, object] = {
         "schema_version": 1,
         "generator": prepared.manifest,
@@ -654,6 +684,8 @@ def measure_agentic_layers(
             configs=configs,
             replacing_actions=replacing_actions,
             split_composite_source_ids=split_composite_source_ids,
+            record_writer=record_writer,
+            record_layer=layer,
         )
         block: dict[str, object] = {
             "description": description,
@@ -1004,6 +1036,7 @@ def run(args: argparse.Namespace) -> int:
     positive_documents, dataiku_report = dataiku.load_documents(dataset_path)
     negative_documents, negative_report = load_negative_documents(negative_path)
     available_documents = positive_documents + negative_documents
+    original_available_documents = available_documents
     max_documents = args.quick_documents if args.profile == "quick" else None
     if max_documents is not None and max_documents <= 0:
         raise CandidateError("quick document count must be positive")
@@ -1042,10 +1075,24 @@ def run(args: argparse.Namespace) -> int:
     )
     if not validator_probe.is_file():
         raise CandidateError(f"validator recall probe is missing: {validator_probe}")
-    validator_measurements = score.collect_validator_measurements(
+    complete_validator_measurements = score.collect_validator_measurements(
         validator_probe,
-        available_documents,
+        original_available_documents,
         (document.uid for document in documents),
+    )
+    validator_measurements = records.filter_measurements(
+        complete_validator_measurements, available_documents
+    )
+    metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
+    extra_documents = (
+        [record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)]
+        if agentic_prepared is not None else []
+    )
+    record_writer = records.RecordWriter(
+        original_available_documents, complete_validator_measurements,
+        corpus_sha256=dataset_report["integrity"]["sha256"],
+        extra_documents=extra_documents,
+        layer_contract=agentic_prepared.contract if agentic_prepared is not None else None,
     )
     runs, repetition_provenance = execute_measurements(
         repo_root=repo_root,
@@ -1058,8 +1105,8 @@ def run(args: argparse.Namespace) -> int:
         measured_repetitions=args.measured_repetitions,
         validator_measurements=validator_measurements,
         policy_path=policy_path,
+        record_writer=record_writer,
     )
-    metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
     dataset_report["validator_gold_census"] = score.validator_gold_census(
         available_documents, validator_measurements
     )
@@ -1115,6 +1162,7 @@ def run(args: argparse.Namespace) -> int:
             warmup_count=args.warmups,
             measured_repetitions=args.measured_repetitions,
             policy_path=policy_path,
+            record_writer=record_writer,
         )
         candidate["layers"]["gold_validity"] = {
             "C": agentic.gold_validity_digest(documents, validator_measurements)
@@ -1172,6 +1220,9 @@ def run(args: argparse.Namespace) -> int:
             **performance_result,
         }
 
+    candidate["observation_record"] = record_writer.write(
+        output_dir / "observations-v1.jsonl.gz", candidate, add_reference=True
+    )
     write_json(output_dir / "scorecard-v4.json", candidate)
     write_json(output_dir / "diagnostics.json", diagnostics(candidate))
     write_json(output_dir / "regression-status.json", regression)

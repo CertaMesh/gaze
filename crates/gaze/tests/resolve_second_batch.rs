@@ -98,6 +98,12 @@ fn mismatch(span: std::ops::Range<usize>) -> LeakSuspect {
     };
     s
 }
+/// A residual the follow-up planner declines: a class mismatch on plain text. The `Redact`
+/// fallback tokenizes a residual set it can plan completely (todo 3879), so a test about what
+/// happens after the fallback deletes needs a residual of this shape to reach the deletion.
+fn declined(span: std::ops::Range<usize>) -> LeakSuspect {
+    mismatch(span)
+}
 fn run(
     p: &Pipeline,
     s: &Session,
@@ -174,7 +180,7 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
             (scan2.clone(), Ok(vec![raw(a.len() + 1..a.len() + 4)])),
             (
                 scan3.clone(),
-                Ok(vec![raw(a.len() + b.len() + 2..a.len() + b.len() + 9)]),
+                Ok(vec![declined(a.len() + b.len() + 2..a.len() + b.len() + 9)]),
             ),
             (final_text.clone(), terminal_report),
         ];
@@ -544,7 +550,7 @@ fn five_sweeps_can_mean_ten_backend_calls_and_still_only_one_second_batch() {
         (texts[1].clone(), Ok(vec![raw(a.len() + 1..a.len() + 2)])),
         (
             texts[2].clone(),
-            Ok(vec![raw(a.len() + b.len() + 2..a.len() + b.len() + 3)]),
+            Ok(vec![declined(a.len() + b.len() + 2..a.len() + b.len() + 3)]),
         ),
         (
             texts[3].clone(),
@@ -587,6 +593,72 @@ fn five_sweeps_can_mean_ten_backend_calls_and_still_only_one_second_batch() {
         3,
         "one token per batch: first resolve, second batch, terminal round — and no more"
     );
+}
+
+/// The same cascade with a residual the planner can resolve: the fallback tokenizes `c` instead
+/// of deleting it (todo 3879), the document restores exactly, and the scan bound above is
+/// unchanged — still five sweeps, ten backend calls, one second batch.
+#[test]
+fn five_sweeps_tokenize_a_plannable_fallback_residual_without_an_extra_sweep() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let a = session
+        .tokenize_with_family("safety_net", &PiiClass::Name, "a")
+        .unwrap();
+    let b = session
+        .tokenize_with_family("safety_net", &PiiClass::Name, "b")
+        .unwrap();
+    let c = session
+        .tokenize_with_family("safety_net", &PiiClass::Name, "c")
+        .unwrap();
+    let e = session
+        .tokenize_with_family("safety_net", &PiiClass::Name, "é")
+        .unwrap();
+    let texts = [
+        "a b c é".to_owned(),
+        format!("{a} b c é"),
+        format!("{a} {b} c é"),
+        format!("{a} {b} {c} é"),
+        format!("{a} {b} {c} {e}"),
+    ];
+    let active = Arc::new(Mutex::new(VecDeque::from(vec![
+        (texts[0].clone(), Ok(vec![raw(0..1)])),
+        (texts[1].clone(), Ok(vec![raw(a.len() + 1..a.len() + 2)])),
+        (
+            texts[2].clone(),
+            Ok(vec![raw(a.len() + b.len() + 2..a.len() + b.len() + 3)]),
+        ),
+        (
+            texts[3].clone(),
+            Ok(vec![raw(texts[3].len() - 2..texts[3].len())]),
+        ),
+        (texts[4].clone(), Ok(vec![])),
+    ])));
+    let passive = Arc::new(Mutex::new(
+        texts
+            .iter()
+            .map(|t| (t.clone(), Ok(vec![])))
+            .collect::<VecDeque<_>>(),
+    ));
+    let p = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(Script(active.clone()))
+        .register_safety_net(Script(passive.clone()))
+        .build()
+        .unwrap();
+    let (CleanDocument::Text(text), spans, _) =
+        run(&p, &session, &texts[0], SafetyNetPolicy::default()).unwrap()
+    else {
+        panic!("text")
+    };
+    assert_eq!(text, texts[4]);
+    assert_eq!(
+        spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
+        [0..1, 2..3, 4..5, 6..8]
+    );
+    assert_eq!(session.restore_strict_text(&text).unwrap(), texts[0]);
+    assert!(active.lock().unwrap().is_empty());
+    assert!(passive.lock().unwrap().is_empty());
+    assert_eq!(session.tokens().len(), 4);
 }
 
 #[test]
@@ -701,7 +773,7 @@ fn second_batch_terminal_registry_malformed_spans_are_enforced_before_conversion
             (texts[1].clone(), Ok(vec![raw(a.len() + 1..a.len() + 2)])),
             (
                 texts[2].clone(),
-                Ok(vec![raw(a.len() + b.len() + 2..a.len() + b.len() + 3)]),
+                Ok(vec![declined(a.len() + b.len() + 2..a.len() + b.len() + 3)]),
             ),
             (texts[3].clone(), Ok(vec![])),
         ])));
@@ -742,7 +814,7 @@ fn second_batch_then_fallback_trace_keeps_original_raw_coordinates() {
         (format!("{a} b c"), Ok(vec![raw(a.len() + 1..a.len() + 2)])),
         (
             format!("{a} {b} c"),
-            Ok(vec![raw(a.len() + b.len() + 2..a.len() + b.len() + 3)]),
+            Ok(vec![declined(a.len() + b.len() + 2..a.len() + b.len() + 3)]),
         ),
         (
             final_text.clone(),

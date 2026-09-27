@@ -227,6 +227,16 @@ pipeline.
 
 ### Fixed
 
+- **The safety net's `Redact` fallback tokenizes a residual it can resolve
+  instead of redacting it** (solo todo 3879). A token's class name in the
+  re-scan text can make Nym flag the plain value beside it, so each resolve
+  round can surface one more value. After the one follow-up round the fallback
+  replaced the next one with a `[REDACTED:<class>]` marker, and restore was no
+  longer exact: `…15(2), 45-60. Based at 12 Kowhai Lane, Building 4…` lost its
+  `(2)`. `SafetyNetFallback::Redact` now tokenizes the residuals a
+  post-resolution re-scan found when every one of them can be tokenized, and
+  redacts only otherwise. A first-pass refusal still redacts. Bytes are
+  protected either way; the scan count is unchanged. See UPGRADE.md.
 - **`gaze proxy` tokenizes what the safety net flags instead of refusing the
   request.** Under the policy `gaze setup` writes (Nym enabled), the proxy
   answered `500 {"error":"Pipeline"}` to any request containing a date, such
