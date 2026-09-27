@@ -35,7 +35,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 
 
-GENERATOR_VERSION = 3
+GENERATOR_VERSION = 4
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -1124,6 +1124,143 @@ def _lookalike_records(partition: str, seed: int) -> list[Record]:
     return records
 
 
+# A consuming regex guard can eat the only separator before its neighbour.
+# These cases extend the published split without changing any v3 document.
+# The setup policy excludes `secrets`, so `password.field` has no gold here.
+@dataclass(frozen=True)
+class AdjacentValue:
+    value: str
+    label: str | None = None
+    prefix: str = ""
+    suffix: str = ""
+
+
+@dataclass(frozen=True)
+class AdjacencyCase:
+    family: str
+    language: str
+    region: str
+    values: tuple[AdjacentValue, ...]
+
+
+ADJACENT_SEPARATORS = {"space": " ", "comma": ",", "tab": "\t", "nbsp": NBSP}
+ADJACENT_TEMPLATES = {
+    "adjacent_prose": {
+        "dev": "Check these adjacent values: {VALUES}.",
+        "test": "The handover lists adjacent values: {VALUES}.",
+    },
+    "adjacent_log_kv": {
+        "dev": 'level=info event=inspect values="{VALUES}" result=queued',
+        "test": 'level=debug event=handover values="{VALUES}" result=stored',
+    },
+    "adjacent_csv": {
+        "dev": 'row,adjacent_values\n1,"{VALUES}"\n',
+        "test": 'record,adjacent_values\n7,"{VALUES}"\n',
+    },
+    "adjacent_json_array": {
+        "dev": '{"operation":"inspect","items":["{VALUES}"]}',
+        "test": '{"operation":"handover","items":["{VALUES}"]}',
+    },
+}
+
+
+ADJACENT_GOLD = {
+    "dev": (
+        AdjacencyCase("ip_v6", "en", "US", (AdjacentValue("fd42:1::d1", "IPADDRESS"), AdjacentValue("fd42:1::d2", "IPADDRESS"))),
+        AdjacencyCase("ip_v6_mapped", "en", "US", (AdjacentValue("fd42:1::d3", "IPADDRESS"), AdjacentValue("::ffff:10.42.0.2", "IPADDRESS"))),
+        AdjacencyCase("ip_v4", "en", "US", (AdjacentValue("10.42.0.6", "IPADDRESS"), AdjacentValue("10.42.0.7", "IPADDRESS"))),
+        AdjacencyCase("ip_v4_v6", "en", "US", (AdjacentValue("10.42.0.4", "IPADDRESS"), AdjacentValue("fd42:1::d4", "IPADDRESS"))),
+        AdjacencyCase("ip_documentation_neighbor", "en", "US", (AdjacentValue("2001:db8::d5"), AdjacentValue("fd42:1::d5", "IPADDRESS"))),
+        AdjacencyCase("phone_structural", "en", "US", (AdjacentValue("+12025550100", "TELEPHONENUM"), AdjacentValue("+12025550101", "TELEPHONENUM"))),
+        AdjacencyCase("phone_e164_spaced", "en", "GB", (AdjacentValue("+44 7700 900123", "TELEPHONENUM"), AdjacentValue("+44 7700 900124", "TELEPHONENUM"))),
+        AdjacencyCase("phone_national_de", "de", "DE", (AdjacentValue("+49 1555 0112233", "TELEPHONENUM"), AdjacentValue("+49 1555 0112234", "TELEPHONENUM"))),
+        AdjacencyCase("phone_national_us", "en", "US", (AdjacentValue("+1 555 0100", "TELEPHONENUM"), AdjacentValue("+1 555 0101", "TELEPHONENUM"))),
+        AdjacencyCase("postal_at_ch", "de", "AT", (AdjacentValue("0000", "ZIPCODE", suffix=" Narnia"), AdjacentValue("0001", "ZIPCODE", suffix=" Utopia"))),
+        AdjacencyCase("postal_ca", "en", "CA", (AdjacentValue("Z1Z 9Z9", "ZIPCODE"), AdjacentValue("Z2Z 8Z8", "ZIPCODE"))),
+        AdjacencyCase("postal_gb", "en", "GB", (AdjacentValue("ZZ9 9ZZ", "ZIPCODE"), AdjacentValue("ZZ8 8ZZ", "ZIPCODE"))),
+        AdjacencyCase("birth_date_cue", "en", "US", (AdjacentValue("1980-02-03", "DATEOFBIRTH", prefix="DOB: "), AdjacentValue("1981-02-04", "DATEOFBIRTH", prefix="DOB: "))),
+        AdjacencyCase("ip_v6_triple", "en", "US", (AdjacentValue("fd42:1::d6", "IPADDRESS"), AdjacentValue("fd42:1::d7", "IPADDRESS"), AdjacentValue("fd42:1::d8", "IPADDRESS"))),
+    ),
+    "test": (
+        AdjacencyCase("ip_v6", "en", "US", (AdjacentValue("fd42:2::a1", "IPADDRESS"), AdjacentValue("fd42:2::a2", "IPADDRESS"))),
+        AdjacencyCase("ip_v6_mapped", "en", "US", (AdjacentValue("fd42:2::a3", "IPADDRESS"), AdjacentValue("::ffff:10.43.0.3", "IPADDRESS"))),
+        AdjacencyCase("ip_v4", "en", "US", (AdjacentValue("10.43.0.8", "IPADDRESS"), AdjacentValue("10.43.0.9", "IPADDRESS"))),
+        AdjacencyCase("ip_v4_v6", "en", "US", (AdjacentValue("10.43.0.5", "IPADDRESS"), AdjacentValue("fd42:2::a4", "IPADDRESS"))),
+        AdjacencyCase("ip_documentation_neighbor", "en", "US", (AdjacentValue("2001:db8::a5"), AdjacentValue("fd42:2::a5", "IPADDRESS"))),
+        AdjacencyCase("phone_structural", "en", "US", (AdjacentValue("+12025550102", "TELEPHONENUM"), AdjacentValue("+12025550103", "TELEPHONENUM"))),
+        AdjacencyCase("phone_e164_spaced", "en", "GB", (AdjacentValue("+44 7700 900125", "TELEPHONENUM"), AdjacentValue("+44 7700 900126", "TELEPHONENUM"))),
+        AdjacencyCase("phone_national_de", "de", "DE", (AdjacentValue("+49 1555 0112235", "TELEPHONENUM"), AdjacentValue("+49 1555 0112236", "TELEPHONENUM"))),
+        AdjacencyCase("phone_national_us", "en", "US", (AdjacentValue("+1 555 0102", "TELEPHONENUM"), AdjacentValue("+1 555 0103", "TELEPHONENUM"))),
+        AdjacencyCase("postal_at_ch", "de", "AT", (AdjacentValue("0002", "ZIPCODE", suffix=" Arcadia"), AdjacentValue("0003", "ZIPCODE", suffix=" Eloria"))),
+        AdjacencyCase("postal_ca", "en", "CA", (AdjacentValue("Z3Z 7Z7", "ZIPCODE"), AdjacentValue("Z4Z 6Z6", "ZIPCODE"))),
+        AdjacencyCase("postal_gb", "en", "GB", (AdjacentValue("ZZ7 7ZZ", "ZIPCODE"), AdjacentValue("ZZ6 6ZZ", "ZIPCODE"))),
+        AdjacencyCase("birth_date_cue", "en", "US", (AdjacentValue("1990-02-03", "DATEOFBIRTH", prefix="DOB: "), AdjacentValue("1991-02-04", "DATEOFBIRTH", prefix="DOB: "))),
+        AdjacencyCase("ip_v6_triple", "en", "US", (AdjacentValue("fd42:2::a6", "IPADDRESS"), AdjacentValue("fd42:2::a7", "IPADDRESS"), AdjacentValue("fd42:2::a8", "IPADDRESS"))),
+    ),
+}
+
+
+ADJACENT_LOOKALIKES = {
+    "dev": (
+        AdjacencyCase("adjacent_versions", "en", "US", (AdjacentValue("1.2.3"), AdjacentValue("4.5.6"))),
+        AdjacencyCase("adjacent_hex_hashes", "en", "US", (AdjacentValue("0xdeadbeef"), AdjacentValue("0xcafebabe"))),
+        AdjacencyCase("adjacent_times", "en", "US", (AdjacentValue("08:03"), AdjacentValue("09:04"))),
+        AdjacencyCase("adjacent_rooms", "en", "US", (AdjacentValue("4711", prefix="Room "), AdjacentValue("4722", prefix="Room "))),
+        AdjacencyCase("adjacent_due_dates", "en", "US", (AdjacentValue("2025-05-06", prefix="Due: "), AdjacentValue("2025-05-07", prefix="Due: "))),
+        AdjacencyCase("adjacent_word_paths", "en", "US", (AdjacentValue("x::2"), AdjacentValue("y::3"))),
+        AdjacencyCase("adjacent_documentation_ips", "en", "US", (AdjacentValue("2001:db8::d9"), AdjacentValue("2001:db8::da"))),
+        AdjacencyCase("adjacent_loopback_ips", "en", "US", (AdjacentValue("127.0.0.6"), AdjacentValue("127.0.0.7"))),
+        AdjacencyCase("adjacent_link_local_ips", "en", "US", (AdjacentValue("fe80::d1"), AdjacentValue("fe80::d2"))),
+        AdjacencyCase("adjacent_mapped_loopback_ips", "en", "US", (AdjacentValue("::ffff:127.0.0.2"), AdjacentValue("::ffff:127.0.0.4"))),
+    ),
+    "test": (
+        AdjacencyCase("adjacent_versions", "en", "US", (AdjacentValue("2.3.4"), AdjacentValue("5.6.7"))),
+        AdjacencyCase("adjacent_hex_hashes", "en", "US", (AdjacentValue("0x1a2b3c4d"), AdjacentValue("0x5e6f7a8b"))),
+        AdjacencyCase("adjacent_times", "en", "US", (AdjacentValue("10:05"), AdjacentValue("11:06"))),
+        AdjacencyCase("adjacent_rooms", "en", "US", (AdjacentValue("4833", prefix="Room "), AdjacentValue("4844", prefix="Room "))),
+        AdjacencyCase("adjacent_due_dates", "en", "US", (AdjacentValue("2026-06-08", prefix="Due: "), AdjacentValue("2026-06-09", prefix="Due: "))),
+        AdjacencyCase("adjacent_word_paths", "en", "US", (AdjacentValue("m::4"), AdjacentValue("n::5"))),
+        AdjacencyCase("adjacent_documentation_ips", "en", "US", (AdjacentValue("2001:db8::a9"), AdjacentValue("2001:db8::aa"))),
+        AdjacencyCase("adjacent_loopback_ips", "en", "US", (AdjacentValue("127.0.0.8"), AdjacentValue("127.0.0.9"))),
+        AdjacencyCase("adjacent_link_local_ips", "en", "US", (AdjacentValue("fe80::a1"), AdjacentValue("fe80::a2"))),
+        AdjacencyCase("adjacent_mapped_loopback_ips", "en", "US", (AdjacentValue("::ffff:127.0.0.3"), AdjacentValue("::ffff:127.0.0.5"))),
+    ),
+}
+
+
+def _adjacency_records(partition: str, layer: str) -> list[Record]:
+    cases = ADJACENT_GOLD[partition] if layer == LAYER_IDENTIFIERS else ADJACENT_LOOKALIKES[partition]
+    records: list[Record] = []
+    for case in cases:
+        for direction, values in (("forward", case.values), ("reverse", case.values[::-1])):
+            for separator_name, separator in ADJACENT_SEPARATORS.items():
+                for surface, templates in ADJACENT_TEMPLATES.items():
+                    # An escaped JSON tab is two raw bytes, so it is not a single
+                    # separator for the scanner's byte-level adjacency contract.
+                    if surface == "adjacent_json_array" and separator_name == "tab":
+                        continue
+                    fragment = separator.join(
+                        f"{{P{index}}}{{V{index}}}{{T{index}}}"
+                        for index in range(1, len(values) + 1)
+                    )
+                    template = templates[partition].replace("{VALUES}", fragment)
+                    fields: dict[str, tuple[str, str | None]] = {}
+                    for index, value in enumerate(values, 1):
+                        fields[f"P{index}"] = (value.prefix, None)
+                        fields[f"V{index}"] = (value.value, value.label if layer == LAYER_IDENTIFIERS else None)
+                        fields[f"T{index}"] = (value.suffix, None)
+                    text, gold = _fill(template, fields)
+                    records.append(Record(
+                        uid=f"agentic-{partition}-{layer}-{case.family}-{direction}-{separator_name}-{surface}",
+                        partition=partition, layer=layer, family=case.family, surface=surface,
+                        validity=UNCHECKED if layer == LAYER_IDENTIFIERS else BENIGN,
+                        group=f"{partition}-{layer}-{case.family}-{direction}",
+                        template=f"adjacent/{surface}/{partition}",
+                        language=case.language, region=case.region, text=text, gold=gold,
+                    ))
+    return records
+
+
 # --------------------------------------------------------------------------
 # Layer R: the repeat-value slice. One document repeats a value 2-4 times in
 # different positions and shapes (every occurrence is gold) next to decoys:
@@ -1338,6 +1475,8 @@ def generate(partition: str) -> list[Record]:
         _identifier_records(partition, seed)
         + _lookalike_records(partition, seed)
         + _repeat_records(partition, seed)
+        + _adjacency_records(partition, LAYER_IDENTIFIERS)
+        + _adjacency_records(partition, LAYER_LOOKALIKES)
     )
     for record in records:
         encoded = record.text.encode("utf-8")
