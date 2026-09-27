@@ -2,7 +2,7 @@
   "schema_version": 1,
   "contract": "scored-labels-v3",
   "purpose": "Human audit of the contract v3 gold-gap rule. The column stays a diagnostic beside the v2 headline until this audit passes.",
-  "status": "awaiting_verdicts",
+  "status": "verdicts_recorded",
   "source": {
     "trace": "trace-pass2-ner.jsonl",
     "trace_sha256": "e715a7e92eb8ccd98ed6628528eb86b66c6fea5b0e837f87ac58c50af722dc09",
@@ -200,10 +200,17 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-001"
+      "id": "gg-001",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-1068",
@@ -221,10 +228,17 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-002"
+      "id": "gg-002",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-1307",
@@ -242,10 +256,17 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-003"
+      "id": "gg-003",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-1336",
@@ -264,10 +285,17 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-004"
+      "id": "gg-004",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-1489",
@@ -283,10 +311,17 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-005"
+      "id": "gg-005",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-150",
@@ -304,10 +339,17 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-006"
+      "id": "gg-006",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-1623",
@@ -325,10 +367,17 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-007"
+      "id": "gg-007",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-1633",
@@ -346,10 +395,17 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-008"
+      "id": "gg-008",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-1748",
@@ -367,10 +423,17 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-009"
+      "id": "gg-009",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-1809",
@@ -388,10 +451,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-010"
+      "id": "gg-010",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1938",
@@ -407,10 +476,17 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-011"
+      "id": "gg-011",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus",
+        "user_confirmed": true
+      }
     },
     {
       "document_id": "dataiku-test-1959",
@@ -426,10 +502,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-012"
+      "id": "gg-012",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1994",
@@ -447,10 +529,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-013"
+      "id": "gg-013",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "no",
+        "typesafe": "yes",
+        "rule": "1: TypeSafe in 2-of-3 majority"
+      }
     },
     {
       "document_id": "dataiku-test-1994",
@@ -468,10 +556,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-014"
+      "id": "gg-014",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-204",
@@ -487,10 +581,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-015"
+      "id": "gg-015",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2076",
@@ -508,10 +608,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-016"
+      "id": "gg-016",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2082",
@@ -527,10 +633,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-017"
+      "id": "gg-017",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2145",
@@ -548,10 +660,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-018"
+      "id": "gg-018",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2239",
@@ -569,10 +687,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-019"
+      "id": "gg-019",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2313",
@@ -590,10 +714,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-020"
+      "id": "gg-020",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2432",
@@ -611,10 +741,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-021"
+      "id": "gg-021",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2445",
@@ -633,10 +769,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-022"
+      "id": "gg-022",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2470",
@@ -654,10 +796,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-023"
+      "id": "gg-023",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2561",
@@ -675,10 +823,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-024"
+      "id": "gg-024",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2561",
@@ -696,10 +850,26 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-025"
+      "id": "gg-025",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "uncertain",
+        "rule": "2a: TypeSafe re-ask, confidence >= 0.8",
+        "typesafe_tiebreak": {
+          "score": 1.91,
+          "confidence": 0.87,
+          "probabilities": {
+            "no": 0.04,
+            "uncertain": 0.01,
+            "yes": 0.95
+          },
+          "argmax": "yes"
+        }
+      }
     },
     {
       "document_id": "dataiku-test-2637",
@@ -717,10 +887,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-026"
+      "id": "gg-026",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2745",
@@ -738,10 +914,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-027"
+      "id": "gg-027",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-292",
@@ -760,10 +942,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-028"
+      "id": "gg-028",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2961",
@@ -781,10 +969,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-029"
+      "id": "gg-029",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2973",
@@ -802,10 +996,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-030"
+      "id": "gg-030",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3045",
@@ -823,10 +1023,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-031"
+      "id": "gg-031",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3274",
@@ -844,10 +1050,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-032"
+      "id": "gg-032",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "no",
+        "typesafe": "yes",
+        "rule": "1: TypeSafe in 2-of-3 majority"
+      }
     },
     {
       "document_id": "dataiku-test-3445",
@@ -865,10 +1077,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-033"
+      "id": "gg-033",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3687",
@@ -886,10 +1104,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-034"
+      "id": "gg-034",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3819",
@@ -907,10 +1131,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-035"
+      "id": "gg-035",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3826",
@@ -928,10 +1158,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-036"
+      "id": "gg-036",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-392",
@@ -947,10 +1183,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-037"
+      "id": "gg-037",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4089",
@@ -968,10 +1210,26 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-038"
+      "id": "gg-038",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "no",
+        "rule": "2b: TypeSafe low-confidence -> Opus + Codex majority",
+        "typesafe_tiebreak": {
+          "score": 1.81,
+          "confidence": 0.72,
+          "probabilities": {
+            "no": 0.09,
+            "uncertain": 0.01,
+            "yes": 0.9
+          },
+          "argmax": "yes"
+        }
+      }
     },
     {
       "document_id": "dataiku-test-4367",
@@ -987,10 +1245,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-039"
+      "id": "gg-039",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4439",
@@ -1008,10 +1272,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-040"
+      "id": "gg-040",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4490",
@@ -1029,10 +1299,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-041"
+      "id": "gg-041",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4518",
@@ -1050,10 +1326,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-042"
+      "id": "gg-042",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4542",
@@ -1071,10 +1353,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-043"
+      "id": "gg-043",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4724",
@@ -1092,10 +1380,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-044"
+      "id": "gg-044",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4813",
@@ -1114,10 +1408,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-045"
+      "id": "gg-045",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "no",
+        "typesafe": "yes",
+        "rule": "1: TypeSafe in 2-of-3 majority"
+      }
     },
     {
       "document_id": "dataiku-test-4821",
@@ -1133,10 +1433,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-046"
+      "id": "gg-046",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-5029",
@@ -1152,10 +1458,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-047"
+      "id": "gg-047",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-5123",
@@ -1171,10 +1483,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.9,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-048"
+      "id": "gg-048",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-543",
@@ -1192,10 +1510,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-049"
+      "id": "gg-049",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-660",
@@ -1213,10 +1537,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-050"
+      "id": "gg-050",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-699",
@@ -1234,10 +1564,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-051"
+      "id": "gg-051",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-775",
@@ -1255,10 +1591,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-052"
+      "id": "gg-052",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-95",
@@ -1277,10 +1619,16 @@
       ],
       "design_weight": 6.093023255813954,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-053"
+      "id": "gg-053",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1114",
@@ -1298,10 +1646,16 @@
       ],
       "design_weight": 7.0,
       "question": "Is the highlighted repeat the same organisation as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-054"
+      "id": "gg-054",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2858",
@@ -1317,10 +1671,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.0,
       "question": "Is the highlighted repeat the same organisation as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-055"
+      "id": "gg-055",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4725",
@@ -1336,10 +1696,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.0,
       "question": "Is the highlighted repeat the same organisation as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-056"
+      "id": "gg-056",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1506",
@@ -1357,10 +1723,16 @@
       ],
       "design_weight": 17.0,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-057"
+      "id": "gg-057",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3978",
@@ -1376,10 +1748,16 @@
       "ambiguity_signals": [],
       "design_weight": 2.0,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-058"
+      "id": "gg-058",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2890",
@@ -1395,10 +1773,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-059"
+      "id": "gg-059",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "no",
+        "typesafe": "yes",
+        "rule": "1: TypeSafe in 2-of-3 majority"
+      }
     },
     {
       "document_id": "dataiku-test-1775",
@@ -1414,10 +1798,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-060"
+      "id": "gg-060",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3680",
@@ -1433,10 +1823,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-061"
+      "id": "gg-061",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4865",
@@ -1452,10 +1848,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-062"
+      "id": "gg-062",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1028",
@@ -1473,10 +1875,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-063"
+      "id": "gg-063",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1126",
@@ -1494,10 +1902,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-064"
+      "id": "gg-064",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1189",
@@ -1513,10 +1927,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-065"
+      "id": "gg-065",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1192",
@@ -1532,10 +1952,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-066"
+      "id": "gg-066",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1195",
@@ -1551,10 +1977,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-067"
+      "id": "gg-067",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1313",
@@ -1570,10 +2002,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-068"
+      "id": "gg-068",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1418",
@@ -1591,10 +2029,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-069"
+      "id": "gg-069",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1514",
@@ -1610,10 +2054,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-070"
+      "id": "gg-070",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1534",
@@ -1631,10 +2081,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-071"
+      "id": "gg-071",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1555",
@@ -1650,10 +2106,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-072"
+      "id": "gg-072",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1580",
@@ -1669,10 +2131,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-073"
+      "id": "gg-073",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1588",
@@ -1688,10 +2156,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-074"
+      "id": "gg-074",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1631",
@@ -1707,10 +2181,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-075"
+      "id": "gg-075",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1664",
@@ -1726,10 +2206,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-076"
+      "id": "gg-076",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1670",
@@ -1745,10 +2231,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-077"
+      "id": "gg-077",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1793",
@@ -1764,10 +2256,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-078"
+      "id": "gg-078",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2021",
@@ -1783,10 +2281,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-079"
+      "id": "gg-079",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2023",
@@ -1802,10 +2306,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-080"
+      "id": "gg-080",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2138",
@@ -1823,10 +2333,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-081"
+      "id": "gg-081",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2237",
@@ -1842,10 +2358,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-082"
+      "id": "gg-082",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2282",
@@ -1861,10 +2383,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-083"
+      "id": "gg-083",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2341",
@@ -1882,10 +2410,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-084"
+      "id": "gg-084",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-258",
@@ -1901,10 +2435,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-085"
+      "id": "gg-085",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-26",
@@ -1920,10 +2460,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-086"
+      "id": "gg-086",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2657",
@@ -1939,10 +2485,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-087"
+      "id": "gg-087",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2717",
@@ -1958,10 +2510,26 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-088"
+      "id": "gg-088",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "uncertain",
+        "rule": "2b: TypeSafe low-confidence -> Opus + Codex majority",
+        "typesafe_tiebreak": {
+          "score": 1.25,
+          "confidence": 0.0,
+          "probabilities": {
+            "no": 0.37,
+            "uncertain": 0.02,
+            "yes": 0.61
+          },
+          "argmax": "yes"
+        }
+      }
     },
     {
       "document_id": "dataiku-test-2829",
@@ -1977,10 +2545,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-089"
+      "id": "gg-089",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2903",
@@ -1998,10 +2572,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-090"
+      "id": "gg-090",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2951",
@@ -2017,10 +2597,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-091"
+      "id": "gg-091",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2978",
@@ -2038,10 +2624,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-092"
+      "id": "gg-092",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2978",
@@ -2059,10 +2651,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-093"
+      "id": "gg-093",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-318",
@@ -2078,10 +2676,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-094"
+      "id": "gg-094",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3472",
@@ -2097,10 +2701,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-095"
+      "id": "gg-095",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3582",
@@ -2116,10 +2726,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-096"
+      "id": "gg-096",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3589",
@@ -2135,10 +2751,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-097"
+      "id": "gg-097",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3598",
@@ -2154,10 +2776,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-098"
+      "id": "gg-098",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3694",
@@ -2173,10 +2801,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-099"
+      "id": "gg-099",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3783",
@@ -2192,10 +2826,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-100"
+      "id": "gg-100",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3784",
@@ -2211,10 +2851,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-101"
+      "id": "gg-101",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3889",
@@ -2230,10 +2876,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-102"
+      "id": "gg-102",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3993",
@@ -2249,10 +2901,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-103"
+      "id": "gg-103",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-400",
@@ -2268,10 +2926,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-104"
+      "id": "gg-104",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4057",
@@ -2289,10 +2953,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-105"
+      "id": "gg-105",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4064",
@@ -2308,10 +2978,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-106"
+      "id": "gg-106",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-414",
@@ -2327,10 +3003,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-107"
+      "id": "gg-107",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4283",
@@ -2346,10 +3028,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-108"
+      "id": "gg-108",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4338",
@@ -2367,10 +3055,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-109"
+      "id": "gg-109",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4399",
@@ -2386,10 +3080,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-110"
+      "id": "gg-110",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4466",
@@ -2405,10 +3105,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-111"
+      "id": "gg-111",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4491",
@@ -2426,10 +3132,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-112"
+      "id": "gg-112",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4553",
@@ -2445,10 +3157,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-113"
+      "id": "gg-113",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4675",
@@ -2464,10 +3182,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-114"
+      "id": "gg-114",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-468",
@@ -2483,10 +3207,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-115"
+      "id": "gg-115",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4781",
@@ -2502,10 +3232,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-116"
+      "id": "gg-116",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4836",
@@ -2523,10 +3259,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-117"
+      "id": "gg-117",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4971",
@@ -2544,10 +3286,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-118"
+      "id": "gg-118",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-541",
@@ -2565,10 +3313,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-119"
+      "id": "gg-119",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-574",
@@ -2584,10 +3338,16 @@
       "ambiguity_signals": [],
       "design_weight": 10.883720930232558,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-120"
+      "id": "gg-120",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-660",
@@ -2605,10 +3365,26 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "uncertain",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-121"
+      "id": "gg-121",
+      "adjudication": {
+        "opus": "uncertain",
+        "codex": "uncertain",
+        "typesafe": "yes",
+        "rule": "2b: TypeSafe low-confidence -> Opus + Codex majority",
+        "typesafe_tiebreak": {
+          "score": 1.39,
+          "confidence": 0.08,
+          "probabilities": {
+            "no": 0.13,
+            "uncertain": 0.36,
+            "yes": 0.51
+          },
+          "argmax": "yes"
+        }
+      }
     },
     {
       "document_id": "dataiku-test-794",
@@ -2626,10 +3402,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-122"
+      "id": "gg-122",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-829",
@@ -2647,10 +3429,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-123"
+      "id": "gg-123",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-842",
@@ -2668,10 +3456,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-124"
+      "id": "gg-124",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-898",
@@ -2689,10 +3483,16 @@
       ],
       "design_weight": 5.3,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-125"
+      "id": "gg-125",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1698",
@@ -2708,10 +3508,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-126"
+      "id": "gg-126",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-12",
@@ -2727,10 +3533,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-127"
+      "id": "gg-127",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1157",
@@ -2748,10 +3560,16 @@
       ],
       "design_weight": 8.0,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-128"
+      "id": "gg-128",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2193",
@@ -2769,10 +3587,16 @@
       ],
       "design_weight": 8.0,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-129"
+      "id": "gg-129",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2470",
@@ -2788,10 +3612,16 @@
       "ambiguity_signals": [],
       "design_weight": 24.0,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-130"
+      "id": "gg-130",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1157",
@@ -2807,10 +3637,16 @@
       "ambiguity_signals": [],
       "design_weight": 25.0,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-131"
+      "id": "gg-131",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1633",
@@ -2826,10 +3662,16 @@
       "ambiguity_signals": [],
       "design_weight": 25.0,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-132"
+      "id": "gg-132",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3078",
@@ -2847,10 +3689,16 @@
       ],
       "design_weight": 3.0,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-133"
+      "id": "gg-133",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4192",
@@ -2866,10 +3714,16 @@
       "ambiguity_signals": [],
       "design_weight": 25.0,
       "question": "Is the highlighted repeat the same place as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-134"
+      "id": "gg-134",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1090",
@@ -2887,10 +3741,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-135"
+      "id": "gg-135",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1101",
@@ -2906,10 +3766,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-136"
+      "id": "gg-136",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1181",
@@ -2925,10 +3791,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-137"
+      "id": "gg-137",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1297",
@@ -2946,10 +3818,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-138"
+      "id": "gg-138",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1331",
@@ -2965,10 +3843,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-139"
+      "id": "gg-139",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1336",
@@ -2984,10 +3868,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-140"
+      "id": "gg-140",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1664",
@@ -3003,10 +3893,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-141"
+      "id": "gg-141",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1698",
@@ -3022,10 +3918,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-142"
+      "id": "gg-142",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1735",
@@ -3041,10 +3943,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-143"
+      "id": "gg-143",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1825",
@@ -3060,10 +3968,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-144"
+      "id": "gg-144",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1898",
@@ -3081,10 +3995,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-145"
+      "id": "gg-145",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2028",
@@ -3102,10 +4022,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-146"
+      "id": "gg-146",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2032",
@@ -3121,10 +4047,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-147"
+      "id": "gg-147",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2082",
@@ -3142,10 +4074,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-148"
+      "id": "gg-148",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2193",
@@ -3161,10 +4099,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-149"
+      "id": "gg-149",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2210",
@@ -3180,10 +4124,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-150"
+      "id": "gg-150",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2247",
@@ -3199,10 +4149,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-151"
+      "id": "gg-151",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2376",
@@ -3220,10 +4176,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-152"
+      "id": "gg-152",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2451",
@@ -3239,10 +4201,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-153"
+      "id": "gg-153",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2537",
@@ -3258,10 +4226,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-154"
+      "id": "gg-154",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2609",
@@ -3277,10 +4251,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-155"
+      "id": "gg-155",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2637",
@@ -3296,10 +4276,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-156"
+      "id": "gg-156",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2657",
@@ -3315,10 +4301,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-157"
+      "id": "gg-157",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2856",
@@ -3336,10 +4328,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-158"
+      "id": "gg-158",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-2950",
@@ -3357,10 +4355,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-159"
+      "id": "gg-159",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3109",
@@ -3376,10 +4380,26 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "no",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-160"
+      "id": "gg-160",
+      "adjudication": {
+        "opus": "no",
+        "codex": "no",
+        "typesafe": "uncertain",
+        "rule": "2a: TypeSafe re-ask, confidence >= 0.8",
+        "typesafe_tiebreak": {
+          "score": 0.02,
+          "confidence": 0.97,
+          "probabilities": {
+            "no": 0.98,
+            "uncertain": 0.01,
+            "yes": 0.01
+          },
+          "argmax": "no"
+        }
+      }
     },
     {
       "document_id": "dataiku-test-3131",
@@ -3395,10 +4415,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-161"
+      "id": "gg-161",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-328",
@@ -3414,10 +4440,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-162"
+      "id": "gg-162",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3339",
@@ -3435,10 +4467,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-163"
+      "id": "gg-163",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3387",
@@ -3456,10 +4494,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-164"
+      "id": "gg-164",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3528",
@@ -3475,10 +4519,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-165"
+      "id": "gg-165",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3591",
@@ -3496,10 +4546,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-166"
+      "id": "gg-166",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3687",
@@ -3517,10 +4573,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-167"
+      "id": "gg-167",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3710",
@@ -3538,10 +4600,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-168"
+      "id": "gg-168",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3825",
@@ -3557,10 +4625,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-169"
+      "id": "gg-169",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3826",
@@ -3576,10 +4650,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-170"
+      "id": "gg-170",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3958",
@@ -3595,10 +4675,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-171"
+      "id": "gg-171",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4043",
@@ -3614,10 +4700,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-172"
+      "id": "gg-172",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4061",
@@ -3635,10 +4727,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-173"
+      "id": "gg-173",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4105",
@@ -3656,10 +4754,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-174"
+      "id": "gg-174",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4266",
@@ -3677,10 +4781,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-175"
+      "id": "gg-175",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4325",
@@ -3698,10 +4808,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-176"
+      "id": "gg-176",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4391",
@@ -3717,10 +4833,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-177"
+      "id": "gg-177",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4452",
@@ -3738,10 +4860,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-178"
+      "id": "gg-178",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4475",
@@ -3759,10 +4887,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-179"
+      "id": "gg-179",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4528",
@@ -3780,10 +4914,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-180"
+      "id": "gg-180",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4566",
@@ -3801,10 +4941,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-181"
+      "id": "gg-181",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4784",
@@ -3823,10 +4969,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-182"
+      "id": "gg-182",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-482",
@@ -3844,10 +4996,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-183"
+      "id": "gg-183",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4864",
@@ -3863,10 +5021,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-184"
+      "id": "gg-184",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4864",
@@ -3884,10 +5048,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-185"
+      "id": "gg-185",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4974",
@@ -3905,10 +5075,16 @@
       ],
       "design_weight": 5.84,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-186"
+      "id": "gg-186",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4981",
@@ -3924,10 +5100,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-187"
+      "id": "gg-187",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-5101",
@@ -3943,10 +5125,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-188"
+      "id": "gg-188",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-816",
@@ -3962,10 +5150,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-189"
+      "id": "gg-189",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-862",
@@ -3981,10 +5175,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "no",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-190"
+      "id": "gg-190",
+      "adjudication": {
+        "opus": "no",
+        "codex": "no",
+        "typesafe": "no",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-890",
@@ -4000,10 +5200,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-191"
+      "id": "gg-191",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-955",
@@ -4019,10 +5225,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-192"
+      "id": "gg-192",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-964",
@@ -4038,10 +5250,16 @@
       "ambiguity_signals": [],
       "design_weight": 11.852941176470589,
       "question": "Is the highlighted repeat the same person as the labelled value?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-193"
+      "id": "gg-193",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-1996",
@@ -4057,10 +5275,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-194"
+      "id": "gg-194",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-202",
@@ -4076,10 +5300,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-195"
+      "id": "gg-195",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3122",
@@ -4095,10 +5325,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-196"
+      "id": "gg-196",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "no",
+        "typesafe": "yes",
+        "rule": "1: TypeSafe in 2-of-3 majority"
+      }
     },
     {
       "document_id": "dataiku-test-3837",
@@ -4114,10 +5350,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-197"
+      "id": "gg-197",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-3962",
@@ -4133,10 +5375,16 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-198"
+      "id": "gg-198",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "yes",
+        "typesafe": "yes",
+        "rule": "unanimous model consensus"
+      }
     },
     {
       "document_id": "dataiku-test-4528",
@@ -4152,10 +5400,26 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "no",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-199"
+      "id": "gg-199",
+      "adjudication": {
+        "opus": "no",
+        "codex": "no",
+        "typesafe": "yes",
+        "rule": "2a: TypeSafe re-ask, confidence >= 0.8",
+        "typesafe_tiebreak": {
+          "score": 0.12,
+          "confidence": 0.81,
+          "probabilities": {
+            "no": 0.93,
+            "uncertain": 0.01,
+            "yes": 0.06
+          },
+          "argmax": "no"
+        }
+      }
     },
     {
       "document_id": "dataiku-test-4703",
@@ -4171,10 +5435,28 @@
       "ambiguity_signals": [],
       "design_weight": 1.0,
       "question": "Is the highlighted repeat the same value used as the same personal datum?",
-      "verdict": null,
+      "verdict": "yes",
       "second_adjudicator_verdict": null,
       "note": null,
-      "id": "gg-200"
+      "id": "gg-200",
+      "adjudication": {
+        "opus": "yes",
+        "codex": "no",
+        "typesafe": "yes",
+        "rule": "1: TypeSafe in 2-of-3 majority"
+      }
     }
-  ]
+  ],
+  "adjudication": {
+    "method": "Three model judges (Claude Opus drafted first; Codex and TypeSafe judged afterwards, their files sealed by SHA-256 before reading the Opus proposals). 188 cards unanimous. The 12 contested cards were settled by a rule fixed before any re-ask: where TypeSafe sided with a 2-of-3 majority, the majority stands; where TypeSafe was the lone dissent, one fresh TypeSafe Score call (jev-latest, levels no / uncertain / yes, the other two judges' reasons as context) decides at confidence >= 0.8, otherwise the Opus + Codex majority stands. The user confirmed 10 consensus cards by hand; every confirmation matched.",
+    "delegation": "User 2026-09-27, asked how to finish the 12 unclicked contested cards: \"Weren't you supposed to use typesafe ai\".",
+    "blinding_limitation": "The Codex judge's brief disclosed the Opus aggregate counts and its four no/uncertain card IDs, not the reasons, before judging. TypeSafe saw only the rubric and the card contexts.",
+    "judge_files_sha256": {
+      "codex": "dd0c86fcb9f1b4bd6e795c6902e1d9deaf4c43c1368eb7596d590788620e5a31",
+      "typesafe": "ab34688625efae6c3830942ae7002f99cea89c5fd56f8f60196c5432a27b9df3"
+    },
+    "tiebreak_results_sha256": "780a6a5f589f3154a00af1f08179ea650728317d858b0fed9d07784ad21f2634",
+    "document_text": "Judge reasons and tiebreak prompts quote document text, so they stay out of this file; per-card reasons are in the audit report. Verdict labels, rules and tiebreak probabilities only.",
+    "trace_note": "The trace this sample was drawn from (sha256 e715a7e9...) is no longer on disk, so the draw cannot be regenerated today. All 200 entries were re-verified against the pinned Dataiku parquet (sha256 916c6379...): the attributed span is gold with the entry's label, the candidate's trimmed bytes equal the gold value, and the candidate overlaps no gold."
+  }
 }

@@ -57,6 +57,25 @@ ROWS = [
 ]
 
 
+def audit_sample(failures: int, bunched: int = 0) -> dict:
+    """200 entries, one per document except the first `bunched` entries,
+    which share one document; the first `failures` entries answer no."""
+    entries = []
+    for index in range(200):
+        document = "doc-bunch" if index < bunched else f"doc-{index}"
+        entries.append(
+            {
+                "id": f"gg-{index + 1:03d}",
+                "document_id": document,
+                "byte_start": 0,
+                "byte_end": 5,
+                "design_weight": 8.0,
+                "verdict": "no" if index < failures else "yes",
+            }
+        )
+    return {"entries": entries}
+
+
 class ReplayTests(unittest.TestCase):
     def test_replay_keeps_v2_numbers_and_reports_the_column(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -197,6 +216,37 @@ class StatisticsTests(unittest.TestCase):
         strata[1]["sampled"] = 2
         entries += [{"design_weight": 9.0}, {"design_weight": 9.0}]
         evidence.check_design_weights(entries, strata, 19)
+
+    def test_acceptance_passes_at_four_and_fails_at_five(self) -> None:
+        result = evidence.acceptance(audit_sample(failures=4))
+        self.assertTrue(result["passes"])
+        self.assertEqual(result["failures"], 4)
+        self.assertEqual(result["documents_with_failure"], 4)
+        self.assertLessEqual(result["cluster_design_effect"], 1.0)
+        self.assertEqual(result["cluster_adjusted_upper_bound"], result["one_sided_95_upper_bound"])
+        self.assertFalse(evidence.acceptance(audit_sample(failures=5))["passes"])
+
+    def test_uncertain_counts_as_a_failure(self) -> None:
+        sample = audit_sample(failures=4)
+        sample["entries"][10]["verdict"] = "uncertain"
+        result = evidence.acceptance(sample)
+        self.assertEqual(result["failures"], 5)
+        self.assertFalse(result["passes"])
+
+    def test_failures_bunched_in_one_document_widen_the_bound(self) -> None:
+        # Four failures in one twelve-entry document: the count passes, the
+        # clustered bound does not.
+        result = evidence.acceptance(audit_sample(failures=4, bunched=12))
+        self.assertEqual(result["failures"], 4)
+        self.assertGreater(result["cluster_design_effect"], 1.0)
+        self.assertGreater(result["cluster_adjusted_upper_bound"], evidence.MAX_UPPER_BOUND)
+        self.assertFalse(result["passes"])
+
+    def test_a_missing_verdict_refuses_to_score(self) -> None:
+        sample = audit_sample(failures=0)
+        sample["entries"][7]["verdict"] = None
+        with self.assertRaisesRegex(SystemExit, "gg-008"):
+            evidence.acceptance(sample)
 
     def test_questions_are_label_appropriate(self) -> None:
         self.assertIn("same person", evidence.question("SURNAME"))
