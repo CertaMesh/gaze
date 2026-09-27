@@ -458,6 +458,7 @@ def main() -> int:
         ).strip()),
         "gaze_crates_tree": crates_tree("HEAD"),
         "runner_sha256": digest_file(BENCH / "run_no_opf_benchmark.py"),
+        "dataset_loader_sha256": digest_file(BENCH / "dataiku_en_de_gaze_bench.py"),
         "latest_release_at_measurement": {
             key: latest_release[key] for key in ("version", "scorecard_sha256")
         },
