@@ -35,6 +35,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **All-caps, lower-case and hyphenated copies of a header name no longer ship
+  raw** (solo todo #3897). Three stages leaked. The repeat-value sweep matched
+  a cue-found `Herr Tobias Brenner` only as a whole or as title-case parts, so
+  `TOBIAS BRENNER` shipped raw; runs of two or more adjacent name parts now
+  match in any case when one part is distinctive, and parts also sweep in
+  upper case. `email.header.name` took only ASCII title-case parts, so
+  `From: Jorunn Vasquez-Ellery <…>` found no rule value and `-Elle` shipped raw
+  in the header; parts may now be all caps, carry diacritics, or join with a
+  hyphen or apostrophe. NER spans stopped inside words (`jorunn vas`); name,
+  location and organization spans now grow to whole words, and name spans and
+  swept name copies over hyphen- or apostrophe-glued parts. Regex
+  `pattern_template` values can now use `\p{…}` Unicode classes. Benchmark
+  gain gate (setup policy, seed 20260710): leaked bytes v2 −151, v1 −210,
+  false-positive bytes +95, zero refusals, exact restore unchanged.
+
 - **Australian state plus postcode addresses are tokenized deterministically**
   (solo todo #3880). `postal.au` protects the state abbreviation and four-digit
   postcode together whenever `en-AU` is in the effective locale chain, so
