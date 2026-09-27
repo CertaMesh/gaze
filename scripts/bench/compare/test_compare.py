@@ -14,6 +14,10 @@ def test_native_character_offsets_become_utf8_bytes() -> None:
     assert spans == [compare.score.Span(3, 24, "EMAIL_ADDRESS")]
 
 
+def test_published_paths_do_not_expose_home_directory() -> None:
+    assert compare.portable_path(Path.home() / ".local" / "bin" / "python") == "$HOME/.local/bin/python"
+
+
 def test_pack_requires_byte_aligned_gold_and_unique_ids(tmp_path: Path) -> None:
     row = {
         "id": "synthetic-1", "partition": "sealed", "layer": "V",
