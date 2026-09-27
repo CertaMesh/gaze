@@ -24,6 +24,7 @@ repository root.
 | `scripts/bench/gaze-pipeline-bench.py` | Generates the end-to-end Gaze pipeline benchmark snapshot. | Maintainers refreshing benchmark evidence. |
 | `scripts/bench/opf-bench-scorer.py` | Scores OpenAI Privacy Filter direct, observer-residual, and latency cells. | Maintainers running safety-net benchmarks. |
 | `scripts/bench/ner-bench-scorer.py` | Runs the config-driven multi-model NER leaderboard. | Maintainers evaluating NER candidates. |
+| `scripts/bench/clean_scaling.py` | Times `gaze clean` on growing synthetic German inputs and, with `--compare`, diffs two binaries' outputs and restores. | Maintainers checking that runtime grows linearly with input size. |
 | `scripts/bench/ner-warm-latency.py` | Measures warm persistent-model latency for pinned NER candidates. | Maintainers evaluating low-latency NER options. |
 | `scripts/bench/safety_net_bench_lib.py` | Shared fixtures, scoring, and snapshot helpers for benchmark scripts. | Other scripts in `scripts/bench/`. |
 | `scripts/bench/onnx-token-classification-runner.py` | Generic ONNX Runtime token-classification subprocess wrapper. | NER leaderboard and warm-latency scripts. |

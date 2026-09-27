@@ -72,7 +72,10 @@ def clean(binary: str, text: str, locale: str, policy: str | None) -> tuple[floa
 def restore(binary: str, output: dict) -> str:
     request = json.dumps({"session_blob": output["session_blob"], "text": output["clean_text"]})
     done = subprocess.run(
-        [binary, "restore"], input=request.encode(), capture_output=True, check=False
+        [binary, "restore", "--max-bytes", str(len(request.encode()) + 1)],
+        input=request.encode(),
+        capture_output=True,
+        check=False,
     )
     if done.returncode != 0:
         sys.exit(f"{binary} restore failed ({done.returncode}): {done.stderr.decode()[:400]}")
