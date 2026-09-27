@@ -29,6 +29,16 @@ The [v0.15.1 release benchmark](docs/reference/benchmarks/README.md#current-rele
 
 <!-- BEGIN GENERATED: readme-chart -->
 
+Leaked PII bytes per setup, scored labels v3, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
+
+```mermaid
+xychart-beta horizontal
+    title "Leaked PII bytes, scored labels v3 - lower is better"
+    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)"]
+    y-axis "Leaked PII bytes" 0 --> 100000
+    bar [13319, 22144, 23428, 90253]
+```
+
 Leaked PII bytes per setup, scored labels v2, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
 
 ```mermaid
@@ -51,7 +61,7 @@ xychart-beta horizontal
 
 <!-- END GENERATED: readme-chart -->
 
-No setup refused a document, so all 2,910 processed documents are also the common set. The v0.15 default restores every document exactly; v0.14.0's Kiji net did not (78.4%). v0.15.1 scores the same as v0.15.0 here, so they share one row: its card fix covers cards that pass the Luhn check, and most of this corpus's card numbers do not. Against v0.14.0's default, the `gaze setup` default leaks 40% fewer PII bytes under v2 (22% under v1) with 82% fewer false-positive bytes; the [benchmark history](docs/reference/benchmarks/README.md#release-history) has every measured arm. The headline is scored-label contract v2, the labels Gaze commits to detect (PASSWORD and SECURITYTOKEN are out of contract, gold 123,621 B); v1 scores every original corpus label (gold 130,282 B) and stays beside it for comparison with earlier releases. v0.14.0's v2 numbers come from its own benchmark binary scored by today's harness, which reproduces its committed v1 numbers exactly.
+No setup refused a document, so all 2,910 processed documents are also the common set. The v0.15 default restores every document exactly; v0.14.0's Kiji net did not (78.4%). v0.15.1 scores the same as v0.15.0 here, so they share one row: its card fix covers cards that pass the Luhn check, and most of this corpus's card numbers do not. Against v0.14.0's default, the `gaze setup` default leaks 40% fewer PII bytes under v3 and v2 (22% under v1) with 88% fewer false-positive bytes under v3 (82% under v2); the [benchmark history](docs/reference/benchmarks/README.md#release-history) has every measured arm. The headline is scored-label contract v3: the labels Gaze commits to detect (PASSWORD and SECURITYTOKEN are out of contract, gold 123,621 B), with a protected, unlabelled repeat of a labelled value credited instead of counted as a false positive ([audited](docs/reference/benchmarks/README.md#gold-gap-protection-contract-v3)); its leaked bytes are v2's. v2 (same labels, no credit) and v1 (every original corpus label, gold 130,282 B) stay beside it. v0.14.0's and v0.15.0's v3 numbers come from observation records of their own benchmark binaries, captured with today's harness; each record reproduces that release's committed v1 and v2 numbers.
 
 **Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw). Names and other values a recognizer found once are not carried to their other occurrences, so without NER a name repeated in prose can pass raw, and UK national-format phone numbers are not yet detected.
 

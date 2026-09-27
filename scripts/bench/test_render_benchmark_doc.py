@@ -846,7 +846,7 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         # Each contract gets its own section, headline first; neither borrows
         # the other contract's row.
         v2, v1 = charts.split("#### Scored labels v1", 1)
-        self.assertTrue(v2.startswith("#### Scored labels v2 (headline"), v2[:60])
+        self.assertTrue(v2.startswith("#### Scored labels v2 (the labels"), v2[:60])
         self.assertIn("Not measured under scored labels v2: v0.14.0.", v2)
         self.assertIn("Not measured under scored labels v1: v0.15.0.", v1)
         self.assertEqual(charts.count("One measured release so far (1 point)"), 2)
@@ -886,8 +886,8 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         label_re = re.compile(r'^"(.+) \((\d+\.\d)%\)"$')
         title_re = re.compile(r"scored labels v(\d+)")
         for path, expected_axes in (
-            (render.DEFAULT_README, 2),  # one comparison chart per contract
-            (render.DEFAULT_DOC, 4),  # comparison + leaked trend, per contract
+            (render.DEFAULT_README, 3),  # one comparison chart per contract (v3, v2, v1)
+            (render.DEFAULT_DOC, 6),  # comparison + leaked trend, per contract
         ):
             contract, labelled = None, []
             for line in path.read_text(encoding="utf-8").splitlines():
@@ -1755,58 +1755,129 @@ def with_v2(row: dict, leaked: int = 13319) -> dict:
     return row
 
 
+def v3_scorecard(row: dict, leaked: int = 13319, credited: int = 1000) -> dict:
+    """The row re-scored under contract v3: v2's numbers plus a gold-gap credit."""
+    value = v2_scorecard(row, leaked)
+    value["scoring"]["scored_label_contract"].update(
+        id="scored-labels-v3", version=3, file="docs/reference/benchmarks/scored-labels-v3.json"
+    )
+    for run in value["runs"]:
+        metrics = run["metrics"]
+        fp = metrics["utf8_bytes"]["false_positive"]
+        metrics["gold_gap"] = {
+            "status": "diagnostic",
+            "gold_gap_protected_bytes": credited,
+            "gold_gap_protected_bytes_by_label": {"FIRSTNAME": credited},
+            "gold_gap_protected_ranges": 1,
+            "gold_gap_protected_ranges_by_label": {"FIRSTNAME": 1},
+            "false_positive_bytes_after_gold_gap": fp - credited,
+            "adjusted_precision": 0.9,
+        }
+    return value
+
+
+def with_v3(row: dict, leaked: int = 13319) -> dict:
+    name = render.contract_scorecard_name(row["version"], 3)
+    row.setdefault("contract_results", []).append(
+        render.contract_result_from_scorecard(
+            v3_scorecard(row, leaked), row, scorecard_filename=name, scorecard_sha256="5" * 64
+        )
+    )
+    return row
+
+
 class HeadlineContractTest(unittest.TestCase):
-    """Contract v2 leads every leak headline; v1 stays beside it, labelled."""
+    """Contract v3 leads every leak headline; v2 and v1 stay beside it, labelled."""
 
     def value(self) -> dict:
         return releases(
             release("v0.14.0", 25179),
-            with_v2(release("v0.15.0")),
-            with_v2(release("v0.15.1")),
+            with_v3(with_v2(release("v0.15.0"))),
+            with_v3(with_v2(release("v0.15.1"))),
         )
 
-    def test_the_headline_contract_is_v2(self):
-        self.assertEqual(render.HEADLINE_CONTRACT, 2)
+    def test_the_headline_contract_is_v3(self):
+        self.assertEqual(render.HEADLINE_CONTRACT, 3)
 
-    def test_current_release_leads_with_v2(self):
+    def test_current_release_leads_with_v3(self):
         current = render.render_current_release(self.value())
-        v2 = current.index("**Scored labels v2 (headline")
+        v3 = current.index("**Scored labels v3 (headline")
+        v2 = current.index("**Scored labels v2 (the labels Gaze commits to detect, without")
         v1 = current.index("**Scored labels v1 (all original gold labels")
+        self.assertLess(v3, v2)
         self.assertLess(v2, v1)
-        self.assertIn("Gold PII bytes: 123,621.", current[v2:v1])
-        self.assertIn("| 13,319 |", current[v2:v1])
+        self.assertIn("Gold PII bytes: 123,621.", current[v3:v2])
+        # Same leak under v3 and v2; v3's false positives are after the credit.
+        self.assertIn("| 13,319 |", current[v3:v2])
+        self.assertIn("| 4,426 | 1,000 |", current[v3:v2])
+        self.assertIn(render.GOLD_GAP_NOTE, current[v3:v2])
+        self.assertIn("| 5,426 |", current[v2:v1])
+        self.assertNotIn("Gold-gap credited", current[v2:])
         self.assertIn("| 19,556 |", current[v1:])
-        self.assertIn(
-            "| Scorecard, scored labels v2 | "
-            "[`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json) |",
-            current,
-        )
+        for version in (2, 3):
+            name = f"scorecard-v0.15.1-scored-labels-v{version}.json"
+            self.assertIn(f"| Scorecard, scored labels v{version} | [`{name}`]({name}) |", current)
 
-    def test_charts_lead_with_v2_and_name_the_contract(self):
+    def test_charts_lead_with_v3_and_name_the_contract(self):
         charts = render.render_charts(self.value())
-        self.assertTrue(charts.startswith("#### Scored labels v2 (headline"), charts[:80])
+        self.assertTrue(charts.startswith("#### Scored labels v3 (headline"), charts[:80])
         titles = [line.strip() for line in charts.splitlines() if line.strip().startswith("title ")]
-        self.assertIn("scored labels v2", titles[0])
+        self.assertIn("scored labels v3", titles[0])
         self.assertTrue(all("scored labels v" in title for title in titles), titles)
-        v2, v1 = charts.split("#### Scored labels v1", 1)
+        v3, rest = charts.split("#### Scored labels v2", 1)
+        v2, v1 = rest.split("#### Scored labels v1", 1)
+        self.assertIn("bar [13319]", v3)
+        self.assertIn("Not measured under scored labels v3: v0.14.0.", v3)
         self.assertIn("bar [13319]", v2)
-        self.assertIn("Not measured under scored labels v2: v0.14.0.", v2)
         self.assertIn("bar [19556, 25179]", v1)
 
-    def test_readme_chart_leads_with_v2(self):
-        chart = render.render_readme_chart(self.value())
-        self.assertLess(chart.index("scored labels v2"), chart.index("scored labels v1"))
+    def test_a_v3_row_needs_gold_gap_on_every_arm(self):
+        # Missing everywhere would print v2's false positives under the v3
+        # heading; missing on one arm cannot fill the credit column. Both are
+        # refused before anything renders.
+        def partial(arms):
+            [block] = arms.values()
+            arms["pass2-ner"] = {k: v for k, v in block.items() if k != "gold_gap"}
 
-    def test_history_lists_v2_columns_first_and_marks_unmeasured_rows(self):
+        for name, strip in (
+            ("missing", lambda arms: [arm.pop("gold_gap") for arm in arms.values()]),
+            ("partial", partial),
+        ):
+            with self.subTest(name):
+                value = self.value()
+                result = value["releases"][-1]["contract_results"][-1]
+                self.assertEqual(result["scored_label_contract"]["version"], 3)
+                strip(result["arms"])
+                with self.assertRaisesRegex(render.RenderError, "v3 and later, on every arm"):
+                    render.validate_history(value)
+        value = self.value()
+        arm = next(iter(value["releases"][-1]["contract_results"][0]["arms"].values()))
+        arm["gold_gap"] = copy.deepcopy(
+            next(iter(value["releases"][-1]["contract_results"][-1]["arms"].values()))["gold_gap"]
+        )
+        with self.assertRaisesRegex(render.RenderError, "only there"):
+            render.validate_history(value)
+
+    def test_readme_chart_leads_with_v3(self):
+        chart = render.render_readme_chart(self.value())
+        self.assertLess(chart.index("scored labels v3"), chart.index("scored labels v1"))
+
+    def test_history_lists_v3_columns_first_and_marks_unmeasured_rows(self):
         lines = render.render_history(self.value()).splitlines()
         header = lines[0]
+        self.assertLess(
+            header.index("Leaked PII bytes, all processed, v3"),
+            header.index("Leaked PII bytes, all processed, v2"),
+        )
         self.assertLess(
             header.index("Leaked PII bytes, all processed, v2"),
             header.index("Leaked PII bytes, all processed, v1"),
         )
         old, new = lines[2], lines[3]
-        self.assertIn("| *not measured* | *not measured* | *not measured* | 25,179 |", old)
-        self.assertIn("| 13,319 | 13,319 | 5,426 | 19,556 | 19,556 | 5,426 |", new)
+        self.assertIn("| *not measured* | *not measured* | *not measured* " * 2 + "| 25,179 |", old)
+        self.assertIn(
+            "| 13,319 | 13,319 | 4,426 | 13,319 | 13,319 | 5,426 | 19,556 | 19,556 | 5,426 |", new
+        )
         for version in ("v0.15.0", "v0.15.1"):
             name = f"scorecard-{version}-scored-labels-v2.json"
             self.assertIn(f"[`{name}`]({name})", new)
@@ -1914,7 +1985,7 @@ class HeadlineContractTest(unittest.TestCase):
             [result] = stored["releases"][0]["contract_results"]
             self.assertEqual(result["scored_label_contract"]["version"], 2)
             self.assertEqual(result["arms"]["policy-file"]["surviving_pii_utf8_bytes"], 13319)
-            self.assertIn("#### Scored labels v2 (headline", doc.read_text(encoding="utf-8"))
+            self.assertIn("#### Scored labels v2 (", doc.read_text(encoding="utf-8"))
             self.assertEqual(render.main(argv + ["--check"]), 0)
             card.unlink()
             self.assertEqual(render.main(argv + ["--check"]), 2)

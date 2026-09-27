@@ -1,11 +1,14 @@
 """Contract replay must depend on observations and retain no document values."""
 
 import gzip
+import io
+import contextlib
 import copy
 import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -54,6 +57,106 @@ class RecordReplayTests(unittest.TestCase):
             del broken["scoring"]["scored_label_contract"]["id"]
             with self.assertRaisesRegex(agentic.LayerError, "kiji_contract"):
                 agentic.gate(card, broken)
+
+    def test_committed_v3_rows_rebuild_from_their_records(self):
+        """Every v3 headline number is a re-score of a committed record."""
+        bench = ROOT / "docs/reference/benchmarks"
+        history = json.loads((bench / "release-history.json").read_text(encoding="utf-8"))
+        v3 = score.load_scored_label_contract(
+            bench / "scored-labels-v3.json",
+            display_path="docs/reference/benchmarks/scored-labels-v3.json",
+        )
+        records = {
+            "v0.14.0": "observations-v0.14.0.jsonl.gz",
+            "v0.15.0": "observations-v0.15.0.jsonl.gz",
+            "v0.15.1": "observations-v0.15.1.jsonl.gz",
+        }
+        for release in history["releases"]:
+            [result] = [
+                item for item in release.get("contract_results", ())
+                if item["scored_label_contract"]["version"] == 3
+            ]
+            path = bench / records[release["version"]]
+            pointer = result.get("observation_record") or release["observation_record"]
+            self.assertEqual(pointer["file"], path.name)
+            self.assertEqual(score.sha256_file(path), pointer["sha256"])
+            committed = json.loads((bench / result["scorecard"]).read_text(encoding="utf-8"))
+            self.assertEqual(score.sha256_file(bench / result["scorecard"]), result["scorecard_sha256"])
+            self.assertEqual(record.rescore(path, v3), committed, release["version"])
+
+    def test_later_captures_reproduce_their_releases_committed_numbers(self):
+        """v0.15.0 and v0.14.0 were captured on 2026-09-27 with that day's harness.
+
+        Every run field matches the committed v1 and v2 scorecards except
+        `validator_recall_by_label`, which the harness's probe computes, not the
+        release, and which grew since those runs: v0.15.0 differs only in
+        credit-card shape-only recall (99 -> 124 of 126); v0.14.0's original v1
+        run also lacks the `production_recall_by_gold_validity` sub-blocks and
+        differs in shape-only recall for cards (94 -> 124), IBAN, phone and tax
+        numbers and in card validator-backed recall. Against v0.14.0's v2 run
+        and its v1 calibration, captured with a later harness, the block
+        matches. The document renders validator recall only from the current
+        release's own scorecard, so no displayed number depends on it.
+        """
+        bench = ROOT / "docs/reference/benchmarks"
+        contracts = (bench / "scored-labels-v2.json", bench / "scored-labels-v3.json")
+        for version, v1, probe_differs in (
+            ("v0.15.0", "scorecard-v0.15.0.json", {"v1": True, "v2": True}),
+            ("v0.14.0", "scorecard-v0.14.0.json", {"v1": True, "v2": False}),
+            ("v0.14.0", "scorecard-v0.14.0-rescore-calibration-v1.json", {"v1": False, "v2": False}),
+        ):
+            with self.subTest(version=version, v1=v1):
+                result = proof.verify_capture(
+                    bench / f"observations-{version}.jsonl.gz",
+                    bench / v1,
+                    bench / f"scorecard-{version}-scored-labels-v2.json",
+                    *contracts,
+                    ignore=["validator_recall_by_label"],
+                )
+                self.assertEqual(
+                    result["ignored_run_fields_differ"], {"validator_recall_by_label": probe_differs}
+                )
+
+    def test_capture_mode_compares_runs_and_reports_skipped_fields(self):
+        bench = ROOT / "docs/reference/benchmarks"
+        args = (
+            bench / "observations-v0.15.1.jsonl.gz",
+            bench / "scorecard-v0.15.1.json",
+            bench / "scorecard-v0.15.1-scored-labels-v2.json",
+            bench / "scored-labels-v2.json",
+            bench / "scored-labels-v3.json",
+        )
+        result = proof.verify_capture(*args, ignore=["validator_recall_by_label"])
+        self.assertTrue(result["v1_runs_match"] and result["v2_runs_match"])
+        # Only a harness-computed field may be skipped: skipping the release's
+        # own results would make any record pass.
+        for field in ("metrics", "pipeline_contract"):
+            with self.assertRaisesRegex(record.RecordError, "harness-computed"):
+                proof.verify_capture(*args, ignore=[field])
+        argv = ["verify_record_scorecards.py", str(args[0]), "--v1", str(args[1]),
+                "--v2", str(args[2]), "--v2-contract", str(args[3]),
+                "--v3-contract", str(args[4]), "--capture", "--ignore-run-field", "metrics"]
+        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as refused:
+                proof.main()
+        self.assertEqual(refused.exception.code, 2)
+        self.assertEqual(
+            result["ignored_run_fields_differ"],
+            {"validator_recall_by_label": {"v1": False, "v2": False}},
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            changed = json.loads(args[1].read_text(encoding="utf-8"))
+            changed["runs"][0]["metrics"]["utf8_bytes"]["leaked"] += 1
+            v1 = Path(tmp) / "v1.json"
+            v1.write_text(json.dumps(changed), encoding="utf-8")
+            with self.assertRaisesRegex(record.RecordError, "v1_runs_match': False"):
+                proof.verify_capture(args[0], v1, *args[2:])
+            # A skipped field still reports its difference instead of hiding it.
+            changed = json.loads(args[1].read_text(encoding="utf-8"))
+            changed["runs"][0]["validator_recall_by_label"] = {}
+            v1.write_text(json.dumps(changed), encoding="utf-8")
+            result = proof.verify_capture(args[0], v1, *args[2:], ignore=["validator_recall_by_label"])
+            self.assertEqual(result["ignored_run_fields_differ"]["validator_recall_by_label"]["v1"], True)
 
     def setUp(self):
         email = "alice@example.invalid"

@@ -121,6 +121,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The benchmark headline is scored-label contract v3** (solo todo #3696,
+  after the gold-gap audit passed). Leaked bytes are unchanged from v2; false
+  positives and byte precision are after the audited gold-gap credit, which
+  gets its own column. For the `gaze setup` default (v0.15.0 and v0.15.1):
+  13,319 leaked bytes, 18,488 false-positive bytes (v2: 30,073), byte
+  precision 0.856 (v2: 0.786). v2 and v1 stay beside it, and the merge and
+  release gates still read v2 and v1. v0.15.0's and v0.14.0's v3 numbers come
+  from new observation records of their own benchmark binaries; each record
+  reproduces the release's committed v1 and v2 results
+  (`verify_record_scorecards.py --capture`).
+
 - **[bundle-tokenization-drift] `core` excludes documentation IPs.** The
   no-policy snapshot drops RFC 5737 IPv4 and RFC 3849 IPv6 detections; nearby
   non-documentation addresses still tokenize and restore.

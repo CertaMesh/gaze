@@ -103,12 +103,15 @@ labels with a reason; it puts the credential labels `PASSWORD` and
 `SECURITYTOKEN` out of contract (user ruling 2026-09-16: credentials are not
 personal data), treats Gaze's own credential classes as neutral predictions, and
 marks `USERNAME`, `URL`, `COMPANYNAME`, `COUNTRY` and `STATE` as rulings still
-pending. **v2 is the headline contract** (user decision 2026-09-26): it scores
-the labels Gaze commits to detect, while v1 scores every original gold label
-and stays beside it for comparison with releases measured before v2 existed.
-A release can carry both: its row is measured under one contract and
-re-scored under the other from the same commit and corpus, each with its own
-committed scorecard. Out-of-contract bytes are neither leaked nor false
+pending. [`scored-labels-v3.json`](scored-labels-v3.json) keeps v2's labels
+and credits a protected, unlabelled repeat of a labelled value (see
+[Gold-gap protection](#gold-gap-protection-contract-v3)). **v3 is the headline
+contract** (user decision 2026-09-26, after its audit passed): it scores the
+labels Gaze commits to detect without charging correct protection as a false
+positive. v2 (the same labels, no credit) and v1 (every original gold label)
+stay beside it. A release can carry several: its row is measured under one
+contract and re-scored under the others from the same commit and corpus, each
+with its own committed scorecard. Out-of-contract bytes are neither leaked nor false
 positive. Numbers from different contracts are never compared as a
 regression, every table and chart names its contract, and a release not
 measured under a contract shows *not measured* there instead of borrowing the
@@ -116,11 +119,11 @@ other contract's numbers. See
 [`scripts/bench/README.md`](../../../scripts/bench/README.md#scored-label-contracts).
 
 Contract column note: the history table carries leak and false-positive
-columns per contract, v2 first. A release row whose own contract is not v1
-shows "scored labels vN" beside its version. v3
-rows carry the same headline columns as v2 plus the gold-gap diagnostic below.
+columns per contract, v3 first. A release row whose own contract is not v1
+shows "scored labels vN" beside its version. v3 tables add a gold-gap
+credited bytes column beside false-positive bytes.
 
-### Gold-gap protection (contract v3, diagnostic)
+### Gold-gap protection (contract v3)
 
 The corpus labels a PII value where it is introduced and, in the audited
 candidates, not where it recurs. "My name is Emma Clarke … Emma has always
@@ -138,13 +141,17 @@ a test against a table the repo's rustc generates), is reported as
 span in document order, each byte once).
 Only trimmed bytes are credited; padding stays false positive.
 
-**This is a diagnostic column; the v2 headline is unchanged.** Leaked,
-true-positive and false-positive bytes and byte precision are computed exactly
-as under v2 and stay the release-gate numbers. The diagnostic adds
-`false_positive_bytes_after_gold_gap` (v2 FP − gold-gap) and
-`adjusted_precision` = TP / (TP + FP after gold-gap); every scored predicted
-byte is TP, FP after gold-gap, or gold-gap, with ignored bytes separate. The
-negative corpus has no gold, so nothing there can qualify.
+**How the headline reads it.** Leaked and true-positive bytes are exactly
+v2's: the credit touches only false positives. The v3 headline shows
+false-positive bytes after the credit (`false_positive_bytes_after_gold_gap`,
+v2 FP − gold-gap) and byte precision after it (`adjusted_precision` =
+TP / (TP + FP after gold-gap)), with the credited bytes in their own column;
+every scored predicted byte is TP, FP after gold-gap, or gold-gap, with ignored
+bytes separate. The negative corpus has no gold, so nothing there can qualify.
+The scorecard itself keeps v2's `utf8_bytes` block and reports the credit
+beside it in `metrics.gold_gap`, whose `status` field reads `diagnostic`
+because it is a fixed setting of the pinned contract file; the renderer does
+the adjustment in one place. The merge and release gates still read v2 and v1.
 
 Byte equality is not identity: a same-document homonym ("May" the name and
 "May" the month) passes all four conditions, so the column counts only because
@@ -343,8 +350,18 @@ Two consequences worth stating plainly:
 | Model bundle `nym-small-int8` | `71f9023bcf86ead7234434f11a4881c0b0a87622ba4e2e44b74f55d3ede7c767` |
 | Scorecard, scored labels v2 | [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json) |
 | Scorecard sha256, scored labels v2 | `e20a8fb6b1f6f4d3098b93f3e77d62d73c7cc4c34c96aff527bbbb072931de55` |
+| Scorecard, scored labels v3 | [`scorecard-v0.15.1-scored-labels-v3.json`](scorecard-v0.15.1-scored-labels-v3.json) |
+| Scorecard sha256, scored labels v3 | `63f7a276ede374f71f21bf34ddd735cdbc4065373b2739a47f68b31b78b7663f` |
 
-**Scored labels v2 (headline: the labels Gaze commits to detect).** Gold PII bytes: 123,621.
+**Scored labels v3 (headline: the labels Gaze commits to detect, with protected repeats of a labelled value credited).** Gold PII bytes: 123,621.
+
+Leaked bytes are v2's. A protected, unlabelled, byte-identical repeat of a labelled value in the same document is credited instead of counted as a false positive (gold-gap credited bytes); false-positive bytes and byte precision are after that credit. [Audit of the credit](#gold-gap-protection-contract-v3).
+
+| Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Gold-gap credited bytes info | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `policy-file` **(shipped default)** | 123,621 | 13,319 | 10.7741% | 18,488 | 11,585 | 0.856448 | 55.7732% | 100.0000% | 100.0000% | 100.0000% | 0 | 138.72 |
+
+**Scored labels v2 (the labels Gaze commits to detect, without gold-gap credit).** Gold PII bytes: 123,621.
 
 | Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -374,7 +391,37 @@ Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its 
 
 <!-- BEGIN GENERATED: charts -->
 
-#### Scored labels v2 (headline: the labels Gaze commits to detect)
+#### Scored labels v3 (headline: the labels Gaze commits to detect, with protected repeats of a labelled value credited)
+
+**Leaked PII bytes — v0.15.0 – v0.15.1 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v3; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
+
+```mermaid
+xychart-beta horizontal
+    title "Leaked PII bytes, scored labels v3 - lower is better"
+    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)"]
+    y-axis "Leaked PII bytes" 0 --> 100000
+    bar [13319, 22144, 23428, 90253]
+```
+
+**Trend across releases — each release's shipped default.** Scored under scored labels v3. The shipped arm changes between releases; the history table names it per row.
+
+```mermaid
+xychart-beta
+    title "Leaked PII bytes, shipped default - scored labels v3"
+    x-axis ["v0.14.0 (17.9%)", "v0.15.0 – v0.15.1 (10.8%)"]
+    y-axis "Leaked PII bytes (lower is better)" 0 --> 25000
+    line [22144, 13319]
+```
+
+```mermaid
+xychart-beta
+    title "False-positive bytes, shipped default - scored labels v3"
+    x-axis ["v0.14.0", "v0.15.0 – v0.15.1"]
+    y-axis "False-positive bytes (lower is less over-redaction)" 0 --> 180000
+    line [157048, 18488]
+```
+
+#### Scored labels v2 (the labels Gaze commits to detect, without gold-gap credit)
 
 **Leaked PII bytes — v0.15.0 – v0.15.1 against the previous release with different results.** Lower is better; the goal is zero. Scored under scored labels v2; every bar is a measured arm in [`release-history.json`](release-history.json). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes.
 
@@ -442,7 +489,7 @@ xychart-beta
 
 Consecutive releases with the same results share one row, labelled oldest –
 newest: same results means the same shipped arm, refused documents, leaked PII
-bytes, false-positive bytes, restore-exact rate and gold-gap diagnostic (when
+bytes, false-positive bytes, restore-exact rate and gold-gap credit (when
 the contract reports one) under the same scored-label contract, corpus and
 provisional status, while clean p95 latency, date, commit and machine are
 ignored because they vary with the host. The table and trend
@@ -453,12 +500,14 @@ which stay committed as the machine-readable evidence.
 
 <!-- BEGIN GENERATED: history -->
 
-| Release | Measured | Commit | Machine | Scorecards | Shipped arm | Refused ↓ | Leaked PII bytes, all processed, v2 ↓ | Leaked PII bytes, common documents, v2 ↓ | False-positive bytes, v2 ↔ | Leaked PII bytes, all processed, v1 ↓ | Leaked PII bytes, common documents, v1 ↓ | False-positive bytes, v1 ↔ | Restore exact ↑ | clean p95 ms ↓ |
-| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json), [`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json) | `full-stack-kiji-resolve` | 0 | 22,144 | 22,144 | 168,259 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
-| v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json) | `policy-file` | 0 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
+| Release | Measured | Commit | Machine | Scorecards | Shipped arm | Refused ↓ | Leaked PII bytes, all processed, v3 ↓ | Leaked PII bytes, common documents, v3 ↓ | False-positive bytes, v3 ↔ | Leaked PII bytes, all processed, v2 ↓ | Leaked PII bytes, common documents, v2 ↓ | False-positive bytes, v2 ↔ | Leaked PII bytes, all processed, v1 ↓ | Leaked PII bytes, common documents, v1 ↓ | False-positive bytes, v1 ↔ | Restore exact ↑ | clean p95 ms ↓ |
+| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json), [`scorecard-v0.14.0-scored-labels-v2.json`](scorecard-v0.14.0-scored-labels-v2.json), [`scorecard-v0.14.0-scored-labels-v3.json`](scorecard-v0.14.0-scored-labels-v3.json) | `full-stack-kiji-resolve` | 0 | 22,144 | 22,144 | 157,048 | 22,144 | 22,144 | 168,259 | 25,179 | 25,179 | 168,276 | 78.4192% | 195.86 |
+| v0.15.0 – v0.15.1 | 2026-09-26 | `f769f82` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.15.0.json`](scorecard-v0.15.0.json), [`scorecard-v0.15.0-scored-labels-v2.json`](scorecard-v0.15.0-scored-labels-v2.json), [`scorecard-v0.15.0-scored-labels-v3.json`](scorecard-v0.15.0-scored-labels-v3.json), [`scorecard-v0.15.1.json`](scorecard-v0.15.1.json), [`scorecard-v0.15.1-scored-labels-v2.json`](scorecard-v0.15.1-scored-labels-v2.json), [`scorecard-v0.15.1-scored-labels-v3.json`](scorecard-v0.15.1-scored-labels-v3.json) | `policy-file` | 0 | 13,319 | 13,319 | 18,488 | 13,319 | 13,319 | 30,073 | 19,556 | 19,556 | 30,073 | 100.0000% | 138.72 |
 
 - **v0.14.0, scored labels v2:** v0.14.0's own `clean_for_bench` (sha256 `fccad457ec06…`, built from `f66a3f2b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `c495a6f1`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
+- **v0.14.0, scored labels v3:** v0.14.0's own `clean_for_bench` (sha256 `9ef4ba9ef57f…`, built from `f66a3f2b`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `9dc171b1`); trace/manifest agreement checked with `tokenize` as manifest actions, the rule that release was built with.
+- **v0.15.0, scored labels v3:** v0.15.0's own `clean_for_bench` (sha256 `2b4f5df0ba3b…`, built from `6fcba31a`) scored by today's harness ([`rescore_past_release.py`](../../../scripts/bench/rescore_past_release.py) at `9dc171b1`); trace/manifest agreement checked with `redact` and `tokenize` as manifest actions, the rule that release was built with.
 
 <!-- END GENERATED: history -->
 
@@ -701,12 +750,13 @@ uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --append-history
 ```
 
-Then score the same commit under the headline contract and record it on the
+Then score the same commit under contracts v2 and v3 and record both on the
 row just appended. The run must use the same commit, corpus and policy; the
-renderer refuses a result that differs in any of them.
+renderer refuses a result that differs in any of them. v3 needs no new run: it
+re-scores the observation record the v2 run wrote.
 
 ```bash
-# 3. Re-score under contract v2 (the headline) and record it on the row.
+# 3. Re-score under contract v2 and record it on the row.
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
   --seed 20260710 --no-download \
   --scored-labels docs/reference/benchmarks/scored-labels-v2.json
@@ -714,6 +764,16 @@ cp target/bench-data/no-opf/full/scorecard-v4.json \
    docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v2.json \
+  --version vX.Y.Z \
+  --append-contract-result
+
+# 4. Re-score the v2 run's observation record under contract v3 (the headline).
+uv run --project scripts/bench python scripts/bench/rescore.py \
+  target/bench-data/no-opf/full/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v3.json \
+  --output docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json
+uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z-scored-labels-v3.json \
   --version vX.Y.Z \
   --append-contract-result
 ```
