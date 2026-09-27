@@ -56,9 +56,11 @@ gold regardless of class. The mapping only controls contract v3's repeated-gold
 credit, under the same rules Gaze uses.
 
 Presidio's default NLP model and recognizers are English only. The English
-default row leaves German documents unprotected. The multilingual row uses
+default row leaves German, Dutch, French, and Portuguese documents unprocessed.
+The multilingual row uses
 Presidio's documented multiple-model configuration with `de_core_news_lg` and
-language-specific built-in recognizers; it still runs on the same documents.
+language-specific built-in recognizers; it leaves Dutch, French, and Portuguese
+documents unprocessed while still scoring the same corpus.
 Presidio's analyzer output goes through its anonymizer with the default
 replacement operator, and scoring uses the resolved original spans that the
 anonymizer processes. GLiNER uses the model card's listed labels and its
