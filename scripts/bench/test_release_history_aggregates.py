@@ -18,11 +18,18 @@ class ReleaseHistoryAggregateTests(unittest.TestCase):
     def test_each_contract_and_layer_matches_its_pinned_evidence(self):
         history = json.loads((ROOT / "release-history.json").read_text())
         for release in history["releases"]:
-            for row in (release, *release.get("contract_results", [])):
+            rows = (release, *release.get("contract_results", []))
+            # Generated layers are scored under their own layer contract, not the
+            # corpus contract, so a release records them once or more; a v3
+            # result re-scored from a C-only record carries none.
+            self.assertTrue(any("agentic_layers" in row for row in rows), release["version"])
+            for row in rows:
                 card = json.loads((ROOT / row["scorecard"]).read_text())
                 for config, arm in row["arms"].items():
                     run = next(run for run in card["runs"] if run["config"] == config)
                     self.assertEqual(arm["per_label_recall"], run["per_label_recall"])
+                if "agentic_layers" not in row:
+                    continue
                 layers = row["agentic_layers"]
                 artifact_path = ROOT / layers["source_file"]
                 self.assertEqual(

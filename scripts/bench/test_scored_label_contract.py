@@ -752,7 +752,7 @@ class GoldGapScoringTests(unittest.TestCase):
 
 
 class GoldGapRenderTests(unittest.TestCase):
-    """A v3 row prints the diagnostic beside the unchanged v2 columns."""
+    """A v3 row stores v2's numbers and renders false positives after the credit."""
 
     def card(self, version: int, gold_gap: bool) -> dict:
         card = render_tests.scorecard()
@@ -789,21 +789,24 @@ class GoldGapRenderTests(unittest.TestCase):
             scorecard_sha256="0" * 64,
         )
 
-    def test_v3_row_renders_the_diagnostic_beside_the_headline(self) -> None:
+    def test_v3_row_reads_false_positives_after_the_credit(self) -> None:
         v3_entry = self.entry(self.card(3, gold_gap=True))
         v2_entry = self.entry(self.card(2, gold_gap=False))
         arm = v3_entry["arms"][render.SHIPPED_DEFAULT_ARM]
         self.assertEqual(arm["gold_gap"]["gold_gap_protected_bytes"], 1001)
-        # The headline columns are the v2 numbers, identical in both rows.
+        # The stored arm numbers are the v2 numbers, identical in both rows; the
+        # adjustment happens only when rendering.
         for name, block in v2_entry["arms"].items():
             headline = {k: v for k, v in v3_entry["arms"][name].items() if k != "gold_gap"}
             self.assertEqual(headline, block)
         history = {**render.empty_history(), "releases": [v3_entry]}
         render.validate_history(history)
         text = render.render_current_release(history)
-        self.assertIn("diagnostic; v2 headline unchanged", text)
-        self.assertIn("| `pass2-ner` | 1,001 | 2,000 | 0.500000 |", text)
-        self.assertIn("False-positive bytes ↔", text)
+        self.assertIn(render.GOLD_GAP_NOTE, text)
+        self.assertIn("| False-positive bytes ↔ | Gold-gap credited bytes info | Byte precision ↑ |", text)
+        pass2 = next(line for line in text.splitlines() if line.startswith("| `pass2-ner`"))
+        self.assertIn("| 2,000 | 1,001 | 0.500000 |", pass2)
+        self.assertNotIn("diagnostic", text)
         v2_text = render.render_current_release(
             {**render.empty_history(), "releases": [v2_entry]}
         )

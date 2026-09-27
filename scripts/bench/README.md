@@ -160,6 +160,22 @@ uv run --project scripts/bench python scripts/bench/verify_record_scorecards.py 
   --v3-contract docs/reference/benchmarks/scored-labels-v3.json
 ```
 
+A record captured later with today's harness (v0.15.0 and v0.14.0, captured
+2026-09-27 with `rescore_past_release.py`) is checked with `--capture`, which
+compares dataset identity and every run field except timing against the
+release's committed scorecards. A field the harness computes may be skipped
+by name, and the result reports whether it differed:
+
+```bash
+uv run --project scripts/bench python scripts/bench/verify_record_scorecards.py \
+  docs/reference/benchmarks/observations-v0.15.0.jsonl.gz \
+  --v1 docs/reference/benchmarks/scorecard-v0.15.0.json \
+  --v2 docs/reference/benchmarks/scorecard-v0.15.0-scored-labels-v2.json \
+  --v2-contract docs/reference/benchmarks/scored-labels-v2.json \
+  --v3-contract docs/reference/benchmarks/scored-labels-v3.json \
+  --capture --ignore-run-field validator_recall_by_label
+```
+
 The scorecard records the contract under `scoring.scored_label_contract`: its
 id, version, file SHA-256, excluded labels, scored and excluded gold counts, and
 `scored_gold_digest` over every scored `(document, start, end, label)`. The
