@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Stdlib-only, no corpus and no model: fails if the benchmark document
+      # Stdlib-only, no external corpus and no model: fails if the benchmark document
       # drifts from the release scorecards it reports.
       - name: benchmark document matches its committed evidence
         run: python3 scripts/bench/render_benchmark_doc.py --check

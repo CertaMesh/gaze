@@ -9,13 +9,18 @@ import json
 import re
 from pathlib import Path
 
+import agentic_layers
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
 HISTORY = ROOT / "docs/reference/benchmarks/agentic-adjacency-v4-history.json"
 CONTRACT = ROOT / "docs/reference/benchmarks/scored-labels-agentic.json"
-GENERATOR_VERSION = 4
-CORPUS_SHA256 = "3700ce379d571e82de320534f2d0ffd92fc595a52fe037e7dd3b995016dfdd5b"
+GENERATOR_VERSION = agentic_layers.GENERATOR_VERSION
+CORPUS_SHA256 = agentic_layers.manifest(
+    agentic_layers.PUBLISHED_PARTITION,
+    agentic_layers.generate(agentic_layers.PUBLISHED_PARTITION),
+)["corpus_sha256"]
 POLICY_SHA256 = "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
 EXPECTED_ROWS = (
     ("v0.15.1", "policy-file"),
