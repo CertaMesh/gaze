@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pattern_template` values can now use `\p{…}` Unicode classes. Benchmark
   gain gate (setup policy, seed 20260710): leaked bytes v2 −151, v1 −210,
   false-positive bytes +95, zero refusals, exact restore unchanged.
+
 - **IBAN and payment card numbers are tokenized even when mod-97 or Luhn
   fails** (solo todo #3906). A mistyped or masked account or card number is
   still someone's financial data. `iban.structural` now keeps a
