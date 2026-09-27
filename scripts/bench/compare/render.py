@@ -53,7 +53,9 @@ def render(report: dict[str, object], source: str) -> str:
                     row = tools[name]["contracts"][version][layer]
                 else:
                     continue
-                fp = row["false_positive_bytes_after_gold_gap"] if version == "v3" else row["false_positive_bytes"]
+                fp = row["false_positive_bytes"]
+                if version == "v3" and row["false_positive_bytes_after_gold_gap"] is not None:
+                    fp = row["false_positive_bytes_after_gold_gap"]
                 latency = row["latency"]
                 lines.append(
                     f"| {version} | {layer} | {name} | {row['leaked_bytes']:,} | {fp:,} | "
