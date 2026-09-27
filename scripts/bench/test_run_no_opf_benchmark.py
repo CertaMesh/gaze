@@ -600,6 +600,35 @@ class ModelValidationTests(unittest.TestCase):
                     runner.validate_required_models(repo_root, bundle)
 
 
+class PolicyNerSettingsTests(unittest.TestCase):
+    def test_policy_without_ner_keeps_cli_defaults(self) -> None:
+        model = Path("/synthetic/default-davlan")
+        self.assertEqual(
+            runner.policy_ner_settings({}, Path("/synthetic/policy.toml"), model, 0.3),
+            (model, 0.3),
+        )
+
+    def test_policy_with_ner_uses_policy_model_and_threshold(self) -> None:
+        self.assertEqual(
+            runner.policy_ner_settings(
+                {"ner": {"model_dir": "models/davlan", "threshold": 0.42}},
+                Path("/synthetic/policy.toml"),
+                Path("/synthetic/default-davlan"),
+                0.3,
+            ),
+            (Path("/synthetic/models/davlan"), 0.42),
+        )
+
+    def test_present_ner_requires_complete_settings(self) -> None:
+        with self.assertRaisesRegex(runner.CandidateError, "policy NER settings are invalid"):
+            runner.policy_ner_settings(
+                {"ner": {"model_dir": "models/davlan"}},
+                Path("/synthetic/policy.toml"),
+                Path("/synthetic/default-davlan"),
+                0.3,
+            )
+
+
 class ProfileIsolationTests(unittest.TestCase):
     def document(self) -> score.Document:
         return score.Document(

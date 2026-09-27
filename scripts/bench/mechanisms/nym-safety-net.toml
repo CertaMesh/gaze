@@ -1,0 +1,6 @@
+# Sections `gaze setup` adds for the default Nym safety net.
+[safety_net]
+backend = "nym"
+
+[safety_net.nym]
+model_dir = "/Users/krishankoenig/.local/share/gaze/models/nym-small-int8"

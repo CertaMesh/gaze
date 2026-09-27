@@ -192,6 +192,13 @@ class MechanismArmsTest(unittest.TestCase):
         )
         self.assertTrue(mech.release_cell(entry, "v0.15.1").startswith("not available"))
 
+    def test_older_davlan_cell_names_setup_default(self) -> None:
+        entry = next(item for item in LEDGER["mechanisms"] if item["id"] == "davlan-ner")
+        self.assertEqual(
+            mech.release_cell(entry, "v0.14.0"),
+            "not available: setup default added in v0.15",
+        )
+
     def test_tampered_ledger_number_fails_the_evidence_check(self) -> None:
         ledger = copy.deepcopy(self.ledger)
         ledger["mechanisms"][0]["measurements"][0]["contracts"]["2"]["base"]["leaked"] += 1
@@ -324,11 +331,12 @@ class MechanismArmsTest(unittest.TestCase):
         fixture.record(ledger)
         body = mech.render(ledger, ["v0.15.1"], root)
         titles = [entry["title"] for entry in ledger["mechanisms"]]
-        self.assertEqual(titles, ["GLiNER date-of-birth judge", "Synthetic drop"])
+        expected = [entry["title"] for entry in LEDGER["mechanisms"]] + ["Synthetic drop"]
+        self.assertEqual(titles, expected)
         for title in titles:
             self.assertEqual(body.count(f"| {title} | `"), 3, title)
-            self.assertIn(f"| {title} | not available: mechanism added in v0.16 |", body)
             self.assertIn(f"- **{title}** ships ", body)
+        self.assertIn("| Synthetic drop | not available: mechanism added in v0.16 |", body)
 
     def test_ledger_validation_rejects_bad_shapes(self) -> None:
         cases = {
