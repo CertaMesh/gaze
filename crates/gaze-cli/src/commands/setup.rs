@@ -92,7 +92,7 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
 
     if args.dob_model_dir.is_some() && !args.dob_judge {
         return Err(setup_error(
-            "--dob-model-dir requires --dob-judge".to_string(),
+            "--dob-model-dir cannot be combined with --no-dob-judge".to_string(),
         ));
     }
     let dob_model_dir = if args.dob_judge {
@@ -735,6 +735,7 @@ fn print_summary(summary: &SetupSummary) {
     if summary.dob_model_dir.is_some() {
         println!("GLiNER model: {GLINER_DOB_HF_REPO} (model card licence: Apache-2.0)");
         println!("Source: https://huggingface.co/{GLINER_DOB_HF_REPO} at revision {GLINER_DOB_HF_COMMIT}");
+        println!("Opt out: gaze setup --no-dob-judge");
     }
     if let Some(opf_checkpoint) = &summary.opf_checkpoint {
         println!(

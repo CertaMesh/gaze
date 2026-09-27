@@ -69,6 +69,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Per-mechanism benchmark arms** (solo todo #3900). A release row measures
+  the whole stack; a mechanism arm measures one mechanism on its own: the same
+  binary, corpus and seed with and without one policy delta file under
+  `scripts/bench/mechanisms/`. `scripts/bench/mechanism_arms.py record`
+  refuses a pair unless the candidate policy is exactly base plus delta and
+  all four runs (v2 and v1) share one clean commit, corpus, seed and scored
+  population; it commits both observation records and `check` (run by the
+  docs workflow) re-derives every number from them, v3 included. Releases
+  older than a mechanism say so in their cell. The GLiNER DOB judge is the
+  first row.
 - **The contract v3 gold-gap audit passed** (solo todo #3696): 3 of 200
   sampled credits failed (one-sided 95 % bound 3.83 %, limit 5 %), each in a
   different document. Three model judges (Claude Opus, Codex, TypeSafe)
@@ -106,6 +116,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`gaze setup` installs and enables the GLiNER date-of-birth judge by
+  default** (solo todo #3900). Its own benchmark arm on the main corpus
+  passed the gate under contracts v2 and v1: layer C leaked bytes fell by 85
+  (DATEOFBIRTH 810 to 725), agentic layer A by 20, with no false-positive
+  bytes added on any layer and no refusals. Setup now downloads the pinned
+  352 MB bundle; `--no-dob-judge` leaves it out. The SHA pin, doctor check and
+  fail-closed behaviour on a missing or corrupt bundle are unchanged.
+  `--dob-judge` is still accepted and changes nothing, and `--dob-model-dir`
+  no longer needs it.
 - **The benchmark headline is scored-label contract v3** (solo todo #3696,
   after the gold-gap audit passed). Leaked bytes are unchanged from v2; false
   positives and byte precision are after the audited gold-gap credit, which

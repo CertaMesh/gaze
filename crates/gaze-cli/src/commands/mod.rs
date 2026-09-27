@@ -90,11 +90,14 @@ enum Cmd {
         /// NER model install directory. Defaults to $XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl.
         #[arg(long)]
         model_dir: Option<PathBuf>,
-        /// Install and enable the pinned local GLiNER date-of-birth judge.
-        #[arg(long)]
+        /// Skip the pinned local GLiNER date-of-birth judge, which setup installs and enables by default.
+        #[arg(long, conflicts_with = "dob_judge")]
+        no_dob_judge: bool,
+        /// The judge is on by default; kept so existing scripts keep working.
+        #[arg(long, hide = true)]
         dob_judge: bool,
-        /// GLiNER bundle directory; requires --dob-judge.
-        #[arg(long, requires = "dob_judge")]
+        /// GLiNER bundle directory. Defaults to $XDG_DATA_HOME/gaze/models/gliner-multi-pii-dob-int8.
+        #[arg(long, conflicts_with = "no_dob_judge")]
         dob_model_dir: Option<PathBuf>,
         /// Use defaults without prompts.
         #[arg(long)]
@@ -694,7 +697,8 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             safety_net,
             policy_out,
             model_dir,
-            dob_judge,
+            no_dob_judge,
+            dob_judge: _,
             dob_model_dir,
             non_interactive,
             force,
@@ -702,7 +706,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             safety_net,
             policy_out,
             model_dir,
-            dob_judge,
+            dob_judge: !no_dob_judge,
             dob_model_dir,
             non_interactive,
             force,
@@ -938,6 +942,44 @@ mod tests {
         ));
         for sub in cmd.get_subcommands() {
             walk(sub, format!("{path} {}", sub.get_name()), out);
+        }
+    }
+
+    /// `(no_dob_judge, dob_model_dir)` as parsed from `gaze setup <extra>`.
+    #[cfg(feature = "setup")]
+    fn setup_dob_flags(extra: &[&str]) -> Result<(bool, Option<PathBuf>), clap::Error> {
+        let cli = Cli::try_parse_from(["gaze", "setup"].iter().chain(extra))?;
+        let Cmd::Setup {
+            no_dob_judge,
+            dob_model_dir,
+            ..
+        } = cli.cmd
+        else {
+            unreachable!("expected setup command");
+        };
+        Ok((no_dob_judge, dob_model_dir))
+    }
+
+    #[cfg(feature = "setup")]
+    #[test]
+    fn setup_enables_the_dob_judge_unless_opted_out() {
+        assert_eq!(setup_dob_flags(&[]).unwrap(), (false, None));
+        assert_eq!(setup_dob_flags(&["--dob-judge"]).unwrap(), (false, None));
+        assert_eq!(setup_dob_flags(&["--no-dob-judge"]).unwrap(), (true, None));
+        assert_eq!(
+            setup_dob_flags(&["--dob-model-dir", "/tmp/gliner"]).unwrap(),
+            (false, Some(PathBuf::from("/tmp/gliner")))
+        );
+        for conflicting in [
+            &["--no-dob-judge", "--dob-judge"][..],
+            &["--no-dob-judge", "--dob-model-dir", "/tmp/gliner"][..],
+        ] {
+            let err = setup_dob_flags(conflicting).unwrap_err();
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::ArgumentConflict,
+                "{conflicting:?}"
+            );
         }
     }
 

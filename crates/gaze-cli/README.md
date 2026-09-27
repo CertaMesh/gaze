@@ -163,11 +163,11 @@ The policy is written owner-only (mode `0600`). When setup and gaze run as
 different accounts, see
 [Policy file permissions](../../docs/reference/policy.md#policy-file-permissions).
 
-`--dob-judge` additionally installs the SHA-pinned GLiNER multi PII int8 bundle
-and enables the local date-of-birth judge in `[dob_judge]`. It is off by
-default. `--dob-model-dir <path>` selects the bundle directory and requires
-`--dob-judge`. The doctor checks a synthetic cue-less birth date before
-publishing the policy.
+Setup also installs the SHA-pinned GLiNER multi PII int8 bundle and enables
+the local date-of-birth judge in `[dob_judge]`. `--no-dob-judge` leaves it
+out; `--dob-model-dir <path>` selects the bundle directory. The doctor checks
+a synthetic cue-less birth date before publishing the policy. `--dob-judge`
+is still accepted and changes nothing.
 
 ## Daemon mode
 

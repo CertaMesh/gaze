@@ -75,7 +75,14 @@ fn setup_cli_clean_tokenizes_every_bundled_class() {
         .unwrap()
         .args(["setup", "--non-interactive", "--policy-out"])
         .arg(&policy_path)
-        .args(["--model-dir", &model_dir, "--safety-net", "none", "--force"])
+        .args([
+            "--model-dir",
+            &model_dir,
+            "--safety-net",
+            "none",
+            "--no-dob-judge",
+            "--force",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -87,6 +94,7 @@ fn setup_cli_clean_tokenizes_every_bundled_class() {
     let policy = fs::read_to_string(&policy_path).unwrap();
     assert!(policy.contains("action = \"tokenize\""));
     assert!(!policy.contains("[safety_net]"));
+    assert!(!policy.contains("[dob_judge]"));
     let generated = gaze::Policy::load_for_cli(&policy_path).unwrap();
     let declared = generated
         .rulepacks
@@ -163,7 +171,10 @@ fn setup_default_attaches_nym_and_catches_the_plate() {
     assert!(notice.contains("Training-data licence review is open"));
     assert!(notice.contains("gaze setup --safety-net none"));
     assert!(notice.contains("doctor Nym pass: synthetic licence plate tokenized"));
+    assert!(notice.contains("doctor GLiNER pass: synthetic birth date tokenized"));
+    assert!(notice.contains("gaze setup --no-dob-judge"));
     let policy = fs::read_to_string(&policy_path).unwrap();
+    assert!(policy.contains("[dob_judge]\nenabled = true"));
     assert!(policy.contains("[safety_net]\nbackend = \"nym\""));
     assert!(policy.contains("[safety_net.nym]\nmodel_dir = \"/"));
     let plate = "Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt.";
