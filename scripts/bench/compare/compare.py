@@ -8,6 +8,7 @@ import dataclasses
 import hashlib
 import importlib.metadata
 import json
+import os
 import platform
 import select
 import socket
@@ -16,6 +17,7 @@ import sys
 import tempfile
 import time
 from collections import defaultdict
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Sequence
@@ -422,6 +424,7 @@ def main() -> int:
     mappings = load_mapping()
     report: dict[str, object] = {
         "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "description": "same corpus and scorer; tools run with their documented defaults",
         "harness_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip(),
         "harness_dirty": bool(subprocess.check_output(
@@ -484,7 +487,9 @@ def main() -> int:
             try:
                 # Warm the model outside the measured per-document latency.
                 backend.predict(score.Document("warmup", "alice@example.invalid", "en", "", "synthetic", ()))
+                load_before = os.getloadavg()
                 measured = measure(name, backend.predict, layers, mapping)
+                measured["host_load_1m_before_after"] = [round(load_before[0], 2), round(os.getloadavg()[0], 2)]
                 measured["provenance"] = provenance
                 report["tools"][name] = measured
                 print(f"COMPARISON_DONE {name}", file=sys.stderr, flush=True)
