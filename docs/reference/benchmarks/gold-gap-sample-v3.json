@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract": "scored-labels-v3",
-  "purpose": "Human audit of the contract v3 gold-gap rule. The column stays a diagnostic beside the v2 headline until this audit passes.",
+  "purpose": "Model-judged audit (three judges plus TypeSafe tiebreak) of the contract v3 gold-gap rule. The column stays a diagnostic beside the v2 headline until this audit passes.",
   "status": "verdicts_recorded",
   "source": {
     "trace": "trace-pass2-ner.jsonl",
@@ -5455,8 +5455,12 @@
       "codex": "dd0c86fcb9f1b4bd6e795c6902e1d9deaf4c43c1368eb7596d590788620e5a31",
       "typesafe": "ab34688625efae6c3830942ae7002f99cea89c5fd56f8f60196c5432a27b9df3"
     },
-    "tiebreak_results_sha256": "780a6a5f589f3154a00af1f08179ea650728317d858b0fed9d07784ad21f2634",
-    "document_text": "Judge reasons and tiebreak prompts quote document text, so they stay out of this file; per-card reasons are in the audit report. Verdict labels, rules and tiebreak probabilities only.",
+    "tiebreak_results": {
+      "path": "scripts/bench/fixtures/gold-gap-tiebreak-v3.json",
+      "sha256": "780a6a5f589f3154a00af1f08179ea650728317d858b0fed9d07784ad21f2634",
+      "script": "scripts/bench/gold_gap_tiebreak.py"
+    },
+    "document_text": "Judge reasons, proposals and tiebreak prompts quote synthetic Dataiku document text, so they stay out of this public repo: they are archived in the private CertaMesh/business repo under audits/benchmark/v3-gold-gap-2026-09-27/. This file carries verdict labels, rules and tiebreak probabilities only; `gold_gap_evidence.py accept` checks them against the tiebreak results file.",
     "trace_note": "The trace this sample was drawn from (sha256 e715a7e9...) is no longer on disk, so the draw cannot be regenerated today. All 200 entries were re-verified against the pinned Dataiku parquet (sha256 916c6379...): the attributed span is gold with the entry's label, the candidate's trimmed bytes equal the gold value, and the candidate overlaps no gold."
   }
 }

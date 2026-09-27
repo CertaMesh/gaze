@@ -43,6 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 V2_PATH = "docs/reference/benchmarks/scored-labels-v2.json"
 V3_PATH = "docs/reference/benchmarks/scored-labels-v3.json"
 SAMPLE_PATH = "docs/reference/benchmarks/gold-gap-sample-v3.json"
+TIEBREAK_PATH = "scripts/bench/fixtures/gold-gap-tiebreak-v3.json"
 
 SAMPLE_SEED = 20260922
 SAMPLE_SIZE = 200
@@ -465,8 +466,9 @@ def draw_sample(trace_path: Path, wordlist: Path) -> dict[str, object]:
         "schema_version": 1,
         "contract": "scored-labels-v3",
         "purpose": (
-            "Human audit of the contract v3 gold-gap rule. The column stays a "
-            "diagnostic beside the v2 headline until this audit passes."
+            "Model-judged audit (three judges plus TypeSafe tiebreak) of the "
+            "contract v3 gold-gap rule. The column stays a diagnostic beside the "
+            "v2 headline until this audit passes."
         ),
         "status": "awaiting_verdicts",
         "source": {
@@ -590,6 +592,43 @@ def cluster_design_effect(entries: Sequence[dict[str, object]], failed: Sequence
     return clustered / (rate * (1 - rate) / (n - 1))
 
 
+def check_adjudication(sample: dict[str, object], tiebreak: Sequence[dict[str, object]]) -> None:
+    """Refuse a sample whose verdicts do not follow from the judges and the tiebreak.
+
+    A unanimous card's verdict must be the judges' shared verdict; every other
+    card must appear in the tiebreak results with the same three verdicts,
+    rule, re-ask answer and final verdict.
+    """
+    rows = {row["id"]: row for row in tiebreak}
+    problems = []
+    for entry in sample["entries"]:
+        adjudication = entry.get("adjudication") or {}
+        judges = (adjudication.get("opus"), adjudication.get("codex"), adjudication.get("typesafe"))
+        row = rows.pop(entry["id"], None)
+        if len(set(judges)) == 1 and judges[0] in VERDICTS:
+            if row is not None:
+                problems.append(f"{entry['id']}: unanimous but listed in the tiebreak")
+            elif entry.get("verdict") != judges[0]:
+                problems.append(f"{entry['id']}: verdict differs from the unanimous judges")
+            continue
+        if row is None:
+            problems.append(f"{entry['id']}: contested but missing from the tiebreak")
+            continue
+        expected = {key: row[key] for key in ("opus", "codex", "typesafe", "rule")}
+        if {key: adjudication.get(key) for key in expected} != expected:
+            problems.append(f"{entry['id']}: judges or rule differ from the tiebreak")
+        if row["tiebreak"] is not None:
+            recorded = adjudication.get("typesafe_tiebreak") or {}
+            keys = ("score", "confidence", "probabilities", "argmax")
+            if any(recorded.get(key) != row["tiebreak"][key] for key in keys):
+                problems.append(f"{entry['id']}: re-ask answer differs from the tiebreak")
+        if entry.get("verdict") != row["final"]:
+            problems.append(f"{entry['id']}: verdict differs from the tiebreak's final verdict")
+    problems += [f"{cid}: in the tiebreak but not in the sample" for cid in sorted(rows)]
+    if problems:
+        raise SystemExit("adjudication does not match the tiebreak record:\n  " + "\n  ".join(problems))
+
+
 def acceptance(sample: dict[str, object]) -> dict[str, object]:
     """Score a sample whose every entry carries a verdict against the declared rule."""
     entries = sample["entries"]
@@ -654,9 +693,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     accept = sub.add_parser("accept")
     accept.add_argument("--sample", type=Path, default=REPO_ROOT / SAMPLE_PATH)
+    accept.add_argument("--tiebreak", type=Path, default=REPO_ROOT / TIEBREAK_PATH)
     args = parser.parse_args(list(argv) if argv is not None else None)
     if args.command == "accept":
-        result = acceptance(json.loads(args.sample.read_text(encoding="utf-8")))
+        sample = json.loads(args.sample.read_text(encoding="utf-8"))
+        check_adjudication(sample, json.loads(args.tiebreak.read_text(encoding="utf-8")))
+        result = acceptance(sample)
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0 if result["passes"] else 1
     if args.command == "replay":

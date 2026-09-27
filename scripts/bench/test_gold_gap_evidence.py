@@ -248,6 +248,50 @@ class StatisticsTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "gg-008"):
             evidence.acceptance(sample)
 
+    def test_committed_sample_matches_its_tiebreak_record(self) -> None:
+        sample = json.loads((evidence.REPO_ROOT / evidence.SAMPLE_PATH).read_text(encoding="utf-8"))
+        tiebreak = json.loads((evidence.REPO_ROOT / evidence.TIEBREAK_PATH).read_text(encoding="utf-8"))
+        evidence.check_adjudication(sample, tiebreak)
+        self.assertTrue(evidence.acceptance(sample)["passes"])
+
+    def test_adjudication_mismatches_are_refused(self) -> None:
+        tiebreak = [
+            {"id": "gg-002", "opus": "yes", "codex": "no", "typesafe": "yes",
+             "rule": "1: TypeSafe in 2-of-3 majority", "final": "yes", "tiebreak": None},
+            {"id": "gg-003", "opus": "no", "codex": "no", "typesafe": "yes",
+             "rule": "2a: TypeSafe re-ask, confidence >= 0.8", "final": "no",
+             "tiebreak": {"score": 0.1, "confidence": 0.9, "probabilities": {"no": 0.95}, "argmax": "no"}},
+        ]
+
+        def sample():
+            return {"entries": [
+                {"id": "gg-001", "verdict": "yes",
+                 "adjudication": {"opus": "yes", "codex": "yes", "typesafe": "yes"}},
+                {"id": "gg-002", "verdict": "yes",
+                 "adjudication": {"opus": "yes", "codex": "no", "typesafe": "yes",
+                                  "rule": "1: TypeSafe in 2-of-3 majority"}},
+                {"id": "gg-003", "verdict": "no",
+                 "adjudication": {"opus": "no", "codex": "no", "typesafe": "yes",
+                                  "rule": "2a: TypeSafe re-ask, confidence >= 0.8",
+                                  "typesafe_tiebreak": dict(tiebreak[1]["tiebreak"])}},
+            ]}
+
+        evidence.check_adjudication(sample(), tiebreak)
+        mutations = {
+            "unanimous judges": lambda s: s["entries"][0].update(verdict="no"),
+            "final verdict": lambda s: s["entries"][2].update(verdict="yes"),
+            "judges or rule": lambda s: s["entries"][1]["adjudication"].update(rule="2b"),
+            "re-ask answer": lambda s: s["entries"][2]["adjudication"]["typesafe_tiebreak"].update(confidence=0.7),
+            "missing from the tiebreak": lambda s: s["entries"][0]["adjudication"].update(codex="no"),
+            "not in the sample": lambda s: s["entries"].pop(1),
+        }
+        for message, mutate in mutations.items():
+            with self.subTest(message):
+                broken = sample()
+                mutate(broken)
+                with self.assertRaisesRegex(SystemExit, message):
+                    evidence.check_adjudication(broken, tiebreak)
+
     def test_questions_are_label_appropriate(self) -> None:
         self.assertIn("same person", evidence.question("SURNAME"))
         self.assertIn("same place", evidence.question("CITY"))

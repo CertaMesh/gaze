@@ -103,6 +103,15 @@ python scripts/bench/gold_gap_evidence.py sheet  --trace <trace.jsonl>  # local 
 python scripts/bench/gold_gap_evidence.py accept  # exits 1 if the audit fails
 ```
 
+`accept` first checks every verdict against the judges recorded in the sample
+and the tiebreak results in `fixtures/gold-gap-tiebreak-v3.json`, written by
+`gold_gap_tiebreak.py`. The tiebreak's inputs quote document text and live in
+the private audit archive, not in this repo:
+
+```bash
+python scripts/bench/gold_gap_tiebreak.py --archive <audit archive> --payloads-only <out.json>
+```
+
 v2 also lists `neutral_prediction_classes` (`custom:password`,
 `custom:security_token`, `custom:secret`). A prediction of one of those classes
 still counts as protection where it covers scored gold; its other bytes are

@@ -178,7 +178,10 @@ clustering does not widen the 4.52 % bound. Each failure is real PII the corpus
 leaves unlabelled, attributed to the wrong gold (a spouse, a different contact,
 another address's ZIP, an unclear addressee). Design-weighted failure rate
 1.78 %, byte-weighted 1.17 %. Every entry's verdict and how it was reached are
-in the sample file; `gold_gap_evidence.py accept` recomputes the result.
+in the sample file. The tiebreak run is `scripts/bench/gold_gap_tiebreak.py`,
+its text-free results `scripts/bench/fixtures/gold-gap-tiebreak-v3.json`, and
+`gold_gap_evidence.py accept` checks every verdict against them before it
+recomputes the result.
 
 ### Zero-leak production goals
 
