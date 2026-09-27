@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ops::Range;
 
 use crate::anchor_resolver::{AnchorOutcome, AnchorResolver};
@@ -166,7 +167,7 @@ impl CandidatePool {
             input,
             locale_chain,
         });
-        let mut resolved = Vec::new();
+        let mut resolved = ResolvedSet::default();
         for &id in ids {
             let candidate = WholeCandidate {
                 candidate: self.originals[id].clone(),
@@ -176,6 +177,7 @@ impl CandidatePool {
             };
             self.insert(&mut resolved, candidate, policy, anchor_ctx);
         }
+        let mut resolved = resolved.into_vec();
         if let Some(ctx) = anchor_ctx {
             resolved = resolved
                 .into_iter()
@@ -192,99 +194,180 @@ impl CandidatePool {
 
     fn insert(
         &mut self,
-        resolved: &mut Vec<WholeCandidate>,
+        resolved: &mut ResolvedSet,
         candidate: WholeCandidate,
         policy: &FamilyPolicyTable,
         anchor_ctx: Option<AnchorContext<'_>>,
     ) {
-        for index in 0..resolved.len() {
-            #[cfg(test)]
-            {
-                self.work.overlap_probes += 1;
-            }
-            let Some(overlap) =
-                Overlap::classify(&resolved[index].candidate.span, &candidate.candidate.span)
-            else {
-                continue;
-            };
-            let existing = resolved[index].node;
-            let incoming = candidate.node;
-            let result = self.next_node;
-            self.next_node += 1;
-            let mut removal = None;
-            let outcome = match arbitrate(
-                &resolved[index].candidate,
-                &candidate.candidate,
-                overlap,
-                policy,
-                anchor_ctx,
-            ) {
-                Arbitration::Merge => {
-                    resolved[index].members.extend(candidate.members);
-                    merge_same_span_same_class(&mut resolved[index].candidate, candidate.candidate);
-                    PairOutcome::Merge
-                }
-                Arbitration::Family(tie) => {
-                    resolved[index].members.extend(candidate.members);
-                    resolved[index].candidate = *tie;
-                    resolved[index].settlement = Settlement::CollisionPolicy;
-                    removal = Some(ConflictTier::CollisionPolicy);
-                    PairOutcome::Family
-                }
-                Arbitration::CandidateWins(tier) => {
-                    let mut candidate = candidate;
-                    candidate.candidate.source_recognizer_ids.extend(
-                        resolved[index]
-                            .candidate
-                            .source_recognizer_ids
-                            .iter()
-                            .cloned(),
-                    );
-                    candidate.candidate.decided_by = tier;
-                    if tier == ConflictTier::CollisionPolicy {
-                        candidate.settlement = Settlement::CollisionPolicy;
-                    }
-                    candidate
-                        .candidate
-                        .merged_sources
-                        .push(resolved[index].candidate.source.clone());
-                    // Defeated candidates are provenance, not structural members.
-                    resolved[index] = candidate;
-                    removal = Some(tier);
-                    PairOutcome::Incoming(tier)
-                }
-                Arbitration::ExistingWins(tier) => {
-                    resolved[index]
-                        .candidate
-                        .source_recognizer_ids
-                        .extend(candidate.candidate.source_recognizer_ids.iter().cloned());
-                    // Relabel for audit only: a settled family stays settled.
-                    resolved[index].candidate.decided_by = tier;
-                    if tier == ConflictTier::CollisionPolicy {
-                        resolved[index].settlement = Settlement::CollisionPolicy;
-                    }
-                    resolved[index]
-                        .candidate
-                        .merged_sources
-                        .push(candidate.candidate.source);
-                    PairOutcome::Existing(tier)
-                }
-            };
-            resolved[index].node = result;
-            self.events.push(ResolutionEvent::Pair {
-                existing,
-                incoming,
-                result,
-                outcome,
-            });
-            if overlap != Overlap::Exact {
-                if let Some(tier) = removal {
-                    remove_overlaps(resolved, index, tier, &mut self.events);
-                }
-            }
-            return;
+        let mut probes = 0;
+        let slot = resolved.first_overlap(&candidate.candidate.span, &mut probes);
+        #[cfg(test)]
+        {
+            self.work.overlap_probes += probes;
         }
-        resolved.push(candidate);
+        let Some(slot) = slot else {
+            resolved.push(candidate);
+            return;
+        };
+        let mut held = resolved.take(slot);
+        let overlap = Overlap::classify(&held.candidate.span, &candidate.candidate.span)
+            .expect("first_overlap returns an overlapping slot");
+        let existing = held.node;
+        let incoming = candidate.node;
+        let result = self.next_node;
+        self.next_node += 1;
+        let mut removal = None;
+        let outcome = match arbitrate(
+            &held.candidate,
+            &candidate.candidate,
+            overlap,
+            policy,
+            anchor_ctx,
+        ) {
+            Arbitration::Merge => {
+                held.members.extend(candidate.members);
+                merge_same_span_same_class(&mut held.candidate, candidate.candidate);
+                PairOutcome::Merge
+            }
+            Arbitration::Family(tie) => {
+                held.members.extend(candidate.members);
+                held.candidate = *tie;
+                held.settlement = Settlement::CollisionPolicy;
+                removal = Some(ConflictTier::CollisionPolicy);
+                PairOutcome::Family
+            }
+            Arbitration::CandidateWins(tier) => {
+                let mut candidate = candidate;
+                candidate
+                    .candidate
+                    .source_recognizer_ids
+                    .extend(held.candidate.source_recognizer_ids.iter().cloned());
+                candidate.candidate.decided_by = tier;
+                if tier == ConflictTier::CollisionPolicy {
+                    candidate.settlement = Settlement::CollisionPolicy;
+                }
+                candidate
+                    .candidate
+                    .merged_sources
+                    .push(held.candidate.source.clone());
+                // Defeated candidates are provenance, not structural members.
+                held = candidate;
+                removal = Some(tier);
+                PairOutcome::Incoming(tier)
+            }
+            Arbitration::ExistingWins(tier) => {
+                held.candidate
+                    .source_recognizer_ids
+                    .extend(candidate.candidate.source_recognizer_ids.iter().cloned());
+                // Relabel for audit only: a settled family stays settled.
+                held.candidate.decided_by = tier;
+                if tier == ConflictTier::CollisionPolicy {
+                    held.settlement = Settlement::CollisionPolicy;
+                }
+                held.candidate
+                    .merged_sources
+                    .push(candidate.candidate.source);
+                PairOutcome::Existing(tier)
+            }
+        };
+        held.node = result;
+        self.events.push(ResolutionEvent::Pair {
+            existing,
+            incoming,
+            result,
+            outcome,
+        });
+        if overlap != Overlap::Exact {
+            if let Some(tier) = removal {
+                remove_overlaps(resolved, &mut held, tier, &mut self.events);
+            }
+        }
+        resolved.put(slot, held);
+    }
+}
+
+/// The resolved spans of one pool, in arrival order, with an index by start.
+///
+/// Arrival order decides which rival an incoming candidate meets first, so
+/// it is kept as slot order: a replaced entry keeps its slot, a removed one
+/// leaves a hole. Finding the first rival by scanning every slot made a pool
+/// of N candidates cost O(N^2) (todo 3895); the index finds it among the
+/// spans that actually overlap.
+#[derive(Default)]
+struct ResolvedSet {
+    slots: Vec<Option<WholeCandidate>>,
+    /// Non-empty spans by start. Resolved spans never overlap each other, so
+    /// ordering them by start orders them by end too.
+    by_start: BTreeMap<usize, usize>,
+    /// Slots holding an empty span, which can sit inside a non-empty one.
+    empty: Vec<usize>,
+}
+
+impl ResolvedSet {
+    /// Lowest slot whose span overlaps `span`, as the full scan would find.
+    fn first_overlap(&self, span: &Range<usize>, probes: &mut usize) -> Option<usize> {
+        self.overlapping(span, probes).into_iter().min()
+    }
+
+    fn overlapping(&self, span: &Range<usize>, probes: &mut usize) -> Vec<usize> {
+        let mut found = Vec::new();
+        for (_, &slot) in self.by_start.range(..span.end).rev() {
+            *probes += 1;
+            let existing = &self.span(slot);
+            if existing.end <= span.start {
+                break;
+            }
+            if overlaps(existing, span) {
+                found.push(slot);
+            }
+        }
+        for &slot in &self.empty {
+            *probes += 1;
+            if overlaps(&self.span(slot), span) {
+                found.push(slot);
+            }
+        }
+        found
+    }
+
+    fn span(&self, slot: usize) -> Range<usize> {
+        self.slots[slot]
+            .as_ref()
+            .expect("indexed slot is occupied")
+            .candidate
+            .span
+            .clone()
+    }
+
+    fn push(&mut self, candidate: WholeCandidate) {
+        self.slots.push(None);
+        self.put(self.slots.len() - 1, candidate);
+    }
+
+    fn put(&mut self, slot: usize, candidate: WholeCandidate) {
+        let span = &candidate.candidate.span;
+        if span.is_empty() {
+            self.empty.push(slot);
+        } else {
+            let previous = self.by_start.insert(span.start, slot);
+            debug_assert!(previous.is_none(), "resolved spans overlap");
+        }
+        self.slots[slot] = Some(candidate);
+    }
+
+    fn take(&mut self, slot: usize) -> WholeCandidate {
+        let candidate = self.slots[slot].take().expect("slot is occupied");
+        let span = &candidate.candidate.span;
+        if span.is_empty() {
+            self.empty.retain(|&held| held != slot);
+        } else {
+            self.by_start.remove(&span.start);
+        }
+        candidate
+    }
+
+    fn into_vec(self) -> Vec<WholeCandidate> {
+        self.slots.into_iter().flatten().collect()
     }
 }
 
@@ -760,38 +843,27 @@ thread_local! {
 }
 
 fn remove_overlaps(
-    resolved: &mut Vec<WholeCandidate>,
-    winner_index: usize,
+    resolved: &mut ResolvedSet,
+    winner: &mut WholeCandidate,
     tier: ConflictTier,
     events: &mut Vec<ResolutionEvent>,
 ) {
     #[cfg(test)]
     REMOVE_OVERLAPS_CALLS.with(|calls| calls.set(calls.get() + 1));
 
-    let winner_span = resolved[winner_index].candidate.span.clone();
-    let mut index = 0;
-    while index < resolved.len() {
-        if index != winner_index && overlaps(&resolved[index].candidate.span, &winner_span) {
-            let loser = resolved.remove(index);
-            let target = if index < winner_index {
-                winner_index - 1
-            } else {
-                winner_index
-            };
-            events.push(ResolutionEvent::Collateral {
-                removed: loser.node,
-                replacing: resolved[target].node,
-            });
-            resolved[target]
-                .candidate
-                .merged_sources
-                .push(loser.candidate.source);
-            // Audit relabel only; `settlement` belongs to the winner and is
-            // already correct for the pair it just won.
-            resolved[target].candidate.decided_by = tier;
-            continue;
-        }
-        index += 1;
+    let mut losers = resolved.overlapping(&winner.candidate.span, &mut 0);
+    // Slot order is arrival order, which fixes the audit order of the losers.
+    losers.sort_unstable();
+    for slot in losers {
+        let loser = resolved.take(slot);
+        events.push(ResolutionEvent::Collateral {
+            removed: loser.node,
+            replacing: winner.node,
+        });
+        winner.candidate.merged_sources.push(loser.candidate.source);
+        // Audit relabel only; `settlement` belongs to the winner and is
+        // already correct for the pair it just won.
+        winner.candidate.decided_by = tier;
     }
 }
 
@@ -2238,14 +2310,15 @@ mod recovery_event_tests {
             make(10..15, PiiClass::Name, "b"),
             make(3..12, PiiClass::Email, "c"),
         ]);
-        let mut nodes = (0..2)
-            .map(|id| WholeCandidate {
+        let mut nodes = ResolvedSet::default();
+        for id in 0..2 {
+            nodes.push(WholeCandidate {
                 candidate: pool.originals[id].clone(),
                 members: vec![id],
                 node: id,
                 settlement: Settlement::Open,
-            })
-            .collect::<Vec<_>>();
+            });
+        }
         let incoming = WholeCandidate {
             candidate: pool.originals[2].clone(),
             members: vec![2],
@@ -2253,6 +2326,7 @@ mod recovery_event_tests {
             settlement: Settlement::Open,
         };
         pool.insert(&mut nodes, incoming, &FamilyPolicyTable::EMPTY, None);
+        let nodes = nodes.into_vec();
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0].members, vec![2]);
         assert!(matches!(

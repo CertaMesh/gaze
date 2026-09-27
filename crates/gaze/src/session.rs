@@ -509,6 +509,17 @@ impl Session {
             .state
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // Copying the whole state on every call made minting N values
+        // O(N^2) (todo 3895). Update in place unless a reader still holds a
+        // snapshot. `update` must leave the state untouched when it reports
+        // no change, and must not panic after its first write.
+        if let Some(state) = Arc::get_mut(&mut boundary) {
+            let (output, changed) = update(state);
+            if changed {
+                state.advance_generation();
+            }
+            return output;
+        }
         let mut next = (**boundary).clone();
         let (output, changed) = update(&mut next);
         if changed {
@@ -1224,11 +1235,17 @@ where
         return (existing.clone(), false);
     }
 
-    let next = state.next_by_class.entry(class.clone()).or_insert(0);
-    *next = next
+    // Overflow is checked before the first write because `Session` may
+    // update its state in place.
+    let next = state
+        .next_by_class
+        .get(class)
+        .copied()
+        .unwrap_or(0)
         .checked_add(1)
         .expect("session token counter exhausted");
-    let token = build(*next);
+    let token = build(next);
+    state.next_by_class.insert(class.clone(), next);
     state.token_by_value.insert(key, token.clone());
     state.value_by_token.insert(token.clone(), raw.to_string());
     state.restore_regex_cache = None;
@@ -3533,6 +3550,43 @@ mod tests {
             Some(state.generation)
         );
         assert!(state.generation > 0);
+    }
+
+    /// Minting a value must not copy the session state (todo 3895: a copy
+    /// per value made N values cost O(N^2)). Pointer identity proves the
+    /// update happened in place while no reader held a snapshot.
+    #[test]
+    fn tokenize_updates_unshared_state_in_place() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let class = PiiClass::custom("postal_code").expect("class");
+        let before = Arc::as_ptr(&session.state_snapshot());
+        for code in 10_000..10_100 {
+            session.tokenize(&class, &code.to_string()).expect("token");
+        }
+        let state = session.state_snapshot();
+        assert_eq!(Arc::as_ptr(&state), before);
+        assert_eq!(state.token_by_value.len(), 100);
+        assert_eq!(state.generation, 100);
+    }
+
+    #[test]
+    fn tokenize_never_changes_a_snapshot_a_reader_holds() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let class = PiiClass::custom("postal_code").expect("class");
+        let first = session.tokenize(&class, "10000").expect("token");
+        let held = session.state_snapshot();
+        let second = session.tokenize(&class, "10001").expect("token");
+        session.record_evidence(None, &class, "10000", ManifestEvidence::Validated);
+
+        assert!(held.value_by_token.contains_key(&first));
+        assert!(!held.value_by_token.contains_key(&second));
+        assert!(held.evidence_by_value.is_empty());
+        assert_eq!(held.generation, 1);
+        let live = session.state_snapshot();
+        assert!(!Arc::ptr_eq(&held, &live));
+        assert!(live.value_by_token.contains_key(&second));
+        assert_eq!(live.evidence_by_value.len(), 1);
+        assert_eq!(live.generation, 3);
     }
 
     #[test]
