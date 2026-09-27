@@ -427,7 +427,9 @@ policy or the no-policy `core-extended` compatibility chain. An explicit
 `global` or `en-NZ` only chain does not run it. New Zealand needs a separate rule because
 its postcode has no Australian state abbreviation. The state range filter can
 miss postcodes used across state boundaries; a `#` before a locality can still
-leave an inner state and postcode match.
+leave an inner state and postcode match. A capitalized word before a valid
+state and range can also make a non-address count look like an address, such as
+`Melbourne VIC 3000 people`.
 `postal.ca`, `postal.gb`, and `postal.ie` interleave letters and digits in
 positions ordinary prose and identifiers do not produce, so they are
 format-basis and run at every locale including `--locale=global`. An adopter
