@@ -53,6 +53,7 @@ pub struct RegexDetector {
     token_family: String,
     capture_groups: Option<Vec<u32>>,
     exclusions: Vec<String>,
+    reject_match_regex: Option<Regex>,
     validator_kind: Option<ValidatorKind>,
     normalizer_kind: Option<NormalizerKind>,
     ascii_email_boundary: bool,
@@ -122,6 +123,7 @@ impl RegexDetector {
                 .into_iter()
                 .map(|value| value.to_ascii_lowercase())
                 .collect(),
+            reject_match_regex: None,
             validator_kind,
             normalizer_kind,
             ascii_email_boundary,
@@ -236,6 +238,15 @@ impl Recognizer for RegexDetector {
 }
 
 impl RegexDetector {
+    /// A rulepack guard can refuse a full regex match before its capture is emitted.
+    pub fn with_rejection_pattern(mut self, match_pattern: Option<&str>) -> Result<Self> {
+        self.reject_match_regex = match_pattern
+            .map(Regex::new)
+            .transpose()
+            .map_err(RecognizerError::InvalidRegex)?;
+        Ok(self)
+    }
+
     /// The candidate spans in `input`: pattern matches that pass the boundary checks, or for a
     /// card-run recognizer the cards in each run plus the Luhn-failing pattern windows that hold
     /// none, so validator veto still records those.
@@ -261,7 +272,13 @@ impl RegexDetector {
                         .next()
                         .map(|ch| full.start() + ch.len_utf8())
                 };
-                if let Some(span) = span.filter(|span| self.boundary_accepts(input, span)) {
+                if let Some(span) = span.filter(|span| {
+                    self.boundary_accepts(input, span)
+                        && !self
+                            .reject_match_regex
+                            .as_ref()
+                            .is_some_and(|guard| guard.is_match(full.as_str()))
+                }) {
                     return Some(span);
                 }
             }

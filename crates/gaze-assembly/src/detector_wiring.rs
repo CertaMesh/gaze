@@ -175,6 +175,12 @@ pub(crate) fn register_rulepack_recognizers(
                         validator_kind,
                         normalizer_kind,
                     )?
+                    .with_rejection_pattern(
+                        recognizer
+                            .context
+                            .as_ref()
+                            .and_then(|context| context.reject_match_regex.as_deref()),
+                    )?
                     .with_locale_basis(recognizer.locale_basis),
                 );
             }

@@ -113,6 +113,7 @@ pub struct ContextSpec {
     pub window: Option<u16>,
     pub boost: Option<f32>,
     pub exclusions: Vec<String>,
+    pub reject_match_regex: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -461,6 +462,8 @@ struct RawContextSpec {
     boost: Option<f32>,
     #[serde(default)]
     exclusions: Vec<String>,
+    #[serde(default)]
+    reject_match_regex: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -669,6 +672,7 @@ fn parse_recognizer(
             window: context.window,
             boost: context.boost,
             exclusions: context.exclusions,
+            reject_match_regex: context.reject_match_regex,
         }),
         validator: raw.validator.map(|validator| ValidatorSpec {
             kind: validator.kind,

@@ -63,7 +63,7 @@ fn class_for(index: usize) -> PiiClass {
 }
 
 /// Even-indexed recognizers are validator-backed so same-class containment
-/// exercises the validator-preference branch in both directions.
+/// also exercises pairs where the enclosed candidate has stronger evidence.
 fn canonical_form_for(index: usize) -> Option<String> {
     index.is_multiple_of(2).then(|| format!("canon{index}"))
 }
@@ -200,5 +200,35 @@ proptest! {
         check_invariants(&specs, &permuted, |candidates| {
             resolve_candidates_with_policy(candidates, registry.family_policy())
         });
+    }
+
+    #[test]
+    fn same_class_container_covers_every_enclosed_byte(
+        start in 0usize..24,
+        len in 2usize..16,
+        outer_score in 0.1f32..1.0,
+        inner_score in 0.1f32..1.0,
+        inner_validated in any::<bool>(),
+    ) {
+        let outer_span = start..start + len;
+        for inner_span in [start + 1..start + len, start..start + len - 1] {
+            let outer = Candidate::new(
+                outer_span.clone(), PiiClass::Email, "outer", outer_score, 0,
+                None, "email", "outer", ConflictTier::None, Vec::new(),
+            );
+            let inner = Candidate::new(
+                inner_span.clone(), PiiClass::Email, "inner", inner_score, 100,
+                inner_validated.then(|| "validated".to_string()), "email", "inner",
+                ConflictTier::None, Vec::new(),
+            );
+            for candidates in [vec![outer.clone(), inner.clone()], vec![inner.clone(), outer.clone()]] {
+                let resolved = resolve_candidates(candidates);
+                prop_assert_eq!(resolved.len(), 1);
+                prop_assert_eq!(&resolved[0].span, &outer_span);
+                prop_assert_eq!(resolved[0].decided_by, ConflictTier::SameClassContainment);
+                prop_assert!(resolved[0].span.start <= inner_span.start
+                    && inner_span.end <= resolved[0].span.end);
+            }
+        }
     }
 }

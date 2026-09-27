@@ -604,7 +604,7 @@ fn expected_default_activation_rows() -> BTreeSet<DefaultActivationRow> {
         ),
         (
             "core-extended compatibility alias",
-            vec!["global", "en-US", "de-DE", "de-AT", "de-CH"],
+            vec!["global", "en-US", "de-DE", "de-AT", "de-CH", "en-AU"],
             true,
             loaded_rulepack(CORE_EXTENDED_RULEPACK),
         ),

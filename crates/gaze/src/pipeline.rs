@@ -8007,7 +8007,58 @@ mod tests {
         let loser = entries.iter().find(|e| e.conflict_loser).expect("loser");
         assert_eq!(winner.source, "ner/gliner", "longer span should win");
         assert_eq!(loser.source, "ner/bert", "shorter span should lose");
-        assert_eq!(loser.decided_by, ConflictTier::SpanLength);
+        assert_eq!(loser.decided_by, ConflictTier::SameClassContainment);
+    }
+
+    #[test]
+    fn same_class_container_protects_superset_and_audits_enclosed_loser() {
+        let text = "NSW 2000";
+        let class = PiiClass::custom("postal_code").expect("class");
+        let short = detector_with_detections(
+            "postal.at_ch",
+            vec![Detection::new(4..8, class.clone(), "postal.at_ch")],
+        );
+        let long = detector_with_detections(
+            "postal.au",
+            vec![Detection::new(0..8, class.clone(), "postal.au")],
+        );
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .detector(short)
+            .detector(long)
+            .rule(ClassRule::new(class, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let CleanDocument::Text(cleaned) = pipeline
+            .redact(&session, RawDocument::Text(text.to_string()))
+            .expect("redact")
+        else {
+            panic!("expected text");
+        };
+        assert!(!cleaned.contains("NSW") && !cleaned.contains("2000"));
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&session, &cleaned)
+                .expect("restore"),
+            text
+        );
+        let entries = entries.lock().unwrap();
+        let winner = entries
+            .iter()
+            .find(|entry| !entry.conflict_loser)
+            .expect("winner");
+        let loser = entries
+            .iter()
+            .find(|entry| entry.conflict_loser)
+            .expect("loser");
+        assert_eq!(winner.source, "postal.au");
+        assert_eq!(loser.source, "postal.at_ch");
+        assert_eq!(loser.decided_by, ConflictTier::SameClassContainment);
     }
 
     /// Deterministic probe for the container-eviction defect (todo #3025 slice U):

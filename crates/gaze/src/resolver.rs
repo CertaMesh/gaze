@@ -52,7 +52,7 @@ pub(crate) struct CandidatePool {
 }
 
 #[cfg(test)]
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub(crate) struct ResolutionWork {
     pub(crate) pools: usize,
     pub(crate) candidates: usize,
@@ -64,6 +64,12 @@ pub(crate) struct WholeCandidate {
     pub(crate) members: Vec<usize>,
     pub(crate) node: usize,
     pub(crate) settlement: Settlement,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ContainmentMode {
+    Enclosing,
+    Prior,
 }
 
 /// Whether collision policy has already decided this span's family.
@@ -156,6 +162,56 @@ impl CandidatePool {
         policy: &FamilyPolicyTable,
         anchors: Option<(&AnchorResolver, &str, &[LocaleTag])>,
     ) -> Vec<WholeCandidate> {
+        let event_start = self.events.len();
+        let next_node_start = self.next_node;
+        #[cfg(test)]
+        let work_start = self.work.clone();
+        let selected = self.resolve_with_mode(ids, policy, anchors, ContainmentMode::Enclosing);
+        let used_containment = self.events[event_start..].iter().any(|event| {
+            matches!(
+                event,
+                ResolutionEvent::Pair {
+                    outcome: PairOutcome::Incoming(ConflictTier::SameClassContainment)
+                        | PairOutcome::Existing(ConflictTier::SameClassContainment),
+                    ..
+                }
+            )
+        });
+        if !used_containment {
+            return selected;
+        }
+
+        // A third partial rival can defeat the new container after it defeats
+        // an inner span. Keep the prior selection if that would expose bytes
+        // the prior resolver covered. Most pools never enter this second pass.
+        let mut prior = Self {
+            originals: self.originals.clone(),
+            order: self.order.clone(),
+            events: self.events[..event_start].to_vec(),
+            next_node: next_node_start,
+            #[cfg(test)]
+            work: work_start,
+        };
+        let prior_selected = prior.resolve_with_mode(ids, policy, anchors, ContainmentMode::Prior);
+        if covers_all_spans(&selected, &prior_selected) {
+            return selected;
+        }
+        self.events = prior.events;
+        self.next_node = prior.next_node;
+        #[cfg(test)]
+        {
+            self.work = prior.work;
+        }
+        prior_selected
+    }
+
+    fn resolve_with_mode(
+        &mut self,
+        ids: &[usize],
+        policy: &FamilyPolicyTable,
+        anchors: Option<(&AnchorResolver, &str, &[LocaleTag])>,
+        mode: ContainmentMode,
+    ) -> Vec<WholeCandidate> {
         #[cfg(test)]
         {
             self.work.pools += 1;
@@ -174,7 +230,7 @@ impl CandidatePool {
                 node: id,
                 settlement: Settlement::Open,
             };
-            self.insert(&mut resolved, candidate, policy, anchor_ctx);
+            self.insert(&mut resolved, candidate, policy, anchor_ctx, mode);
         }
         if let Some(ctx) = anchor_ctx {
             resolved = resolved
@@ -196,6 +252,7 @@ impl CandidatePool {
         candidate: WholeCandidate,
         policy: &FamilyPolicyTable,
         anchor_ctx: Option<AnchorContext<'_>>,
+        mode: ContainmentMode,
     ) {
         for index in 0..resolved.len() {
             #[cfg(test)]
@@ -218,6 +275,7 @@ impl CandidatePool {
                 overlap,
                 policy,
                 anchor_ctx,
+                mode,
             ) {
                 Arbitration::Merge => {
                     resolved[index].members.extend(candidate.members);
@@ -288,6 +346,26 @@ impl CandidatePool {
     }
 }
 
+fn covers_all_spans(selected: &[WholeCandidate], prior: &[WholeCandidate]) -> bool {
+    prior.iter().all(|prior_node| {
+        let mut cursor = prior_node.candidate.span.start;
+        for selected_node in selected {
+            let span = &selected_node.candidate.span;
+            if span.end <= cursor {
+                continue;
+            }
+            if span.start > cursor {
+                break;
+            }
+            cursor = cursor.max(span.end);
+            if cursor >= prior_node.candidate.span.end {
+                return true;
+            }
+        }
+        false
+    })
+}
+
 fn resolve_candidates_inner(
     candidates: &mut Vec<Candidate>,
     policy: &FamilyPolicyTable,
@@ -310,8 +388,7 @@ fn resolve_candidates_inner(
 enum Overlap {
     /// Identical spans: the winner keeps the slot; nothing else can overlap.
     Exact,
-    /// One span fully covers the other (same-class containment gets the
-    /// validator-preference rule).
+    /// One span fully covers the other.
     Containment,
     /// Spans overlap without either covering the other.
     Partial,
@@ -352,10 +429,23 @@ fn arbitrate(
     overlap: Overlap,
     policy: &FamilyPolicyTable,
     anchor_ctx: Option<AnchorContext<'_>>,
+    mode: ContainmentMode,
 ) -> Arbitration {
-    // Family tie must be checked before the same-class merge and before any
-    // ladder: two equal-precedence variants collapse into one family token even
-    // when they share a class.
+    // A same-class container covers every byte its enclosed candidate protected,
+    // and adds more. Geometry settles this before family policy or the base ladder.
+    if mode == ContainmentMode::Enclosing
+        && overlap == Overlap::Containment
+        && existing.class == candidate.class
+    {
+        return if contains(&candidate.span, &existing.span) {
+            Arbitration::CandidateWins(ConflictTier::SameClassContainment)
+        } else {
+            Arbitration::ExistingWins(ConflictTier::SameClassContainment)
+        };
+    }
+
+    // Exact-span family ties still collapse into one family token before the
+    // same-class merge or base ladder.
     if let Some(tie) = family_tie_candidate(candidate, existing, policy) {
         return Arbitration::Family(Box::new(tie));
     }
@@ -363,9 +453,10 @@ fn arbitrate(
         return Arbitration::Merge;
     }
 
-    // Same-class containment prefers the validator-backed span, then the base
-    // ladder; policy and anchors do not apply inside one class.
-    if overlap == Overlap::Containment && existing.class == candidate.class {
+    if mode == ContainmentMode::Prior
+        && overlap == Overlap::Containment
+        && existing.class == candidate.class
+    {
         let candidate_validated = candidate.canonical_form.is_some();
         let existing_validated = existing.canonical_form.is_some();
         if candidate_validated != existing_validated {
@@ -510,8 +601,9 @@ fn evidence_tier(
 /// contained candidate's. Equal tiers go to the container: on the reference
 /// letter the phone rule is validator-backed like the IBAN, and breaking the
 /// tie by score hands the middle of the IBAN to the phone. Geometry and
-/// tiers decide, never arrival order. Partial overlaps and same-class pairs
-/// keep today's rungs.
+/// tiers decide, never arrival order. Partial overlaps and exact same-class
+/// pairs keep their existing rungs; strict same-class containment resolves
+/// earlier by the enclosing span.
 fn containment_precedence(
     existing: &Candidate,
     candidate: &Candidate,
@@ -1221,16 +1313,141 @@ mod tests {
     }
 
     #[test]
-    fn same_class_containment_prefers_validator_backed_candidate() {
-        let mut validated = candidate(0..10, PiiClass::Email, 0.50, "validator");
+    fn same_class_containment_never_loses_covered_bytes_to_validator_or_score() {
+        let mut validated = candidate(0..5, PiiClass::Email, 0.99, "validator");
         validated.canonical_form = Some("canonical".to_string());
         let resolved = resolve_candidates(vec![
-            candidate(0..5, PiiClass::Email, 0.95, "regex"),
+            candidate(0..10, PiiClass::Email, 0.50, "container"),
             validated,
         ]);
 
         assert_eq!(resolved.len(), 1);
-        assert_eq!(resolved[0].recognizer_id, "validator");
+        assert_eq!(resolved[0].recognizer_id, "container");
+        assert_eq!(resolved[0].span, 0..10);
+        assert_eq!(resolved[0].decided_by, ConflictTier::SameClassContainment);
+    }
+
+    #[test]
+    fn same_class_containment_precedes_declared_evidence_tiers() {
+        for (outer_evidence, inner_evidence) in [
+            (EvidenceKind::Rule, EvidenceKind::Learned),
+            (EvidenceKind::Learned, EvidenceKind::Rule),
+        ] {
+            let outer =
+                candidate(0..10, PiiClass::Email, 0.50, "outer").with_evidence(outer_evidence);
+            let mut inner =
+                candidate(2..8, PiiClass::Email, 0.99, "inner").with_evidence(inner_evidence);
+            inner.canonical_form = Some("validated".into());
+            for candidates in [
+                vec![outer.clone(), inner.clone()],
+                vec![inner.clone(), outer.clone()],
+            ] {
+                let resolved = resolve_candidates(candidates);
+                assert_eq!(resolved.len(), 1);
+                assert_eq!(resolved[0].recognizer_id, "outer");
+                assert_eq!(resolved[0].span, 0..10);
+                assert_eq!(resolved[0].decided_by, ConflictTier::SameClassContainment);
+                assert!(resolved[0].merged_sources.contains(&"inner".to_string()));
+            }
+        }
+    }
+
+    #[test]
+    fn same_class_containment_never_reduces_prior_protected_bytes() {
+        fn next(state: &mut u64) -> u64 {
+            *state ^= *state << 13;
+            *state ^= *state >> 7;
+            *state ^= *state << 17;
+            *state
+        }
+        fn covered(selected: &[Range<usize>], prior: &[Range<usize>]) -> bool {
+            prior.iter().all(|span| {
+                (span.start..span.end)
+                    .all(|byte| selected.iter().any(|candidate| candidate.contains(&byte)))
+            })
+        }
+
+        let mut seed = 0x5eed_2026_0727_3880u64;
+        let mut nested_pools = 0usize;
+        let mut unsafe_without_guard = 0usize;
+        for count in 2..=5 {
+            for case in 0..10_000 {
+                let mut input = Vec::with_capacity(count);
+                for index in 0..count {
+                    let start = (next(&mut seed) % 20) as usize;
+                    let end = start + 1 + (next(&mut seed) % 12) as usize;
+                    let class = match next(&mut seed) % 3 {
+                        0 => PiiClass::Email,
+                        1 => PiiClass::Name,
+                        _ => PiiClass::custom("postal_code").unwrap(),
+                    };
+                    let mut item = candidate(
+                        start..end,
+                        class,
+                        [0.4, 0.6, 0.8, 0.99][(next(&mut seed) % 4) as usize],
+                        &format!("r{case}_{index}"),
+                    );
+                    item.priority = (next(&mut seed) % 5) as i32 - 2;
+                    if next(&mut seed).is_multiple_of(4) {
+                        item.canonical_form = Some("synthetic".into());
+                    }
+                    item.evidence = if next(&mut seed).is_multiple_of(2) {
+                        EvidenceKind::Rule
+                    } else {
+                        EvidenceKind::Learned
+                    };
+                    input.push(item);
+                }
+                if input.iter().enumerate().any(|(i, a)| {
+                    input.iter().skip(i + 1).any(|b| {
+                        a.class == b.class
+                            && a.span != b.span
+                            && (contains(&a.span, &b.span) || contains(&b.span, &a.span))
+                    })
+                }) {
+                    nested_pools += 1;
+                }
+                let mut prior_pool = CandidatePool::new(input.clone());
+                let order = prior_pool.order.clone();
+                let prior = prior_pool.resolve_with_mode(
+                    &order,
+                    &FamilyPolicyTable::EMPTY,
+                    None,
+                    ContainmentMode::Prior,
+                );
+                let prior_spans = prior
+                    .iter()
+                    .map(|node| node.candidate.span.clone())
+                    .collect::<Vec<_>>();
+                let mut raw_pool = CandidatePool::new(input.clone());
+                let order = raw_pool.order.clone();
+                let unguarded = raw_pool.resolve_with_mode(
+                    &order,
+                    &FamilyPolicyTable::EMPTY,
+                    None,
+                    ContainmentMode::Enclosing,
+                );
+                let unguarded_spans = unguarded
+                    .iter()
+                    .map(|node| node.candidate.span.clone())
+                    .collect::<Vec<_>>();
+                if !covered(&unguarded_spans, &prior_spans) {
+                    unsafe_without_guard += 1;
+                }
+                let selected = resolve_candidates(input);
+                let selected_spans = selected
+                    .iter()
+                    .map(|node| node.span.clone())
+                    .collect::<Vec<_>>();
+                assert!(
+                    covered(&selected_spans, &prior_spans),
+                    "pool size {count}, case {case}: {prior_spans:?} -> {selected_spans:?}"
+                );
+            }
+        }
+        eprintln!("checked 40000 pools, {nested_pools} had strict same-class nesting, {unsafe_without_guard} needed the coverage safeguard");
+        assert!(nested_pools > 100);
+        assert!(unsafe_without_guard > 0);
     }
 
     #[test]
@@ -2252,7 +2469,13 @@ mod recovery_event_tests {
             node: 2,
             settlement: Settlement::Open,
         };
-        pool.insert(&mut nodes, incoming, &FamilyPolicyTable::EMPTY, None);
+        pool.insert(
+            &mut nodes,
+            incoming,
+            &FamilyPolicyTable::EMPTY,
+            None,
+            ContainmentMode::Enclosing,
+        );
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0].members, vec![2]);
         assert!(matches!(
