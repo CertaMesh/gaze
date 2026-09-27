@@ -642,7 +642,7 @@ class GoldGapScoringTests(unittest.TestCase):
                 )
 
     def test_same_document_homonym_is_credited_by_the_rule(self) -> None:
-        # The blind spot the human audit exists for: byte equality is not
+        # The blind spot the sample audit exists for: byte equality is not
         # identity. The rule credits it; the audit decides whether it may.
         text = "May Example submitted the form. Delivery is scheduled for May."
         doc = gap_document(text, at(text, "May", "FIRSTNAME"), at(text, "Example", "SURNAME"))
