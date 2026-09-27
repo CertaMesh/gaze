@@ -252,11 +252,11 @@ Companion deep-dives:
 [`docs/explanation/detection/anchor-resolution.md`](../explanation/detection/anchor-resolution.md),
 [`docs/explanation/safety-net/safety-net-modes.md`](../explanation/safety-net/safety-net-modes.md).
 
-### 2.1 Tier order (canonical)
+### 2.1 Conflict tier labels
 
-When candidates overlap, the resolver applies tiers in this fixed order;
-the first tier to produce a decision wins. The order is part of
-[KDD-6 (Conflict Resolution Is Deterministic)](../../ARCHITECTURE.md#kdd-6-conflict-resolution-is-deterministic).
+These labels record why a candidate won or lost. The resolver's decision
+order, including the same-class containment safeguard, is described in
+[Full conflict-resolution order](redaction-classes.md#full-conflict-resolution-order).
 
 1. **`ValidatorVeto`** (pre-resolver) — drops any candidate whose
    declared validator rejects the canonical form. Loser audit rows carry
@@ -290,6 +290,8 @@ the first tier to produce a decision wins. The order is part of
    protects also claimed them. Never a winner or loser row.
 12. **`RecognizerId`** — final lexicographic tiebreak on recognizer id.
 13. **`Merged`** — adjacent same-class candidates merged into one span.
+14. **`SameClassContainment`** — a strict same-class container was selected
+    because it covered the enclosed span and preserved prior byte coverage.
 
 SafetyNet modes layer on top of the resolver (after tokenization):
 
