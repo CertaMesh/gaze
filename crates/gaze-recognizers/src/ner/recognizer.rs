@@ -40,7 +40,7 @@ impl NerRecognizer {
 
 impl Recognizer for NerRecognizer {
     fn id(&self) -> &str {
-        "ner"
+        gaze_types::NER_RECOGNIZER_ID
     }
 
     fn supported_class(&self) -> &PiiClass {

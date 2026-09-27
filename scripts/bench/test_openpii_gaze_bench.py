@@ -29,7 +29,7 @@ EXPECTED_BUILTIN_SOURCE_IDS = frozenset(
     }
 )
 BUILTIN_SOURCE_LITERAL_PATHS = {
-    "ner": "crates/gaze-recognizers/src/ner/recognizer.rs",
+    "ner": "crates/gaze-types/src/lib.rs",
     "openai-privacy-filter": (
         "crates/gaze-recognizers/src/safety_net/openai_filter/mod.rs"
     ),

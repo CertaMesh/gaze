@@ -506,9 +506,12 @@ fn evidence_tier(
 /// resolver's lowest evidence tier, and the one the repeat-value sweep never
 /// propagates.
 pub(crate) fn is_learned(candidate: &Candidate) -> bool {
-    candidate.recognizer_id == "ner"
+    candidate.recognizer_id == crate::NER_RECOGNIZER_ID
         || candidate.source == "ner"
         || candidate.source.starts_with("ner/")
+        // Licensed by a NER street span, so it carries no more certainty than NER: a house
+        // number must never be swept to every other copy of `17` (todo 3670).
+        || candidate.recognizer_id == crate::house_number::HOUSE_NUMBER_RECOGNIZER_ID
 }
 
 /// Detects the containment-precedence shape and says which side is the
