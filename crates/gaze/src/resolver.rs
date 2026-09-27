@@ -582,8 +582,8 @@ fn arbitrate(
         && overlap == Overlap::Containment
         && existing.class == candidate.class
     {
-        let candidate_validated = candidate.canonical_form.is_some();
-        let existing_validated = existing.canonical_form.is_some();
+        let candidate_validated = is_validated(candidate);
+        let existing_validated = is_validated(existing);
         if candidate_validated != existing_validated {
             return if candidate_validated {
                 Arbitration::CandidateWins(ConflictTier::Validator)
@@ -692,12 +692,18 @@ enum EvidenceTier {
     Validated,
 }
 
+/// A validator passed. A canonical form alone does not say so: an IBAN or card kept although its
+/// checksum failed (`ValidatorOnFail::Record`) still carries its normalizer's canonical form.
+fn is_validated(candidate: &Candidate) -> bool {
+    candidate.canonical_form.is_some() && candidate.validator_fail_reason.is_none()
+}
+
 fn evidence_tier(
     candidate: &Candidate,
     policy: &FamilyPolicyTable,
     anchor_ctx: Option<AnchorContext<'_>>,
 ) -> EvidenceTier {
-    if candidate.canonical_form.is_some() {
+    if is_validated(candidate) {
         return EvidenceTier::Validated;
     }
     if candidate.source.starts_with("structural.") {
@@ -787,6 +793,10 @@ fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
     if existing.canonical_form.is_none() {
         existing.canonical_form = candidate.canonical_form;
     }
+    // A recorded checksum failure sticks: the merged value was never validated.
+    existing.validator_fail_reason = existing
+        .validator_fail_reason
+        .or(candidate.validator_fail_reason);
     existing.decided_by = ConflictTier::Merged;
     existing.merged_sources.push(candidate.source);
 }

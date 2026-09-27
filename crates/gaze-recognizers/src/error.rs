@@ -11,6 +11,19 @@ pub enum RecognizerError {
         /// Unsupported validator kind.
         kind: String,
     },
+    /// `on_fail = "record"` on a validator that must veto, or on a recognizer that scans whole
+    /// digit runs for cards (every run would then be a candidate).
+    #[error(
+        "validator {kind} cannot keep a failed candidate on recognizer {recognizer_id}: {reason}"
+    )]
+    UnsupportedValidatorOnFail {
+        /// Recognizer identifier.
+        recognizer_id: String,
+        /// Validator kind.
+        kind: String,
+        /// Why the combination is refused.
+        reason: &'static str,
+    },
     /// Normalizer kind is unsupported by this recognizer build.
     #[error("unsupported normalizer: {kind}")]
     UnsupportedNormalizer {

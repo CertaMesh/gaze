@@ -5,7 +5,7 @@ use gaze::{
     RedactionEntry, RedactionLogError, RedactionLogger, Rulepack, RulepackError, RulepackSource,
     Scope, Session,
 };
-use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
+use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind, ValidatorOnFail};
 use gaze_types::{
     DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer, ValidatorOutcome,
 };
@@ -54,6 +54,12 @@ fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
     )
     .expect("regex detector")
     .with_locale_basis(spec.locale_basis)
+    .with_validator_on_fail(
+        spec.validator
+            .as_ref()
+            .map_or(ValidatorOnFail::Veto, |validator| validator.on_fail),
+    )
+    .expect("validator on_fail")
 }
 
 fn detect_recognizer(
@@ -226,7 +232,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 41);
+    assert_eq!(core.recognizers.len(), 43);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -1397,8 +1403,10 @@ fn phase2_formatted_card_with_hyphens_tokenizes_and_round_trips() {
     assert_eq!(restore_tokens(&session, &clean), input);
 }
 
+/// A Luhn-failing card still tokenizes after a card cue (solo todo 3906): `card.structural`
+/// vetoes it, `card.cued` keeps it. Without a cue it stays raw.
 #[test]
-fn phase2_formatted_card_failing_luhn_drops() {
+fn phase2_formatted_card_failing_luhn_tokenizes_only_after_a_card_cue() {
     let rulepack = core_extended();
     let input = "Card: 4111 1111 1111 1112";
 
@@ -1407,11 +1415,19 @@ fn phase2_formatted_card_failing_luhn_drops() {
     let pipeline = pipeline_from_rulepack(&rulepack);
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
-    assert_eq!(clean, input);
+    assert_custom_token(&clean, "credit_card");
+    assert!(clean.starts_with("Card: <"), "{clean}");
+    assert_eq!(restore_tokens(&session, &clean), input);
+
+    let uncued = "Order 4111 1111 1111 1112";
+    assert_eq!(
+        clean_text(&pipeline, &session, uncued, LocaleTag::EnUs),
+        uncued
+    );
 }
 
 #[test]
-fn phase2_iban_and_cards_are_universal_and_solo_classes() {
+fn phase2_iban_and_cards_are_universal_classes_with_cued_siblings() {
     let rulepack = core_extended();
     let iban = rulepack
         .recognizers
@@ -1440,21 +1456,25 @@ fn phase2_iban_and_cards_are_universal_and_solo_classes() {
             .map(|collision| collision.family.as_str()),
         Some("payment-card-or-iban")
     );
+    // The structural rule plus its cue-anchored checksum-failure sibling (solo todo 3906).
     assert_eq!(
         rulepack
             .recognizers
             .iter()
             .filter(|recognizer| recognizer.class == PiiClass::Custom("iban".to_string()))
-            .count(),
-        1
+            .map(|recognizer| recognizer.id.as_str())
+            .collect::<std::collections::BTreeSet<_>>(),
+        std::collections::BTreeSet::from(["iban.cued", "iban.structural"])
     );
+    // The structural rule plus its cue-anchored checksum-failure sibling (solo todo 3906).
     assert_eq!(
         rulepack
             .recognizers
             .iter()
             .filter(|recognizer| recognizer.class == PiiClass::Custom("credit_card".to_string()))
-            .count(),
-        1
+            .map(|recognizer| recognizer.id.as_str())
+            .collect::<std::collections::BTreeSet<_>>(),
+        std::collections::BTreeSet::from(["card.cued", "card.structural"])
     );
 
     for locale in [

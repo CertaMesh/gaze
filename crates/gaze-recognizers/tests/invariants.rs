@@ -4,7 +4,7 @@ use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, Pipeline, RawDocument, RawMatch, RecognizerSpec,
     Rulepack, RulepackSource, Scope, Session,
 };
-use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
+use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind, ValidatorOnFail};
 use gaze_types::{LocaleTag, PiiClass};
 
 fn core_extended() -> Rulepack {
@@ -50,6 +50,12 @@ fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
     )
     .expect("regex detector")
     .with_locale_basis(spec.locale_basis)
+    .with_validator_on_fail(
+        spec.validator
+            .as_ref()
+            .map_or(ValidatorOnFail::Veto, |validator| validator.on_fail),
+    )
+    .expect("validator on_fail")
 }
 
 fn pipeline_from_rulepack(rulepack: &Rulepack) -> Pipeline {

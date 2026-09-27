@@ -472,25 +472,23 @@ fn every_registry_country_tokenizes_whole_with_and_without_a_trailing_label() {
     }
 }
 
-/// A country code outside the registry produces no candidate at all.
-///
-/// On base it produced a candidate that validator veto then dropped. Dropping it earlier is the
-/// intended behaviour: `iban_registry_length` returns `None`, so no such string could ever have
-/// become a token.
+/// A country code outside the registry is never an `iban.structural` candidate: with no cue it
+/// stays raw. After the word `IBAN` it is `iban.cued`'s: a mistyped country code or an account
+/// number the writer calls an IBAN is still an account (solo todo 3906), tokenized as one IBAN.
 #[test]
-fn non_registry_country_codes_never_tokenize() {
+fn non_registry_country_codes_tokenize_only_after_an_iban_cue() {
     for code in ["ZZ", "QQ", "XX"] {
         assert!(
             iban_registry_length(code).is_none(),
             "{code} must stay outside the registry for this fixture"
         );
-        let text = format!("IBAN {code}61 1904 3002 3457 3201");
-        let cleaned = clean(&text);
+        // The 16 digits are Luhn-valid, so `card.structural` may claim them; no IBAN token may.
+        let uncued = clean(&format!("Ref {code}61 1904 3002 3457 3201"));
         assert!(
-            !cleaned.contains(":Custom:iban_"),
-            "{code} is not a registry country and must not produce an IBAN token: {}",
-            shape_of(&cleaned)
+            !uncued.contains(":Custom:iban_"),
+            "{code} without a cue must not be an IBAN: {uncued}"
         );
+        assert_iban_tokenized("IBAN ", &format!("{code}61 1904 3002 3457 3201"), "");
     }
 }
 

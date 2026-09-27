@@ -1,4 +1,6 @@
-use gaze_types::{Candidate, ValidatorFailReason, ValidatorKind, ValidatorOutcome};
+use gaze_types::{
+    Candidate, EvidenceKind, ValidatorFailReason, ValidatorKind, ValidatorOnFail, ValidatorOutcome,
+};
 
 use crate::registry::RecognizerRegistry;
 
@@ -55,6 +57,18 @@ pub fn apply(
                 if candidate.canonical_form.is_none() {
                     candidate.canonical_form = canonical_form;
                 }
+                kept.push(candidate);
+            }
+            // An IBAN or card the recognizer found by shape and context stays a candidate when
+            // its checksum fails: a mistyped or masked number is still someone's financial data
+            // (user ruling 2026-09-27). The failure goes on its audit row, and it is `Learned`
+            // evidence, so the repeat-value sweep never spreads an unvalidated value.
+            ValidatorOutcome::Fail { reason }
+                if recognizer.validator_on_fail() == ValidatorOnFail::Record
+                    && kind.allows_recorded_failure() =>
+            {
+                candidate.validator_fail_reason = Some(reason);
+                candidate.evidence = EvidenceKind::Learned;
                 kept.push(candidate);
             }
             ValidatorOutcome::Fail { reason } => {

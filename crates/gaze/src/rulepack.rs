@@ -119,6 +119,10 @@ pub struct ContextSpec {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidatorSpec {
     pub kind: String,
+    /// What validator veto does when the validator fails: `veto` (default) or `record`.
+    /// `record` is accepted only for `luhn` and `iban_mod97`; see
+    /// [`gaze_types::ValidatorKind::allows_recorded_failure`].
+    pub on_fail: gaze_types::ValidatorOnFail,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -216,6 +220,15 @@ pub enum RulepackError {
     },
     #[error("unsupported validator kind: {kind}")]
     UnsupportedValidator { kind: String },
+    #[error(
+        "recognizer '{recognizer_id}': validator '{kind}' does not support on_fail = '{on_fail}'; \
+         only luhn and iban_mod97 may record a failure, every other validator vetoes"
+    )]
+    UnsupportedValidatorOnFail {
+        recognizer_id: String,
+        kind: String,
+        on_fail: String,
+    },
     #[error("unsupported normalizer kind: {kind}")]
     UnsupportedNormalizer { kind: String },
     #[error("unsupported safety_tier: {value}")]
@@ -470,6 +483,8 @@ struct RawContextSpec {
 #[serde(deny_unknown_fields)]
 struct RawValidatorSpec {
     kind: String,
+    #[serde(default)]
+    on_fail: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -623,6 +638,34 @@ impl From<RawLocaleData> for LocaleData {
     }
 }
 
+/// `on_fail = "record"` keeps a candidate whose validator failed. Only IBAN mod-97 and Luhn
+/// allow it (user ruling 2026-09-27); any other validator fails closed at load, so no rulepack
+/// can relax a tax, national-ID or other checksum by accident.
+fn parse_validator_spec(
+    recognizer_id: &str,
+    raw: RawValidatorSpec,
+) -> Result<ValidatorSpec, RulepackError> {
+    let refuse = |on_fail: &str| RulepackError::UnsupportedValidatorOnFail {
+        recognizer_id: recognizer_id.to_string(),
+        kind: raw.kind.clone(),
+        on_fail: on_fail.to_string(),
+    };
+    let on_fail = match raw.on_fail.as_deref() {
+        None => gaze_types::ValidatorOnFail::Veto,
+        Some(value) => gaze_types::ValidatorOnFail::parse(value).ok_or_else(|| refuse(value))?,
+    };
+    if on_fail == gaze_types::ValidatorOnFail::Record
+        && !gaze_types::ValidatorKind::parse(&raw.kind)
+            .is_ok_and(gaze_types::ValidatorKind::allows_recorded_failure)
+    {
+        return Err(refuse("record"));
+    }
+    Ok(ValidatorSpec {
+        kind: raw.kind,
+        on_fail,
+    })
+}
+
 fn parse_recognizer(
     raw: RawRecognizerSpec,
     default_locales: &[LocaleTag],
@@ -637,6 +680,10 @@ fn parse_recognizer(
     let collision = raw
         .collision
         .map(|collision| parse_collision_membership(&raw.id, collision))
+        .transpose()?;
+    let validator = raw
+        .validator
+        .map(|validator| parse_validator_spec(&raw.id, validator))
         .transpose()?;
     let safety_tier = raw
         .safety_tier
@@ -674,9 +721,7 @@ fn parse_recognizer(
             exclusions: context.exclusions,
             reject_match_regex: context.reject_match_regex,
         }),
-        validator: raw.validator.map(|validator| ValidatorSpec {
-            kind: validator.kind,
-        }),
+        validator,
         normalizer: raw.normalizer.map(|normalizer| NormalizerSpec {
             kind: normalizer.kind,
         }),
@@ -1971,6 +2016,86 @@ pattern = "BETA-[0-9]+"
 {second_collision}
 "#
         )
+    }
+
+    fn validator_rulepack(kind: &str, on_fail: &str) -> String {
+        format!(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "validators"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "probe.validated"
+class = "custom:probe"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = 'card \d{{16}}'
+
+[recognizers.validator]
+kind = "{kind}"
+{on_fail}
+"#
+        )
+    }
+
+    #[test]
+    fn validator_on_fail_record_is_accepted_only_for_iban_and_luhn() {
+        for kind in ["iban_mod97", "luhn"] {
+            let pack = Rulepack::parse(&validator_rulepack(kind, "on_fail = \"record\""))
+                .unwrap_or_else(|error| panic!("{kind} may record: {error}"));
+            let validator = pack.recognizers[0].validator.as_ref().expect("validator");
+            assert_eq!(validator.on_fail, gaze_types::ValidatorOnFail::Record);
+        }
+        for kind in [
+            "de_steuer_id_mod1110",
+            "bsn_mod11",
+            "uk_nhs_mod11",
+            "cpf_mod11",
+            "fr_nir_mod97",
+            "aadhaar_verhoeff",
+            "email_rfc",
+            "ipv4_parse_non_documentation",
+            "eth_eip55",
+        ] {
+            let error = Rulepack::parse(&validator_rulepack(kind, "on_fail = \"record\""))
+                .expect_err("only IBAN and Luhn may keep a failed candidate");
+            assert!(
+                matches!(error, RulepackError::UnsupportedValidatorOnFail { .. }),
+                "{kind}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn validator_on_fail_defaults_to_veto_and_rejects_unknown_values() {
+        let pack = Rulepack::parse(&validator_rulepack("luhn", "")).expect("default");
+        let validator = pack.recognizers[0].validator.as_ref().expect("validator");
+        assert_eq!(validator.on_fail, gaze_types::ValidatorOnFail::Veto);
+        let pack = Rulepack::parse(&validator_rulepack("bsn_mod11", "on_fail = \"veto\""))
+            .expect("explicit veto is fine for any validator");
+        assert_eq!(
+            pack.recognizers[0]
+                .validator
+                .as_ref()
+                .expect("validator")
+                .on_fail,
+            gaze_types::ValidatorOnFail::Veto
+        );
+        for value in ["ignore", "Record", "keep"] {
+            let error = Rulepack::parse(&validator_rulepack(
+                "luhn",
+                &format!("on_fail = \"{value}\""),
+            ))
+            .expect_err("unknown on_fail fails closed");
+            assert!(
+                matches!(error, RulepackError::UnsupportedValidatorOnFail { .. }),
+                "{value}: {error}"
+            );
+        }
     }
 
     fn anchored_match_rulepack(override_line: &str) -> String {

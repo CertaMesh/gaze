@@ -118,6 +118,10 @@ impl ManifestEvidence {
     pub(crate) fn of(candidate: &Candidate) -> Self {
         if candidate.recognizer_id == SWEEP_ID {
             Self::Pattern
+        } else if candidate.validator_fail_reason.is_some() {
+            // Kept although its checksum failed (`ValidatorOnFail::Record`): its normalizer may
+            // still have set a canonical form, but nothing validated it.
+            Self::Learned
         } else if candidate.canonical_form.is_some() {
             Self::Validated
         } else if candidate.source.starts_with("structural.") {
