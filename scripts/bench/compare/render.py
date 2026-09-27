@@ -97,6 +97,10 @@ def render(report: dict[str, object], source: str) -> str:
         "Presidio English default leaves German documents unprocessed. "
         "This measures detection; competitor restore and manifest behavior is not scored.",
         "",
+        f"Gaze revision: `{gaze['v3']['gaze_revision']}`; "
+        f"setup policy SHA-256: `{gaze['v3']['policy_sha256']}`. "
+        "The measured call scopes differ by tool, so latency is descriptive.",
+        "",
         f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published.",
         "",
         "| Contract | Layer | Tool | Leaked B | FP B | CPU p50 ms | CPU p95 ms |",
