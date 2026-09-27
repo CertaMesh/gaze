@@ -108,6 +108,26 @@ const COMMON_WORDS: &[&str] = &[
     "short", "spring", "steel", "swift", "walker", "street", "gates", "means",
 ];
 
+/// Name particles and articles (`von der`, `van den`, `de la`). They sit inside
+/// names but are everyday words on their own, so a part or a run made only of
+/// them is never a name: `von der` of `Anna von der Heide` must not sweep
+/// `Unterlagen von der Bank` (review F1 on #691).
+#[rustfmt::skip]
+const PARTICLES: &[&str] = &[
+    "von", "van", "der", "den", "dem", "des", "del", "della", "dos", "das", "da",
+    "de", "di", "du", "la", "le", "ter", "ten", "zu", "zur", "vom", "y", "bin",
+    "ibn", "al", "el",
+];
+
+/// Organization and role words in sender names (`SUPPORT TEAM`, `DHL Paket`).
+/// A header value made of them is tokenized as a whole, but none of them is a
+/// name part on its own (review F2 on #691).
+#[rustfmt::skip]
+const ORG_ROLE_WORDS: &[&str] = &[
+    "support", "team", "service", "info", "paket", "kundenservice", "noreply",
+    "newsletter",
+];
+
 /// Certainty of the evidence a manifest value was found with, ordered like
 /// the resolver's evidence tiers. Persisted per manifest entry in the session
 /// blob so a later turn can tell rule-found values from model-found ones.
@@ -446,16 +466,25 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
     }
     if shape == ValueShape::MultiWord && source.class == PiiClass::Name {
         let parts = value.split_whitespace().collect::<Vec<_>>();
-        for part in parts.iter().filter(|part| is_word(part)) {
-            if part.chars().filter(|ch| ch.is_alphabetic()).count() >= MIN_PART_LETTERS {
-                // A part is swept only in a spelling that starts upper-case:
-                // a lower-case single word is too often an ordinary word.
-                for spelling in word_spellings(part)
-                    .into_iter()
-                    .filter(|spelling| spelling.chars().next().is_some_and(char::is_uppercase))
-                {
-                    push(PatternKind::Exact, spelling, SweepLink::Part);
-                }
+        // An org-shaped sender (`DHL Paket`, `GitHub Support`) is tokenized
+        // whole, but its parts are product and department words, so none of
+        // them sweeps alone (review F2 on #691).
+        let single_parts = if is_org_shaped(&parts) {
+            &[][..]
+        } else {
+            &parts[..]
+        };
+        for part in single_parts
+            .iter()
+            .filter(|part| is_word(part) && is_distinctive_part(part))
+        {
+            // A part is swept only in a spelling that starts upper-case:
+            // a lower-case single word is too often an ordinary word.
+            for spelling in word_spellings(part)
+                .into_iter()
+                .filter(|spelling| spelling.chars().next().is_some_and(char::is_uppercase))
+            {
+                push(PatternKind::Exact, spelling, SweepLink::Part);
             }
         }
         // Two or more adjacent parts are a name in any case: a cue-found
@@ -481,10 +510,46 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
     }
 }
 
-/// A name part that is a name on its own: long enough and not a common word.
+/// A name part that is a name on its own: long enough and not an ordinary
+/// word. The one rule for single parts and for the distinctive part of a run.
 fn is_distinctive_part(part: &str) -> bool {
     part.chars().filter(|ch| ch.is_alphabetic()).count() >= MIN_PART_LETTERS
-        && !COMMON_WORDS.contains(&part.to_lowercase().as_str())
+        && !is_ordinary_word(part)
+}
+
+/// A common word that is also a name, a particle, or an org or role word
+/// (in any hyphen piece, so `IT-Support` counts).
+fn is_ordinary_word(word: &str) -> bool {
+    let lower = word.to_lowercase();
+    COMMON_WORDS.contains(&lower.as_str())
+        || PARTICLES.contains(&lower.as_str())
+        || lower
+            .split(['-', '\'', '’'])
+            .any(|piece| ORG_ROLE_WORDS.contains(&piece))
+}
+
+/// A word with an upper-case letter right after a lower-case one (`GitHub`).
+fn is_camel_case(word: &str) -> bool {
+    word.chars()
+        .zip(word.chars().skip(1))
+        .any(|(before, after)| before.is_lowercase() && after.is_uppercase())
+}
+
+/// A word of two or more letters, all upper case (`DHL`, `TOBIAS`).
+fn is_all_caps(word: &str) -> bool {
+    word.chars().filter(|ch| ch.is_alphabetic()).count() >= 2
+        && word
+            .chars()
+            .filter(|ch| ch.is_alphabetic())
+            .all(char::is_uppercase)
+}
+
+/// A name value shaped like an organization: a CamelCase part, or all-caps
+/// parts mixed with others (`DHL Paket`). A wholly all-caps value
+/// (`MARIA KOWALSKI`) is a shouted personal name and keeps its parts.
+fn is_org_shaped(parts: &[&str]) -> bool {
+    let caps = parts.iter().filter(|part| is_all_caps(part)).count();
+    parts.iter().any(|part| is_camel_case(part)) || (caps > 0 && caps < parts.len())
 }
 
 /// A single word: letters, joined by at most internal hyphens or apostrophes.
@@ -498,14 +563,16 @@ fn is_word(value: &str) -> bool {
 /// The spellings a single word is swept in: the word as written (a
 /// byte-identical copy carries the source's own evidence, so `SCHNEIDER`
 /// sweeps `SCHNEIDER`), its title case (`MARIA` also sweeps `Maria`) and its
-/// upper case (`Maria` also sweeps `MARIA` in a shouted subject line).
-/// Empty for a word on the common-word list.
+/// upper case (`Maria` also sweeps `MARIA` in a shouted subject line). A
+/// CamelCase word (`GitHub`) is a brand spelling, so it gets no upper case.
+/// Empty for an ordinary word ([`is_ordinary_word`]).
 fn word_spellings(word: &str) -> Vec<String> {
-    if COMMON_WORDS.contains(&word.to_lowercase().as_str()) {
+    if is_ordinary_word(word) {
         return Vec::new();
     }
     let mut spellings = vec![word.to_string()];
-    for spelling in [title_case(word), word.to_uppercase()] {
+    let upper = (!is_camel_case(word)).then(|| word.to_uppercase());
+    for spelling in std::iter::once(title_case(word)).chain(upper) {
         if !spellings.contains(&spelling) {
             spellings.push(spelling);
         }
@@ -836,6 +903,70 @@ mod tests {
             raw: "AB12CD".into(),
         };
         assert_eq!(found(vec![id], "x AB12CD-extra y"), ["AB12CD"]);
+    }
+
+    /// Review F1 (#691): particles and articles are never name parts on
+    /// their own, so `von der` is not swept from `Anna von der Heide`.
+    #[test]
+    fn particles_are_never_distinctive_or_parts() {
+        assert!(found(
+            vec![name("Anna von der Heide")],
+            "Unterlagen von der Bank und von der Post holen, VON DER KASSE."
+        )
+        .is_empty());
+        assert!(found(vec![name("Jan van der Berg")], "The van der Waals force.").is_empty());
+        assert!(found(vec![name("Paul van den Broek")], "we gaan van den bosch").is_empty());
+        let leyen = vec![name("Ursula von der Leyen")];
+        assert!(found(leyen.clone(), "DER VERTRAG VON HEUTE").is_empty());
+        assert!(found(leyen.clone(), "Der Vertrag von heute").is_empty());
+        // The distinctive part still carries every run and its own spellings.
+        assert_eq!(found(leyen.clone(), "an VON DER LEYEN"), ["VON DER LEYEN"]);
+        assert_eq!(found(leyen, "frau von der leyen"), ["von der leyen"]);
+    }
+
+    /// Review F2 (#691): an org-shaped sender (a CamelCase part, or all-caps
+    /// mixed with other parts) and org or role words never sweep as single
+    /// parts; the whole value still does.
+    #[test]
+    fn org_shaped_values_do_not_propagate_single_parts() {
+        let dhl = vec![name("DHL Paket")];
+        assert!(found(dhl.clone(), "Ihr Paket kommt. Das PAKET ist da").is_empty());
+        assert_eq!(found(dhl, "Ihr DHL Paket kommt"), ["DHL Paket"]);
+        assert!(found(
+            vec![name("DHL Paket Service")],
+            "SERVICE desk, Service desk"
+        )
+        .is_empty());
+        let team = vec![name("SUPPORT TEAM")];
+        assert!(found(team.clone(), "Contact Support or the Team").is_empty());
+        assert_eq!(found(team, "ask the support team"), ["support team"]);
+        let hub = SweepSource {
+            family: "counter".into(),
+            class: PiiClass::Name,
+            raw: "GitHub".into(),
+        };
+        assert!(found(vec![hub.clone()], "GITHUB outage").is_empty());
+        assert_eq!(found(vec![hub], "GitHub outage"), ["GitHub"]);
+        // A fully all-caps personal name keeps its parts (main already swept them).
+        let caps = vec![name("JORUNN VASQUEZ-ELLERY")];
+        assert_eq!(
+            found(caps.clone(), "Dear Vasquez-Ellery,"),
+            ["Vasquez-Ellery"]
+        );
+        assert_eq!(
+            found(caps, "ping jorunn vasquez-ellery"),
+            ["jorunn vasquez-ellery"]
+        );
+    }
+
+    /// Review F3 (#691), accepted and disclosed: joiner growth also takes a
+    /// hyphenated common word glued to a name. Fail-closed, few bytes.
+    #[test]
+    fn joiner_growth_takes_a_glued_hyphenated_word() {
+        assert_eq!(
+            found(vec![name("Maria Kowalski")], "see Kowalski-follow-up notes"),
+            ["Kowalski-follow-up"]
+        );
     }
 
     #[test]

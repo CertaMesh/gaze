@@ -100,7 +100,9 @@ parts glued to it by a hyphen or apostrophe
 of `Jorunn Vasquez`, and `O'Brien` one copy of the part `Brien`. Stopping at
 the source's edge would ship `-ellery` raw. A forward continuation needs two
 letters, so a possessive `'s` stays outside the token; a continuation that
-runs into a digit is not taken.
+runs into a digit is not taken. The growth does not ask whether the glued word
+is a name, so `Kowalski-follow-up` becomes one token over `-follow-up` too:
+fail-closed, a few bytes (review F3 on #691).
 
 Why runs: a cue-found value keeps its cue's honorific
 (`From: Herr Tobias Brenner <…>` yields `Herr Tobias Brenner`), so the bare
@@ -117,6 +119,27 @@ noun and English every sentence start, so title case alone cannot tell
 The cost is recall: `Herr Richter` is not swept from a `Thomas Richter`
 header. The full value `Thomas Richter` still is.
 
+Two more closed lists make a word ordinary, so it is never a part on its own
+and never the distinctive part of a run:
+
+- **Particles and articles** (`von`, `van`, `der`, `den`, `de`, `la`, `y`,
+  `bin`, `al`, ...). `Anna von der Heide` must not turn every German
+  `von der` into a token. `von der Leyen` is still swept in any case through
+  its distinctive `leyen`. The cost: `VAN DER BERG` has no distinctive part
+  (`berg` is a common word), so a lower-case or all-caps copy relies on NER.
+- **Organization and role words** (`support`, `team`, `service`, `info`,
+  `paket`, `kundenservice`, `noreply`, `newsletter`, also as a hyphen piece
+  as in `IT-Support`).
+
+A value shaped like an organization never sweeps single parts: a CamelCase
+part (`GitHub`), or all-caps parts mixed with others (`DHL Paket`). The whole
+value and its runs still sweep, so `DHL Paket` is found again but `Paket` is
+not. A CamelCase single word keeps its written and title-case spellings but
+gets no upper case (`GitHub` does not sweep `GITHUB`). A wholly all-caps value
+(`MARIA KOWALSKI`) is a shouted personal name and keeps its parts. The cost:
+a CamelCase surname (`Ronald McDonald`) sweeps as a whole and in runs, not
+as `McDonald` alone.
+
 Case folding keeps a map from every folded byte back to the character it came
 from, and a copy must start and end on whole characters. Turkish `İ` lowers to
 two scalars; the copy still covers exactly its own bytes. Default Unicode case
@@ -129,7 +152,10 @@ lower-case single words would tokenize ordinary words that happen to be
 names. A surname part on the common-word list stays raw on its own. A digit
 run under six digits is not swept. A copy in an earlier proxy field than its
 source stays raw (see above). A value no rule found (only NER, or nothing)
-seeds no sweep.
+seeds no sweep. An honorific plus a name made only of common words stays raw
+in lower case: `From: Herr Frank Wolf <…>` then `frank wolf` has no
+distinctive part, so no run, and the whole-value match needs `herr`
+(same for `Mr Bill Gates`).
 
 ## Token identity and restore
 

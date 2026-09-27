@@ -370,3 +370,67 @@ fn daemon_later_turn_sweeps_an_all_caps_honorific_name() {
         "{turns:?}"
     );
 }
+
+/// Review F1/F2 on #691, precision direction: particles and org-shaped
+/// senders must not turn ordinary body words into tokens.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn particles_and_org_senders_do_not_sweep_ordinary_words() {
+    for (header, body) in [
+        (
+            "From: \"Anna von der Heide\" <ah@example.invalid>\n",
+            "Bitte die Unterlagen von der Bank und von der Post holen, VON DER KASSE.\n",
+        ),
+        (
+            "From: \"Jan van der Berg\" <jb@example.invalid>\n",
+            "The van der Waals force.\n",
+        ),
+        (
+            "From: \"Paul van den Broek\" <pb@example.invalid>\n",
+            "we gaan van den bosch\n",
+        ),
+        (
+            "From: \"Ursula von der Leyen\" <ul@example.invalid>\n",
+            "DER VERTRAG VON HEUTE\n",
+        ),
+        (
+            "From: DHL Paket <dhl@example.invalid>\n",
+            "Ihr Paket kommt morgen. Das Paket ist da.\n",
+        ),
+        (
+            "From: SUPPORT TEAM <st@example.invalid>\n",
+            "Contact Support or the Team.\n",
+        ),
+        ("From: GitHub <gh@example.invalid>\n", "GITHUB is down.\n"),
+    ] {
+        let input = format!("{header}{body}");
+        let clean = clean_and_round_trip(&input, &[]);
+        assert!(clean.ends_with(body), "{body:?} -> {clean:?}");
+    }
+}
+
+/// Review F1/F2 on #691, recall direction: the distinctive part and a fully
+/// all-caps personal name still sweep.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn particle_names_and_all_caps_names_still_sweep() {
+    for (header, body, forbidden) in [
+        (
+            "From: \"Ursula von der Leyen\" <ul@example.invalid>\n",
+            "Termin mit VON DER LEYEN und frau von der leyen\n",
+            "leyen",
+        ),
+        (
+            "From: JORUNN VASQUEZ-ELLERY <jv@example.invalid>\n",
+            "ping jorunn vasquez-ellery, Dear Vasquez-Ellery\n",
+            "vasquez",
+        ),
+    ] {
+        let input = format!("{header}{body}");
+        let clean = clean_and_round_trip(&input, &[]);
+        assert!(
+            !clean.to_lowercase().contains(forbidden),
+            "{forbidden:?} shipped raw in {clean:?}"
+        );
+    }
+}
