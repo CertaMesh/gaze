@@ -23,6 +23,7 @@ def validate_current(report: dict[str, object]) -> None:
     sys.path.insert(0, str(BENCH))
     import agentic_layers
     import dataiku_en_de_gaze_bench as dataiku
+    import run_no_opf_benchmark as runner
 
     corpus = report["corpus"]
     expected = {
@@ -37,7 +38,15 @@ def validate_current(report: dict[str, object]) -> None:
             corpus["agentic"]["corpus_sha256"],
             agentic_layers.prepare(REPO).manifest["corpus_sha256"],
         ),
+        "agentic scored labels": (
+            report["contracts"]["agentic"], agentic_layers.load_contract(REPO).sha256,
+        ),
     }
+    for version, path in (("v1", None), ("v2", Path("docs/reference/benchmarks/scored-labels-v2.json")),
+                          ("v3", Path("docs/reference/benchmarks/scored-labels-v3.json"))):
+        expected[f"{version} scored labels"] = (
+            report["contracts"][version], runner.load_scored_label_contract(REPO, path).sha256,
+        )
     for name, (recorded, current) in expected.items():
         if recorded != current:
             raise ValueError(f"{name} changed; rerun every competitor")

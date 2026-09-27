@@ -447,6 +447,13 @@ def main() -> int:
         ).strip()),
         "scorer_sha256": digest_file(BENCH / "gaze_bench_score.py"),
         "mapping_sha256": digest_file(MAP_PATH),
+        "contracts": {
+            **{
+                version: runner.load_scored_label_contract(REPO, path).sha256
+                for version, path in CONTRACTS.items()
+            },
+            "agentic": agentic.load_contract(REPO).sha256,
+        },
         "hardware": platform.platform(), "device": "cpu", "corpus": corpus,
         "tools": {}, "skipped": {}, "gaze": {},
     }
