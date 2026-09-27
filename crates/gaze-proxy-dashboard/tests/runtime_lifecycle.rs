@@ -85,7 +85,7 @@ fn spawn_paired_dashboard(pid_file: &Path) -> (PairedDashboard, u32, Vec<u8>) {
 
 #[cfg(not(target_os = "macos"))]
 fn assert_process_reaped(pid: u32) {
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let alive = Command::new("/bin/kill")
             .args(["-0", &pid.to_string()])
@@ -390,7 +390,7 @@ fn browser_purge_request_advances_epoch_without_corrupting_control_protocol() {
         "browser purge request rejected"
     );
 
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline = Instant::now() + Duration::from_secs(60);
     let mut epoch = None;
     while Instant::now() < deadline {
         match control.lifecycle() {

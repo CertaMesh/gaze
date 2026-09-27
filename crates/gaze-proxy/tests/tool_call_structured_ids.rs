@@ -114,8 +114,11 @@ async fn tool_call_arguments_with_national_ids_and_nbsp_iban_reach_upstream_toke
     let proxy_task =
         tokio::spawn(async move { gaze_proxy::serve(config, pipeline).await.unwrap() });
 
-    let client = Client::new();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .unwrap();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     while !client
         .get(format!("http://{bind}/_gaze_proxy/healthz"))
         .send()

@@ -1000,10 +1000,10 @@ mod tests {
             )
         });
         parent.write_all(&[PARENT_SHUTDOWN]).unwrap();
+        worker.join().unwrap().unwrap();
         let mut ack = [0_u8; 1];
         parent.read_exact(&mut ack).unwrap();
         assert_eq!(ack[0], CHILD_STOPPED);
-        worker.join().unwrap().unwrap();
         assert_eq!(probe.read_timeout().unwrap(), None);
     }
 
