@@ -473,11 +473,12 @@ fn every_registry_country_tokenizes_whole_with_and_without_a_trailing_label() {
 }
 
 /// A country code outside the registry is never an `iban.structural` candidate: with no cue it
-/// stays raw. After the word `IBAN` it is `iban.cued`'s: a mistyped country code or an account
-/// number the writer calls an IBAN is still an account (solo todo 3906), tokenized as one IBAN.
+/// is no IBAN. After the word `IBAN` a real ISO 3166-1 country without IBANs is `iban.cued`'s: an
+/// account number the writer calls an IBAN is still an account (solo todo 3906). A two-letter
+/// pair that is no country is no IBAN even after the cue (review of #694).
 #[test]
 fn non_registry_country_codes_tokenize_only_after_an_iban_cue() {
-    for code in ["ZZ", "QQ", "XX"] {
+    for code in ["US", "AU", "CA", "ZZ", "QQ", "XX"] {
         assert!(
             iban_registry_length(code).is_none(),
             "{code} must stay outside the registry for this fixture"
@@ -486,9 +487,20 @@ fn non_registry_country_codes_tokenize_only_after_an_iban_cue() {
         let uncued = clean(&format!("Ref {code}61 1904 3002 3457 3201"));
         assert!(
             !uncued.contains(":Custom:iban_"),
-            "{code} without a cue must not be an IBAN: {uncued}"
+            "{code} without a cue must not be an IBAN: {}",
+            shape_of(&uncued)
         );
+    }
+    for code in ["US", "AU", "CA"] {
         assert_iban_tokenized("IBAN ", &format!("{code}61 1904 3002 3457 3201"), "");
+    }
+    for code in ["ZZ", "QQ", "XX"] {
+        let cued = clean(&format!("IBAN {code}61 1904 3002 3457 3201"));
+        assert!(
+            !cued.contains(":Custom:iban_"),
+            "{code} is no country and must not be an IBAN: {}",
+            shape_of(&cued)
+        );
     }
 }
 
