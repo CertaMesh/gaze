@@ -266,7 +266,7 @@ class Opf:
     def predict(self, document: score.Document) -> list[score.Span]:
         payload = json.dumps({"text": document.text}, ensure_ascii=False).encode("utf-8")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-            conn.settimeout(60)
+            conn.settimeout(600)
             conn.connect(str(self.socket))
             conn.sendall(payload)
             conn.shutdown(socket.SHUT_WR)
@@ -386,9 +386,14 @@ def measure(
     for layer, documents in layers.items():
         timers = []
         accumulators = {key: score.MetricAccumulator() for key in contracts}
-        for document in documents:
+        for index, document in enumerate(documents, 1):
             start = time.perf_counter()
-            predictions = predictor(document)
+            try:
+                predictions = predictor(document)
+            except TimeoutError as error:
+                raise RuntimeError(
+                    f"{name} timed out in layer {layer} at document {index}/{len(documents)}"
+                ) from error
             timers.append((time.perf_counter() - start) * 1000)
             validate_labels(predictions, mapping)
             if name == "opf":
@@ -400,6 +405,8 @@ def measure(
                     else score.apply_scored_label_contract([document], contract)[0]
                 )
                 accumulators[version].add(mapped_document(applied, mapping), predictions)
+            if index % 500 == 0:
+                print(f"{name}: scored {index}/{len(documents)} in layer {layer}", file=sys.stderr, flush=True)
         latency = {"p50_ms": round(score.percentile(timers, 0.5), 3),
                    "p95_ms": round(score.percentile(timers, 0.95), 3),
                    "samples": len(timers)}
@@ -523,7 +530,8 @@ def main() -> int:
                 backend = Opf(args.opf_python, args.opf_checkpoint, Path(temporary))
                 provenance = {"checkpoint_sha256": digest_tree(args.opf_checkpoint),
                               "runtime": opf_runtime_info(args.opf_python),
-                              "decode": "default viterbi, typed output, cpu"}
+                              "decode": "default viterbi, typed output, cpu",
+                              "socket_timeout_seconds": 600}
                 mapping = mappings["opf"]
             try:
                 # Warm the model outside the measured per-document latency.
