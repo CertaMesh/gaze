@@ -18,6 +18,7 @@ mod anchored_match;
 // Pinned model bundle verification, shared by the primary NER bundle and the Nym safety net.
 mod bundle;
 mod dictionary;
+mod dob_judge;
 mod error;
 mod locale_aware;
 mod ner;
@@ -30,6 +31,11 @@ pub use anchored_match::{
     is_person_name_candidate, AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape,
 };
 pub use dictionary::DictionaryRecognizer;
+pub use dob_judge::{
+    verify_gliner_dob_bundle, DobJudgeLoadError, DobJudgeRecognizer, GLINER_DOB_BUNDLE_SHA256,
+    GLINER_DOB_HF_COMMIT, GLINER_DOB_HF_REPO, GLINER_DOB_MODEL_DIR_NAME, GLINER_DOB_SHA256SUMS,
+    GLINER_DOB_UPSTREAM_FILES, REQUIRED_GLINER_DOB_ARTIFACTS,
+};
 pub use error::{RecognizerError, Result};
 #[cfg(feature = "phone-parser")]
 pub use gaze_types::Region;

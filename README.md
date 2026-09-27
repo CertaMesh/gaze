@@ -94,6 +94,12 @@ From: Ada Example <ada@example.invalid>
 
 `gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a NER-only policy.
 
+Use `gaze setup --dob-judge` to install the optional SHA-pinned local GLiNER
+bundle and enable cue-less date-of-birth judgments in the generated policy.
+This option is off by default. `--dob-model-dir <path>` selects its bundle
+directory. The setup doctor checks a synthetic birth date before publishing
+the policy.
+
 `clean_text` is what you send to the model. `clean.json` also holds the `session_blob`: keep it on your server, because it is what `gaze restore` needs and it contains the originals.
 
 ## Where next

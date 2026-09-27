@@ -62,6 +62,46 @@ impl Recognizer for Ner {
     }
 }
 
+/// Stands in for a model-confirmed DOB without loading the ONNX bundle.
+struct LearnedDob(PiiClass);
+
+impl Recognizer for LearnedDob {
+    fn id(&self) -> &str {
+        "dob.gliner"
+    }
+    fn supported_class(&self) -> &PiiClass {
+        &self.0
+    }
+    fn token_family(&self) -> &str {
+        "birth_date"
+    }
+    fn detect(
+        &self,
+        input: &str,
+        _: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+        if !input.starts_with("Patient record: ") {
+            return Ok(vec![]);
+        }
+        let date = "14.03.1987";
+        let Some(start) = input.find(date) else {
+            return Ok(vec![]);
+        };
+        Ok(vec![Candidate::new(
+            start..start + date.len(),
+            self.supported_class().clone(),
+            self.id(),
+            0.9,
+            0,
+            None,
+            self.token_family(),
+            self.id(),
+            ConflictTier::None,
+            vec![],
+        )])
+    }
+}
+
 fn candidate(span: std::ops::Range<usize>, id: &str, source: &str) -> Candidate {
     Candidate::new(
         span,
@@ -203,6 +243,21 @@ fn learned_values_do_not_propagate() {
         input,
     );
     assert!(out.contains("later anna weber wrote"), "{out}");
+}
+
+#[test]
+fn model_confirmed_birth_date_does_not_sweep_a_later_business_date() {
+    let session = Session::new(Scope::Conversation("dob-evidence".into())).unwrap();
+    let pipeline = Pipeline::builder()
+        .recognizer(LearnedDob(PiiClass::Custom("birth_date".into())))
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+
+    let first = clean(&pipeline, &session, "Patient record: 14.03.1987.");
+    assert!(!first.contains("14.03.1987"), "{first}");
+    let second = clean(&pipeline, &session, "Account opened: 14.03.1987.");
+    assert_eq!(second, "Account opened: 14.03.1987.");
 }
 
 #[test]

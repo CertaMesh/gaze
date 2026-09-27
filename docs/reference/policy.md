@@ -838,6 +838,31 @@ downloaded from `onnx/model_int8.onnx` and verified against the repository-root
 the canonical copy-paste policy block is
 [`crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml`](../../crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml).
 
+### `[dob_judge]` (optional)
+
+```toml
+[dob_judge]
+enabled = true
+model_dir = "/absolute/path/to/gliner-multi-pii-dob-int8"
+threshold = 0.5
+```
+
+The local GLiNER judge considers date-shaped spans that the rule floor has not
+already claimed as `birth_date`. It can emit a restorable `birth_date` token
+with the distinct `dob.gliner` source. It is disabled unless `enabled = true`;
+`gaze setup --dob-judge` installs the SHA-pinned int8 bundle and writes this
+block. An enabled block requires `model_dir`. Missing or corrupt bundle files,
+an invalid threshold, and inference errors fail closed. `threshold` defaults
+to `0.5` and must be greater than `0.0` and less than `1.0`. The model scores
+`date of birth`, `date`, and `event date` together. The birth-date score must
+also exceed both alternative scores by at least `0.65`. Some ambiguous business
+dates may still receive a birth-date label. Contexts such as `Account opened`
+are excluded before model inference. In a synthetic held-out probe with that
+keyword filter bypassed, the judge emitted 7/13 birth-date spans (EN 5/7, DE
+2/4, FR 0/2) and 1/19 business-date spans. Cue-less DE/FR form dates and the
+second person in a list often remain raw unless another recognizer catches
+them.
+
 ### `[safety_net]` and `[safety_net.nym]`
 
 `backend = "nym"` activates the opt-in Nym-small safety net for CLI commands

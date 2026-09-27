@@ -524,6 +524,36 @@ class ModelValidationTests(unittest.TestCase):
             result = runner.validate_model_bundle(pin)
         self.assertEqual(result["verified_artifacts"], 1)
 
+    def test_enabled_gliner_bundle_is_recorded_and_verified(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "bundle"
+            bundle.mkdir()
+            artifact = bundle / "model.onnx"
+            artifact.write_bytes(b"synthetic GLiNER model")
+            manifest = bundle / "SHA256SUMS"
+            manifest.write_text(
+                f"{score.sha256_file(artifact)}  model.onnx\n", encoding="utf-8"
+            )
+            digest = score.sha256_file(manifest)
+            source = root / "crates/gaze-recognizers/src/dob_judge.rs"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                f'pub const GLINER_DOB_BUNDLE_SHA256: &str = "{digest}";\n',
+                encoding="utf-8",
+            )
+            policy = {"dob_judge": {"enabled": True, "model_dir": "bundle"}}
+            result = runner.validate_gliner_dob_bundle(root, root / "policy.toml", policy)
+            self.assertEqual(result["model_id"], "gliner-multi-pii-dob-int8")
+            self.assertEqual(result["expected_sha256"], digest)
+            self.assertEqual(result["observed_sha256"], digest)
+            self.assertIsNone(
+                runner.validate_gliner_dob_bundle(root, root / "policy.toml", {})
+            )
+            artifact.write_bytes(b"tampered model")
+            with self.assertRaisesRegex(runner.ModelBundleError, "artifact digest mismatch"):
+                runner.validate_gliner_dob_bundle(root, root / "policy.toml", policy)
+
     def test_present_model_with_mismatched_manifest_digest_fails_closed(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as tmp:
