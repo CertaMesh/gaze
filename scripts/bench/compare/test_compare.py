@@ -84,3 +84,15 @@ def test_public_page_rejects_partial_competitor_run() -> None:
     with pytest.raises(ValueError, match="every configured competitor"):
         render.render({"gaze": {version: {} for version in ("v1", "v2", "v3")},
                        "tools": {}, "corpus": {"layers": {}}}, "comparison.json")
+
+
+def test_timeout_reports_layer_position_without_document_text() -> None:
+    document = compare.score.Document(
+        "synthetic", "alice@example.invalid", "en", "", "synthetic", (),
+    )
+
+    def timeout(_document: compare.score.Document) -> list[compare.score.Span]:
+        raise TimeoutError("socket timeout")
+
+    with pytest.raises(RuntimeError, match=r"opf timed out in layer C at document 1/1"):
+        compare.measure("opf", timeout, {"C": [document]}, compare.load_mapping()["opf"])
