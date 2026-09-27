@@ -706,7 +706,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             safety_net,
             policy_out,
             model_dir,
-            dob_judge: !no_dob_judge,
+            dob_judge: dob_judge_enabled(no_dob_judge),
             dob_model_dir,
             non_interactive,
             force,
@@ -893,6 +893,13 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
     }
 }
 
+/// The GLiNER DOB judge is on unless `--no-dob-judge`; the hidden `--dob-judge`
+/// only keeps old scripts parsing.
+#[cfg(feature = "setup")]
+fn dob_judge_enabled(no_dob_judge: bool) -> bool {
+    !no_dob_judge
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
@@ -981,6 +988,72 @@ mod tests {
                 "{conflicting:?}"
             );
         }
+    }
+
+    /// Flags to the written policy, both directions, with a fake installer: no env,
+    /// no network, no model. The live path is covered by tests/setup_policy.rs.
+    #[cfg(feature = "setup")]
+    #[test]
+    fn setup_flags_decide_whether_the_policy_carries_the_dob_judge() {
+        use gaze_model_setup::InstallOutcome;
+
+        let ner = PathBuf::from("/tmp/synthetic-ner");
+        for (flags, expect_judge) in [
+            (&[][..], true),
+            (&["--dob-judge"][..], true),
+            (&["--no-dob-judge"][..], false),
+        ] {
+            let (no_dob_judge, dob_model_dir) = setup_dob_flags(flags).unwrap();
+            let mut installs = 0;
+            let resolved = setup::resolve_dob_judge(
+                dob_judge_enabled(no_dob_judge),
+                dob_model_dir.as_deref(),
+                |dir| {
+                    installs += 1;
+                    assert_eq!(dir, None, "{flags:?}");
+                    Ok(InstallOutcome::AlreadyPresent {
+                        model_dir: PathBuf::from("/tmp/synthetic-gliner"),
+                    })
+                },
+            )
+            .unwrap();
+            assert_eq!(installs, usize::from(expect_judge), "{flags:?}");
+            let policy = setup::setup_policy_toml_with_dob(
+                &ner,
+                None,
+                resolved.as_ref().map(|(dir, _)| dir.as_path()),
+            )
+            .unwrap();
+            assert_eq!(
+                policy.contains("[dob_judge]\nenabled = true"),
+                expect_judge,
+                "{flags:?}: {policy}"
+            );
+        }
+    }
+
+    #[cfg(feature = "setup")]
+    #[test]
+    fn failed_dob_install_names_the_opt_out() {
+        let err = setup::resolve_dob_judge(true, None, |_| {
+            Err(gaze_model_setup::SetupError::PathResolve {
+                message: "offline".to_string(),
+            })
+        })
+        .unwrap_err();
+        assert!(
+            matches!(&err, CliError::SetupDetail(detail) if detail.contains("gaze setup --no-dob-judge")),
+            "{err:?}"
+        );
+        let err =
+            setup::resolve_dob_judge(false, Some(std::path::Path::new("/tmp/gliner")), |_| {
+                unreachable!("a disabled judge must not install")
+            })
+            .unwrap_err();
+        assert!(
+            matches!(&err, CliError::SetupDetail(detail) if detail.contains("--no-dob-judge")),
+            "{err:?}"
+        );
     }
 
     #[test]

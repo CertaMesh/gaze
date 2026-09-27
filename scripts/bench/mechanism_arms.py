@@ -35,8 +35,12 @@ import verify_record_scorecards as verify
 from render_benchmark_doc import (
     GOLD_GAP_CONTRACT,
     HEADLINE_CONTRACT,
+    RenderError,
+    _gold_gap_from_run,
     begin_marker,
+    check_gold_gap_arms,
     end_marker,
+    headline_arms,
     version_sort_key,
 )
 
@@ -47,13 +51,13 @@ DOC = BENCH_DIR / "README.md"
 LEDGER = BENCH_DIR / "mechanism-arms.json"
 EVIDENCE_DIR = BENCH_DIR / "mechanisms"
 RELEASE_HISTORY = BENCH_DIR / "release-history.json"
-V2_CONTRACT = BENCH_DIR / "scored-labels-v2.json"
-V3_CONTRACT = BENCH_DIR / "scored-labels-v3.json"
 BLOCK = "mechanism-arms"
 SCHEMA_VERSION = 1
 # Headline first; from GOLD_GAP_CONTRACT on, false-positive bytes are the
 # gold-gap adjusted value (same rule as render_benchmark_doc.headline_arms).
 CONTRACTS = (HEADLINE_CONTRACT, 2, 1)
+# The contracts a pair is measured (and gated) under; the others are re-scored.
+GATED_CONTRACTS = (2, 1)
 # The one scorecard field a v1 run may differ in from the v1 rescore of the v2
 # run's record: it names the record file, which is a different file by
 # construction. Everything else, timing aside, must match.
@@ -72,9 +76,12 @@ def sha256(path: Path) -> str:
 
 
 def _contract(version: int) -> score.ScoredLabelContract:
+    """Contract v1 is built in; every later one is `scored-labels-v<N>.json`."""
     if version == 1:
         return score.SCORED_LABEL_CONTRACT_V1
-    path = {2: V2_CONTRACT, 3: V3_CONTRACT}[version]
+    path = BENCH_DIR / f"scored-labels-v{version}.json"
+    if not path.is_file():
+        raise MechanismError(f"scored-label contract v{version} has no file at {path.name}")
     return score.load_scored_label_contract(
         path, display_path=path.relative_to(ROOT).as_posix()
     )
@@ -104,17 +111,23 @@ def _count(value: Any, where: str) -> int:
 
 
 def headline(run: Mapping[str, Any], version: int) -> dict[str, int]:
-    """Layer C bytes as the benchmark document reads them under `version`."""
+    """Layer C bytes as the benchmark document reads them under `version`.
+
+    The false-positive rule is the renderer's own (`headline_arms`), so this
+    table and the release table can never disagree on which number is FP.
+    """
     utf8 = run["metrics"]["utf8_bytes"]
-    gold_gap = run["metrics"].get("gold_gap")
-    if (gold_gap is not None) != (version >= GOLD_GAP_CONTRACT):
-        raise MechanismError(
-            f"contract v{version} run {'lacks' if gold_gap is None else 'carries'} a gold_gap block"
-        )
-    false_positive = (
-        gold_gap["false_positive_bytes_after_gold_gap"] if gold_gap is not None
-        else utf8["false_positive"]
-    )
+    arm = {"false_positive_utf8_bytes": utf8["false_positive"], "byte_precision": None}
+    try:
+        gold_gap = _gold_gap_from_run(run, "policy-file")
+        if gold_gap is not None:
+            arm["gold_gap"] = gold_gap
+        check_gold_gap_arms({"policy-file": arm}, version, f"contract v{version}")
+        false_positive = headline_arms({"policy-file": arm}, version)["policy-file"][
+            "false_positive_utf8_bytes"
+        ]
+    except RenderError as error:
+        raise MechanismError(str(error)) from error
     return {
         "gold": _count(utf8["pii"], "utf8_bytes.pii"),
         "leaked": _count(utf8["leaked"], "utf8_bytes.leaked"),
@@ -172,11 +185,26 @@ def _delta(base: Mapping[str, int], candidate: Mapping[str, int]) -> dict[str, i
     }
 
 
-def derive(base_record: Path, candidate_record: Path) -> dict[str, Any]:
-    """Every ledger number, recomputed from the two committed records."""
+def identity_from_card(scorecard: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "revision": scorecard["gaze"]["revision"],
+        "corpus_sha256": scorecard["dataset"]["integrity"]["sha256"],
+        "sampling_seed": scorecard["parameters"]["sampling_seed"],
+        "policy_sha256": scorecard["parameters"]["policy_sha256"],
+    }
+
+
+def derive(
+    base_record: Path, candidate_record: Path, versions: Sequence[int] = CONTRACTS
+) -> dict[str, Any]:
+    """Every derived ledger field, recomputed from the two committed records:
+    identity (commit, corpus, seed, both policy SHAs), the numbers per contract,
+    the agentic layers and the gate verdict per gated contract."""
     contracts: dict[str, Any] = {}
     layers: dict[str, Any] = {}
-    for version in CONTRACTS:
+    gate: dict[str, Any] = {}
+    identity: dict[str, Any] = {}
+    for version in versions:
         contract = _contract(version)
         cards = {
             "base": record.rescore(base_record, contract),
@@ -196,6 +224,21 @@ def derive(base_record: Path, candidate_record: Path) -> dict[str, Any]:
                 false_positive_by_class(candidate_record, contract),
             )
         contracts[str(version)] = entry
+        base_identity, candidate_identity = (identity_from_card(card) for card in cards.values())
+        shared = {key: base_identity[key] for key in ("revision", "corpus_sha256", "sampling_seed")}
+        if any(candidate_identity[key] != value for key, value in shared.items()):
+            raise MechanismError("base and candidate records differ in commit, corpus or seed")
+        identity = {
+            **shared,
+            "base_policy_sha256": base_identity["policy_sha256"],
+            "candidate_policy_sha256": candidate_identity["policy_sha256"],
+        }
+        if version in GATED_CONTRACTS:
+            decision = agentic.decide(
+                agentic.layer_totals(cards["base"], "policy-file"),
+                agentic.layer_totals(cards["candidate"], "policy-file"),
+            )
+            gate[f"v{version}"] = {"verdict": decision["verdict"], "reason": decision["reason"]}
         if not layers and "layers" in cards["base"]:
             totals = {
                 arm: agentic.layer_totals(card, "policy-file") for arm, card in cards.items()
@@ -211,7 +254,7 @@ def derive(base_record: Path, candidate_record: Path) -> dict[str, Any]:
                 }
                 for layer in ("A", "D", "R")
             }
-    return {"contracts": contracts, "agentic_layers": layers}
+    return {**identity, "contracts": contracts, "agentic_layers": layers, "gate": gate}
 
 
 # --------------------------------------------------------------------------
@@ -307,6 +350,14 @@ def check_pair(
     }
 
 
+ATTESTED_NOTE = (
+    "Recorded at record time from --binary, git and --machine; the observation records "
+    "do not carry them, so check cannot re-derive them."
+)
+# Fields a measurement holds besides what `derive` recomputes from its records.
+NON_DERIVED_FIELDS = frozenset({"release", "records", "attested"})
+
+
 def git_crates_tree(revision: str) -> str:
     """The measured commit's `crates/` tree: equal trees mean the same detection code,
     so a later rebase that touches only scripts or docs leaves the row valid."""
@@ -346,20 +397,20 @@ def record_measurement(
         target = evidence_dir / f"{stem}-{arm}.jsonl.gz"
         shutil.copyfile(arms[f"{arm}-v2"][1], target)
         files[arm] = {"file": target.relative_to(root).as_posix(), "sha256": sha256(target)}
-    numbers = derive(evidence_dir / f"{stem}-base.jsonl.gz", evidence_dir / f"{stem}-candidate.jsonl.gz")
+    derived = derive(evidence_dir / f"{stem}-base.jsonl.gz", evidence_dir / f"{stem}-candidate.jsonl.gz")
+    disagreeing = sorted(key for key, value in pair.items() if derived[key] != value)
+    if disagreeing:
+        raise MechanismError(f"the committed records re-derive other {disagreeing} than the runs")
     measurement = {
         "release": release,
-        "revision": pair["revision"],
-        "crates_tree": crates_tree,
-        "machine": machine,
-        "binary_sha256": sha256(binary),
-        "corpus_sha256": pair["corpus_sha256"],
-        "sampling_seed": pair["sampling_seed"],
-        "base_policy_sha256": pair["base_policy_sha256"],
-        "candidate_policy_sha256": pair["candidate_policy_sha256"],
         "records": files,
-        "gate": pair["gate"],
-        **numbers,
+        **derived,
+        "attested": {
+            "binary_sha256": sha256(binary),
+            "crates_tree": crates_tree,
+            "machine": machine,
+            "note": ATTESTED_NOTE,
+        },
     }
     entry = next((item for item in ledger["mechanisms"] if item["id"] == mechanism), None)
     delta_row = {"file": delta.relative_to(root).as_posix(), "sha256": sha256(delta)}
@@ -429,22 +480,41 @@ def _check_file(row: Any, where: str, root: Path) -> None:
 
 
 def _validate_measurement(measurement: Mapping[str, Any], where: str, root: Path) -> None:
-    for key in ("revision", "crates_tree", "binary_sha256", "corpus_sha256",
-                "base_policy_sha256", "candidate_policy_sha256"):
-        pattern = re.compile(r"^[0-9a-f]{40}$") if key in {"revision", "crates_tree"} else HEX64
-        if not isinstance(measurement.get(key), str) or not pattern.fullmatch(measurement[key]):
+    sha1 = re.compile(r"^[0-9a-f]{40}$")
+    attested = measurement.get("attested")
+    if not isinstance(attested, dict):
+        raise MechanismError(f"{where}: attested block is missing")
+    for key, pattern, value in (
+        ("revision", sha1, measurement.get("revision")),
+        ("corpus_sha256", HEX64, measurement.get("corpus_sha256")),
+        ("base_policy_sha256", HEX64, measurement.get("base_policy_sha256")),
+        ("candidate_policy_sha256", HEX64, measurement.get("candidate_policy_sha256")),
+        ("attested.crates_tree", sha1, attested.get("crates_tree")),
+        ("attested.binary_sha256", HEX64, attested.get("binary_sha256")),
+    ):
+        if not isinstance(value, str) or not pattern.fullmatch(value):
             raise MechanismError(f"{where}: {key} is missing or malformed")
     if measurement["base_policy_sha256"] == measurement["candidate_policy_sha256"]:
         raise MechanismError(f"{where}: base and candidate policies are identical")
-    if not isinstance(measurement.get("machine"), str) or not measurement["machine"].strip():
-        raise MechanismError(f"{where}: machine is missing")
+    if not isinstance(attested.get("machine"), str) or not attested["machine"].strip():
+        raise MechanismError(f"{where}: attested.machine is missing")
     for arm in ("base", "candidate"):
         _check_file(measurement.get("records", {}).get(arm), f"{where} {arm} record", root)
     contracts = measurement.get("contracts", {})
-    if sorted(contracts) != sorted(str(version) for version in CONTRACTS):
-        raise MechanismError(f"{where}: needs numbers under contracts {list(CONTRACTS)}")
-    if set(measurement.get("gate", {})) != {"v2", "v1"}:
+    if not all(isinstance(key, str) and key.isdigit() for key in contracts) or not {
+        str(version) for version in GATED_CONTRACTS
+    } <= set(contracts):
+        raise MechanismError(
+            f"{where}: needs numbers under at least contracts {list(GATED_CONTRACTS)}"
+        )
+    if set(measurement.get("gate", {})) != {f"v{version}" for version in GATED_CONTRACTS}:
         raise MechanismError(f"{where}: needs the v2 and v1 gate verdicts")
+
+
+def measured_contracts(measurement: Mapping[str, Any]) -> list[int]:
+    """The contracts a row has numbers for, newest first. A row measured before a
+    newer headline contract existed keeps its own set instead of failing."""
+    return sorted((int(key) for key in measurement["contracts"]), reverse=True)
 
 
 def load_ledger(path: Path = LEDGER) -> dict[str, Any]:
@@ -477,9 +547,10 @@ def release_cell(entry: Mapping[str, Any], version: str) -> str:
     measured = next((m for m in entry["measurements"] if m["release"] == version), None)
     if measured is None:
         return "not measured for this release"
-    headline_row = measured["contracts"][str(CONTRACTS[0])]
+    version = measured_contracts(measured)[0]
+    headline_row = measured["contracts"][str(version)]
     return (
-        f"leaked {_signed(headline_row['candidate']['leaked'] - headline_row['base']['leaked'])} B, "
+        f"v{version}: leaked {_signed(headline_row['candidate']['leaked'] - headline_row['base']['leaked'])} B, "
         f"FP {_signed(headline_row['candidate']['false_positive'] - headline_row['base']['false_positive'])} B"
     )
 
@@ -506,7 +577,7 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str]) -> str:
     for entry in ledger["mechanisms"]:
         for measurement in entry["measurements"]:
             at = measurement["release"] or f"`{measurement['revision'][:12]}` (unreleased)"
-            for version in CONTRACTS:
+            for version in measured_contracts(measurement):
                 row = measurement["contracts"][str(version)]
                 base, candidate = row["base"], row["candidate"]
                 gate = measurement["gate"].get(f"v{version}", {}).get(
@@ -542,8 +613,9 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str]) -> str:
                 f"({_link(entry['policy_delta']['file'])}); evidence "
                 f"[base]({_link(measurement['records']['base']['file'])}) and "
                 f"[candidate]({_link(measurement['records']['candidate']['file'])}) "
-                f"observation records; `crates/` tree `{measurement['crates_tree'][:12]}`, "
-                f"binary `{measurement['binary_sha256'][:12]}`, {measurement['machine']}."
+                f"observation records. Attested, not re-derivable: `crates/` tree "
+                f"`{measurement['attested']['crates_tree'][:12]}`, binary "
+                f"`{measurement['attested']['binary_sha256'][:12]}`, {measurement['attested']['machine']}."
             )
     lines += [
         "",
@@ -574,15 +646,19 @@ def check_evidence(ledger: Mapping[str, Any], root: Path = ROOT) -> None:
     """Every stored number equals what the committed records re-derive."""
     for entry in ledger["mechanisms"]:
         for measurement in entry["measurements"]:
-            numbers = derive(
+            where = f"{entry['id']} @ {str(measurement.get('revision'))[:12]}"
+            derived = derive(
                 root / measurement["records"]["base"]["file"],
                 root / measurement["records"]["candidate"]["file"],
+                measured_contracts(measurement),
             )
-            for key, value in numbers.items():
-                if measurement[key] != value:
+            unexplained = sorted(set(measurement) - set(derived) - NON_DERIVED_FIELDS)
+            if unexplained:
+                raise MechanismError(f"{where}: fields {unexplained} are neither derived nor attested")
+            for key, value in derived.items():
+                if measurement.get(key) != value:
                     raise MechanismError(
-                        f"{entry['id']} @ {measurement['revision'][:12]}: {key} differs from "
-                        "what its committed records re-derive"
+                        f"{where}: {key} differs from what its committed records re-derive"
                     )
 
 

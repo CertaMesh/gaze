@@ -13,14 +13,6 @@
       "measurements": [
         {
           "release": null,
-          "revision": "35c4fc79377dce474dc93c320c94c259cd4fcdc0",
-          "crates_tree": "d23a925233253226ff68f6ec700e89c45ea1c950",
-          "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
-          "binary_sha256": "0ecb1cddab0326cb29dcbe4af550aeaa765fd4d929465a9d52bc25df0f9c7885",
-          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
-          "sampling_seed": 20260710,
-          "base_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
-          "candidate_policy_sha256": "343cf1cceb38d0b8210bbca01130ca07b06d564b2dad94a31d04b06598129cab",
           "records": {
             "base": {
               "file": "docs/reference/benchmarks/mechanisms/gliner-dob-judge-35c4fc79377d-base.jsonl.gz",
@@ -31,16 +23,11 @@
               "sha256": "ba1821b59e0fe9f46ad60a7c78ecb5def1d991ea64f8d3b920203932bd4fee1a"
             }
           },
-          "gate": {
-            "v2": {
-              "verdict": "pass",
-              "reason": "leaked bytes fell by 105, FP bytes changed by +0"
-            },
-            "v1": {
-              "verdict": "pass",
-              "reason": "leaked bytes fell by 105, FP bytes changed by +0"
-            }
-          },
+          "revision": "35c4fc79377dce474dc93c320c94c259cd4fcdc0",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+          "candidate_policy_sha256": "343cf1cceb38d0b8210bbca01130ca07b06d564b2dad94a31d04b06598129cab",
           "contracts": {
             "3": {
               "base": {
@@ -133,6 +120,22 @@
                 "failed_closed": 0
               }
             }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 105, FP bytes changed by +0"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 105, FP bytes changed by +0"
+            }
+          },
+          "attested": {
+            "binary_sha256": "0ecb1cddab0326cb29dcbe4af550aeaa765fd4d929465a9d52bc25df0f9c7885",
+            "crates_tree": "d23a925233253226ff68f6ec700e89c45ea1c950",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
           }
         }
       ]

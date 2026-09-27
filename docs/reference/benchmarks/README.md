@@ -591,7 +591,7 @@ Each row runs the same binary, corpus and seed twice: once with the base policy,
 
 What moved, per label (contract v2; v1 adds only the credential labels):
 
-- **GLiNER date-of-birth judge**: leaked bytes by gold label: DATEOFBIRTH -85. FP bytes by predicted class: none. Agentic layers: A leaked -20, FP 0; D leaked 0, FP 0; R leaked 0, FP 0. Policy delta [`gliner-dob-judge.toml`](../../../scripts/bench/mechanisms/gliner-dob-judge.toml); evidence [base](mechanisms/gliner-dob-judge-35c4fc79377d-base.jsonl.gz) and [candidate](mechanisms/gliner-dob-judge-35c4fc79377d-candidate.jsonl.gz) observation records; `crates/` tree `d23a92523325`, binary `0ecb1cddab03`, MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
+- **GLiNER date-of-birth judge**: leaked bytes by gold label: DATEOFBIRTH -85. FP bytes by predicted class: none. Agentic layers: A leaked -20, FP 0; D leaked 0, FP 0; R leaked 0, FP 0. Policy delta [`gliner-dob-judge.toml`](../../../scripts/bench/mechanisms/gliner-dob-judge.toml); evidence [base](mechanisms/gliner-dob-judge-35c4fc79377d-base.jsonl.gz) and [candidate](mechanisms/gliner-dob-judge-35c4fc79377d-candidate.jsonl.gz) observation records. Attested, not re-derivable: `crates/` tree `d23a92523325`, binary `0ecb1cddab03`, MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
 
 Shipped releases, one column per release:
 

@@ -8,12 +8,14 @@ is known exactly without running a model.
 from __future__ import annotations
 
 import copy
+import functools
 import gzip
 import json
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import mechanism_arms as mech
 import scorecard_record as record
@@ -172,7 +174,7 @@ class MechanismArmsTest(unittest.TestCase):
         entry = copy.deepcopy(self.ledger["mechanisms"][0])
         entry["measurements"][0]["release"] = "v0.16.0"
         self.assertEqual(
-            mech.release_cell(entry, "v0.16.0"), f"leaked +{self.fixture.dropped} B, FP 0 B"
+            mech.release_cell(entry, "v0.16.0"), f"v3: leaked +{self.fixture.dropped} B, FP 0 B"
         )
         self.assertTrue(mech.release_cell(entry, "v0.15.1").startswith("not available"))
 
@@ -252,19 +254,62 @@ class MechanismArmsTest(unittest.TestCase):
         run = {"metrics": {"utf8_bytes": {"pii": 1, "leaked": 0, "false_positive": 2}},
                "pipeline_availability": {"failed_closed_documents": 0}}
         self.assertEqual(mech.headline(run, 2)["false_positive"], 2)
-        with self.assertRaisesRegex(mech.MechanismError, "v3 run lacks"):
+        with self.assertRaisesRegex(mech.MechanismError, "gold_gap block belongs"):
             mech.headline(run, 3)
-        run["metrics"]["gold_gap"] = {"false_positive_bytes_after_gold_gap": 1}
+        run["metrics"]["gold_gap"] = {
+            "status": "diagnostic", "gold_gap_protected_bytes": 1,
+            "false_positive_bytes_after_gold_gap": 1, "adjusted_precision": 0.5,
+            "gold_gap_protected_bytes_by_label": {"EMAIL": 1},
+        }
         self.assertEqual(mech.headline(run, 3)["false_positive"], 1)
-        with self.assertRaisesRegex(mech.MechanismError, "v2 run carries"):
+        with self.assertRaisesRegex(mech.MechanismError, "gold_gap block belongs"):
             mech.headline(run, 2)
+        run["metrics"]["gold_gap"]["gold_gap_protected_bytes_by_label"] = {"EMAIL": 2}
+        with self.assertRaisesRegex(mech.MechanismError, "do not sum"):
+            mech.headline(run, 3)
+
+    def test_a_contract_without_a_file_is_a_typed_error(self) -> None:
+        with self.assertRaisesRegex(mech.MechanismError, "contract v4 has no file"):
+            mech._contract(4)
+
+    def test_rows_measured_before_a_newer_headline_still_validate_and_render(self) -> None:
+        # A v4 headline must not invalidate rows that only have v3, v2 and v1.
+        with mock.patch.object(mech, "CONTRACTS", (4, 2, 1)):
+            mech.validate(self.ledger, self.fixture.root)
+            body = mech.render(self.ledger, ["v0.16.0"])
+        self.assertIn("| v3 |", body)
+        self.assertNotIn("| v4 |", body)
+
+    def test_two_mechanisms_render_side_by_side(self) -> None:
+        fixture = self.fresh()
+        root = fixture.root
+        ledger = copy.deepcopy(LEDGER)
+        for entry in ledger["mechanisms"]:
+            paths = [entry["policy_delta"]["file"]] + [
+                measurement["records"][arm]["file"]
+                for measurement in entry["measurements"] for arm in ("base", "candidate")
+            ]
+            for path in paths:
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(mech.ROOT / path, root / path)
+        fixture.record(ledger)
+        body = mech.render(ledger, ["v0.15.1"])
+        titles = [entry["title"] for entry in ledger["mechanisms"]]
+        self.assertEqual(titles, ["GLiNER date-of-birth judge", "Synthetic drop"])
+        for title in titles:
+            self.assertEqual(body.count(f"| {title} | `"), 3, title)
+            self.assertIn(f"| {title} | not available: mechanism added in v0.16 |", body)
+            self.assertIn(f"- **{title}**:", body)
 
     def test_ledger_validation_rejects_bad_shapes(self) -> None:
         cases = {
             "schema": lambda ledger: ledger.update(schema_version=2),
             "duplicate": lambda ledger: ledger["mechanisms"].append(copy.deepcopy(ledger["mechanisms"][0])),
             "no measurement": lambda ledger: ledger["mechanisms"][0].update(measurements=[]),
-            "contracts": lambda ledger: ledger["mechanisms"][0]["measurements"][0]["contracts"].pop("3"),
+            "contracts": lambda ledger: ledger["mechanisms"][0]["measurements"][0]["contracts"].pop("2"),
+            "contract key": lambda ledger: ledger["mechanisms"][0]["measurements"][0]["contracts"].update(v9={}),
+            "attested": lambda ledger: ledger["mechanisms"][0]["measurements"][0].pop("attested"),
+            "binary": lambda ledger: ledger["mechanisms"][0]["measurements"][0]["attested"].update(binary_sha256="x"),
             "gate": lambda ledger: ledger["mechanisms"][0]["measurements"][0]["gate"].pop("v1"),
             "same policy": lambda ledger: ledger["mechanisms"][0]["measurements"][0].update(
                 candidate_policy_sha256=ledger["mechanisms"][0]["measurements"][0]["base_policy_sha256"]),
@@ -277,7 +322,41 @@ class MechanismArmsTest(unittest.TestCase):
                     mech.validate(ledger, self.fixture.root)
 
 
+@functools.cache
+def _cached_derive(base: Path, candidate: Path, versions: tuple[int, ...]) -> str:
+    return json.dumps(_REAL_DERIVE(base, candidate, versions))
+
+
+_REAL_DERIVE = mech.derive
+
+
+def _derive_once(base: Path, candidate: Path, versions) -> dict:
+    """Re-scoring a full record takes seconds; each mutation needs the same result."""
+    return json.loads(_cached_derive(base, candidate, tuple(versions)))
+
+
 class CommittedLedgerTest(unittest.TestCase):
+    def test_every_stored_field_is_checked_against_the_records(self) -> None:
+        mutations = {
+            "revision": lambda m: m.update(revision="0" * 40),
+            "corpus_sha256": lambda m: m.update(corpus_sha256="0" * 64),
+            "sampling_seed": lambda m: m.update(sampling_seed=m["sampling_seed"] + 1),
+            "base_policy_sha256": lambda m: m.update(base_policy_sha256="0" * 64),
+            "candidate_policy_sha256": lambda m: m.update(candidate_policy_sha256="1" * 64),
+            "gate": lambda m: m["gate"]["v2"].update(verdict="fail"),
+            "gate reason": lambda m: m["gate"]["v1"].update(reason="made up"),
+            "layers": lambda m: m["agentic_layers"]["A"]["base"].update(leaked=0),
+            "unexplained field": lambda m: m.update(note="hand-written"),
+        }
+        with mock.patch.object(mech, "derive", _derive_once):
+            mech.check_evidence(LEDGER)
+            for name, change in mutations.items():
+                with self.subTest(field=name):
+                    ledger = copy.deepcopy(LEDGER)
+                    change(ledger["mechanisms"][0]["measurements"][0])
+                    with self.assertRaisesRegex(mech.MechanismError, "re-derive|neither derived"):
+                        mech.check_evidence(ledger)
+
     def test_committed_ledger_matches_its_records_and_document(self) -> None:
         mech.validate(LEDGER)
         mech.check_evidence(LEDGER)

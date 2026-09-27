@@ -124,7 +124,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   352 MB bundle; `--no-dob-judge` leaves it out. The SHA pin, doctor check and
   fail-closed behaviour on a missing or corrupt bundle are unchanged.
   `--dob-judge` is still accepted and changes nothing, and `--dob-model-dir`
-  no longer needs it.
+  no longer needs it. Existing policies are untouched; re-run
+  `gaze setup --force` to add the judge (it reuses a bundle that already
+  verifies). See UPGRADE.md.
 - **The benchmark headline is scored-label contract v3** (solo todo #3696,
   after the gold-gap audit passed). Leaked bytes are unchanged from v2; false
   positives and byte precision are after the audited gold-gap credit, which

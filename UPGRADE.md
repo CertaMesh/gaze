@@ -59,6 +59,26 @@ re-tokenize stored manifests.
    unless it returns `EvidenceKind::Rule` from `evidence()`. It also ranks
    lower in cross-class containment, so its spans no longer swallow an
    enclosed rule match of another class.
+5. **`gaze setup` turns on the date-of-birth judge.** New policies include
+   `[dob_judge]` and setup downloads a 352 MB model. Existing policies do not
+   change; re-run setup to opt in.
+
+### Changed: `gaze setup` installs and enables the GLiNER date-of-birth judge
+
+A policy written by an earlier `gaze setup` keeps working unchanged: nothing
+reads or rewrites it. To get the judge, re-run setup over it:
+
+```bash
+gaze setup --non-interactive --policy-out gaze.toml --force
+```
+
+That downloads the SHA-pinned `gliner-multi-pii-dob-int8` bundle (352 MB) into
+`$XDG_DATA_HOME/gaze/models/`, or reuses a bundle already there once it
+verifies against the pin, and adds a `[dob_judge]` block. `--dob-model-dir`
+points it at another directory. For a machine that cannot hold the model, add
+`--no-dob-judge`; the policy then matches what v0.15 setup wrote. A missing or
+corrupt bundle still stops setup and `gaze clean` with an error; it never falls
+back to running without the judge.
 
 ### Changed: `SafetyNetFallback::Redact` tokenizes a resolvable residual
 

@@ -107,7 +107,7 @@ $ jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text
 From: Ada Example <ada [at] example.invalid>
 ```
 
-`gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a NER-only policy.
+`gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a policy without the Nym safety net, and add `--no-dob-judge` for NER only.
 
 `gaze setup` also installs the SHA-pinned local GLiNER bundle (352 MB) and
 enables cue-less date-of-birth judgments in the generated policy. On the
