@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
 
-use gaze_types::{Detection, Detector, RecognizerRuntimeError};
+use gaze_types::{Detection, Detector, PiiClass, RecognizerRuntimeError};
 
 use super::backend::{load_backend, NerBackend};
 use super::decode;
@@ -97,7 +97,7 @@ impl NerDetector {
                 },
             ));
         }
-        Ok(merge_overlapping_spans(spans)
+        Ok(merge_overlapping_spans(snap_word_class_edges(input, spans))
             .into_iter()
             .filter(|span| decode::is_valid_entity_span(input, &span.span, &span.class))
             .collect())
@@ -179,6 +179,29 @@ impl Detector for NerDetector {
     }
 }
 
+/// Grows every word-class span to whole words, and every `Name` over glued name parts.
+///
+/// The model labels sub-word pieces, so a span can stop inside a word (`jorunn vas` of
+/// `jorunn vasquez-ellery`, `J` of `JORUNN`) and ship the rest raw (todo 3897). Names,
+/// locations and organizations are words; identifier classes keep their spans, because their
+/// values legitimately sit inside longer strings. Runs on the whole input, after chunk offsets
+/// are applied, so a chunk edge cannot stop the growth. Spans that now overlap merge after.
+fn snap_word_class_edges(input: &str, mut spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> {
+    for span in &mut spans {
+        match span.class {
+            PiiClass::Name => {
+                let words = gaze_types::expand_to_word_edges(input, span.span.clone());
+                span.span = gaze_types::extend_over_name_joiners(input, words);
+            }
+            PiiClass::Location | PiiClass::Organization => {
+                span.span = gaze_types::expand_to_word_edges(input, span.span.clone());
+            }
+            _ => {}
+        }
+    }
+    spans
+}
+
 fn merge_overlapping_spans(mut spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> {
     spans.sort_by(|left, right| {
         left.span
@@ -204,8 +227,66 @@ fn merge_overlapping_spans(mut spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> 
 
 #[cfg(test)]
 mod tests {
-    use super::{merge_overlapping_spans, NerSpanResult};
+    use super::{merge_overlapping_spans, snap_word_class_edges, NerSpanResult};
     use gaze_types::PiiClass;
+
+    fn snapped(input: &str, spans: &[(&str, PiiClass)]) -> Vec<String> {
+        let spans = spans
+            .iter()
+            .map(|(part, class)| {
+                let start = input.find(part).expect("part in input");
+                NerSpanResult {
+                    span: start..start + part.len(),
+                    class: class.clone(),
+                    score: 0.9,
+                }
+            })
+            .collect();
+        merge_overlapping_spans(snap_word_class_edges(input, spans))
+            .into_iter()
+            .map(|span| input[span.span].to_string())
+            .collect()
+    }
+
+    /// Todo 3897: sub-word pieces left `quez-ellery`, `-Elle` and `ORUNN` raw.
+    #[test]
+    fn word_class_spans_grow_to_whole_words_and_glued_name_parts() {
+        let input = "From: Jorunn Vasquez-Ellery\nping jorunn vasquez-ellery and JORUNN VASQUEZ";
+        assert_eq!(
+            snapped(
+                input,
+                &[("Jorunn Vasquez", PiiClass::Name), ("ry", PiiClass::Name)]
+            ),
+            ["Jorunn Vasquez-Ellery"]
+        );
+        assert_eq!(
+            snapped(input, &[("jorunn vas", PiiClass::Name)]),
+            ["jorunn vasquez-ellery"]
+        );
+        assert_eq!(
+            snapped(
+                input,
+                &[("J", PiiClass::Name), ("ORUNN VASQUEZ", PiiClass::Name)]
+            )
+            .last()
+            .map(String::as_str),
+            Some("JORUNN VASQUEZ")
+        );
+        assert_eq!(
+            snapped("in Baden-Württemberg", &[("Württem", PiiClass::Location)]),
+            ["Württemberg"]
+        );
+    }
+
+    #[test]
+    fn identifier_classes_and_possessives_keep_their_edges() {
+        let input = "ID12345 and Vasquez's desk";
+        assert_eq!(
+            snapped(input, &[("12345", PiiClass::Custom("id".into()))]),
+            ["12345"]
+        );
+        assert_eq!(snapped(input, &[("Vasq", PiiClass::Name)]), ["Vasquez"]);
+    }
 
     /// Regression: touching half-open same-class ranges (`[0..3)` and `[3..7)`
     /// share zero bytes) must remain separate so the downstream pipeline mints
