@@ -44,6 +44,14 @@ def digest_file(path: Path) -> str:
     return score.sha256_file(path)
 
 
+def portable_path(path: Path) -> str:
+    resolved = path.resolve()
+    for root, prefix in ((REPO, ""), (Path.home(), "$HOME/")):
+        if resolved.is_relative_to(root):
+            return prefix + resolved.relative_to(root).as_posix()
+    return resolved.as_posix()
+
+
 @lru_cache(maxsize=None)
 def digest_tree(path: Path) -> str:
     if not path.is_dir():
@@ -131,7 +139,7 @@ def load_pack(path: Path) -> tuple[dict[str, list[score.Document]], dict[str, ob
         )
     if not seen:
         raise ValueError(f"empty variant pack: {path}")
-    return dict(partitions), {"path": path.as_posix(), "sha256": digest_file(path), "documents": len(seen)}
+    return dict(partitions), {"path": portable_path(path), "sha256": digest_file(path), "documents": len(seen)}
 
 
 def load_corpus(dataset: Path, pack_dir: Path | None) -> tuple[dict[str, list[score.Document]], dict[str, object]]:
@@ -292,7 +300,7 @@ def opf_runtime_info(python: Path) -> dict[str, object]:
         text=True,
     )
     info = json.loads(raw)
-    result: dict[str, object] = {"version": info["version"], "python": str(python)}
+    result: dict[str, object] = {"version": info["version"], "python": portable_path(python)}
     if info["direct_url"]:
         from urllib.parse import unquote, urlparse
 
