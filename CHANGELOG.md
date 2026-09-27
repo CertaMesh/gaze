@@ -121,7 +121,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   passed the gate under contracts v2 and v1: layer C leaked bytes fell by 85
   (DATEOFBIRTH 810 to 725), agentic layer A by 20, with no false-positive
   bytes added on any layer and no refusals. Setup now downloads the pinned
-  352 MB bundle; `--no-dob-judge` leaves it out. The SHA pin, doctor check and
+  352 MB bundle; `--no-dob-judge` leaves it out. Cost on a quiet Apple M5
+  Max (`scripts/bench/mechanism_latency.py`, 200 documents): warm p50
+  75.6 to 76.1 ms, p95 137 to 160 ms, cold first document 2.2 to 3.7 s,
+  peak RSS 1,076 to 1,740 MiB. The SHA pin, doctor check and
   fail-closed behaviour on a missing or corrupt bundle are unchanged.
   `--dob-judge` is still accepted and changes nothing, and `--dob-model-dir`
   no longer needs it. Existing policies are untouched; re-run
