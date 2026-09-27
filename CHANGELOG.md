@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Australian state plus postcode addresses are tokenized deterministically**
+  (solo todo #3880). `postal.au` protects the state abbreviation and four-digit
+  postcode together in `en-AU` documents, so these spans no longer rely on Nym
+  context. New Zealand postcodes remain outside this rule.
+
 - **Dates of birth after a birth cue are tokenized** (solo todo #3651).
   Every release up to and including v0.15.1 sent these raw through
   `gaze clean` and `gaze proxy` alike: `Geburtsdatum 30.05.1971`,

@@ -19,7 +19,7 @@ compatibility name for the same embedded `core.toml` bytes
 (`crates/gaze-recognizers/src/lib.rs:45-55`,
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
-The shared payload currently contains exactly 40 recognizer specs
+The shared payload currently contains exactly 41 recognizer specs
 (`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
 
 The opt-in `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
@@ -120,6 +120,7 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `postal.de` | `regex` | Bare five-digit German postal-code shapes | `custom:postal_code` | `de-DE` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
 | `core, core-extended` | `postal.us` | `regex` | US five-digit ZIP or ZIP+4 shapes | `custom:postal_code` | `en-US` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
 | `core, core-extended` | `postal.at_ch` | `regex` | Austrian and Swiss four-digit postal codes, optionally `A-`/`CH-`/`FL-` prefixed, only directly after a postal cue (`PLZ`, `Postleitzahl`, `Postcode`, `ZIP`) or directly before a city-shaped token (uppercase start, or `St.` / `St` before a capitalised name) across a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; a city-anchored code is not matched when preceded by `#` | `custom:postal_code` | `de-AT, de-CH` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
+| `core, core-extended` | `postal.au` | `regex` | Australian state or territory abbreviation plus four-digit postcode in Australia Post's published state range, after a capitalized locality or address word, or before a terminal field boundary; the state and code are one restorable token | `custom:postal_code` | `en-AU` | `none` | `none` | `locale_gated` | no | 0.70 | 70 |
 | `core, core-extended` | `postal.ca` | `regex` | Canadian `A9A 9A9` postal codes, hyphenated, compact, or separated by a space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE; not matched when preceded by `#` | `custom:postal_code` | `en-CA` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.gb` | `regex` | UK postcodes across all six Royal Mail outward forms plus `GIR 0AA`, followed by a `9AA` inward code over the official inward alphabet; space, NO-BREAK SPACE, or NARROW NO-BREAK SPACE separator; not matched when preceded by `#` | `custom:postal_code` | `en-GB` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
 | `core, core-extended` | `postal.ie` | `regex` | Irish Eircodes: routing key including `D6W`, plus a four-character identifier over the restricted Eircode alphabet that must carry at least one letter | `custom:postal_code` | `en-IE` | `none` | `none` | `safe_default` | yes | 0.80 | 72 |
@@ -355,7 +356,7 @@ alongside the pinned Davlan mBERT NER model; the OpenAI Privacy Filter remains
 opt-in (`--safety-net openai-filter`).
 
 The plain `core` default locale chain is `global`
-(`crates/gaze-recognizers/embedded/core.toml:1-1373`), so the document-basis
+(`crates/gaze-recognizers/embedded/core.toml`), so the document-basis
 recognizers that activate are exactly the global `safe_default` ones. Every
 `locale_basis = "format"` recognizer activates regardless of the chain
 (`crates/gaze-assembly/src/detector_wiring.rs:271-301`); see
@@ -372,8 +373,8 @@ derived from the loaded rulepacks by
 (`crates/gaze-assembly/src/locale.rs`): the union of `locales` over enabled,
 document-basis `safety_tier = "locale_gated"` recognizers, minus `global`,
 ordered compatibility-first (`en-US`, `de-DE`, `de-AT`, `de-CH`) then by
-canonical tag. For the bundled `core` recognizers that is exactly `en-US`,
-`de-DE`, `de-AT`, `de-CH`; an adopter path rulepack with a locale-gated
+canonical tag. For the bundled `core` recognizers that is `en-US`,
+`de-DE`, `de-AT`, `de-CH`, `en-AU`; an adopter path rulepack with a locale-gated
 recognizer for another locale extends the chain automatically. `gaze clean`
 (`crates/gaze-cli/src/pipeline/run.rs`), `gaze daemon`
 (`crates/gaze-cli/src/commands/daemon.rs`), and the library's
@@ -384,8 +385,8 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1373`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.at_ch, postal.ca, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.at_ch, postal.au, postal.ca, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate
@@ -414,6 +415,17 @@ the second row's chain `postal.at_ch` therefore runs on every document and keeps
 each match that no `postal.us` or `postal.de` candidate overlaps.
 Its measured false-positive class is a four-digit number followed by a
 capitalised German noun (`1500 Euro`); every such token restores losslessly.
+`postal.au` uses the Australian state or territory abbreviation and
+[Australia Post's published postcode ranges](https://collectables.auspost.com.au/community-and-events/articles/postcodes-turn-50).
+A capitalized locality or address word before
+the state admits prose after the code; without that context, punctuation, a
+table boundary, or the end of input must follow. Its token contains both the
+state and postcode, which protects both parts of the address and restores them
+together. The rule is document-basis `en-AU`, so a policy that activates only
+`global` or `en-NZ` does not run it. New Zealand needs a separate rule because
+its postcode has no Australian state abbreviation. The state range filter can
+miss postcodes used across state boundaries; a `#` before a locality can still
+leave an inner state and postcode match.
 `postal.ca`, `postal.gb`, and `postal.ie` interleave letters and digits in
 positions ordinary prose and identifiers do not produce, so they are
 format-basis and run at every locale including `--locale=global`. An adopter
