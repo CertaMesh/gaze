@@ -430,9 +430,19 @@ impl ResolvedSet {
 }
 
 fn covers_all_spans(selected: &[WholeCandidate], prior: &[WholeCandidate]) -> bool {
+    // Both lists are sorted by start. A selected span that ends before one
+    // prior span starts ends before every later one too, so the scan resumes
+    // there instead of at 0 (restarting made this O(N^2), todo 3895).
+    let mut first = 0;
     prior.iter().all(|prior_node| {
         let mut cursor = prior_node.candidate.span.start;
-        for selected_node in selected {
+        while selected
+            .get(first)
+            .is_some_and(|node| node.candidate.span.end <= cursor)
+        {
+            first += 1;
+        }
+        for selected_node in &selected[first..] {
             let span = &selected_node.candidate.span;
             if span.end <= cursor {
                 continue;
@@ -2506,6 +2516,82 @@ mod tests {
 #[cfg(test)]
 mod recovery_event_tests {
     use super::*;
+    /// `covers_all_spans` resumes its scan instead of restarting it for each
+    /// prior span (todo 3895). Pin it against the restarting original on
+    /// random sorted, non-overlapping span lists, including empty spans.
+    #[test]
+    fn covers_all_spans_matches_the_restarting_scan() {
+        fn restarting(selected: &[WholeCandidate], prior: &[WholeCandidate]) -> bool {
+            prior.iter().all(|prior_node| {
+                let mut cursor = prior_node.candidate.span.start;
+                for selected_node in selected {
+                    let span = &selected_node.candidate.span;
+                    if span.end <= cursor {
+                        continue;
+                    }
+                    if span.start > cursor {
+                        break;
+                    }
+                    cursor = cursor.max(span.end);
+                    if cursor >= prior_node.candidate.span.end {
+                        return true;
+                    }
+                }
+                false
+            })
+        }
+        fn next(state: &mut u64) -> u64 {
+            *state ^= *state << 13;
+            *state ^= *state >> 7;
+            *state ^= *state << 17;
+            *state
+        }
+        fn spans(state: &mut u64) -> Vec<WholeCandidate> {
+            let mut at = 0;
+            (0..next(state) % 8)
+                .map(|id| {
+                    let start = at + (next(state) % 3) as usize;
+                    let end = start + (next(state) % 4) as usize;
+                    at = end;
+                    WholeCandidate {
+                        candidate: Candidate::new(
+                            start..end,
+                            PiiClass::Email,
+                            "span",
+                            0.5,
+                            0,
+                            None,
+                            "span",
+                            "span",
+                            ConflictTier::None,
+                            vec![],
+                        ),
+                        members: vec![id as usize],
+                        node: id as usize,
+                        settlement: Settlement::Open,
+                    }
+                })
+                .collect()
+        }
+        let mut state = 0x3895_u64;
+        let (mut covered, mut uncovered) = (0, 0);
+        for _ in 0..20_000 {
+            let selected = spans(&mut state);
+            let prior = spans(&mut state);
+            let expected = restarting(&selected, &prior);
+            assert_eq!(covers_all_spans(&selected, &prior), expected);
+            if expected {
+                covered += 1;
+            } else {
+                uncovered += 1;
+            }
+        }
+        assert!(
+            covered > 1_000 && uncovered > 1_000,
+            "{covered} / {uncovered}"
+        );
+    }
+
     #[test]
     fn collateral_removal_has_no_fabricated_pair_outcome_or_membership() {
         let make = |span, class, id| {
