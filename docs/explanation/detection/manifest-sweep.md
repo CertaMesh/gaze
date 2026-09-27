@@ -20,8 +20,8 @@ after   From: <a13e:Name_1> <<a13e:Email_1>>
 After resolve and before the safety net. The sweep collects its values from
 two places: this document's resolved winners and the session manifest. It
 looks for copies that no winner covers. Each copy joins the candidate pool,
-and the pool is resolved again, so the resolver's usual rungs settle any
-overlap. A copy that encloses a weaker same-class span, such as an NER
+and the pool is resolved again, so the resolver's containment and priority
+rules settle any overlap. A copy that encloses a weaker same-class span, such as an NER
 fragment that left `<Name_1>a`, wins and covers the whole copy. A document
 with no uncovered copy keeps its first resolution; the only extra cost is one
 linear scan.

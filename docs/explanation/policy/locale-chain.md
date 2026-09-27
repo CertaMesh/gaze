@@ -33,9 +33,11 @@ Recognizer eligibility then depends on `locale_basis`:
 ## Several locales in one chain
 
 Document-basis recognizers run class by class, one chain locale at a time, in
-chain order. An earlier locale wins per span, not per document: a later
-locale's candidate joins the pool only where it does not overlap a candidate
-of the same class from an earlier locale. Under `[de-AT, de-DE]`, a de-AT match
+chain order. An earlier locale wins partial and exact overlaps per span,
+not per document. Strict same-class containment admits both candidates; the
+resolver prefers the containing span and audits the enclosed loser when that
+selection preserves all bytes covered by prior arbitration. Under
+`[de-AT, de-DE]`, a de-AT match
 on one number therefore does not switch `de-DE` rules off for a German postal
 code elsewhere in the same document. A `global` recognizer is eligible at every
 step and finds the same spans each time, so its repeats drop out. The overlap

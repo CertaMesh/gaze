@@ -759,15 +759,16 @@ priority = 86
 # Postal collision policy (supersedes the research-855 two-rule note, which described a world with
 # only `postal.de` and `postal.us` in it).
 #
-# `custom:postal_code` is served by six recognizers in two groups that cannot overlap:
+# `custom:postal_code` is served by seven recognizers in two groups that cannot overlap:
 #
-#   NUMERIC — document-basis, locale-gated: `postal.de`, `postal.us`, `postal.at_ch`
+#   NUMERIC — document-basis, locale-gated: `postal.de`, `postal.us`, `postal.at_ch`, `postal.au`
 #     `postal.de` / `postal.us` accept naked five-digit strings, a shape that carries no structural
 #     signal whatsoever and is indistinguishable from a year, an order number, or an amount. The
 #     DOCUMENT-locale gate is the only thing standing in for that missing structure, which is why
 #     these stay gated. `postal.at_ch` matches four digits only behind a cue or before a city-shaped
 #     token; see its own note. Document-basis rules of one class resolve PER SPAN across the
-#     chain: an earlier locale wins only where its candidate overlaps a later locale's, so under
+#     chain: an earlier locale wins partial overlaps, while strict same-class containment prefers
+#     the larger span when it preserves prior byte coverage. Thus under
 #     [de-AT, de-DE] a de-AT match (true or false) does not switch `postal.de` off for a German
 #     code elsewhere in the document (pinned in `postal_at_ch.rs`). The loader lint warns, and fails strict mode, on the co-firing five-digit pair.
 #
@@ -786,7 +787,7 @@ priority = 86
 id = "postal.de"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.us", "postal.at_ch", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-DE"]
 locale_basis = "document"
@@ -805,7 +806,7 @@ priority = 70
 id = "postal.us"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.at_ch", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-US"]
 locale_basis = "document"
@@ -858,13 +859,13 @@ priority = 70
 #     measured false positive.
 # `locales = ["de-AT", "de-CH"]` only. Both tags are in the bundled locale-gated activation set,
 # so the rule also runs under the no-policy `core-extended` compatibility chain
-# `global, en-US, de-DE, de-AT, de-CH` on every document, keeping each match that no `postal.us` or
+# `global, en-US, de-DE, de-AT, de-CH, en-AU` on every document, keeping each match that no `postal.us` or
 # `postal.de` candidate overlaps; pass `--locale=global` or a narrower policy chain to avoid that.
 [[recognizers]]
 id = "postal.at_ch"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-AT", "de-CH"]
 locale_basis = "document"
@@ -873,6 +874,46 @@ locale_basis = "document"
 kind = "regex"
 pattern = '''(?:(?i:\b(?:plz|postleitzahl|post[ \t]?code|postal[ \t]code|zip(?:[ \t]?code)?))[ \t]*[:#.]?[ \u{00A0}\u{202F}]*((?:(?:A|CH|FL)-)?\d{4})\b|(?:\A|[^#])\b((?:(?:A|CH|FL)-)?\d{4}),?[ \u{00A0}\u{202F}]{1,3}(?:\p{Lu}[\p{L}\-]{2,}|St(?:\.[ \u{00A0}\u{202F}]?|[ \u{00A0}\u{202F}])\p{Lu}))'''
 capture_groups = [1, 2]
+
+[recognizers.scoring]
+base = 0.70
+priority = 70
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# Australian state/territory plus four-digit postcode. A bare four-digit number is too ambiguous;
+# the state abbreviation and Australia Post's published state postcode ranges provide the anchor.
+# Two contexts cover addresses: a preceding capitalized locality/street word, or a terminal field
+# boundary (punctuation, end, or a table separator). The first keeps "Melbourne VIC 3065 next month";
+# the second keeps "QLD 4072, Australia" without treating "VIC 3000 people" as an address.
+# The capture includes the state abbreviation so neither its gold STATE span nor the postcode leaks.
+# A preceding EN/DE function word alone is refused as an address anchor. Any other capitalised
+# word of three or more letters, including German nouns, can anchor it. The terminal branch also
+# accepts table/CSV state-and-number cells, including year-shaped NSW values.
+# This range check avoids an exhaustive postcode registry; cross-border postcodes outside the
+# declared state's published range may still need another detector. New Zealand needs a different
+# anchor. https://collectables.auspost.com.au/community-and-events/articles/postcodes-turn-50
+[[recognizers]]
+id = "postal.au"
+safety_tier = "locale_gated"
+class = "custom:postal_code"
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.ca", "postal.gb", "postal.ie"]
+enabled = true
+locales = ["en-AU"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?:(?:\A|[^#\p{L}\p{N}_])\p{Lu}[\p{L}'-]{2,}(?:[ \t\u{00A0}\u{202F}]+\p{Lu}[\p{L}'-]{2,}){0,2}[ \t\u{00A0}\u{202F}\n,|]{1,4}((?:NSW[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:1\d{3}|2[0-5]\d{2}|26(?:19|[2-9]\d)|2[78]\d{2}|29(?:2[1-9]|[3-9]\d))|VIC[ \t\u{00A0}\u{202F}\n,|]{1,4}[38]\d{3}|QLD[ \t\u{00A0}\u{202F}\n,|]{1,4}[49]\d{3}|SA[ \t\u{00A0}\u{202F}\n,|]{1,4}5\d{3}|WA[ \t\u{00A0}\u{202F}\n,|]{1,4}6\d{3}|TAS[ \t\u{00A0}\u{202F}\n,|]{1,4}7\d{3}|NT[ \t\u{00A0}\u{202F}\n,|]{1,4}0[89]\d{2}|ACT[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:02\d{2}|26(?:0\d|1[0-8])|29(?:[01]\d|20))))\b|(?:\A|[^#\p{L}\p{N}_])((?:NSW[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:1\d{3}|2[0-5]\d{2}|26(?:19|[2-9]\d)|2[78]\d{2}|29(?:2[1-9]|[3-9]\d))|VIC[ \t\u{00A0}\u{202F}\n,|]{1,4}[38]\d{3}|QLD[ \t\u{00A0}\u{202F}\n,|]{1,4}[49]\d{3}|SA[ \t\u{00A0}\u{202F}\n,|]{1,4}5\d{3}|WA[ \t\u{00A0}\u{202F}\n,|]{1,4}6\d{3}|TAS[ \t\u{00A0}\u{202F}\n,|]{1,4}7\d{3}|NT[ \t\u{00A0}\u{202F}\n,|]{1,4}0[89]\d{2}|ACT[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:02\d{2}|26(?:0\d|1[0-8])|29(?:[01]\d|20))))\b[ \t\u{00A0}\u{202F}]{0,3}(?:\z|[,.;!?|\n)]))'''
+capture_groups = [1, 2]
+
+[recognizers.context]
+# Reject a lone EN/DE function word as locality. Multiword locality names remain eligible.
+reject_match_regex = '''(?i)\A(?:[^#\p{L}\p{N}_])?(?:the|this|these|those|our|your|for|and|from|with|die|der|das|den|dem|des|ein|eine|einer|einem|einen|unser|unsere|ihr|ihre|zum|zur)[ \t\u{00A0}\u{202F}\n,|]{1,4}(?:NSW|VIC|QLD|SA|WA|TAS|NT|ACT)[ \t\u{00A0}\u{202F}\n,|]{1,4}\d{4}\b'''
 
 [recognizers.scoring]
 base = 0.70
@@ -910,7 +951,7 @@ license = "Apache-2.0"
 id = "postal.ca"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-CA"]
 locale_basis = "format"
@@ -966,7 +1007,7 @@ license = "Apache-2.0"
 id = "postal.gb"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.ca", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.ie"]
 enabled = true
 locales = ["en-GB"]
 locale_basis = "format"
@@ -1018,7 +1059,7 @@ license = "Apache-2.0"
 id = "postal.ie"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.ca", "postal.gb"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb"]
 enabled = true
 locales = ["en-IE"]
 locale_basis = "format"

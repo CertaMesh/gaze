@@ -62,6 +62,12 @@ Now `pipeline.redact(...)` tokenizes `ORD-789012` alongside the bundled classes,
 
 ## Go beyond regex
 
+For a regex recognizer in a **rulepack**, `reject_match_regex` under
+`[recognizers.context]` can refuse a shape based on the complete regex match,
+including text outside `capture_groups`. This is a rulepack field, not a
+`[[policy.custom_recognizers]]` field. An invalid guard regex fails pipeline
+assembly. See the [rulepack reference](../../reference/policy.md#rulepack-recognizers).
+
 - **Validators and normalizers** — constrain or canonicalize a match (for example, checksum a
   number) without breaking restore. A normalizer must preserve the original byte span; see
   [recognizer normalizers preserve the original span](../../explanation/detection/recognizer-normalizer-spans.md).

@@ -652,6 +652,32 @@ mod tests {
         );
     }
 
+    #[test]
+    fn strict_same_class_containment_reaches_resolver_in_either_locale_order() {
+        let registry = RecognizerRegistry::builder()
+            .register(document_recognizer("short", LocaleTag::DeAt, 4..8))
+            .register(document_recognizer("long", LocaleTag::EnAu, 0..8))
+            .build();
+        for chain in [
+            [LocaleTag::DeAt, LocaleTag::EnAu],
+            [LocaleTag::EnAu, LocaleTag::DeAt],
+        ] {
+            let ids = pool_ids(&registry, &chain);
+            assert_eq!(ids.len(), 2, "both candidates reach arbitration: {ids:?}");
+            let dictionaries = DictionaryBundle::default();
+            let ctx = DetectContext::new(&chain, &dictionaries);
+            let (resolved, vetoed) = registry
+                .detect_all_resolved("abcdefghij", &ctx)
+                .expect("resolve containment");
+            assert!(vetoed.is_empty());
+            assert_eq!(resolved.len(), 1);
+            assert_eq!(resolved[0].span, 0..8);
+            assert_eq!(resolved[0].recognizer_id, "long");
+            assert_eq!(resolved[0].decided_by, ConflictTier::SameClassContainment);
+            assert!(resolved[0].merged_sources.contains(&"short".to_string()));
+        }
+    }
+
     // Global rules run at every chain step and repeat their spans; the repeats must not
     // multiply candidates.
     #[test]
@@ -1049,10 +1075,10 @@ impl RecognizerRegistry {
                 );
             }
 
-            // Earlier chain locales win per span, not per document: a later locale's candidate
-            // is admitted only where no earlier locale of this class matched. Spans are claimed
-            // before validator veto, so this never admits less than stopping at the first
-            // locale did. Global rules repeat their spans at every step and drop out here.
+            // Earlier chain locales win per span, except strict same-class containment:
+            // keep both spans so the resolver can choose the enclosing one and audit the loser.
+            // This cannot reduce covered bytes for the pair. Spans are claimed before validator
+            // veto, so partial overlaps retain the existing locale fallback behavior.
             let mut claimed: Vec<std::ops::Range<usize>> = Vec::new();
             // Locale-invariant recognizers detect at their first eligible step; later steps
             // reuse that output, so NER infers once per document instead of once per step.
@@ -1091,8 +1117,14 @@ impl RecognizerRegistry {
                             .filter(|candidate| candidate.score >= min_score(&class))
                             .filter(|candidate| {
                                 !claimed.iter().any(|span| {
-                                    span.start < candidate.span.end
-                                        && candidate.span.start < span.end
+                                    let overlaps = span.start < candidate.span.end
+                                        && candidate.span.start < span.end;
+                                    let strict_containment = (span.start <= candidate.span.start
+                                        && candidate.span.end <= span.end
+                                        || candidate.span.start <= span.start
+                                            && span.end <= candidate.span.end)
+                                        && span != &candidate.span;
+                                    overlaps && !strict_containment
                                 })
                             })
                             .cloned(),

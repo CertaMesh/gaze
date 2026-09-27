@@ -44,6 +44,106 @@ fn spans(nodes: &[Candidate]) -> Vec<Range<usize>> {
 }
 
 #[test]
+fn a_later_partial_winner_does_not_discard_the_enclosed_original() {
+    let registry = RecognizerRegistry::builder().build();
+    let mut rival = candidate(8..15, PiiClass::Email, "rival");
+    rival.priority = 1;
+    let originals = [
+        candidate(0..5, PiiClass::Email, "inner"),
+        candidate(0..10, PiiClass::Email, "outer"),
+        rival,
+    ];
+    let baseline = run(
+        vec![originals[0].clone(), originals[2].clone()],
+        &registry,
+        &"x".repeat(20),
+    );
+    let baseline_spans = baseline
+        .primary
+        .iter()
+        .chain(&baseline.recovered)
+        .map(|node| node.span.clone())
+        .collect::<Vec<_>>();
+    for order in [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let result = run(
+            order.map(|i| originals[i].clone()).to_vec(),
+            &registry,
+            &"x".repeat(20),
+        );
+        assert_eq!(spans(&result.primary), vec![8..15]);
+        assert_eq!(spans(&result.recovered), vec![0..5]);
+        let retained = result
+            .primary
+            .iter()
+            .chain(&result.recovered)
+            .map(|node| node.span.clone())
+            .collect::<Vec<_>>();
+        for byte in 0..20 {
+            if baseline_spans.iter().any(|span| span.contains(&byte)) {
+                assert!(
+                    retained.iter().any(|span| span.contains(&byte)),
+                    "lost protected byte {byte}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn containment_does_not_reduce_coverage_with_interleaved_priorities() {
+    let registry = RecognizerRegistry::builder().build();
+    let mut inner = candidate(0..5, PiiClass::Email, "inner");
+    inner.priority = 2;
+    let outer = candidate(0..10, PiiClass::Email, "outer");
+    let mut rival = candidate(3..15, PiiClass::Email, "rival");
+    rival.priority = 1;
+    let baseline = run(
+        vec![inner.clone(), rival.clone()],
+        &registry,
+        &"x".repeat(20),
+    );
+    let added = run(vec![inner, outer, rival], &registry, &"x".repeat(20));
+    assert_eq!(spans(&added.primary), vec![0..5]);
+    assert!(!added.events.iter().any(|event| {
+        matches!(
+            event,
+            ResolutionEvent::Pair {
+                outcome: crate::resolver::PairOutcome::Incoming(ConflictTier::SameClassContainment)
+                    | crate::resolver::PairOutcome::Existing(ConflictTier::SameClassContainment),
+                ..
+            }
+        )
+    }));
+    let baseline_spans = baseline
+        .primary
+        .iter()
+        .chain(&baseline.recovered)
+        .map(|node| node.span.clone())
+        .collect::<Vec<_>>();
+    let added_spans = added
+        .primary
+        .iter()
+        .chain(&added.recovered)
+        .map(|node| node.span.clone())
+        .collect::<Vec<_>>();
+    for byte in 0..20 {
+        if baseline_spans.iter().any(|span| span.contains(&byte)) {
+            assert!(
+                added_spans.iter().any(|span| span.contains(&byte)),
+                "lost protected byte {byte}: {baseline_spans:?} -> {added_spans:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn six_permutations_recover_original_payload_and_keep_primary() {
     let registry = RecognizerRegistry::builder().build();
     for order in [
@@ -126,7 +226,7 @@ fn reverse_geometry_and_two_productive_recovery_rounds() {
 }
 
 #[test]
-fn pending_pool_uses_legacy_merge_validator_family_and_anchor_rules() {
+fn pending_pool_uses_containment_and_legacy_rules_elsewhere() {
     for mode in 0..6 {
         let mut builder = RecognizerRegistry::builder();
         if mode >= 3 {
@@ -194,7 +294,16 @@ fn pending_pool_uses_legacy_merge_validator_family_and_anchor_rules() {
         all.extend(pending);
         all.push(candidate(25..40, PiiClass::Email, "last"));
         let result = run(all, &registry, raw);
-        assert_eq!(result.recovered, expected);
+        if mode == 1 {
+            assert_eq!(spans(&result.recovered), vec![0..8]);
+            assert_eq!(result.recovered[0].recognizer_id, "b");
+            assert_eq!(
+                result.recovered[0].decided_by,
+                ConflictTier::SameClassContainment
+            );
+        } else {
+            assert_eq!(result.recovered, expected);
+        }
     }
 }
 
@@ -308,7 +417,19 @@ fn indexed_primary_matches_frozen_legacy_and_recovery_terminates() {
         );
         assert_eq!(result.primary, reversed.primary);
         assert_eq!(result.recovered, reversed.recovered);
-        assert_eq!(result.primary, legacy::resolve_candidates(input.clone()));
+        let mut legacy_primary = legacy::resolve_candidates(input.clone());
+        for candidate in &mut legacy_primary {
+            if candidate.decided_by == ConflictTier::SpanLength
+                && result.primary.iter().any(|actual| {
+                    actual.span == candidate.span
+                        && actual.recognizer_id == candidate.recognizer_id
+                        && actual.decided_by == ConflictTier::SameClassContainment
+                })
+            {
+                candidate.decided_by = ConflictTier::SameClassContainment;
+            }
+        }
+        assert_eq!(result.primary, legacy_primary);
         let mut all = result.primary;
         all.extend(result.recovered);
         all.sort_by_key(|n| n.span.start);

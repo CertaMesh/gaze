@@ -68,6 +68,8 @@ Use `RegexDetector::emails()` for the built-in email recognizer. Rulepack
 assembly uses `RegexDetector::with_rulepack_fields` so locale tags, scores,
 priorities, token families, capture groups, exclusions, validators, and
 normalizers can flow from TOML rulepacks into the registry.
+Optional rulepack-only `context.reject_match_regex` checks the full regex match.
+A guard match rejects that candidate; an invalid guard fails pipeline assembly.
 
 `ValidatorKind` and `NormalizerKind` are closed sets. The complete variant
 lists, rulepack spellings, feature gates and fail-closed wiring stage are in
@@ -215,7 +217,7 @@ Full contract:
 
 ## Explicit birth-date and credential fields
 
-The embedded `gaze-core` rulepack version **0.6.0** contains 40 recognizers.
+The embedded `gaze-core` rulepack version **0.6.0** contains 41 recognizers.
 Two project-authored `safe_default` rules with `locales = ["global"]` add
 birth-date and credential field recognition through the existing assembly and
 `RegexDetector` machinery, once their bundle is loaded.

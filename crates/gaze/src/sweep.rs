@@ -183,9 +183,9 @@ impl SweepHit {
             self.class.clone(),
             SWEEP_ID,
             1.0,
-            // A copy that reaches the resolver sits in a gap or overlaps a
-            // weaker same-class span (an NER fragment such as `<Name_1>a`);
-            // it must win the same-class ladder so the union is covered.
+            // A copy in a gap needs no tie-break. Strict same-class containment
+            // now selects the enclosing span; this priority retains the sweep
+            // choice for other overlaps with a weaker fragment.
             i32::MAX,
             None,
             self.family.clone(),

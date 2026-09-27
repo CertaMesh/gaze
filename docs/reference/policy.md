@@ -354,6 +354,8 @@ non-routable. Tenant numeric IDs such as `Subscriber_0001234567` and
 numeric shapes must not become phone or credit-card detections without a
 passing validator.
 
+### Rulepack recognizers
+
 Within a rulepack, every `[[recognizers]]` block has an `id`, `class`, and
 `[recognizers.match]` table. If two recognizers in the same rulepack emit the
 same `class`, at least one must explicitly list the other recognizer id in
@@ -372,11 +374,23 @@ pattern = '''(?m)^From:\s+([A-Z][a-z]+)\s+<[^>]+>'''
 capture_groups = [1]
 ```
 
+Regex rulepack recognizers may set `reject_match_regex` under
+`[recognizers.context]` to reject a full regex match before any capture is
+emitted. This guard sees text outside `capture_groups`; an invalid guard
+regex fails pipeline assembly. It is unavailable in
+`[[policy.custom_recognizers]]`.
+
+When same-class spans strictly contain one another, the resolver prefers the
+longer span regardless of evidence tier, score, or rule priority. If that
+choice would expose bytes covered by the prior arbitration of the entire
+candidate pool, the resolver keeps the prior result. Exact and partial
+overlaps keep their normal precedence rules.
+
 `locale_basis` accepts two values:
 
 | Value | Meaning |
 |-------|---------|
-| `"document"` | `locales` gates eligibility against the resolved document locale chain. The registry walks the chain per class; an earlier locale wins per span, and a later locale's candidates are kept wherever they do not overlap an earlier locale's candidates of the same class ([Locale Chain](../explanation/policy/locale-chain.md)). This is the legacy default when an external/adopter rulepack omits the field. |
+| `"document"` | `locales` gates eligibility against the resolved document locale chain. The registry walks the chain per class; an earlier locale wins partial and exact overlaps. Strict same-class containment reaches the resolver, which prefers the containing span when it preserves prior byte coverage and audits the loser ([Locale Chain](../explanation/policy/locale-chain.md)). This is the legacy default when an external/adopter rulepack omits the field. |
 | `"format"` | `locales` records format provenance only. Assembly registers the recognizer regardless of document locale, and the registry runs it once outside locale fallback before ordinary conflict resolution. |
 
 Bundled rulepacks must state `locale_basis` explicitly for every recognizer.

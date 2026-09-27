@@ -753,7 +753,7 @@ fn write_temp_rulepack(name: &str, contents: &str) -> std::path::PathBuf {
 }
 
 // The derived set for the bundled `core` recognizers equals the literal list
-// the CLI/daemon/library used to carry (`en-US, de-DE, de-AT, de-CH`) — this is
+// the CLI/daemon/library used to carry (`en-US, de-DE, de-AT, de-CH, en-AU`) — this is
 // the derived-set == pack-union assertion; it also gates the bundle: a new
 // bundled `locale_gated` recognizer changes this set and must update the pin
 // plus the "Shipped default activation" reference table.
@@ -768,6 +768,7 @@ fn locale_gated_activation_locales_for_core_bundle_match_compat_list() {
             LocaleTag::DeDe,
             LocaleTag::DeAt,
             LocaleTag::DeCh,
+            LocaleTag::EnAu,
         ]
     );
 }
@@ -857,6 +858,7 @@ pattern = '''BR-E-[0-9]{6}'''
             LocaleTag::DeDe,
             LocaleTag::DeAt,
             LocaleTag::DeCh,
+            LocaleTag::EnAu,
             LocaleTag::EnGb,
             es,
         ],
@@ -865,8 +867,7 @@ pattern = '''BR-E-[0-9]{6}'''
 }
 
 // Pins the shipped compatibility chain: for the bundled `core` recognizers the
-// derived activation set is exactly the v0.6 alias order, so S10-F2 changes no
-// shipped behaviour.
+// derived activation set follows compatibility order before new locale tags.
 #[test]
 fn core_extended_alias_locale_chain_is_compat_order() {
     let core = CorePipelineConfig::new()
@@ -882,6 +883,7 @@ fn core_extended_alias_locale_chain_is_compat_order() {
             LocaleTag::DeDe,
             LocaleTag::DeAt,
             LocaleTag::DeCh,
+            LocaleTag::EnAu,
         ]
     );
 }
@@ -3123,16 +3125,10 @@ fn policy_regex_recognizers_register_under_their_policy_name() {
     );
 }
 
-/// A policy `kind = "regex"` recognizer emits at the confidence the `Detector`
-/// wrapper hard-coded (1.0), not `RegexDetector::with_source`'s 0.70 default.
-/// Class priority and rule priority tie here (same class, both rules at
-/// priority 0) and the two spans overlap without being identical, so the score
-/// rung decides ahead of span length, and dropping
-/// `with_base_score` in `register_policy_detectors` would silently hand it to
-/// the rulepack rule. Pins that behaviour-preserver: the policy rule must win,
-/// and it must win *on score*.
+/// A rulepack span containing a shorter policy regex span protects every byte
+/// the policy rule found. Same-class containment takes precedence over score.
 #[test]
-fn policy_regex_rule_outranks_a_same_class_rulepack_rule_on_score() {
+fn same_class_rulepack_container_outranks_shorter_policy_regex() {
     let rulepack = Rulepack::parse(
         r#"
 schema_version = "0.1.0"
@@ -3182,15 +3178,15 @@ priority = 0
         .expect("winner row");
     assert_eq!(
         winner.recognizer_id.as_deref(),
-        Some("tenant.shape"),
-        "the policy rule's score must outrank the rulepack rule's 0.70"
+        Some("pack.shape"),
+        "the enclosing span must protect the shorter policy match"
     );
     assert_eq!(
         winner.decided_by,
-        ConflictTier::Score,
-        "the score rung decides it; any other tier means the scores tied"
+        ConflictTier::SameClassContainment,
+        "the containment rung decides before score"
     );
-    let loser = loser_row(&logger, "pack.shape");
+    let loser = loser_row(&logger, "tenant.shape");
     assert_eq!(
         loser.class,
         PiiClass::from_policy_name("custom:shape").expect("class")

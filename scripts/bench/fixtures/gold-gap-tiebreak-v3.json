@@ -1,0 +1,182 @@
+[
+ {
+  "id": "gg-013",
+  "document_id": "dataiku-test-1994",
+  "opus": "yes",
+  "codex": "no",
+  "typesafe": "yes",
+  "rule": "1: TypeSafe in 2-of-3 majority",
+  "final": "yes",
+  "tiebreak": null
+ },
+ {
+  "id": "gg-025",
+  "document_id": "dataiku-test-2561",
+  "opus": "yes",
+  "codex": "yes",
+  "typesafe": "uncertain",
+  "tiebreak": {
+   "type": "score",
+   "score": 1.91,
+   "confidence": 0.87,
+   "probabilities": {
+    "no": 0.04,
+    "uncertain": 0.01,
+    "yes": 0.95
+   },
+   "argmax": "yes"
+  },
+  "rule": "2a: TypeSafe re-ask, confidence >= 0.8",
+  "final": "yes"
+ },
+ {
+  "id": "gg-032",
+  "document_id": "dataiku-test-3274",
+  "opus": "yes",
+  "codex": "no",
+  "typesafe": "yes",
+  "rule": "1: TypeSafe in 2-of-3 majority",
+  "final": "yes",
+  "tiebreak": null
+ },
+ {
+  "id": "gg-038",
+  "document_id": "dataiku-test-4089",
+  "opus": "yes",
+  "codex": "yes",
+  "typesafe": "no",
+  "tiebreak": {
+   "type": "score",
+   "score": 1.81,
+   "confidence": 0.72,
+   "probabilities": {
+    "no": 0.09,
+    "uncertain": 0.01,
+    "yes": 0.9
+   },
+   "argmax": "yes"
+  },
+  "rule": "2b: TypeSafe low-confidence -> Opus + Codex majority",
+  "final": "yes"
+ },
+ {
+  "id": "gg-045",
+  "document_id": "dataiku-test-4813",
+  "opus": "yes",
+  "codex": "no",
+  "typesafe": "yes",
+  "rule": "1: TypeSafe in 2-of-3 majority",
+  "final": "yes",
+  "tiebreak": null
+ },
+ {
+  "id": "gg-059",
+  "document_id": "dataiku-test-2890",
+  "opus": "yes",
+  "codex": "no",
+  "typesafe": "yes",
+  "rule": "1: TypeSafe in 2-of-3 majority",
+  "final": "yes",
+  "tiebreak": null
+ },
+ {
+  "id": "gg-088",
+  "document_id": "dataiku-test-2717",
+  "opus": "yes",
+  "codex": "yes",
+  "typesafe": "uncertain",
+  "tiebreak": {
+   "type": "score",
+   "score": 1.25,
+   "confidence": 0.0,
+   "probabilities": {
+    "no": 0.37,
+    "uncertain": 0.02,
+    "yes": 0.61
+   },
+   "argmax": "yes"
+  },
+  "rule": "2b: TypeSafe low-confidence -> Opus + Codex majority",
+  "final": "yes"
+ },
+ {
+  "id": "gg-121",
+  "document_id": "dataiku-test-660",
+  "opus": "uncertain",
+  "codex": "uncertain",
+  "typesafe": "yes",
+  "tiebreak": {
+   "type": "score",
+   "score": 1.39,
+   "confidence": 0.08,
+   "probabilities": {
+    "no": 0.13,
+    "uncertain": 0.36,
+    "yes": 0.51
+   },
+   "argmax": "yes"
+  },
+  "rule": "2b: TypeSafe low-confidence -> Opus + Codex majority",
+  "final": "uncertain"
+ },
+ {
+  "id": "gg-160",
+  "document_id": "dataiku-test-3109",
+  "opus": "no",
+  "codex": "no",
+  "typesafe": "uncertain",
+  "tiebreak": {
+   "type": "score",
+   "score": 0.02,
+   "confidence": 0.97,
+   "probabilities": {
+    "no": 0.98,
+    "uncertain": 0.01,
+    "yes": 0.01
+   },
+   "argmax": "no"
+  },
+  "rule": "2a: TypeSafe re-ask, confidence >= 0.8",
+  "final": "no"
+ },
+ {
+  "id": "gg-196",
+  "document_id": "dataiku-test-3122",
+  "opus": "yes",
+  "codex": "no",
+  "typesafe": "yes",
+  "rule": "1: TypeSafe in 2-of-3 majority",
+  "final": "yes",
+  "tiebreak": null
+ },
+ {
+  "id": "gg-199",
+  "document_id": "dataiku-test-4528",
+  "opus": "no",
+  "codex": "no",
+  "typesafe": "yes",
+  "tiebreak": {
+   "type": "score",
+   "score": 0.12,
+   "confidence": 0.81,
+   "probabilities": {
+    "no": 0.93,
+    "uncertain": 0.01,
+    "yes": 0.06
+   },
+   "argmax": "no"
+  },
+  "rule": "2a: TypeSafe re-ask, confidence >= 0.8",
+  "final": "no"
+ },
+ {
+  "id": "gg-200",
+  "document_id": "dataiku-test-4703",
+  "opus": "yes",
+  "codex": "no",
+  "typesafe": "yes",
+  "rule": "1: TypeSafe in 2-of-3 majority",
+  "final": "yes",
+  "tiebreak": null
+ }
+]
