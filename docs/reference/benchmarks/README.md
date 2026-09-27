@@ -583,7 +583,21 @@ every number below from those records and runs on every pull request.
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v3 headline counts false-positive bytes after gold-gap credit.
 
-No mechanism has been measured on its own yet.
+| Mechanism | Measured at | Contract | Leaked bytes, without → with | FP bytes, without → with | Gate |
+| --- | --- | --- | ---: | ---: | --- |
+| GLiNER date-of-birth judge | `35c4fc79377d` (unreleased) | v3 | 11,909 → 11,824 (-85) | 13,768 → 13,768 (0) | not gated: re-scored from the v2 records |
+| GLiNER date-of-birth judge | `35c4fc79377d` (unreleased) | v2 | 11,909 → 11,824 (-85) | 25,480 → 25,480 (0) | pass |
+| GLiNER date-of-birth judge | `35c4fc79377d` (unreleased) | v1 | 18,155 → 18,070 (-85) | 25,480 → 25,480 (0) | pass |
+
+What moved, per label (contract v2; v1 adds only the credential labels):
+
+- **GLiNER date-of-birth judge**: leaked bytes by gold label: DATEOFBIRTH -85. FP bytes by predicted class: none. Agentic layers: A leaked -20, FP 0; D leaked 0, FP 0; R leaked 0, FP 0. Policy delta [`gliner-dob-judge.toml`](../../../scripts/bench/mechanisms/gliner-dob-judge.toml); evidence [base](mechanisms/gliner-dob-judge-35c4fc79377d-base.jsonl.gz) and [candidate](mechanisms/gliner-dob-judge-35c4fc79377d-candidate.jsonl.gz) observation records; `crates/` tree `d23a92523325`, binary `0ecb1cddab03`, MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
+
+Shipped releases, one column per release:
+
+| Mechanism | `v0.15.1` | `v0.15.0` | `v0.14.0` |
+| --- | --- | --- | --- |
+| GLiNER date-of-birth judge | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
 
 <!-- END GENERATED: mechanism-arms -->
 

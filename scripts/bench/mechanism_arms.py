@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import tomllib
 from collections import Counter
 from pathlib import Path
@@ -31,7 +32,13 @@ import agentic_layers as agentic
 import gaze_bench_score as score
 import scorecard_record as record
 import verify_record_scorecards as verify
-from render_benchmark_doc import begin_marker, end_marker, version_sort_key
+from render_benchmark_doc import (
+    GOLD_GAP_CONTRACT,
+    HEADLINE_CONTRACT,
+    begin_marker,
+    end_marker,
+    version_sort_key,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,10 +51,9 @@ V2_CONTRACT = BENCH_DIR / "scored-labels-v2.json"
 V3_CONTRACT = BENCH_DIR / "scored-labels-v3.json"
 BLOCK = "mechanism-arms"
 SCHEMA_VERSION = 1
-# From this contract on, the headline false-positive bytes are the gold-gap
-# adjusted value (same rule as render_benchmark_doc.headline_arms).
-GOLD_GAP_CONTRACT = 3
-CONTRACTS = (3, 2, 1)
+# Headline first; from GOLD_GAP_CONTRACT on, false-positive bytes are the
+# gold-gap adjusted value (same rule as render_benchmark_doc.headline_arms).
+CONTRACTS = (HEADLINE_CONTRACT, 2, 1)
 # The one scorecard field a v1 run may differ in from the v1 rescore of the v2
 # run's record: it names the record file, which is a different file by
 # construction. Everything else, timing aside, must match.
@@ -301,9 +307,22 @@ def check_pair(
     }
 
 
+def git_crates_tree(revision: str) -> str:
+    """The measured commit's `crates/` tree: equal trees mean the same detection code,
+    so a later rebase that touches only scripts or docs leaves the row valid."""
+    try:
+        return subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", f"{revision}:crates"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise MechanismError(f"cannot resolve the crates tree of {revision}: {error}") from error
+
+
 def record_measurement(
     ledger: dict[str, Any], *, mechanism: str, title: str, added_in: str, delta: Path,
     runs: Mapping[str, Path], binary: Path, machine: str, release: str | None,
+    crates_tree: str | None = None,
     evidence_dir: Path = EVIDENCE_DIR, root: Path = ROOT,
 ) -> dict[str, Any]:
     root, delta, evidence_dir = root.resolve(), delta.resolve(), evidence_dir.resolve()
@@ -319,6 +338,7 @@ def record_measurement(
     if set(arms) != {"base-v2", "candidate-v2", "base-v1", "candidate-v1"}:
         raise MechanismError("record needs base-v2, candidate-v2, base-v1 and candidate-v1")
     pair = check_pair(arms, delta)
+    crates_tree = crates_tree or git_crates_tree(pair["revision"])
     evidence_dir.mkdir(parents=True, exist_ok=True)
     stem = f"{mechanism}-{release or pair['revision'][:12]}"
     files = {}
@@ -330,6 +350,7 @@ def record_measurement(
     measurement = {
         "release": release,
         "revision": pair["revision"],
+        "crates_tree": crates_tree,
         "machine": machine,
         "binary_sha256": sha256(binary),
         "corpus_sha256": pair["corpus_sha256"],
@@ -408,9 +429,9 @@ def _check_file(row: Any, where: str, root: Path) -> None:
 
 
 def _validate_measurement(measurement: Mapping[str, Any], where: str, root: Path) -> None:
-    for key in ("revision", "binary_sha256", "corpus_sha256",
+    for key in ("revision", "crates_tree", "binary_sha256", "corpus_sha256",
                 "base_policy_sha256", "candidate_policy_sha256"):
-        pattern = HEX64 if key != "revision" else re.compile(r"^[0-9a-f]{40}$")
+        pattern = re.compile(r"^[0-9a-f]{40}$") if key in {"revision", "crates_tree"} else HEX64
         if not isinstance(measurement.get(key), str) or not pattern.fullmatch(measurement[key]):
             raise MechanismError(f"{where}: {key} is missing or malformed")
     if measurement["base_policy_sha256"] == measurement["candidate_policy_sha256"]:
@@ -488,7 +509,9 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str]) -> str:
             for version in CONTRACTS:
                 row = measurement["contracts"][str(version)]
                 base, candidate = row["base"], row["candidate"]
-                gate = measurement["gate"].get(f"v{version}", {}).get("verdict", "n/a (derived)")
+                gate = measurement["gate"].get(f"v{version}", {}).get(
+                    "verdict", "not gated: re-scored from the v2 records"
+                )
                 lines.append(
                     f"| {entry['title']} | {at} | v{version} | "
                     f"{base['leaked']:,} → {candidate['leaked']:,} "
@@ -519,7 +542,8 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str]) -> str:
                 f"({_link(entry['policy_delta']['file'])}); evidence "
                 f"[base]({_link(measurement['records']['base']['file'])}) and "
                 f"[candidate]({_link(measurement['records']['candidate']['file'])}) "
-                f"observation records; {measurement['machine']}."
+                f"observation records; `crates/` tree `{measurement['crates_tree'][:12]}`, "
+                f"binary `{measurement['binary_sha256'][:12]}`, {measurement['machine']}."
             )
     lines += [
         "",

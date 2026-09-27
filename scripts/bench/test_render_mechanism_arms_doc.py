@@ -123,7 +123,7 @@ class SyntheticMechanism:
         arguments = dict(
             mechanism="synthetic-drop", title="Synthetic drop", added_in="v0.16",
             delta=self.delta, runs=self.runs, binary=self.binary,
-            machine="test host", release=None,
+            machine="test host", release=None, crates_tree="d" * 40,
             evidence_dir=self.root / "evidence", root=self.root,
         )
         arguments.update(overrides)
