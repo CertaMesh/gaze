@@ -560,7 +560,10 @@ fn work_counts_show_disjoint_gaps_are_not_replayed() {
         let baseline = run(disjoint.clone(), &registry, &"x".repeat(42 + 2 * count));
         assert_eq!(baseline.work.pools, 1);
         assert_eq!(baseline.work.candidates, count);
-        assert_eq!(baseline.work.overlap_probes, count * (count - 1) / 2);
+        // Each disjoint arrival inspects only its left neighbour, so the
+        // resolver's work grows linearly (todo 3895; a full scan was
+        // count * (count - 1) / 2).
+        assert_eq!(baseline.work.overlap_probes, count - 1);
         let mut input = triple();
         input.extend(disjoint);
         let result = run(input, &registry, &"x".repeat(42 + 2 * count));
