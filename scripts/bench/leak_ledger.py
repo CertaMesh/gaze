@@ -322,6 +322,7 @@ def _trace_identity(trace: Sequence[Mapping[str, Any]]) -> list[tuple]:
 def probe(
     *, record_path: Path, binary: Path, policy: Path, dataset: Path, model_dir: Path,
     machine: str, threshold: float = 0.3, main_revision: str | None = None,
+    main_binary: Path | None = None, record_binary_sha256: str | None = None,
 ) -> dict[str, Any]:
     import run_no_opf_benchmark as runner
 
@@ -399,9 +400,16 @@ def probe(
     revision = card["gaze"]["revision"]
     if card["gaze"]["dirty"]:
         raise LedgerError("the record was measured on a dirty tree")
-    crates_tree = _crates_tree(revision)
-    if main_revision is not None and _crates_tree(main_revision) != crates_tree:
-        raise LedgerError(f"{main_revision} has another crates/ tree than the record's {revision}")
+    reuse = None
+    if main_revision is not None and main_revision != revision:
+        # A record from another commit stands for main only when main's own release
+        # producer is byte-identical to the one that measured the record.
+        if main_binary is None or record_binary_sha256 is None:
+            raise LedgerError("--main-revision needs --main-binary and --record-binary-sha256")
+        main_binary_sha256 = sha256(main_binary)
+        if main_binary_sha256 != record_binary_sha256:
+            raise LedgerError(f"{main_revision}'s producer differs from the record's; run a fresh record")
+        reuse = {"record_revision": revision, "producer_sha256": main_binary_sha256}
     stem = revision[:12]
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     record_target = EVIDENCE_DIR / f"observations-{stem}.jsonl.gz"
@@ -413,8 +421,8 @@ def probe(
         "comment": "Leak ledger: every leaked gold byte of one commit by root cause. "
                    "Written by scripts/bench/leak_ledger.py probe; checked by its check command.",
         "revision": revision,
-        "crates_tree": crates_tree,
         "main_revision": main_revision or revision,
+        "reused_record": reuse,
         "corpus_sha256": header["corpus_sha256"],
         "policy_sha256": card["parameters"]["policy_sha256"],
         "sampling_seed": card["parameters"]["sampling_seed"],
@@ -429,14 +437,6 @@ def probe(
     }
     INDEX.write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8")
     return index
-
-
-def _crates_tree(revision: str) -> str:
-    """The `crates/` tree: equal trees run the same detection code."""
-    return subprocess.run(
-        ["git", "rev-parse", f"{revision}:crates"], cwd=ROOT, check=True,
-        capture_output=True, text=True,
-    ).stdout.strip()
 
 
 # --------------------------------------------------------------------------
@@ -526,8 +526,11 @@ def render(rows: Sequence[Mapping[str, Any]], index: Mapping[str, Any],
     scored_c = [row for row in rows if row["layer"] == "C" and _scored(row["label"], contract)]
     letters = list(CAUSES)
     lines = [
-        f"Main `{index['main_revision'][:12]}` (record measured on `{index['revision'][:12]}`, "
-        f"same `crates/` tree `{index['crates_tree'][:12]}`), `gaze setup` policy `{index['policy_sha256'][:12]}`, "
+        f"Main `{index['main_revision'][:12]}`"
+        + (f" (record measured on `{index['revision'][:12]}` with a byte-identical release "
+           f"producer `{index['reused_record']['producer_sha256'][:12]}`)"
+           if index["reused_record"] else "")
+        + f", `gaze setup` policy `{index['policy_sha256'][:12]}`, "
         f"scored-label contract v{HEADLINE_CONTRACT}. Leaked bytes per gold span, summed per "
         "label (the scorecard's `per_label_recall`); overlapping gold counts once per span, so "
         f"the label sum ({totals[str(HEADLINE_CONTRACT)]['C']['labels']:,} B) can exceed the "
@@ -650,7 +653,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     add.add_argument("--machine", required=True)
     add.add_argument("--main-revision",
                      help="the main commit this ledger stands for, when the record was measured "
-                          "on another commit with the same crates/ tree")
+                          "on another commit whose release producer is byte-identical")
+    add.add_argument("--main-binary", type=Path,
+                     help="release clean_for_bench built from --main-revision, unmodified")
+    add.add_argument("--record-binary-sha256",
+                     help="SHA-256 of the release producer that measured the record")
     commands.add_parser("check", help="fail if the ledger, its totals or its table drifted")
     commands.add_parser("render", help="rewrite the table from the committed ledger")
     args = parser.parse_args(argv)
@@ -658,7 +665,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "probe":
             probe(record_path=args.record, binary=args.binary, policy=args.policy,
                   dataset=args.dataset, model_dir=args.model_dir, machine=args.machine,
-                  main_revision=args.main_revision)
+                  main_revision=args.main_revision, main_binary=args.main_binary,
+                  record_binary_sha256=args.record_binary_sha256)
         totals, body = derive()
         original = DOC.read_text(encoding="utf-8")
         rendered = apply(original, body)
