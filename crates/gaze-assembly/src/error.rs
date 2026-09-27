@@ -17,6 +17,8 @@ pub enum BuildError {
     },
     #[error("recognizer error: {0}")]
     Recognizer(gaze_recognizers::RecognizerError),
+    #[error("GLiNER date-of-birth judge: {0}")]
+    DobJudgeLoad(#[from] gaze_recognizers::DobJudgeLoadError),
     #[error("nym safety net requires the safety-net-nym feature; install with `gaze setup --safety-net nym`")]
     NymFeatureDisabled,
     #[error("nym model_dir is missing; install with `gaze setup --safety-net nym`")]

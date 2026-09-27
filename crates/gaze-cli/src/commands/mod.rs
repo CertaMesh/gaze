@@ -90,6 +90,12 @@ enum Cmd {
         /// NER model install directory. Defaults to $XDG_DATA_HOME/gaze/models/davlan-mbert-ner-hrl.
         #[arg(long)]
         model_dir: Option<PathBuf>,
+        /// Install and enable the pinned local GLiNER date-of-birth judge.
+        #[arg(long)]
+        dob_judge: bool,
+        /// GLiNER bundle directory; requires --dob-judge.
+        #[arg(long, requires = "dob_judge")]
+        dob_model_dir: Option<PathBuf>,
         /// Use defaults without prompts.
         #[arg(long)]
         non_interactive: bool,
@@ -688,12 +694,16 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             safety_net,
             policy_out,
             model_dir,
+            dob_judge,
+            dob_model_dir,
             non_interactive,
             force,
         } => setup::run(setup::Args {
             safety_net,
             policy_out,
             model_dir,
+            dob_judge,
+            dob_model_dir,
             non_interactive,
             force,
         }),
