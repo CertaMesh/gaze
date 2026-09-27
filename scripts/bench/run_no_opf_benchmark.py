@@ -1008,15 +1008,16 @@ def run(args: argparse.Namespace) -> int:
             policy_data = tomllib.loads(policy_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
             raise CandidateError(f"cannot read policy {policy_path}: {error}") from error
-        try:
-            ner = policy_data["ner"]
-            model_path = Path(ner["model_dir"]).expanduser()
-            davlan_model = (
-                model_path if model_path.is_absolute() else policy_path.parent / model_path
-            ).resolve()
-            effective_threshold = float(ner["threshold"])
-        except (KeyError, TypeError, ValueError) as error:
-            raise CandidateError(f"policy NER settings are missing or invalid: {error}") from error
+        if "ner" in policy_data:
+            try:
+                ner = policy_data["ner"]
+                model_path = Path(ner["model_dir"]).expanduser()
+                davlan_model = (
+                    model_path if model_path.is_absolute() else policy_path.parent / model_path
+                ).resolve()
+                effective_threshold = float(ner["threshold"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise CandidateError(f"policy NER settings are invalid: {error}") from error
         if policy_data.get("safety_net", {}).get("backend") == "nym":
             try:
                 nym_path = Path(
