@@ -1577,7 +1577,7 @@ def gold_validity_digest(
 
 
 def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict[str, int]]:
-    """Per layer: gated leaked bytes, FP bytes and refusals of one arm.
+    """Per layer: gated leaked bytes, FP bytes, refusals and restore counts.
 
     Gold that fails its own checksum stays scored in the headline, but only a
     rule without a checksum can reach it, so it is reported (`twin_leaked`)
@@ -1589,6 +1589,15 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
     for layer in GATE_LAYERS:
         run = _layer_run(scorecard, layer, config)
         utf8 = run["metrics"]["utf8_bytes"]
+        contract = run.get("pipeline_contract")
+        if not isinstance(contract, dict):
+            raise LayerError(f"layer {layer} has no pipeline_contract; measure this scorecard again")
+        for field in ("documents", "restore_exact_documents", "manifest_valid_documents"):
+            if type(contract.get(field)) is not int or contract[field] < 0:
+                raise LayerError(f"layer {layer} has no valid pipeline_contract.{field}; measure this scorecard again")
+        if any(contract[field] > contract["documents"] for field in
+               ("restore_exact_documents", "manifest_valid_documents")):
+            raise LayerError(f"layer {layer} pipeline_contract counts exceed documents")
         twin_leaked = 0
         if layer == LAYER_IDENTIFIERS:
             twin_leaked = sum(
@@ -1609,11 +1618,14 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
                 if block.get("production_recall_by_gold_validity")
             )
         totals[layer] = {
+            "documents": contract["documents"],
             "headline_leaked": utf8["leaked"],
             "leaked": utf8["leaked"] - twin_leaked,
             "twin_leaked": twin_leaked,
             "false_positive": utf8["false_positive"],
             "failed_closed": run["pipeline_availability"]["failed_closed_documents"],
+            "restore_exact": contract["restore_exact_documents"],
+            "manifest_valid": contract["manifest_valid_documents"],
         }
     return totals
 
@@ -1628,6 +1640,8 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
     """
     rows = {
         layer: {
+            "documents_base": base[layer]["documents"],
+            "documents_candidate": candidate[layer]["documents"],
             "headline_leaked_base": base[layer]["headline_leaked"],
             "headline_leaked_candidate": candidate[layer]["headline_leaked"],
             "leaked_base": base[layer]["leaked"],
@@ -1638,6 +1652,10 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
             "false_positive_candidate": candidate[layer]["false_positive"],
             "failed_closed_base": base[layer]["failed_closed"],
             "failed_closed_candidate": candidate[layer]["failed_closed"],
+            "restore_exact_base": base[layer]["restore_exact"],
+            "restore_exact_candidate": candidate[layer]["restore_exact"],
+            "manifest_valid_base": base[layer]["manifest_valid"],
+            "manifest_valid_candidate": candidate[layer]["manifest_valid"],
         }
         for layer in GATE_LAYERS
     }
@@ -1649,10 +1667,21 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         or r["headline_leaked_candidate"] > r["headline_leaked_base"]
     ]
     refusal_rise = [l for l, r in rows.items() if r["failed_closed_candidate"] > r["failed_closed_base"]]
+    restore_drop = [l for l, r in rows.items() if r["restore_exact_candidate"] < r["restore_exact_base"]]
+    manifest_drop = [l for l, r in rows.items() if r["manifest_valid_candidate"] < r["manifest_valid_base"]]
+    restore_gain = [l for l, r in rows.items() if r["restore_exact_candidate"] > r["restore_exact_base"]]
+    manifest_gain = [l for l, r in rows.items() if r["manifest_valid_candidate"] > r["manifest_valid_base"]]
     leak_drop = sum(r["leaked_base"] - r["leaked_candidate"] for r in rows.values())
     fp_rise = sum(r["false_positive_candidate"] - r["false_positive_base"] for r in rows.values())
     summary = {"leaked_bytes_decrease": leak_drop, "false_positive_bytes_increase": fp_rise}
-    if leak_rise:
+    population_change = [l for l, r in rows.items() if r["documents_candidate"] != r["documents_base"]]
+    if population_change:
+        verdict, reason = "fail", f"document counts differ in {population_change}"
+    elif restore_drop:
+        verdict, reason = "fail", f"exact-restore documents fell in {restore_drop}"
+    elif manifest_drop:
+        verdict, reason = "fail", f"valid-manifest documents fell in {manifest_drop}"
+    elif leak_rise:
         verdict, reason = "fail", f"leaked bytes rose in {leak_rise}"
     elif refusal_rise:
         verdict, reason = "fail", f"failed-closed documents rose in {refusal_rise}"
@@ -1666,6 +1695,13 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
             )
     elif fp_rise < 0:
         verdict, reason = "pass", f"false-positive-only fix: FP bytes fell by {-fp_rise}"
+    elif (restore_gain or manifest_gain) and fp_rise == 0:
+        verdict, reason = "pass", (
+            f"reversibility improved: exact restore rose in {restore_gain}; "
+            f"valid manifests rose in {manifest_gain}"
+        )
+    elif (restore_gain or manifest_gain) and fp_rise > 0:
+        verdict, reason = "fail", f"FP bytes rose by {fp_rise} despite reversibility gain"
     else:
         verdict, reason = "fail", "no layer's leaked bytes fell and FP bytes did not fall"
     return {"verdict": verdict, "reason": reason, "summary": summary, "layers": rows}
@@ -1779,12 +1815,14 @@ def gate_markdown(result: Mapping[str, object]) -> str:
         lines += [f"- {name}: `{digest}`" for name, digest in result["policy_digests"].items()]
         lines.append("")
     if result["layers"]:
-        lines += ["| Layer | Leaked base | Leaked cand | FP base | FP cand | Failed closed base | Failed closed cand | Twin leak base | Twin leak cand |",
-                  "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
+        lines += ["| Layer | Leaked base | Leaked cand | FP base | FP cand | Failed closed base | Failed closed cand | Restore base | Restore cand | Valid manifest base | Valid manifest cand | Twin leak base | Twin leak cand |",
+                  "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
         for layer, r in result["layers"].items():
             lines.append(
                 f"| {layer} | {r['leaked_base']} | {r['leaked_candidate']} | {r['false_positive_base']} | "
                 f"{r['false_positive_candidate']} | {r['failed_closed_base']} | {r['failed_closed_candidate']} | "
+                f"{r['restore_exact_base']} | {r['restore_exact_candidate']} | "
+                f"{r['manifest_valid_base']} | {r['manifest_valid_candidate']} | "
                 f"{r['twin_leaked_base']} | {r['twin_leaked_candidate']} |"
             )
         lines += ["", "Gated leak excludes gold that fails its checksum (layer A twins, layer C "
