@@ -233,6 +233,10 @@ impl CandidatePool {
             };
             self.insert(&mut resolved, candidate, policy, anchor_ctx, mode);
         }
+        // Every arbitration arm keeps resolved spans disjoint; the fallback
+        // exists for a future arm that does not.
+        #[cfg(test)]
+        assert!(!resolved.linear, "resolved spans overlap");
         let mut resolved = resolved.into_vec();
         if let Some(ctx) = anchor_ctx {
             resolved = resolved
@@ -359,6 +363,10 @@ struct ResolvedSet {
     by_start: BTreeMap<usize, usize>,
     /// Slots holding an empty span, which can sit inside a non-empty one.
     empty: Vec<usize>,
+    /// Set once a span would break the no-overlap invariant the index relies
+    /// on. The pool then scans every slot, as before the index existed: an
+    /// arbitration bug costs time, never a span silently left unarbitrated.
+    linear: bool,
 }
 
 impl ResolvedSet {
@@ -369,6 +377,18 @@ impl ResolvedSet {
 
     fn overlapping(&self, span: &Range<usize>, probes: &mut usize) -> Vec<usize> {
         let mut found = Vec::new();
+        if self.linear {
+            for (slot, held) in self.slots.iter().enumerate() {
+                *probes += 1;
+                if held
+                    .as_ref()
+                    .is_some_and(|held| overlaps(&held.candidate.span, span))
+                {
+                    found.push(slot);
+                }
+            }
+            return found;
+        }
         for (_, &slot) in self.by_start.range(..span.end).rev() {
             *probes += 1;
             let existing = &self.span(slot);
@@ -403,23 +423,35 @@ impl ResolvedSet {
     }
 
     fn put(&mut self, slot: usize, candidate: WholeCandidate) {
-        let span = &candidate.candidate.span;
+        let span = candidate.candidate.span.clone();
+        self.slots[slot] = Some(candidate);
+        if self.linear {
+            return;
+        }
         if span.is_empty() {
             self.empty.push(slot);
-        } else {
-            let previous = self.by_start.insert(span.start, slot);
-            debug_assert!(previous.is_none(), "resolved spans overlap");
+            return;
         }
-        self.slots[slot] = Some(candidate);
+        let before = self.by_start.range(..=span.start).next_back();
+        let after = self.by_start.range(span.start..).next();
+        let disjoint = before.is_none_or(|(_, &slot)| self.span(slot).end <= span.start)
+            && after.is_none_or(|(&start, _)| span.end <= start);
+        if disjoint {
+            self.by_start.insert(span.start, slot);
+        } else {
+            self.linear = true;
+        }
     }
 
     fn take(&mut self, slot: usize) -> WholeCandidate {
         let candidate = self.slots[slot].take().expect("slot is occupied");
         let span = &candidate.candidate.span;
-        if span.is_empty() {
-            self.empty.retain(|&held| held != slot);
-        } else {
-            self.by_start.remove(&span.start);
+        if !self.linear {
+            if span.is_empty() {
+                self.empty.retain(|&held| held != slot);
+            } else {
+                self.by_start.remove(&span.start);
+            }
         }
         candidate
     }
@@ -2590,6 +2622,97 @@ mod recovery_event_tests {
             covered > 1_000 && uncovered > 1_000,
             "{covered} / {uncovered}"
         );
+    }
+
+    fn whole(pool: &CandidatePool, id: usize) -> WholeCandidate {
+        WholeCandidate {
+            candidate: pool.originals[id].clone(),
+            members: vec![id],
+            node: id,
+            settlement: Settlement::Open,
+        }
+    }
+
+    fn counter(span: Range<usize>, class: PiiClass, id: &str) -> Candidate {
+        Candidate::new(
+            span,
+            class,
+            id,
+            0.9,
+            0,
+            None,
+            "counter",
+            id,
+            ConflictTier::None,
+            vec![],
+        )
+    }
+
+    /// Collateral losers leave in arrival (slot) order, not in the reverse
+    /// start order the index yields them in, so `Collateral` events and the
+    /// winner's `merged_sources` keep the order the full scan produced.
+    #[test]
+    fn collateral_losers_leave_in_arrival_order() {
+        // Slot order 20..25, 0..5, 10..15, 6..8 differs from start order.
+        let mut pool = CandidatePool::new(vec![
+            counter(20..25, PiiClass::Name, "first"),
+            counter(0..5, PiiClass::Name, "a"),
+            counter(10..15, PiiClass::Name, "c"),
+            counter(6..8, PiiClass::Name, "b"),
+            counter(3..24, PiiClass::Email, "winner"),
+        ]);
+        let mut nodes = ResolvedSet::default();
+        for id in 0..4 {
+            nodes.push(whole(&pool, id));
+        }
+        let incoming = whole(&pool, 4);
+        pool.insert(
+            &mut nodes,
+            incoming,
+            &FamilyPolicyTable::EMPTY,
+            None,
+            ContainmentMode::Enclosing,
+        );
+        let nodes = nodes.into_vec();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].candidate.span, 3..24);
+        let removed = pool
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                ResolutionEvent::Collateral { removed, .. } => Some(*removed),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(removed, vec![1, 2, 3]);
+        let sources = (0..4)
+            .map(|id| pool.originals[id].source.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(nodes[0].candidate.merged_sources, sources);
+    }
+
+    /// A span that would overlap an indexed one switches the set to the full
+    /// scan instead of dropping the span from the index (fail closed, no
+    /// panic in release builds).
+    #[test]
+    fn overlapping_put_falls_back_to_the_full_scan() {
+        let pool = CandidatePool::new(vec![
+            counter(0..10, PiiClass::Name, "a"),
+            counter(0..4, PiiClass::Name, "same-start"),
+            counter(8..12, PiiClass::Name, "partial"),
+        ]);
+        let mut nodes = ResolvedSet::default();
+        nodes.push(whole(&pool, 0));
+        assert!(!nodes.linear);
+        nodes.push(whole(&pool, 1));
+        assert!(nodes.linear);
+        nodes.push(whole(&pool, 2));
+        let mut probes = 0;
+        assert_eq!(nodes.overlapping(&(9..11), &mut probes), vec![0, 2]);
+        assert_eq!(nodes.first_overlap(&(2..3), &mut probes), Some(0));
+        assert_eq!(nodes.take(1).candidate.span, 0..4);
+        assert_eq!(nodes.overlapping(&(0..20), &mut probes), vec![0, 2]);
+        assert_eq!(nodes.into_vec().len(), 2);
     }
 
     #[test]
