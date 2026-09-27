@@ -603,7 +603,8 @@ class GateTests(unittest.TestCase):
                                            **{field: {layer: 9}})
                     result = agentic.gate(base, candidate)
                     self.assertEqual(result["verdict"], "fail")
-                    self.assertIn(layer, result["reason"])
+                    self.assertEqual(result["reason"],
+                                     f"{'exact-restore documents fell' if field == 'restore' else 'valid-manifest documents fell'} in ['{layer}']")
 
     def test_restore_and_manifest_rise_count_as_improvement(self) -> None:
         for layer in agentic.GATE_LAYERS:
