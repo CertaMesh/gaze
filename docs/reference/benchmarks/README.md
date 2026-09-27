@@ -18,6 +18,7 @@ and fails on drift.
 | [Current release](#current-release) | the headline table |
 | [Charts](#charts) | per-arm and release-over-release |
 | [Release history](#release-history) | one row per released version |
+| [Leak ledger](#leak-ledger) | every leaked gold byte by root cause |
 | [Safety-Net Matrix](#safety-net-matrix) | backend pins and matrix shape |
 | [NER Model Leaderboard](#ner-model-leaderboard) | candidate backends |
 | [How to reproduce](#how-to-reproduce) | commands, harness, hardware |
@@ -621,6 +622,44 @@ Shipped releases, one column per release:
 | Davlan NER | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
 
 <!-- END GENERATED: mechanism-arms -->
+
+---
+
+## Leak ledger
+
+The headline says how many gold bytes leak; the leak ledger says why each one
+does. For one commit it lists every gold span with at least one raw byte left
+in the output, under the `gaze setup` policy, for layer C and the generated
+agentic layers A, D and R, and gives it one root cause:
+
+| Cause | Meaning |
+| --- | --- |
+| a no candidate | no recognizer produced anything overlapping the span; the closest one within 16 bytes is noted |
+| b vetoed | a validator vetoed an overlapping candidate, a candidate was dropped before resolution (locale claim), or only a recognizer outside the locale chain matched |
+| c lost in resolution | an overlapping candidate lost to another winner; the winner's class and the audit tier are noted |
+| d partial span | a token covers part of the value and the rest stays raw |
+| e repeat not swept | the same value is protected elsewhere in the document but not here |
+| f junk-shaped gold | no candidate, and the gold looks like junk (an identifier label with no digit or at most four alphanumerics); it stays in the target until an audited contract change |
+| g other | a primary-resolution winner covers the span but the final trace does not |
+
+The first matching cause wins, in the order d, b (validator), c, b (dropped
+or locale-gated), e, f, a; g is the remainder.
+
+[`scripts/bench/leak_ledger.py`](../../../scripts/bench/leak_ledger.py)
+`probe` joins a clean-tree runner record with the candidate pool that the
+bench producer prints under `GAZE_BENCH_CANDIDATE_POOL=1`, and refuses unless
+every document's final trace equals the record's. It commits the record and
+one value-free row per leaked span (document ID, label, byte offsets, cause,
+rule IDs) under [`leak-ledger/`](leak-ledger/), indexed by
+[`leak-ledger.json`](leak-ledger.json). `check` needs no corpus, model or
+binary: it re-derives the leaked spans and their bytes from the record,
+requires the rows to match them exactly, and requires every label's total to
+equal the scorecard's `per_label_recall` leaked bytes under every
+scored-label contract and the agentic layer contract.
+
+<!-- BEGIN GENERATED: leak-ledger -->
+
+<!-- END GENERATED: leak-ledger -->
 
 ---
 
