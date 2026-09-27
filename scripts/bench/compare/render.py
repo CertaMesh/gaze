@@ -92,21 +92,33 @@ def render(report: dict[str, object], source: str) -> str:
         "",
         "Same corpus and scorer; tools run with their documented defaults. "
         "UTF-8 byte counts use the Gaze scorer. For v3, FP is the scorer's "
-        "false-positive count after its audited gold-gap credit. CPU p50/p95 "
-        "is warm per-document inference/clean time on the same machine. "
-        "Presidio English default leaves German documents unprocessed. "
+        "false-positive count after its audited gold-gap credit. CPU-host p50/p95 "
+        "is warm per-document wall-clock inference/clean time on the same machine. "
+        "Presidio English default leaves non-English documents unprocessed; "
+        "the English/German row leaves Dutch, French, and Portuguese documents unprocessed. "
+        "A 0.0 ms median can therefore mean a skipped language. "
         "This measures detection; competitor restore and manifest behavior is not scored.",
         "",
         f"Gaze revision: `{gaze['v3']['gaze_revision']}`; "
         f"setup policy SHA-256: `{gaze['v3']['policy_sha256']}`. "
         "The measured call scopes differ by tool, so latency is descriptive.",
         "",
+        "Competitor runtimes: Presidio "
+        f"{tools['presidio-en']['provenance']['analyzer_version']} with spaCy "
+        f"{tools['presidio-en']['provenance']['spacy_version']}; GLiNER "
+        f"{tools['gliner']['provenance']['gliner_version']} at model snapshot "
+        f"`{tools['gliner']['provenance']['model_snapshot']}`; "
+        + (f"OPF {tools['opf']['provenance']['runtime']['version']} at source "
+           f"`{tools['opf']['provenance']['runtime']['source_revision']}`."
+           if 'opf' in tools else "OPF skipped."),
+        "",
         f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published.",
         "",
-        "| Contract | Layer | Tool | Leaked B | FP B | CPU p50 ms | CPU p95 ms |",
+        "| Contract | Layer | Tool | Leaked B | FP B | CPU-host p50 ms | CPU-host p95 ms |",
         "|---|---|---|---:|---:|---:|---:|",
     ]
-    better = []
+    lower_leak = []
+    lower_fp_at_equal_leak = []
     for version in versions:
         for layer in layer_ids:
             gaze_row = gaze[version]["layers"][layer]
@@ -125,9 +137,25 @@ def render(report: dict[str, object], source: str) -> str:
                     f"| {version} | {layer} | {name} | {row['leaked_bytes']:,} | {fp:,} | "
                     f"{latency['p50_ms']:.1f} | {latency['p95_ms']:.1f} |"
                 )
-                if name != "gaze" and row["leaked_bytes"] < gaze_row["leaked_bytes"]:
-                    better.append(f"{version}/{layer}: {name} leaks {row['leaked_bytes']:,} B versus Gaze {gaze_row['leaked_bytes']:,} B")
-    lines.extend(["", "**Where Gaze leaks more:** " + ("; ".join(better) if better else "none in these measured rows") + "."])
+                if name != "gaze" and version == "v3":
+                    gaze_fp = gaze_row["false_positive_bytes_after_gold_gap"]
+                    if gaze_fp is None:
+                        gaze_fp = gaze_row["false_positive_bytes"]
+                    if row["leaked_bytes"] < gaze_row["leaked_bytes"]:
+                        lower_leak.append(
+                            f"{layer}: {name} leaks {row['leaked_bytes']:,} B versus Gaze "
+                            f"{gaze_row['leaked_bytes']:,} B"
+                        )
+                    elif row["leaked_bytes"] == gaze_row["leaked_bytes"] and fp < gaze_fp:
+                        lower_fp_at_equal_leak.append(
+                            f"{layer}: {name} has {fp:,} FP B versus Gaze {gaze_fp:,} FP B"
+                        )
+    lines.extend([
+        "", "**Where Gaze leaks more under v3:** "
+        + ("; ".join(lower_leak) if lower_leak else "none in these measured rows") + ".",
+        "", "**Where a competitor has fewer false positives at equal v3 leakage:** "
+        + ("; ".join(lower_fp_at_equal_leak) if lower_fp_at_equal_leak else "none in these measured rows") + ".",
+    ])
     skipped = report.get("skipped", {})
     if skipped:
         lines.extend(["", "**Skipped:** " + "; ".join(f"{name}: {reason}" for name, reason in skipped.items()) + "."])
