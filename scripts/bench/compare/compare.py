@@ -445,6 +445,9 @@ def main() -> int:
     layers, corpus = load_corpus(args.dataset, args.pack_dir)
     preflight_contracts(layers)
     mappings = load_mapping()
+    latest_release = json.loads(
+        (REPO / "docs/reference/benchmarks/release-history.json").read_text(encoding="utf-8")
+    )["releases"][-1]
     report: dict[str, object] = {
         "schema_version": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -455,6 +458,9 @@ def main() -> int:
         ).strip()),
         "gaze_crates_tree": crates_tree("HEAD"),
         "runner_sha256": digest_file(BENCH / "run_no_opf_benchmark.py"),
+        "latest_release_at_measurement": {
+            key: latest_release[key] for key in ("version", "scorecard_sha256")
+        },
         "scorer_sha256": digest_file(BENCH / "gaze_bench_score.py"),
         "mapping_sha256": digest_file(MAP_PATH),
         "contracts": {
