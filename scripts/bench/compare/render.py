@@ -32,6 +32,7 @@ def validate_current(report: dict[str, object]) -> None:
     expected = {
         "scorer": (report["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
         "Gaze runner": (report["runner_sha256"], digest_file(BENCH / "run_no_opf_benchmark.py")),
+        "dataset loader": (report["dataset_loader_sha256"], digest_file(BENCH / "dataiku_en_de_gaze_bench.py")),
         "mapping": (report["mapping_sha256"], digest_file(Path(__file__).with_name("label-map.json"))),
         "latest release": (
             report["latest_release_at_measurement"],
