@@ -215,7 +215,7 @@ Full contract:
 
 ## Explicit birth-date and credential fields
 
-The embedded `gaze-core` rulepack version **0.6.0** contains 40 recognizers.
+The embedded `gaze-core` rulepack version **0.6.0** contains 41 recognizers.
 Two project-authored `safe_default` rules with `locales = ["global"]` add
 birth-date and credential field recognition through the existing assembly and
 `RegexDetector` machinery, once their bundle is loaded.
