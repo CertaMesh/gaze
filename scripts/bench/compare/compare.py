@@ -399,6 +399,13 @@ def measure(
     return output
 
 
+def write_report(path: Path, report: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tool", choices=[*TOOLS, "all"], default="all")
@@ -492,14 +499,12 @@ def main() -> int:
                 measured["host_load_1m_before_after"] = [round(load_before[0], 2), round(os.getloadavg()[0], 2)]
                 measured["provenance"] = provenance
                 report["tools"][name] = measured
+                write_report(args.output, report)
                 print(f"COMPARISON_DONE {name}", file=sys.stderr, flush=True)
             finally:
                 if isinstance(backend, Opf):
                     backend.close()
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = args.output.with_suffix(args.output.suffix + ".tmp")
-    temporary_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary_path.replace(args.output)
+    write_report(args.output, report)
     return 0
 
 
