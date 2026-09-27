@@ -43,6 +43,9 @@ pub(super) enum Relation {
 pub(super) enum Batch {
     First,
     Second,
+    /// The `Redact` fallback's reversible action: a residual set it can plan completely is
+    /// tokenized instead of deleted, so the document still restores exactly (todo 3879).
+    Fallback,
     Deletion,
     /// The one reversible round the terminal phase runs on its own scan, after the fallback has
     /// already deleted. Its own batch so the ledger records which round minted a token.
@@ -911,7 +914,7 @@ mod tests {
                     .unwrap(),
                 None
             ),
-            Batch::Second | Batch::Terminal => {
+            Batch::Second | Batch::Fallback | Batch::Terminal => {
                 let FollowupResolution::Ready(plan) =
                     plan_followup_resolutions(&target, clean, &report, None).unwrap()
                 else {
