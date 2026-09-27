@@ -272,13 +272,34 @@ class MechanismArmsTest(unittest.TestCase):
         with self.assertRaisesRegex(mech.MechanismError, "contract v4 has no file"):
             mech._contract(4)
 
-    def test_rows_measured_before_a_newer_headline_still_validate_and_render(self) -> None:
-        # A v4 headline must not invalidate rows that only have v3, v2 and v1.
-        with mock.patch.object(mech, "CONTRACTS", (4, 2, 1)):
-            mech.validate(self.ledger, self.fixture.root)
-            body = mech.render(self.ledger, ["v0.16.0"])
-        self.assertIn("| v3 |", body)
-        self.assertNotIn("| v4 |", body)
+    def test_a_newer_contract_needs_refresh_not_a_new_run(self) -> None:
+        # A v4 file makes check refuse v3-only rows by name; validate and render
+        # still work, and refresh re-derives the row from the same records.
+        ledger = copy.deepcopy(self.ledger)
+        with mock.patch.object(mech, "required_contracts", lambda: (4, 3, 2, 1)):
+            mech.validate(ledger, self.fixture.root)
+            self.assertIn("| v3 |", mech.render(ledger, ["v0.16.0"]))
+            with self.assertRaisesRegex(mech.MechanismError, "requires \\[4, 3, 2, 1\\]; run .*refresh"):
+                mech.check_evidence(ledger, self.fixture.root)
+        row = ledger["mechanisms"][0]["measurements"][0]
+        stub = {key: copy.deepcopy(value) for key, value in row.items()
+                if key not in mech.NON_DERIVED_FIELDS}
+        stub["contracts"]["4"] = stub["contracts"]["3"]
+        with mock.patch.object(mech, "derive", lambda *_args, **_kwargs: copy.deepcopy(stub)):
+            mech.refresh(ledger, self.fixture.root)
+        self.assertEqual(mech.measured_contracts(ledger["mechanisms"][0]["measurements"][0]), [4, 3, 2, 1])
+
+    def test_required_contracts_come_from_the_repository(self) -> None:
+        self.assertEqual(mech.required_contracts(), (3, 2, 1))
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        bench = Path(tmp.name)
+        for name in ("scored-labels-v2.json", "scored-labels-v3.json", "scored-labels-agentic.json"):
+            (bench / name).write_text("{}", encoding="utf-8")
+        self.assertEqual(mech.required_contracts(bench), (3, 2, 1))
+        (bench / "scored-labels-v3.json").unlink()
+        with self.assertRaisesRegex(mech.MechanismError, "disagree with headline v3"):
+            mech.required_contracts(bench)
 
     def test_two_mechanisms_render_side_by_side(self) -> None:
         fixture = self.fresh()
@@ -346,6 +367,8 @@ class CommittedLedgerTest(unittest.TestCase):
             "gate": lambda m: m["gate"]["v2"].update(verdict="fail"),
             "gate reason": lambda m: m["gate"]["v1"].update(reason="made up"),
             "layers": lambda m: m["agentic_layers"]["A"]["base"].update(leaked=0),
+            "drop headline contract": lambda m: m["contracts"].pop("3"),
+            "drop v2 contract": lambda m: m["contracts"].pop("2"),
             "unexplained field": lambda m: m.update(note="hand-written"),
         }
         with mock.patch.object(mech, "derive", _derive_once):
@@ -354,7 +377,9 @@ class CommittedLedgerTest(unittest.TestCase):
                 with self.subTest(field=name):
                     ledger = copy.deepcopy(LEDGER)
                     change(ledger["mechanisms"][0]["measurements"][0])
-                    with self.assertRaisesRegex(mech.MechanismError, "re-derive|neither derived"):
+                    with self.assertRaisesRegex(
+                        mech.MechanismError, "re-derive|neither derived|repository requires"
+                    ):
                         mech.check_evidence(ledger)
 
     def test_committed_ledger_matches_its_records_and_document(self) -> None:

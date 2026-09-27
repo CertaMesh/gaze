@@ -577,7 +577,10 @@ every run shares one commit, clean tree, corpus, seed and scored population,
 and each v1 run equals the v1 re-score of its v2 run's observation record.
 It commits both v2 observation records under
 [`mechanisms/`](mechanisms/); v3 is re-scored from them. `check` re-derives
-every number below from those records and runs on every pull request.
+every number below from those records and runs on every pull request. Every
+row must carry every scored-label contract the repository has; after a new
+`scored-labels-v<N>.json` lands, `refresh` re-derives all rows from the same
+records, with no new benchmark run.
 
 <!-- BEGIN GENERATED: mechanism-arms -->
 

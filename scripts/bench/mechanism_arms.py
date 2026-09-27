@@ -53,9 +53,8 @@ EVIDENCE_DIR = BENCH_DIR / "mechanisms"
 RELEASE_HISTORY = BENCH_DIR / "release-history.json"
 BLOCK = "mechanism-arms"
 SCHEMA_VERSION = 1
-# Headline first; from GOLD_GAP_CONTRACT on, false-positive bytes are the
-# gold-gap adjusted value (same rule as render_benchmark_doc.headline_arms).
-CONTRACTS = (HEADLINE_CONTRACT, 2, 1)
+# From GOLD_GAP_CONTRACT on, false-positive bytes are the gold-gap adjusted
+# value (same rule as render_benchmark_doc.headline_arms).
 # The contracts a pair is measured (and gated) under; the others are re-scored.
 GATED_CONTRACTS = (2, 1)
 # The one scorecard field a v1 run may differ in from the v1 rescore of the v2
@@ -85,6 +84,29 @@ def _contract(version: int) -> score.ScoredLabelContract:
     return score.load_scored_label_contract(
         path, display_path=path.relative_to(ROOT).as_posix()
     )
+
+
+def required_contracts(bench_dir: Path | None = None) -> tuple[int, ...]:
+    """v1 plus every `scored-labels-v<N>.json` in the repository, newest first.
+
+    Every row must carry numbers under all of them. The set comes from the
+    repository, never from the row, so deleting a contract block from a row
+    fails `check` instead of quietly demoting the headline. The records do not
+    depend on a contract, so a newly added contract needs only `refresh`, not a
+    new benchmark run.
+    """
+    found = {
+        int(match.group(1))
+        for path in (bench_dir or BENCH_DIR).glob("scored-labels-v*.json")
+        if (match := re.fullmatch(r"scored-labels-v(\d+)\.json", path.name))
+    }
+    versions = tuple(sorted(found | {1}, reverse=True))
+    if versions[0] != HEADLINE_CONTRACT or not set(GATED_CONTRACTS) <= set(versions):
+        raise MechanismError(
+            f"contract files {list(versions)} disagree with headline v{HEADLINE_CONTRACT} "
+            f"or lack the gated contracts {list(GATED_CONTRACTS)}"
+        )
+    return versions
 
 
 def contract_version(scorecard: Mapping[str, Any]) -> int:
@@ -195,7 +217,7 @@ def identity_from_card(scorecard: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def derive(
-    base_record: Path, candidate_record: Path, versions: Sequence[int] = CONTRACTS
+    base_record: Path, candidate_record: Path, versions: Sequence[int] | None = None
 ) -> dict[str, Any]:
     """Every derived ledger field, recomputed from the two committed records:
     identity (commit, corpus, seed, both policy SHAs), the numbers per contract,
@@ -204,7 +226,7 @@ def derive(
     layers: dict[str, Any] = {}
     gate: dict[str, Any] = {}
     identity: dict[str, Any] = {}
-    for version in versions:
+    for version in versions or required_contracts():
         contract = _contract(version)
         cards = {
             "base": record.rescore(base_record, contract),
@@ -512,8 +534,8 @@ def _validate_measurement(measurement: Mapping[str, Any], where: str, root: Path
 
 
 def measured_contracts(measurement: Mapping[str, Any]) -> list[int]:
-    """The contracts a row has numbers for, newest first. A row measured before a
-    newer headline contract existed keeps its own set instead of failing."""
+    """The contracts a row has numbers for, newest first. `check` requires these to
+    be exactly `required_contracts()`; validation and rendering accept any set."""
     return sorted((int(key) for key in measurement["contracts"]), reverse=True)
 
 
@@ -647,10 +669,16 @@ def check_evidence(ledger: Mapping[str, Any], root: Path = ROOT) -> None:
     for entry in ledger["mechanisms"]:
         for measurement in entry["measurements"]:
             where = f"{entry['id']} @ {str(measurement.get('revision'))[:12]}"
+            required = required_contracts()
+            if measured_contracts(measurement) != list(required):
+                raise MechanismError(
+                    f"{where}: has contracts {measured_contracts(measurement)}, the repository "
+                    f"requires {list(required)}; run `mechanism_arms.py refresh`"
+                )
             derived = derive(
                 root / measurement["records"]["base"]["file"],
                 root / measurement["records"]["candidate"]["file"],
-                measured_contracts(measurement),
+                required,
             )
             unexplained = sorted(set(measurement) - set(derived) - NON_DERIVED_FIELDS)
             if unexplained:
@@ -660,6 +688,16 @@ def check_evidence(ledger: Mapping[str, Any], root: Path = ROOT) -> None:
                     raise MechanismError(
                         f"{where}: {key} differs from what its committed records re-derive"
                     )
+
+
+def refresh(ledger: dict[str, Any], root: Path = ROOT) -> None:
+    """Re-derive every row from its committed records under today's contracts."""
+    for entry in ledger["mechanisms"]:
+        for measurement in entry["measurements"]:
+            measurement.update(derive(
+                root / measurement["records"]["base"]["file"],
+                root / measurement["records"]["candidate"]["file"],
+            ))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -679,6 +717,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     add.add_argument("--release", help="the release this measures; omit for an unreleased commit")
     commands.add_parser("check", help="fail if the ledger or its table drifted from the records")
     commands.add_parser("render", help="rewrite the table from the ledger")
+    commands.add_parser(
+        "refresh", help="re-derive every row from its records, e.g. after a new contract file"
+    )
     args = parser.parse_args(argv)
     try:
         ledger = load_ledger()
@@ -690,6 +731,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                       for name in ("base-v2", "candidate-v2", "base-v1", "candidate-v1")},
                 binary=args.binary, machine=args.machine, release=args.release,
             )
+            LEDGER.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
+        elif args.command == "refresh":
+            refresh(ledger)
             LEDGER.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
         validate(ledger)
         original = DOC.read_text(encoding="utf-8")
