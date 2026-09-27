@@ -16,6 +16,9 @@ jobs:
       - name: benchmark document matches its committed evidence
         run: python3 scripts/bench/render_benchmark_doc.py --check
 
+      - name: competitor comparison matches current benchmark inputs
+        run: python3 scripts/bench/compare/render.py docs/reference/benchmarks/comparison.json --readme docs/reference/benchmarks/README.md --check
+
       - name: adjacency layer table matches its committed measurements
         run: python3 scripts/bench/render_agentic_adjacency_doc.py --check
 
