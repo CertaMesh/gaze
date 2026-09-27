@@ -1076,6 +1076,35 @@ bytes are left out of the net-bytes credit, but a rise in them still fails the
 gate. Only a rule without a checksum can reach them, and the layer D
 counterweights already price that kind of rule separately.
 
+IBAN (`IBAN`) and payment card (`CREDITCARDNUMBER`) gold is the exception:
+its checksum-invalid gold is gated like valid gold, in layer A and in layer C
+(`CREDITABLE_INVALID_LABELS` in `agentic_layers.py`). The user ruled on
+2026-09-27 that Gaze tokenizes IBAN and card numbers even when mod-97 or Luhn
+fails, because a mistyped or masked account or card number is still someone's
+financial data. A leak of one is therefore a real leak, not gold only a
+careless rule could reach. Every other label keeps the exclusion. The
+headline does not change; only the gate's credit does.
+
+The credit comes with a **credit guard**. A rule that tags every
+space-grouped 16-digit run would earn thousands of credited card bytes and
+pass on net bytes, so the credit must never pay for false positives on the
+benign twin shape. The gate fails any candidate whose layer D false-positive
+bytes rise on a credited label's counterweight family, with no net-bytes
+offset. `CREDIT_GUARD_FAMILIES` derives the families from `COUNTERWEIGHTS`:
+`ref_number_16` for `CREDITCARDNUMBER`, none for `IBAN` (its twins are exempt
+from counterweights because a mod-97-failing IBAN shape has no common benign
+use). A scorecard without the guarded family's cells is refused. Re-scored from the
+committed release records under contract v2, the gated leaked bytes become:
+
+| Release | Layer C before | Layer C after | Layer A before | Layer A after |
+| --- | ---: | ---: | ---: | ---: |
+| v0.14.0 | 17,009 | 19,832 | 7,397 | 19,409 |
+| v0.15.0 | 8,067 | 11,043 | 1,227 | 12,835 |
+| v0.15.1 | 8,067 | 11,043 | 1,227 | 12,662 |
+
+`ReleaseGateCreditTests` in `test_agentic_layers.py` pins this table against
+the committed records.
+
 Gold validity is a property of the gold, but the validator probe that decides
 it is built from the measured tree. `layers.gold_validity.C` therefore records
 a SHA-256 over every layer C gold span's verdict, and the gate compares it. A
@@ -1090,7 +1119,11 @@ v3. It remains a historical pin for the gate arithmetic:
 
 - **The spaced 16-digit rule fails.** It saves 15 gated leaked bytes and adds
   551 false-positive bytes. Its 1,830 byte Kiji "gain" is entirely card and
-  IBAN gold that fails Luhn or mod-97.
+  IBAN gold that fails Luhn or mod-97. This verdict predates the IBAN/card
+  credit above. With that credit alone it would pass on net bytes; the
+  current gate fails it on the credit guard, because it raises layer D false
+  positives on `ref_number_16`. `credit_guard` in the pin records that count,
+  measured fresh on generator v4 for main and both mutants.
 - **The bare 9-digit rule passes.** It saves 353 gated leaked bytes: 180 of
   valid BSN, and 173 of Kiji driver-licence, ID-card, national-ID, SSN and
   building numbers. It adds 295 false-positive bytes.
