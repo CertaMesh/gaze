@@ -84,6 +84,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Per-mechanism benchmark arms** (solo todo #3900). A release row measures
+  the whole stack; a mechanism arm measures one mechanism on its own: the same
+  binary, corpus and seed with and without one policy delta file under
+  `scripts/bench/mechanisms/`. `scripts/bench/mechanism_arms.py record`
+  refuses a pair unless the candidate policy is exactly base plus delta and
+  all four runs (v2 and v1) share one clean commit, corpus, seed and scored
+  population; it commits both observation records and `check` (run by the
+  docs workflow) re-derives every number from them, v3 included. Releases
+  older than a mechanism say so in their cell. The GLiNER DOB judge is the
+  first row: on the main corpus it cut layer C leaked bytes by 85
+  (DATEOFBIRTH 810 to 725) and agentic layer A by 20 under contracts v2 and
+  v1, with no false-positive bytes added and no refusals. It stays opt-in
+  (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk (todo #3905):
+  on a quiet Apple M5 Max (`scripts/bench/mechanism_latency.py`, 200
+  documents) it moved warm p50 75.6 to 76.1 ms, p95 137 to 160 ms, the cold
+  first document 2.2 to 3.7 s and peak RSS 1,076 to 1,740 MiB.
 - **The contract v3 gold-gap audit passed** (solo todo #3696): 3 of 200
   sampled credits failed (one-sided 95 % bound 3.83 %, limit 5 %), each in a
   different document. Three model judges (Claude Opus, Codex, TypeSafe)

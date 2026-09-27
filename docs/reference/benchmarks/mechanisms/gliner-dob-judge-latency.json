@@ -1,0 +1,121 @@
+{
+  "hardware": "Apple M5 Max, 18 cores, 64 GiB RAM, macOS-26.5-arm64-arm-64bit-Mach-O, ort 2.0.0-rc.12, Nym bundle 71f9023bcf86\u2026, intra-op threads 1",
+  "git_head": "db65680dae76d18fa3798231dc11d3d8981d810a",
+  "seed": 20260710,
+  "documents": 200,
+  "rounds": 3,
+  "clean_for_bench_sha256": "0ecb1cddab0326cb29dcbe4af550aeaa765fd4d929465a9d52bc25df0f9c7885",
+  "policy_delta": "scripts/bench/mechanisms/gliner-dob-judge.toml",
+  "host_before": {
+    "label": "before",
+    "load_1m": 1.67,
+    "load_5m": 4.02,
+    "load_15m": 5.8,
+    "foreign_processes": [],
+    "quiet": true
+  },
+  "policy_sha256": {
+    "base": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+    "candidate": "343cf1cceb38d0b8210bbca01130ca07b06d564b2dad94a31d04b06598129cab"
+  },
+  "rounds_by_arm": {
+    "base": [
+      {
+        "cold_first_document_ms": 2187.3,
+        "warm_clean": {
+          "n": 200,
+          "p50_ms": 75.63,
+          "p95_ms": 137.75,
+          "max_ms": 209.66,
+          "mean_ms": 81.96
+        },
+        "peak_rss_mib": 1076.0
+      },
+      {
+        "cold_first_document_ms": 2164.0,
+        "warm_clean": {
+          "n": 200,
+          "p50_ms": 75.54,
+          "p95_ms": 136.37,
+          "max_ms": 209.49,
+          "mean_ms": 81.62
+        },
+        "peak_rss_mib": 1076.1
+      },
+      {
+        "cold_first_document_ms": 2147.0,
+        "warm_clean": {
+          "n": 200,
+          "p50_ms": 75.71,
+          "p95_ms": 137.15,
+          "max_ms": 210.04,
+          "mean_ms": 81.82
+        },
+        "peak_rss_mib": 1075.9
+      }
+    ],
+    "candidate": [
+      {
+        "cold_first_document_ms": 3741.4,
+        "warm_clean": {
+          "n": 200,
+          "p50_ms": 76.05,
+          "p95_ms": 158.1,
+          "max_ms": 211.26,
+          "mean_ms": 85.59
+        },
+        "peak_rss_mib": 1737.9
+      },
+      {
+        "cold_first_document_ms": 3755.5,
+        "warm_clean": {
+          "n": 200,
+          "p50_ms": 75.82,
+          "p95_ms": 160.19,
+          "max_ms": 211.95,
+          "mean_ms": 85.61
+        },
+        "peak_rss_mib": 1740.1
+      },
+      {
+        "cold_first_document_ms": 3734.8,
+        "warm_clean": {
+          "n": 200,
+          "p50_ms": 76.2,
+          "p95_ms": 159.64,
+          "max_ms": 214.9,
+          "mean_ms": 85.67
+        },
+        "peak_rss_mib": 1740.0
+      }
+    ]
+  },
+  "median_of_rounds": {
+    "base": {
+      "p50_ms": 75.63,
+      "p95_ms": 137.15,
+      "mean_ms": 81.82,
+      "cold_first_document_ms": 2164.0,
+      "peak_rss_mib": 1076.0
+    },
+    "candidate": {
+      "p50_ms": 76.05,
+      "p95_ms": 159.64,
+      "mean_ms": 85.61,
+      "cold_first_document_ms": 3741.4,
+      "peak_rss_mib": 1740.0
+    }
+  },
+  "host_after": {
+    "label": "after",
+    "load_1m": 2.62,
+    "load_5m": 3.49,
+    "load_15m": 5.28,
+    "foreign_processes": [],
+    "quiet": false
+  },
+  "verdict": "valid",
+  "uptime_before": "17:40  up 13 days,  9:02, 1 user, load averages: 1.67 4.02 5.80",
+  "uptime_after": "17:42  up 13 days,  9:05, 1 user, load averages: 2.62 3.49 5.28",
+  "command": "uv run --project scripts/bench python scripts/bench/mechanism_latency.py --base-policy <plain `gaze setup` policy, sha256 f909a23a...> --policy-delta scripts/bench/mechanisms/gliner-dob-judge.toml --out <this file>"
+}
