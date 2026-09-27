@@ -899,6 +899,8 @@ python3 scripts/bench/agentic_layers.py gate \
 The gate checks the production arm of layers C, A, D and R. It checks leaked
 bytes twice: on the gated bytes below, and on the headline leaked bytes over
 all gold, so a regression cannot hide inside gold the gate leaves out.
+It also checks exact restores and valid manifests per layer against the same
+attempted-document population; missing or impossible counts exit `2`.
 
 When a candidate intentionally adds policy sections, declare them in a separate
 TOML file and pass `--policy-delta <file.toml>` to the gate. This mode accepts

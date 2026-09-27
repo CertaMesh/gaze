@@ -511,14 +511,19 @@ def _scorecard(
 
     def run(layer: str) -> dict:
         leaked = leaks[layer] + {"A": twin_leak, "C": c_invalid_leak}.get(layer, 0)
+        completed = 10 - refused.get(layer, 0)
         block = {
             "config": "policy-file",
             "metrics": {"utf8_bytes": {"leaked": leaked, "false_positive": fps.get(layer, 0)}},
-            "pipeline_availability": {"failed_closed_documents": refused.get(layer, 0)},
+            "pipeline_availability": {
+                "attempted_documents": 10,
+                "completed_documents": completed,
+                "failed_closed_documents": refused.get(layer, 0),
+            },
             "pipeline_contract": {
-                "documents": 10,
-                "restore_exact_documents": (restore or {}).get(layer, 10),
-                "manifest_valid_documents": (manifests or {}).get(layer, 10),
+                "documents": completed,
+                "restore_exact_documents": (restore or {}).get(layer, completed),
+                "manifest_valid_documents": (manifests or {}).get(layer, completed),
             },
         }
         if layer == "C":
@@ -622,13 +627,53 @@ class GateTests(unittest.TestCase):
                         with self.assertRaisesRegex(agentic.LayerError, f"layer {layer}.*{field}"):
                             agentic.gate(cards["base"], cards["candidate"])
 
+    def test_missing_pipeline_contract_fails_closed_on_both_sides(self) -> None:
+        for side in ("base", "candidate"):
+            for layer in agentic.GATE_LAYERS:
+                with self.subTest(side=side, layer=layer):
+                    cards = {name: _scorecard(self.BASE, self.FP) for name in ("base", "candidate")}
+                    del agentic._layer_run(cards[side], layer, "policy-file")["pipeline_contract"]
+                    with self.assertRaisesRegex(agentic.LayerError, f"layer {layer} has no pipeline_contract"):
+                        agentic.gate(cards["base"], cards["candidate"])
+
+    def test_contract_counts_cannot_exceed_completed_documents(self) -> None:
+        for field in ("restore_exact_documents", "manifest_valid_documents"):
+            candidate = _scorecard(self.BASE, self.FP)
+            candidate["runs"][0]["pipeline_contract"][field] = 11
+            with self.subTest(field=field), self.assertRaisesRegex(agentic.LayerError, "counts exceed documents"):
+                agentic.gate(_scorecard(self.BASE, self.FP), candidate)
+
     def test_restore_gain_cannot_come_from_more_documents(self) -> None:
-        base = _scorecard(self.BASE, self.FP, restore={"C": 9})
+        base = _scorecard(self.BASE, self.FP, refused={"C": 1})
         candidate = _scorecard(self.BASE, self.FP)
-        candidate["runs"][0]["pipeline_contract"]["documents"] = 11
         result = agentic.gate(base, candidate)
         self.assertEqual(result["verdict"], "fail")
-        self.assertIn("document counts differ", result["reason"])
+        self.assertIn("without an eligible gain", result["reason"])
+
+    def test_refusal_fix_can_pass_and_refusal_rise_keeps_its_reason(self) -> None:
+        base = _scorecard(self.BASE, self.FP, refused={"C": 1})
+        candidate = _scorecard({**self.BASE, "C": 98}, self.FP)
+        self.assertEqual(agentic.gate(base, candidate)["verdict"], "pass")
+        result = agentic.gate(candidate, base)
+        self.assertEqual(result["verdict"], "fail")
+        self.assertIn("failed-closed documents rose", result["reason"])
+
+    def test_attempted_population_change_fails(self) -> None:
+        candidate = _scorecard(self.BASE, self.FP)
+        candidate["runs"][0]["pipeline_availability"]["attempted_documents"] = 11
+        candidate["runs"][0]["pipeline_availability"]["completed_documents"] = 11
+        candidate["runs"][0]["pipeline_contract"]["documents"] = 11
+        result = agentic.gate(_scorecard(self.BASE, self.FP), candidate)
+        self.assertEqual(result["verdict"], "fail")
+        self.assertIn("attempted document counts differ", result["reason"])
+
+    def test_fp_and_restore_gain_are_both_named(self) -> None:
+        base = _scorecard(self.BASE, self.FP, restore={"C": 9})
+        candidate = _scorecard(self.BASE, {**self.FP, "D": 6})
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["verdict"], "pass")
+        self.assertIn("FP bytes fell", result["reason"])
+        self.assertIn("exact restore rose", result["reason"])
 
     def verdict(self, candidate: dict, base: dict | None = None) -> str:
         return agentic.gate(base or _scorecard(self.BASE, self.FP), candidate)["verdict"]
@@ -995,7 +1040,7 @@ class MutantGatePinTests(unittest.TestCase):
     @staticmethod
     def with_equal_restore(totals: dict) -> dict:
         # This historical pin predates restore totals; these tests isolate the byte rule.
-        return {layer: {**row, "documents": 0, "restore_exact": 0, "manifest_valid": 0}
+        return {layer: {**row, "attempted": 0, "documents": 0, "restore_exact": 0, "manifest_valid": 0}
                 for layer, row in totals.items()}
 
     def test_spaced_sixteen_digit_mutant_fails(self) -> None:

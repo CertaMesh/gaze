@@ -1598,6 +1598,16 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
         if any(contract[field] > contract["documents"] for field in
                ("restore_exact_documents", "manifest_valid_documents")):
             raise LayerError(f"layer {layer} pipeline_contract counts exceed documents")
+        availability = run.get("pipeline_availability")
+        if not isinstance(availability, dict):
+            raise LayerError(f"layer {layer} has no pipeline_availability; measure this scorecard again")
+        for field in ("attempted_documents", "completed_documents", "failed_closed_documents"):
+            if type(availability.get(field)) is not int or availability[field] < 0:
+                raise LayerError(f"layer {layer} has no valid pipeline_availability.{field}; measure this scorecard again")
+        if (availability["completed_documents"] != contract["documents"] or
+                availability["completed_documents"] + availability["failed_closed_documents"] !=
+                availability["attempted_documents"]):
+            raise LayerError(f"layer {layer} pipeline document counts disagree")
         twin_leaked = 0
         if layer == LAYER_IDENTIFIERS:
             twin_leaked = sum(
@@ -1618,12 +1628,13 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
                 if block.get("production_recall_by_gold_validity")
             )
         totals[layer] = {
+            "attempted": availability["attempted_documents"],
             "documents": contract["documents"],
             "headline_leaked": utf8["leaked"],
             "leaked": utf8["leaked"] - twin_leaked,
             "twin_leaked": twin_leaked,
             "false_positive": utf8["false_positive"],
-            "failed_closed": run["pipeline_availability"]["failed_closed_documents"],
+            "failed_closed": availability["failed_closed_documents"],
             "restore_exact": contract["restore_exact_documents"],
             "manifest_valid": contract["manifest_valid_documents"],
         }
@@ -1640,6 +1651,8 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
     """
     rows = {
         layer: {
+            "attempted_base": base[layer]["attempted"],
+            "attempted_candidate": candidate[layer]["attempted"],
             "documents_base": base[layer]["documents"],
             "documents_candidate": candidate[layer]["documents"],
             "headline_leaked_base": base[layer]["headline_leaked"],
@@ -1669,22 +1682,25 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
     refusal_rise = [l for l, r in rows.items() if r["failed_closed_candidate"] > r["failed_closed_base"]]
     restore_drop = [l for l, r in rows.items() if r["restore_exact_candidate"] < r["restore_exact_base"]]
     manifest_drop = [l for l, r in rows.items() if r["manifest_valid_candidate"] < r["manifest_valid_base"]]
-    restore_gain = [l for l, r in rows.items() if r["restore_exact_candidate"] > r["restore_exact_base"]]
-    manifest_gain = [l for l, r in rows.items() if r["manifest_valid_candidate"] > r["manifest_valid_base"]]
+    restore_gain = [l for l, r in rows.items() if r["documents_candidate"] == r["documents_base"]
+                    and r["restore_exact_candidate"] > r["restore_exact_base"]]
+    manifest_gain = [l for l, r in rows.items() if r["documents_candidate"] == r["documents_base"]
+                     and r["manifest_valid_candidate"] > r["manifest_valid_base"]]
+    refusal_drop = [l for l, r in rows.items() if r["failed_closed_candidate"] < r["failed_closed_base"]]
     leak_drop = sum(r["leaked_base"] - r["leaked_candidate"] for r in rows.values())
     fp_rise = sum(r["false_positive_candidate"] - r["false_positive_base"] for r in rows.values())
     summary = {"leaked_bytes_decrease": leak_drop, "false_positive_bytes_increase": fp_rise}
-    population_change = [l for l, r in rows.items() if r["documents_candidate"] != r["documents_base"]]
+    population_change = [l for l, r in rows.items() if r["attempted_candidate"] != r["attempted_base"]]
     if population_change:
-        verdict, reason = "fail", f"document counts differ in {population_change}"
+        verdict, reason = "fail", f"attempted document counts differ in {population_change}"
+    elif refusal_rise:
+        verdict, reason = "fail", f"failed-closed documents rose in {refusal_rise}"
     elif restore_drop:
         verdict, reason = "fail", f"exact-restore documents fell in {restore_drop}"
     elif manifest_drop:
         verdict, reason = "fail", f"valid-manifest documents fell in {manifest_drop}"
     elif leak_rise:
         verdict, reason = "fail", f"leaked bytes rose in {leak_rise}"
-    elif refusal_rise:
-        verdict, reason = "fail", f"failed-closed documents rose in {refusal_rise}"
     elif leak_drop > 0:
         if fp_rise < leak_drop:
             verdict, reason = "pass", f"leaked bytes fell by {leak_drop}, FP bytes changed by {fp_rise:+d}"
@@ -1694,7 +1710,10 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
                 "leaked bytes saved"
             )
     elif fp_rise < 0:
-        verdict, reason = "pass", f"false-positive-only fix: FP bytes fell by {-fp_rise}"
+        reason = f"FP bytes fell by {-fp_rise}"
+        if restore_gain or manifest_gain:
+            reason += f"; exact restore rose in {restore_gain}; valid manifests rose in {manifest_gain}"
+        verdict = "pass"
     elif (restore_gain or manifest_gain) and fp_rise == 0:
         verdict, reason = "pass", (
             f"reversibility improved: exact restore rose in {restore_gain}; "
@@ -1702,6 +1721,8 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         )
     elif (restore_gain or manifest_gain) and fp_rise > 0:
         verdict, reason = "fail", f"FP bytes rose by {fp_rise} despite reversibility gain"
+    elif refusal_drop:
+        verdict, reason = "fail", f"failed-closed documents fell in {refusal_drop}, without an eligible gain"
     else:
         verdict, reason = "fail", "no layer's leaked bytes fell and FP bytes did not fall"
     return {"verdict": verdict, "reason": reason, "summary": summary, "layers": rows}
