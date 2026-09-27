@@ -1031,7 +1031,8 @@ mod tests {
     #[test]
     fn every_particle_and_particle_pair_stays_raw() {
         // The reference set lives here, not in `PARTICLES`, so a particle
-        // dropped from the production list fails this test.
+        // dropped from the production list fails this test. `'t` is left
+        // out: it is not a word, so it can never be part of a run.
         #[rustfmt::skip]
         let words = [
             "von", "vom", "zu", "zum", "zur", "der", "den", "dem", "des", "van",
@@ -1039,7 +1040,8 @@ mod tests {
             "le", "les", "del", "las", "los", "y", "da", "das", "do", "dos", "e",
             "di", "dal", "dalla", "dei", "degli", "della", "delle", "dello", "af",
             "av", "al", "el", "bin", "ibn", "bint", "abu", "bar", "mac",
-            "ap",
+            "ap", "auf", "bij", "over", "voor", "onder", "dalle", "abd", "bat",
+            "ferch", "ab", "am", "an", "i", "im", "in", "lo", "mc", "ni",
         ];
         let mut swept = Vec::new();
         for first in &words {
