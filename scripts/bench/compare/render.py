@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,7 +29,12 @@ def validate_current(report: dict[str, object]) -> None:
     corpus = report["corpus"]
     expected = {
         "scorer": (report["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
+        "Gaze runner": (report["runner_sha256"], digest_file(BENCH / "run_no_opf_benchmark.py")),
         "mapping": (report["mapping_sha256"], digest_file(Path(__file__).with_name("label-map.json"))),
+        "Gaze detection tree": (
+            report["gaze_crates_tree"],
+            subprocess.check_output(["git", "rev-parse", "HEAD:crates"], cwd=REPO, text=True).strip(),
+        ),
         "main dataset": (corpus["main_dataset"]["sha256"], dataiku.DATASET_SHA256),
         "negative corpus": (
             corpus["negative_corpus_sha256"],
