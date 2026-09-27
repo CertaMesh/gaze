@@ -123,6 +123,14 @@ class CauseTests(unittest.TestCase):
         self.assertEqual(result["detail"]["closest"]["gap"], 3)
         self.assertFalse(result["detail"]["closest"]["compatible"])
 
+    def test_closest_prefers_a_compatible_class_over_a_nearer_one(self):
+        result = classify(row(*TAX, "TAXNUM"), pool_items=pool(detected=[
+            item(56, 59, "name", "ner"), item(28, 31, "custom:tax_id", "tax.cue"),
+        ]))
+        closest = result["detail"]["closest"]
+        self.assertEqual((closest["recognizer"], closest["gap"], closest["compatible"]),
+                         ("tax.cue", 8, True))
+
     def test_no_candidate_far_from_everything_names_nothing(self):
         result = classify(row(*TAX, "TAXNUM"))
         self.assertEqual((result["cause"], result["detail"]["closest"]), ("a", None))
