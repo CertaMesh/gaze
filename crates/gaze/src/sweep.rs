@@ -937,6 +937,10 @@ mod tests {
             "SERVICE desk, Service desk"
         )
         .is_empty());
+        // Only the shape rule stops these: `Express` and `Enterprise` are not
+        // org words.
+        assert!(found(vec![name("DHL Express")], "Express delivery, EXPRESS lane").is_empty());
+        assert!(found(vec![name("GitHub Enterprise")], "Enterprise plan").is_empty());
         let team = vec![name("SUPPORT TEAM")];
         assert!(found(team.clone(), "Contact Support or the Team").is_empty());
         assert_eq!(found(team, "ask the support team"), ["support team"]);

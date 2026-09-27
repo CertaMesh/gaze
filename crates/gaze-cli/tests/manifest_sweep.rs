@@ -402,6 +402,10 @@ fn particles_and_org_senders_do_not_sweep_ordinary_words() {
             "Contact Support or the Team.\n",
         ),
         ("From: GitHub <gh@example.invalid>\n", "GITHUB is down.\n"),
+        (
+            "From: DHL Express <dx@example.invalid>\n",
+            "Express delivery is booked.\n",
+        ),
     ] {
         let input = format!("{header}{body}");
         let clean = clean_and_round_trip(&input, &[]);
