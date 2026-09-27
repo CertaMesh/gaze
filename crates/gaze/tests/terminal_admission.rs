@@ -57,6 +57,18 @@ fn uncovered(span: std::ops::Range<usize>) -> LeakSuspect {
     )
 }
 
+/// A residual the follow-up planner declines: a class mismatch on plain text. The `Redact`
+/// fallback tokenizes a residual set it can plan completely (todo 3879), so reaching the deletion
+/// this file is about takes a residual of this shape.
+fn declined(span: std::ops::Range<usize>) -> LeakSuspect {
+    let mut suspect = uncovered(span);
+    suspect.kind = LeakKind::ClassMismatch {
+        pipeline_class: PiiClass::Email,
+        safety_net_class: PiiClass::Name,
+    };
+    suspect
+}
+
 fn bleed(span: std::ops::Range<usize>, gap: std::ops::Range<usize>) -> LeakSuspect {
     let mut suspect = uncovered(span);
     suspect.kind = LeakKind::PartialBleed { uncovered: gap };
@@ -135,7 +147,9 @@ impl Harness {
 /// The scripted document every terminal case starts from.
 ///
 /// `"alpha bravo charlie delta"`: the second batch tokenizes `alpha`, the fallback redacts
-/// `charlie`, and the terminal pass then sees `"<alpha> bravo [REDACTED:name] delta"`.
+/// `charlie`, and the terminal pass then sees `"<alpha> bravo [REDACTED:name] delta"`. The
+/// residual on `charlie` is one the planner declines; a plannable one is tokenized instead, see
+/// `a_plannable_fallback_residual_is_tokenized_and_restores_exactly`.
 ///
 /// This fixture used to delete `charlie`, leaving `"<alpha> bravo  delta"` -- two adjacent spaces
 /// with a deletion SEAM between them, which a later pass could read as a new, manufactured shape.
@@ -173,7 +187,7 @@ impl Doc {
             (Self::RAW.into(), Ok(vec![uncovered(0..5)])),
             (
                 resolved,
-                Ok(vec![uncovered(alpha.len() + 7..alpha.len() + 14)]),
+                Ok(vec![declined(alpha.len() + 7..alpha.len() + 14)]),
             ),
         ];
         let marker_start = alpha.len() + 7;
@@ -263,6 +277,43 @@ fn terminal_resolves_a_fresh_finding_once_and_completes() {
         h.actions(),
         [Action::Tokenize, Action::Redact, Action::Tokenize],
         "second batch, fallback redaction, then the terminal round"
+    );
+}
+
+/// The fallback's reversible branch: when the planner can resolve the whole residual set, the
+/// fallback tokenizes `charlie` instead of deleting it (todo 3879). Nothing was deleted, so the
+/// terminal scan finds no marker and the document restores byte for byte.
+#[test]
+fn a_plannable_fallback_residual_is_tokenized_and_restores_exactly() {
+    let doc = Doc::new();
+    let charlie = doc.token("charlie");
+    let mut steps = doc.lead.clone();
+    let resolved = format!("{} bravo charlie delta", doc.alpha);
+    steps[2] = (
+        resolved,
+        Ok(vec![uncovered(doc.alpha.len() + 7..doc.alpha.len() + 14)]),
+    );
+    let tokenized = format!("{} bravo {charlie} delta", doc.alpha);
+    steps.push((tokenized.clone(), Ok(vec![])));
+    let h = harness(steps, false);
+    let (clean, spans, _) = doc
+        .run(&h)
+        .expect("a plannable fallback residual must be tokenized");
+    let text = text_of(clean);
+    assert_eq!(text, tokenized);
+    assert_eq!(doc.session.restore_strict_text(&text).unwrap(), Doc::RAW);
+    assert_eq!(
+        spans.iter().map(|s| s.raw_span.clone()).collect::<Vec<_>>(),
+        [0..5, 12..19]
+    );
+    assert!(h.drained(), "one terminal scan, no extra round");
+    let rows = h.rows.lock().unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|r| (r.action, r.fallback_triggered.is_some()))
+            .collect::<Vec<_>>(),
+        // The fallback's token row carries the reason that triggered it.
+        [(Action::Tokenize, false), (Action::Tokenize, true)]
     );
 }
 

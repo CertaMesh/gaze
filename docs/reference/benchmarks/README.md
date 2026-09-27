@@ -657,6 +657,8 @@ python3 scripts/bench/ner-warm-latency.py --repo-root .
 
 ## How to reproduce
 
+Pull requests that change detection or the benchmark use these commands under the [benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate).
+
 ### The release run
 
 Each release measures its own tree. The three steps below are the whole contract:
@@ -891,11 +893,11 @@ a generator change must bump `GENERATOR_VERSION`, the contract's
 `generator_version` and the pins together. Once a test generation has been
 published, its failures belong in the next dev generation.
 
-**The rule gate.** A pull request that adds or widens a detection rule merges
-only on a fresh base-versus-candidate pair of full-profile runs: the base is
-the merge base on `main`, the candidate is the PR head, and both use the same
-policy, seed and corpus. The pair is scored under contract v2 and again under
-v1:
+**The rule gate.** The merge rule lives in
+[Benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate). This section
+only describes how `agentic_layers.py gate` measures it. Run a fresh base and
+candidate pair of full-profile runs on the same policy, seed and corpus, once
+per scored-label contract, then compare them:
 
 ```bash
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
@@ -906,6 +908,10 @@ python3 scripts/bench/agentic_layers.py gate \
   --base target/bench-data/gate-base-v2/full/scorecard-v4.json \
   --candidate target/bench-data/gate-cand-v2/full/scorecard-v4.json
 ```
+
+The gate checks the production arm of layers C, A, D and R. It checks leaked
+bytes twice: on the gated bytes below, and on the headline leaked bytes over
+all gold, so a regression cannot hide inside gold the gate leaves out.
 
 When a candidate intentionally adds policy sections, declare them in a separate
 TOML file and pass `--policy-delta <file.toml>` to the gate. This mode accepts
@@ -918,28 +924,13 @@ sections; edits to existing sections or undeclared keys are not comparable
 candidate and delta file SHA-256 digests for review. Keep both policy files at
 their recorded paths until the gate runs.
 
-For each contract, the production arm's numbers must satisfy all of these:
-
-1. **No layer leaks more.** Leaked bytes do not rise in C, A, D or R. This
-   is checked twice: on the gated bytes below, and on the headline leaked
-   bytes over all gold. A regression cannot hide inside gold the gate leaves
-   out.
-2. **No layer refuses more.** A refused document drops out of the leak count,
-   so a rise in failed-closed documents in any layer fails the gate.
-3. **Net bytes improve.** At least one layer's leaked bytes fall, and the
-   false-positive bytes added, summed over all four layers, are fewer than the
-   leaked bytes saved, summed the same way. A false-positive-only fix passes
-   instead when no layer's leaked bytes change and the summed false-positive
-   bytes fall.
-
-The gate counts only gold that a precise rule can reach. Layer A leaves out
-its checksum-invalid twins, and layer C leaves out the Kiji gold that fails its
+**Gated gold** is the gold a precise rule can reach. Layer A leaves out its
+checksum-invalid twins, and layer C leaves out the Kiji gold that fails its
 own validator (from the per-label validator split). Both kinds stay in the
 headline and the census, and the gate reports them beside its verdict. Their
-bytes are left out of the net-bytes credit, but a rise in them still fails
-rule 1. Only a rule without a checksum can reach them, and the layer
-D counterweights already price that kind of rule separately. This net-bytes
-limit is the user's decision of 2026-09-26.
+bytes are left out of the net-bytes credit, but a rise in them still fails the
+gate. Only a rule without a checksum can reach them, and the layer D
+counterweights already price that kind of rule separately.
 
 Gold validity is a property of the gold, but the validator probe that decides
 it is built from the measured tree. `layers.gold_validity.C` therefore records
@@ -960,8 +951,9 @@ v3. It remains a historical pin for the gate arithmetic:
   valid BSN, and 173 of Kiji driver-licence, ID-card, national-ID, SSN and
   building numbers. It adds 295 false-positive bytes.
 
-**The gate is necessary, not sufficient.** It measures only these corpora.
-Review still judges precision. A bare 9-digit rule would be refused in review
+**The gate is necessary, not sufficient**
+([Benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate), rule 5). It
+measures only these corpora. A bare 9-digit rule would be refused in review
 for the false positives it causes on reference numbers outside the corpus,
 even though it passes here.
 
