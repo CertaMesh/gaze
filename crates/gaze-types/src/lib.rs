@@ -4291,6 +4291,14 @@ impl Candidate {
         }
     }
 
+    /// Whether a validator passed on this candidate: it carries a canonical form and no recorded
+    /// failure. A canonical form alone proves nothing: an IBAN or card kept by
+    /// [`ValidatorOnFail::Record`] may carry its normalizer's canonical form. The resolver's
+    /// evidence tiers and the repeat-value sweep both ask this.
+    pub fn checksum_validated(&self) -> bool {
+        self.canonical_form.is_some() && self.validator_fail_reason.is_none()
+    }
+
     /// Returns this candidate with its evidence kind set.
     pub fn with_evidence(mut self, evidence: EvidenceKind) -> Self {
         self.evidence = evidence;

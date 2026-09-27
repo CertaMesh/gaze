@@ -54,8 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fails** (solo todo #3906). A mistyped or masked account or card number is
   still someone's financial data. `iban.structural` now keeps a
   registry-shaped IBAN that fails mod-97; the new `iban.cued` tokenizes an
-  IBAN-structured value after the word `IBAN` whose country code is outside
-  the IBAN registry; the new `card.cued` tokenizes a card layout after a card cue
+  IBAN-structured value after the word `IBAN` whose country code is a real
+  ISO 3166-1 code outside the IBAN registry; the new `card.cued` tokenizes a card layout after a card cue
   (`card`, `Karte` compounds, card brands) when it fails Luhn.
   `card.structural` keeps its Luhn veto, so an uncued 16-digit order or
   voucher number stays untouched. The winner's audit row carries

@@ -34,20 +34,37 @@ pub fn apply(
             continue;
         };
 
+        let records = recognizer.validator_on_fail() == ValidatorOnFail::Record
+            && kind.allows_recorded_failure();
         // A `luhn` candidate may be the union of overlapping Luhn-valid windows of one digit run
         // (`gaze_types::payment_card::scan_card_run`), which fails Luhn as a whole. It passes
         // when the run still holds a card; a span holding none fails exactly as before.
+        //
+        // A recording (cue-anchored) card recognizer passes only when its span STARTS with the
+        // card, and is narrowed to it, so a valid card is scoped exactly as `card.structural`
+        // scopes it (a trailing CVV stays outside, todo 3843). Otherwise it stays a recorded
+        // failure over its whole span: a Luhn-failing 4-4-4-4-3 card is one token, never a
+        // partial one, and a card-shaped window deeper in the span never leaves leading digits
+        // raw (solo todo 3906).
         let outcome = match kind.validate(raw) {
-            ValidatorOutcome::Fail { .. }
-                if kind == ValidatorKind::Luhn
-                    && gaze_types::payment_card::holds_card(
-                        input,
-                        candidate.span.clone(),
-                        source_spans,
-                    ) =>
-            {
-                ValidatorOutcome::Pass {
-                    canonical_form: Some(raw.to_string()),
+            ValidatorOutcome::Fail { reason } if kind == ValidatorKind::Luhn => {
+                let cards = gaze_types::payment_card::scan_card_run(
+                    input,
+                    candidate.span.clone(),
+                    source_spans,
+                )
+                .cards;
+                match cards.first().zip(cards.last()) {
+                    Some(_) if !records => ValidatorOutcome::Pass {
+                        canonical_form: Some(raw.to_string()),
+                    },
+                    Some((first, last)) if first.start == candidate.span.start => {
+                        candidate.span = first.start..last.end;
+                        ValidatorOutcome::Pass {
+                            canonical_form: Some(input[candidate.span.clone()].to_string()),
+                        }
+                    }
+                    _ => ValidatorOutcome::Fail { reason },
                 }
             }
             outcome => outcome,
@@ -63,10 +80,7 @@ pub fn apply(
             // its checksum fails: a mistyped or masked number is still someone's financial data
             // (user ruling 2026-09-27). The failure goes on its audit row, and it is `Learned`
             // evidence, so the repeat-value sweep never spreads an unvalidated value.
-            ValidatorOutcome::Fail { reason }
-                if recognizer.validator_on_fail() == ValidatorOnFail::Record
-                    && kind.allows_recorded_failure() =>
-            {
+            ValidatorOutcome::Fail { reason } if records => {
                 candidate.validator_fail_reason = Some(reason);
                 candidate.evidence = EvidenceKind::Learned;
                 kept.push(candidate);

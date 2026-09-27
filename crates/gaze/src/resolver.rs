@@ -582,8 +582,8 @@ fn arbitrate(
         && overlap == Overlap::Containment
         && existing.class == candidate.class
     {
-        let candidate_validated = is_validated(candidate);
-        let existing_validated = is_validated(existing);
+        let candidate_validated = candidate.checksum_validated();
+        let existing_validated = existing.checksum_validated();
         if candidate_validated != existing_validated {
             return if candidate_validated {
                 Arbitration::CandidateWins(ConflictTier::Validator)
@@ -692,18 +692,12 @@ enum EvidenceTier {
     Validated,
 }
 
-/// A validator passed. A canonical form alone does not say so: an IBAN or card kept although its
-/// checksum failed (`ValidatorOnFail::Record`) still carries its normalizer's canonical form.
-fn is_validated(candidate: &Candidate) -> bool {
-    candidate.canonical_form.is_some() && candidate.validator_fail_reason.is_none()
-}
-
 fn evidence_tier(
     candidate: &Candidate,
     policy: &FamilyPolicyTable,
     anchor_ctx: Option<AnchorContext<'_>>,
 ) -> EvidenceTier {
-    if is_validated(candidate) {
+    if candidate.checksum_validated() {
         return EvidenceTier::Validated;
     }
     if candidate.source.starts_with("structural.") {
@@ -1063,9 +1057,9 @@ mod tests {
         let class = PiiClass::custom("iban").expect("class");
         let mut failed = candidate(0..4, class.clone(), 0.7, "iban.structural");
         failed.canonical_form = Some("DE99".into());
-        assert!(is_validated(&failed));
+        assert!(failed.checksum_validated());
         failed.validator_fail_reason = Some(gaze_types::ValidatorFailReason::IbanMod97Failed);
-        assert!(!is_validated(&failed));
+        assert!(!failed.checksum_validated());
         let policy = crate::RecognizerRegistry::builder().build();
         assert_eq!(
             evidence_tier(&failed, policy.family_policy(), None),

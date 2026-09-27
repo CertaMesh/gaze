@@ -180,6 +180,10 @@ def values(r: random.Random) -> list[dict]:
         "version": "1.2.3.4567",
         "amount": "1 234 567,89",
         "ups tracking": "1Z999AA10123456784",
+        # Review of #694, F1: compact numbers that are no card.
+        "epoch ms": "1695827361000",
+        "compact phone 13": "4915123456789",
+        "compact phone 15": "491761234567890",
     }
     for kind, value in lookalikes.items():
         out.append({"kind": f"benign {kind}", "valid": None, "value": value})
@@ -203,11 +207,6 @@ def documents() -> list[dict]:
     return docs
 
 
-def shape(text: str) -> str:
-    """Digits as 9 and letters as A: failure lines never print a value."""
-    return "".join("9" if ch.isdigit() else "A" if ch.isalpha() else ch for ch in text)
-
-
 def protected_bytes(response: dict, span: tuple[int, int]) -> int:
     return base_enum.iban_view(response, span)[1]
 
@@ -228,27 +227,28 @@ def main() -> int:
         base = base_enum.run(base_bin, policy, docs)
         cand = base_enum.run(cand_bin, policy, docs)
 
-    failures: list[str] = []
+    # (reason, value kind, context kind): never a document text or value.
+    failures: list[tuple[str, str, str]] = []
     newly: collections.Counter = collections.Counter()
     newly_bytes: collections.Counter = collections.Counter()
     unchanged: collections.Counter = collections.Counter()
     for doc, b, c in zip(docs, base, cand, strict=True):
         if b is None or c is None:
-            failures.append(f"missing response: {shape(doc['text'])}")
+            failures.append(("missing response", doc["kind"], doc["context"]))
             continue
         before, after = protected_bytes(b, doc["span"]), protected_bytes(c, doc["span"])
         key = (doc["kind"], doc["valid"], doc["context"])
         if after < before:
-            failures.append(f"lost {before - after} B: {shape(doc['text'])}")
+            failures.append(("lost bytes", doc["kind"], doc["context"]))
         if after > before:
             newly[key] += 1
             newly_bytes[key] += after - before
             if doc["kind"].startswith("benign"):
-                failures.append(f"benign lookalike newly tokenized: {shape(doc['text'])}")
+                failures.append(("benign lookalike newly tokenized", doc["kind"], doc["context"]))
             if doc["kind"].startswith("card") and doc["valid"] is False and doc["context"] != "card_cue":
-                failures.append(f"Luhn-failing card tokenized without a card cue: {shape(doc['text'])}")
+                failures.append(("Luhn-failing card tokenized without a card cue", doc["kind"], doc["context"]))
             if doc["kind"] == "iban_unknown_country" and doc["context"] != "iban_cue":
-                failures.append(f"non-registry IBAN shape tokenized without an IBAN cue: {shape(doc['text'])}")
+                failures.append(("non-registry IBAN shape tokenized without an IBAN cue", doc["kind"], doc["context"]))
         else:
             unchanged[key] += 1
 
@@ -265,15 +265,15 @@ def main() -> int:
         "newly_tokenized": rows,
         "newly_tokenized_documents": sum(newly.values()),
         "unchanged_documents": sum(unchanged.values()),
-        "failures": failures,
+        "failures": [list(failure) for failure in failures],
     }
     Path(out_path).write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"{len(docs)} documents; newly tokenized {sum(newly.values())}; failures {len(failures)}")
     for row in rows:
         print(f"  {row['kind']:<24} valid={str(row['checksum_valid']):<5} {row['context']:<9} "
               f"+{row['newly_tokenized_documents']} docs, +{row['newly_protected_bytes']} B")
-    for failure in failures[:40]:
-        print("FAIL", failure)
+    for reason, kind, context in sorted(set(failures)):
+        print(f"FAIL {reason}: {kind} / {context}")
     return 1 if failures else 0
 
 

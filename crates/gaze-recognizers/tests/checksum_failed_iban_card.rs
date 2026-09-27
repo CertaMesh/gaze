@@ -6,13 +6,17 @@
 //!
 //! - `iban.structural`: a registry country code with that country's exact IBAN length, with or
 //!   without a cue (unchanged shape, `on_fail = "record"`).
-//! - `iban.cued`: a country code outside the IBAN registry, two digits and a BBAN (up to four
-//!   letters then 6 to 26 digits compact, or three to eight digit-bearing groups) within 32
-//!   characters after the word `IBAN` on the same line. Registry countries stay with
+//! - `iban.cued`: a real ISO 3166-1 country code outside the IBAN registry, two digits and a BBAN
+//!   (up to four letters then 6 to 26 digits compact, or three to eight digit-bearing groups)
+//!   within 32 characters after the word `IBAN` on the same line. Registry countries stay with
 //!   `iban.structural`, so a registry IBAN with a dropped digit is not covered.
-//! - `card.cued`: a card layout (4-4-4-4, 4-6-5, 4-6-4, compact 13 to 19) within 32 characters
-//!   after a card cue (`card`, `Karte` compounds, card brands) on the same line; a trailing CVV
-//!   group stays outside the token.
+//! - `card.cued`: a card layout (4-4-4-4-3 whole, 4-4-4-4, 4-6-5, 4-6-4, compact 16 to 19 from
+//!   2-6, compact 14 to 15 from 3) within 32 characters after a card cue (`card`, German card
+//!   compounds, card brands) on the same line. A span that starts with a Luhn-valid card is
+//!   narrowed to it, so a valid card's CVV stays outside, as `card.structural` scopes it.
+//!
+//! In both cued rules one `:`, `,` or `=` may follow the cue directly; any later `.`, `;`, `!`,
+//! `?`, `:`, `,` or `=` ends the window (review of #694).
 //!
 //! `card.structural` still vetoes a Luhn failure: without a cue a 16-digit run is as likely an
 //! order, voucher or tracking number. Every failed value keeps its reason on the audit row and is
@@ -218,10 +222,40 @@ fn iban_shapes_without_a_cue_or_structure_stay_raw() {
     assert_raw("IBAN 2 of 3: US29 1234 5678 9012 3456 7890 12");
     // Cue, but the compact value runs into a longer identifier.
     assert_raw("IBAN US29CITI12345678901234_x9");
+    // Review of #694, F2: a two-letter pair that is no country, and a cue whose clause ends.
+    for text in [
+        "IBAN field left blank, ticket XY12 3456 7890 1234 opened.",
+        "IBAN: n/a, VAT ID US123456789012",
+        "IBAN pending. Order US29 1234 5678 9012 3456 7890 12 shipped.",
+    ] {
+        let cleaned = clean(text);
+        assert!(!cleaned.contains(":Custom:iban_"), "{}", shape(&cleaned));
+    }
 }
 
+/// ISO 3166-1 alpha-2, all 249 codes (checked against `pycountry` when this list was written).
+const ISO_3166_ALPHA_2: &[&str] = &[
+    "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX", "AZ",
+    "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS",
+    "BT", "BV", "BW", "BY", "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN",
+    "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE",
+    "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF",
+    "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HM",
+    "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR", "IS", "IT", "JE", "JM",
+    "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA", "LB", "LC",
+    "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK",
+    "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA",
+    "NC", "NE", "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG",
+    "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW",
+    "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS",
+    "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO",
+    "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VI",
+    "VN", "VU", "WF", "WS", "YE", "YT", "ZA", "ZM", "ZW",
+];
+
 #[test]
-fn iban_cued_country_class_is_the_registry_complement() {
+fn iban_cued_country_class_is_iso_3166_minus_the_registry() {
+    assert_eq!(ISO_3166_ALPHA_2.len(), 249);
     let core = Rulepack::load(RulepackSource::Embedded(embedded("core").expect("core")))
         .expect("core loads");
     let spec = core
@@ -243,7 +277,12 @@ fn iban_cued_country_class_is_the_registry_complement() {
             let text = format!("IBAN {country}12 3456 7890 1234 5678 90");
             let matched = regex.is_match(&text);
             let registry = gaze_types::iban_registry_length(&country).is_some();
-            assert_eq!(matched, !registry, "{country}: registry={registry}");
+            let iso = ISO_3166_ALPHA_2.contains(&country.as_str());
+            assert_eq!(
+                matched,
+                iso && !registry,
+                "{country}: iso={iso} registry={registry}"
+            );
         }
     }
 }
@@ -268,8 +307,9 @@ fn card_after_a_cue_failing_luhn_is_tokenized() {
             "5500\u{00A0}1234\u{00A0}5678\u{00A0}9012",
             "",
         ),
-        // A trailing CVV stays outside the token, as `card.structural` scopes it.
-        ("credit card number ", "4532 7812 3456 7890", " 123 (CVV)"),
+        // A Luhn-failing 4-4-4-4-3 is one token, trailing group included: never partial.
+        ("credit card number ", "4532 7812 3456 7890 123", " (CVV)"),
+        ("Sim card ICCID ", "8949 0200 0012 3456 789", ""),
     ] {
         fails(ValidatorKind::Luhn, value);
         assert_tokenized(prefix, value, trailer, "credit_card");
@@ -304,6 +344,20 @@ fn luhn_failing_digits_without_a_card_shape_or_cue_stay_raw() {
     // Cue words inside other words are not cues.
     assert_raw_card_run("Scorecard ", "4532 7812 3456 7890", "");
     assert_raw_card_run("Eintrittskarte ", "4532 7812 3456 7890", "");
+    // Review of #694, F1: epoch-millisecond timestamps and compact phone numbers near a card
+    // cue are not cards (compact cards are 16-19 digits from 2-6, or 14-15 from 3).
+    assert_raw_card_run("{\"object\": \"card\", \"created\": ", "1695827361000", "}");
+    assert_raw_card_run("{\"card\": \"active\", \"ts\": ", "1695827361000", "}");
+    assert_raw_card_run("Card created at ", "1695827361000", " ms.");
+    assert_raw_card_run("Kartennummer? Nein, ruf mich an: ", "4915123456789", "");
+    assert_raw_card_run("credit card number ", "4915123456789", "");
+    assert_raw_card_run("credit card number ", "491761234567890", "");
+    // F2: the cue does not reach into another clause, field or word sense.
+    assert_raw_card_run("card game; game id ", "4000 1234 5678 9011", "");
+    assert_raw_card_run("Die Karte zeigt Planquadrat ", "4000 1234 5678 9011", "");
+    assert_raw_card_run("Karte: Menü ", "1234 5678 9012 3456", "");
+    assert_raw_card_run("Visa application number ", "1234567890123456", "");
+    assert_raw_card_run("Your Visa interview reference: ", "4000 1234 5678 9011", "");
     // Cue, but the number is past the 32-character window.
     assert_raw_card_run(
         "card on file, see the attached billing statement ",

@@ -384,28 +384,31 @@ locales = ["global"]
 locale_basis = "document"
 
 # An IBAN-structured value (two letters, two check digits, a BBAN) written after the word IBAN
-# whose country code is NOT in the ISO 13616 registry: a mistyped country code, or an account
-# number the writer calls an IBAN (solo todo 3906). Registry countries belong to
-# `iban.structural`, which knows each country's exact length and refuses a glued identifier; a
-# registry country here would let a trailing group or glued label ride into the token. The class
-# below is every two-letter code minus the registry, pinned to `gaze_types::iban_registry_length`
-# by `iban_cued_country_class_is_the_registry_complement` in
+# whose country code is a real ISO 3166-1 alpha-2 code that is NOT in the ISO 13616 registry: an
+# account number the writer calls an IBAN, from a country without IBANs (solo todo 3906).
+# Registry countries belong to `iban.structural`, which knows each country's exact length and
+# refuses a glued identifier; a registry country here would let a trailing group or glued label
+# ride into the token. A two-letter pair that is no country (`XY`) is not an IBAN. The class is
+# pinned to the ISO list minus `gaze_types::iban_registry_length` by
+# `iban_cued_country_class_is_iso_3166_minus_the_registry` in
 # `crates/gaze-recognizers/tests/checksum_failed_iban_card.rs`.
-# The cue carries the precision: the value must follow `IBAN` (optionally `IBAN number` /
-# `IBAN-Nr`) on the same line within 32 characters with no digit in between. The BBAN is either
-# compact (up to four bank-code letters, then 6 to 26 digits) or three to eight separated groups
-# that each hold a digit, after at most one letters-only bank-code group, so a following `BIC`,
-# `and` or other word is never absorbed. As for `iban.structural`, there is no trailing `\b`:
-# the code boundary of every `iban_mod97` recognizer keeps a glued label (`…1234BIC`) outside the
-# token and drops a value glued to a digit or `_` as part of a longer identifier.
+# The cue carries the precision: the value follows `IBAN` (optionally `IBAN number` / `IBAN-Nr`)
+# on the same line within 32 characters with no digit in between; one `:`, `,` or `=` may follow
+# the cue directly, and any later `.`, `;`, `!`, `?`, `:`, `,` or `=` ends the window. The BBAN
+# is either compact (up to four bank-code letters, then 6 to 26 digits) or three to eight
+# separated groups that each hold a digit, after at most one letters-only bank-code group, so a
+# following `BIC`, `and` or other word is never absorbed. As for `iban.structural`, there is no
+# trailing `\b`: the code boundary of every `iban_mod97` recognizer keeps a glued label
+# (`…1234BIC`) outside the token and drops a value glued to a digit or `_` as part of a longer
+# identifier.
 [recognizers.match]
 kind = "regex"
 pattern = '''
 (?x)
-(?i:\biban(?:[\x20_-]?(?:number|no|nr|nummer|code))?)\b
-[^\d\n]{0,32}?
+(?i:\biban(?:[\x20_-]?(?:number|no|nr|nummer|code))?)\b\.?
+["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
 \b(
-  (?:A[A-CF-KM-SU-Y]|B[B-DFJ-QS-XZ]|C[A-GI-QS-X]|D[A-DF-IL-NP-Z]|E[A-DFH-RT-Z]|F[A-HJL-NPQS-Z]|G[ACDF-HJKM-QSU-Z]|H[A-MO-QSTV-Z]|I[A-DF-KM-PRU-Z]|J[A-NP-Z]|K[A-VXY]|L[AD-HJ-SWXZ]|M[ABF-JLMO-QSV-Z]|N[A-HJKMNP-Z]|O[A-LN-Z]|P[A-JM-RU-Z]|Q[B-Z]|R[A-NP-RTV-Z]|S[BF-HJLNP-SUW-Z]|T[A-KMO-QS-Z]|U[B-Z]|V[B-FH-Z]|W[A-Z]|X[A-JL-Z]|Y[A-DF-Z]|Z[A-Z])\d{2}
+  (?:A[FGIMOQ-SUWX]|B[BDFJL-OQSTVWZ]|C[ACDFGIK-OU-X]|D[MZ]|E[CHRT]|F[JM]|G[ADF-HMNPQSUWY]|H[KMT]|I[DM-OR]|J[EMP]|K[EG-IMNPRY]|L[AKRS]|M[AF-HLMO-QSV-Z]|N[ACE-GPRUZ]|P[AE-HMNRWY]|R[EW]|S[BGHJLNRSX-Z]|T[CDF-HJKMOTVWZ]|U[GMSYZ]|V[CEINU]|W[FS]|YT|Z[AMW])\d{2}
   (?:
     [A-Z]{0,4}\d{6,26}
   | (?:[\x20\x{00A0}\x{202F}-][A-Z]{1,4})?
@@ -470,26 +473,38 @@ locale_basis = "document"
 # masked card number is still someone's card (user ruling 2026-09-27, solo todo 3906).
 # `card.structural` keeps vetoing Luhn failures, because it offers every digit run in the text;
 # here the cue carries the precision. Cues: `card` (with credit/debit/payment/bank/prepaid/gift
-# and number/no/nr/holder, in any `_`/`-`/space/camelCase spelling), German `Karte` compounds
-# (Kreditkarte, Kartennummer, EC-Karte, ...) and the card brands. The number must follow on the
-# same line within 32 characters with no digit in between, in a card layout: 4-4-4-4, 4-6-5,
-# 4-6-4 or compact 13 to 19 digits. One trailing group of exactly 3 digits (a CVV) may follow and
-# stays outside the token, as `card.structural` scopes it; any further digits refuse the match,
-# so a longer reference number after a cue never yields a card-shaped prefix.
+# and number/no/nr/holder, in any `_`/`-`/space/camelCase spelling), German card compounds
+# (Kreditkarte, EC-Karte, Kartennummer, ...; a bare `Karte` counts only with `Nummer`/`Nr`
+# after it, because it also means a map or a menu) and the card brands.
+# The number follows on the same line within 32 characters with no digit in between. One `:`,
+# `,` or `=` (after optional quotes) may follow the cue directly; any later `.`, `;`, `!`, `?`,
+# `:`, `,` or `=` ends the window, so the cue never reaches into another clause or field.
+# Layouts: 4-4-4-4-3 (whole: a 19-digit card, or a card and its CVV, both inside one token),
+# 4-4-4-4, 4-6-5, 4-6-4, and compact 16 to 19 digits starting 2-6 or compact 14 to 15 digits
+# starting 3 (Diners, Amex). Compact 13 to 15 digit numbers otherwise are phone numbers (E.164
+# has at most 15 digits) or epoch-millisecond timestamps, not cards. One trailing 3-digit group
+# may follow the other layouts; any further digits refuse the match, so a longer reference
+# after a cue never yields a card-shaped prefix. When the span starts with a Luhn-valid card,
+# validator veto narrows it to that card, so a valid card with its CVV is scoped exactly as
+# `card.structural` scopes it (todo 3843).
 [recognizers.match]
 kind = "regex"
 pattern = '''
 (?x)
 (?i:
-  \b(?:(?:credit|debit|payment|bank|prepaid|gift)[\x20_-]?)?cards?(?:[\x20_-]?(?:number|num|no|nr|holder))?\b
-| \b(?:kredit|debit|bank|ec|giro|geld|prepaid)?[\x20-]?karten?(?:nummer|nummern|daten|nr)?\b
+  \b(?:(?:credit|debit|payment|bank|prepaid|gift)[\x20_-]?)?cards?(?:[\x20_-]?(?:number|num|no|nr|holder))?\b\.?
+| \b(?:kredit|debit|bank|ec|giro|geld|prepaid)[\x20-]?karten?(?:nummer|nummern|daten|nr)?\b\.?
+| \bkarten?(?:nummer|nummern|nr)\b\.?
+| \bkarten?\b[^\d\n.;!?:,=]{0,24}?\b(?:nummer|nr)\b\.?
 | \b(?:visa|mastercard|master\x20card|amex|american\x20express|maestro|diners(?:\x20club)?|jcb|unionpay|girocard)\b
 )
-[^\d\n]{0,32}?
+["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
 \b(
-  \d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}
+  \d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{3}
+| \d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}
 | \d{4}[\x20\x{00A0}\x{202F}-]\d{6}[\x20\x{00A0}\x{202F}-]\d{4,5}
-| \d{13,19}
+| [2-6]\d{15,18}
+| 3\d{13,14}
 )
 (?:[\x20\x{00A0}\x{202F}-]\d{3})?
 (?:[^\d\x20\x{00A0}\x{202F}-]|[\x20\x{00A0}\x{202F}-][^\d]|[\x20\x{00A0}\x{202F}-]?\z)
