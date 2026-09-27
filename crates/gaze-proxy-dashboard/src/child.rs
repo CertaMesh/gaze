@@ -188,9 +188,6 @@ impl DashboardChildEntrypoint {
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         let secret = PairingSecret::generate()?;
         child_pair(&mut control, authority, &secret)?;
-        control
-            .set_read_timeout(None)
-            .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
 
         let state = Arc::new(Mutex::new(ChildState {
             store: EventStore::new(config.retention, InspectionEpochV1::new(0)),
@@ -361,6 +358,10 @@ fn child_control_loop(
     state: &Arc<Mutex<ChildState>>,
     active_responses: &AtomicUsize,
 ) -> Result<(), DashboardError> {
+    // Pairing has a bounded read; steady-state control waits for commands without a deadline.
+    control
+        .set_read_timeout(None)
+        .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
     loop {
         let mut command = [0_u8; 1];
         control
@@ -974,6 +975,36 @@ mod tests {
         Oversize,
         Partial,
         Decode,
+    }
+
+    #[test]
+    fn control_loop_clears_pairing_timeout_before_steady_state() {
+        let secret = PairingSecret::generate().unwrap();
+        let limits = RetentionLimits::new(4, 64 * 1024, Duration::from_secs(30)).unwrap();
+        let state = Arc::new(Mutex::new(ChildState {
+            store: EventStore::new(limits, InspectionEpochV1::new(0)),
+            auth: AuthRegistry::new(&secret, 4),
+            reveals: RevealRegistry::new(Duration::from_secs(30)),
+        }));
+        let (mut control, mut parent) = UnixStream::pair().unwrap();
+        control
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let probe = control.try_clone().unwrap();
+        let worker = thread::spawn(move || {
+            child_control_loop(
+                &mut control,
+                "127.0.0.1:8080".parse().unwrap(),
+                &state,
+                &AtomicUsize::new(0),
+            )
+        });
+        parent.write_all(&[PARENT_SHUTDOWN]).unwrap();
+        let mut ack = [0_u8; 1];
+        parent.read_exact(&mut ack).unwrap();
+        assert_eq!(ack[0], CHILD_STOPPED);
+        worker.join().unwrap().unwrap();
+        assert_eq!(probe.read_timeout().unwrap(), None);
     }
 
     #[test]

@@ -32,6 +32,46 @@ const IBAN_NBSP: &str = "DE89\u{a0}3704\u{a0}0044\u{a0}0532\u{a0}0130\u{a0}00";
 
 type Forwarded = Arc<Mutex<Vec<Value>>>;
 
+fn assert_class_token(value: &str, class: &str) {
+    let inner = value
+        .strip_prefix('<')
+        .and_then(|value| value.strip_suffix('>'))
+        .expect("the entire field must be one token");
+    let (session_hex, token_class) = inner.split_once(':').expect("session-prefixed token");
+    assert_eq!(session_hex.len(), 8, "invalid session prefix in {value}");
+    assert!(
+        session_hex
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()),
+        "invalid session prefix in {value}"
+    );
+    assert_eq!(
+        token_class,
+        format!("Custom:{class}_1"),
+        "wrong token in {value}"
+    );
+}
+
+fn assert_no_raw_outside_tokens(body: &Value, tokens: &[&str]) {
+    let mut serialized = body.to_string();
+    for token in tokens {
+        serialized = serialized.replace(token, "");
+    }
+    for raw in [BSN, STEUER_ID, "3704", "0532"] {
+        assert!(
+            !serialized.contains(raw),
+            "{raw:?} reached upstream outside a token: {body}"
+        );
+    }
+}
+
+#[test]
+fn token_session_hex_can_contain_an_iban_group() {
+    let token = "<f0d83704:Custom:family:payment-card-or-iban_1>";
+    assert_class_token(token, "family:payment-card-or-iban");
+    assert_no_raw_outside_tokens(&json!({"iban": token}), &[token]);
+}
+
 async fn capture(State(forwarded): State<Forwarded>, Json(body): Json<Value>) -> Json<Value> {
     forwarded.lock().await.push(body);
     Json(json!({"choices": [{"message": {"role": "assistant", "content": "ok"}}]}))
@@ -117,18 +157,23 @@ async fn tool_call_arguments_with_national_ids_and_nbsp_iban_reach_upstream_toke
         .as_str()
         .expect("arguments stay a string")
         .to_owned();
-    let serialized = bodies[0].to_string();
-    for raw in [BSN, STEUER_ID, "3704", "0532"] {
-        assert!(
-            !serialized.contains(raw),
-            "{raw:?} reached upstream: {sent}"
-        );
-    }
+    let sent_arguments: Value = serde_json::from_str(&sent).expect("arguments stay JSON");
+    assert_eq!(sent_arguments.as_object().unwrap().len(), 3);
+    let mut tokens = Vec::new();
     // `core-extended` carries no `iban` anchor cue bucket, so the IBAN resolves to its fail-closed
     // collision-family token (`Custom:family:payment-card-or-iban`), exactly as it does in prose.
-    for class in ["Custom:bsn_", "Custom:steuer_id_", "iban_"] {
-        assert!(sent.contains(class), "expected a {class} token in {sent}");
+    for (field, class) in [
+        ("bsn", "bsn"),
+        ("steuer_id", "steuer_id"),
+        ("iban", "family:payment-card-or-iban"),
+    ] {
+        let value = sent_arguments[field]
+            .as_str()
+            .expect("field stays a string");
+        assert_class_token(value, class);
+        tokens.push(value);
     }
+    assert_no_raw_outside_tokens(&bodies[0], &tokens);
 
     proxy_task.abort();
     upstream_task.abort();
