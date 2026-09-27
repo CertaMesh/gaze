@@ -9,7 +9,7 @@
       "shipped": "opt-in (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk (todo 3905), then default-on",
       "latency": {
         "file": "docs/reference/benchmarks/mechanisms/gliner-dob-judge-latency.json",
-        "sha256": "a67ffcbc9c4db37572a7b8a422b363e419237ceb3a23290fd673d54433be4923"
+        "sha256": "838cfd64c0e33e3b7b0504347ba3a968041ed10f887732c60b9cf5dcbe9266d9"
       },
       "policy_delta": {
         "file": "scripts/bench/mechanisms/gliner-dob-judge.toml",
