@@ -341,3 +341,57 @@ mod tests {
         assert_eq!(merged[0].span, 10..25);
     }
 }
+
+#[cfg(test)]
+mod detect_path_tests {
+    use std::ops::Range;
+    use std::sync::Arc;
+
+    use gaze_types::PiiClass;
+
+    use super::NerDetector;
+    use crate::ner::backend::NerBackend;
+    use crate::ner::error::NerRuntimeError;
+    use crate::ner::types::{NerBackendKind, NerSpanResult};
+
+    /// Splits the input mid-word and tags the first chunk's name pieces only,
+    /// the way WordPiece labels can stop inside `vasquez`.
+    struct MidWordBackend;
+
+    impl NerBackend for MidWordBackend {
+        fn chunk_ranges(&self, input: &str) -> Result<Vec<Range<usize>>, NerRuntimeError> {
+            let cut = input.find("vas").expect("fixture word") + 3;
+            Ok(vec![0..cut, cut..input.len()])
+        }
+
+        fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+            Ok(input
+                .find("jorunn")
+                .map(|start| NerSpanResult {
+                    span: start..input.len(),
+                    class: PiiClass::Name,
+                    score: 0.9,
+                })
+                .into_iter()
+                .collect())
+        }
+    }
+
+    #[test]
+    fn detect_grows_a_chunk_cut_name_to_the_whole_compound() {
+        let detector = NerDetector {
+            backend_kind: NerBackendKind::Ort,
+            recognizer_version_id: "ner.synthetic.v1".into(),
+            locale: None,
+            threshold: 0.0,
+            backend: Arc::new(MidWordBackend),
+        };
+        let input = "ping jorunn vasquez-ellery now";
+        let spans = detector.detect_span_results(input).unwrap();
+        let found = spans
+            .iter()
+            .map(|span| &input[span.span.clone()])
+            .collect::<Vec<_>>();
+        assert_eq!(found, ["jorunn vasquez-ellery"]);
+    }
+}
