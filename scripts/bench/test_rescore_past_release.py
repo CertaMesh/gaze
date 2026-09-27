@@ -47,11 +47,15 @@ class ReleaseCheckoutTest(unittest.TestCase):
             self.assertIsNone(rescore.policy_dependencies(None, root))
 
     def test_rescored_card_writes_policy_dependency_identity(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+        with tempfile.TemporaryDirectory() as release, tempfile.TemporaryDirectory() as harness:
+            root = Path(release)
+            harness_root = Path(harness)
             policy = root / "policy.toml"
             policy.write_text('[policy.rulepacks]\npaths=["pack.toml"]\n', encoding="utf-8")
-            (root / "pack.toml").write_text('name="synthetic"\n', encoding="utf-8")
+            release_pack = root / "pack.toml"
+            release_pack.write_text('name="release"\n', encoding="utf-8")
+            harness_pack = harness_root / "pack.toml"
+            harness_pack.write_text('name="harness"\n', encoding="utf-8")
             binary = root / "clean_for_bench"
             binary.write_bytes(b"binary")
             args = rescore.parse_args([
@@ -81,7 +85,7 @@ class ReleaseCheckoutTest(unittest.TestCase):
                 (rescore.score, "assemble_scorecard", {"parameters": {"profile": "full"}}),
             ]
             with ExitStack() as stack:
-                stack.enter_context(mock.patch.object(rescore, "HARNESS_ROOT", root))
+                stack.enter_context(mock.patch.object(rescore, "HARNESS_ROOT", harness_root))
                 for target, name, value in returns:
                     stack.enter_context(mock.patch.object(target, name, return_value=value))
                 stack.enter_context(mock.patch.object(rescore.records, "RecordWriter", return_value=writer))
@@ -90,6 +94,9 @@ class ReleaseCheckoutTest(unittest.TestCase):
             card = write_json.call_args.args[1]
             self.assertEqual(card["runner_provenance"]["policy_dependencies"],
                              rescore.policy_dependencies(policy, root))
+            digest = card["runner_provenance"]["policy_dependencies"]["files"]["policy.rulepacks.paths[0]"]
+            self.assertEqual(digest, hashlib.sha256(release_pack.read_bytes()).hexdigest())
+            self.assertNotEqual(digest, hashlib.sha256(harness_pack.read_bytes()).hexdigest())
 
     def test_a_dirty_release_checkout_is_refused_before_anything_runs(self):
         with tempfile.TemporaryDirectory() as tmp:

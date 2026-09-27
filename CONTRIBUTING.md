@@ -103,6 +103,17 @@ cargo run -p xtask -- safety-net-sanity
 cargo run -p xtask -- ci-feature-matrix
 ```
 
+The live GLiNER tests are explicitly ignored in ordinary CI because CI does
+not install the 333 MB model. After `gaze setup --dob-judge`, run them with the
+pinned local bundle:
+
+```bash
+export GAZE_GLINER_DOB_TEST_BUNDLE="${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/gliner-multi-pii-dob-int8"
+cargo test -p gaze-recognizers --lib dob_judge::tests::live_model_separates_birth_dates_from_business_dates_without_keyword_filter -- --ignored --exact
+cargo test --release -p gaze-recognizers --lib dob_judge::tests::live_forty_row_table_reuses_tiled_windows -- --ignored --exact --nocapture
+cargo test -p gaze-recognizers --test dob_judge_live local_bundle_classifies_synthetic_dates -- --ignored --exact
+```
+
 The `--all-features` flag on `cargo test` exercises every current workspace
 feature. The v0.5 `gaze` audit feature shim was removed in v0.6; compatibility
 tests import concrete audit sinks from `gaze-audit` directly.

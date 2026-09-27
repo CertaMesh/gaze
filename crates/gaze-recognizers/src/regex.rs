@@ -234,11 +234,29 @@ impl RegexDetector {
         input: &str,
         source_spans: Option<&[(usize, usize)]>,
     ) -> Vec<std::ops::Range<usize>> {
-        let matches = self
-            .regex
-            .captures_iter(input)
-            .filter_map(|caps| self.span_from_captures(&caps))
-            .filter(|span| self.boundary_accepts(input, span));
+        let mut search_at = Some(0);
+        let matches = std::iter::from_fn(|| {
+            while let Some(at) = search_at {
+                let caps = self.regex.captures_at(input, at)?;
+                let full = caps.get(0)?;
+                let span = self.span_from_captures(&caps);
+                // A capture can end before a consuming suffix guard. Resume at the captured
+                // value so that separator can also be the next match's prefix guard.
+                let next = span.as_ref().map_or(full.end(), |span| span.end);
+                search_at = if next > full.start() {
+                    Some(next)
+                } else {
+                    input[full.start()..]
+                        .chars()
+                        .next()
+                        .map(|ch| full.start() + ch.len_utf8())
+                };
+                if let Some(span) = span.filter(|span| self.boundary_accepts(input, span)) {
+                    return Some(span);
+                }
+            }
+            None
+        });
         if !self.card_runs {
             return matches.collect();
         }
@@ -329,6 +347,55 @@ fn is_ascii_email_continuation(ch: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn captured_values_reuse_a_consumed_separator_for_the_next_match() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r"(?:^|[^[:alnum:]])(id\d+)(?:$|[^[:alnum:]])",
+            PiiClass::custom("synthetic_id").unwrap(),
+            "synthetic.boundary",
+            vec![LocaleTag::Global],
+            0.7,
+            0,
+            "counter",
+            Some(vec![1]),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(detector.spans("id1 id2 id3", None), vec![0..3, 4..7, 8..11]);
+    }
+
+    #[test]
+    fn captured_values_reuse_a_two_character_suffix_guard() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r"(?:^|[^[:alnum:]])(id\d+)(?:$|\.(?:$|[^0-9]))",
+            PiiClass::custom("synthetic_id").unwrap(),
+            "synthetic.boundary",
+            vec![LocaleTag::Global],
+            0.7,
+            0,
+            "counter",
+            Some(vec![1]),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(detector.spans("id1. id2.", None), vec![0..3, 5..8]);
+    }
+
+    #[test]
+    fn zero_width_matches_advance_through_the_input_and_stop_at_the_end() {
+        let detector = RegexDetector::with_source(
+            r"\b",
+            PiiClass::custom("synthetic_id").unwrap(),
+            "synthetic.boundary",
+        )
+        .unwrap();
+        assert_eq!(detector.spans("a b", None), vec![0..0, 1..1, 2..2, 3..3]);
+    }
 
     #[test]
     fn bundled_email_detector_matches_before_non_ascii_letter() {

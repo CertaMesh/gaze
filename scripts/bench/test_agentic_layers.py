@@ -3,6 +3,7 @@
 
 import copy
 import hashlib
+import ipaddress
 import json
 import re
 import sys
@@ -23,6 +24,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
+    "dev": "6df97e1ea7fbe49a0362335de0c0436913cf77689948156a1fd7e3701a40e9ad",
+    "test": "387a35ac155153e9b58a26ec7946b3d459b0d094fffdd5f05de39558eb640604",
+}
+PREVIOUS_CORPUS_SHA256 = {
     "dev": "4cab04e2418b5f6ffff482e84bd1c90bb523726f8d5b3aa560409071b49c8459",
     "test": "c751da0b8b7d2e9e18663ad07458d75c70b26799b1c22d71004b3e0e351dd22b",
 }
@@ -99,6 +104,79 @@ class GeneratorTests(unittest.TestCase):
                     agentic.manifest(partition, records)["corpus_sha256"],
                     PINNED_CORPUS_SHA256[partition],
                 )
+
+    def test_previous_partition_documents_are_byte_identical(self) -> None:
+        for partition, records in self.corpora.items():
+            previous = [r for r in records if not r.surface.startswith("adjacent_")]
+            self.assertEqual(
+                hashlib.sha256(agentic.corpus_bytes(previous)).hexdigest(),
+                PREVIOUS_CORPUS_SHA256[partition],
+            )
+
+    def test_adjacency_cases_cover_both_orders_separators_and_surfaces(self) -> None:
+        for partition, records in self.corpora.items():
+            adjacent = [r for r in records if r.surface.startswith("adjacent_")]
+            cases = (*agentic.ADJACENT_GOLD[partition], *agentic.ADJACENT_LOOKALIKES[partition])
+            self.assertEqual(len(adjacent), len(cases) * 2 * (4 * 3 + 3))
+            for case in cases:
+                layer = "A" if case in agentic.ADJACENT_GOLD[partition] else "D"
+                matching = [r for r in adjacent if r.family == case.family and r.layer == layer]
+                self.assertEqual(len(matching), 30, case.family)
+                self.assertEqual(
+                    {r.surface for r in matching}, set(agentic.ADJACENT_TEMPLATES), case.family
+                )
+                self.assertFalse(
+                    any(r.surface == "adjacent_json_array" and "-tab-" in r.uid for r in matching),
+                    case.family,
+                )
+                for record in matching:
+                    self.assertTrue(record.gold if layer == "A" else not record.gold, record.uid)
+
+    def test_adjacency_json_arrays_preserve_logical_single_separators(self) -> None:
+        for partition, records in self.corpora.items():
+            cases = {
+                ("A", c.family): c for c in agentic.ADJACENT_GOLD[partition]
+            } | {
+                ("D", c.family): c for c in agentic.ADJACENT_LOOKALIKES[partition]
+            }
+            for record in records:
+                if record.surface != "adjacent_json_array":
+                    continue
+                _, _, _, _, direction, separator_name, _ = record.uid.split("-", 6)
+                case = cases[(record.layer, record.family)]
+                values = case.values if direction == "forward" else case.values[::-1]
+                expected = agentic.ADJACENT_SEPARATORS[separator_name].join(
+                    value.prefix + value.value + value.suffix for value in values
+                )
+                self.assertNotEqual(separator_name, "tab", record.uid)
+                self.assertEqual(json.loads(record.text)["items"], [expected], record.uid)
+
+    def test_ip_gold_is_private_host_address_and_nonidentifying_ranges_are_lookalikes(self) -> None:
+        for partition in agentic.PARTITIONS:
+            ip_gold = [
+                value.value for case in agentic.ADJACENT_GOLD[partition]
+                for value in case.values if value.label == "IPADDRESS"
+            ]
+            self.assertTrue(ip_gold)
+            for value in ip_gold:
+                address = ipaddress.ip_address(value)
+                host = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else None
+                host = host or address
+                self.assertTrue(host.is_private, value)
+                self.assertFalse(host.is_loopback or host.is_link_local, value)
+            lookalikes = {
+                case.family: [value.value for value in case.values]
+                for case in agentic.ADJACENT_LOOKALIKES[partition]
+            }
+            for family in ("adjacent_loopback_ips", "adjacent_link_local_ips", "adjacent_mapped_loopback_ips"):
+                self.assertIn(family, lookalikes)
+                self.assertEqual(len(lookalikes[family]), 2)
+            self.assertTrue(all(ipaddress.ip_address(value).is_loopback for value in lookalikes["adjacent_loopback_ips"]))
+            self.assertTrue(all(ipaddress.ip_address(value).is_link_local for value in lookalikes["adjacent_link_local_ips"]))
+            self.assertTrue(all(
+                ipaddress.ip_address(value).ipv4_mapped.is_loopback
+                for value in lookalikes["adjacent_mapped_loopback_ips"]
+            ))
 
     def test_every_gold_span_selects_exactly_the_inserted_value(self) -> None:
         for records in self.corpora.values():
@@ -432,7 +510,7 @@ class ContractTests(unittest.TestCase):
             applied = agentic.apply_contract(self.documents(), contract)
         dob = [d for d in applied if d.excluded_spans]
         self.assertTrue(dob)
-        self.assertTrue(all(d.cell and "|dob|" in d.cell for d in dob))
+        self.assertTrue(all(d.cell and ("|dob|" in d.cell or "|birth_date_cue|" in d.cell) for d in dob))
 
 
 def _success_response(document: score.Document) -> dict[str, object]:
@@ -501,6 +579,8 @@ def _scorecard(
     refused: dict[str, int] | None = None,
     twin_leak: int = 0,
     c_invalid_leak: int = 0,
+    restore: dict[str, int] | None = None,
+    manifests: dict[str, int] | None = None,
 ) -> dict:
     """`leaks` is gated (valid) gold; `twin_leak` / `c_invalid_leak` add
     checksum-failed bytes to layers A and C."""
@@ -509,10 +589,20 @@ def _scorecard(
 
     def run(layer: str) -> dict:
         leaked = leaks[layer] + {"A": twin_leak, "C": c_invalid_leak}.get(layer, 0)
+        completed = 10 - refused.get(layer, 0)
         block = {
             "config": "policy-file",
             "metrics": {"utf8_bytes": {"leaked": leaked, "false_positive": fps.get(layer, 0)}},
-            "pipeline_availability": {"failed_closed_documents": refused.get(layer, 0)},
+            "pipeline_availability": {
+                "attempted_documents": 10,
+                "completed_documents": completed,
+                "failed_closed_documents": refused.get(layer, 0),
+            },
+            "pipeline_contract": {
+                "documents": completed,
+                "restore_exact_documents": (restore or {}).get(layer, completed),
+                "manifest_valid_documents": (manifests or {}).get(layer, completed),
+            },
         }
         if layer == "C":
             block["validator_recall_by_label"] = {
@@ -692,6 +782,149 @@ class GateTests(unittest.TestCase):
             (model / ".cache").mkdir()
             (model / ".cache" / "index").write_bytes(b"cache")
             self.assertEqual(first, agentic.policy_dependency_files(policy, root))
+
+    def test_active_model_under_dotted_parent_is_hashed_and_empty_model_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = root / ".local" / "share" / "gaze" / "models" / "ner"
+            model.mkdir(parents=True)
+            weight = model / "weights.bin"
+            weight.write_bytes(b"synthetic model")
+            policies = {
+                "ner": {"ner": {"model_dir": str(model)}},
+                "nym": {"safety_net": {"backend": "nym", "nym": {"model_dir": str(model)}}},
+                "dob": {"dob_judge": {"enabled": True, "model_dir": str(model)}},
+            }
+            references = {
+                "ner": "ner.model_dir/weights.bin",
+                "nym": "safety_net.nym.model_dir/weights.bin",
+                "dob": "dob_judge.model_dir/weights.bin",
+            }
+            for name, policy in policies.items():
+                with self.subTest(name=name):
+                    self.assertEqual(
+                        agentic.policy_dependency_files(policy, root),
+                        {references[name]: hashlib.sha256(weight.read_bytes()).hexdigest()},
+                    )
+            weight.unlink()
+            (model / ".DS_Store").write_bytes(b"ignored metadata")
+            for name, policy in policies.items():
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    agentic.LayerError, "no hashable files"
+                ):
+                    agentic.policy_dependency_files(policy, root)
+    def test_restore_and_manifest_drop_fail_on_every_layer(self) -> None:
+        for layer in agentic.GATE_LAYERS:
+            for field in ("restore", "manifests"):
+                with self.subTest(layer=layer, field=field):
+                    base = _scorecard(self.BASE, self.FP)
+                    candidate = _scorecard({**self.BASE, "R": self.BASE["R"] - 1}, self.FP,
+                                           **{field: {layer: 9}})
+                    result = agentic.gate(base, candidate)
+                    self.assertEqual(result["verdict"], "fail")
+                    self.assertEqual(result["reason"],
+                                     f"{'exact-restore documents fell' if field == 'restore' else 'valid-manifest documents fell'} in ['{layer}']")
+
+    def test_restore_and_manifest_rise_count_as_improvement(self) -> None:
+        for layer in agentic.GATE_LAYERS:
+            for field in ("restore", "manifests"):
+                with self.subTest(layer=layer, field=field):
+                    base = _scorecard(self.BASE, self.FP, **{field: {layer: 9}})
+                    candidate = _scorecard(self.BASE, self.FP)
+                    self.assertEqual(agentic.gate(base, candidate)["verdict"], "pass")
+                    # A byte regression cannot be masked by a restore gain.
+                    candidate = _scorecard(self.BASE, {**self.FP, "D": 8})
+                    self.assertEqual(agentic.gate(base, candidate)["verdict"], "fail")
+
+    def test_missing_or_invalid_restore_counts_fail_closed_on_both_sides(self) -> None:
+        for side in ("base", "candidate"):
+            for layer in agentic.GATE_LAYERS:
+                for field in ("restore_exact_documents", "manifest_valid_documents"):
+                    with self.subTest(side=side, layer=layer, field=field):
+                        cards = {"base": _scorecard(self.BASE, self.FP),
+                                 "candidate": _scorecard(self.BASE, self.FP)}
+                        agentic._layer_run(cards[side], layer, "policy-file")["pipeline_contract"].pop(field)
+                        with self.assertRaisesRegex(agentic.LayerError, f"layer {layer}.*{field}"):
+                            agentic.gate(cards["base"], cards["candidate"])
+
+    def test_missing_pipeline_contract_fails_closed_on_both_sides(self) -> None:
+        for side in ("base", "candidate"):
+            for layer in agentic.GATE_LAYERS:
+                with self.subTest(side=side, layer=layer):
+                    cards = {name: _scorecard(self.BASE, self.FP) for name in ("base", "candidate")}
+                    del agentic._layer_run(cards[side], layer, "policy-file")["pipeline_contract"]
+                    with self.assertRaisesRegex(agentic.LayerError, f"layer {layer} has no pipeline_contract"):
+                        agentic.gate(cards["base"], cards["candidate"])
+
+    def test_contract_counts_cannot_exceed_completed_documents(self) -> None:
+        for field in ("restore_exact_documents", "manifest_valid_documents"):
+            candidate = _scorecard(self.BASE, self.FP)
+            candidate["runs"][0]["pipeline_contract"][field] = 11
+            with self.subTest(field=field), self.assertRaisesRegex(agentic.LayerError, "counts exceed documents"):
+                agentic.gate(_scorecard(self.BASE, self.FP), candidate)
+
+    def test_restore_gain_cannot_come_from_more_documents(self) -> None:
+        base = _scorecard(self.BASE, self.FP, refused={"C": 1})
+        candidate = _scorecard(self.BASE, self.FP)
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["verdict"], "fail")
+        self.assertIn("without an eligible gain", result["reason"])
+
+    def test_refusal_fix_can_pass_and_refusal_rise_keeps_its_reason(self) -> None:
+        base = _scorecard(self.BASE, self.FP, refused={"C": 1})
+        candidate = _scorecard({**self.BASE, "C": 98}, self.FP)
+        self.assertEqual(agentic.gate(base, candidate)["verdict"], "pass")
+        result = agentic.gate(candidate, base)
+        self.assertEqual(result["verdict"], "fail")
+        self.assertIn("failed-closed documents rose", result["reason"])
+
+    def test_refusal_fix_cannot_hide_new_restore_or_manifest_failure(self) -> None:
+        for field, reason in (("restore", "exact-restore failures rose"),
+                              ("manifests", "invalid-manifest documents rose")):
+            with self.subTest(field=field):
+                base = _scorecard(self.BASE, self.FP, refused={"C": 1})
+                candidate = _scorecard({**self.BASE, "C": 98}, self.FP,
+                                       **{field: {"C": 9}})
+                result = agentic.gate(base, candidate)
+                self.assertEqual(result["verdict"], "fail")
+                self.assertIn(reason, result["reason"])
+                self.assertEqual(result["layers"]["C"]["restore_failures_base"], 0)
+                self.assertEqual(result["layers"]["C"]["manifest_invalid_base"], 0)
+
+    def test_missing_availability_counts_fail_closed_on_both_sides(self) -> None:
+        for side in ("base", "candidate"):
+            for layer in agentic.GATE_LAYERS:
+                for field in ("attempted_documents", "completed_documents", "failed_closed_documents"):
+                    with self.subTest(side=side, layer=layer, field=field):
+                        cards = {name: _scorecard(self.BASE, self.FP) for name in ("base", "candidate")}
+                        agentic._layer_run(cards[side], layer, "policy-file")["pipeline_availability"].pop(field)
+                        with self.assertRaisesRegex(agentic.LayerError, f"layer {layer}.*{field}"):
+                            agentic.gate(cards["base"], cards["candidate"])
+
+    def test_inconsistent_availability_counts_fail_closed(self) -> None:
+        for field, value in (("completed_documents", 9), ("attempted_documents", 11)):
+            with self.subTest(field=field):
+                candidate = _scorecard(self.BASE, self.FP)
+                candidate["runs"][0]["pipeline_availability"][field] = value
+                with self.assertRaisesRegex(agentic.LayerError, "pipeline document counts disagree"):
+                    agentic.gate(_scorecard(self.BASE, self.FP), candidate)
+
+    def test_attempted_population_change_fails(self) -> None:
+        candidate = _scorecard(self.BASE, self.FP)
+        candidate["runs"][0]["pipeline_availability"]["attempted_documents"] = 11
+        candidate["runs"][0]["pipeline_availability"]["completed_documents"] = 11
+        candidate["runs"][0]["pipeline_contract"]["documents"] = 11
+        result = agentic.gate(_scorecard(self.BASE, self.FP), candidate)
+        self.assertEqual(result["verdict"], "fail")
+        self.assertIn("attempted document counts differ", result["reason"])
+
+    def test_fp_and_restore_gain_are_both_named(self) -> None:
+        base = _scorecard(self.BASE, self.FP, restore={"C": 9})
+        candidate = _scorecard(self.BASE, {**self.FP, "D": 6})
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["verdict"], "pass")
+        self.assertIn("FP bytes fell", result["reason"])
+        self.assertIn("exact restore rose", result["reason"])
 
     def verdict(self, candidate: dict, base: dict | None = None) -> str:
         return agentic.gate(base or _scorecard(self.BASE, self.FP), candidate)["verdict"]
@@ -1101,9 +1334,16 @@ class MutantGatePinTests(unittest.TestCase):
         cls.pin = json.loads(path.read_text(encoding="utf-8"))
 
     def verdict(self, mutant: str) -> dict:
-        result = agentic.decide(self.pin["totals"]["main"], self.pin["totals"][mutant])
+        result = agentic.decide(self.with_equal_restore(self.pin["totals"]["main"]),
+                                self.with_equal_restore(self.pin["totals"][mutant]))
         self.assertEqual({**result["summary"], "verdict": result["verdict"]}, self.pin["expected"][mutant])
         return result
+
+    @staticmethod
+    def with_equal_restore(totals: dict) -> dict:
+        # This historical pin predates restore totals; these tests isolate the byte rule.
+        return {layer: {**row, "attempted": 0, "documents": 0, "restore_exact": 0, "manifest_valid": 0}
+                for layer, row in totals.items()}
 
     def test_spaced_sixteen_digit_mutant_fails(self) -> None:
         result = self.verdict("mutant_spaced_sixteen_digits")
@@ -1123,15 +1363,16 @@ class MutantGatePinTests(unittest.TestCase):
         def all_gold(totals: dict) -> dict:
             return {layer: {**row, "leaked": row["leaked"] + row["twin_leaked"], "twin_leaked": 0}
                     for layer, row in totals.items()}
-        result = agentic.decide(all_gold(self.pin["totals"]["main"]),
-                                all_gold(self.pin["totals"]["mutant_spaced_sixteen_digits"]))
+        result = agentic.decide(all_gold(self.with_equal_restore(self.pin["totals"]["main"])),
+                                all_gold(self.with_equal_restore(self.pin["totals"]["mutant_spaced_sixteen_digits"])))
         self.assertEqual(result["verdict"], "pass")
 
     def test_pin_records_its_provenance(self) -> None:
         provenance = self.pin["provenance"]
         for key in ("harness_commit", "corpus_sha256", "policy_sha256", "binary_sha256", "commands"):
             self.assertTrue(provenance.get(key), key)
-        self.assertEqual(provenance["generator_version"], agentic.GENERATOR_VERSION)
+        # The mutant pin is a published v3 measurement, retained as historical evidence.
+        self.assertEqual(provenance["generator_version"], 3)
 
 
 if __name__ == "__main__":

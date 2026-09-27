@@ -786,10 +786,23 @@ model:
 - **Layer A families:** payment card; IBAN for DE (spaced and compact), AT,
   NL, FR and GB; Steuer-ID; BSN; NHS number; CPF; email; German and US phone
   numbers; dates of birth; and sender names in email headers, including
-  hyphenated surnames.
+  hyphenated surnames. The adjacency slice adds synthetic private-network
+  IPv4/IPv6 host endpoints associated with a user's device (including mapped
+  IPv4, three-address runs and documentation-range neighbours), four phone
+  recognizer shapes, AT/CH, CA and GB postcodes, and birth dates after a cue.
+  The setup policy excludes `secrets`, so `password.field` is not scored.
 - **Layer A surfaces:** prose with a cue, prose without a cue, NBSP-spaced,
   NARROW-NBSP-spaced, log `key=value`, CSV, and tool-call JSON. The tool-call
   JSON is the single-encoded `arguments` string that `gaze-proxy` cleans.
+  Adjacency cases place both orders of each pair (and a reversed triple)
+  across prose, log lines, quoted CSV fields and JSON arrays, with exactly
+  one space, comma, tab or NBSP between values. JSON array strings omit the
+  tab case because its raw `\t` escape is two bytes rather than one separator.
+- **Layer D adjacency counterweights:** adjacent versions, hex hashes, times,
+  four-digit room numbers, due dates, word-attached `::` paths, RFC 3849
+  documentation IPs, loopback IPs and link-local IPs. They carry no gold.
+  The v3 documents remain byte identical within each partition; the
+  generator and both partition hashes are pinned at v4.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -899,6 +912,9 @@ python3 scripts/bench/agentic_layers.py gate \
 The gate checks the production arm of layers C, A, D and R. It checks leaked
 bytes twice: on the gated bytes below, and on the headline leaked bytes over
 all gold, so a regression cannot hide inside gold the gate leaves out.
+It also checks exact restores and valid manifests per layer against the same
+attempted-document population. Fewer refusals may not raise a layer's
+restore-failure or invalid-manifest count; missing or impossible counts exit `2`.
 
 When a candidate intentionally adds policy sections, declare them in a separate
 TOML file and pass `--policy-delta <file.toml>` to the gate. This mode accepts
@@ -939,7 +955,8 @@ could turn valid PII into "failed its checksum" and drop it from the gated
 bytes. The gate then needs an explicit review decision.
 
 [`gate-pin-mutants.json`](../../../scripts/bench/fixtures/agentic/gate-pin-mutants.json)
-pins the true verdicts of two real full-harness runs against main:
+pins the true verdicts of two real full-harness runs against main on generator
+v3. It remains a historical pin for the gate arithmetic:
 
 - **The spaced 16-digit rule fails.** It saves 15 gated leaked bytes and adds
   551 false-positive bytes. Its 1,830 byte Kiji "gain" is entirely card and
@@ -992,6 +1009,26 @@ Two options exist for v0.14.0 only, and the output records both:
   on its own against the grammar and the release's vocabulary.
 
 Both options are off by default.
+
+### Measured adjacency layer history
+
+The release rows below use generator v4's test partition and the setup policy.
+Record the three past-release `agentic_layers.py measure` outputs with
+`render_agentic_adjacency_doc.py --record`, then render this table from its
+committed ledger. Do not edit the rows by hand.
+
+<!-- BEGIN GENERATED: agentic-adjacency-v4 -->
+
+| Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `v0.15.1` `policy-file` | 18,064 / 48,508 | 1,196 | 3,454 | 374 / 5,142 | 403 |
+| `v0.15.0` `policy-file` | 18,237 / 48,508 | 1,196 | 3,454 | 374 / 5,142 | 403 |
+| `v0.14.0` `full-stack-kiji-resolve` | 26,765 / 48,508 | 3,673 | 2,473 | 525 / 5,142 | 190 |
+| `v0.14.0` `pass2-ner` | 27,185 / 48,508 | 886 | 2,328 | 550 / 5,142 | 140 |
+
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v4-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v4, test corpus `387a35ac1551…`, setup policy `f909a23aecac…`.
+
+<!-- END GENERATED: agentic-adjacency-v4 -->
 
 ### Hardware spec template
 
