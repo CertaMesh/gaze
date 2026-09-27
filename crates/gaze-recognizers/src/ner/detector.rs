@@ -182,24 +182,50 @@ impl Detector for NerDetector {
 /// Grows every word-class span to whole words, and every `Name` over glued name parts.
 ///
 /// The model labels sub-word pieces, so a span can stop inside a word (`jorunn vas` of
-/// `jorunn vasquez-ellery`, `J` of `JORUNN`) and ship the rest raw (todo 3897). Names,
-/// locations and organizations are words; identifier classes keep their spans, because their
-/// values legitimately sit inside longer strings. Runs on the whole input, after chunk offsets
-/// are applied, so a chunk edge cannot stop the growth. Spans that now overlap merge after.
-fn snap_word_class_edges(input: &str, mut spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> {
-    for span in &mut spans {
-        match span.class {
-            PiiClass::Name => {
-                let words = gaze_types::expand_to_word_edges(input, span.span.clone());
-                span.span = gaze_types::extend_over_name_joiners(input, words);
-            }
-            PiiClass::Location | PiiClass::Organization => {
-                span.span = gaze_types::expand_to_word_edges(input, span.span.clone());
-            }
-            _ => {}
-        }
-    }
+/// `jorunn vasquez-ellery`) and ship the rest raw (todo 3897). Names, locations and
+/// organizations are words; identifier classes keep their spans, because their values
+/// legitimately sit inside longer strings. An edge never grows into bytes another span
+/// already claims, so two entities glued together (`BobMary`) stay two pseudonyms. Runs on
+/// the whole input, after chunk offsets are applied, so a chunk edge cannot stop the growth.
+fn snap_word_class_edges(input: &str, spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> {
+    let claimed = spans
+        .iter()
+        .map(|span| span.span.clone())
+        .collect::<Vec<_>>();
     spans
+        .into_iter()
+        .enumerate()
+        .map(|(index, mut span)| {
+            let grown = match span.class {
+                PiiClass::Name => gaze_types::extend_over_name_joiners(
+                    input,
+                    gaze_types::expand_to_word_edges(input, span.span.clone()),
+                ),
+                PiiClass::Location | PiiClass::Organization => {
+                    gaze_types::expand_to_word_edges(input, span.span.clone())
+                }
+                _ => return span,
+            };
+            let others = claimed
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != index)
+                .map(|(_, range)| range);
+            let floor = others
+                .clone()
+                .filter(|range| range.end <= span.span.start)
+                .map(|range| range.end)
+                .max()
+                .unwrap_or(0);
+            let ceiling = others
+                .filter(|range| range.start >= span.span.end)
+                .map(|range| range.start)
+                .min()
+                .unwrap_or(input.len());
+            span.span = grown.start.max(floor)..grown.end.min(ceiling);
+            span
+        })
+        .collect()
 }
 
 fn merge_overlapping_spans(mut spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> {
@@ -263,14 +289,26 @@ mod tests {
             snapped(input, &[("jorunn vas", PiiClass::Name)]),
             ["jorunn vasquez-ellery"]
         );
+        // Touching pieces keep their shared edge; every byte stays covered.
         assert_eq!(
             snapped(
-                input,
+                "x JORUNN VASQUEZ y",
                 &[("J", PiiClass::Name), ("ORUNN VASQUEZ", PiiClass::Name)]
-            )
-            .last()
-            .map(String::as_str),
-            Some("JORUNN VASQUEZ")
+            ),
+            ["J", "ORUNN VASQUEZ"]
+        );
+        // An edge never grows into another span's bytes.
+        assert_eq!(
+            snapped(
+                "BobMary",
+                &[("Bob", PiiClass::Name), ("Mary", PiiClass::Name)]
+            ),
+            ["Bob", "Mary"]
+        );
+        // A lone piece still grows to its whole word.
+        assert_eq!(
+            snapped("x JORUNN VASQUEZ y", &[("J", PiiClass::Name)]),
+            ["JORUNN"]
         );
         assert_eq!(
             snapped("in Baden-Württemberg", &[("Württem", PiiClass::Location)]),
