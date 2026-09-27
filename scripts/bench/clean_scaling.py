@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """Measure how `gaze clean` time grows with input size (todo 3895).
 
-The input is synthetic German order lines (no real PII):
+Two synthetic line shapes (no real PII), picked with `--shape`:
 
-    Zeile <n>: Bestellung 1500 Euro an 1010 Wien, NSW
+    de: Zeile <n>: Bestellung 1500 Euro an 1010 Wien, NSW
+    au: Zeile <n>: Lieferung an Brisbane QLD 4072, Australia
 
-`<n>` counts from 0, so every line from 10,000 on carries a distinct five-digit
-number that `postal.de` tokenizes under `de-DE`: the manifest grows with the
-input. Under `de-AT` the four-digit codes after a cue or before a city are
-`postal.at_ch` candidates on every line: the candidate pool grows with the
-input. Before the fix, 1 MB took 20 s under `de-DE` and time roughly tripled
-per doubling under `de-AT`.
+`<n>` counts from 0, so from line 10,000 on every `de` line carries a
+distinct five-digit number that `postal.de` tokenizes under `de-DE`: the
+manifest grows with the input. Under `de-AT` the four-digit codes after a cue
+or before a city are `postal.at_ch` candidates on every line: the candidate
+pool grows with the input. Under `en-AU,de-AT` every `au` line has a
+`postal.au` span enclosing a `postal.at_ch` span from the next locale, and
+the same value repeats on every line for the repeat-value sweep. Before the
+fixes, 1 MB `de` took 20 s under `de-DE` and time roughly tripled per
+doubling under `de-AT`.
 
 Each binary cleans each size `--repeat` times; the table reports the median
 wall clock and the ratio to the next smaller size (linear is 2.0). Timing is a
@@ -27,6 +31,7 @@ Usage (from the repository root):
     python3 scripts/bench/clean_scaling.py \\
         --binary base=<gaze at main> --binary cand=target/release/gaze \\
         --sizes 0.5,1,2,4 --locale de-DE --locale de-AT --compare
+    python3 scripts/bench/clean_scaling.py --shape au --locale en-AU,de-AT ...
 """
 
 from __future__ import annotations
@@ -42,15 +47,18 @@ import sys
 import time
 from pathlib import Path
 
-LINE = "Zeile {n}: Bestellung 1500 Euro an 1010 Wien, NSW \n"
+SHAPES = {
+    "de": "Zeile {n}: Bestellung 1500 Euro an 1010 Wien, NSW \n",
+    "au": "Zeile {n}: Lieferung an Brisbane QLD 4072, Australia\n",
+}
 MIB = 1024 * 1024
 SESSION_HEX = re.compile(r"\b([0-9a-f]{8})(?=:)")
 
 
-def make_input(mib: float) -> str:
+def make_input(mib: float, shape: str = "de") -> str:
     lines, size, n = [], 0, 0
     while size < mib * MIB:
-        line = LINE.format(n=n)
+        line = SHAPES[shape].format(n=n)
         lines.append(line)
         size += len(line)
         n += 1
@@ -116,6 +124,7 @@ def main() -> int:
     parser.add_argument("--binary", action="append", required=True, help="label=path")
     parser.add_argument("--sizes", default="0.5,1,2,4", help="MiB, comma separated")
     parser.add_argument("--locale", action="append", help="repeatable; default de-DE")
+    parser.add_argument("--shape", choices=sorted(SHAPES), default="de")
     parser.add_argument("--policy", help="optional policy.toml for every run")
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--compare", action="store_true")
@@ -125,7 +134,8 @@ def main() -> int:
     sizes = [float(size) for size in args.sizes.split(",")]
     locales = args.locale or ["de-DE"]
     print(f"host: {host()}; load average (1 min) {os.getloadavg()[0]:.2f}")
-    print(f"policy: {args.policy or 'none (bundled core)'}; median of {args.repeat}\n")
+    policy = args.policy or "none (bundled core)"
+    print(f"shape: {args.shape}; policy: {policy}; median of {args.repeat}\n")
     print("| locale | MiB | " + " | ".join(f"{label} s (×)" for label, _ in binaries) + " |")
     print("|---|---|" + "---|" * len(binaries))
 
@@ -133,7 +143,7 @@ def main() -> int:
     for locale in locales:
         previous: dict[str, float] = {}
         for mib in sizes:
-            text = make_input(mib)
+            text = make_input(mib, args.shape)
             cells, reference = [], None
             for label, path in binaries:
                 times, output = [], None
