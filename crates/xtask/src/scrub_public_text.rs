@@ -226,6 +226,10 @@ const PUBLIC_URL_ALLOWLIST: &[(&str, &str)] = &[
         r"^/number_resource_info/555_numbers\.html$",
     ),
     ("huggingface.co", r"^/Wismut/nym-pii-multilingual-small$"),
+    (
+        "collectables.auspost.com.au",
+        r"^/community-and-events/articles/postcodes-turn-50$",
+    ),
     ("127.0.0.1:8787", r"^(/v1)?$"),
     (
         "semver.org",
@@ -469,6 +473,7 @@ mod tests {
             "https://api.anthropic.com",
             "https://nationalnanpa.com/number_resource_info/555_numbers.html",
             "https://huggingface.co/Wismut/nym-pii-multilingual-small",
+            "https://collectables.auspost.com.au/community-and-events/articles/postcodes-turn-50",
         ] {
             assert!(is_allowlisted_public_url(url), "{url} must be allowed");
         }
@@ -492,6 +497,8 @@ mod tests {
             "https://github.com/CertaMesh/gaze/blob/main/a%40b",
             "https://github.com/CertaMesh/gaze/blob/main/docs/123456789.md",
             "https://example.org/",
+            "https://auspost.com.au/community-and-events/articles/postcodes-turn-50",
+            "https://collectables.auspost.com.au/community-and-events/articles/postcodes-turn-50/x",
             // Free text in the path or fragment of an allowlisted host.
             "https://semver.org/DE89370400440532013000",
             "https://semver.org/spec/v2.0.0.html#4915112345678",
