@@ -42,9 +42,9 @@ python scripts/bench/compare/compare.py \
 ```
 
 Copy only the aggregate JSON into `docs/reference/benchmarks/`, then render its
-table with `python scripts/bench/compare/render.py
-docs/reference/benchmarks/comparison.json --readme
-docs/reference/benchmarks/README.md`. The renderer requires all three Gaze
+page with `python scripts/bench/compare/render.py
+docs/reference/benchmarks/comparison.json --page
+docs/reference/benchmarks/competitors.md`. The renderer requires all three Gaze
 contracts. If a variant pack is present, each Gaze scorecard must also carry
 the identical pack layer and document-ID digest; otherwise comparison fails.
 

@@ -4,6 +4,9 @@ The single benchmark document for Gaze. It carries the current release's
 measured numbers as a table and as charts, the methodology behind them, and the
 commands to reproduce them.
 
+[Competitor comparison](competitors.md) scores Presidio, GLiNER-PII, and OPF
+on the same documents and byte scorer as Gaze.
+
 Everything under [Current release](#current-release), [Charts](#charts), and
 [Release history](#release-history) is **generated** from
 [`release-history.json`](release-history.json) by

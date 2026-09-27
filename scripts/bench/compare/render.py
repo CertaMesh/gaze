@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the public aggregate comparison block from a measured report."""
+"""Render the public competitor page from a measured report."""
 
 from __future__ import annotations
 
@@ -9,8 +9,6 @@ import json
 import sys
 from pathlib import Path
 
-START = "<!-- comparison:start -->"
-END = "<!-- comparison:end -->"
 ORDER = ("gaze", "presidio-en", "presidio-en-de", "gliner", "opf")
 REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
@@ -69,14 +67,14 @@ def render(report: dict[str, object], source: str) -> str:
                     raise ValueError(f"{name} lacks layer {layer} under {version}")
 
     lines = [
-        START,
-        "### Comparison",
+        "# Competitor comparison",
         "",
         "Same corpus and scorer; tools run with their documented defaults. "
         "UTF-8 byte counts use the Gaze scorer. For v3, FP is the scorer's "
         "false-positive count after its audited gold-gap credit. CPU p50/p95 "
         "is warm per-document inference/clean time on the same machine. "
-        "Presidio English default leaves German documents unprocessed.",
+        "Presidio English default leaves German documents unprocessed. "
+        "This measures detection; competitor restore and manifest behavior is not scored.",
         "",
         f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published.",
         "",
@@ -108,33 +106,24 @@ def render(report: dict[str, object], source: str) -> str:
     skipped = report.get("skipped", {})
     if skipped:
         lines.extend(["", "**Skipped:** " + "; ".join(f"{name}: {reason}" for name, reason in skipped.items()) + "."])
-    lines.extend([END, ""])
+    lines.append("")
     return "\n".join(lines)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
-    parser.add_argument("--readme", type=Path, required=True)
+    parser.add_argument("--page", type=Path, required=True)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     report = json.loads(args.report.read_text(encoding="utf-8"))
     validate_current(report)
-    block = render(report, args.report.name)
-    current = args.readme.read_text(encoding="utf-8")
+    page = render(report, args.report.name)
     if args.check:
-        if START not in current or END not in current or current.split(START, 1)[1].split(END, 1)[0] != block.split(START, 1)[1].split(END, 1)[0]:
-            raise ValueError("comparison block is stale; rerender it")
+        if args.page.read_text(encoding="utf-8") != page:
+            raise ValueError("competitor page is stale; rerender it")
         return
-    if START in current:
-        if current.count(START) != 1 or current.count(END) != 1:
-            raise ValueError("comparison block markers are not unique")
-        before, tail = current.split(START)
-        _, after = tail.split(END)
-        updated = before + block + after.lstrip("\n")
-    else:
-        updated = current.rstrip() + "\n\n" + block
-    args.readme.write_text(updated, encoding="utf-8")
+    args.page.write_text(page, encoding="utf-8")
 
 
 if __name__ == "__main__":
