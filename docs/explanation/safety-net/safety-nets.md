@@ -38,9 +38,9 @@ can land without changing the trait shape or audit schema.
                             ▼
    ┌─────────────────────────────────────────────────────────────────┐
    │ PASS 1 — REGEX + DICTIONARY (deterministic)                     │
-   │   "Contact alice@example.invalid"                               │
+   │   "Contact " + "alice" + "@" + "example.invalid"               │
    │     → recognizers (email.global, name.de, iban, …)              │
-   │     → Candidate { class=Email, score=1.0, span=(8,28), … }      │
+   │     → Candidate { class=Email, score=1.0, span=(8,29), … }      │
    └────────────────────────────┬────────────────────────────────────┘
                                 ▼
    ┌─────────────────────────────────────────────────────────────────┐

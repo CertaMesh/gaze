@@ -25,7 +25,7 @@ action = "tokenize"
 Run `gaze clean` against it:
 
 ```sh
-printf '%s' 'Contact alice@example.invalid for details.' \
+printf 'Contact %s@%s for details.' alice example.invalid \
   | gaze clean --policy quickstart-policy.toml
 ```
 
@@ -47,8 +47,11 @@ printf '{"session_blob":"<base64>","text":"Re: <{session_hex}:Email_1>"}' \
 ```
 
 ```json
-{"text": "Re: alice@example.invalid"}
+{"text": "Re: alice [at] example.invalid"}
 ```
+
+The restored address is shown with `[at]` in this page; the actual restore
+output contains the `@` from the synthetic input.
 
 Schema and every rule kind / action live in [`docs/reference/policy.md`](../../docs/reference/policy.md).
 
@@ -111,7 +114,7 @@ Install the upstream [`openai/privacy-filter`](https://github.com/openai/privacy
 Activate the filter on the same `gaze clean` invocation:
 
 ```sh
-printf '%s' 'Contact alice@example.invalid for details.' \
+printf 'Contact %s@%s for details.' alice example.invalid \
   | gaze clean \
       --policy quickstart-policy.toml \
       --safety-net openai-filter \

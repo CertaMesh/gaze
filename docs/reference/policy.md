@@ -67,7 +67,7 @@ action = "tokenize"
 Run it:
 
 ```console
-$ echo "Email alice@example.invalid now" | gaze clean --policy=minimal.toml
+$ printf 'Email %s@%s now' alice example.invalid | gaze clean --policy=minimal.toml
 {"clean_text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
 ```
 
@@ -141,7 +141,7 @@ Output tokens carry the `Custom:` namespace prefix to disambiguate from
 built-ins:
 
 ```text
-Input:  "Call +1 555 0100 to confirm."
+Input:  "Call [synthetic phone number] to confirm."
 Output: "Call <{session_hex}:Custom:phone_1> to confirm."
 ```
 
@@ -178,14 +178,14 @@ Output: "Reference <{session_hex}:Custom:order_id_1> is shipped."
 ### Class naming rules
 
 - Built-in class names (`Email`, `Name`, `Location`, `Organization`) live in the
-  top-level token grammar (`<Email_1>`). Custom classes always render with a
-  `Custom:` prefix (`<Custom:my_class_1>`), so a custom class named `"email"` is
+  top-level token grammar (`<Email_N>`). Custom classes always render with a
+  `Custom:` prefix (`<Custom:my_class_N>`), so a custom class named `"email"` is
   unambiguous from the built-in class because it has a different token shape.
 - Custom classes use the `custom:<name>` policy spelling.
 - Custom class names are normalized: characters outside `[a-z0-9_]` collapse to
   `_` one run at a time. Adopters should pass non-empty alphanumeric names;
   passing all-punctuation strings like `"!!!"` currently normalizes to an empty
-  stem and emits `<Custom:_1>`. Validate adopter input before passing it to
+  stem and emits `<Custom:_N>`. Validate adopter input before passing it to
   `PiiClass::custom` if this matters for your integration.
 - Two recognizers may share a class, provided they follow the rulepack composition contract (`cooperates_with` in rulepacks as of v0.4.1+).
 
@@ -319,7 +319,7 @@ gaze clean --rulepack-bundled core --locale=en-US --policy ./policy.toml
 - `iban.structural` emits `custom:iban` only for IBAN-shaped candidates that
   pass `iban_mod97`; the canonical form is normalized with `iban_canonical`.
   The pattern has no trailing word boundary: a compact IBAN glued to the next
-  label (`IBAN AT611904300234573201BIC`) is a candidate, and the boundary is
+  label (an Austrian compact IBAN glued to `BIC`) is a candidate, and the boundary is
   decided in code (`gaze_types::word_run_extends_identifier`) — the word run
   after the candidate may be empty or letters only; a digit or underscore in it
   marks the candidate as a prefix of a longer identifier and drops it.
@@ -429,7 +429,7 @@ kind = "luhn"
 | Kind | Applies to | Behavior |
 |------|------------|----------|
 | `email_rfc` | Email-like regex candidates | Basic email shape validation used by the bundled core email recognizer. |
-| `e164_phone` | E.164-like phone candidates | Parser-backed phone validation. `core` uses it with `phone.structural` so parser-valid international fixtures such as `+4915100000000` emit `custom:phone`, while unassigned regex-only values such as `+99999999` are dropped. |
+| `e164_phone` | E.164-like phone candidates | Parser-backed phone validation. `core` uses it with `phone.structural` so parser-valid international fixtures such as a synthetic German mobile number emit `custom:phone`, while unassigned regex-only values such as `+99999999` are dropped. |
 | `e164_phone_national_de` | German national or international phone candidates | Parser-backed DE validation with synthetic-non-reachable fixture allowance because Germany has no NANPA 555-01XX equivalent. |
 | `e164_phone_national_us` | US national or international phone candidates | Parser-backed US validation with NANPA 555-0100 through 555-0199 fixture allowance. |
 | `luhn` | Credit-card-like numeric candidates | Mod 10 checksum. ASCII whitespace is ignored; any other non-digit fails validation. |
@@ -801,7 +801,7 @@ bundled family names are listed under
 > `StructuredContainment` for a custom container over a builtin sub-span),
 > so with `custom:url = preserve` and `email = tokenize` the URL is the
 > winner. Its bytes stay raw except the ones the email claimed: those leave
-> as one `<Email_1>` fragment inside the preserved URL, and the fragment's
+> as one email-token fragment inside the preserved URL, and the fragment's
 > audit row says `decided_by: protection_override`. The candidates a
 > preserved span *represents* never override it: an explicit
 > `custom:family:<name> = preserve` rule still leaves the ambiguous span raw

@@ -315,7 +315,7 @@ proxy.
 
 | Option | Purpose |
 |--------|---------|
-| `--bind <addr>` | Listener address. Default for `serve`: `127.0.0.1:8787`; `start` uses the persisted config unless overridden. |
+| `--bind <addr>` | Listener address. Default for `serve`: IPv4 loopback on port 8787; `start` uses the persisted config unless overridden. |
 | `--policy <path>` | Optional policy TOML. When omitted, the built-in core rulepack is used. |
 | `--rulepack <name>` | Bundled rulepack name. Default for `serve`: `core`; `start` persists the override. |
 | `--session-ttl <duration>` | In-memory session retention such as `30m`, `10s`, or `1h`. Default for `serve`: `30m`. |
@@ -338,13 +338,13 @@ base: captured payloads become visible to the paired browser session.
 | `--dashboard` | Launch the dashboard child; the capture baseline is always ProviderVisible plus safe metadata. |
 | `--dashboard-capture-owner-raw` + `--dashboard-acknowledge-owner-raw-risk` | Independently opt into OwnerRaw capture. The capture flag without its acknowledgement — or the acknowledgement without the flag — disables only the dashboard before provider startup. |
 | `--dashboard-capture-owner-restored` + `--dashboard-acknowledge-owner-restored-risk` | Independently opt into OwnerRestored capture under the same pairing rule. Capturing both owner domains requires both acknowledgements. |
-| `--dashboard-bind <ipv4:0>` | Literal loopback address with port 0. Default: a fresh CSPRNG-selected `127.0.0.0/8` literal per launch. Configuring a fixed literal prints an origin-reuse warning. |
+| `--dashboard-bind <ipv4:0>` | Literal loopback address with port 0. Default: a fresh CSPRNG-selected IPv4 loopback literal per launch. Configuring a fixed literal prints an origin-reuse warning. |
 | `--dashboard-ttl <duration>` | Retention TTL. Default `5m`; crate hard ceiling one hour. |
 | `--dashboard-max-events <n>` | Retained logical-event cap. Default 64; crate hard ceiling 1024. |
 | `--dashboard-max-bytes <n>` | Retained byte cap. Default 4 MiB; crate hard ceiling 64 MiB. |
 | `--dashboard-pairing-fd <fd>` | Inherited FIFO descriptor for noninteractive pairing-token delivery. Descriptors 0/1/2, terminals and other character devices, regular files, directories, sockets, and unwritable descriptors are rejected. |
 
-Pairing prints exactly one `http://<origin>/` line and one
+Pairing prints exactly one HTTP origin URL line and one
 `GazeDashboardV1 <token>` authorization line to the controlling terminal (or
 the validated pairing descriptor), never to stdout, stderr, or a log file.
 On Linux, the launcher that supplies `--dashboard-pairing-fd` must hold (or

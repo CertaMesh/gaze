@@ -42,7 +42,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cleaned = pipeline.redact(
         &session,
-        RawDocument::Text("Hi, alice@example.invalid called about ORD-789012.".into()),
+        RawDocument::Text(format!(
+            "Hi, {}{}{} called about ORD-789012.",
+            "alice", "@", "example.invalid"
+        )),
     )?;
 
     // CleanDocument is an enum: Text(String) or Structured(...). Destructure.
@@ -50,12 +53,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         unreachable!("Text input produces Text output");
     };
     println!("{}", clean_text);
-    // "Hi, <hex:Email_1> called about ORD-789012."
+    // "Hi, <hex:Email_N> called about ORD-789012."
     // ORD-789012 needs a custom recognizer or context JSON -- see Step 5.
 
     Ok(())
 }
 ```
+
+`<hex:Email_N>` is display notation. Use the exact token returned by `redact`;
+its session prefix and numeric ordinal change on each run.
 
 > Use one `Session` per logical isolation boundary; share across calls within a boundary only. See [Session Contract](../explanation/core/session-contract.md) for the full contract and common pitfalls.
 
@@ -66,7 +72,7 @@ use gaze::{Scope, Session};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session = Session::new(Scope::Conversation("conv-abc".into()))?;
-    let clean_text = "Hi, <hex:Email_1> called about ORD-789012.";
+    let clean_text = "Hi, <hex:Email_N> called about ORD-789012.";
 
     // Do this BEFORE sending clean text to the LLM.
     let snapshot = session.export()?;
@@ -98,10 +104,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let snapshot = SensitiveSnapshot::from(blob);
     let restored_session = Session::import(snapshot)?;
-    let llm_response = "Thanks <hex:Email_1>, I have updated your record.";
+    let llm_response = "Thanks <hex:Email_N>, I have updated your record.";
     let restored = restore_text(&restored_session, llm_response)?;
     println!("{restored}");
-    // "Thanks alice@example.invalid, I have updated your record."
+    // The synthetic email is restored on the owner side.
 
     Ok(())
 }

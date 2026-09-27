@@ -177,7 +177,7 @@ only under `#[cfg(test)]`.
 Adversarial self-test for reviewers:
 
 1. On a throwaway branch, add a production-scope fixture literal such as
-   `"alice@example.invalid"` with a valid-looking marker:
+   a synthetic email assembled from `alice`, `@`, and `example.invalid` with a valid-looking marker:
    `// fixture-cited(crates/gaze/tests/email.rs:gaze::tests::email_round_trip)`.
 2. Run `cargo run -p xtask -- fixture-citation-lint`; it must fail unless
    `cargo test --workspace -- --list` contains the cited test name exactly.

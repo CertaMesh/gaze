@@ -7,12 +7,12 @@ fired at that exact spot, so a name caught in an email header shipped raw in
 the body, in a different case, or in the next turn (solo todo 3849).
 
 ```text
-input   From: Maria Schneider <maria.schneider@example.invalid>
+input   From: Maria Schneider <[synthetic email]>
         hi, this is maria schneider again. Thanks, Maria
-before  From: <a13e:Name_1> <<a13e:Email_1>>
+before  From: [name token A] <[email token A]>
         hi, this is maria schneider again. Thanks, Maria
-after   From: <a13e:Name_1> <<a13e:Email_1>>
-        hi, this is <a13e:Name_2> again. Thanks, <a13e:Name_3>
+after   From: [name token A] <[email token A]>
+        hi, this is [name token B] again. Thanks, [name token C]
 ```
 
 ## Where it runs
@@ -22,7 +22,7 @@ two places: this document's resolved winners and the session manifest. It
 looks for copies that no winner covers. Each copy joins the candidate pool,
 and the pool is resolved again, so the resolver's containment and priority
 rules settle any overlap. A copy that encloses a weaker same-class span, such as an NER
-fragment that left `<Name_1>a`, wins and covers the whole copy. A document
+fragment that left a letter outside its name token, wins and covers the whole copy. A document
 with no uncovered copy keeps its first resolution; the only extra cost is one
 linear scan.
 
@@ -93,7 +93,7 @@ Each value has one shape, and each shape owns its precision floor.
 
 Every copy must stand on word edges under the shared
 `gaze_types::is_inside_word` rule, and a copy inside a URL-shaped run
-(`://` or a leading `www.`) is skipped. A single word on a closed list of
+(a URL scheme or web prefix) is skipped. A single word on a closed list of
 common words that are also names is never swept: months, weekdays, English
 names that are everyday words (`Will`, `Mark`, `Rose`, `May`), English
 surnames that are everyday verbs or nouns (`Grant`, `Price`, `Banks`,

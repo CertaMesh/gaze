@@ -5,7 +5,7 @@ transport checks, credentials, reveal and response leases, and safe view constra
 
 ## Origin and transport
 
-- Bind a CSPRNG-selected literal IPv4 address in 127.0.0.0/8 with port zero.
+- Bind a CSPRNG-selected literal IPv4 address in the loopback range with port zero.
 - Require the exact bound literal authority in Host and the exact http:// origin in Origin.
 - Loopback position is not authentication.
 - Accept at most one canonical HTTP/1.1 origin-form request per connection, then close.

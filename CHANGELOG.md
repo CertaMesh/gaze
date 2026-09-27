@@ -51,10 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Dates of birth after a birth cue are tokenized** (solo todo #3651).
   Every release up to and including v0.15.1 sent these raw through
-  `gaze clean` and `gaze proxy` alike: `Geburtsdatum 30.05.1971`,
-  `{"dob": "30.05.1971"}` in a tool result, `née le 02/11/1992`, and any
+  `gaze clean` and `gaze proxy` alike: a German birth-date field,
+  a DOB field in a tool result, a French day-first birth date, and any
   month-name or two-digit-year date. `birth_date.cue` only read a line-start
-  field record (`DOB: 1990-02-03`) and `born on` / `geboren am`.
+  field record (a structured DOB field) and `born on` / `geboren am`.
 - A value a rule found once is now tokenized everywhere it repeats. Before,
   a copy was protected only when a recognizer fired at that exact spot, so a
   name caught in an email header shipped raw in the body, in another case, or
@@ -186,7 +186,7 @@ through the same code (PR #658).
 
 - **`gaze proxy` tokenizes safety-net findings** (PR #660). Under the policy
   `gaze setup` writes (Nym on), the proxy refused every request that held a
-  date, such as `Invoice date 1971-05-30.`, with an opaque
+  date, such as an invoice date, with an opaque
   `500 {"error":"Pipeline"}`, while `gaze clean` tokenized the same date. The
   proxy now runs the Resolve step of
   `gaze clean --safety-net-fallback strict` on request text: a flagged span is
@@ -323,7 +323,7 @@ pipeline.
 - **`gaze proxy` tokenizes what the safety net flags instead of refusing the
   request.** Under the policy `gaze setup` writes (Nym enabled), the proxy
   answered `500 {"error":"Pipeline"}` to any request containing a date, such
-  as `Invoice date 1971-05-30.` or `born on 30 May 1971.`, while `gaze clean`
+  as an invoice date or a prose birth date, while `gaze clean`
   tokenized the same date. The proxy ran only the primary pipeline and then
   used the net as an admission gate, so every net finding became a refusal.
   Both request paths (the legacy OpenAI and Gemini adapters and the Anthropic
@@ -335,7 +335,8 @@ pipeline.
   defaults to the `redact` fallback: when the nets' re-run flags something
   new, it tokenizes that in a second reversible batch and deletes what is left
   one way. The proxy refuses such a request instead (for example
-  `user jweber84 born 1984-03-12` under the `gaze setup` policy). Spans that no
+  `user <handle> born <ISO date>` under the `gaze setup` policy).
+  Spans that no
   net flags and no rule detects, such as a `DD.MM.YYYY` date without a cue,
   still reach the provider raw, exactly as `gaze clean` prints them. The old
   behaviour blocked some of them only because it refused the whole request
@@ -520,7 +521,8 @@ ship in this release:
 
 - **A payment card next to other digits can reach the model untokenized**
   (solo todo #3843). A card followed by a separated CVV or expiry
-  (`4111 1111 1111 1111 123`) or preceded by other digits fails the Luhn check
+  (a checksum-valid test card followed by three digits) or preceded by other
+  digits fails the Luhn check
   as one run, so the forward path does not tokenize it. The restore-boundary
   check reports the same shape in model output (PR #652). A fix is in progress
   (PR #658) and lands after this release.
@@ -605,7 +607,7 @@ committed; the v1 row stays the version's benchmark figure.
   and its echo now compare equal whatever separator either side used, so a
   Zs-grouped echo of a manifest value reports `ManifestBypass`, not
   `FreshPiiDetected`. A card followed by a CVV or expiry
-  (`4111 1111 1111 1111 123`), preceded by another number, or joined to more
+  (a checksum-valid test card followed by three digits), preceded by another number, or joined to more
   digits by a fullwidth group or a dropped ZERO WIDTH JOINER failed Luhn as one
   run and also passed unreported, in ASCII text too. The check now retries the
   group-aligned sub-runs printed in a card layout (compact, 4-4-4-4,
@@ -1369,7 +1371,7 @@ committed; the v1 row stays the version's benchmark figure.
   `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` (case-insensitively at every
   locale). The existing word guard remains
   in force, so Rust and C++ double-colon paths, including `Address::new`, stay untouched.
-  The identifier-glued form `_2001:db8::1` remains outside this cue rule
+  An identifier-glued IPv6 documentation address remains outside this cue rule
   (solo todo #3762).
 
 - **Security: a compact IBAN glued to the next word shipped raw.**
@@ -2000,9 +2002,9 @@ committed; the v1 row stays the version's benchmark figure.
   `#[non_exhaustive]` and the stored field is private, so this addition does not
   break external struct construction.
 
-- **Scheme- and `www.`-anchored URL detection at the deterministic rule floor**
+- **Scheme- and web-prefix-anchored URL detection at the deterministic rule floor**
   (todo #2254). The new `url.anchored` recognizer in the embedded `core` bundle
-  tokenizes `http://`, `https://`, and `www.`-prefixed URLs as
+  tokenizes URLs with an HTTP(S) scheme or a `www` prefix as
   `custom:url`, covering the whole span rather than a fragment. It is
   `safety_tier = "safe_default"` with `locales = ["global"]`, so it is active for
   every adopter of the default bundle, not only for configurations that
@@ -2010,7 +2012,7 @@ committed; the v1 row stays the version's benchmark figure.
 
   The [consolidated scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md)
   records the measured EN/DE coverage and A4 negative results. Bare-host URLs
-  without a scheme or `www.` prefix remain outside this rule's scope because
+  without a scheme or web prefix remain outside this rule's scope because
   they also occur in the negative corpus.
 
   **Documentation, repository, and example URLs are tokenized.** This is
@@ -3298,17 +3300,16 @@ strengthen the trust + adopter-ergonomics axes of the north star.
   national recognizers. Previously `Customer+12025550100` leaked through
   `phone.structural` even after `phone.national.us` rejected it.
 - DE phone regex no longer over-matches formatted IBAN tails like
-  `DE89 3704 0044 0532 0130 00`.
+  a formatted German example IBAN.
 
 ## [0.6.2] - 2026-04-30
 
 ### Fixed
 
-- `ip.v6` recognizer: RFC 4291 §2.2 IPv4-embedded form support
-  (`x:x:x:x:x:x:d.d.d.d`, including IPv4-mapped `::ffff:d.d.d.d` and
-  IPv4-compatible `::d.d.d.d`). Previously, inputs like
-  `::ffff:192.0.2.128` partially tokenized as `::ffff:192`, leaking the
-  embedded IPv4 octets. Closes #419.
+- `ip.v6` recognizer: RFC 4291 §2.2 IPv4-embedded form support,
+  including IPv4-mapped and IPv4-compatible forms. Previously, inputs like
+  an IPv4-mapped documentation address were partially tokenized at the IPv4
+  boundary, leaking the embedded IPv4 octets. Closes #419.
 
 ## [0.6.1] — 2026-04-30
 
@@ -3685,7 +3686,7 @@ for the same list with its design notes.
 
 - **S1 ClassMapOverrideSafety xtask gate** (#51): the previously scaffolded gate is now active. The behavioral test runner invokes `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered` through `cargo test`, while `.github/workflows/class-map-override-safety.yml` runs the gate on PRs and pushes to `main`. An adversarial in-PR self-test programmatically verifies the gate fails non-zero when a listed test is missing or renamed, following the meta-Potemkin guard captured in drawer `gaze_architecture_12b32d53`.
 - **S2 audit schema v2** (#53): `RedactionEntry` now includes `created_at: i64` epoch milliseconds, with an on-open SQLite `ALTER TABLE` migration so legacy DBs without `created_at` remain queryable through a NULL default. `gaze audit query` and `gaze audit export` now accept `--from <iso8601>` and `--to <iso8601>` filters, JSONL export includes `created_at`, and ISO 8601 parse failures emit typed `CliError::PolicyConfig` messages with the offending input quoted. Time-filtered queries omit NULL `created_at` legacy rows by SQL semantics; unfiltered queries still include them. Fixture coverage covers both v0.4.3-shaped and v0.4.4-shaped SQLite DBs.
-- **S3a phonenumber-backed `E164Phone` validator** (#52): the `phonenumber` crate is available behind the optional `phone-parser` feature, default-on for `gaze-cli` and opt-in for raw library users. `ValidatorKind::E164Phone` extends the existing `phone.structural` recognizer in `core-extended.toml`, preserving valid E.164 matches such as `+4915550112233` while rejecting regex-passing but unassigned shapes such as `+99999999`. Builds without `phone-parser` reject the `e164_phone` validator at rulepack load time with `RulepackError::UnsupportedValidator`, preserving axis-1 fail-closed behavior rather than silently dropping phone detection at runtime. Audit notes live in [`PIInuts/business:research/v0.4.4-phonenumber-audit.md`](https://github.com/PIInuts/business/blob/main/research/v0.4.4-phonenumber-audit.md).
+- **S3a phonenumber-backed `E164Phone` validator** (#52): the `phonenumber` crate is available behind the optional `phone-parser` feature, default-on for `gaze-cli` and opt-in for raw library users. `ValidatorKind::E164Phone` extends the existing `phone.structural` recognizer in `core-extended.toml`, preserving valid E.164 matches such as a synthetic German mobile number while rejecting regex-passing but unassigned shapes such as `+99999999`. Builds without `phone-parser` reject the `e164_phone` validator at rulepack load time with `RulepackError::UnsupportedValidator`, preserving axis-1 fail-closed behavior rather than silently dropping phone detection at runtime. Audit notes live in [`PIInuts/business:research/v0.4.4-phonenumber-audit.md`](https://github.com/PIInuts/business/blob/main/research/v0.4.4-phonenumber-audit.md).
 - **S4 Date posture memo** (#50): [`PIInuts/business:research/v0.4.4-date-posture.md`](https://github.com/PIInuts/business/blob/main/research/v0.4.4-date-posture.md) locks Gaze's Date-as-PII stance. Dates are not PII by default, never ship in default `core` or `core-extended` bundles, and future v0.4.5+ implementation scope is limited to DOB-only structured contexts. General-prose dates require context classification research for v0.5+, and the GH #5 token-spam tradeoff is resolved as no-default-on. The negative corpus covers version strings, IPs, file paths, ID-shaped numerics, year-only strings, and build or CI metadata.
 
 ### Changed
@@ -3749,7 +3750,7 @@ for the same list with its design notes.
 ### Added
 
 - **S4 Linux release artifact:** release CI now publishes `gaze-x86_64-unknown-linux-gnu` from a native `ubuntu-24.04` runner, alongside `gaze-aarch64-apple-darwin`, with `.sha256` files for both artifacts. The Linux artifact requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer); older distros should build from source.
-- Release artifact smoke now executes the packaged binary for `--version`, `alice@example.invalid` clean/restore reversibility, S1 runtime knob help flags (`--session-scope`, NER, and rulepack surfaces), and `core-extended` bundled rulepack loading with neutral non-real fixture data.
+- Release artifact smoke now executes the packaged binary for `--version`, synthetic email clean/restore reversibility, S1 runtime knob help flags (`--session-scope`, NER, and rulepack surfaces), and `core-extended` bundled rulepack loading with neutral non-real fixture data.
 - v0.4.1 Bundle P1 foundation: `gaze-assembly` library entrypoint, `xtask` scaffold, and the `symmetric_potemkin_gate` workflow.
 - `token.family` now threads from recognizers into session snapshot entries while preserving the existing emitted token grammar.
 - Locale-aware regex `pattern_template` lowering for `{locale_email_headers}` with English and German defaults.
@@ -3813,7 +3814,7 @@ for the same list with its design notes.
 - **context.hotwords / boost / window**: parsed + gated; runtime consumers planned for v0.4.1.
 - **Per-term traceability** in dictionary detection log: `dictionary:{name}` only; `[#term_index]` extension planned for v0.4.1.
 
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.7
 
 ## [v0.3.1] — 2026-04-24
 
