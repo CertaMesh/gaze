@@ -131,7 +131,9 @@ pub enum SafetyNetFallback {
     Strict,
     /// Ship the residual bytes untouched. Dev-only.
     Tolerant,
-    /// Delete the residual spans (one-way), then scan once more with the live manifest.
+    /// Tokenize the residuals a post-resolution re-scan found when every one of them can be
+    /// tokenized reversibly; otherwise replace the residual spans with a one-way marker. A
+    /// first-pass refusal is always redacted. Then scan once more with the live manifest.
     /// Reject with [`Error::SafetyNetFallback`] if an actionable suspect remains; net errors
     /// propagate. This checks configured nets only, not detection completeness.
     Redact,
