@@ -1811,6 +1811,7 @@ def _measure(args: argparse.Namespace) -> None:
     import platform
 
     import run_no_opf_benchmark as runner
+    import scorecard_record as records
 
     repo_root = Path(__file__).resolve().parents[2]
     probe = score.validator_probe_binary(repo_root)
@@ -1822,8 +1823,15 @@ def _measure(args: argparse.Namespace) -> None:
     score.COMMITTED_SOURCE_ID_VOCABULARY = score.load_committed_source_id_vocabulary(
         vocabulary_root
     )
+    prepared = prepare(repo_root)
+    writer = records.RecordWriter(
+        [], {"documents": {}},
+        corpus_sha256=prepared.manifest["corpus_sha256"],
+        extra_documents=[record.to_document() for record in generate(PUBLISHED_PARTITION)],
+        layer_contract=prepared.contract,
+    )
     layers = runner.measure_agentic_layers(
-        prepared=prepare(repo_root),
+        prepared=prepared,
         repo_root=repo_root,
         binary=args.binary.resolve(),
         validator_probe=probe,
@@ -1836,6 +1844,7 @@ def _measure(args: argparse.Namespace) -> None:
         configs=args.config,
         replacing_actions=frozenset(args.manifest_actions.split(",")),
         split_composite_source_ids=args.split_composite_source_ids,
+        record_writer=writer,
     )
     result = {
         "schema_version": score.SCORECARD_SCHEMA_VERSION,
@@ -1855,6 +1864,10 @@ def _measure(args: argparse.Namespace) -> None:
         "layers": layers,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    result["observation_record"] = writer.write(
+        args.output.with_name("observations-v1.jsonl.gz"), result,
+        add_reference=True,
+    )
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
 

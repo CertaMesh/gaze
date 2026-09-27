@@ -46,7 +46,9 @@ from typing import Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import dataiku_en_de_gaze_bench as dataiku  # noqa: E402
+import agentic_layers as agentic  # noqa: E402
 import gaze_bench_score as score  # noqa: E402
+import scorecard_record as records  # noqa: E402
 import run_no_opf_benchmark as runner  # noqa: E402
 
 HARNESS_ROOT = Path(__file__).resolve().parents[2]
@@ -95,6 +97,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--binary-profile", choices=("debug", "release"), required=True)
     parser.add_argument("--configs", required=True)
+    parser.add_argument("--policy", type=Path, help="policy for the policy-file config")
+    parser.add_argument("--agentic-layers", action="store_true", help="measure generated layers too")
+    parser.add_argument("--agentic-scored-labels", type=Path)
     parser.add_argument("--model-env", action="append", default=[])
     parser.add_argument("--model-bundle", action="append", default=[])
     parser.add_argument(
@@ -131,6 +136,11 @@ def run(args: argparse.Namespace) -> Path:
     configs = tuple(c for c in args.configs.split(",") if c)
     if not configs or any("opf" in c.lower() for c in configs):
         raise PastReleaseError("configs must be non-empty and OPF-free")
+    if ("policy-file" in configs) != (args.policy is not None):
+        raise PastReleaseError("policy-file requires --policy, and --policy requires policy-file")
+    policy = args.policy.resolve() if args.policy is not None else None
+    if policy is not None and not policy.is_file():
+        raise PastReleaseError(f"policy is missing: {policy}")
     # Read before anything runs: the scorecard names the harness that scored it,
     # not whatever the checkout holds when the run ends.
     harness = subprocess.run(
@@ -168,6 +178,7 @@ def run(args: argparse.Namespace) -> Path:
         HARNESS_ROOT / runner.NEGATIVE_CORPUS
     )
     available = positives + negatives
+    original_available = available
     documents, sampling_report = score.stratified_sample(
         available, args.max_documents, seed=args.seed
     )
@@ -175,8 +186,23 @@ def run(args: argparse.Namespace) -> Path:
     documents = score.apply_scored_label_contract(documents, contract)
 
     probe = score.build_validator_probe(HARNESS_ROOT)
-    measurements = score.collect_validator_measurements(
-        probe, available, (document.uid for document in documents)
+    complete_measurements = score.collect_validator_measurements(
+        probe, original_available, (document.uid for document in documents)
+    )
+    measurements = records.filter_measurements(complete_measurements, available)
+    metadata, dataset_report = runner.composite_dataset_report(dataiku_report, negative_report)
+    prepared = (
+        agentic.prepare(HARNESS_ROOT, args.agentic_scored_labels)
+        if args.agentic_layers else None
+    )
+    record_writer = records.RecordWriter(
+        original_available, complete_measurements,
+        corpus_sha256=dataset_report["integrity"]["sha256"],
+        extra_documents=(
+            [record.to_document() for record in agentic.generate(agentic.PUBLISHED_PARTITION)]
+            if prepared is not None else []
+        ),
+        layer_contract=prepared.contract if prepared is not None else None,
     )
     environment = runner.build_no_opf_environment(os.environ)
     for value in args.model_env:
@@ -199,10 +225,12 @@ def run(args: argparse.Namespace) -> Path:
             warmup_count=args.warmups,
             validator_measurements=measurements,
             replacing_actions=frozenset(args.manifest_actions.split(",")),
+            policy_path=policy,
+            record_document=(lambda config, document, response, measurements:
+                record_writer.add("C", config, document, response, measurements)),
         )
         for config in configs
     ]
-    metadata, dataset_report = runner.composite_dataset_report(dataiku_report, negative_report)
     dataset_report["validator_gold_census"] = score.validator_gold_census(
         available, measurements
     )
@@ -215,6 +243,7 @@ def run(args: argparse.Namespace) -> Path:
             "profile": "full" if args.max_documents is None else "sampled",
             "configs": list(configs),
             "binary_profile": args.binary_profile,
+            "policy_sha256": _sha256(policy) if policy is not None else None,
             "max_documents": args.max_documents,
             "sampling_seed": args.seed,
             "ner_threshold": args.threshold,
@@ -235,13 +264,36 @@ def run(args: argparse.Namespace) -> Path:
         "harness_revision": harness,
         "manifest_replacing_actions": sorted(args.manifest_actions.split(",")),
         "binary_sha256": _sha256(binary),
+        "policy": {"path": str(policy), "sha256": _sha256(policy)} if policy is not None else None,
         "profile": card["parameters"]["profile"],
         "model_bundles": bundles,
         "hardware": platform.platform() + "; " + platform.processor(),
         "warmup_count": args.warmups,
         "measured_repetitions": 1,
     }
+    if prepared is not None:
+        card["layers"] = runner.measure_agentic_layers(
+            prepared=prepared,
+            repo_root=release_root,
+            binary=binary,
+            validator_probe=probe,
+            davlan_model=davlan,
+            threshold=args.threshold,
+            diagnostics_dir=output.parent / "logs",
+            warmup_count=args.warmups,
+            measured_repetitions=1,
+            policy_path=policy,
+            configs=configs,
+            replacing_actions=frozenset(args.manifest_actions.split(",")),
+            record_writer=record_writer,
+        )
+        card["layers"]["gold_validity"] = {
+            "C": agentic.gold_validity_digest(documents, measurements)
+        }
     output.parent.mkdir(parents=True, exist_ok=True)
+    card["observation_record"] = record_writer.write(
+        output.with_name("observations-v1.jsonl.gz"), card, add_reference=True
+    )
     runner.write_json(output, card)
     return output
 

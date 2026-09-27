@@ -22,6 +22,7 @@ import tomllib
 import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
@@ -162,6 +163,9 @@ class Document:
     # Reporting cell of a generated agentic-layer document; None for every
     # other corpus, whose scorecards therefore carry no per_cell block.
     cell: str | None = None
+    # Replay-only evidence for v3. Values are compared while the raw text is
+    # available; the record keeps only matching gold span identities.
+    gap_evidence: Mapping[tuple[int, int, str], tuple[int, int, bool, tuple[tuple[int, int, str], ...]]] | None = None
 
     @property
     def locale_chain(self) -> list[str]:
@@ -1460,31 +1464,39 @@ def gold_gap_credits(
     """
     rule = document.gold_gap
     assert rule is not None
-    text = document.text.encode("utf-8")
+    text = document.text.encode("utf-8") if document.gap_evidence is None else b""
     gold_by_value: dict[bytes, list[Span]] = defaultdict(list)
-    for span in sorted(document.spans, key=lambda item: (item.start, item.end, item.label)):
-        gold_by_value[text[span.start : span.end]].append(span)
+    if document.gap_evidence is None:
+        for span in sorted(document.spans, key=lambda item: (item.start, item.end, item.label)):
+            gold_by_value[text[span.start : span.end]].append(span)
+    scored_gold = {(span.start, span.end, span.label) for span in document.spans}
     blocked = merge_intervals([*gold, *ignored])
     candidates: list[tuple[int, int, int, int, str, str]] = []
     for span in predictions:
         if interval_overlaps((span.start, span.end), blocked):
             continue
-        start, end = span.start, span.end
-        while start < end and text[start] in GOLD_GAP_TRIM_BYTES:
-            start += 1
-        while end > start and text[end - 1] in GOLD_GAP_TRIM_BYTES:
-            end -= 1
+        if document.gap_evidence is None:
+            start, end = span.start, span.end
+            while start < end and text[start] in GOLD_GAP_TRIM_BYTES:
+                start += 1
+            while end > start and text[end - 1] in GOLD_GAP_TRIM_BYTES:
+                end -= 1
+            matches = gold_by_value.get(text[start:end], ())
+            boundary = gold_gap_on_word_boundary(text, start, end)
+        else:
+            start, end, boundary, identities = document.gap_evidence[(span.start, span.end, span.label)]
+            matches = [Span(*identity) for identity in identities if identity in scored_gold]
         if start == end:
             continue
         attributed = next(
             (
                 gold_span
-                for gold_span in gold_by_value.get(text[start:end], ())
+                for gold_span in matches
                 if rule.is_compatible(span.label, gold_span.label)
             ),
             None,
         )
-        if attributed is None or not gold_gap_on_word_boundary(text, start, end):
+        if attributed is None or not boundary:
             continue
         candidates.append(
             (start, end, attributed.start, attributed.end, attributed.label, span.label)
@@ -2329,6 +2341,16 @@ def validator_recall_by_label(
     return result
 
 
+class _ReplayProcess:
+    message_deadline = False
+
+    def check_message_deadline(self) -> None:
+        pass
+
+    def check_deadline(self) -> None:
+        pass
+
+
 @producer_boundary
 def run_config(
     repo_root: Path,
@@ -2347,6 +2369,8 @@ def run_config(
     policy_path: Path | None = None,
     replacing_actions: frozenset[str] = MANIFEST_REPLACING_ACTIONS,
     split_composite_source_ids: bool = False,
+    record_document: object | None = None,
+    replay_responses: Mapping[str, dict[str, object]] | None = None,
 ) -> dict[str, object]:
     # Checked before the subprocess starts, not on the first response.
     _check_replacing_actions(replacing_actions)
@@ -2398,6 +2422,11 @@ def run_config(
 
     def exchange(document: Document) -> tuple[dict[str, object], float]:
         nonlocal first_response_ms
+        if replay_responses is not None:
+            response = replay_responses[document.uid]
+            if first_response_ms is None:
+                first_response_ms = 0.0
+            return response, 0.0
         if process.message_deadline:
             process.check_message_deadline()
         request = {
@@ -2418,7 +2447,12 @@ def run_config(
             first_response_ms = (validated_at - started) * 1000.0
         return response, (validated_at - request_started) * 1000.0
 
-    with BenchSubprocess(command, cwd=repo_root, env=environment) as process:
+    process_context = (
+        nullcontext(_ReplayProcess())
+        if replay_responses is not None
+        else BenchSubprocess(command, cwd=repo_root, env=environment)
+    )
+    with process_context as process:
         for warmup_index in range(warmup_count):
             warmup_document = documents[warmup_index % len(documents)]
             response, round_trip_ms = exchange(warmup_document)
@@ -2471,6 +2505,8 @@ def run_config(
             )
         for index, document in enumerate(documents):
             response, _ = exchange(document)
+            if record_document is not None:
+                record_document(config, document, response, validator_measurements)
             if "pipeline_error_code" in response:
                 failed_closed_documents.append(
                     {
