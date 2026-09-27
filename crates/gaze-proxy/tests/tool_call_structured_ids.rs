@@ -9,7 +9,6 @@
 //!
 //! Fixture values are synthetic, checksum-valid test numbers.
 
-use std::net::{SocketAddr, TcpListener as StdTcpListener};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -77,13 +76,6 @@ async fn capture(State(forwarded): State<Forwarded>, Json(body): Json<Value>) ->
     Json(json!({"choices": [{"message": {"role": "assistant", "content": "ok"}}]}))
 }
 
-fn unused_local_addr() -> SocketAddr {
-    StdTcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-}
-
 #[tokio::test]
 async fn tool_call_arguments_with_national_ids_and_nbsp_iban_reach_upstream_tokenized() {
     let forwarded: Forwarded = Arc::new(Mutex::new(Vec::new()));
@@ -104,15 +96,19 @@ async fn tool_call_arguments_with_national_ids_and_nbsp_iban_reach_upstream_toke
         .build()
         .expect("core-extended assembles");
     let chain = core.locale_chain().clone();
-    let bind = unused_local_addr();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind = listener.local_addr().unwrap();
     let config = ProxyConfig::new(
         bind,
         vec![Arc::new(OpenAiAdapter::new(upstream)) as Arc<dyn ProviderAdapter>],
     )
     .with_locale_chain(chain);
     let pipeline = Arc::new(core.into_pipeline());
-    let proxy_task =
-        tokio::spawn(async move { gaze_proxy::serve(config, pipeline).await.unwrap() });
+    let proxy_task = tokio::spawn(async move {
+        gaze_proxy::serve_with_listener(config, pipeline, listener)
+            .await
+            .unwrap()
+    });
 
     let client = Client::builder()
         .timeout(Duration::from_secs(60))

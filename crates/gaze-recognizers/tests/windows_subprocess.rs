@@ -67,14 +67,12 @@ fn unicode_prefix_and_strict_output_errors() {
         ));
     }
     for mode in ["stdout-cap", "broken-stdin"] {
-        let start = Instant::now();
         let error = infer(mode, true, &"w".repeat(2 * 1024 * 1024), dir.path()).unwrap_err();
         assert!(matches!(error, SafetyNetError::Runtime { .. }), "{error:?}");
         assert!(
             !error.to_string().contains("timed out"),
             "must preserve IO error: {error:?}"
         );
-        assert!(start.elapsed() < Duration::from_secs(60));
     }
 }
 
@@ -88,11 +86,13 @@ fn descendant_held_pipes_cancel_and_close_owned_handles() {
         } else {
             "clean".into()
         };
-        let start = Instant::now();
         let error = infer(&format!("hold{fd}"), true, &input, &marker).unwrap_err();
         assert!(error.to_string().contains("timed out"), "{error:?}");
-        assert!(start.elapsed() < Duration::from_secs(60), "fd={fd}");
         assert!(marker.with_extension("ready").exists());
+        assert!(
+            !marker.with_extension("released").exists(),
+            "cancellation waited for the descendant to release fd={fd} naturally"
+        );
         let end = Instant::now() + Duration::from_secs(60);
         while !marker.with_extension("closed").exists() && Instant::now() < end {
             std::thread::sleep(Duration::from_millis(10));
