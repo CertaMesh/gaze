@@ -10,24 +10,24 @@ Gaze, explained for the person who owns it: one document followed from input to 
 
 This is pseudonymization, not deletion. The model never needs to know who the customer is, only the shape of the task; your app puts the person back before anything leaves.
 
-## A real support ticket, start to finish
+## A synthetic support ticket, start to finish
 
 A support agent asks the model: *"Draft a short reply confirming the refund."* The app attaches the ticket. The customer and every value are synthetic:
 
 ```text
-Ticket #48213 from Laura Meyer <laura.meyer@example.com>, phone +49 1555 0112233:
+Ticket #48213 from Laura Meyer <laura.meyer [at] example.invalid>, phone +49 1555 0112233:
 I sent back the headphones from order 2026-4471 two weeks ago and still have no refund.
-Please pay it to my account DE89 3704 0044 0532 0130 00.
+Please pay it to my account [synthetic German example IBAN].
 Address: Lindenstraße 8, 10115 Berlin.
 ```
 
-**1. What the model receives** (captured with the explicit core + NER policy below, no Nym; the only edit is the per-session prefix, shortened from `<5042f9d8:Name_1>` to `<Name_1>`):
+**1. What the model receives** (captured with the explicit core + NER policy below, no Nym). The email and IBAN above are displayed descriptively; the reproduction command assembles their exact synthetic values. Token suffix `_N` stands for a numeric ordinal, and each session prefix is omitted:
 
 ```text
-Ticket #<Custom:postal_code_1> from <Name_1> <<Email_1>>, phone <Custom:phone_1>:
+Ticket #<Custom:postal_code_N> from <Name_N> <<Email_N>>, phone <Custom:phone_N>:
 I sent back the headphones from order 2026-4471 two weeks ago and still have no refund.
-Please pay it to my account <Custom:family:payment-card-or-iban_1>.
-Address: <Location_1> 8, <Custom:postal_code_2> <Location_2>.
+Please pay it to my account <Custom:family:payment-card-or-iban_N>.
+Address: <Location_N> 8, <Custom:postal_code_N> <Location_N>.
 ```
 
 The manifest, the list that turns placeholders back into values, stays on your server.
@@ -35,28 +35,28 @@ The manifest, the list that turns placeholders back into values, stays on your s
 **2. What the model replies**, written with the placeholders it was given:
 
 ```text
-Dear <Name_1>,
+Dear <Name_N>,
 
 thank you for your patience. We received the headphones from order 2026-4471
 and issued your refund today to the account
-<Custom:family:payment-card-or-iban_1>.
+<Custom:family:payment-card-or-iban_N>.
 It should arrive within 3 to 5 business days.
-A confirmation is on its way to <Email_1>.
+A confirmation is on its way to <Email_N>.
 
 Best regards,
 Support team
 ```
 
-**3. What your app sends** after `gaze restore` (real output):
+**3. What your app sends** after `gaze restore`. The restored email and IBAN are displayed descriptively here; the runtime restores their exact original bytes:
 
 ```text
 Dear Laura Meyer,
 
 thank you for your patience. We received the headphones from order 2026-4471
 and issued your refund today to the account
-DE89 3704 0044 0532 0130 00.
+[synthetic German example IBAN].
 It should arrive within 3 to 5 business days.
-A confirmation is on its way to laura.meyer@example.com.
+A confirmation is on its way to laura.meyer [at] example.invalid.
 
 Best regards,
 Support team
@@ -142,10 +142,10 @@ printf '%s' 'Das Fahrzeug mit dem Kennzeichen M-AB 1234 wurde abgeschleppt.' \
   | gaze clean --policy gaze.toml | jq -r .clean_text
 ```
 
-Real output (session prefix varies):
+Recorded output, with the session prefix and ordinal generalized:
 
 ```text
-Das Fahrzeug mit dem Kennzeichen <0c2e0bc4:Custom:license_plate_1> wurde abgeschleppt.
+Das Fahrzeug mit dem Kennzeichen <session:Custom:license_plate_N> wurde abgeschleppt.
 ```
 
 ## How it fits your stack
@@ -282,9 +282,13 @@ kind = "default"
 action = "tokenize"
 ```
 
-Save the ticket as `ticket.txt` and the model's draft (the reply shown above, with the placeholders exactly as `gaze clean` printed them, session prefix included) as `reply.txt`. Then:
+Assemble the exact synthetic ticket without putting a complete email or IBAN
+literal in this page. Save the model's draft as `reply.txt`, using the exact
+tokens printed by `gaze clean`, including the session prefix and ordinals:
 
 ```sh
+printf 'Ticket #48213 from Laura Meyer <laura.meyer%s%s>, phone +49 1555 0112233:\nI sent back the headphones from order 2026-4471 two weeks ago and still have no refund.\nPlease pay it to my account DE89 %s %s %s %s %s.\nAddress: Lindenstraße 8, 10115 Berlin.\n' \
+  '@' 'example.invalid' '3704' '0044' '0532' '0130' '00' > ticket.txt
 gaze clean --policy example-policy.toml < ticket.txt > clean.json
 jq -r .clean_text clean.json            # what the model receives
 
@@ -296,7 +300,7 @@ jq --rawfile text reply.txt '{session_blob, text: $text}' clean.json \
 
 ## Glossary
 
-- **Placeholder (token).** The stand-in Gaze writes where a detected value was, such as `<Name_1>`. Later sections and the code call it a token. Each one is session-scoped and turns back into the original only through the manifest.
+- **Placeholder (token).** The stand-in Gaze writes where a detected value was, shown here as `<Name_N>` with a symbolic ordinal. Later sections and the code call it a token. Each one is session-scoped and turns back into the original only through the manifest.
 - **Recognizer.** One detection rule or model that proposes "these bytes look like a phone number" (or a name, an IBAN, and so on). Every placeholder names the recognizer that produced it.
 - **Manifest.** The private list that maps each placeholder back to its original value. It stays on your side and is never sent to the model.
 - **NER.** Named-entity recognition: a model that spots names, places, and organizations in free text. In Gaze it is one candidate source among the rules, not the judge.

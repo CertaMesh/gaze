@@ -22,7 +22,7 @@ working redact → send → restore loop in about ten minutes.
 
 ## Find your way
 
-These docs follow the [Diátaxis](https://diataxis.fr/) model. Each page serves one job;
+These docs follow the Diátaxis documentation model. Each page serves one job;
 pick the column that matches *why* you're here:
 
 - **[Tutorials](tutorials/README.md)** — learning-oriented. Begin here if Gaze is new to you.

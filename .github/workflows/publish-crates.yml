@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
 
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "scrub-public-text skipped: workflow_dispatch has no tag-scoped changelog section"
+            cargo run -p xtask -- scrub-public-text --published
             exit 0
           fi
 
@@ -54,7 +54,7 @@ jobs:
             exit 1
           fi
 
-          cargo run -p xtask -- scrub-public-text "$changelog_section" UPGRADE.md
+          cargo run -p xtask -- scrub-public-text --published "$changelog_section" UPGRADE.md
 
       - name: Derive crates.io publish plan
         shell: bash

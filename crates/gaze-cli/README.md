@@ -179,19 +179,17 @@ for the terminology note.
 `gaze daemon --policy policy.toml` keeps one pipeline alive and reads one JSON
 request per stdin line:
 
-Replace the bracketed label below with a synthetic email address when trying it.
+JSON decodes the Unicode escape before detection, so this request contains a
+synthetic email address without spelling it literally in release text.
 
 ```json
-{"session_id":"conversation-1","text":"Contact [synthetic email]"}
+{"session_id":"conversation-1","text":"Contact alice\u0040example.invalid"}
 ```
 
-Each stdout line is either a clean response:
+The clean response has an email token in `clean_text` and nonempty `manifest`
+and `tokens` arrays. The token's session prefix changes each run.
 
-```json
-{"session_id":"conversation-1","clean_text":"Contact <...:Email_1>","manifest":[],"tokens":[]}
-```
-
-or a typed protocol/cleaning error:
+On failure, stdout contains a typed protocol or cleaning error:
 
 ```json
 {"session_id":null,"error":"JsonMalformed","detail":"malformed JSON line"}

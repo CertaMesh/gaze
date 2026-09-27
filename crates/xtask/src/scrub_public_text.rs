@@ -1,6 +1,7 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{bail, Context, Result};
@@ -10,9 +11,18 @@ use serde::Deserialize;
 
 #[derive(Debug, ClapArgs)]
 pub(crate) struct Args {
+    /// Include published Markdown and one hop of its local docs links.
+    #[arg(long)]
+    published: bool,
     /// Public text files to check before release publication.
-    #[arg(required = true)]
+    #[arg(required_unless_present = "published")]
     files: Vec<PathBuf>,
+}
+
+pub(crate) struct PublishedFiles {
+    pub(crate) paths: Vec<PathBuf>,
+    pub(crate) crate_readmes: usize,
+    pub(crate) published_crates: usize,
 }
 
 #[derive(Debug)]
@@ -37,8 +47,18 @@ struct CleanEntry {
 
 pub(crate) fn run(args: Args) -> Result<()> {
     let mut findings = Vec::new();
+    let root = crate::repo::repo_root()?;
+    let mut files = BTreeSet::new();
+    files.extend(args.files);
+    if args.published {
+        let published = published_files(&root)?;
+        if published.crate_readmes != published.published_crates {
+            bail!("published crate README count does not match published crate count");
+        }
+        files.extend(published.paths);
+    }
 
-    for file in &args.files {
+    for file in &files {
         let text = fs::read_to_string(file)
             .with_context(|| format!("failed to read {}", file.display()))?;
         findings.extend(scan_user_paths(file, &text)?);
@@ -50,8 +70,8 @@ pub(crate) fn run(args: Args) -> Result<()> {
     if findings.is_empty() {
         println!(
             "scrub-public-text: passed ({} file{})",
-            args.files.len(),
-            if args.files.len() == 1 { "" } else { "s" }
+            files.len(),
+            if files.len() == 1 { "" } else { "s" }
         );
         return Ok(());
     }
@@ -67,6 +87,72 @@ pub(crate) fn run(args: Args) -> Result<()> {
         );
     }
     bail!("scrub-public-text failed; scrub or pseudonymize the reported text before release")
+}
+
+/// Resolve the files released directly and current docs linked from them.
+/// Keep this set shared between PR tests and tag-time publication checks.
+pub(crate) fn published_files(root: &Path) -> Result<PublishedFiles> {
+    let mut paths = BTreeSet::from([
+        PathBuf::from("CHANGELOG.md"),
+        PathBuf::from("UPGRADE.md"),
+        PathBuf::from("README.md"),
+    ]);
+    let readme = Regex::new(r#"(?m)^readme\s*=\s*"([^"]+)""#)?;
+    let unpublished = Regex::new(r"(?m)^publish\s*=\s*false\s*$")?;
+    let mut crate_readmes = 0;
+    let mut published_crates = 0;
+
+    for entry in fs::read_dir(root.join("crates")).context("list workspace crates")? {
+        let crate_dir = entry?.path();
+        let manifest = crate_dir.join("Cargo.toml");
+        if !manifest.is_file() {
+            continue;
+        }
+        let manifest_text = fs::read_to_string(&manifest)
+            .with_context(|| format!("read {}", manifest.display()))?;
+        let is_published = !unpublished.is_match(&manifest_text);
+        published_crates += usize::from(is_published);
+        let crate_readme = if let Some(captures) = readme.captures(&manifest_text) {
+            crate_dir.join(&captures[1])
+        } else {
+            crate_dir.join("README.md")
+        };
+        if !crate_readme.is_file() {
+            if is_published {
+                bail!("published crate has no README: {}", manifest.display());
+            }
+            continue;
+        }
+        if is_published {
+            crate_readmes += 1;
+        }
+        paths.insert(crate_readme.strip_prefix(root)?.to_path_buf());
+    }
+
+    // Follow only one hop from directly published text, never recurse through docs.
+    let cited_doc = Regex::new(r"docs/[A-Za-z0-9_./-]+\.md")?;
+    for source in paths.clone() {
+        let text = fs::read_to_string(root.join(&source))
+            .with_context(|| format!("read {}", source.display()))?;
+        for hit in cited_doc.find_iter(&text) {
+            let path = PathBuf::from(hit.as_str());
+            if path
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+            {
+                bail!("invalid documentation link in {}", source.display());
+            }
+            if root.join(&path).is_file() {
+                paths.insert(path);
+            }
+        }
+    }
+
+    Ok(PublishedFiles {
+        paths: paths.into_iter().collect(),
+        crate_readmes,
+        published_crates,
+    })
 }
 
 fn scan_user_paths(file: &Path, text: &str) -> Result<Vec<Finding>> {
@@ -344,6 +430,21 @@ fn line_column(text: &str, byte_offset: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn published_set_covers_crate_readmes_and_one_hop_of_links() {
+        let root = crate::repo::repo_root().expect("workspace root");
+        let files = published_files(&root).expect("published Markdown");
+        assert!(files.published_crates >= 15, "published crate count fell");
+        assert_eq!(files.crate_readmes, files.published_crates);
+        for path in [
+            "docs/explanation/how-gaze-works.md",
+            "docs/tutorials/getting-started.md",
+            "docs/reference/cli.md",
+        ] {
+            assert!(files.paths.contains(&PathBuf::from(path)), "missing {path}");
+        }
+    }
 
     #[test]
     fn allowlist_accepts_fixed_public_release_links() {

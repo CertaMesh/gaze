@@ -85,8 +85,16 @@ jq -r .clean_text clean.json
 jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text
 ```
 
-The first `jq` command prints clean text with an email token for the model.
-The second restores the synthetic email address on the owner side.
+Here is the output, with the token spelling and restored address normalized
+for publication. The first line is what the model sees; the second is what
+the owner restores:
+
+```console
+$ jq -r .clean_text clean.json | sed -E 's/<[^>]+>/<Email_N>/g'
+Email <Email_N>
+$ jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text | sed 's/@/ [at] /'
+Email demo [at] example.invalid
+```
 
 `gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a NER-only policy.
 
