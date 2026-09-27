@@ -1166,11 +1166,11 @@ ADJACENT_TEMPLATES = {
 
 ADJACENT_GOLD = {
     "dev": (
-        AdjacencyCase("ip_v6", "en", "US", (AdjacentValue("fe80::d1", "IPADDRESS"), AdjacentValue("::d2", "IPADDRESS"))),
-        AdjacencyCase("ip_v6_mapped", "en", "US", (AdjacentValue("fe80::d3", "IPADDRESS"), AdjacentValue("::ffff:127.0.0.2", "IPADDRESS"))),
-        AdjacencyCase("ip_v4", "en", "US", (AdjacentValue("127.0.0.6", "IPADDRESS"), AdjacentValue("127.0.0.7", "IPADDRESS"))),
-        AdjacencyCase("ip_v4_v6", "en", "US", (AdjacentValue("127.0.0.4", "IPADDRESS"), AdjacentValue("fe80::d4", "IPADDRESS"))),
-        AdjacencyCase("ip_documentation_neighbor", "en", "US", (AdjacentValue("2001:db8::d5"), AdjacentValue("fe80::d5", "IPADDRESS"))),
+        AdjacencyCase("ip_v6", "en", "US", (AdjacentValue("fd42:1::d1", "IPADDRESS"), AdjacentValue("fd42:1::d2", "IPADDRESS"))),
+        AdjacencyCase("ip_v6_mapped", "en", "US", (AdjacentValue("fd42:1::d3", "IPADDRESS"), AdjacentValue("::ffff:10.42.0.2", "IPADDRESS"))),
+        AdjacencyCase("ip_v4", "en", "US", (AdjacentValue("10.42.0.6", "IPADDRESS"), AdjacentValue("10.42.0.7", "IPADDRESS"))),
+        AdjacencyCase("ip_v4_v6", "en", "US", (AdjacentValue("10.42.0.4", "IPADDRESS"), AdjacentValue("fd42:1::d4", "IPADDRESS"))),
+        AdjacencyCase("ip_documentation_neighbor", "en", "US", (AdjacentValue("2001:db8::d5"), AdjacentValue("fd42:1::d5", "IPADDRESS"))),
         AdjacencyCase("phone_structural", "en", "US", (AdjacentValue("+12025550100", "TELEPHONENUM"), AdjacentValue("+12025550101", "TELEPHONENUM"))),
         AdjacencyCase("phone_e164_spaced", "en", "GB", (AdjacentValue("+44 7700 900123", "TELEPHONENUM"), AdjacentValue("+44 7700 900124", "TELEPHONENUM"))),
         AdjacencyCase("phone_national_de", "de", "DE", (AdjacentValue("+49 1555 0112233", "TELEPHONENUM"), AdjacentValue("+49 1555 0112234", "TELEPHONENUM"))),
@@ -1179,14 +1179,14 @@ ADJACENT_GOLD = {
         AdjacencyCase("postal_ca", "en", "CA", (AdjacentValue("Z1Z 9Z9", "ZIPCODE"), AdjacentValue("Z2Z 8Z8", "ZIPCODE"))),
         AdjacencyCase("postal_gb", "en", "GB", (AdjacentValue("ZZ9 9ZZ", "ZIPCODE"), AdjacentValue("ZZ8 8ZZ", "ZIPCODE"))),
         AdjacencyCase("birth_date_cue", "en", "US", (AdjacentValue("1980-02-03", "DATEOFBIRTH", prefix="DOB: "), AdjacentValue("1981-02-04", "DATEOFBIRTH", prefix="DOB: "))),
-        AdjacencyCase("ip_v6_triple", "en", "US", (AdjacentValue("fe80::d6", "IPADDRESS"), AdjacentValue("::d7", "IPADDRESS"), AdjacentValue("fe80::d8", "IPADDRESS"))),
+        AdjacencyCase("ip_v6_triple", "en", "US", (AdjacentValue("fd42:1::d6", "IPADDRESS"), AdjacentValue("fd42:1::d7", "IPADDRESS"), AdjacentValue("fd42:1::d8", "IPADDRESS"))),
     ),
     "test": (
-        AdjacencyCase("ip_v6", "en", "US", (AdjacentValue("fe80::a1", "IPADDRESS"), AdjacentValue("::a2", "IPADDRESS"))),
-        AdjacencyCase("ip_v6_mapped", "en", "US", (AdjacentValue("fe80::a3", "IPADDRESS"), AdjacentValue("::ffff:127.0.0.3", "IPADDRESS"))),
-        AdjacencyCase("ip_v4", "en", "US", (AdjacentValue("127.0.0.8", "IPADDRESS"), AdjacentValue("127.0.0.9", "IPADDRESS"))),
-        AdjacencyCase("ip_v4_v6", "en", "US", (AdjacentValue("127.0.0.5", "IPADDRESS"), AdjacentValue("fe80::a4", "IPADDRESS"))),
-        AdjacencyCase("ip_documentation_neighbor", "en", "US", (AdjacentValue("2001:db8::a5"), AdjacentValue("fe80::a5", "IPADDRESS"))),
+        AdjacencyCase("ip_v6", "en", "US", (AdjacentValue("fd42:2::a1", "IPADDRESS"), AdjacentValue("fd42:2::a2", "IPADDRESS"))),
+        AdjacencyCase("ip_v6_mapped", "en", "US", (AdjacentValue("fd42:2::a3", "IPADDRESS"), AdjacentValue("::ffff:10.43.0.3", "IPADDRESS"))),
+        AdjacencyCase("ip_v4", "en", "US", (AdjacentValue("10.43.0.8", "IPADDRESS"), AdjacentValue("10.43.0.9", "IPADDRESS"))),
+        AdjacencyCase("ip_v4_v6", "en", "US", (AdjacentValue("10.43.0.5", "IPADDRESS"), AdjacentValue("fd42:2::a4", "IPADDRESS"))),
+        AdjacencyCase("ip_documentation_neighbor", "en", "US", (AdjacentValue("2001:db8::a5"), AdjacentValue("fd42:2::a5", "IPADDRESS"))),
         AdjacencyCase("phone_structural", "en", "US", (AdjacentValue("+12025550102", "TELEPHONENUM"), AdjacentValue("+12025550103", "TELEPHONENUM"))),
         AdjacencyCase("phone_e164_spaced", "en", "GB", (AdjacentValue("+44 7700 900125", "TELEPHONENUM"), AdjacentValue("+44 7700 900126", "TELEPHONENUM"))),
         AdjacencyCase("phone_national_de", "de", "DE", (AdjacentValue("+49 1555 0112235", "TELEPHONENUM"), AdjacentValue("+49 1555 0112236", "TELEPHONENUM"))),
@@ -1195,7 +1195,7 @@ ADJACENT_GOLD = {
         AdjacencyCase("postal_ca", "en", "CA", (AdjacentValue("Z3Z 7Z7", "ZIPCODE"), AdjacentValue("Z4Z 6Z6", "ZIPCODE"))),
         AdjacencyCase("postal_gb", "en", "GB", (AdjacentValue("ZZ7 7ZZ", "ZIPCODE"), AdjacentValue("ZZ6 6ZZ", "ZIPCODE"))),
         AdjacencyCase("birth_date_cue", "en", "US", (AdjacentValue("1990-02-03", "DATEOFBIRTH", prefix="DOB: "), AdjacentValue("1991-02-04", "DATEOFBIRTH", prefix="DOB: "))),
-        AdjacencyCase("ip_v6_triple", "en", "US", (AdjacentValue("fe80::a6", "IPADDRESS"), AdjacentValue("::a7", "IPADDRESS"), AdjacentValue("fe80::a8", "IPADDRESS"))),
+        AdjacencyCase("ip_v6_triple", "en", "US", (AdjacentValue("fd42:2::a6", "IPADDRESS"), AdjacentValue("fd42:2::a7", "IPADDRESS"), AdjacentValue("fd42:2::a8", "IPADDRESS"))),
     ),
 }
 
@@ -1209,6 +1209,9 @@ ADJACENT_LOOKALIKES = {
         AdjacencyCase("adjacent_due_dates", "en", "US", (AdjacentValue("2025-05-06", prefix="Due: "), AdjacentValue("2025-05-07", prefix="Due: "))),
         AdjacencyCase("adjacent_word_paths", "en", "US", (AdjacentValue("x::2"), AdjacentValue("y::3"))),
         AdjacencyCase("adjacent_documentation_ips", "en", "US", (AdjacentValue("2001:db8::d9"), AdjacentValue("2001:db8::da"))),
+        AdjacencyCase("adjacent_loopback_ips", "en", "US", (AdjacentValue("127.0.0.6"), AdjacentValue("127.0.0.7"))),
+        AdjacencyCase("adjacent_link_local_ips", "en", "US", (AdjacentValue("fe80::d1"), AdjacentValue("fe80::d2"))),
+        AdjacencyCase("adjacent_mapped_loopback_ips", "en", "US", (AdjacentValue("::ffff:127.0.0.2"), AdjacentValue("::ffff:127.0.0.4"))),
     ),
     "test": (
         AdjacencyCase("adjacent_versions", "en", "US", (AdjacentValue("2.3.4"), AdjacentValue("5.6.7"))),
@@ -1218,6 +1221,9 @@ ADJACENT_LOOKALIKES = {
         AdjacencyCase("adjacent_due_dates", "en", "US", (AdjacentValue("2026-06-08", prefix="Due: "), AdjacentValue("2026-06-09", prefix="Due: "))),
         AdjacencyCase("adjacent_word_paths", "en", "US", (AdjacentValue("m::4"), AdjacentValue("n::5"))),
         AdjacencyCase("adjacent_documentation_ips", "en", "US", (AdjacentValue("2001:db8::a9"), AdjacentValue("2001:db8::aa"))),
+        AdjacencyCase("adjacent_loopback_ips", "en", "US", (AdjacentValue("127.0.0.8"), AdjacentValue("127.0.0.9"))),
+        AdjacencyCase("adjacent_link_local_ips", "en", "US", (AdjacentValue("fe80::a1"), AdjacentValue("fe80::a2"))),
+        AdjacencyCase("adjacent_mapped_loopback_ips", "en", "US", (AdjacentValue("::ffff:127.0.0.3"), AdjacentValue("::ffff:127.0.0.5"))),
     ),
 }
 
@@ -1229,9 +1235,11 @@ def _adjacency_records(partition: str, layer: str) -> list[Record]:
         for direction, values in (("forward", case.values), ("reverse", case.values[::-1])):
             for separator_name, separator in ADJACENT_SEPARATORS.items():
                 for surface, templates in ADJACENT_TEMPLATES.items():
-                    # JSON strings cannot contain a raw tab. Its one-tab logical value is escaped.
-                    written_separator = "\\t" if surface == "adjacent_json_array" and separator == "\t" else separator
-                    fragment = written_separator.join(
+                    # An escaped JSON tab is two raw bytes, so it is not a single
+                    # separator for the scanner's byte-level adjacency contract.
+                    if surface == "adjacent_json_array" and separator_name == "tab":
+                        continue
+                    fragment = separator.join(
                         f"{{P{index}}}{{V{index}}}{{T{index}}}"
                         for index in range(1, len(values) + 1)
                     )
