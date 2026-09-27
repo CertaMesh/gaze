@@ -4,12 +4,53 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import sys
 from pathlib import Path
 
 START = "<!-- comparison:start -->"
 END = "<!-- comparison:end -->"
 ORDER = ("gaze", "presidio-en", "presidio-en-de", "gliner", "opf")
+REPO = Path(__file__).resolve().parents[3]
+BENCH = REPO / "scripts/bench"
+
+
+def digest_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def validate_current(report: dict[str, object]) -> None:
+    """Reject a published comparison when benchmark inputs have changed."""
+    sys.path.insert(0, str(BENCH))
+    import agentic_layers
+    import dataiku_en_de_gaze_bench as dataiku
+
+    corpus = report["corpus"]
+    expected = {
+        "scorer": (report["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
+        "mapping": (report["mapping_sha256"], digest_file(Path(__file__).with_name("label-map.json"))),
+        "main dataset": (corpus["main_dataset"]["sha256"], dataiku.DATASET_SHA256),
+        "negative corpus": (
+            corpus["negative_corpus_sha256"],
+            digest_file(REPO / "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl"),
+        ),
+        "agentic layers": (
+            corpus["agentic"]["corpus_sha256"],
+            agentic_layers.prepare(REPO).manifest["corpus_sha256"],
+        ),
+    }
+    for name, (recorded, current) in expected.items():
+        if recorded != current:
+            raise ValueError(f"{name} changed; rerun every competitor")
+    pack_dir = REPO / "docs/reference/benchmarks/variant-packs"
+    current_packs = {
+        path.relative_to(REPO).as_posix(): digest_file(path)
+        for path in sorted(pack_dir.glob("*.jsonl"))
+    }
+    recorded_packs = {item["path"]: item["sha256"] for item in corpus["packs"]}
+    if recorded_packs != current_packs:
+        raise ValueError("variant packs changed; rerun every competitor, including sealed partitions")
 
 
 def render(report: dict[str, object], source: str) -> str:
@@ -75,10 +116,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
     parser.add_argument("--readme", type=Path, required=True)
+    parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     report = json.loads(args.report.read_text(encoding="utf-8"))
+    validate_current(report)
     block = render(report, args.report.name)
     current = args.readme.read_text(encoding="utf-8")
+    if args.check:
+        if START not in current or END not in current or current.split(START, 1)[1].split(END, 1)[0] != block.split(START, 1)[1].split(END, 1)[0]:
+            raise ValueError("comparison block is stale; rerender it")
+        return
     if START in current:
         if current.count(START) != 1 or current.count(END) != 1:
             raise ValueError("comparison block markers are not unique")
