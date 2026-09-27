@@ -310,8 +310,7 @@ fn resolve_candidates_inner(
 enum Overlap {
     /// Identical spans: the winner keeps the slot; nothing else can overlap.
     Exact,
-    /// One span fully covers the other (same-class containment gets the
-    /// validator-preference rule).
+    /// One span fully covers the other.
     Containment,
     /// Spans overlap without either covering the other.
     Partial,
@@ -353,29 +352,23 @@ fn arbitrate(
     policy: &FamilyPolicyTable,
     anchor_ctx: Option<AnchorContext<'_>>,
 ) -> Arbitration {
-    // Family tie must be checked before the same-class merge and before any
-    // ladder: two equal-precedence variants collapse into one family token even
-    // when they share a class.
+    // A same-class container covers every byte its enclosed candidate protected,
+    // and adds more. Geometry settles this before family policy or the base ladder.
+    if overlap == Overlap::Containment && existing.class == candidate.class {
+        return if contains(&candidate.span, &existing.span) {
+            Arbitration::CandidateWins(ConflictTier::SameClassContainment)
+        } else {
+            Arbitration::ExistingWins(ConflictTier::SameClassContainment)
+        };
+    }
+
+    // Exact-span family ties still collapse into one family token before the
+    // same-class merge or base ladder.
     if let Some(tie) = family_tie_candidate(candidate, existing, policy) {
         return Arbitration::Family(Box::new(tie));
     }
     if overlap == Overlap::Exact && existing.class == candidate.class {
         return Arbitration::Merge;
-    }
-
-    // Same-class containment prefers the validator-backed span, then the base
-    // ladder; policy and anchors do not apply inside one class.
-    if overlap == Overlap::Containment && existing.class == candidate.class {
-        let candidate_validated = candidate.canonical_form.is_some();
-        let existing_validated = existing.canonical_form.is_some();
-        if candidate_validated != existing_validated {
-            return if candidate_validated {
-                Arbitration::CandidateWins(ConflictTier::Validator)
-            } else {
-                Arbitration::ExistingWins(ConflictTier::Validator)
-            };
-        }
-        return ladder_verdict(existing, candidate);
     }
 
     if let Some(candidate_wins) = policy.compare(&candidate.recognizer_id, &existing.recognizer_id)
@@ -1217,16 +1210,18 @@ mod tests {
     }
 
     #[test]
-    fn same_class_containment_prefers_validator_backed_candidate() {
-        let mut validated = candidate(0..10, PiiClass::Email, 0.50, "validator");
+    fn same_class_containment_never_loses_covered_bytes_to_validator_or_score() {
+        let mut validated = candidate(0..5, PiiClass::Email, 0.99, "validator");
         validated.canonical_form = Some("canonical".to_string());
         let resolved = resolve_candidates(vec![
-            candidate(0..5, PiiClass::Email, 0.95, "regex"),
+            candidate(0..10, PiiClass::Email, 0.50, "container"),
             validated,
         ]);
 
         assert_eq!(resolved.len(), 1);
-        assert_eq!(resolved[0].recognizer_id, "validator");
+        assert_eq!(resolved[0].recognizer_id, "container");
+        assert_eq!(resolved[0].span, 0..10);
+        assert_eq!(resolved[0].decided_by, ConflictTier::SameClassContainment);
     }
 
     #[test]

@@ -424,9 +424,10 @@ qualify. Without that context, punctuation, a table boundary, or the end of
 input must follow. Thus CSV and table cells such as `NSW,1234` and
 `| NSW | 2024 |` can be tokenized even when the number is a count or year.
 Its token contains both state and postcode, which protects both parts of an
-address and restores them together. `postal.at_ch` refuses a city-anchored
-code directly preceded by an Australian state abbreviation so the AU token
-wins under either shipped locale chain order. The rule is document-basis `en-AU`: it runs when `en-AU` is in the
+address and restores them together. Strict same-class containment makes the AU
+token win under either shipped locale chain order. `postal.at_ch` still
+protects an out-of-range code or a code in a chain without `en-AU`; the state
+can remain raw in those cases. The rule is document-basis `en-AU`: it runs when `en-AU` is in the
 effective locale chain, including for every document under the broad setup
 policy or the no-policy `core-extended` compatibility chain. An explicit
 `global` or `en-NZ` only chain does not run it. New Zealand needs a separate rule because

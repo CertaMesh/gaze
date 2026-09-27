@@ -160,12 +160,55 @@ fn au_state_and_postcode_win_under_shipped_locale_orders() {
                 "state survived under {locales:?}: {cleaned:?}"
             );
         }
-        assert_eq!(
-            clean_and_restore_with_chain(locales, "Canberra ACT 2619 Australia"),
-            "Canberra ACT 2619 Australia",
-            "ACT 2619 is outside the ACT range under {locales:?}"
+        let invalid_act = clean_and_restore_with_chain(locales, "Canberra ACT 2619 Australia");
+        assert!(
+            !without_tokens(&invalid_act).contains("2619"),
+            "postal.at_ch must still protect an out-of-range AU code under {locales:?}: {invalid_act:?}"
         );
     }
+}
+
+#[test]
+fn earlier_numeric_postal_rule_keeps_codes_the_au_rule_rejects() {
+    let setup_chain = [
+        LocaleTag::EnUs,
+        LocaleTag::DeDe,
+        LocaleTag::DeAt,
+        LocaleTag::DeCh,
+        LocaleTag::EnGb,
+        LocaleTag::EnIe,
+        LocaleTag::EnAu,
+    ];
+    for original in [
+        "Barooga NSW 3644 Australia",
+        "Barooga NSW 3644, Australia",
+        "Kalka SA 0872 Australia",
+        "Jervis Bay ACT 2540 Australia",
+        "The NSW 2000 Sydney office",
+        "Canberra ACT 2619 Australia",
+    ] {
+        let cleaned = clean_and_restore_with_chain(&setup_chain, original);
+        let code = original
+            .split_whitespace()
+            .find(|word| {
+                word.trim_end_matches(',').len() == 4
+                    && word
+                        .trim_end_matches(',')
+                        .chars()
+                        .all(|c| c.is_ascii_digit())
+            })
+            .expect("four-digit code")
+            .trim_end_matches(',');
+        assert!(
+            !without_tokens(&cleaned).contains(code),
+            "earlier numeric recognizer stopped protecting {code}: {cleaned:?}"
+        );
+    }
+    let de_at_only = clean_and_restore(LocaleTag::DeAt, "Brisbane QLD 4072, Australia");
+    assert!(
+        !without_tokens(&de_at_only).contains("4072"),
+        "postal.at_ch must work without en-AU: {de_at_only:?}"
+    );
 }
 
 #[test]

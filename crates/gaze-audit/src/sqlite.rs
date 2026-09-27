@@ -748,6 +748,7 @@ mod tests {
             ConflictTier::Score,
             ConflictTier::SpanLength,
             ConflictTier::Validator,
+            ConflictTier::SameClassContainment,
             ConflictTier::ValidatorVeto,
             ConflictTier::CollisionPolicy,
             ConflictTier::AnchoredContext,

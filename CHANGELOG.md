@@ -28,9 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   postcode together whenever `en-AU` is in the effective locale chain, so
   these spans no longer rely on Nym context. The no-policy `core-extended`
   chain includes `en-AU` on every document. New Zealand postcodes remain
-  outside this rule. `postal.at_ch` now yields when an Australian state directly
-  precedes the code, preserving the joined token under the shipped locale
-  chains. The address anchor refuses common English and German function words,
+  outside this rule. For strict same-class overlaps, the containing span wins
+  and the enclosed candidate is audited as a loser. This gives the joined AU
+  token precedence under shipped locale chains while `postal.at_ch` still
+  protects an out-of-range code or a code on a chain without `en-AU`.
+  The address anchor refuses common English and German function words,
   but other capitalised words, including German nouns, can still trigger it;
   terminal CSV/table state-and-number cells, including years, can also match.
 
@@ -53,6 +55,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   street word.
 
 ### Added
+
+- Rulepack regex recognizers can set `[recognizers.context] reject_match_regex`
+  to refuse a full regex match before emitting its capture. This field is
+  unavailable in `[[policy.custom_recognizers]]`; invalid guard regexes fail
+  pipeline assembly.
+- `ConflictTier::SameClassContainment` (`same_class_containment`) records
+  strict same-class span containment in winner and loser audit rows.
 
 - Opt-in, local GLiNER date-of-birth judge for date-shaped spans left unclaimed
   by the rule floor. `gaze setup --dob-judge` installs a SHA-pinned ONNX bundle;

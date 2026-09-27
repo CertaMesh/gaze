@@ -3125,16 +3125,10 @@ fn policy_regex_recognizers_register_under_their_policy_name() {
     );
 }
 
-/// A policy `kind = "regex"` recognizer emits at the confidence the `Detector`
-/// wrapper hard-coded (1.0), not `RegexDetector::with_source`'s 0.70 default.
-/// Class priority and rule priority tie here (same class, both rules at
-/// priority 0) and the two spans overlap without being identical, so the score
-/// rung decides ahead of span length, and dropping
-/// `with_base_score` in `register_policy_detectors` would silently hand it to
-/// the rulepack rule. Pins that behaviour-preserver: the policy rule must win,
-/// and it must win *on score*.
+/// A rulepack span containing a shorter policy regex span protects every byte
+/// the policy rule found. Same-class containment takes precedence over score.
 #[test]
-fn policy_regex_rule_outranks_a_same_class_rulepack_rule_on_score() {
+fn same_class_rulepack_container_outranks_shorter_policy_regex() {
     let rulepack = Rulepack::parse(
         r#"
 schema_version = "0.1.0"
@@ -3184,15 +3178,15 @@ priority = 0
         .expect("winner row");
     assert_eq!(
         winner.recognizer_id.as_deref(),
-        Some("tenant.shape"),
-        "the policy rule's score must outrank the rulepack rule's 0.70"
+        Some("pack.shape"),
+        "the enclosing span must protect the shorter policy match"
     );
     assert_eq!(
         winner.decided_by,
-        ConflictTier::Score,
-        "the score rung decides it; any other tier means the scores tied"
+        ConflictTier::SameClassContainment,
+        "the containment rung decides before score"
     );
-    let loser = loser_row(&logger, "pack.shape");
+    let loser = loser_row(&logger, "tenant.shape");
     assert_eq!(
         loser.class,
         PiiClass::from_policy_name("custom:shape").expect("class")

@@ -68,9 +68,8 @@ Use `RegexDetector::emails()` for the built-in email recognizer. Rulepack
 assembly uses `RegexDetector::with_rulepack_fields` so locale tags, scores,
 priorities, token families, capture groups, exclusions, validators, and
 normalizers can flow from TOML rulepacks into the registry.
-Optional `context.reject_match_regex` checks the full regex match, while
-`context.reject_prefix_regex` checks the input before the reported capture.
-Either match rejects that candidate; an invalid guard fails pipeline assembly.
+Optional rulepack-only `context.reject_match_regex` checks the full regex match.
+A guard match rejects that candidate; an invalid guard fails pipeline assembly.
 
 `ValidatorKind` and `NormalizerKind` are closed sets. The complete variant
 lists, rulepack spellings, feature gates and fail-closed wiring stage are in

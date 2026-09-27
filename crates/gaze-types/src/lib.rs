@@ -2371,6 +2371,8 @@ pub enum ConflictTier {
     SpanLength,
     /// Same-class containment validator result decided the conflict.
     Validator,
+    /// Strict same-class containment selected the span protecting more bytes.
+    SameClassContainment,
     /// Pre-resolver validator veto rejected the candidate.
     ValidatorVeto,
     /// Cross-class collision-family policy decided the conflict.
@@ -2416,6 +2418,7 @@ impl ConflictTier {
             Self::Score => "score",
             Self::SpanLength => "span_length",
             Self::Validator => "validator",
+            Self::SameClassContainment => "same_class_containment",
             Self::ValidatorVeto => "validator_veto",
             Self::CollisionPolicy => "collision_policy",
             Self::AnchoredContext => "anchored_context",
@@ -2440,6 +2443,7 @@ impl ConflictTier {
             "score" => Some(Self::Score),
             "span_length" => Some(Self::SpanLength),
             "validator" => Some(Self::Validator),
+            "same_class_containment" => Some(Self::SameClassContainment),
             "validator_veto" => Some(Self::ValidatorVeto),
             "collision_policy" => Some(Self::CollisionPolicy),
             "anchored_context" => Some(Self::AnchoredContext),
@@ -3667,6 +3671,7 @@ mod redaction_logger_tests {
             ConflictTier::Score,
             ConflictTier::SpanLength,
             ConflictTier::Validator,
+            ConflictTier::SameClassContainment,
             ConflictTier::ValidatorVeto,
             ConflictTier::CollisionPolicy,
             ConflictTier::AnchoredContext,

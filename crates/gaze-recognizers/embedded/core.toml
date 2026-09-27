@@ -767,7 +767,8 @@ priority = 86
 #     DOCUMENT-locale gate is the only thing standing in for that missing structure, which is why
 #     these stay gated. `postal.at_ch` matches four digits only behind a cue or before a city-shaped
 #     token; see its own note. Document-basis rules of one class resolve PER SPAN across the
-#     chain: an earlier locale wins only where its candidate overlaps a later locale's, so under
+#     chain: an earlier locale wins partial overlaps, while strict same-class containment goes
+#     to the larger span. Thus under
 #     [de-AT, de-DE] a de-AT match (true or false) does not switch `postal.de` off for a German
 #     code elsewhere in the document (pinned in `postal_at_ch.rs`). The loader lint warns, and fails strict mode, on the co-firing five-digit pair.
 #
@@ -873,10 +874,6 @@ locale_basis = "document"
 kind = "regex"
 pattern = '''(?:(?i:\b(?:plz|postleitzahl|post[ \t]?code|postal[ \t]code|zip(?:[ \t]?code)?))[ \t]*[:#.]?[ \u{00A0}\u{202F}]*((?:(?:A|CH|FL)-)?\d{4})\b|(?:\A|[^#])\b((?:(?:A|CH|FL)-)?\d{4}),?[ \u{00A0}\u{202F}]{1,3}(?:\p{Lu}[\p{L}\-]{2,}|St(?:\.[ \u{00A0}\u{202F}]?|[ \u{00A0}\u{202F}])\p{Lu}))'''
 capture_groups = [1, 2]
-
-[recognizers.context]
-# Let postal.au protect the state and postcode even when de-AT/de-CH appears first.
-reject_prefix_regex = '''\b(?:NSW|VIC|QLD|SA|WA|TAS|NT|ACT)[ \t\u{00A0}\u{202F}\n,|]{1,4}\z'''
 
 [recognizers.scoring]
 base = 0.70

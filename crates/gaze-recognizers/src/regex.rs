@@ -54,7 +54,6 @@ pub struct RegexDetector {
     capture_groups: Option<Vec<u32>>,
     exclusions: Vec<String>,
     reject_match_regex: Option<Regex>,
-    reject_prefix_regex: Option<Regex>,
     validator_kind: Option<ValidatorKind>,
     normalizer_kind: Option<NormalizerKind>,
     ascii_email_boundary: bool,
@@ -125,7 +124,6 @@ impl RegexDetector {
                 .map(|value| value.to_ascii_lowercase())
                 .collect(),
             reject_match_regex: None,
-            reject_prefix_regex: None,
             validator_kind,
             normalizer_kind,
             ascii_email_boundary,
@@ -230,17 +228,9 @@ impl Recognizer for RegexDetector {
 }
 
 impl RegexDetector {
-    /// Rulepack guards inspect the full regex match or the text before its reported capture.
-    pub fn with_rejection_patterns(
-        mut self,
-        match_pattern: Option<&str>,
-        prefix_pattern: Option<&str>,
-    ) -> Result<Self> {
+    /// A rulepack guard can refuse a full regex match before its capture is emitted.
+    pub fn with_rejection_pattern(mut self, match_pattern: Option<&str>) -> Result<Self> {
         self.reject_match_regex = match_pattern
-            .map(Regex::new)
-            .transpose()
-            .map_err(RecognizerError::InvalidRegex)?;
-        self.reject_prefix_regex = prefix_pattern
             .map(Regex::new)
             .transpose()
             .map_err(RecognizerError::InvalidRegex)?;
@@ -278,10 +268,6 @@ impl RegexDetector {
                             .reject_match_regex
                             .as_ref()
                             .is_some_and(|guard| guard.is_match(full.as_str()))
-                        && !self
-                            .reject_prefix_regex
-                            .as_ref()
-                            .is_some_and(|guard| guard.is_match(&input[..span.start]))
                 }) {
                     return Some(span);
                 }
