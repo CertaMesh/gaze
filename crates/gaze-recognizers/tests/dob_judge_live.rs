@@ -65,7 +65,7 @@ fn local_bundle_classifies_synthetic_dates() {
         .rule(DefaultRule::new(Action::Tokenize))
         .build()
         .unwrap();
-    let session = Session::new(Scope::Ephemeral).unwrap();
+    let session = Session::new(Scope::Conversation("dob-judge-live".into())).unwrap();
     let text = "Helena (14.03.1987) is listed in the patient file.";
     let (clean, _, _) = pipeline
         .clean_with_safety_net_detect_context(
@@ -84,4 +84,18 @@ fn local_bundle_classifies_synthetic_dates() {
         pipeline.restore_strict_text(&session, &cleaned).unwrap(),
         text
     );
+
+    let business_date = "Account opened: 14.03.1987.";
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(business_date.into()),
+            &[],
+            &dictionaries,
+        )
+        .unwrap();
+    let CleanDocument::Text(cleaned_business_date) = clean else {
+        panic!("expected text")
+    };
+    assert_eq!(cleaned_business_date, business_date);
 }
