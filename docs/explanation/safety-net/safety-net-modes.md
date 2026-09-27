@@ -64,7 +64,7 @@ The three fallbacks:
 
 | `--safety-net-fallback` | What happens to a residual suspect |
 |---|---|
-| `redact` **(default)** | Replaced with a one-way `[REDACTED:<class>]` marker. |
+| `redact` **(default)** | Tokenized when every residual the post-resolve re-run found can be tokenized reversibly; otherwise all of them are replaced with a one-way `[REDACTED:<class>]` marker. A first-pass refusal is always replaced with the marker. |
 | `strict` | The document is rejected with `Error::SafetyNetFallback(reason)`; the CLI exits `3`. |
 | `tolerant` | The residual bytes ship. Development only. |
 

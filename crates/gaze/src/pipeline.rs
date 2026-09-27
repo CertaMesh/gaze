@@ -131,7 +131,9 @@ pub enum SafetyNetFallback {
     Strict,
     /// Ship the residual bytes untouched. Dev-only.
     Tolerant,
-    /// Delete the residual spans (one-way), then scan once more with the live manifest.
+    /// Tokenize the residuals a post-resolution re-scan found when every one of them can be
+    /// tokenized reversibly; otherwise replace the residual spans with a one-way marker. A
+    /// first-pass refusal is always redacted. Then scan once more with the live manifest.
     /// Reject with [`Error::SafetyNetFallback`] if an actionable suspect remains; net errors
     /// propagate. This checks configured nets only, not detection completeness.
     Redact,
@@ -1884,28 +1886,56 @@ impl Pipeline {
                             .iter()
                             .map(|suspect| (*suspect).clone())
                             .collect::<Vec<_>>();
+                        // A residual set the planner can resolve completely is tokenized rather
+                        // than deleted: the bytes are protected either way, and only the token
+                        // keeps the document restorable. A cascade of plannable suspects (each
+                        // re-scan flagging the value next to the last token) outran the one
+                        // follow-up round and ended here deleting a value that was never at
+                        // risk (todo 3879). Anything the planner refuses is deleted as before.
+                        // Only a residual the post-resolution re-run found: a first-pass refusal
+                        // is the resolver declining those suspects, and the fallback does not
+                        // overrule it.
+                        let tokenized = matches!(on_residual, SafetyNetFallback::Redact)
+                            && residual_report.is_some()
+                            && !actionable.is_empty()
+                            && self.tokenize_fallback_residuals(
+                                target,
+                                clean,
+                                &acted_on,
+                                document_kind,
+                                field_path,
+                                reason,
+                                protection_trace.as_deref_mut(),
+                            )?;
                         // Freeze pipeline-produced replacements, and what the fallback's audit
                         // rows are about to claim, before deletion shifts clean spans and the
-                        // affine mapper stops being exact.
+                        // affine mapper stops being exact. A tokenizing fallback promised to
+                        // delete nothing.
                         let terminal_provenance =
                             if matches!(on_residual, SafetyNetFallback::Redact) {
+                                let promised: &[&LeakSuspect] =
+                                    if tokenized { &[] } else { &actionable };
                                 Some((
                                     TerminalManifestProvenance::capture(target, clean)?,
-                                    FallbackPromise::capture(clean, &actionable)?,
+                                    FallbackPromise::capture(clean, promised)?,
                                 ))
                             } else {
                                 None
                             };
-                        let fallback = self.apply_safety_net_fallback(
-                            target,
-                            clean,
-                            &actionable,
-                            document_kind,
-                            field_path,
-                            on_residual,
-                            reason,
-                            protection_trace.as_deref_mut(),
-                        );
+                        let fallback = if tokenized {
+                            Ok(())
+                        } else {
+                            self.apply_safety_net_fallback(
+                                target,
+                                clean,
+                                &actionable,
+                                document_kind,
+                                field_path,
+                                on_residual,
+                                reason,
+                                protection_trace.as_deref_mut(),
+                            )
+                        };
                         (acted_on, terminal_provenance, fallback)
                     };
                     // A residual found by the post-resolution re-run is absent from the primary
@@ -1938,6 +1968,46 @@ impl Pipeline {
                 Ok(())
             }
         }
+    }
+
+    /// The `Redact` fallback's reversible branch: tokenize `residuals` when the follow-up planner
+    /// can resolve every one of them, and report whether it did. Nothing is touched when the plan
+    /// is incomplete; the caller then deletes as the fallback always has. The rows carry the
+    /// fallback reason, like the terminal round's.
+    #[allow(clippy::too_many_arguments)]
+    fn tokenize_fallback_residuals(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        clean: &mut CleanText,
+        residuals: &[LeakSuspect],
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+        reason: FallbackReason,
+        protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+    ) -> Result<bool> {
+        let round = LeakReport::from_parts(residuals.to_vec(), Vec::new());
+        let original = protection_trace.as_deref().map(|trace| trace.raw_text);
+        let FollowupResolution::Ready(plan) =
+            plan_followup_resolutions(target, clean, &round, original)?
+        else {
+            return Ok(false);
+        };
+        // Every residual must be one of the plan's parents: a partial plan would leave the rest
+        // for no one, since the deletion branch is skipped once this returns true.
+        if plan.parents.len() + plan.protected.len() < residuals.len() {
+            return Ok(false);
+        }
+        self.apply_followup_resolutions(
+            target,
+            clean,
+            plan,
+            document_kind,
+            field_path,
+            Batch::Fallback,
+            Some(reason),
+            protection_trace,
+        )?;
+        Ok(true)
     }
 
     /// Decide a document the `Redact` fallback has just deleted from.

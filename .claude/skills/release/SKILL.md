@@ -40,6 +40,10 @@ Run from `main` after all release-blocker PRs are merged.
    chart point keyed by `vX.Y.Z` to the consolidated benchmark document, with
    commit sha, script, and hardware as secondary columns. Dogfood the updated
    document. A release without a fresh benchmark is blocked.
+10. Confirm every detection PR merged since the last tag carries passing
+    evidence under the
+    [benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate), and that
+    past-release rows were re-measured if the benchmark itself changed.
 
 If any step fails, stop and fix the release branch. Do not tag around a red
 checklist.

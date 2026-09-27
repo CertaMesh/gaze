@@ -860,6 +860,9 @@ struct ScriptNet {
     net: usize,
     step: std::sync::Mutex<usize>,
     calls: NetCalls,
+    /// Adds a plain-text class mismatch to the final residual, which the follow-up planner
+    /// declines: the whole set then goes to deletion instead of being tokenized (todo 3879).
+    declined: bool,
 }
 impl SafetyNet for ScriptNet {
     fn id(&self) -> &str {
@@ -917,18 +920,28 @@ impl SafetyNet for ScriptNet {
                 }
                 2 => {
                     let residual = &context.manifest.spans[1];
-                    vec![LeakSuspect::new(
+                    let mismatch = |span| {
+                        LeakSuspect::new(
+                            span,
+                            PiiClass::Name,
+                            self.id(),
+                            Some(0.99),
+                            LeakKind::ClassMismatch {
+                                pipeline_class: field(),
+                                safety_net_class: PiiClass::Name,
+                            },
+                            "synthetic",
+                            None,
+                        )
+                    };
+                    let mut found = vec![mismatch(
                         residual.clean_span.start..residual.clean_span.end + 1,
-                        PiiClass::Name,
-                        self.id(),
-                        Some(0.99),
-                        LeakKind::ClassMismatch {
-                            pipeline_class: field(),
-                            safety_net_class: PiiClass::Name,
-                        },
-                        "synthetic",
-                        None,
-                    )]
+                    )];
+                    if self.declined {
+                        let start = output.rfind("rk").unwrap();
+                        found.push(mismatch(start..start + 2));
+                    }
+                    found
                 }
                 3 => vec![],
                 _ => panic!("unexpected extra sweep"),
@@ -938,79 +951,105 @@ impl SafetyNet for ScriptNet {
         Ok(found)
     }
 }
+/// The straddling mismatch reaches the fallback as its exposed one-byte gap, which the planner can
+/// resolve: alone, it is tokenized and restore is exact (todo 3879). Beside a plain-text mismatch
+/// the planner declines, the fallback is the final authority over both and deletes them.
 #[test]
 fn actual_two_net_sequence_sees_residual_output_and_deletes_its_final_authority() {
-    let mut p = pipeline(pair(), true);
-    let calls = NetCalls::default();
-    for net in 0..2 {
-        p.safety_nets.push(Arc::new(ScriptNet {
-            net,
-            step: std::sync::Mutex::new(0),
-            calls: calls.clone(),
-        }));
-    }
-    let session = Session::new(crate::Scope::Ephemeral).unwrap();
-    let (output, manifest, _, trace) = p
-        .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
-            &session,
-            RAW,
-            &[crate::LocaleTag::Global],
-            &DictionaryBundle::default(),
-            SafetyNetPolicy::default(),
-        )
-        .unwrap();
-    wire_fixture(RAW, &manifest, &trace);
-    let observed = calls.lock().unwrap();
-    assert_eq!(observed.len(), 8);
-    for (phase, pair) in observed.chunks_exact(2).enumerate() {
-        assert_eq!(pair[0].1, phase);
-        assert_eq!(pair[0].2, pair[1].2);
-        assert_eq!(pair[0].3, pair[1].3);
-        // The straddling finding now resolves its exposed gap and leaves a narrower fallback
-        // marker, both represented in the final manifest.
-        assert_eq!(pair[0].4, [2, 3, 4, 5][phase]);
-        if phase > 0 {
-            assert_ne!(pair[0].2, observed[(phase - 1) * 2].2);
+    for declined in [false, true] {
+        let mut p = pipeline(pair(), true);
+        let calls = NetCalls::default();
+        for net in 0..2 {
+            p.safety_nets.push(Arc::new(ScriptNet {
+                net,
+                step: std::sync::Mutex::new(0),
+                calls: calls.clone(),
+                declined,
+            }));
+        }
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let (output, manifest, _, trace) = p
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                RAW,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        wire_fixture(RAW, &manifest, &trace);
+        let redactions = usize::from(declined) * 2;
+        let observed = calls.lock().unwrap();
+        assert_eq!(observed.len(), 8);
+        for (phase, pair) in observed.chunks_exact(2).enumerate() {
+            assert_eq!(pair[0].1, phase);
+            assert_eq!(pair[0].2, pair[1].2);
+            assert_eq!(pair[0].3, pair[1].3);
+            // The straddling finding's exposed gap gets its own final manifest entry, and a
+            // declined sibling one more.
+            assert_eq!(pair[0].4, [2, 3, 4, 5 + usize::from(declined)][phase]);
+            if phase > 0 {
+                assert_ne!(pair[0].2, observed[(phase - 1) * 2].2);
+            }
+        }
+        assert!(!observed[0].2.contains(" right"));
+        // 15..21 is the primary pass's; 21..22 is the straddle's exposed gap, and 25..27 the
+        // declined `rk`.
+        let mut expected = vec![0..15, 15..21, 21..22, 23..25, 27..29];
+        if declined {
+            expected.insert(4, 25..27);
+        }
+        assert_eq!(
+            manifest
+                .iter()
+                .map(|s| s.raw_span.clone())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(
+            trace
+                .iter()
+                .filter(|t| t.stage() == "safety_net" && t.action() == "tokenize")
+                .count(),
+            if declined { 2 } else { 3 }
+        );
+        assert_eq!(
+            trace
+                .iter()
+                .filter(|t| t.decision() == "fallback_redact")
+                .count(),
+            redactions
+        );
+        // One manifest entry per trace item: the trace accounts for every entry, and a
+        // redaction is never the one entry nothing in the trace explains.
+        assert_eq!(
+            trace.iter().filter(|t| t.action() == "tokenize").count(),
+            manifest.len() - redactions
+        );
+        assert_eq!(
+            trace.iter().filter(|t| t.action() == "redact").count(),
+            redactions
+        );
+        // Restore is the contract this change is measured against. The redacted bytes do not
+        // come back — a marker is one-way — but the marker itself passes through the strict scan
+        // verbatim: it is ordinary text to restore, never a token to substitute and never a
+        // reason to reject.
+        let restored = session.restore_strict_text(&text(output)).unwrap();
+        if declined {
+            let marker = gaze_types::redaction_marker::redaction_marker(&PiiClass::Name);
+            assert_eq!(
+                restored,
+                format!(
+                    "{}{marker}{}{marker}{}",
+                    &RAW[..21],
+                    &RAW[22..25],
+                    &RAW[27..]
+                )
+            );
+        } else {
+            assert_eq!(restored, RAW);
         }
     }
-    assert!(!observed[0].2.contains(" right"));
-    // 15..21 is reversibly resolved; the remaining 21..22 gap is the fallback redaction.
-    assert_eq!(
-        manifest
-            .iter()
-            .map(|s| s.raw_span.clone())
-            .collect::<Vec<_>>(),
-        vec![0..15, 15..21, 21..22, 23..25, 27..29]
-    );
-    assert_eq!(
-        trace
-            .iter()
-            .filter(|t| t.stage() == "safety_net" && t.action() == "tokenize")
-            .count(),
-        2
-    );
-    assert_eq!(
-        trace
-            .iter()
-            .filter(|t| t.decision() == "fallback_redact")
-            .count(),
-        1
-    );
-    // Four tokenizations plus one redaction, one manifest entry each: the trace accounts for
-    // every entry, and the redaction is no longer the one entry nothing in the trace explains.
-    assert_eq!(
-        trace.iter().filter(|t| t.action() == "tokenize").count(),
-        manifest.len() - 1
-    );
-    assert_eq!(trace.iter().filter(|t| t.action() == "redact").count(), 1);
-    // Restore is the contract this change is measured against. The redacted bytes do not come
-    // back — a marker is one-way — but the marker itself passes through the strict scan verbatim:
-    // it is ordinary text to restore, never a token to substitute and never a reason to reject.
-    let marker = gaze_types::redaction_marker::redaction_marker(&PiiClass::Name);
-    assert_eq!(
-        session.restore_strict_text(&text(output)).unwrap(),
-        format!("{}{marker}{}", &RAW[..21], &RAW[22..])
-    );
 }
 
 struct RejectNet {

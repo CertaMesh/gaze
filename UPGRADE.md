@@ -51,6 +51,26 @@ re-tokenize stored manifests.
 2. **`session_blob` moves to envelope version 6.** Blobs written by v0.16
    cannot be read by v0.15 or older. Upgrade every process that restores a
    blob before (or together with) every process that writes one.
+3. **The `Redact` safety-net fallback tokenizes when it can.** Expect fewer
+   `[REDACTED:<class>]` markers and more tokens; nothing to change unless you
+   count markers.
+
+### Changed: `SafetyNetFallback::Redact` tokenizes a resolvable residual
+
+**Action required only if you count or assert redaction markers.** This is
+the shipped default (`Resolve` + `Redact`). When the re-scan after the resolve
+rounds still flags something, the fallback used to redact every residual.
+Now it tokenizes them if every one can be tokenized reversibly (plain
+uncovered text, or the uncovered part of a partly tokenized span), and redacts
+them all otherwise, for example when one is a class mismatch or overlaps a
+value the session does not own. A first-pass refusal still redacts.
+
+- Restore is exact for the documents this changes, where before the marker
+  stood in for the value.
+- The fallback's audit rows are now `Tokenize` rows, still carrying
+  `fallback_triggered`, so an audit query can tell them from the resolve
+  rounds' rows.
+- The number of safety-net scans per document is unchanged.
 
 ### Breaking: `ProviderAdapter::contract()` has no default
 

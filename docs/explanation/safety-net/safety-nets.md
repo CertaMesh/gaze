@@ -266,7 +266,9 @@ will see that change; nothing about which spans get redacted moved.
 ### Terminal admission after a `Redact` fallback
 
 Under `Resolve` + `Redact` the fallback *replaces* the residual spans it could
-not resolve with a one-way marker. That changes the input string, so the scan
+not resolve with a one-way marker. (When the re-run's whole residual set can be
+tokenized, the fallback tokenizes it instead and nothing is replaced; the
+terminal scan still runs.) That changes the input string, so the scan
 that follows is the first pass to see that text, and it routinely reports a
 short sub-word span that the earlier passes read and accepted. Denying on every
 such span held a fallback document to a standard no completing document has to
