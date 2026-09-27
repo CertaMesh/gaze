@@ -373,3 +373,144 @@ fn precision_probe_occupational_and_verb_surnames() {
         assert!(out.ends_with(body), "{out:?}");
     }
 }
+
+/// Solo todo 3897: the cue-found value carries its honorific, so every bare
+/// spelling of the name is a run of its parts. All-caps, lower-case, mixed
+/// case and NBSP copies each ship as one token and restore exactly.
+#[test]
+fn recall_probes_honorific_header_name_in_every_case() {
+    let header = "From: Herr Tobias Brenner <t@example.invalid>\n";
+    for body in [
+        "later: tobias brenner called.",
+        "later: TOBIAS BRENNER called.",
+        "later: tObIaS bReNnEr called.",
+        "later: Tobias\u{00A0}Brenner called.",
+        "later: TOBIAS\u{202F}BRENNER called.",
+        "later: BRENNER called.",
+        "later: Brenner called.",
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let out = clean(
+            &pipeline(vec![], Audit::default()),
+            &session,
+            &format!("{header}{body}"),
+        );
+        let out_body = &out[out.find('\n').unwrap() + 1..];
+        assert_eq!(tokens(out_body).len(), 1, "{body:?} -> {out:?}");
+        assert!(
+            out_body.starts_with("later: <") && out_body.ends_with("> called."),
+            "{body:?} -> {out:?}"
+        );
+    }
+}
+
+#[test]
+fn recall_probes_glued_name_continuations() {
+    for (header, body) in [
+        (
+            "From: Jorunn Vasquez <j@example.invalid>\n",
+            "ping jorunn vasquez-ellery now",
+        ),
+        (
+            "From: Jorunn Vasquez <j@example.invalid>\n",
+            "ping JORUNN VASQUEZ-ELLERY now",
+        ),
+        (
+            "From: Jorunn Vasquez <j@example.invalid>\n",
+            "ping Ellery-Vasquez now",
+        ),
+        (
+            "From: Siobhan O'Brien <s@example.invalid>\n",
+            "ping SIOBHAN O'BRIEN now",
+        ),
+        (
+            "From: Siobhan O'Brien <s@example.invalid>\n",
+            "ping O'BRIEN now",
+        ),
+        (
+            "From: Siobhan Brien <s@example.invalid>\n",
+            "ping O\u{2019}Brien now",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let out = clean(
+            &pipeline(vec![], Audit::default()),
+            &session,
+            &format!("{header}{body}"),
+        );
+        let out_body = &out[out.find('\n').unwrap() + 1..];
+        assert_eq!(tokens(out_body).len(), 1, "{body:?} -> {out:?}");
+        assert!(
+            out_body.starts_with("ping <") && out_body.ends_with("> now"),
+            "{body:?} -> {out:?}"
+        );
+    }
+}
+
+#[test]
+fn precision_probes_runs_and_continuations() {
+    for (header, body) in [
+        // No distinctive part: `herr` and `richter` are common words.
+        (
+            "From: Herr Thomas Richter <t@example.invalid>\n",
+            "der herr richter hat entschieden.",
+        ),
+        // A lone lower-case part stays raw (stated leak, unchanged).
+        (
+            "From: Herr Tobias Brenner <t@example.invalid>\n",
+            "thanks tobias",
+        ),
+        // Mixed-case single part is not a spelling of the part.
+        (
+            "From: Herr Tobias Brenner <t@example.invalid>\n",
+            "thanks tOBIAS",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let out = clean(
+            &pipeline(vec![], Audit::default()),
+            &session,
+            &format!("{header}{body}"),
+        );
+        assert!(out.ends_with(&format!("\n{body}")), "{body:?} -> {out:?}");
+    }
+    // A possessive stays outside the token.
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let out = clean(
+        &pipeline(vec![], Audit::default()),
+        &session,
+        "From: Jorunn Vasquez <j@example.invalid>\nVasquez's desk",
+    );
+    assert!(out.ends_with(">'s desk"), "{out}");
+}
+
+#[test]
+fn honorific_name_runs_propagate_to_a_later_turn() {
+    let session = Session::new(Scope::Conversation("c3897".into())).unwrap();
+    let audit = Audit::default();
+    let p = pipeline(vec![], audit.clone());
+    clean(
+        &p,
+        &session,
+        "From: Herr Tobias Brenner <t@example.invalid>\n",
+    );
+    let second = clean(
+        &p,
+        &session,
+        "tobias brenner and TOBIAS BRENNER-KLEE agreed.",
+    );
+    assert_eq!(tokens(&second).len(), 2, "{second}");
+    assert!(second.ends_with("> agreed."), "{second}");
+    assert!(!second.to_lowercase().contains("brenner"), "{second}");
+    let rows = audit.0.lock().unwrap().clone();
+    let links = rows
+        .iter()
+        .filter(|row| row.decided_by == ConflictTier::ManifestSweep)
+        .map(|row| row.provenance_merged_from.as_deref().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        links,
+        ["manifest_sweep:part", "manifest_sweep:part"],
+        "{rows:#?}"
+    );
+}
