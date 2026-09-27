@@ -1,4 +1,30 @@
 {
+  "credit_guard": {
+    "provenance": {
+      "binary_sha256": "30939ee26e9f188af2beb777e1d779ac83febbdc7fd8b2a413b6a5d27b65f003",
+      "commands": [
+        "cargo build --release -p gaze-recognizers --example clean_for_bench --features safety-net-nym",
+        "cargo run -p gaze-cli -- setup --non-interactive --force --policy-out <gaze-setup-policy.toml>",
+        "python3 scripts/bench/agentic_layers.py measure --label <side> --binary target/release/examples/clean_for_bench --config policy-file --policy <gaze-setup-policy.toml [+ mutant toml]> --output <layers.json>"
+      ],
+      "corpus_sha256": "387a35ac155153e9b58a26ec7946b3d459b0d094fffdd5f05de39558eb640604",
+      "crates_equal_to_main": "6d944622",
+      "generator_version": 4,
+      "harness_commit": "3dabc3bece3360c0a43dab62951a76ad811b9c0b",
+      "measured": "2026-09-27, layers A/D/R, correctness only",
+      "policy_sha256": {
+        "main": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+        "mutant16": "ea797a2f9ea028b81fc4fc50fd0654482448b402f83398d44a80b208598f1203",
+        "mutant9": "d811b9e58822ace6bfb012e7eeca81eabd0c10a45b4b7955abf588c12d77caeb"
+      }
+    },
+    "purpose": "layer D ref_number_16 false-positive bytes, the credit guard's input for CREDITCARDNUMBER; measured fresh because the totals above predate the guard",
+    "ref_number_16_false_positive": {
+      "main": 0,
+      "mutant_bare_nine_digits": 0,
+      "mutant_spaced_sixteen_digits": 570
+    }
+  },
   "expected": {
     "mutant_bare_nine_digits": {
       "false_positive_bytes_increase": 295,

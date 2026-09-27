@@ -758,8 +758,10 @@ mod tests {
                 }),
             },
         };
+        // Whitespace is not a fixture token, so the space keeps the straddle
+        // and stops the padding from being part of the name's word.
         let prefix = "x".repeat(NER_CHUNK_TOKEN_BUDGET - "Alice".len());
-        let input = format!("{prefix}Alice Example met the team.");
+        let input = format!("{prefix} Alice Example met the team.");
         let entity_start = input.find("Alice Example").expect("fixture entity");
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);

@@ -19,10 +19,15 @@
 //!   byte keeps the raw range of its source character and a match must start
 //!   and end on whole characters.
 //! - A single alphabetic word (a whole value or a part of a multi-word name)
-//!   matches only as written or in title case, and never when it is on the
-//!   closed common-word list. Matching lower-case single words would tokenize
-//!   ordinary words that happen to be names, so a lone lower-case `maria` is a
-//!   stated leak.
+//!   matches only as written, in title case or in upper case, and never when
+//!   it is on the closed common-word list. Matching lower-case single words
+//!   would tokenize ordinary words that happen to be names, so a lone
+//!   lower-case `maria` is a stated leak.
+//! - Two or more adjacent parts of a multi-word name match like a multi-word
+//!   value when one of them is distinctive: a cue-found `Herr Tobias Brenner`
+//!   also sweeps `TOBIAS BRENNER`.
+//! - A name copy grows over parts glued on by a hyphen or apostrophe, so
+//!   `Vasquez` never leaves `-Ellery` raw.
 //! - Collision-family tokens match byte-exact only: the family class exists
 //!   because the value's class was ambiguous, and folding would widen that.
 //! - Every edge must pass [`gaze_types::is_inside_word`], and a hit inside a
@@ -32,7 +37,9 @@ use std::collections::HashSet;
 use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, MatchKind};
-use gaze_types::{is_inside_word, Candidate, ConflictTier, EvidenceKind, PiiClass};
+use gaze_types::{
+    extend_over_name_joiners, is_inside_word, Candidate, ConflictTier, EvidenceKind, PiiClass,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::normalize::normalize;
@@ -51,6 +58,9 @@ const MIN_VALUE_CHARS: usize = 4;
 const MIN_DIGIT_RUN: usize = 6;
 /// Name parts need at least this many letters.
 const MIN_PART_LETTERS: usize = 3;
+/// Runs of parts are built only for names of at most this many parts, which
+/// bounds the patterns one value adds (a header name has at most four).
+const MAX_RUN_PARTS: usize = 6;
 /// The sweep fails closed instead of degrading when a session's value list
 /// grows past either cap.
 const MAX_PATTERNS: usize = 200_000;
@@ -96,6 +106,50 @@ const COMMON_WORDS: &[&str] = &[
     "hart", "house", "hunt", "knight", "lord", "love", "low", "marshall", "mills",
     "noble", "north", "south", "east", "pike", "pool", "pope", "power", "sharp",
     "short", "spring", "steel", "swift", "walker", "street", "gates", "means",
+];
+
+/// Name particles and articles. They sit inside names but are everyday words
+/// on their own, so a part or a run made only of them is never a name:
+/// `von der` of `Anna von der Heide` must not sweep `Unterlagen von der Bank`
+/// (review F1 and re-verify R1 on #691).
+///
+/// Compiled per naming convention, covering every setup-policy locale and the
+/// common particle cultures. Each is a closed grammatical set, so the list
+/// is by convention, not by corpus frequency:
+/// - German nobiliary and locative particles: von, vom, zu, zum, zur, am, an,
+///   auf, im, in, der, den, dem, des.
+/// - Dutch and Flemish tussenvoegsels: van, de, der, den, het, 't, ten, ter,
+///   te, op, in, uit, aan, bij, over, voor, onder.
+/// - French: de, du, des, la, le, les (`d'` is a joiner, not a part).
+/// - Spanish and Catalan: de, del, la, las, los, y, i.
+/// - Portuguese: da, das, do, dos, de, e.
+/// - Italian: di, da, dal, dalla, dalle, dei, degli, del, della, delle, dello,
+///   lo.
+/// - Scandinavian: af, av.
+/// - Arabic and Hebrew patronymics and articles: al, el, bin, ibn, bint, abu,
+///   abd, bat, bar. Not `ben`: `Ben` is a common English given name, and a
+///   particle is never swept alone, so listing it would ship `Thanks, Ben`
+///   raw; lower-case `ben` is not an everyday word to protect.
+/// - Gaelic and Welsh patronymics: mac, mc, ni, ap, ab, ferch. Not `nic`,
+///   for the same reason as `ben` (`Nic` is a given name).
+#[rustfmt::skip]
+const PARTICLES: &[&str] = &[
+    "von", "vom", "zu", "zum", "zur", "am", "an", "auf", "im", "in", "der",
+    "den", "dem", "des", "van", "de", "het", "'t", "ten", "ter", "te", "op",
+    "uit", "aan", "bij", "over", "voor", "onder", "du", "la", "le", "les",
+    "del", "las", "los", "y", "i", "da", "das", "do", "dos", "e", "di", "dal",
+    "dalla", "dalle", "dei", "degli", "della", "delle", "dello", "lo", "af",
+    "av", "al", "el", "bin", "ibn", "bint", "abu", "abd", "bat", "bar",
+    "mac", "mc", "ni", "ap", "ab", "ferch",
+];
+
+/// Organization and role words in sender names (`SUPPORT TEAM`, `DHL Paket`).
+/// A header value made of them is tokenized as a whole, but none of them is a
+/// name part on its own (review F2 on #691).
+#[rustfmt::skip]
+const ORG_ROLE_WORDS: &[&str] = &[
+    "support", "team", "service", "info", "paket", "kundenservice", "noreply",
+    "newsletter",
 ];
 
 /// Certainty of the evidence a manifest value was found with, ordered like
@@ -155,7 +209,7 @@ pub(crate) enum SweepLink {
     Exact,
     /// A different spelling (case, whitespace): the copy gets a sibling token.
     Variant,
-    /// A title-case part of a multi-word name.
+    /// A part, or a run of parts, of a multi-word name.
     Part,
 }
 
@@ -322,14 +376,20 @@ impl SweepMatcher {
         link: SweepLink,
         hits: &mut Vec<SweepHit>,
     ) {
-        if span.is_empty()
-            || is_inside_word(text, span.start)
-            || is_inside_word(text, span.end)
-            || inside_url(text, &span)
-        {
+        if span.is_empty() || is_inside_word(text, span.start) || is_inside_word(text, span.end) {
             return;
         }
         let source = &self.sources[source];
+        // A name copy glued to more name (`Vasquez-Ellery`, `O'Brien`) covers
+        // the whole compound; stopping at the source's edge ships the rest raw.
+        let span = if source.class == PiiClass::Name {
+            extend_over_name_joiners(text, span)
+        } else {
+            span
+        };
+        if inside_url(text, &span) {
+            return;
+        }
         let link = match link {
             SweepLink::Part => SweepLink::Part,
             _ if normalize(&source.raw).text == text[span.clone()] => SweepLink::Exact,
@@ -466,19 +526,91 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
         }
     }
     if shape == ValueShape::MultiWord && source.class == PiiClass::Name {
-        for part in value.split_whitespace().filter(|part| is_word(part)) {
-            if part.chars().filter(|ch| ch.is_alphabetic()).count() >= MIN_PART_LETTERS {
-                // A part is swept only in a spelling that starts upper-case:
-                // a lower-case single word is too often an ordinary word.
-                for spelling in word_spellings(part)
-                    .into_iter()
-                    .filter(|spelling| spelling.chars().next().is_some_and(char::is_uppercase))
-                {
-                    push(PatternKind::Exact, spelling, SweepLink::Part);
+        let parts = value.split_whitespace().collect::<Vec<_>>();
+        // An org-shaped sender (`DHL Paket`, `GitHub Support`) is tokenized
+        // whole, but its parts are product and department words, so none of
+        // them sweeps alone (review F2 on #691).
+        let single_parts = if is_org_shaped(&parts) {
+            &[][..]
+        } else {
+            &parts[..]
+        };
+        for part in single_parts
+            .iter()
+            .filter(|part| is_word(part) && is_distinctive_part(part))
+        {
+            // A part is swept only in a spelling that starts upper-case:
+            // a lower-case single word is too often an ordinary word.
+            for spelling in word_spellings(part)
+                .into_iter()
+                .filter(|spelling| spelling.chars().next().is_some_and(char::is_uppercase))
+            {
+                push(PatternKind::Exact, spelling, SweepLink::Part);
+            }
+        }
+        // Two or more adjacent parts are a name in any case: a cue-found
+        // value carries its honorific (`Herr Tobias Brenner`), so the bare
+        // `tobias brenner` is a run of its parts, not a spelling of the value.
+        // A run needs one distinctive part, so the `grace hall` of
+        // `Grace Hall Kowalski` (a venue) is not a name.
+        if parts.len() <= MAX_RUN_PARTS {
+            for len in 2..parts.len() {
+                for run in parts.windows(len) {
+                    if run.iter().all(|part| is_word(part))
+                        && run.iter().any(|part| is_distinctive_part(part))
+                    {
+                        push(
+                            PatternKind::Folded,
+                            fold(&run.join(" ")).text,
+                            SweepLink::Part,
+                        );
+                    }
                 }
             }
         }
     }
+}
+
+/// A name part that is a name on its own: long enough and not an ordinary
+/// word. The one rule for single parts and for the distinctive part of a run.
+fn is_distinctive_part(part: &str) -> bool {
+    part.chars().filter(|ch| ch.is_alphabetic()).count() >= MIN_PART_LETTERS
+        && !is_ordinary_word(part)
+}
+
+/// A common word that is also a name, a particle, or an org or role word
+/// (in any hyphen piece, so `IT-Support` counts).
+fn is_ordinary_word(word: &str) -> bool {
+    let lower = word.to_lowercase();
+    COMMON_WORDS.contains(&lower.as_str())
+        || PARTICLES.contains(&lower.as_str())
+        || lower
+            .split(['-', '\'', '’'])
+            .any(|piece| ORG_ROLE_WORDS.contains(&piece))
+}
+
+/// A word with an upper-case letter right after a lower-case one (`GitHub`).
+fn is_camel_case(word: &str) -> bool {
+    word.chars()
+        .zip(word.chars().skip(1))
+        .any(|(before, after)| before.is_lowercase() && after.is_uppercase())
+}
+
+/// A word of two or more letters, all upper case (`DHL`, `TOBIAS`).
+fn is_all_caps(word: &str) -> bool {
+    word.chars().filter(|ch| ch.is_alphabetic()).count() >= 2
+        && word
+            .chars()
+            .filter(|ch| ch.is_alphabetic())
+            .all(char::is_uppercase)
+}
+
+/// A name value shaped like an organization: a CamelCase part, or all-caps
+/// parts mixed with others (`DHL Paket`). A wholly all-caps value
+/// (`MARIA KOWALSKI`) is a shouted personal name and keeps its parts.
+fn is_org_shaped(parts: &[&str]) -> bool {
+    let caps = parts.iter().filter(|part| is_all_caps(part)).count();
+    parts.iter().any(|part| is_camel_case(part)) || (caps > 0 && caps < parts.len())
 }
 
 /// A single word: letters, joined by at most internal hyphens or apostrophes.
@@ -491,16 +623,20 @@ fn is_word(value: &str) -> bool {
 
 /// The spellings a single word is swept in: the word as written (a
 /// byte-identical copy carries the source's own evidence, so `SCHNEIDER`
-/// sweeps `SCHNEIDER`) and its title case (`MARIA` also sweeps `Maria`).
-/// Empty for a word on the common-word list.
+/// sweeps `SCHNEIDER`), its title case (`MARIA` also sweeps `Maria`) and its
+/// upper case (`Maria` also sweeps `MARIA` in a shouted subject line). A
+/// CamelCase word (`GitHub`) is a brand spelling, so it gets no upper case.
+/// Empty for an ordinary word ([`is_ordinary_word`]).
 fn word_spellings(word: &str) -> Vec<String> {
-    if COMMON_WORDS.contains(&word.to_lowercase().as_str()) {
+    if is_ordinary_word(word) {
         return Vec::new();
     }
-    let title = title_case(word);
     let mut spellings = vec![word.to_string()];
-    if title != word {
-        spellings.push(title);
+    let upper = (!is_camel_case(word)).then(|| word.to_uppercase());
+    for spelling in std::iter::once(title_case(word)).chain(upper) {
+        if !spellings.contains(&spelling) {
+            spellings.push(spelling);
+        }
     }
     spellings
 }
@@ -827,6 +963,212 @@ mod tests {
         assert!(found(sources.clone(), "Der Richter hat entschieden.").is_empty());
         assert!(found(sources.clone(), "Grant access to the repo.").is_empty());
         assert!(found(sources, "Der Bauer verkaufte Eier.").is_empty());
+    }
+
+    #[test]
+    fn runs_of_name_parts_match_in_any_case() {
+        // Solo todo 3897: a cue-found value carries its honorific, so the bare
+        // name is a run of its parts, not a spelling of the whole value.
+        let sources = vec![name("Herr Tobias Brenner")];
+        let text = "later: tobias brenner and TOBIAS BRENNER, tObIaS\u{a0}bReNnEr";
+        assert_eq!(
+            found(sources.clone(), text),
+            ["tobias brenner", "TOBIAS BRENNER", "tObIaS\u{a0}bReNnEr"]
+        );
+        assert_eq!(found(sources, "herr tobias kam"), ["herr tobias"]);
+    }
+
+    #[test]
+    fn runs_need_a_distinctive_part() {
+        // `grace` and `hall` are common words, so the adjacent run of
+        // `Grace Hall Kowalski` is a venue, not a name.
+        assert!(found(vec![name("Grace Hall Kowalski")], "book the grace hall").is_empty());
+        // Runs are made of whole parts; a lone lower-case part stays raw.
+        assert!(found(vec![name("Herr Tobias Brenner")], "thanks tobias").is_empty());
+    }
+
+    #[test]
+    fn parts_match_in_all_caps() {
+        let sources = vec![name("Maria Kowalski")];
+        assert_eq!(found(sources.clone(), "RE: KOWALSKI"), ["KOWALSKI"]);
+        assert_eq!(found(sources.clone(), "HI MARIA"), ["MARIA"]);
+        assert!(found(sources, "thanks mARIA").is_empty());
+        let single = SweepSource {
+            family: "counter".into(),
+            class: PiiClass::Name,
+            raw: "Kowalski".into(),
+        };
+        assert_eq!(found(vec![single], "x KOWALSKI y"), ["KOWALSKI"]);
+    }
+
+    #[test]
+    fn name_copies_cover_glued_hyphen_and_apostrophe_continuations() {
+        let sources = vec![name("Jorunn Vasquez")];
+        assert_eq!(
+            found(sources.clone(), "ping jorunn vasquez-ellery now"),
+            ["jorunn vasquez-ellery"]
+        );
+        assert_eq!(
+            found(sources.clone(), "Dear Vasquez-Ellery,"),
+            ["Vasquez-Ellery"]
+        );
+        assert_eq!(
+            found(sources.clone(), "Mrs Ellery-Vasquez"),
+            ["Ellery-Vasquez"]
+        );
+        assert_eq!(found(sources.clone(), "O'Vasquez said"), ["O'Vasquez"]);
+        // A possessive `'s` is not more name.
+        assert_eq!(found(sources.clone(), "Vasquez's desk"), ["Vasquez"]);
+        assert_eq!(found(sources, "Vasquez’s desk"), ["Vasquez"]);
+        // Other classes keep their exact edges.
+        let id = SweepSource {
+            family: "counter".into(),
+            class: PiiClass::Custom("id".into()),
+            raw: "AB12CD".into(),
+        };
+        assert_eq!(found(vec![id], "x AB12CD-extra y"), ["AB12CD"]);
+    }
+
+    /// Review F1 (#691): particles and articles are never name parts on
+    /// their own, so `von der` is not swept from `Anna von der Heide`.
+    #[test]
+    fn particles_are_never_distinctive_or_parts() {
+        assert!(found(
+            vec![name("Anna von der Heide")],
+            "Unterlagen von der Bank und von der Post holen, VON DER KASSE."
+        )
+        .is_empty());
+        assert!(found(vec![name("Jan van der Berg")], "The van der Waals force.").is_empty());
+        assert!(found(vec![name("Paul van den Broek")], "we gaan van den bosch").is_empty());
+        let leyen = vec![name("Ursula von der Leyen")];
+        assert!(found(leyen.clone(), "DER VERTRAG VON HEUTE").is_empty());
+        assert!(found(leyen.clone(), "Der Vertrag von heute").is_empty());
+        // The distinctive part still carries every run and its own spellings.
+        assert_eq!(found(leyen.clone(), "an VON DER LEYEN"), ["VON DER LEYEN"]);
+        assert_eq!(found(leyen, "frau von der leyen"), ["von der leyen"]);
+    }
+
+    #[test]
+    fn ben_stays_a_given_name() {
+        assert_eq!(found(vec![name("Ben Kowalski")], "Thanks, Ben"), ["Ben"]);
+        assert_eq!(found(vec![name("Nic Kowalski")], "Thanks, Nic"), ["Nic"]);
+    }
+
+    /// Re-verify R1 (#691): the particle rule covers the class, not the
+    /// listed instances. Every particle and every particle pair from a
+    /// sender `Maria P Q Kowalski` must stay raw in ordinary text, in lower,
+    /// title and upper case.
+    #[test]
+    fn every_particle_and_particle_pair_stays_raw() {
+        // The reference set lives here, not in `PARTICLES`, so a particle
+        // dropped from the production list fails this test. `'t` is left
+        // out: it is not a word, so it can never be part of a run.
+        #[rustfmt::skip]
+        let words = [
+            "von", "vom", "zu", "zum", "zur", "der", "den", "dem", "des", "van",
+            "de", "het", "ten", "ter", "te", "op", "uit", "aan", "du", "la",
+            "le", "les", "del", "las", "los", "y", "da", "das", "do", "dos", "e",
+            "di", "dal", "dalla", "dei", "degli", "della", "delle", "dello", "af",
+            "av", "al", "el", "bin", "ibn", "bint", "abu", "bar", "mac",
+            "ap", "auf", "bij", "over", "voor", "onder", "dalle", "abd", "bat",
+            "ferch", "ab", "am", "an", "i", "im", "in", "lo", "mc", "ni",
+        ];
+        let mut swept = Vec::new();
+        for first in &words {
+            for second in &words {
+                let matcher = SweepMatcher::build(vec![
+                    name(&format!("Maria {first} {second} Kowalski")),
+                    name(&format!("Maria {first} Kowalski")),
+                ])
+                .unwrap()
+                .unwrap();
+                let lower = format!("go {first} {second} home");
+                for text in [
+                    lower.clone(),
+                    title_case_words(&lower),
+                    lower.to_uppercase(),
+                ] {
+                    for hit in matcher.find(&text) {
+                        swept.push(text[hit.span].to_string());
+                    }
+                }
+            }
+        }
+        assert!(swept.is_empty(), "particles swept: {swept:?}");
+    }
+
+    fn title_case_words(text: &str) -> String {
+        text.split(' ')
+            .map(title_case)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn spanish_and_dutch_particle_runs_stay_raw() {
+        assert!(found(
+            vec![name("Carmen de los Rios")],
+            "Vamos de los Angeles, DE LOS ANDES"
+        )
+        .is_empty());
+        assert!(found(
+            vec![name("Gerrit op het Veld")],
+            "Zet het op het bord. OP HET PLEIN."
+        )
+        .is_empty());
+        assert_eq!(
+            found(vec![name("Gerrit op het Veld")], "met gerrit op het veld"),
+            ["gerrit op het veld"]
+        );
+    }
+
+    /// Review F2 (#691): an org-shaped sender (a CamelCase part, or all-caps
+    /// mixed with other parts) and org or role words never sweep as single
+    /// parts; the whole value still does.
+    #[test]
+    fn org_shaped_values_do_not_propagate_single_parts() {
+        let dhl = vec![name("DHL Paket")];
+        assert!(found(dhl.clone(), "Ihr Paket kommt. Das PAKET ist da").is_empty());
+        assert_eq!(found(dhl, "Ihr DHL Paket kommt"), ["DHL Paket"]);
+        assert!(found(
+            vec![name("DHL Paket Service")],
+            "SERVICE desk, Service desk"
+        )
+        .is_empty());
+        // Only the shape rule stops these: `Express` and `Enterprise` are not
+        // org words.
+        assert!(found(vec![name("DHL Express")], "Express delivery, EXPRESS lane").is_empty());
+        assert!(found(vec![name("GitHub Enterprise")], "Enterprise plan").is_empty());
+        let team = vec![name("SUPPORT TEAM")];
+        assert!(found(team.clone(), "Contact Support or the Team").is_empty());
+        assert_eq!(found(team, "ask the support team"), ["support team"]);
+        let hub = SweepSource {
+            family: "counter".into(),
+            class: PiiClass::Name,
+            raw: "GitHub".into(),
+        };
+        assert!(found(vec![hub.clone()], "GITHUB outage").is_empty());
+        assert_eq!(found(vec![hub], "GitHub outage"), ["GitHub"]);
+        // A fully all-caps personal name keeps its parts (main already swept them).
+        let caps = vec![name("JORUNN VASQUEZ-ELLERY")];
+        assert_eq!(
+            found(caps.clone(), "Dear Vasquez-Ellery,"),
+            ["Vasquez-Ellery"]
+        );
+        assert_eq!(
+            found(caps, "ping jorunn vasquez-ellery"),
+            ["jorunn vasquez-ellery"]
+        );
+    }
+
+    /// Review F3 (#691), accepted and disclosed: joiner growth also takes a
+    /// hyphenated common word glued to a name. Fail-closed, few bytes.
+    #[test]
+    fn joiner_growth_takes_a_glued_hyphenated_word() {
+        assert_eq!(
+            found(vec![name("Maria Kowalski")], "see Kowalski-follow-up notes"),
+            ["Kowalski-follow-up"]
+        );
     }
 
     #[test]

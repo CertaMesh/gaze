@@ -1480,6 +1480,32 @@ fn same_span_structural_name_overlap_logs_loser() {
 }
 
 #[test]
+fn pattern_template_passes_unicode_classes_through() {
+    let locale_vocab =
+        std::collections::HashMap::from([("email_headers".to_string(), vec!["From".to_string()])]);
+    let pattern = lower_pattern_template(
+        "email.header.name",
+        r"^(?:{locale.email_headers}): (\p{Lu}[\p{L}\P{N}]*)$",
+        &locale_vocab,
+    )
+    .expect("lowered pattern");
+    assert_eq!(pattern, r"^(?:(?:From)): (\p{Lu}[\p{L}\P{N}]*)$");
+    let regex = regex::Regex::new(&pattern).expect("compiled regex");
+    let captures = regex.captures("From: Ölçer").expect("captures");
+    assert_eq!(captures.get(1).map(|m| m.as_str()), Some("Ölçer"));
+
+    // An escaped backslash before `p` is a literal `p`; the brace stays a placeholder.
+    let err = lower_pattern_template("x", r"\\p{Lu}", &locale_vocab).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            BuildError::Rulepack(RulepackError::UnknownPatternTemplatePlaceholder { .. })
+        ),
+        "{err:?}"
+    );
+}
+
+#[test]
 fn pattern_template_preserves_regex_quantifiers() {
     let locale_vocab =
         std::collections::HashMap::from([("email_headers".to_string(), vec!["From".to_string()])]);

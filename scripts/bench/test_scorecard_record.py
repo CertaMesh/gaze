@@ -304,8 +304,9 @@ class RecordReplayTests(unittest.TestCase):
         layer_docs = [
             score.Document("layer-a", "alice@example.invalid", "en", "US", "synthetic",
                            (score.Span(0, 21, "EMAIL"),), cell="A|email|prose_cue|valid"),
-            score.Document("layer-d", "benign sku", "en", "US", "synthetic", (),
-                           cell="D|sku|prose|benign"),
+            # A ref_number_16 cell: the gate's credit guard reads that layer D family.
+            score.Document("layer-d", "voucher 1234 5678 9012 3457", "en", "US", "synthetic", (),
+                           cell="D|ref_number_16|prose|benign"),
             score.Document("layer-r", "alice@example.invalid", "en", "US", "synthetic",
                            (score.Span(0, 21, "EMAIL"),), cell="R|email|repeat|valid"),
         ]

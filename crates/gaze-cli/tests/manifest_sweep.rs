@@ -263,3 +263,186 @@ fn daemon_later_turns_are_swept_with_earlier_turn_values() {
         .unwrap();
     assert_eq!(swept, 2, "each swept copy writes one audit row");
 }
+
+/// Solo todo 3897, the reviewer repro: the header value carries `Herr`, and
+/// the all-caps copy used to ship raw.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn honorific_header_name_is_swept_in_every_case() {
+    let input = "From: Herr Tobias Brenner <tb@example.invalid>\nSubject: Termin\n\n\
+                 later: tobias brenner and TOBIAS BRENNER, Tobias\u{00A0}Brenner.\n";
+    let clean = clean_and_round_trip(input, &[]);
+    let lower = clean.to_lowercase();
+    assert!(
+        !lower.contains("tobias") && !lower.contains("brenner"),
+        "{clean}"
+    );
+}
+
+/// The header rule takes hyphenated, apostrophe, diacritic and all-caps name
+/// parts whole, and their copies are swept whole.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn header_names_with_joined_parts_are_found_and_swept_whole() {
+    for (header, body, forbidden) in [
+        (
+            "From: Jorunn Vasquez-Ellery <jv@example.invalid>\n",
+            "ping jorunn vasquez-ellery and JORUNN VASQUEZ-ELLERY\n",
+            ["jorunn", "vasquez", "ellery"],
+        ),
+        (
+            "From: Siobhan O'Brien <so@example.invalid>\n",
+            "cc siobhan o'brien and O'BRIEN\n",
+            ["siobhan", "brien", "brien"],
+        ),
+        (
+            "From: JÜRGEN MÜLLER-LÜDENSCHEIDT <jm@example.invalid>\n",
+            "Gruß an jürgen müller-lüdenscheidt\n",
+            ["jürgen", "lüdenscheidt", "müller-"],
+        ),
+    ] {
+        let input = format!("{header}{body}");
+        let clean = clean_and_round_trip(&input, &[]);
+        let lower = clean.to_lowercase();
+        for raw in forbidden {
+            assert!(!lower.contains(raw), "{raw:?} shipped raw in {clean:?}");
+        }
+    }
+}
+
+/// Precision direction: a header frame is still required, and a lone
+/// lower-case part is still the stated leak.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn joined_name_shapes_outside_a_header_frame_stay_raw() {
+    let input = "Re: Vasquez-Ellery report\nthe o'brien file and the well-known case\n";
+    let value = clean(input);
+    assert_eq!(value["clean_text"].as_str().unwrap(), input);
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_later_turn_sweeps_an_all_caps_honorific_name() {
+    let (_dir, policy) = write_core_only_policy();
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args([
+            "daemon",
+            "--policy",
+            policy.to_str().unwrap(),
+            "--locale",
+            "en-US",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        for text in [
+            "From: Herr Tobias Brenner <tb@example.invalid>\nHallo.\n",
+            "TOBIAS BRENNER and tobias brenner-klee confirmed.\n",
+        ] {
+            writeln!(stdin, "{}", json!({ "session_id": "s3897", "text": text })).unwrap();
+        }
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let turns = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<Value>(line).unwrap()["clean_text"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(turns.len(), 2, "{turns:?}");
+    assert_eq!(name_tokens(&turns[1]).len(), 2, "{turns:?}");
+    let lower = turns[1].to_lowercase();
+    assert!(
+        !lower.contains("tobias") && !lower.contains("brenner") && !lower.contains("klee"),
+        "{turns:?}"
+    );
+}
+
+/// Review F1/F2 on #691, precision direction: particles and org-shaped
+/// senders must not turn ordinary body words into tokens.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn particles_and_org_senders_do_not_sweep_ordinary_words() {
+    for (header, body) in [
+        (
+            "From: \"Anna von der Heide\" <ah@example.invalid>\n",
+            "Bitte die Unterlagen von der Bank und von der Post holen, VON DER KASSE.\n",
+        ),
+        (
+            "From: \"Jan van der Berg\" <jb@example.invalid>\n",
+            "The van der Waals force.\n",
+        ),
+        (
+            "From: \"Paul van den Broek\" <pb@example.invalid>\n",
+            "we gaan van den bosch\n",
+        ),
+        (
+            "From: \"Ursula von der Leyen\" <ul@example.invalid>\n",
+            "DER VERTRAG VON HEUTE\n",
+        ),
+        (
+            "From: DHL Paket <dhl@example.invalid>\n",
+            "Ihr Paket kommt morgen. Das Paket ist da.\n",
+        ),
+        (
+            "From: SUPPORT TEAM <st@example.invalid>\n",
+            "Contact Support or the Team.\n",
+        ),
+        (
+            "From: \"Carmen de los Rios\" <cr@example.invalid>\n",
+            "Vamos de los Angeles, DE LOS ANDES.\n",
+        ),
+        (
+            "From: \"Gerrit op het Veld\" <gv@example.invalid>\n",
+            "Zet het op het bord. OP HET PLEIN.\n",
+        ),
+        ("From: GitHub <gh@example.invalid>\n", "GITHUB is down.\n"),
+        (
+            "From: DHL Express <dx@example.invalid>\n",
+            "Express delivery is booked.\n",
+        ),
+    ] {
+        let input = format!("{header}{body}");
+        let clean = clean_and_round_trip(&input, &[]);
+        assert!(clean.ends_with(body), "{body:?} -> {clean:?}");
+    }
+}
+
+/// Review F1/F2 on #691, recall direction: the distinctive part and a fully
+/// all-caps personal name still sweep.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn particle_names_and_all_caps_names_still_sweep() {
+    for (header, body, forbidden) in [
+        (
+            "From: \"Ursula von der Leyen\" <ul@example.invalid>\n",
+            "Termin mit VON DER LEYEN und frau von der leyen\n",
+            "leyen",
+        ),
+        (
+            "From: JORUNN VASQUEZ-ELLERY <jv@example.invalid>\n",
+            "ping jorunn vasquez-ellery, Dear Vasquez-Ellery\n",
+            "vasquez",
+        ),
+    ] {
+        let input = format!("{header}{body}");
+        let clean = clean_and_round_trip(&input, &[]);
+        assert!(
+            !clean.to_lowercase().contains(forbidden),
+            "{forbidden:?} shipped raw in {clean:?}"
+        );
+    }
+}
