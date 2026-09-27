@@ -911,6 +911,16 @@ sections; edits to existing sections or undeclared keys are not comparable
 candidate and delta file SHA-256 digests for review. Keep both policy files at
 their recorded paths until the gate runs.
 
+`runner_provenance.policy_dependencies` records SHA-256 for external rulepacks,
+dictionary term files, and every regular file under active model directories.
+The gate also compares Davlan, Nym, and enabled GLiNER DOB bundle digests in
+`runner_provenance.model_bundles`. It compares files by logical policy reference, so different
+worktree paths do not affect identity. With `--policy-delta`, only dependencies
+owned by newly declared sections may differ. Scorecards without this identity
+are refused; `--allow-legacy-policy-inputs` permits a comparison only when
+**both** historical cards lack it. That explicit mode cannot prove external
+file or model comparability and must not be used for a new detection merge.
+
 **Gated gold** is the gold a precise rule can reach. Layer A leaves out its
 checksum-invalid twins, and layer C leaves out the Kiji gold that fails its
 own validator (from the per-label validator split). Both kinds stay in the

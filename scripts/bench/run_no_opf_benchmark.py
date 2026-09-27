@@ -959,6 +959,7 @@ def run(args: argparse.Namespace) -> int:
     davlan_model = args.model_dir.expanduser().resolve()
     policy_path = repo_path(repo_root, args.policy).resolve() if args.policy else None
     policy_sha = None
+    policy_data = None
     nym_bundle_sha = None
     nym_expected_sha = None
     effective_threshold = args.threshold
@@ -1027,6 +1028,14 @@ def run(args: argparse.Namespace) -> int:
                 "observed_sha256": nym_bundle_sha,
             }
         )
+    policy_dependencies = None
+    if policy_data is not None:
+        try:
+            policy_dependencies = {
+                "files": agentic.policy_dependency_files(policy_data, repo_root),
+            }
+        except agentic.LayerError as error:
+            raise CandidateError(f"policy dependencies: {error}") from error
     if dataset_path.is_file():
         dataiku.verify_dataset(dataset_path)
     elif args.no_download:
@@ -1136,6 +1145,7 @@ def run(args: argparse.Namespace) -> int:
         "entry_point": "scripts/bench/run_no_opf_benchmark.py",
         "profile": args.profile,
         "model_bundles": model_provenance,
+        "policy_dependencies": policy_dependencies,
         "policy": {"path": str(policy_path), "sha256": policy_sha} if policy_path else None,
         "hardware": platform.platform() + "; " + platform.processor(),
         "warmup_count": args.warmups,

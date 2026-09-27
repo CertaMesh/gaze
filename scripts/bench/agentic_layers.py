@@ -1516,6 +1516,91 @@ def coverage_grid(scorecard: Mapping[str, object], config: str | None = None) ->
 GATE_LAYERS = ("C", LAYER_IDENTIFIERS, LAYER_LOOKALIKES, LAYER_REPEATS)
 
 
+def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> dict[str, str]:
+    """Hash external policy inputs by logical reference, independent of worktree path."""
+    files: dict[str, str] = {}
+
+    def resolved(value: object, reference: str) -> Path:
+        if not isinstance(value, str) or not value:
+            raise LayerError(f"invalid {reference} path in policy")
+        path = Path(value).expanduser()
+        return path if path.is_absolute() else working_dir / path
+
+    def add_file(value: object, reference: str) -> None:
+        path = resolved(value, reference)
+        try:
+            if not path.is_file():
+                raise OSError("not a regular file")
+            files[reference] = score.sha256_file(path)
+        except OSError as error:
+            raise LayerError(f"cannot hash policy input {reference} at {path}: {error}") from error
+
+    def add_dir(value: object, reference: str) -> None:
+        directory = resolved(value, reference)
+        if not directory.is_dir():
+            raise LayerError(f"cannot hash policy model directory {reference} at {directory}")
+        for path in sorted(directory.rglob("*")):
+            if path.is_symlink():
+                raise LayerError(f"policy model directory {reference} contains a symlink: {path}")
+            if path.is_file():
+                add_file(str(path), f"{reference}/{path.relative_to(directory).as_posix()}")
+
+    rules = policy.get("policy", {})
+    if isinstance(rules, dict):
+        rulepacks = rules.get("rulepacks", {})
+        if isinstance(rulepacks, dict):
+            for index, path in enumerate(rulepacks.get("paths", [])):
+                add_file(path, f"policy.rulepacks.paths[{index}]")
+        for index, recognizer in enumerate(rules.get("custom_recognizers", [])):
+            if isinstance(recognizer, dict) and "terms_file" in recognizer:
+                add_file(recognizer["terms_file"], f"policy.custom_recognizers[{index}].terms_file")
+    for section in ("ner", "dob_judge"):
+        config = policy.get(section)
+        if isinstance(config, dict) and config.get("model_dir") and (
+            section != "dob_judge" or config.get("enabled") is True
+        ):
+            add_dir(config["model_dir"], f"{section}.model_dir")
+    safety_net = policy.get("safety_net")
+    if isinstance(safety_net, dict) and safety_net.get("backend") == "nym":
+        nym = safety_net.get("nym")
+        if not isinstance(nym, dict) or not nym.get("model_dir"):
+            raise LayerError("active Nym policy has no model_dir")
+        add_dir(nym["model_dir"], "safety_net.nym.model_dir")
+    return dict(sorted(files.items()))
+
+
+def model_bundle_identity(bundles: object) -> dict[str, str]:
+    if not isinstance(bundles, list):
+        raise LayerError("scorecard has no model-bundle provenance")
+    identity: dict[str, str] = {}
+    for bundle in bundles:
+        if not isinstance(bundle, dict):
+            raise LayerError("invalid model-bundle provenance")
+        model_id, digest = bundle.get("model_id"), bundle.get("observed_sha256")
+        if (not isinstance(model_id, str) or not model_id or not isinstance(digest, str)
+                or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest)):
+            raise LayerError("invalid model-bundle provenance")
+        if model_id in identity:
+            raise LayerError(f"duplicate model-bundle provenance: {model_id}")
+        identity[model_id] = digest
+    return dict(sorted(identity.items()))
+
+
+def policy_dependency_identity(scorecard: Mapping[str, object], allow_legacy: bool) -> dict[str, object] | None:
+    provenance = scorecard.get("runner_provenance")
+    dependencies = provenance.get("policy_dependencies") if isinstance(provenance, dict) else None
+    if dependencies is None and allow_legacy:
+        return None
+    if not isinstance(dependencies, dict) or not isinstance(dependencies.get("files"), dict):
+        raise LayerError("scorecard has no policy-dependency identity; measure it again or use --allow-legacy-policy-inputs")
+    files = dependencies["files"]
+    if any(not isinstance(k, str) or not isinstance(v, str) or len(v) != 64
+           or any(char not in "0123456789abcdef" for char in v) for k, v in files.items()):
+        raise LayerError("scorecard has invalid policy-dependency file digests")
+    bundles = model_bundle_identity(provenance.get("model_bundles"))
+    return {"files": files, "model_bundles": bundles}
+
+
 def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
     layers = scorecard.get("layers")
     if not isinstance(layers, dict):
@@ -1708,7 +1793,7 @@ def _toml_equal(left: object, right: object) -> bool:
 
 def _policy_delta_comparison(
     base: Mapping[str, object], candidate: Mapping[str, object], delta_path: Path
-) -> tuple[bool, str, dict[str, str]]:
+) -> tuple[bool, str, dict[str, str], set[str]]:
     base_policy, base_sha = _scorecard_policy(base, "base")
     candidate_policy, candidate_sha = _scorecard_policy(candidate, "candidate")
     try:
@@ -1725,26 +1810,52 @@ def _policy_delta_comparison(
     except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         raise LayerError(f"invalid declared policy delta TOML: {error}") from error
     if not delta or any(not isinstance(section, dict) for section in delta.values()):
-        return False, "policy delta must declare at least one TOML section", digests
+        return False, "policy delta must declare at least one TOML section", digests, set()
     existing = sorted(base_policy.keys() & delta.keys())
     if existing:
-        return False, f"policy delta changes existing base sections: {existing}", digests
+        return False, f"policy delta changes existing base sections: {existing}", digests, set()
     if not _toml_equal(candidate_policy, {**base_policy, **delta}):
-        return False, "candidate policy differs beyond the declared new sections", digests
-    return True, "candidate policy equals base plus declared new sections", digests
+        return False, "candidate policy differs beyond the declared new sections", digests, set()
+    return True, "candidate policy equals base plus declared new sections", digests, set(delta)
+
+
+def _dependency_difference(
+    base: dict[str, object] | None, candidate: dict[str, object] | None,
+    added_sections: set[str],
+) -> list[str]:
+    if base is None or candidate is None:
+        return [] if base is candidate else ["policy_dependencies"]
+    differing: list[str] = []
+    for reference in sorted(base["files"].keys() | candidate["files"].keys()):
+        if base["files"].get(reference) != candidate["files"].get(reference):
+            owner = reference.split(".", 1)[0]
+            if not (owner in added_sections and reference not in base["files"]):
+                differing.append(f"policy input {reference}")
+    model_sections = {
+        "davlan-mbert-ner-hrl-onnx": "ner",
+        "nym-small-int8": "safety_net",
+        "gliner-multi-pii-dob-int8": "dob_judge",
+    }
+    for model_id in sorted(base["model_bundles"].keys() | candidate["model_bundles"].keys()):
+        if base["model_bundles"].get(model_id) != candidate["model_bundles"].get(model_id):
+            if model_sections.get(model_id) not in added_sections:
+                differing.append(f"model bundle {model_id}")
+    return differing
 
 
 def gate(
     base: Mapping[str, object], candidate: Mapping[str, object], config: str | None = None,
     policy_delta: Path | None = None,
+    allow_legacy_policy_inputs: bool = False,
 ) -> dict[str, object]:
     """Identity check, then `decide` on the production arm's layer totals."""
     base_identity = _layer_identity(base)
     candidate_identity = _layer_identity(candidate)
     delta_result: dict[str, object] = {}
     policy_ok = True
+    added_sections: set[str] = set()
     if policy_delta is not None:
-        policy_ok, reason, digests = _policy_delta_comparison(base, candidate, policy_delta)
+        policy_ok, reason, digests, added_sections = _policy_delta_comparison(base, candidate, policy_delta)
         delta_result = {
             "policy_digests": digests,
             "policy_delta_reason": reason,
@@ -1755,6 +1866,9 @@ def gate(
         if base_identity[key] != candidate_identity[key]
         and (key != "policy_sha256" or policy_delta is None)
     )
+    base_dependencies = policy_dependency_identity(base, allow_legacy_policy_inputs)
+    candidate_dependencies = policy_dependency_identity(candidate, allow_legacy_policy_inputs)
+    differing.extend(_dependency_difference(base_dependencies, candidate_dependencies, added_sections))
     if not policy_ok or differing:
         if not policy_ok:
             differing.append("policy_sha256")
@@ -1919,6 +2033,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     gate_cmd.add_argument("--candidate", type=Path, required=True)
     gate_cmd.add_argument("--config")
     gate_cmd.add_argument("--policy-delta", type=Path, help="TOML sections added to the base policy")
+    gate_cmd.add_argument("--allow-legacy-policy-inputs", action="store_true",
+                          help="compare two historical scorecards without policy-dependency identity")
     args = parser.parse_args(argv)
     try:
         if args.command == "generate":
@@ -1937,7 +2053,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "grid":
             print(coverage_grid(_load_json(args.scorecard), args.config), end="")
         else:
-            result = gate(_load_json(args.base), _load_json(args.candidate), args.config, args.policy_delta)
+            result = gate(_load_json(args.base), _load_json(args.candidate), args.config,
+                          args.policy_delta, args.allow_legacy_policy_inputs)
             print(gate_markdown(result), end="")
             return {"pass": 0, "fail": 1}.get(str(result["verdict"]), 2)
     except LayerError as error:

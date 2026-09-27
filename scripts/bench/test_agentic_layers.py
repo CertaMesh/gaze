@@ -531,6 +531,7 @@ def _scorecard(
 
     return {
         "parameters": {"configs": ["policy-file"], "policy_sha256": "p"},
+        "runner_provenance": {"model_bundles": [], "policy_dependencies": {"files": {}}},
         "dataset": {"integrity": {"sha256": "k"}},
         "scoring": {"scored_label_contract": {"id": "scored-labels-v2", "version": 2, "file_sha256": "c"}},
         "runs": [run("C")],
@@ -581,6 +582,79 @@ class CompositeSourceIdTests(unittest.TestCase):
 class GateTests(unittest.TestCase):
     BASE = {"C": 100, "A": 50, "D": 0, "R": 30}
     FP = {"C": 10, "A": 5, "D": 7, "R": 3}
+
+    def test_policy_input_and_model_digest_changes_are_not_comparable_on_either_side(self) -> None:
+        for kind in ("file", "davlan", "nym", "gliner"):
+            for side in ("base", "candidate"):
+                with self.subTest(kind=kind, side=side):
+                    cards = {name: _scorecard(self.BASE, self.FP) for name in ("base", "candidate")}
+                    if kind == "file":
+                        cards[side]["runner_provenance"]["policy_dependencies"]["files"] = {
+                            "policy.rulepacks.paths[0]": "a" * 64
+                        }
+                    else:
+                        model_id = {"davlan": "davlan-mbert-ner-hrl-onnx",
+                                    "nym": "nym-small-int8",
+                                    "gliner": "gliner-multi-pii-dob-int8"}[kind]
+                        for card in cards.values():
+                            card["runner_provenance"]["model_bundles"] = [
+                                {"model_id": model_id, "observed_sha256": "a" * 64}]
+                        cards[side]["runner_provenance"]["model_bundles"][0]["observed_sha256"] = "b" * 64
+                    result = agentic.gate(cards["base"], cards["candidate"])
+                    self.assertEqual(result["verdict"], "not_comparable")
+                    self.assertTrue(any("policy input" in value or "model bundle" in value
+                                        for value in result["differing"]))
+
+    def test_missing_policy_dependency_identity_requires_explicit_legacy_flag(self) -> None:
+        for side in ("base", "candidate"):
+            cards = {name: _scorecard(self.BASE, self.FP) for name in ("base", "candidate")}
+            del cards[side]["runner_provenance"]["policy_dependencies"]
+            with self.subTest(side=side), self.assertRaisesRegex(agentic.LayerError, "policy-dependency identity"):
+                agentic.gate(cards["base"], cards["candidate"])
+            self.assertEqual(agentic.gate(cards["base"], cards["candidate"],
+                                          allow_legacy_policy_inputs=True)["verdict"], "not_comparable")
+        cards = {name: _scorecard(self.BASE, self.FP) for name in ("base", "candidate")}
+        for card in cards.values():
+            del card["runner_provenance"]["policy_dependencies"]
+        self.assertEqual(agentic.gate(cards["base"], cards["candidate"],
+                                      allow_legacy_policy_inputs=True)["verdict"], "fail")
+
+    def test_policy_dependency_files_hash_referenced_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pack.toml").write_text("pack=1", encoding="utf-8")
+            (root / "terms.txt").write_text("synthetic-term", encoding="utf-8")
+            (root / "model").mkdir()
+            (root / "model" / "artifact.bin").write_bytes(b"model-a")
+            policy = {"policy": {"rulepacks": {"paths": ["pack.toml"]},
+                                 "custom_recognizers": [{"terms_file": "terms.txt"}]},
+                      "ner": {"model_dir": "model"}}
+            first = agentic.policy_dependency_files(policy, root)
+            self.assertEqual(set(first), {"policy.rulepacks.paths[0]",
+                                          "policy.custom_recognizers[0].terms_file",
+                                          "ner.model_dir/artifact.bin"})
+            for path, key in ((root / "pack.toml", "policy.rulepacks.paths[0]"),
+                              (root / "terms.txt", "policy.custom_recognizers[0].terms_file"),
+                              (root / "model" / "artifact.bin", "ner.model_dir/artifact.bin")):
+                original = path.read_bytes()
+                path.write_bytes(original + b"x")
+                changed = agentic.policy_dependency_files(policy, root)
+                self.assertNotEqual(changed[key], first[key])
+                path.write_bytes(original)
+
+    def test_active_model_directories_are_hashed_and_disabled_dob_is_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("nym", "dob"):
+                (root / name).mkdir()
+                (root / name / "weights.bin").write_bytes(name.encode())
+            policy = {"safety_net": {"backend": "nym", "nym": {"model_dir": "nym"}},
+                      "dob_judge": {"enabled": False, "model_dir": "dob"}}
+            self.assertEqual(set(agentic.policy_dependency_files(policy, root)),
+                             {"safety_net.nym.model_dir/weights.bin"})
+            policy["dob_judge"]["enabled"] = True
+            self.assertEqual(set(agentic.policy_dependency_files(policy, root)),
+                             {"safety_net.nym.model_dir/weights.bin", "dob_judge.model_dir/weights.bin"})
 
     def verdict(self, candidate: dict, base: dict | None = None) -> str:
         return agentic.gate(base or _scorecard(self.BASE, self.FP), candidate)["verdict"]
@@ -763,6 +837,40 @@ class GateTests(unittest.TestCase):
 class PolicyDeltaGateTests(unittest.TestCase):
     BASE_LEAKS = {"C": 100, "A": 50, "D": 0, "R": 30}
 
+    def test_delta_accepts_only_dependencies_owned_by_new_section(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "model").mkdir()
+            (root / "model" / "artifact.bin").write_bytes(b"gliner-bundle")
+            base_text = "[rules]\nenabled=true\n"
+            added = f'[dob_judge]\nenabled=true\nmodel_dir="{root / "model"}"\n'
+            paths = {name: root / f"{name}.toml" for name in ("base", "candidate", "delta")}
+            for name, content in (("base", base_text), ("candidate", base_text + added), ("delta", added)):
+                paths[name].write_text(content, encoding="utf-8")
+            cards = {name: _scorecard(self.BASE_LEAKS if name == "base" else
+                                      {**self.BASE_LEAKS, "R": 10}) for name in ("base", "candidate")}
+            for name, card in cards.items():
+                digest = hashlib.sha256(paths[name].read_bytes()).hexdigest()
+                card["parameters"]["policy_sha256"] = digest
+                card["runner_provenance"]["policy"] = {"path": str(paths[name]), "sha256": digest}
+                card["runner_provenance"]["policy_dependencies"]["files"] = (
+                    agentic.policy_dependency_files({"dob_judge": {"enabled": True,
+                                                    "model_dir": str(root / "model")}}, root)
+                    if name == "candidate" else {}
+                )
+            model_id = "gliner-multi-pii-dob-int8"
+            cards["candidate"]["runner_provenance"]["model_bundles"] = [
+                {"model_id": model_id, "observed_sha256": "a" * 64}]
+            result = agentic.gate(cards["base"], cards["candidate"], policy_delta=paths["delta"])
+            self.assertEqual(result["verdict"], "pass")
+            cards["base"]["runner_provenance"]["policy_dependencies"]["files"][
+                "policy.rulepacks.paths[0]"] = "a" * 64
+            cards["candidate"]["runner_provenance"]["policy_dependencies"]["files"][
+                "policy.rulepacks.paths[0]"] = "b" * 64
+            result = agentic.gate(cards["base"], cards["candidate"], policy_delta=paths["delta"])
+            self.assertEqual(result["verdict"], "not_comparable")
+            self.assertIn("policy input policy.rulepacks.paths[0]", result["differing"])
+
     def compare(
         self, base_text: str, candidate_text: str, delta_text: str,
         missing_field: str | None = None,
@@ -779,7 +887,7 @@ class PolicyDeltaGateTests(unittest.TestCase):
             for label, card in (("base", base), ("candidate", candidate)):
                 digest = hashlib.sha256(paths[label].read_bytes()).hexdigest()
                 card["parameters"]["policy_sha256"] = digest
-                card["runner_provenance"] = {"policy": {"path": str(paths[label]), "sha256": digest}}
+                card["runner_provenance"]["policy"] = {"path": str(paths[label]), "sha256": digest}
                 if wrong_digest and wrong_digest[0] == label:
                     altered = ("0" if digest[0] != "0" else "1") + digest[1:]
                     self.assertRegex(altered, r"^[0-9a-f]{64}$")
