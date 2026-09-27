@@ -158,6 +158,11 @@ impl RegexDetector {
 }
 
 impl Detector for RegexDetector {
+    /// A regex match is rule evidence.
+    fn evidence(&self) -> gaze_types::EvidenceKind {
+        gaze_types::EvidenceKind::Rule
+    }
+
     fn detect(&self, input: &str) -> Vec<Detection> {
         self.spans(input, None)
             .into_iter()
@@ -167,6 +172,11 @@ impl Detector for RegexDetector {
 }
 
 impl Recognizer for RegexDetector {
+    /// A regex match is rule evidence.
+    fn evidence(&self) -> gaze_types::EvidenceKind {
+        gaze_types::EvidenceKind::Rule
+    }
+
     fn id(&self) -> &str {
         &self.source
     }

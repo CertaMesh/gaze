@@ -32,7 +32,7 @@ use std::collections::HashSet;
 use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, MatchKind};
-use gaze_types::{is_inside_word, Candidate, ConflictTier, PiiClass};
+use gaze_types::{is_inside_word, Candidate, ConflictTier, EvidenceKind, PiiClass};
 use serde::{Deserialize, Serialize};
 
 use crate::normalize::normalize;
@@ -122,10 +122,11 @@ impl ManifestEvidence {
             Self::Validated
         } else if candidate.source.starts_with("structural.") {
             Self::Anchored
-        } else if crate::resolver::is_learned(candidate) {
-            Self::Learned
         } else {
-            Self::Pattern
+            match candidate.evidence {
+                EvidenceKind::Learned => Self::Learned,
+                EvidenceKind::Rule => Self::Pattern,
+            }
         }
     }
 
@@ -193,7 +194,8 @@ impl SweepHit {
             Vec::new(),
         );
         candidate.source_recognizer_ids = vec![SWEEP_ID.to_string()];
-        candidate
+        // A copy of a rule-found value is itself rule evidence.
+        candidate.with_evidence(EvidenceKind::Rule)
     }
 }
 

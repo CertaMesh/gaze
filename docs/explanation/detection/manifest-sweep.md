@@ -52,6 +52,33 @@ the model's mistakes across whole documents: on TAB court cases, 91 % of the
 new false positives came from NER-tagged words such as "Government" and
 "Court". A class the policy does not protect (`preserve`) never propagates.
 
+Each emitter declares which kind of evidence it produces, as
+`gaze::EvidenceKind::Rule` or `gaze::EvidenceKind::Learned`
+(`Recognizer::evidence`, `Detector::evidence`). The registry stamps the
+declaration on every candidate the recognizer emits, and the sweep and the
+resolver read that field. Nothing is inferred from a recognizer id. An emitter
+that declares nothing is `Learned` and never propagates, so a new model-backed
+or heuristic emitter cannot start spreading its values by accident.
+
+| Emitter | Declares |
+|---|---|
+| Rulepack regex, dictionary and anchored-match recognizers (bundled and adopter `[[policy.custom_recognizers]]`) | `Rule` |
+| `gaze index` field-label detector, TokenBridge synthetic-corpus detector | `Rule` |
+| NER (`ner`), GLiNER birth-date judge (`dob.gliner`) | `Learned` |
+| House numbers licensed by a NER street (`address.house_number.street_corroborated`) | `Learned` |
+| An adopter `Recognizer` / `Detector` that declares nothing | `Learned` |
+| A swept copy of a rule value | `Rule` |
+| A collision-family tie | `Rule` only if both sides are `Rule` |
+
+The declaration is also the resolver's evidence tier for cross-class
+containment: a `Learned` span never swallows an enclosed `Rule` candidate of
+another class, so an undeclared emitter's container splits into tokens around
+the rule span instead of covering it with one token. Recovery covers the
+remainder, so no raw bytes ship.
+
+Safety-net values (Nym, OPF) are not candidates. Their tokens record no
+evidence in the session, so they never propagate either.
+
 ## Matching rules
 
 Each value has one shape, and each shape owns its precision floor.

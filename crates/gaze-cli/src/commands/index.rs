@@ -421,6 +421,11 @@ impl SourceDoc {
 struct FieldEntityDetector;
 
 impl Detector for FieldEntityDetector {
+    /// A value behind a known field label is rule evidence.
+    fn evidence(&self) -> gaze::EvidenceKind {
+        gaze::EvidenceKind::Rule
+    }
+
     fn detect(&self, input: &str) -> Vec<Detection> {
         field_detections(input)
     }

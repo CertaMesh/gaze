@@ -5283,7 +5283,9 @@ fn street_corroborated_house_numbers(
             candidate
                 .source_recognizer_ids
                 .push(crate::NER_RECOGNIZER_ID.to_string());
-            found.push(candidate);
+            // Licensed by a NER street span, so it carries no more certainty than NER: a house
+            // number must never be swept to every other copy of `17` (todo 3670).
+            found.push(candidate.with_evidence(crate::EvidenceKind::Learned));
         }
     }
     found
@@ -5387,6 +5389,10 @@ where
 {
     fn id(&self) -> &str {
         "legacy-detector"
+    }
+
+    fn evidence(&self) -> crate::EvidenceKind {
+        self.detector.evidence()
     }
 
     fn supported_class(&self) -> &crate::PiiClass {

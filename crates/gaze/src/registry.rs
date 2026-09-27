@@ -91,7 +91,7 @@ use std::sync::Arc;
 
 use crate::anchor_resolver::AnchorResolver;
 use crate::house_number::{StreetLexicon, StreetNumberOrder};
-pub use gaze_types::{Candidate, DetectContext, DetectError, Recognizer};
+pub use gaze_types::{Candidate, DetectContext, DetectError, EvidenceKind, Recognizer};
 use gaze_types::{CollisionMembership, LocaleBasis, LocaleChain, LocaleTag, PiiClass};
 
 pub trait Validator: Send + Sync {
@@ -929,6 +929,22 @@ mod tests {
     }
 }
 
+/// Runs one recognizer and stamps its declared [`Recognizer::evidence`] on every candidate.
+/// Every registry detect call goes through here, so the sweep reads a declaration the
+/// recognizer made, never a guess from its id.
+fn detect_declared(
+    recognizer: &dyn Recognizer,
+    input: &str,
+    ctx: &DetectContext<'_>,
+) -> Result<Vec<Candidate>, DetectError> {
+    let evidence = recognizer.evidence();
+    Ok(recognizer
+        .detect(input, ctx)?
+        .into_iter()
+        .map(|candidate| candidate.with_evidence(evidence))
+        .collect())
+}
+
 impl RecognizerRegistry {
     pub(crate) fn is_empty(&self) -> bool {
         self.entries.is_empty()
@@ -950,7 +966,7 @@ impl RecognizerRegistry {
                 && (recognizer.locale_basis() == LocaleBasis::Format
                     || locale_chain.intersects(recognizer.locales()))
         }) {
-            candidates.extend(recognizer.detect(input, ctx)?);
+            candidates.extend(detect_declared(recognizer.as_ref(), input, ctx)?);
         }
         let post_candidates = self.detect_post_candidates(input, ctx, &candidates)?;
         candidates.extend(post_candidates);
@@ -974,7 +990,7 @@ impl RecognizerRegistry {
                 && (recognizer.locale_basis() == LocaleBasis::Format
                     || locale_chain.intersects(recognizer.locales()))
         }) {
-            added.extend(recognizer.detect(input, &prior_ctx)?);
+            added.extend(detect_declared(recognizer.as_ref(), input, &prior_ctx)?);
         }
         ctx.degraded.set(prior_ctx.degraded.get());
         Ok(added)
@@ -1053,8 +1069,7 @@ impl RecognizerRegistry {
                 .filter(|recognizer| !recognizer.requires_prior_candidates())
             {
                 candidates.extend(
-                    recognizer
-                        .detect(input, ctx)?
+                    detect_declared(recognizer.as_ref(), input, ctx)?
                         .into_iter()
                         .filter(|candidate| candidate.score >= min_score(&class)),
                 );
@@ -1089,12 +1104,11 @@ impl RecognizerRegistry {
                     let detected: &[Candidate] = if recognizer.detect_is_locale_invariant() {
                         match reused.entry(index) {
                             std::collections::hash_map::Entry::Occupied(slot) => slot.into_mut(),
-                            std::collections::hash_map::Entry::Vacant(slot) => {
-                                slot.insert(recognizer.detect(input, &locale_ctx)?)
-                            }
+                            std::collections::hash_map::Entry::Vacant(slot) => slot
+                                .insert(detect_declared(recognizer.as_ref(), input, &locale_ctx)?),
                         }
                     } else {
-                        fresh = recognizer.detect(input, &locale_ctx)?;
+                        fresh = detect_declared(recognizer.as_ref(), input, &locale_ctx)?;
                         &fresh
                     };
                     class_candidates.extend(

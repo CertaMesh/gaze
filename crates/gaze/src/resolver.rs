@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::anchor_resolver::{AnchorOutcome, AnchorResolver};
 use crate::LocaleTag;
-use crate::{Candidate, ConflictTier, FamilyPolicyTable, PiiClass};
+use crate::{Candidate, ConflictTier, EvidenceKind, FamilyPolicyTable, PiiClass};
 
 pub fn resolve_candidates(candidates: Vec<Candidate>) -> Vec<Candidate> {
     resolve_candidates_with_policy(candidates, &FamilyPolicyTable::EMPTY)
@@ -457,7 +457,7 @@ fn structured_containment(
 /// least the contained candidate's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum EvidenceTier {
-    /// A learned NER span (the `ner` recognizer, `ner/<backend>` source).
+    /// A candidate whose emitter declared [`EvidenceKind::Learned`], or declared nothing.
     Learned,
     /// A plain regex or dictionary term.
     Pattern,
@@ -489,22 +489,10 @@ fn evidence_tier(
             return EvidenceTier::Anchored;
         }
     }
-    if is_learned(candidate) {
-        return EvidenceTier::Learned;
+    match candidate.evidence {
+        EvidenceKind::Learned => EvidenceTier::Learned,
+        EvidenceKind::Rule => EvidenceTier::Pattern,
     }
-    EvidenceTier::Pattern
-}
-
-/// A learned model span. The resolver's lowest evidence tier, which the
-/// repeat-value sweep never propagates.
-pub(crate) fn is_learned(candidate: &Candidate) -> bool {
-    candidate.recognizer_id == crate::NER_RECOGNIZER_ID
-        || candidate.source == "ner"
-        || candidate.source.starts_with("ner/")
-        || candidate.recognizer_id == "dob.gliner"
-        // Licensed by a NER street span, so it carries no more certainty than NER: a house
-        // number must never be swept to every other copy of `17` (todo 3670).
-        || candidate.recognizer_id == crate::house_number::HOUSE_NUMBER_RECOGNIZER_ID
 }
 
 /// Detects the containment-precedence shape and says which side is the
@@ -637,6 +625,13 @@ fn family_tie_candidate(
         .chain(&candidate.source_recognizer_ids)
         .cloned()
         .collect();
+    // A tie rests on the weaker of its two sides.
+    let evidence =
+        if candidate.evidence == EvidenceKind::Rule && existing.evidence == EvidenceKind::Rule {
+            EvidenceKind::Rule
+        } else {
+            EvidenceKind::Learned
+        };
     let mut tied = Candidate::new(
         candidate.span.start.min(existing.span.start)..candidate.span.end.max(existing.span.end),
         PiiClass::family(family),
@@ -650,7 +645,7 @@ fn family_tie_candidate(
         merged_sources,
     );
     tied.source_recognizer_ids = source_recognizer_ids;
-    Some(tied)
+    Some(tied.with_evidence(evidence))
 }
 
 fn apply_missing_anchor_fallback(
@@ -724,6 +719,7 @@ fn family_fallback_candidate(
         merged_sources.push(original_recognizer_id);
     }
     let source_recognizer_ids = candidate.source_recognizer_ids.clone();
+    let evidence = candidate.evidence;
     let mut fallback = Candidate::new(
         candidate.span,
         PiiClass::family(&family),
@@ -737,7 +733,7 @@ fn family_fallback_candidate(
         merged_sources,
     );
     fallback.source_recognizer_ids = source_recognizer_ids;
-    fallback
+    fallback.with_evidence(evidence)
 }
 
 #[cfg(test)]
@@ -814,7 +810,14 @@ fn overlaps(left: &Range<usize>, right: &Range<usize>) -> bool {
 mod tests {
     use super::*;
 
+    /// Stamps evidence as the registry would: the `ner` stand-in is learned, every other
+    /// fixture id stands in for a rule.
     fn candidate(span: Range<usize>, class: PiiClass, score: f32, id: &str) -> Candidate {
+        let evidence = if id == crate::NER_RECOGNIZER_ID {
+            EvidenceKind::Learned
+        } else {
+            EvidenceKind::Rule
+        };
         Candidate::new(
             span,
             class,
@@ -827,6 +830,7 @@ mod tests {
             ConflictTier::None,
             Vec::new(),
         )
+        .with_evidence(evidence)
     }
 
     /// Two variants of one collision family at equal precedence: the shape

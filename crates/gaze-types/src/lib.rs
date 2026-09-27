@@ -14,10 +14,32 @@ use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use thiserror::Error;
 
+/// What a detection rests on, declared by the recognizer or detector that emits it.
+///
+/// The repeat-value sweep copies only [`EvidenceKind::Rule`] values to every other occurrence
+/// in the document and in later turns of the session, so a model's mistake is never spread.
+/// The default is [`EvidenceKind::Learned`]: an emitter that declares nothing is never
+/// propagated. Declare `Rule` only when every candidate comes from a deterministic rule a
+/// reviewer can read (a regex, a dictionary term, a cue-anchored match).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum EvidenceKind {
+    /// A model or heuristic decided: NER, a model judge, a span licensed by a model span.
+    #[default]
+    Learned,
+    /// A deterministic rule decided.
+    Rule,
+}
+
 /// Shared detector contract for text-only PII detection.
 pub trait Detector: Send + Sync {
     /// Detect PII spans in the supplied input string.
     fn detect(&self, input: &str) -> Vec<Detection>;
+
+    /// What this detector's detections rest on. Defaults to [`EvidenceKind::Learned`], which
+    /// the repeat-value sweep never propagates; see [`EvidenceKind`].
+    fn evidence(&self) -> EvidenceKind {
+        EvidenceKind::Learned
+    }
 
     /// Fallible detection entrypoint for detectors backed by runtime systems.
     fn try_detect(&self, input: &str) -> Result<Vec<Detection>, RecognizerRuntimeError> {
@@ -4059,6 +4081,14 @@ pub trait Recognizer: Send + Sync {
     fn requires_prior_candidates(&self) -> bool {
         false
     }
+
+    /// What this recognizer's candidates rest on. The registry stamps it on every candidate
+    /// the recognizer emits, overwriting [`Candidate::evidence`]. Defaults to
+    /// [`EvidenceKind::Learned`], which the repeat-value sweep never propagates; see
+    /// [`EvidenceKind`].
+    fn evidence(&self) -> EvidenceKind {
+        EvidenceKind::Learned
+    }
 }
 
 /// Caller-visible recognizer detection failure.
@@ -4113,6 +4143,9 @@ pub struct Candidate {
     pub merged_sources: Vec<String>,
     /// Original recognizer IDs contributing to this candidate's provenance.
     pub source_recognizer_ids: Vec<String>,
+    /// What the candidate rests on. [`Candidate::new`] starts at [`EvidenceKind::Learned`];
+    /// the registry overwrites it with the emitting recognizer's [`Recognizer::evidence`].
+    pub evidence: EvidenceKind,
 }
 
 impl Candidate {
@@ -4144,7 +4177,14 @@ impl Candidate {
             source: source.into(),
             decided_by,
             merged_sources,
+            evidence: EvidenceKind::Learned,
         }
+    }
+
+    /// Returns this candidate with its evidence kind set.
+    pub fn with_evidence(mut self, evidence: EvidenceKind) -> Self {
+        self.evidence = evidence;
+        self
     }
 
     /// Returns this candidate with a translated span.

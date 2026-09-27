@@ -125,6 +125,11 @@ impl DictionaryCacheKey {
 }
 
 impl Recognizer for DictionaryRecognizer {
+    /// A dictionary term is rule evidence.
+    fn evidence(&self) -> gaze_types::EvidenceKind {
+        gaze_types::EvidenceKind::Rule
+    }
+
     fn id(&self) -> &str {
         &self.id
     }
