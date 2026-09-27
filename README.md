@@ -111,7 +111,11 @@ From: Ada Example <ada [at] example.invalid>
 
 Use `gaze setup --dob-judge` to install the optional SHA-pinned local GLiNER
 bundle and enable cue-less date-of-birth judgments in the generated policy.
-This option is off by default. `--dob-model-dir <path>` selects its bundle
+This option is off by default until its 352 MB bundle is shrunk (todo 3905):
+on the benchmark it cuts leaked date-of-birth bytes from 810 to 725 with no
+added false-positive bytes, but adds 664 MiB peak memory
+([per-mechanism arms](docs/reference/benchmarks/README.md#per-mechanism-arms)).
+`--dob-model-dir <path>` selects its bundle
 directory. The setup doctor checks a synthetic birth date before publishing
 the policy.
 
