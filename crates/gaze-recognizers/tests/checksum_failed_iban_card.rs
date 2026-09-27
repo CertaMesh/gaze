@@ -117,10 +117,25 @@ fn clean(text: &str) -> String {
     clean_with(shared(), &session, text)
 }
 
+/// A value's shape for failure messages: digits as 9, letters as A, tokens as `<token>`.
+/// Fixture values are synthetic, but no value, card or IBAN is ever printed.
+fn shape(text: &str) -> String {
+    gaze::token_shape::pattern()
+        .replace_all(text, "<token>")
+        .chars()
+        .map(|ch| match ch {
+            '0'..='9' => '9',
+            ch if ch.is_alphabetic() => 'A',
+            ch => ch,
+        })
+        .collect()
+}
+
 fn fails(kind: ValidatorKind, value: &str) {
     assert!(
         matches!(kind.validate(value), ValidatorOutcome::Fail { .. }),
-        "fixture {value} must fail {kind:?}"
+        "fixture {} must fail {kind:?}",
+        shape(value)
     );
 }
 
@@ -128,19 +143,23 @@ fn fails(kind: ValidatorKind, value: &str) {
 fn assert_tokenized(prefix: &str, value: &str, trailer: &str, class: &str) {
     let cleaned = clean(&format!("{prefix}{value}{trailer}"));
     let blanked = gaze::token_shape::pattern().replace_all(&cleaned, "\u{0}");
-    assert_eq!(
-        blanked,
-        format!("{prefix}\u{0}{trailer}"),
-        "{value:?} after {prefix:?}: {cleaned}"
+    assert!(
+        blanked == format!("{prefix}\u{0}{trailer}"),
+        "{} after {prefix:?}: {}",
+        shape(value),
+        shape(&cleaned)
     );
     assert!(
         cleaned.contains(&format!(":Custom:{class}_")),
-        "{value:?} must be a {class} token: {cleaned}"
+        "{} must be a {class} token: {}",
+        shape(value),
+        shape(&cleaned)
     );
 }
 
 fn assert_raw(text: &str) {
-    assert_eq!(clean(text), text, "must stay unchanged");
+    let cleaned = clean(text);
+    assert!(cleaned == text, "must stay unchanged: {}", shape(&cleaned));
 }
 
 // ------------------------------------------------------------------ IBAN
@@ -262,7 +281,11 @@ fn card_after_a_cue_failing_luhn_is_tokenized() {
 /// by accident.
 fn assert_raw_card_run(prefix: &str, run: &str, trailer: &str) {
     let scan = gaze_types::payment_card::scan_card_run(run, 0..run.len(), None);
-    assert!(scan.cards.is_empty(), "{run} holds a Luhn-valid window");
+    assert!(
+        scan.cards.is_empty(),
+        "{} holds a Luhn-valid window",
+        shape(run)
+    );
     assert_raw(&format!("{prefix}{run}{trailer}"));
 }
 
@@ -348,11 +371,13 @@ fn a_checksum_failed_value_is_never_swept_to_an_uncued_copy() {
     assert_eq!(
         cleaned.matches(":Custom:credit_card_").count(),
         1,
-        "{cleaned}"
+        "{}",
+        shape(&cleaned)
     );
     assert!(
         cleaned.ends_with(&format!("Order {value} shipped.")),
-        "{cleaned}"
+        "{}",
+        shape(&cleaned)
     );
 
     // The cued IBAN carries a canonical form from its normalizer although mod-97 never passed; a
@@ -360,10 +385,16 @@ fn a_checksum_failed_value_is_never_swept_to_an_uncued_copy() {
     let iban = "US29 1234 5678 9012 3456 7890 12";
     fails(ValidatorKind::IbanMod97, iban);
     let cleaned = clean(&format!("IBAN {iban}. Ticket {iban} closed."));
-    assert_eq!(cleaned.matches(":Custom:iban_").count(), 1, "{cleaned}");
+    assert_eq!(
+        cleaned.matches(":Custom:iban_").count(),
+        1,
+        "{}",
+        shape(&cleaned)
+    );
     assert!(
         cleaned.ends_with(&format!("Ticket {iban} closed.")),
-        "{cleaned}"
+        "{}",
+        shape(&cleaned)
     );
 }
 

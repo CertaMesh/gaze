@@ -203,6 +203,11 @@ def documents() -> list[dict]:
     return docs
 
 
+def shape(text: str) -> str:
+    """Digits as 9 and letters as A: failure lines never print a value."""
+    return "".join("9" if ch.isdigit() else "A" if ch.isalpha() else ch for ch in text)
+
+
 def protected_bytes(response: dict, span: tuple[int, int]) -> int:
     return base_enum.iban_view(response, span)[1]
 
@@ -229,21 +234,21 @@ def main() -> int:
     unchanged: collections.Counter = collections.Counter()
     for doc, b, c in zip(docs, base, cand, strict=True):
         if b is None or c is None:
-            failures.append(f"missing response: {doc['text']!r}")
+            failures.append(f"missing response: {shape(doc['text'])}")
             continue
         before, after = protected_bytes(b, doc["span"]), protected_bytes(c, doc["span"])
         key = (doc["kind"], doc["valid"], doc["context"])
         if after < before:
-            failures.append(f"lost {before - after} B: {doc['text']!r}")
+            failures.append(f"lost {before - after} B: {shape(doc['text'])}")
         if after > before:
             newly[key] += 1
             newly_bytes[key] += after - before
             if doc["kind"].startswith("benign"):
-                failures.append(f"benign lookalike newly tokenized: {doc['text']!r}")
+                failures.append(f"benign lookalike newly tokenized: {shape(doc['text'])}")
             if doc["kind"].startswith("card") and doc["valid"] is False and doc["context"] != "card_cue":
-                failures.append(f"Luhn-failing card tokenized without a card cue: {doc['text']!r}")
+                failures.append(f"Luhn-failing card tokenized without a card cue: {shape(doc['text'])}")
             if doc["kind"] == "iban_unknown_country" and doc["context"] != "iban_cue":
-                failures.append(f"non-registry IBAN shape tokenized without an IBAN cue: {doc['text']!r}")
+                failures.append(f"non-registry IBAN shape tokenized without an IBAN cue: {shape(doc['text'])}")
         else:
             unchanged[key] += 1
 
