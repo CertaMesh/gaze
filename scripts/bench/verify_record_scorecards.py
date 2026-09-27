@@ -71,6 +71,11 @@ def verify(record_path: Path, v1_path: Path, v2_path: Path, v2_contract: Path,
 
 RUN_TIMING = {"latency_ms", "warm_latency_ms", "process"}
 
+#: Run fields the harness computes rather than the release: the only fields
+#: `--capture` may skip. Anything else (metrics, pipeline contract) is the
+#: release's own result and must match.
+HARNESS_RUN_FIELDS = frozenset({"validator_recall_by_label"})
+
 
 def _runs(card: dict, drop: set[str]) -> list[dict]:
     return [
@@ -98,6 +103,10 @@ def verify_capture(record_path: Path, v1_path: Path, v2_path: Path, v2_contract:
         "v2": json.loads(v2_path.read_text(encoding="utf-8")),
     }
     skipped = set(ignore)
+    if not skipped <= HARNESS_RUN_FIELDS:
+        raise record.RecordError(
+            f"only harness-computed run fields may be skipped: {sorted(skipped - HARNESS_RUN_FIELDS)}"
+        )
     result: dict[str, object] = {}
     ignored: dict[str, dict[str, bool]] = {name: {} for name in sorted(skipped)}
     for name, contract in contracts.items():
@@ -134,6 +143,7 @@ def main() -> int:
     parser.add_argument("--capture", action="store_true",
                         help="record captured later with today's harness")
     parser.add_argument("--ignore-run-field", action="append", default=[],
+                        choices=sorted(HARNESS_RUN_FIELDS),
                         help="with --capture: a harness-computed run field to skip (reported)")
     args = parser.parse_args()
     if args.ignore_run_field and not args.capture:

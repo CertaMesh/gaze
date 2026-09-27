@@ -1,11 +1,14 @@
 """Contract replay must depend on observations and retain no document values."""
 
 import gzip
+import io
+import contextlib
 import copy
 import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -84,11 +87,16 @@ class RecordReplayTests(unittest.TestCase):
     def test_later_captures_reproduce_their_releases_committed_numbers(self):
         """v0.15.0 and v0.14.0 were captured on 2026-09-27 with that day's harness.
 
-        Every run field matches the committed v1 and v2 scorecards except the
-        validator probe block, which the harness (not the release) computes:
-        its probe grew since v0.15.0's and v0.14.0's original runs. Against the
-        v1 calibration captured with the same harness as v0.14.0's v2 run, that
-        block matches too.
+        Every run field matches the committed v1 and v2 scorecards except
+        `validator_recall_by_label`, which the harness's probe computes, not the
+        release, and which grew since those runs: v0.15.0 differs only in
+        credit-card shape-only recall (99 -> 124 of 126); v0.14.0's original v1
+        run also lacks the `production_recall_by_gold_validity` sub-blocks and
+        differs in shape-only recall for cards (94 -> 124), IBAN, phone and tax
+        numbers and in card validator-backed recall. Against v0.14.0's v2 run
+        and its v1 calibration, captured with a later harness, the block
+        matches. The document renders validator recall only from the current
+        release's own scorecard, so no displayed number depends on it.
         """
         bench = ROOT / "docs/reference/benchmarks"
         contracts = (bench / "scored-labels-v2.json", bench / "scored-labels-v3.json")
@@ -120,6 +128,18 @@ class RecordReplayTests(unittest.TestCase):
         )
         result = proof.verify_capture(*args, ignore=["validator_recall_by_label"])
         self.assertTrue(result["v1_runs_match"] and result["v2_runs_match"])
+        # Only a harness-computed field may be skipped: skipping the release's
+        # own results would make any record pass.
+        for field in ("metrics", "pipeline_contract"):
+            with self.assertRaisesRegex(record.RecordError, "harness-computed"):
+                proof.verify_capture(*args, ignore=[field])
+        argv = ["verify_record_scorecards.py", str(args[0]), "--v1", str(args[1]),
+                "--v2", str(args[2]), "--v2-contract", str(args[3]),
+                "--v3-contract", str(args[4]), "--capture", "--ignore-run-field", "metrics"]
+        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as refused:
+                proof.main()
+        self.assertEqual(refused.exception.code, 2)
         self.assertEqual(
             result["ignored_run_fields_differ"],
             {"validator_recall_by_label": {"v1": False, "v2": False}},

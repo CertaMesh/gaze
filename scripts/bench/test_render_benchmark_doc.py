@@ -1831,6 +1831,33 @@ class HeadlineContractTest(unittest.TestCase):
         self.assertIn("bar [13319]", v2)
         self.assertIn("bar [19556, 25179]", v1)
 
+    def test_a_v3_row_needs_gold_gap_on_every_arm(self):
+        # Missing everywhere would print v2's false positives under the v3
+        # heading; missing on one arm cannot fill the credit column. Both are
+        # refused before anything renders.
+        def partial(arms):
+            [block] = arms.values()
+            arms["pass2-ner"] = {k: v for k, v in block.items() if k != "gold_gap"}
+
+        for name, strip in (
+            ("missing", lambda arms: [arm.pop("gold_gap") for arm in arms.values()]),
+            ("partial", partial),
+        ):
+            with self.subTest(name):
+                value = self.value()
+                result = value["releases"][-1]["contract_results"][-1]
+                self.assertEqual(result["scored_label_contract"]["version"], 3)
+                strip(result["arms"])
+                with self.assertRaisesRegex(render.RenderError, "v3 and later, on every arm"):
+                    render.validate_history(value)
+        value = self.value()
+        arm = next(iter(value["releases"][-1]["contract_results"][0]["arms"].values()))
+        arm["gold_gap"] = copy.deepcopy(
+            next(iter(value["releases"][-1]["contract_results"][-1]["arms"].values()))["gold_gap"]
+        )
+        with self.assertRaisesRegex(render.RenderError, "only there"):
+            render.validate_history(value)
+
     def test_readme_chart_leads_with_v3(self):
         chart = render.render_readme_chart(self.value())
         self.assertLess(chart.index("scored labels v3"), chart.index("scored labels v1"))
