@@ -912,7 +912,8 @@ candidate and delta file SHA-256 digests for review. Keep both policy files at
 their recorded paths until the gate runs.
 
 `runner_provenance.policy_dependencies` records SHA-256 for external rulepacks,
-dictionary term files, and every regular file under active model directories.
+their referenced dictionary term files, policy dictionary term files, and every
+non-hidden regular file under active model directories. Local dotfiles are ignored.
 The gate also compares Davlan, Nym, and enabled GLiNER DOB bundle digests in
 `runner_provenance.model_bundles`. It compares files by logical policy reference, so different
 worktree paths do not affect identity. With `--policy-delta`, only dependencies

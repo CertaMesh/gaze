@@ -1031,9 +1031,9 @@ def run(args: argparse.Namespace) -> int:
     policy_dependencies = None
     if policy_data is not None:
         try:
-            policy_dependencies = {
-                "files": agentic.policy_dependency_files(policy_data, repo_root),
-            }
+            policy_dependencies = agentic.policy_dependency_provenance(
+                policy_path, repo_root, policy_data
+            )
         except agentic.LayerError as error:
             raise CandidateError(f"policy dependencies: {error}") from error
     if dataset_path.is_file():

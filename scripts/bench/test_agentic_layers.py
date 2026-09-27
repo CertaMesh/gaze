@@ -637,10 +637,34 @@ class GateTests(unittest.TestCase):
                               (root / "terms.txt", "policy.custom_recognizers[0].terms_file"),
                               (root / "model" / "artifact.bin", "ner.model_dir/artifact.bin")):
                 original = path.read_bytes()
-                path.write_bytes(original + b"x")
+                path.write_bytes(original + (b"\nchanged=2\n" if path.suffix == ".toml" else b"x"))
                 changed = agentic.policy_dependency_files(policy, root)
                 self.assertNotEqual(changed[key], first[key])
                 path.write_bytes(original)
+
+    def test_rulepack_dictionary_terms_change_makes_gate_not_comparable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pack.toml").write_text(
+                '[[recognizers]]\nid="songs"\n[recognizers.match]\nkind="dictionary"\nterms_file="songs.txt"\n',
+                encoding="utf-8",
+            )
+            terms = root / "songs.txt"
+            terms.write_text("synthetic song A\n", encoding="utf-8")
+            policy = {"policy": {"rulepacks": {"paths": ["pack.toml"]}}}
+            first = agentic.policy_dependency_files(policy, root)
+            terms.write_text("synthetic song B\n", encoding="utf-8")
+            second = agentic.policy_dependency_files(policy, root)
+            key = "policy.rulepacks.paths[0].recognizers[0].terms_file"
+            self.assertEqual(first["policy.rulepacks.paths[0]"], second["policy.rulepacks.paths[0]"])
+            self.assertNotEqual(first[key], second[key])
+            base = _scorecard(self.BASE, self.FP)
+            candidate = _scorecard({**self.BASE, "R": 10}, self.FP)
+            base["runner_provenance"]["policy_dependencies"]["files"] = first
+            candidate["runner_provenance"]["policy_dependencies"]["files"] = second
+            result = agentic.gate(base, candidate)
+            self.assertEqual(result["verdict"], "not_comparable")
+            self.assertIn(f"policy input {key}", result["differing"])
 
     def test_active_model_directories_are_hashed_and_disabled_dob_is_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -655,6 +679,19 @@ class GateTests(unittest.TestCase):
             policy["dob_judge"]["enabled"] = True
             self.assertEqual(set(agentic.policy_dependency_files(policy, root)),
                              {"safety_net.nym.model_dir/weights.bin", "dob_judge.model_dir/weights.bin"})
+
+    def test_unreferenced_model_dotfiles_do_not_change_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = root / "model"
+            model.mkdir()
+            (model / "weights.bin").write_bytes(b"model")
+            policy = {"ner": {"model_dir": "model"}}
+            first = agentic.policy_dependency_files(policy, root)
+            (model / ".DS_Store").write_bytes(b"local metadata")
+            (model / ".cache").mkdir()
+            (model / ".cache" / "index").write_bytes(b"cache")
+            self.assertEqual(first, agentic.policy_dependency_files(policy, root))
 
     def verdict(self, candidate: dict, base: dict | None = None) -> str:
         return agentic.gate(base or _scorecard(self.BASE, self.FP), candidate)["verdict"]
@@ -863,6 +900,23 @@ class PolicyDeltaGateTests(unittest.TestCase):
                 {"model_id": model_id, "observed_sha256": "a" * 64}]
             result = agentic.gate(cards["base"], cards["candidate"], policy_delta=paths["delta"])
             self.assertEqual(result["verdict"], "pass")
+            for other_model in ("davlan-mbert-ner-hrl-onnx", "nym-small-int8"):
+                with self.subTest(other_model=other_model):
+                    cards["base"]["runner_provenance"]["model_bundles"] = [
+                        {"model_id": other_model, "observed_sha256": "a" * 64}]
+                    cards["candidate"]["runner_provenance"]["model_bundles"].append(
+                        {"model_id": other_model, "observed_sha256": "b" * 64})
+                    result = agentic.gate(cards["base"], cards["candidate"], policy_delta=paths["delta"])
+                    self.assertEqual(result["verdict"], "not_comparable")
+                    self.assertIn(f"model bundle {other_model}", result["differing"])
+                    cards["base"]["runner_provenance"]["model_bundles"] = []
+                    cards["candidate"]["runner_provenance"]["model_bundles"].pop()
+            reference = "dob_judge.model_dir/artifact.bin"
+            cards["base"]["runner_provenance"]["policy_dependencies"]["files"][reference] = "a" * 64
+            result = agentic.gate(cards["base"], cards["candidate"], policy_delta=paths["delta"])
+            self.assertEqual(result["verdict"], "not_comparable")
+            self.assertIn(f"policy input {reference}", result["differing"])
+            del cards["base"]["runner_provenance"]["policy_dependencies"]["files"][reference]
             cards["base"]["runner_provenance"]["policy_dependencies"]["files"][
                 "policy.rulepacks.paths[0]"] = "a" * 64
             cards["candidate"]["runner_provenance"]["policy_dependencies"]["files"][

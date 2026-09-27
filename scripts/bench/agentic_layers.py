@@ -1515,6 +1515,24 @@ def coverage_grid(scorecard: Mapping[str, object], config: str | None = None) ->
 
 GATE_LAYERS = ("C", LAYER_IDENTIFIERS, LAYER_LOOKALIKES, LAYER_REPEATS)
 
+DEPENDENCY_OWNERS = {
+    "policy.rulepacks.paths": "policy",
+    "policy.custom_recognizers": "policy",
+    "ner.model_dir": "ner",
+    "safety_net.nym.model_dir": "safety_net",
+    "dob_judge.model_dir": "dob_judge",
+    "davlan-mbert-ner-hrl-onnx": "ner",
+    "nym-small-int8": "safety_net",
+    "gliner-multi-pii-dob-int8": "dob_judge",
+}
+
+
+def _dependency_owner(reference: str) -> str | None:
+    for prefix, owner in DEPENDENCY_OWNERS.items():
+        if reference == prefix or reference.startswith(prefix + "[") or reference.startswith(prefix + "/"):
+            return owner
+    return None
+
 
 def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> dict[str, str]:
     """Hash external policy inputs by logical reference, independent of worktree path."""
@@ -1526,7 +1544,9 @@ def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> 
         path = Path(value).expanduser()
         return path if path.is_absolute() else working_dir / path
 
-    def add_file(value: object, reference: str) -> None:
+    def add_file(value: object, reference: str) -> Path:
+        if _dependency_owner(reference) is None:
+            raise LayerError(f"unknown policy dependency reference {reference}")
         path = resolved(value, reference)
         try:
             if not path.is_file():
@@ -1534,12 +1554,15 @@ def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> 
             files[reference] = score.sha256_file(path)
         except OSError as error:
             raise LayerError(f"cannot hash policy input {reference} at {path}: {error}") from error
+        return path
 
     def add_dir(value: object, reference: str) -> None:
         directory = resolved(value, reference)
         if not directory.is_dir():
             raise LayerError(f"cannot hash policy model directory {reference} at {directory}")
         for path in sorted(directory.rglob("*")):
+            if any(part.startswith(".") for part in path.relative_to(directory).parts):
+                continue
             if path.is_symlink():
                 raise LayerError(f"policy model directory {reference} contains a symlink: {path}")
             if path.is_file():
@@ -1550,7 +1573,17 @@ def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> 
         rulepacks = rules.get("rulepacks", {})
         if isinstance(rulepacks, dict):
             for index, path in enumerate(rulepacks.get("paths", [])):
-                add_file(path, f"policy.rulepacks.paths[{index}]")
+                reference = f"policy.rulepacks.paths[{index}]"
+                rulepack_path = add_file(path, reference)
+                try:
+                    rulepack = tomllib.loads(rulepack_path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+                    raise LayerError(f"cannot parse policy rulepack {rulepack_path}: {error}") from error
+                for recognizer_index, recognizer in enumerate(rulepack.get("recognizers", [])):
+                    match = recognizer.get("match") if isinstance(recognizer, dict) else None
+                    if isinstance(match, dict) and "terms_file" in match:
+                        add_file(match["terms_file"],
+                                 f"{reference}.recognizers[{recognizer_index}].terms_file")
         for index, recognizer in enumerate(rules.get("custom_recognizers", [])):
             if isinstance(recognizer, dict) and "terms_file" in recognizer:
                 add_file(recognizer["terms_file"], f"policy.custom_recognizers[{index}].terms_file")
@@ -1567,6 +1600,17 @@ def policy_dependency_files(policy: Mapping[str, object], working_dir: Path) -> 
             raise LayerError("active Nym policy has no model_dir")
         add_dir(nym["model_dir"], "safety_net.nym.model_dir")
     return dict(sorted(files.items()))
+
+
+def policy_dependency_provenance(
+    policy_path: Path, working_dir: Path, policy_data: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    if policy_data is None:
+        try:
+            policy_data = tomllib.loads(policy_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
+            raise LayerError(f"cannot read policy dependencies from {policy_path}: {error}") from error
+    return {"files": policy_dependency_files(policy_data, working_dir)}
 
 
 def model_bundle_identity(bundles: object) -> dict[str, str]:
@@ -1828,17 +1872,12 @@ def _dependency_difference(
     differing: list[str] = []
     for reference in sorted(base["files"].keys() | candidate["files"].keys()):
         if base["files"].get(reference) != candidate["files"].get(reference):
-            owner = reference.split(".", 1)[0]
+            owner = _dependency_owner(reference)
             if not (owner in added_sections and reference not in base["files"]):
                 differing.append(f"policy input {reference}")
-    model_sections = {
-        "davlan-mbert-ner-hrl-onnx": "ner",
-        "nym-small-int8": "safety_net",
-        "gliner-multi-pii-dob-int8": "dob_judge",
-    }
     for model_id in sorted(base["model_bundles"].keys() | candidate["model_bundles"].keys()):
         if base["model_bundles"].get(model_id) != candidate["model_bundles"].get(model_id):
-            if model_sections.get(model_id) not in added_sections:
+            if _dependency_owner(model_id) not in added_sections:
                 differing.append(f"model bundle {model_id}")
     return differing
 
