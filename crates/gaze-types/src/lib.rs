@@ -100,12 +100,12 @@ pub enum PiiClass {
 #[error("custom class name normalizes to empty")]
 pub struct EmptyCustomClassName;
 
-/// Built-in class labels in stable display order.
 /// Recognizer id of the bundled NER recognizer. Pipeline stages that treat NER evidence
 /// specially (street-corroborated house numbers) match on this, so a rename cannot silently
 /// switch them off.
 pub const NER_RECOGNIZER_ID: &str = "ner";
 
+/// Built-in class labels in stable display order.
 pub const BUILTIN_CLASS_NAMES: &[&str] = &["Email", "Name", "Location", "Organization"];
 
 /// Family names reserved for bundled collision-policy rulepacks.
