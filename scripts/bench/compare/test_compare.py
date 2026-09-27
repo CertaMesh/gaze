@@ -69,7 +69,8 @@ def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
     }
     report = {
         "corpus": {"layers": {"A": {}}},
-        "gaze": {version: {"layers": {"A": row}} for version in ("v1", "v2", "v3")},
+        "gaze": {version: {"layers": {"A": row}, "gaze_revision": "synthetic",
+                           "policy_sha256": "synthetic"} for version in ("v1", "v2", "v3")},
         "tools": {
             name: {"contracts": {version: {"A": row} for version in ("v1", "v2", "v3")}}
             for name in ("presidio-en", "presidio-en-de", "gliner")
