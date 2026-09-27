@@ -102,14 +102,39 @@ VALIDATOR_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("Leaked bytes, invalid gold", "leaked_utf8_bytes_validator_failed_gold", "int"),
 )
 
-# Contract v3 gold-gap diagnostic: (header, arm gold_gap field, formatter
-# key). Scorecard source is `metrics.gold_gap`; rendered beside, never in place
-# of, the v2 columns above.
+# Contract v3 gold-gap fields an arm must carry: (header, arm gold_gap field,
+# formatter key). Scorecard source is `metrics.gold_gap`; `headline_arms` reads
+# the adjusted false positives and precision from here.
 GOLD_GAP_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("Gold-gap protected bytes", "gold_gap_protected_bytes", "int"),
     ("False-positive bytes after gold-gap", "false_positive_bytes_after_gold_gap", "int"),
     ("Adjusted byte precision", "adjusted_precision", "rate"),
 )
+
+#: First scored-label contract whose arms carry the gold-gap credit.
+GOLD_GAP_CONTRACT = 3
+
+
+def check_gold_gap_arms(arms: Mapping[str, Any], contract_version: int, where: str) -> None:
+    """Every arm carries a well-formed gold_gap block under v3 and later, none before.
+
+    A v3 row without it would print v2's false positives under the v3 heading;
+    a row where only some arms carry it cannot fill the credit column.
+    """
+    expected = contract_version >= GOLD_GAP_CONTRACT
+    for arm, block in arms.items():
+        gold_gap = block.get("gold_gap") if isinstance(block, Mapping) else None
+        if (gold_gap is not None) != expected:
+            raise RenderError(
+                f"{where}/{arm}: a gold_gap block belongs to scored-label contract "
+                f"v{GOLD_GAP_CONTRACT} and later, on every arm, and only there"
+            )
+        if gold_gap is not None and (
+            not isinstance(gold_gap, Mapping)
+            or any(field not in gold_gap for _, field, _ in GOLD_GAP_COLUMNS)
+        ):
+            raise RenderError(f"{where}/{arm}: malformed gold_gap block")
+
 
 BLOCK_NAMES = ("current-release", "charts", "history", "latency")
 README_BLOCK_NAMES = ("readme-chart",)
@@ -328,12 +353,7 @@ def validate_history(history: Mapping[str, Any]) -> None:
             missing = [field for field in ARM_FIELD_SOURCES if field not in block]
             if missing:
                 raise RenderError(f"{version}/{arm}: missing fields {missing}")
-            gold_gap = block.get("gold_gap")
-            if gold_gap is not None and (
-                not isinstance(gold_gap, Mapping)
-                or any(field not in gold_gap for _, field, _ in GOLD_GAP_COLUMNS)
-            ):
-                raise RenderError(f"{version}/{arm}: malformed gold_gap diagnostic")
+        check_gold_gap_arms(arms, _contract_key(entry)[0], version)
         # `--check` renders from this file alone, so the provenance guard has
         # to sit here as well as at extraction or the CI path stays ungated --
         # and it has to check the *values*. A key that is present but holds
@@ -395,6 +415,7 @@ def _validate_contract_results(entry: Mapping[str, Any]) -> None:
             missing = [f for f in ARM_FIELD_SOURCES if not isinstance(block, Mapping) or f not in block]
             if missing:
                 raise RenderError(f"{where}/{arm}: missing fields {missing}")
+        check_gold_gap_arms(arms, number, where)
         if shipped_default_arm(entry) not in arms:
             raise RenderError(f"{where}: the shipped default arm was not measured")
         if "measurement" in result:
@@ -654,15 +675,43 @@ def displayed_groups(history: Mapping[str, Any]) -> list[list[Mapping[str, Any]]
 # row, so every renderer below works on one contract at a time.
 # --------------------------------------------------------------------------
 
-#: The contract the document leads with: v2 scores the labels Gaze commits to
-#: detect. v1 (every original corpus label) stays beside it, because releases
-#: measured before v2 existed can only be compared under v1.
-HEADLINE_CONTRACT = 2
+#: The contract the document leads with: v3 scores the labels Gaze commits to
+#: detect (v2's labels) and credits a protected, unlabelled repeat of a labelled
+#: value instead of counting it as a false positive; its audit passed (#687).
+#: v2 and v1 (every original corpus label) stay beside it.
+HEADLINE_CONTRACT = 3
 
 CONTRACT_ROLES: dict[int, str] = {
     1: "all original gold labels, kept for comparison with earlier releases",
-    2: "headline: the labels Gaze commits to detect",
+    2: "the labels Gaze commits to detect, without gold-gap credit",
+    3: (
+        "headline: the labels Gaze commits to detect, with protected repeats of a "
+        "labelled value credited"
+    ),
 }
+
+
+def headline_arms(arms: Mapping[str, Any], contract_version: int) -> Mapping[str, Any]:
+    """Arms as the document reads them under `contract_version`.
+
+    From v3 on, false-positive bytes and byte precision are the gold-gap-adjusted
+    values and the credit sits beside them as `gold_gap_protected_bytes`. The
+    scorecard keeps v2's `utf8_bytes` block unchanged under v3 and reports the
+    credit in `metrics.gold_gap`, so the adjustment happens here, in one place,
+    and every table and chart reads the same number. `validate_history` has
+    already required the block on every arm of such a row.
+    """
+    if contract_version < GOLD_GAP_CONTRACT:
+        return arms
+    return {
+        arm: {
+            **block,
+            "false_positive_utf8_bytes": block["gold_gap"]["false_positive_bytes_after_gold_gap"],
+            "byte_precision": block["gold_gap"]["adjusted_precision"],
+            "gold_gap_protected_bytes": block["gold_gap"]["gold_gap_protected_bytes"],
+        }
+        for arm, block in arms.items()
+    }
 
 
 def measured_contracts(entry: Mapping[str, Any]) -> list[int]:
@@ -677,7 +726,7 @@ def measured_contracts(entry: Mapping[str, Any]) -> list[int]:
 def contract_view(entry: Mapping[str, Any], version: int) -> Mapping[str, Any] | None:
     """The row as measured under `version`, or None when it was not."""
     if _contract_key(entry)[0] == version:
-        return entry
+        return {**entry, "arms": headline_arms(entry["arms"], version)}
     for result in entry.get("contract_results", ()):
         if result["scored_label_contract"]["version"] == version:
             view = {
@@ -689,7 +738,7 @@ def contract_view(entry: Mapping[str, Any], version: int) -> Mapping[str, Any] |
                 scored_label_contract=result["scored_label_contract"],
                 scorecard=result["scorecard"],
                 scorecard_sha256=result["scorecard_sha256"],
-                arms=result["arms"],
+                arms=headline_arms(result["arms"], version),
             )
             return view
     return None
@@ -820,23 +869,12 @@ def _gold_gap_from_run(run: Mapping[str, Any], config: str) -> dict[str, Any] | 
     return row
 
 
-def render_gold_gap(entry: Mapping[str, Any]) -> list[str]:
-    arms = {arm: block["gold_gap"] for arm, block in entry["arms"].items() if "gold_gap" in block}
-    if not arms:
-        return []
-    lines = [
-        "",
-        "Gold-gap protection (contract v3, **diagnostic; v2 headline unchanged**): "
-        "false-positive bytes that are an unlabelled, byte-identical repeat of a "
-        "gold value in the same document. The columns above are the headline.",
-        "",
-        "| Arm | " + " | ".join(column[0] for column in GOLD_GAP_COLUMNS) + " |",
-        "| --- | " + " | ".join(["---:"] * len(GOLD_GAP_COLUMNS)) + " |",
-    ]
-    for arm, block in arms.items():
-        cells = [_fmt(kind, block[field]) for _, field, kind in GOLD_GAP_COLUMNS]
-        lines.append("| " + " | ".join([f"`{arm}`"] + cells) + " |")
-    return lines
+GOLD_GAP_NOTE = (
+    "Leaked bytes are v2's. A protected, unlabelled, byte-identical repeat of a "
+    "labelled value in the same document is credited instead of counted as a "
+    "false positive (gold-gap credited bytes); false-positive bytes and byte "
+    "precision are after that credit. [Audit of the credit](#gold-gap-protection-contract-v3)."
+)
 
 
 def _validator_row_from_scorecard(block: Mapping[str, Any], where: str) -> dict[str, Any]:
@@ -973,11 +1011,7 @@ def history_entry_from_scorecard(
             f"scorecard has no run for the shipped default arm {shipped_arm}"
         )
     contract = _scored_label_contract(scorecard)
-    has_gold_gap = any("gold_gap" in block for block in arms.values())
-    if has_gold_gap != (contract is not None and contract["version"] >= 3):
-        raise RenderError(
-            "a gold_gap diagnostic belongs to scored-label contract v3 and only there"
-        )
+    check_gold_gap_arms(arms, contract["version"] if contract else 1, "scorecard")
     default_run = next(run for run in runs if run["config"] == shipped_arm)
     validator_recall = validator_recall_from_run(default_run)
 
@@ -1172,8 +1206,10 @@ def render_current_release(history: Mapping[str, Any]) -> str:
                 f"**{contract_heading(version)}.** Gold PII bytes: {_fmt('int', gold)}."
             )
             lines.append("")
+        if version >= GOLD_GAP_CONTRACT:
+            lines.append(GOLD_GAP_NOTE)
+            lines.append("")
         lines.extend(_arm_table(view))
-        lines.extend(render_gold_gap(view))
         lines.append("")
     lines.pop()
     if entry.get("validator_recall"):
@@ -1182,13 +1218,19 @@ def render_current_release(history: Mapping[str, Any]) -> str:
 
 
 def _arm_table(entry: Mapping[str, Any]) -> list[str]:
-    headers = ["Arm info"] + [column[0] for column in ARM_COLUMNS]
+    columns = list(ARM_COLUMNS)
+    if _contract_key(entry)[0] >= GOLD_GAP_CONTRACT:
+        # Under v3 the false-positive column is after the credit; show the credit
+        # right beside it so the two add up to v2's false-positive bytes.
+        at = next(i for i, c in enumerate(columns) if c[1] == "false_positive_utf8_bytes")
+        columns.insert(at + 1, ("Gold-gap credited bytes info", "gold_gap_protected_bytes", "int"))
+    headers = ["Arm info"] + [column[0] for column in columns]
     lines = [
         "| " + " | ".join(headers) + " |",
-        "| --- | " + " | ".join(["---:"] * len(ARM_COLUMNS)) + " |",
+        "| --- | " + " | ".join(["---:"] * len(columns)) + " |",
     ]
     for arm, block in entry["arms"].items():
-        cells = [_fmt(kind, block[field]) for _, field, kind in ARM_COLUMNS]
+        cells = [_fmt(kind, block[field]) for _, field, kind in columns]
         label = f"`{arm}`"
         if arm == shipped_default_arm(entry):
             label += " **(shipped default)**"
