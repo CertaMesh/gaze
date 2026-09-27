@@ -6,6 +6,11 @@
       "id": "gliner-dob-judge",
       "title": "GLiNER date-of-birth judge",
       "added_in": "v0.16",
+      "shipped": "opt-in (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk (todo 3905), then default-on",
+      "latency": {
+        "file": "docs/reference/benchmarks/mechanisms/gliner-dob-judge-latency.json",
+        "sha256": "a67ffcbc9c4db37572a7b8a422b363e419237ceb3a23290fd673d54433be4923"
+      },
       "policy_delta": {
         "file": "scripts/bench/mechanisms/gliner-dob-judge.toml",
         "sha256": "e46b73f7d76025d1e88306786e2c1bd06acf57a9e2ec9db1127d151d56f1673f"

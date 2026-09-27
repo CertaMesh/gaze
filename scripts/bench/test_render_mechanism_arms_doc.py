@@ -65,6 +65,19 @@ def _drop_one_prediction(source: Path, target: Path) -> tuple[str, int]:
     raise AssertionError("no isolated EMAIL prediction to drop")
 
 
+def _copy_pinned_files(ledger: dict, root: Path) -> None:
+    """Copy every file the ledger pins (delta, latency, records) under `root`."""
+    for entry in ledger["mechanisms"]:
+        paths = [entry["policy_delta"]["file"]]
+        if "latency" in entry:
+            paths.append(entry["latency"]["file"])
+        paths += [m["records"][arm]["file"]
+                  for m in entry["measurements"] for arm in ("base", "candidate")]
+        for path in paths:
+            (root / path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(mech.ROOT / path, root / path)
+
+
 class SyntheticMechanism:
     """Four runner output directories plus policies, under one temp root."""
 
@@ -124,6 +137,7 @@ class SyntheticMechanism:
     def record(self, ledger: dict, **overrides) -> dict:
         arguments = dict(
             mechanism="synthetic-drop", title="Synthetic drop", added_in="v0.16",
+            shipped="test only",
             delta=self.delta, runs=self.runs, binary=self.binary,
             machine="test host", release=None, crates_tree="d" * 40,
             evidence_dir=self.root / "evidence", root=self.root,
@@ -241,6 +255,7 @@ class MechanismArmsTest(unittest.TestCase):
             ("added_in", "0.16", "added_in"),
             ("release", "v0.16", "release"),
             ("machine", " ", "--machine"),
+            ("shipped", " ", "--shipped"),
         ):
             with self.subTest(field=field), self.assertRaisesRegex(mech.MechanismError, message):
                 self.fixture.record(mech.empty_ledger(), **{field: value})
@@ -305,28 +320,22 @@ class MechanismArmsTest(unittest.TestCase):
         fixture = self.fresh()
         root = fixture.root
         ledger = copy.deepcopy(LEDGER)
-        for entry in ledger["mechanisms"]:
-            paths = [entry["policy_delta"]["file"]] + [
-                measurement["records"][arm]["file"]
-                for measurement in entry["measurements"] for arm in ("base", "candidate")
-            ]
-            for path in paths:
-                (root / path).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(mech.ROOT / path, root / path)
+        _copy_pinned_files(ledger, root)
         fixture.record(ledger)
-        body = mech.render(ledger, ["v0.15.1"])
+        body = mech.render(ledger, ["v0.15.1"], root)
         titles = [entry["title"] for entry in ledger["mechanisms"]]
         self.assertEqual(titles, ["GLiNER date-of-birth judge", "Synthetic drop"])
         for title in titles:
             self.assertEqual(body.count(f"| {title} | `"), 3, title)
             self.assertIn(f"| {title} | not available: mechanism added in v0.16 |", body)
-            self.assertIn(f"- **{title}**:", body)
+            self.assertIn(f"- **{title}** ships ", body)
 
     def test_ledger_validation_rejects_bad_shapes(self) -> None:
         cases = {
             "schema": lambda ledger: ledger.update(schema_version=2),
             "duplicate": lambda ledger: ledger["mechanisms"].append(copy.deepcopy(ledger["mechanisms"][0])),
             "no measurement": lambda ledger: ledger["mechanisms"][0].update(measurements=[]),
+            "no shipped status": lambda ledger: ledger["mechanisms"][0].pop("shipped"),
             "contracts": lambda ledger: ledger["mechanisms"][0]["measurements"][0]["contracts"].pop("2"),
             "contract key": lambda ledger: ledger["mechanisms"][0]["measurements"][0]["contracts"].update(v9={}),
             "attested": lambda ledger: ledger["mechanisms"][0]["measurements"][0].pop("attested"),
@@ -388,6 +397,32 @@ class CommittedLedgerTest(unittest.TestCase):
         document = mech.DOC.read_text(encoding="utf-8")
         releases = mech._released_versions(mech.RELEASE_HISTORY)
         self.assertEqual(mech.apply(document, mech.render(LEDGER, releases)), document)
+
+    def test_gliner_is_recorded_as_opt_in_until_shrunk_with_its_cost(self) -> None:
+        entry = next(item for item in LEDGER["mechanisms"] if item["id"] == "gliner-dob-judge")
+        self.assertIn("opt-in", entry["shipped"])
+        self.assertIn("3905", entry["shipped"])
+        body = mech.render(LEDGER, [])
+        self.assertIn("peak RSS +664 MiB", body)
+        self.assertIn("p95 +22.5 ms", body)
+
+    def test_latency_evidence_must_be_pinned_and_valid(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        ledger = copy.deepcopy(LEDGER)
+        entry = ledger["mechanisms"][0]
+        _copy_pinned_files(ledger, root)
+        mech.validate(ledger, root)
+        latency = root / entry["latency"]["file"]
+        data = json.loads(latency.read_text(encoding="utf-8"))
+        data["verdict"] = "timing invalid: host was not quiet for the whole window"
+        latency.write_text(json.dumps(data), encoding="utf-8")
+        with self.assertRaisesRegex(mech.MechanismError, "differs from its SHA-256"):
+            mech.validate(ledger, root)
+        entry["latency"]["sha256"] = mech.sha256(latency)
+        with self.assertRaisesRegex(mech.MechanismError, "not a valid quiet-host run"):
+            mech.validate(ledger, root)
 
     def test_every_shipped_release_predating_gliner_says_so(self) -> None:
         entry = next(item for item in LEDGER["mechanisms"] if item["id"] == "gliner-dob-judge")

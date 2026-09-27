@@ -864,8 +864,8 @@ threshold = 0.5
 The local GLiNER judge considers date-shaped spans that the rule floor has not
 already claimed as `birth_date`. It can emit a restorable `birth_date` token
 with the distinct `dob.gliner` source. It is disabled unless `enabled = true`;
-`gaze setup` installs the SHA-pinned int8 bundle and writes this block unless
-run with `--no-dob-judge`. An enabled block requires `model_dir`. Missing or corrupt bundle files,
+`gaze setup --dob-judge` installs the SHA-pinned int8 bundle and writes this
+block; plain `gaze setup` leaves it out until the bundle is shrunk (todo 3905). An enabled block requires `model_dir`. Missing or corrupt bundle files,
 an invalid threshold, and inference errors fail closed. `threshold` defaults
 to `0.5` and must be greater than `0.0` and less than `1.0`. The model scores
 `date of birth`, `date`, and `event date` together. The birth-date score must

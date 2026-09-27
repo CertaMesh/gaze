@@ -78,7 +78,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   population; it commits both observation records and `check` (run by the
   docs workflow) re-derives every number from them, v3 included. Releases
   older than a mechanism say so in their cell. The GLiNER DOB judge is the
-  first row.
+  first row: on the main corpus it cut layer C leaked bytes by 85
+  (DATEOFBIRTH 810 to 725) and agentic layer A by 20 under contracts v2 and
+  v1, with no false-positive bytes added and no refusals. It stays opt-in
+  (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk (todo #3905):
+  on a quiet Apple M5 Max (`scripts/bench/mechanism_latency.py`, 200
+  documents) it moved warm p50 75.6 to 76.1 ms, p95 137 to 160 ms, the cold
+  first document 2.2 to 3.7 s and peak RSS 1,076 to 1,740 MiB.
 - **The contract v3 gold-gap audit passed** (solo todo #3696): 3 of 200
   sampled credits failed (one-sided 95 % bound 3.83 %, limit 5 %), each in a
   different document. Three model judges (Claude Opus, Codex, TypeSafe)
@@ -116,20 +122,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`gaze setup` installs and enables the GLiNER date-of-birth judge by
-  default** (solo todo #3900). Its own benchmark arm on the main corpus
-  passed the gate under contracts v2 and v1: layer C leaked bytes fell by 85
-  (DATEOFBIRTH 810 to 725), agentic layer A by 20, with no false-positive
-  bytes added on any layer and no refusals. Setup now downloads the pinned
-  352 MB bundle; `--no-dob-judge` leaves it out. Cost on a quiet Apple M5
-  Max (`scripts/bench/mechanism_latency.py`, 200 documents): warm p50
-  75.6 to 76.1 ms, p95 137 to 160 ms, cold first document 2.2 to 3.7 s,
-  peak RSS 1,076 to 1,740 MiB. The SHA pin, doctor check and
-  fail-closed behaviour on a missing or corrupt bundle are unchanged.
-  `--dob-judge` is still accepted and changes nothing, and `--dob-model-dir`
-  no longer needs it. Existing policies are untouched; re-run
-  `gaze setup --force` to add the judge (it reuses a bundle that already
-  verifies). See UPGRADE.md.
 - **The benchmark headline is scored-label contract v3** (solo todo #3696,
   after the gold-gap audit passed). Leaked bytes are unchanged from v2; false
   positives and byte precision are after the audited gold-gap credit, which

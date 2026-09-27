@@ -393,9 +393,10 @@ def git_crates_tree(revision: str) -> str:
 
 
 def record_measurement(
-    ledger: dict[str, Any], *, mechanism: str, title: str, added_in: str, delta: Path,
+    ledger: dict[str, Any], *, mechanism: str, title: str, added_in: str, shipped: str,
+    delta: Path,
     runs: Mapping[str, Path], binary: Path, machine: str, release: str | None,
-    crates_tree: str | None = None,
+    crates_tree: str | None = None, latency: Path | None = None,
     evidence_dir: Path = EVIDENCE_DIR, root: Path = ROOT,
 ) -> dict[str, Any]:
     root, delta, evidence_dir = root.resolve(), delta.resolve(), evidence_dir.resolve()
@@ -407,6 +408,8 @@ def record_measurement(
         raise MechanismError(f"release {release!r} must look like v0.16.0")
     if not machine.strip():
         raise MechanismError("--machine is required: the scorecard does not record the host")
+    if not shipped.strip():
+        raise MechanismError("--shipped is required: say how the mechanism ships today")
     arms = {name: _load_arm(path) for name, path in runs.items()}
     if set(arms) != {"base-v2", "candidate-v2", "base-v1", "candidate-v1"}:
         raise MechanismError("record needs base-v2, candidate-v2, base-v1 and candidate-v1")
@@ -442,6 +445,12 @@ def record_measurement(
         ledger["mechanisms"].append(entry)
     elif entry["policy_delta"] != delta_row or entry["added_in"] != added_in:
         raise MechanismError(f"{mechanism} is already recorded with another delta or added_in")
+    # How it ships changes with a default flip; the newest record says so.
+    entry["shipped"] = shipped
+    if latency is not None:
+        entry["latency"] = {
+            "file": latency.resolve().relative_to(root).as_posix(), "sha256": sha256(latency)
+        }
     entry["measurements"] = [
         item for item in entry["measurements"]
         if (item["release"], item["revision"]) != (release, pair["revision"])
@@ -481,10 +490,17 @@ def validate(ledger: Mapping[str, Any], root: Path = ROOT) -> None:
             raise MechanismError(f"{where}: invalid added_in")
         if not isinstance(entry.get("title"), str) or not entry["title"].strip():
             raise MechanismError(f"{where}: title is missing")
+        if not isinstance(entry.get("shipped"), str) or not entry["shipped"].strip():
+            raise MechanismError(f"{where}: shipped (how the mechanism ships today) is missing")
         _check_file(entry.get("policy_delta"), f"{where} policy_delta", root)
         delta = tomllib.loads((root / entry["policy_delta"]["file"]).read_text(encoding="utf-8"))
         if not delta or any(not isinstance(section, dict) for section in delta.values()):
             raise MechanismError(f"{where}: policy delta must add at least one TOML section")
+        if "latency" in entry:
+            _check_file(entry["latency"], f"{where} latency", root)
+            latency = json.loads((root / entry["latency"]["file"]).read_text(encoding="utf-8"))
+            if latency.get("verdict") != "valid":
+                raise MechanismError(f"{where}: latency evidence is not a valid quiet-host run")
         if not entry.get("measurements"):
             raise MechanismError(f"{where}: no measurement")
         for measurement in entry["measurements"]:
@@ -577,12 +593,30 @@ def release_cell(entry: Mapping[str, Any], version: str) -> str:
     )
 
 
+def _cost(entry: Mapping[str, Any], root: Path) -> str:
+    """The quiet-host latency and memory cost, read from its SHA-pinned evidence file."""
+    pinned = entry.get("latency")
+    if pinned is None:
+        return "Cost: not measured. "
+    data = json.loads((root / pinned["file"]).read_text(encoding="utf-8"))
+    base, candidate = (data["median_of_rounds"][arm] for arm in ("base", "candidate"))
+    def change(key: str, scale: float = 1.0, unit: str = "ms", digits: int = 1) -> str:
+        return f"{(candidate[key] - base[key]) / scale:+,.{digits}f} {unit}"
+    return (
+        f"Cost on a quiet host (median of {data['rounds']} rounds, {data['documents']} documents): "
+        f"warm p50 {change('p50_ms')}, p95 {change('p95_ms')}, cold first document "
+        f"{change('cold_first_document_ms', 1000, 's')}, peak RSS "
+        f"{change('peak_rss_mib', unit='MiB', digits=0)} "
+        f"([evidence]({_link(pinned['file'])})). "
+    )
+
+
 def _link(repo_path: str) -> str:
     """A repository path as a link from the benchmark document."""
     return os.path.relpath(repo_path, DOC.parent.relative_to(ROOT).as_posix())
 
 
-def render(ledger: Mapping[str, Any], releases: Sequence[str]) -> str:
+def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT) -> str:
     lines = [
         "Each row runs the same binary, corpus and seed twice: once with the base policy, "
         "once with the base policy plus one mechanism's policy delta. Nothing else differs, "
@@ -629,7 +663,8 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str]) -> str:
                 for layer, block in measurement["agentic_layers"].items()
             ) or "not measured"
             lines.append(
-                f"- **{entry['title']}**: leaked bytes by gold label: {leaked}. "
+                f"- **{entry['title']}** ships {entry['shipped']}. {_cost(entry, root)}"
+                f"Leaked bytes by gold label: {leaked}. "
                 f"FP bytes by predicted class: {fp}. Agentic layers: {layers}. "
                 f"Policy delta [`{Path(entry['policy_delta']['file']).name}`]"
                 f"({_link(entry['policy_delta']['file'])}); evidence "
@@ -707,6 +742,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     add.add_argument("--mechanism", required=True)
     add.add_argument("--title", required=True)
     add.add_argument("--added-in", required=True)
+    add.add_argument("--shipped", required=True,
+                     help="how the mechanism ships today, e.g. 'opt-in (gaze setup --dob-judge)'")
     add.add_argument("--policy-delta", type=Path, required=True)
     for name in ("base-v2", "candidate-v2", "base-v1", "candidate-v1"):
         add.add_argument(f"--{name}", type=Path, required=True,
@@ -714,6 +751,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     add.add_argument("--binary", type=Path, required=True,
                      help="the clean_for_bench binary all four runs used")
     add.add_argument("--machine", required=True)
+    add.add_argument("--latency", type=Path,
+                     help="mechanism_latency.py output (verdict valid) to pin beside the row")
     add.add_argument("--release", help="the release this measures; omit for an unreleased commit")
     commands.add_parser("check", help="fail if the ledger or its table drifted from the records")
     commands.add_parser("render", help="rewrite the table from the ledger")
@@ -726,10 +765,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "record":
             record_measurement(
                 ledger, mechanism=args.mechanism, title=args.title, added_in=args.added_in,
+                shipped=args.shipped,
                 delta=args.policy_delta,
                 runs={name: getattr(args, name.replace("-", "_"))
                       for name in ("base-v2", "candidate-v2", "base-v1", "candidate-v1")},
                 binary=args.binary, machine=args.machine, release=args.release,
+                latency=args.latency,
             )
             LEDGER.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
         elif args.command == "refresh":

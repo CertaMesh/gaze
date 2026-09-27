@@ -107,13 +107,15 @@ $ jq '{session_blob, text: .clean_text}' clean.json | gaze restore | jq -r .text
 From: Ada Example <ada [at] example.invalid>
 ```
 
-`gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a policy without the Nym safety net, and add `--no-dob-judge` for NER only.
+`gaze setup` verifies the pinned NER and Nym bundles, writes `gaze.toml` with Nym on, and checks both detectors. It prints the Nym model card's MIT licence and the open [training-data licence review](docs/explanation/safety-net/safety-nets.md#licence-review-open). Use `gaze setup --safety-net none` for a NER-only policy.
 
-`gaze setup` also installs the SHA-pinned local GLiNER bundle (352 MB) and
-enables cue-less date-of-birth judgments in the generated policy. On the
-benchmark it cuts leaked date-of-birth bytes from 810 to 725 and adds no
-false-positive bytes ([per-mechanism arms](docs/reference/benchmarks/README.md#per-mechanism-arms)).
-`--no-dob-judge` leaves it out; `--dob-model-dir <path>` selects its bundle
+Use `gaze setup --dob-judge` to install the optional SHA-pinned local GLiNER
+bundle and enable cue-less date-of-birth judgments in the generated policy.
+This option is off by default until its 352 MB bundle is shrunk (todo 3905):
+on the benchmark it cuts leaked date-of-birth bytes from 810 to 725 with no
+added false-positive bytes, but adds 664 MiB peak memory
+([per-mechanism arms](docs/reference/benchmarks/README.md#per-mechanism-arms)).
+`--dob-model-dir <path>` selects its bundle
 directory. The setup doctor checks a synthetic birth date before publishing
 the policy.
 
