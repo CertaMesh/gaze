@@ -49,7 +49,7 @@ class RecordReplayTests(unittest.TestCase):
             score.load_scored_label_contract(bench / "scored-labels-v2.json"),
         ):
             card = record.rescore(full_record, contract)
-            self.assertEqual(agentic.gate(card, card)["verdict"], "fail")
+            self.assertEqual(agentic.gate(card, card, allow_legacy_policy_inputs=True)["verdict"], "fail")
             broken = copy.deepcopy(card)
             del broken["scoring"]["scored_label_contract"]["id"]
             with self.assertRaisesRegex(agentic.LayerError, "kiji_contract"):
@@ -298,7 +298,7 @@ class RecordReplayTests(unittest.TestCase):
                     record.rescore(broken, score.SCORED_LABEL_CONTRACT_V1, layer_contract)
                 self.assertEqual(record.main([str(broken), "--output", str(Path(temporary) / "unused.json")]), 2)
             replayed = record.rescore(path, score.SCORED_LABEL_CONTRACT_V1)
-            self.assertEqual(agentic.gate(card, replayed)["verdict"], "fail")
+            self.assertEqual(agentic.gate(card, replayed, allow_legacy_policy_inputs=True)["verdict"], "fail")
             alternate = score.ScoredLabelContract(
                 "synthetic-layer-exclusion", 2, "synthetic.json", "3" * 64,
                 frozenset(), frozenset({"EMAIL"}),
@@ -353,7 +353,7 @@ class RecordReplayTests(unittest.TestCase):
                 agentic.gate(card, broken)
             implicit_v1 = copy.deepcopy(replayed)
             del implicit_v1["scoring"]["scored_label_contract"]
-            self.assertIn(agentic.gate(card, implicit_v1)["verdict"], {"pass", "fail"})
+            self.assertIn(agentic.gate(card, implicit_v1, allow_legacy_policy_inputs=True)["verdict"], {"pass", "fail"})
             broken_identity = copy.deepcopy(replayed)
             del broken_identity["scoring"]["scored_label_contract"]["id"]
             with self.assertRaisesRegex(agentic.LayerError, "kiji_contract"):
