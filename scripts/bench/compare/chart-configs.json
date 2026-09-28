@@ -1,0 +1,8 @@
+{
+  "presidio": "presidio-strong",
+  "datafog-core": "datafog-core",
+  "datafog-python": "datafog-spacy",
+  "scrubadub": "scrubadub-spacy",
+  "gliner": "gliner",
+  "opf": "opf"
+}

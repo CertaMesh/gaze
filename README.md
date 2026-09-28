@@ -29,37 +29,37 @@ The [v0.15.1 release benchmark](docs/reference/benchmarks/README.md#current-rele
 
 <!-- BEGIN GENERATED: readme-chart -->
 
-Leaked PII bytes per setup, scored labels v3, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 layer C documents and scorer. The Gaze main bar is the run measured with the competitors. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
+Leaked PII bytes per setup, scored labels v3, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 documents from Kiji EN/DE holdout and A4 negatives and the same scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
 
 ```mermaid
 %%{init: {'xyChart': {'width': 1200, 'height': 500}}}%%
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v3 - lower is better"
-    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)", "Gaze main 1809f6a3, unreleased (7.5%)", "GLiNER 0.2.29, urchade/gliner_multi_pii-v1, threshold 0.5 (16.3%)", "OPF 0.1.0, default viterbi, typed output, cpu (19.5%)", "Presidio 2.2.364, 5 languages, spaCy lg (24.8%)"]
-    y-axis "Leaked PII bytes" 0 --> 100000
-    bar [13319, 22144, 23428, 90253, 9256, 20152, 24080, 30615]
+    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)", "Gaze main a2f6fefd, unreleased (7.5%)", "Presidio 2.2.364, 5 languages, English transformer + spaCy lg, all applicable recognizers (20.5%)", "DataFog Core 0.3.0, built-in recognizers (83.8%)", "DataFog Python 4.8.1, spacy engine (23.6%)", "scrubadub 2.0.0 + spaCy en_core_web_lg (68.3%)", "GLiNER 0.2.29, urchade/gliner_multi_pii-v1, threshold 0.5 (16.3%)", "OPF 0.1.0, default viterbi, typed output, cpu (19.5%)"]
+    y-axis "Leaked PII bytes" 0 --> 120000
+    bar [13319, 22144, 23428, 90253, 9256, 25314, 103617, 29142, 84397, 20152, 24080]
 ```
 
-Leaked PII bytes per setup, scored labels v2, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 layer C documents and scorer. The Gaze main bar is the run measured with the competitors. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
+Leaked PII bytes per setup, scored labels v2, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 documents from Kiji EN/DE holdout and A4 negatives and the same scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
 
 ```mermaid
 %%{init: {'xyChart': {'width': 1200, 'height': 500}}}%%
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v2 - lower is better"
-    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)", "Gaze main 1809f6a3, unreleased (7.5%)", "GLiNER 0.2.29, urchade/gliner_multi_pii-v1, threshold 0.5 (16.3%)", "OPF 0.1.0, default viterbi, typed output, cpu (19.5%)", "Presidio 2.2.364, 5 languages, spaCy lg (24.8%)"]
-    y-axis "Leaked PII bytes" 0 --> 100000
-    bar [13319, 22144, 23428, 90253, 9256, 20152, 24080, 30615]
+    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)", "Gaze main a2f6fefd, unreleased (7.5%)", "Presidio 2.2.364, 5 languages, English transformer + spaCy lg, all applicable recognizers (20.5%)", "DataFog Core 0.3.0, built-in recognizers (83.8%)", "DataFog Python 4.8.1, spacy engine (23.6%)", "scrubadub 2.0.0 + spaCy en_core_web_lg (68.3%)", "GLiNER 0.2.29, urchade/gliner_multi_pii-v1, threshold 0.5 (16.3%)", "OPF 0.1.0, default viterbi, typed output, cpu (19.5%)"]
+    y-axis "Leaked PII bytes" 0 --> 120000
+    bar [13319, 22144, 23428, 90253, 9256, 25314, 103617, 29142, 84397, 20152, 24080]
 ```
 
-Leaked PII bytes per setup, scored labels v1, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes. The comparison bars use the same 2,910 layer C documents and scorer. The Gaze main bar is the run measured with the competitors. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
+Leaked PII bytes per setup, scored labels v1, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes. The comparison bars use the same 2,910 documents from Kiji EN/DE holdout and A4 negatives and the same scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
 
 ```mermaid
 %%{init: {'xyChart': {'width': 1200, 'height': 500}}}%%
 xychart-beta horizontal
     title "Leaked PII bytes, scored labels v1 - lower is better"
-    x-axis ["v0.15.0 – v0.15.1 default (15.0%)", "v0.14.0 default (19.3%)", "v0.14.0 rules + NER (20.7%)", "v0.14.0 rules only (72.0%)", "Gaze main 1809f6a3, unreleased (11.9%)", "GLiNER 0.2.29, urchade/gliner_multi_pii-v1, threshold 0.5 (20.4%)", "OPF 0.1.0, default viterbi, typed output, cpu (19.6%)", "Presidio 2.2.364, 5 languages, spaCy lg (27.0%)"]
-    y-axis "Leaked PII bytes" 0 --> 104000
-    bar [19556, 25179, 27000, 93850, 15443, 26515, 25485, 35130]
+    x-axis ["v0.15.0 – v0.15.1 default (15.0%)", "v0.14.0 default (19.3%)", "v0.14.0 rules + NER (20.7%)", "v0.14.0 rules only (72.0%)", "Gaze main a2f6fefd, unreleased (11.9%)", "Presidio 2.2.364, 5 languages, English transformer + spaCy lg, all applicable recognizers (23.8%)", "DataFog Core 0.3.0, built-in recognizers (84.6%)", "DataFog Python 4.8.1, spacy engine (25.5%)", "scrubadub 2.0.0 + spaCy en_core_web_lg (68.7%)", "GLiNER 0.2.29, urchade/gliner_multi_pii-v1, threshold 0.5 (20.4%)", "OPF 0.1.0, default viterbi, typed output, cpu (19.6%)"]
+    y-axis "Leaked PII bytes" 0 --> 130000
+    bar [19556, 25179, 27000, 93850, 15443, 31055, 110273, 33270, 89546, 26515, 25485]
 ```
 
 <!-- END GENERATED: readme-chart -->
