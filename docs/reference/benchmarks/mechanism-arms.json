@@ -91,12 +91,12 @@
           "agentic_layers": {
             "A": {
               "base": {
-                "leaked": 13984,
+                "leaked": 16429,
                 "false_positive": 884,
                 "failed_closed": 0
               },
               "candidate": {
-                "leaked": 13964,
+                "leaked": 16409,
                 "false_positive": 884,
                 "failed_closed": 0
               }
@@ -277,12 +277,12 @@
           "agentic_layers": {
             "A": {
               "base": {
-                "leaked": 14136,
+                "leaked": 16620,
                 "false_positive": 724,
                 "failed_closed": 0
               },
               "candidate": {
-                "leaked": 13978,
+                "leaked": 16423,
                 "false_positive": 902,
                 "failed_closed": 0
               }
@@ -314,12 +314,12 @@
           },
           "gate": {
             "v2": {
-              "verdict": "pass",
-              "reason": "leaked bytes fell by 3256, FP bytes changed by +1857"
+              "verdict": "fail",
+              "reason": "credit guard: FP bytes rose on ['ref_number_10 (NHSNUMBER: 0 -> 4)'], the benign twin of credited checksum-invalid gold; no net-bytes gain offsets it"
             },
             "v1": {
-              "verdict": "pass",
-              "reason": "leaked bytes fell by 3592, FP bytes changed by +1857"
+              "verdict": "fail",
+              "reason": "credit guard: FP bytes rose on ['ref_number_10 (NHSNUMBER: 0 -> 4)'], the benign twin of credited checksum-invalid gold; no net-bytes gain offsets it"
             }
           },
           "attested": {
@@ -482,12 +482,12 @@
           "agentic_layers": {
             "A": {
               "base": {
-                "leaked": 14770,
+                "leaked": 17215,
                 "false_positive": 251,
                 "failed_closed": 0
               },
               "candidate": {
-                "leaked": 13978,
+                "leaked": 16423,
                 "false_positive": 902,
                 "failed_closed": 0
               }
