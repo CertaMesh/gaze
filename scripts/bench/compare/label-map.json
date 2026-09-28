@@ -293,7 +293,8 @@
       "CREDITCARDNUMBER",
       "IBAN"
     ],
-    "secret": []
+    "secret": [],
+    "custom:secret": []
   },
   "gaze": {
     "email": [
@@ -594,6 +595,7 @@
     "skype": [
       "USERNAME"
     ],
-    "unknown": []
+    "unknown": [],
+    "tagged": []
   }
 }
