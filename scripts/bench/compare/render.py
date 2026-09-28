@@ -52,6 +52,18 @@ def validate_current(report: dict[str, object]) -> None:
             report.get("comparison_metrics_sha256"),
             digest_file(Path(__file__).with_name("comparison_metrics.py")),
         )
+        expected["foreign CPU sampler"] = (
+            report.get("cpu_contention_sha256"),
+            digest_file(Path(__file__).with_name("cpu_contention.py")),
+        )
+        expected["README chart configurations"] = (
+            report.get("chart_config_sha256"),
+            digest_file(Path(__file__).with_name("chart-configs.json")),
+        )
+        expected["report finalizer"] = (
+            report.get("finalizer_sha256"),
+            digest_file(Path(__file__).with_name("finalize_report.py")),
+        )
     for version, path in compare.CONTRACTS.items():
         expected[f"{version} scored labels"] = (
             report["contracts"][version], compare.runner.load_scored_label_contract(REPO, path).sha256,
@@ -130,6 +142,9 @@ def render(report: dict[str, object], source: str) -> str:
         runtime = tools["opf"]["provenance"]["runtime"]
         opf_source = runtime.get("source_revision")
         opf_description = f"OpenAI Privacy Filter (OPF) {runtime['version']}" + (f" at source `{opf_source}`" if opf_source else "") + "."
+    latency_publishable = report.get("latency_validity", {}).get("publishable", report.get("schema_version", 1) < 2)
+    if report.get("schema_version", 1) >= 2 and "latency_validity" not in report:
+        raise ValueError("comparison report lacks latency validity evidence")
     latency_pairs = [
         (gaze[version]["layers"][layer]["latency"]["p50_ms"],
          tools["presidio-all"]["contracts"][version][layer]["latency"]["p50_ms"])
@@ -141,7 +156,7 @@ def render(report: dict[str, object], source: str) -> str:
         f"Gaze p50 exceeds Presidio all in {slower_rows}/{len(latency_pairs)} "
         "comparable layer-contract rows on this host. "
         if latency_pairs else "No comparable Gaze and Presidio all latency rows. "
-    )
+    ) if latency_publishable else "Latency was not measured under a quiet machine; timing comparisons are withheld. "
     skipped_example = tools["presidio-en"]["contracts"]["v3"].get("A")
     skipped_example_note = (
         f"For example, Presidio English-only v3 A leaks {skipped_example['leaked_bytes']:,} B, "
@@ -158,7 +173,7 @@ def render(report: dict[str, object], source: str) -> str:
         "is warm per-document wall-clock inference/clean time on the same machine. "
         "Presidio all runs English, German, Dutch, French, and Portuguese spaCy models "
         "with the documented German recognizers. Presidio English default is a secondary row. "
-        "Latency includes processed documents only. " + latency_note +
+        + ("Latency includes processed documents only. " if latency_publishable else "") + latency_note +
         "This measures detection; competitor restore and manifest behavior is not scored.",
         "",
         "Leaked and false-positive byte counts are class-agnostic. A skipped document's "
@@ -181,8 +196,10 @@ def render(report: dict[str, object], source: str) -> str:
         "",
         f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published.",
         "",
-        "| Contract | Layer | Tool | Leaked B | FP B | Processed | Skipped | Skipped gold B | CPU-host p50 ms | CPU-host p95 ms |",
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Contract | Layer | Tool | Leaked B | FP B | Processed | Skipped | Skipped gold B | "
+        + ("CPU-host p50 ms | CPU-host p95 ms |" if latency_publishable else "Latency |"),
+        "|---|---|---|---:|---:|---:|---:|---:|"
+        + ("---:|---:|" if latency_publishable else "---|"),
     ]
     lower_leak = []
     lower_fp_at_equal_leak = []
@@ -200,13 +217,17 @@ def render(report: dict[str, object], source: str) -> str:
                 if version == "v3" and row["false_positive_bytes_after_gold_gap"] is not None:
                     fp = row["false_positive_bytes_after_gold_gap"]
                 latency = row["latency"]
-                p50 = "n/a" if latency["p50_ms"] is None else f"{latency['p50_ms']:.1f}"
-                p95 = "n/a" if latency["p95_ms"] is None else f"{latency['p95_ms']:.1f}"
+                if latency_publishable:
+                    p50 = "n/a" if latency["p50_ms"] is None else f"{latency['p50_ms']:.1f}"
+                    p95 = "n/a" if latency["p95_ms"] is None else f"{latency['p95_ms']:.1f}"
+                    timing = f"{p50} | {p95} |"
+                else:
+                    timing = "not measured under a quiet machine |"
                 lines.append(
                     f"| {version} | {layer} | {name} | {row['leaked_bytes']:,} | {fp:,} | "
                     f"{row.get('processed_documents', row['documents']):,} | "
                     f"{row.get('skipped_documents', 0):,} | {row.get('skipped_gold_bytes', 0):,} | "
-                    f"{p50} | {p95} |"
+                    + timing
                 )
                 if name != "gaze" and version == "v3":
                     gaze_fp = gaze_row["false_positive_bytes_after_gold_gap"]

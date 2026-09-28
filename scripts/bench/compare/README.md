@@ -22,6 +22,11 @@ name the corpus, contract, configuration, mapping, and split. No Gaze setting
 is selected or changed using these results. Full-corpus byte rows remain for
 continuity with the benchmark headline.
 
+The root README chart uses exactly the configurations declared in
+`chart-configs.json`. Its bars show full-corpus layer C under the same scored
+label contract. Swept thresholds never enter that chart; their validation
+choice and disjoint test results stay in `competitors.md`.
+
 ## Configurations
 
 - Presidio 2.2.364: original English, English/German, and five-language defaults;
@@ -83,7 +88,14 @@ GAZE_COMPARE_OPF_PYTHON, GAZE_COMPARE_OPF_CHECKPOINT, GAZE_COMPARE_OUTPUT
 
 Then run `scripts/bench/compare/run-full.sh` on a quiet CPU host. It runs each
 configuration sequentially and resumes the same aggregate report across the
-two Python environments. `--dry-run` checks arguments without loading data.
+two Python environments. `finalize_report.py` checks the complete roster,
+hashes the declared chart selection, and marks timing unverified because this
+comparison is not a dedicated quiet-machine timing run. The comparator samples
+CPU outside its process tree every five seconds and records the busy-process
+count and load1 before/after. A sample above one core marks that configuration
+contended. The public page withholds p50/p95 and timing comparisons; a separate
+quiet-machine timing run can use the sampler to publish speed claims.
+`--dry-run` checks arguments without loading data.
 Copy the report to `docs/reference/benchmarks/comparison.json`, render
 `competitors.md`, and run `render.py --check`. The renderer verifies input
 hashes, model pins, tool roster, and document counts. The report records split

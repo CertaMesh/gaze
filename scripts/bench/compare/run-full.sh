@@ -65,3 +65,4 @@ done
 for tool in scrubadub-base scrubadub-spacy; do
     "$GAZE_COMPARE_SCRUB_PYTHON" scripts/bench/compare/compare.py "${args[@]}" --tool "$tool" --resume
 done
+"$GAZE_COMPARE_PYTHON" scripts/bench/compare/finalize_report.py "$output"

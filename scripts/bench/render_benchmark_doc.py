@@ -38,6 +38,7 @@ DEFAULT_DOC = BENCH_DIR / "README.md"
 DEFAULT_HISTORY = BENCH_DIR / "release-history.json"
 DEFAULT_COMPARISON = BENCH_DIR / "comparison.json"
 DEFAULT_README = REPO_ROOT / "README.md"
+CHART_CONFIGS = REPO_ROOT / "scripts" / "bench" / "compare" / "chart-configs.json"
 
 HISTORY_SCHEMA_VERSION = 1
 SCORECARD_SCHEMA_VERSION = 4
@@ -1529,7 +1530,7 @@ def _competitor_label(name: str, tool: Mapping[str, Any]) -> str:
 def readme_comparison_bars(
     history: Mapping[str, Any], comparison: Mapping[str, Any], version: int
 ) -> list[tuple[str, int]]:
-    """Layer C bars measured together, with the lowest-leak row per competitor."""
+    """Layer C bars for configurations declared before measurement."""
     latest = history["releases"][-1]
     components = latest["dataset"]["integrity"]["component_sha256"]
     corpus = comparison["corpus"]
@@ -1556,27 +1557,24 @@ def readme_comparison_bars(
     def label(base: str, leaked: int) -> str:
         return f"{base} ({leaked / gold:.1%})"
 
-    def rank(item: tuple[str, Mapping[str, Any], Mapping[str, Any]]) -> tuple[int, int, int, str]:
-        selected = item[2]
-        return (
-            selected["leaked_bytes"], selected["skipped_documents"],
-            selected["false_positive_bytes"], item[0],
-        )
-
     leaked = gaze["layers"]["C"]["leaked_bytes"]
     bars = [(label(f"Gaze main {main_revision[:8]}, {release}", leaked), leaked)]
-    best: dict[str, tuple[str, Mapping[str, Any], Mapping[str, Any]]] = {}
-    for name, tool in comparison["tools"].items():
+    config_bytes = CHART_CONFIGS.read_bytes()
+    config_sha = hashlib.sha256(config_bytes).hexdigest()
+    if comparison.get("schema_version", 1) >= 2 and comparison.get("chart_config_sha256") != config_sha:
+        raise RenderError("comparison report chart configuration hash does not match")
+    declared = json.loads(config_bytes)
+    if len(set(declared.values())) != len(declared):
+        raise RenderError("a README chart configuration was declared twice")
+    for family, name in declared.items():
+        tool = comparison["tools"].get(name)
+        if tool is None:
+            if comparison.get("schema_version", 1) >= 2:
+                raise RenderError(f"declared README chart configuration is missing: {name}")
+            continue
         row = tool["contracts"].get(contract, {}).get("C")
         if row is None:
-            continue
-        family = _competitor_family(name)
-        candidate = (name, tool, row)
-        previous = best.get(family)
-        if previous is None or rank(candidate) < rank(previous):
-            best[family] = candidate
-    for family in sorted(best):
-        name, tool, row = best[family]
+            raise RenderError(f"declared README chart configuration has no {contract} layer C: {name}")
         skipped = (
             f", {row['skipped_documents']} skipped" if row["skipped_documents"] else ""
         )
@@ -1621,6 +1619,9 @@ def _readme_contract_chart(
         f"The comparison bars use the same {comparison['corpus']['layers']['C']['documents']:,} "
         "layer C documents and scorer. "
         "The Gaze main bar is the run measured with the competitors. "
+        "Competitor bars use the declared configurations in "
+        "[`chart-configs.json`](scripts/bench/compare/chart-configs.json), "
+        "selected before results were reviewed. "
         "Skipped documents count their gold bytes as leaked. "
         "Configurations and false-positive bytes are in "
         "[`competitors.md`](docs/reference/benchmarks/competitors.md)."

@@ -32,6 +32,7 @@ import dataiku_en_de_gaze_bench as dataiku  # noqa: E402
 import gaze_bench_score as score  # noqa: E402
 import run_no_opf_benchmark as runner  # noqa: E402
 from comparison_metrics import ComparisonMetrics, split_for_id  # noqa: E402
+from cpu_contention import ForeignCpuSampler  # noqa: E402
 
 MAP_PATH = Path(__file__).with_name("label-map.json")
 MODEL_PINS_PATH = Path(__file__).with_name("model-wheels.json")
@@ -334,7 +335,9 @@ class Scrubadub:
     def __init__(self, spacy_model: str | None = None) -> None:
         import scrubadub
         self.scrubbers = {}
-        for language, locale in (("en", "en_US"), ("de", "de_DE")):
+        for language, locale in (("en", "en_US"), ("de", "de_DE"),
+                                 ("nl", "nl_NL"), ("fr", "fr_FR"),
+                                 ("pt", "pt_PT")):
             scrubber = scrubadub.Scrubber(locale=locale)
             if spacy_model and language == "en":
                 from scrubadub_spacy.detectors import SpacyEntityDetector
@@ -756,6 +759,7 @@ def main() -> int:
         "requirements_sha256": digest_file(Path(__file__).with_name("requirements.lock")),
         "scrubadub_requirements_sha256": digest_file(Path(__file__).with_name("requirements-scrubadub.lock")),
         "comparison_metrics_sha256": digest_file(Path(__file__).with_name("comparison_metrics.py")),
+        "cpu_contention_sha256": digest_file(Path(__file__).with_name("cpu_contention.py")),
         "mapping_sha256": digest_file(MAP_PATH),
         "model_pins_sha256": digest_file(MODEL_PINS_PATH),
         "contracts": {
@@ -771,7 +775,7 @@ def main() -> int:
     if args.resume:
         previous = json.loads(args.output.read_text(encoding="utf-8"))
         for key in ("corpus", "mapping_sha256", "model_pins_sha256", "compare_sha256",
-                    "comparison_metrics_sha256", "gaze_crates_tree", "contracts"):
+                    "comparison_metrics_sha256", "cpu_contention_sha256", "gaze_crates_tree", "contracts"):
             if previous[key] != report[key]:
                 raise ValueError(f"resume input differs in {key}")
         report = previous
@@ -822,9 +826,11 @@ def main() -> int:
                              ("full", args.gaze_policy)):
             if policy is None:
                 raise ValueError(f"missing Gaze {name} policy")
-            measured = measure_gaze(name, args.gaze_binary, policy, args.gaze_model_dir,
-                                    layers, mappings["gaze"], common_labels,
-                                    args.output.parent / "diagnostics")
+            with ForeignCpuSampler() as sampler:
+                measured = measure_gaze(name, args.gaze_binary, policy, args.gaze_model_dir,
+                                        layers, mappings["gaze"], common_labels,
+                                        args.output.parent / "diagnostics")
+            report.setdefault("contention_samples", {})[f"gaze-{name}"] = sampler.result()
             if name == "full":
                 for version in CONTRACTS:
                     for layer in layers:
@@ -937,13 +943,14 @@ def main() -> int:
             try:
                 # Warm the model outside the measured per-document latency.
                 backend.predict(score.Document("warmup", "alice@example.invalid", "en", "", "synthetic", ()))
-                load_before = os.getloadavg()
-                measured = measure(
-                    name, backend.predict, layers, mapping,
-                    backend.languages if isinstance(backend, Presidio) else None,
-                    common_labels,
-                )
-                measured["host_load_1m_before_after"] = [round(load_before[0], 2), round(os.getloadavg()[0], 2)]
+                with ForeignCpuSampler() as sampler:
+                    measured = measure(
+                        name, backend.predict, layers, mapping,
+                        backend.languages if isinstance(backend, Presidio) else None,
+                        common_labels,
+                    )
+                report.setdefault("contention_samples", {})[name] = sampler.result()
+                measured["host_load_1m_before_after"] = sampler.result()["load1_before_after"]
                 measured["provenance"] = provenance
                 report["tools"][name] = measured
                 select_thresholds(report)
