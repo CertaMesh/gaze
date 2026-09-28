@@ -78,6 +78,9 @@ struct NerSettings {
 
 struct PolicyRun {
     pipeline: Pipeline,
+    policy: gaze::Policy,
+    rulepacks: Vec<Rulepack>,
+    ner_threshold: f32,
     locale_chain: LocaleChain,
     dictionaries: DictionaryBundle,
 }
@@ -111,6 +114,9 @@ struct Request {
     fixture_id: String,
     locale_chain: Vec<String>,
     text: String,
+    /// Synthetic caller-known record for the separate oracle benchmark arm.
+    #[serde(default)]
+    context_json: Option<String>,
     /// Used only by CLI equivalence checks; scored requests keep fixture-derived sessions.
     #[serde(default)]
     session_hex: Option<String>,
@@ -302,6 +308,27 @@ fn handle_request_with_policy(
     request: Request,
     policy_run: Option<&PolicyRun>,
 ) -> Result<Outcome, Box<dyn std::error::Error>> {
+    let record_run = if let Some(raw) = request.context_json.as_deref() {
+        let policy_run = policy_run.ok_or("record context requires policy-file config")?;
+        let context = Context::from_json_str(raw)?;
+        let inputs = gaze_assembly::resolve_policy_inputs(
+            &policy_run.policy,
+            Some(&context),
+            None,
+            Some(policy_run.ner_threshold),
+        )?;
+        let pipeline = gaze_assembly::build_pipeline(
+            &policy_run.policy,
+            &context,
+            &policy_run.rulepacks,
+            &policy_run.locale_chain,
+            Some(policy_run.ner_threshold),
+        )?;
+        Some((pipeline, inputs.dictionaries))
+    } else {
+        None
+    };
+    let full = record_run.as_ref().map_or(full, |run| &run.0);
     let request_locales = request
         .locale_chain
         .iter()
@@ -311,8 +338,10 @@ fn handle_request_with_policy(
         .map(|run| run.locale_chain.as_slice())
         .unwrap_or(&request_locales);
     let empty_dictionaries = DictionaryBundle::default();
-    let dictionaries = policy_run
-        .map(|run| &run.dictionaries)
+    let dictionaries = record_run
+        .as_ref()
+        .map(|run| &run.1)
+        .or_else(|| policy_run.map(|run| &run.dictionaries))
         .unwrap_or(&empty_dictionaries);
     let session_hex = match request.session_hex.as_deref() {
         Some(value) if value.len() == 8 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) => {
@@ -808,6 +837,9 @@ fn build_policy_run() -> Result<PolicyRun, Box<dyn std::error::Error>> {
     )?;
     Ok(PolicyRun {
         pipeline,
+        policy,
+        rulepacks: inputs.rulepacks,
+        ner_threshold: inputs.ner_threshold,
         locale_chain: inputs.locale_chain,
         dictionaries: inputs.dictionaries,
     })
@@ -1274,6 +1306,7 @@ mod tests {
             fixture_id: fixture_id.to_string(),
             locale_chain: vec![locale.to_string()],
             text: text.to_string(),
+            context_json: None,
             session_hex: None,
         };
 
@@ -1291,6 +1324,7 @@ mod tests {
             fixture_id: "synthetic-prefix".to_string(),
             locale_chain: vec!["en-US".to_string()],
             text: "alice@example.invalid".to_string(),
+            context_json: None,
             session_hex: Some("deadbeef".to_string()),
         };
         let Outcome::Success(response) =
@@ -1845,12 +1879,14 @@ mod tests {
                 fixture_id: "producer-determinism-en-1".to_string(),
                 locale_chain: vec!["en-US".to_string()],
                 text: "Dr. Schmidt from Example Labs reviews GAZE-1001 in Berlin. Contact alice@example.invalid or +1-555-0101. This synthetic paragraph repeats Example Labs, Dr. Schmidt, Berlin, and GAZE-1001 so the full producer exercises deterministic recognition, Pass 2 NER and manifest restoration across a document longer than three hundred bytes.".to_string(),
+                context_json: None,
                 session_hex: None,
             },
             Request {
                 fixture_id: "producer-determinism-de-2".to_string(),
                 locale_chain: vec!["de-DE".to_string()],
                 text: "Dr. Schmidt prueft fuer Example Labs den synthetischen Vorgang GAZE-1002 in Berlin. Der Testkontakt lautet alice@example.invalid und die Testnummer +49 1555 0112233. Dieser erfundene Absatz wiederholt Example Labs, Dr. Schmidt, Berlin und GAZE-1002, damit der vollstaendige Produzent Erkennung, Pass 2 NER und Manifest-Wiederherstellung ueber mehr als dreihundert Bytes ausfuehrt.".to_string(),
+                context_json: None,
                 session_hex: None,
             },
         ] {

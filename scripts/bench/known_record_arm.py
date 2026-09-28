@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""Separate oracle arm: how much does a caller-known record help Gaze?
+
+The record is derived from held-out gold before detection. This assumes an
+adopter already knows those values and must never be reported as headline
+context-free performance. Records stay in memory; output contains counts only.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import subprocess
+import tomllib
+from collections import Counter
+from pathlib import Path
+
+import agentic_layers as agentic
+import dataiku_en_de_gaze_bench as dataiku
+import gaze_bench_score as score
+import run_no_opf_benchmark as benchmark
+
+
+LABEL_CLASS = {
+    "EMAIL": "Email",
+    "GIVENNAME": "Name",
+    "FIRSTNAME": "Name",
+    "SURNAME": "Name",
+    "PHONENUMBER": "custom:phone",
+    "TELEPHONENUM": "custom:phone",
+    "IBAN": "custom:iban",
+    "ACCOUNTNUM": "custom:iban",
+    "CREDITCARDNUMBER": "custom:credit_card",
+    "PASSPORTID": "custom:passport",
+    "PASSPORTNUM": "custom:passport",
+    "NATIONALID": "custom:national_id",
+    "IDCARDNUM": "custom:national_id",
+    "TAXNUM": "custom:steuer_id",
+    "STREET": "Location",
+    "CITY": "Location",
+    "BUILDINGNUM": "Location",
+}
+MAX_FIELDS = 32
+MAX_VALUE_BYTES = 256
+
+
+def class_action(policy: dict, class_name: str) -> str | None:
+    for rule in policy.get("rule", []):
+        if rule.get("kind") == "class" and str(rule.get("class", "")).lower() == class_name.lower():
+            return rule.get("action")
+        if rule.get("kind") == "default":
+            return rule.get("action")
+    return None
+
+
+def record_for_document(document: score.Document, policy: dict) -> tuple[str | None, Counter[str]]:
+    encoded = document.text.encode("utf-8")
+    fields: dict[str, str] = {}
+    mapping: dict[str, str] = {}
+    eligible: Counter[str] = Counter()
+    for span in document.spans:
+        class_name = LABEL_CLASS.get(span.label)
+        if class_name is None:
+            continue
+        if class_action(policy, class_name) not in {"tokenize", "format_preserve"}:
+            raise ValueError(f"policy has no reversible action for selected class {class_name}")
+        value = encoded[span.start : span.end].decode("utf-8")
+        if not value.strip() or len(value.encode("utf-8")) > MAX_VALUE_BYTES:
+            continue
+        if len(fields) >= MAX_FIELDS:
+            break
+        key = f"v{len(fields):02d}"
+        fields[key] = value
+        mapping[f"/{key}"] = class_name
+        eligible[span.label] += span.end - span.start
+    if not fields:
+        return None, eligible
+    return json.dumps({"record": fields, "field_map": mapping}, ensure_ascii=False), eligible
+
+
+def paired_records(
+    documents: list[score.Document], policy: dict,
+    fallback_by_language: dict[str, list[str]] | None = None,
+) -> tuple[dict[str, str | None], Counter[str]]:
+    contexts: dict[str, str | None] = {}
+    eligible: Counter[str] = Counter()
+    positives_by_language: dict[str, list[str]] = {}
+    for document in documents:
+        context, bytes_by_label = record_for_document(document, policy)
+        contexts[document.uid] = context
+        eligible.update(bytes_by_label)
+        if context is not None and document.spans:
+            positives_by_language.setdefault(document.language, []).append(context)
+    counters: Counter[str] = Counter()
+    for document in documents:
+        if contexts[document.uid] is not None:
+            continue
+        pool = positives_by_language.get(document.language, []) or (
+            fallback_by_language or {}
+        ).get(document.language, [])
+        if document.negative_category is not None and pool:
+            index = sum(document.uid.encode("utf-8")) % len(pool)
+            contexts[document.uid] = pool[index]
+            counters[document.negative_category] += 1
+    return contexts, eligible
+
+
+def explicit_counterweights(
+    known_pool: dict[str, list[str]],
+) -> tuple[list[score.Document], dict[str, str]]:
+    """Price exact-value homonyms and identifier-shaped product references."""
+    documents: list[score.Document] = []
+    contexts: dict[str, str] = {}
+    for language, pool in sorted(known_pool.items()):
+        counts: Counter[str] = Counter()
+        for context in pool:
+            parsed = json.loads(context)
+            for key, value in parsed["record"].items():
+                class_name = parsed["field_map"][f"/{key}"]
+                kind = "homonym" if class_name == "Name" else "reference"
+                if kind == "reference" and class_name not in {
+                    "custom:iban", "custom:credit_card", "custom:phone"
+                }:
+                    continue
+                if counts[kind] >= 16:
+                    continue
+                uid = f"known-record-counterweight-{language}-{kind}-{counts[kind]:02d}"
+                text = (
+                    f"The fictional product is called {value}."
+                    if kind == "homonym"
+                    else f"The synthetic catalog reference is {value}."
+                )
+                documents.append(
+                    score.Document(
+                        uid=uid,
+                        text=text,
+                        language=language,
+                        region="",
+                        source_dataset="known-record-oracle-counterweight",
+                        spans=(),
+                        negative_category=f"record_{kind}",
+                        cell=f"D|record_{kind}|synthetic|benign",
+                    )
+                )
+                contexts[uid] = context
+                counts[kind] += 1
+            if counts["homonym"] >= 16 and counts["reference"] >= 16:
+                break
+    return documents, contexts
+
+
+def eligible_leak_counter(contexts: dict[str, str | None]) -> tuple[Counter[str], object]:
+    leaked: Counter[str] = Counter()
+
+    def record_document(
+        _config: str, document: score.Document, response: dict, _validators: object
+    ) -> None:
+        if "pipeline_error_code" in response:
+            return
+        context = contexts[document.uid]
+        if context is None:
+            return
+        values = set(json.loads(context)["record"].values())
+        predictions = score.final_trace_predictions(document, response)
+        protected = score.merge_intervals((span.start, span.end) for span in predictions)
+        encoded = document.text.encode("utf-8")
+        for span in document.spans:
+            if span.label not in LABEL_CLASS:
+                continue
+            if encoded[span.start : span.end].decode("utf-8") not in values:
+                continue
+            leaked[span.label] += score.interval_length(
+                score.subtract_intervals([(span.start, span.end)], protected)
+            )
+
+    return leaked, record_document
+
+
+def corpus(repo: Path, contract: str, dataset: Path) -> dict[str, list[score.Document]]:
+    primary, _ = dataiku.load_documents(dataset)
+    negatives, _ = benchmark.load_negative_documents(
+        repo / "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl"
+    )
+    documents = primary + negatives
+    if contract == "v2":
+        scoring = score.load_scored_label_contract(
+            repo / "docs/reference/benchmarks/scored-labels-v2.json"
+        )
+        documents = score.apply_scored_label_contract(documents, scoring)
+    prepared = agentic.prepare(repo)
+    return {
+        "C": documents,
+        "A": prepared.identifiers,
+        "D": prepared.lookalikes,
+        "R": prepared.repeats,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", type=Path, default=Path.cwd())
+    parser.add_argument("--binary", required=True, type=Path)
+    parser.add_argument("--policy", required=True, type=Path)
+    parser.add_argument("--model-dir", required=True, type=Path)
+    parser.add_argument("--dataset", type=Path, default=Path("target/bench-data/dataiku-en-de/test.parquet"))
+    parser.add_argument("--contract", required=True, choices=("v1", "v2"))
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--max-documents", type=int, help="development sample only; never publish as full arm")
+    args = parser.parse_args()
+    repo = args.repo.resolve()
+    policy_path = args.policy.resolve()
+    policy = tomllib.loads(policy_path.read_text(encoding="utf-8"))
+    layers = corpus(repo, args.contract, (repo / args.dataset).resolve())
+    repo_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+    ).strip()
+    known_pool: dict[str, list[str]] = {}
+    for document in layers["A"]:
+        context, _ = record_for_document(document, policy)
+        if context is not None:
+            known_pool.setdefault(document.language, []).append(context)
+    counterweight_documents, counterweight_contexts = explicit_counterweights(known_pool)
+    layers["D"] = [*layers["D"], *counterweight_documents]
+    output: dict[str, object] = {
+        "arm": "known-record oracle (caller already knows the selected gold values)",
+        "contract": args.contract,
+        "full": args.max_documents is None,
+        "source_commit": repo_sha,
+        "policy_sha256": hashlib.sha256(policy_path.read_bytes()).hexdigest(),
+        "dataset_sha256": dataiku.DATASET_SHA256,
+        "agentic_manifest": agentic.manifest(agentic.PUBLISHED_PARTITION, agentic.generate(agentic.PUBLISHED_PARTITION)),
+        "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown (Solo scratchpad 10781)",
+        "layers": {},
+    }
+    for layer, all_documents in layers.items():
+        documents = all_documents[: args.max_documents] if args.max_documents else all_documents
+        contexts, eligible = paired_records(
+            documents, policy, known_pool if layer == "D" else None
+        )
+        contexts.update({uid: context for uid, context in counterweight_contexts.items() if uid in contexts})
+        if not any(contexts.values()):
+            output["layers"][layer] = {"skipped": "no eligible record contexts"}
+            continue
+        kwargs = dict(
+            repo_root=repo,
+            binary=args.binary.resolve(),
+            config="policy-file",
+            documents=documents,
+            model_dir=args.model_dir.resolve(),
+            opf_command=None,
+            opf_checkpoint=None,
+            opf_daemon_socket=None,
+            threshold=0.3,
+            diagnostics_dir=args.output.parent / f"known-record-{args.contract}-{layer}-logs",
+            policy_path=policy_path,
+        )
+        baseline_eligible_leaks, baseline_record = eligible_leak_counter(contexts)
+        record_eligible_leaks, record_record = eligible_leak_counter(contexts)
+        baseline = score.run_config(**kwargs, record_document=baseline_record)
+        with_record = score.run_config(
+            **kwargs,
+            record_document=record_record,
+            context_for_document=lambda document: contexts[document.uid],
+        )
+        output["layers"][layer] = {
+            "documents": len(documents),
+            "record_documents": sum(value is not None for value in contexts.values()),
+            "explicit_counterweight_documents": sum(uid in counterweight_contexts for uid in contexts),
+            "eligible_gold_bytes_by_label": dict(sorted(eligible.items())),
+            "baseline_eligible_leaked_bytes_by_label": dict(sorted(baseline_eligible_leaks.items())),
+            "with_record_eligible_leaked_bytes_by_label": dict(sorted(record_eligible_leaks.items())),
+            "baseline": {
+                key: baseline[key]
+                for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")
+            },
+            "with_record": {
+                key: with_record[key]
+                for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")
+            },
+        }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()
