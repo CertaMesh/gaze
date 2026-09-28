@@ -182,10 +182,13 @@ an explicit JSON path-to-class map:
 
 ```json
 {
-  "record": {"customer": {"name": "Alice Smith", "email": "alice@example.invalid"}},
+  "record": {"customer": {"name": "[customer name]", "email": "[customer email]"}},
   "field_map": {"/customer/name": "Name", "/customer/email": "Email"}
 }
 ```
+
+Replace the bracketed values with the trusted app's actual record values before
+calling Gaze; do not send this raw context to the agent.
 
 Every nonempty string leaf in `record` needs one mapping, and every mapping
 must point to a leaf and name a built-in or `custom:<name>` Gaze class. Arrays,

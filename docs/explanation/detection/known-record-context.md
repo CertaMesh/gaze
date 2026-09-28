@@ -8,10 +8,13 @@ from the session manifest. The record is not included in the cleaned text.
 
 ```json
 {
-  "record": {"customer": {"name": "Alice Smith", "email": "alice@example.invalid"}},
+  "record": {"customer": {"name": "[customer name]", "email": "[customer email]"}},
   "field_map": {"/customer/name": "Name", "/customer/email": "Email"}
 }
 ```
+
+The bracketed values stand for data supplied by the trusted app, not literal
+values to send to an agent.
 
 The caller, rather than Gaze, supplies the class for every string leaf.
 Unmapped, unknown and ambiguous values reject the call. A record dictionary
