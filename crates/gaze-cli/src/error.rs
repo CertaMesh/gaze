@@ -10,6 +10,7 @@ pub(crate) enum CliError {
     EmptyInput,
     InputTooLarge,
     InvalidEncoding,
+    EvalSchema,
     PolicyConfig,
     PolicyConfigDetail(String),
     PolicySchemaUnsupported {
@@ -61,7 +62,11 @@ pub(crate) enum CliError {
 impl CliError {
     pub(crate) fn exit_code(&self) -> u8 {
         match self {
-            Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
+            Self::StdinParse
+            | Self::EmptyInput
+            | Self::InputTooLarge
+            | Self::InvalidEncoding
+            | Self::EvalSchema => 1,
             Self::PolicyConfig
             | Self::PolicyConfigDetail(_)
             | Self::PolicySchemaUnsupported { .. }
@@ -94,6 +99,7 @@ impl CliError {
             Self::EmptyInput => "EmptyInput",
             Self::InputTooLarge => "InputTooLarge",
             Self::InvalidEncoding => "InvalidEncoding",
+            Self::EvalSchema => "EvalSchema",
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
             Self::PolicySchemaUnsupported { .. } => "PolicySchemaUnsupported",
             Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",

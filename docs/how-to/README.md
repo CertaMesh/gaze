@@ -7,6 +7,8 @@ schemas, see the [reference](../reference/README.md).
 
 ## Library and audit
 
+- **[Evaluate annotated data](evaluate-annotated-data.md)** — score protected UTF-8 bytes,
+  leaks, and false positives on an owner-side JSONL corpus.
 - **[Use the `gaze setup` policy from Rust](rust-library.md)** — build the Nym-enabled
   pipeline from the policy `gaze setup` writes, and keep the restore snapshot owner-side.
 - **[Audit and restore](audit-and-restore.md)** — write, query, export, and purge the

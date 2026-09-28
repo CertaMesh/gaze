@@ -1,0 +1,13 @@
+Score Gaze against owner-side annotated JSONL without printing document text
+
+Usage: gaze eval [OPTIONS] <ANNOTATED>
+
+Arguments:
+  <ANNOTATED>  Owner-side JSONL corpus with text and UTF-8 byte spans
+
+Options:
+      --policy <POLICY>        Policy TOML; absent means the same bundled core policy as `gaze clean`
+      --locale <LOCALE>        Active locale fallback chain, comma separated and priority ordered
+      --label-map <LABEL_MAP>  JSON object mapping corpus labels to Gaze policy class names
+      --json                   Emit machine-readable aggregate metrics
+  -h, --help                   Print help
