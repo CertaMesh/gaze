@@ -116,6 +116,36 @@ def load_mapping() -> dict[str, dict[str, tuple[str, ...]]]:
     }
 
 
+def typed_mapping_for_contract(
+    mapping: dict[str, tuple[str, ...]], version: str,
+) -> dict[str, tuple[str, ...]]:
+    """Keep byte and gold-gap mappings stable while scoring exact native types."""
+    typed = dict(mapping)
+    for label in typed:
+        if label.startswith("custom:family:"):
+            typed[label] = ()
+    if version == "v1":
+        for label, gold in (("custom:password", ("PASSWORD",)),
+                            ("custom:security_token", ("SECURITYTOKEN",)),
+                            ("secret", ("PASSWORD", "SECURITYTOKEN")),
+                            ("custom:secret", ("PASSWORD", "SECURITYTOKEN"))):
+            if label in typed:
+                typed[label] = gold
+    return typed
+
+
+def assert_gaze_byte_equality(
+    measured: dict[str, object], expected: dict[str, object], version: str, layer: str,
+) -> None:
+    for field in ("leaked_bytes", "false_positive_bytes", "gold_gap_protected_bytes",
+                  "false_positive_bytes_after_gold_gap"):
+        if measured[field] != expected[field]:
+            raise ValueError(
+                f"Gaze byte mismatch: {version}/{layer}/{field}: "
+                f"{measured[field]} != {expected[field]}"
+            )
+
+
 def validate_labels(spans: Sequence[score.Span], mapping: dict[str, tuple[str, ...]]) -> None:
     unknown = sorted({span.label for span in spans} - mapping.keys())
     if unknown:
@@ -538,7 +568,8 @@ def measure(
         detailed = {
             version: {
                 view: {
-                    split: ComparisonMetrics(mapping, common_labels if view == "common_intersection" else None)
+                    split: ComparisonMetrics(mapping, common_labels if view == "common_intersection" else None,
+                                             typed_mapping_for_contract(mapping, version))
                     for split in ("full", "validation", "test")
                 }
                 for view in ("product_coverage", "common_intersection")
@@ -612,7 +643,8 @@ def measure_gaze(
         byte = {version: score.MetricAccumulator() for version in contracts}
         detailed = {
             version: {
-                view: {split: ComparisonMetrics(mapping, common_labels if view == "common_intersection" else None)
+                view: {split: ComparisonMetrics(mapping, common_labels if view == "common_intersection" else None,
+                                               typed_mapping_for_contract(mapping, version))
                        for split in ("full", "validation", "test")}
                 for view in ("product_coverage", "common_intersection")
             }
@@ -836,10 +868,7 @@ def main() -> int:
                     for layer in layers:
                         new = measured[version][layer]
                         old = expected["gaze"][version]["layers"][layer]
-                        for field in ("leaked_bytes", "false_positive_bytes",
-                                      "gold_gap_protected_bytes", "false_positive_bytes_after_gold_gap"):
-                            if new[field] != old[field]:
-                                raise ValueError(f"Gaze byte mismatch: {version}/{layer}/{field}: {new[field]} != {old[field]}")
+                        assert_gaze_byte_equality(new, old, version, layer)
                         report["gaze"][version]["layers"][layer] = new
                     report["gaze"][version]["prior_scorecard_revision"] = report["gaze"][version]["gaze_revision"]
                     report["gaze"][version]["gaze_revision"] = report["gaze_main_revision"]

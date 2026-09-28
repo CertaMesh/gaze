@@ -22,6 +22,7 @@ def _ratio(numerator: int, denominator: int) -> float:
 class ComparisonMetrics:
     mapping: Mapping[str, Sequence[str]]
     included_labels: frozenset[str] | None = None
+    typed_mapping: Mapping[str, Sequence[str]] | None = None
     documents: int = 0
     pii_documents: int = 0
     leaking_documents: int = 0
@@ -75,7 +76,7 @@ class ComparisonMetrics:
 
         unmatched = list(document.spans)
         for prediction in retained:
-            labels = self.mapping[prediction.label]
+            labels = (self.typed_mapping or self.mapping)[prediction.label]
             match = next((i for i, gold_span in enumerate(unmatched)
                           if prediction.start == gold_span.start
                           and prediction.end == gold_span.end

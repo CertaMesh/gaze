@@ -14,6 +14,85 @@ import compare  # noqa: E402
 
 ORDER = ("gaze", *compare.TOOLS)
 
+LOSS_METRICS = (
+    ("Leaked B", ("leaked_bytes",), "lower"),
+    ("FP B", ("false_positive_bytes",), "lower"),
+    ("Leaking docs", ("leaking_documents",), "lower"),
+    ("Doc leak %", ("document_leak_rate",), "lower"),
+    ("Leaking entities", ("leaking_entities",), "lower"),
+    ("Entity leak %", ("leaked_entity_rate",), "lower"),
+    ("Redaction load %", ("redaction_load",), "lower"),
+    ("TP", ("typed_entities", "tp"), "higher"),
+    ("FP", ("typed_entities", "fp"), "lower"),
+    ("FN", ("typed_entities", "fn"), "lower"),
+    ("Entity P", ("typed_entities", "precision"), "higher"),
+    ("Entity R", ("typed_entities", "recall"), "higher"),
+    ("F1", ("typed_entities", "f1"), "higher"),
+    ("F2", ("typed_entities", "f2"), "higher"),
+)
+
+
+def _metric_value(row: dict[str, object], path: tuple[str, ...]) -> int | float:
+    value = row
+    for key in path:
+        value = value[key]
+    return value
+
+
+def _display_metric(value: int | float, name: str) -> str:
+    if name.endswith("%"):
+        return f"{100 * value:.1f}%"
+    if isinstance(value, float):
+        return f"{value:.3f}"
+    return f"{value:,}"
+
+
+def enumerate_gaze_losses(report: dict[str, object], versions: tuple[str, ...],
+                          layers: list[str]) -> tuple[dict[str, int], list[str]]:
+    """List every scored metric on which a measured competitor beats Gaze."""
+    counts: dict[str, int] = {}
+    entries = []
+    for version in versions:
+        for layer in layers:
+            gaze = report["gaze"][version]["layers"][layer]
+            for name in ORDER[1:]:
+                if name not in report["tools"]:
+                    continue
+                tool = report["tools"][name]["contracts"][version][layer]
+                differences = []
+                for metric in ("Leaked B", "FP B"):
+                    key = "leaked_bytes" if metric == "Leaked B" else "false_positive_bytes"
+                    left, right = tool[key], gaze[key]
+                    if metric == "FP B" and version == "v3":
+                        left = tool.get("false_positive_bytes_after_gold_gap")
+                        right = gaze.get("false_positive_bytes_after_gold_gap")
+                        if left is None:
+                            left = tool[key]
+                        if right is None:
+                            right = gaze[key]
+                    if left < right:
+                        counts[f"full aggregate {metric}"] = counts.get(f"full aggregate {metric}", 0) + 1
+                        differences.append(f"{metric} {_display_metric(left, metric)} vs {_display_metric(right, metric)}")
+                if differences:
+                    entries.append(f"{version} {layer} full aggregate {name}: " + "; ".join(differences))
+                for view in ("product_coverage", "common_intersection"):
+                    for split in ("full", "validation", "test"):
+                        a = tool["metrics"][view][split]
+                        b = gaze["metrics"][view][split]
+                        differences = []
+                        for metric, path, better in LOSS_METRICS:
+                            left, right = _metric_value(a, path), _metric_value(b, path)
+                            if (left < right if better == "lower" else left > right):
+                                counts[metric] = counts.get(metric, 0) + 1
+                                differences.append(
+                                    f"{metric} {_display_metric(left, metric)} vs {_display_metric(right, metric)}"
+                                )
+                        if differences:
+                            entries.append(
+                                f"{version} {layer} {view} {split} {name}: " + "; ".join(differences)
+                            )
+    return counts, entries
+
 
 def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -259,8 +338,8 @@ def render(report: dict[str, object], source: str) -> str:
             "Common intersection scores only classes claimed by every listed configuration. "
             "Entity scores require an exact UTF-8 byte span and a compatible reviewed label mapping.",
             "", f"Common classes: {', '.join(report['common_intersection_labels'])}.",
-            "", "| Contract | Layer | View | Tool | PII docs | Leaking docs | Doc leak % | Leaking entities | Entity leak % | Redaction load % | TP | FP | FN | Entity P | Entity R | F1 | F2 |",
-            "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "", "| Contract | Layer | View | Tool | PII docs | Leaked B | FP B | Leaking docs | Doc leak % | Leaking entities | Entity leak % | Redaction load % | TP | FP | FN | Entity P | Entity R | F1 | F2 |",
+            "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ])
         for version in versions:
             for layer in layer_ids:
@@ -276,36 +355,37 @@ def render(report: dict[str, object], source: str) -> str:
                         entity = metric["typed_entities"]
                         lines.append(
                             f"| {version} | {layer} | {view} | {name} | {metric['pii_documents']:,} | "
+                            f"{metric['leaked_bytes']:,} | {metric['false_positive_bytes']:,} | "
                             f"{metric['leaking_documents']:,} | {100 * metric['document_leak_rate']:.1f} | "
                             f"{metric['leaking_entities']:,} | {100 * metric['leaked_entity_rate']:.1f} | "
                             f"{100 * metric['redaction_load']:.1f} | {entity['tp']:,} | {entity['fp']:,} | "
                             f"{entity['fn']:,} | {entity['precision']:.3f} | {entity['recall']:.3f} | "
                             f"{entity['f1']:.3f} | {entity['f2']:.3f} |"
                         )
-        losses = []
-        gaze_d_test = gaze["v3"]["layers"]["D"]["metrics"]["product_coverage"]["test"]
-        scrub_d_test = tools["scrubadub-base"]["contracts"]["v3"]["D"]["metrics"]["product_coverage"]["test"]
-        if (scrub_d_test["leaked_bytes"] == gaze_d_test["leaked_bytes"]
-                and scrub_d_test["false_positive_bytes"] < gaze_d_test["false_positive_bytes"]):
-            losses.append(
-                "On layer D's fixed test half, scrubadub "
-                f"{tools['scrubadub-base']['provenance']['version']} built-ins leaked "
-                f"{scrub_d_test['leaked_bytes']:,} B and added {scrub_d_test['false_positive_bytes']:,} "
-                f"false-positive B; Gaze full leaked {gaze_d_test['leaked_bytes']:,} B and added "
-                f"{gaze_d_test['false_positive_bytes']:,} false-positive B."
-            )
-        gaze_r_full = gaze["v3"]["layers"]["R"]
-        opf_r_full = tools["opf"]["contracts"]["v3"]["R"]
-        if opf_r_full["leaked_bytes"] < gaze_r_full["leaked_bytes"]:
-            losses.append(
-                "On the full layer R aggregate (a diagnostic spanning both halves), "
-                f"OPF {tools['opf']['provenance']['runtime']['version']} default Viterbi leaked "
-                f"{opf_r_full['leaked_bytes']:,} B versus Gaze full's "
-                f"{gaze_r_full['leaked_bytes']:,} B."
-            )
-        if losses:
-            lines.extend(["", "**Where Gaze trails under the shared v3 contract, reviewed mapping, and byte scorer:** "
-                          + " ".join(losses)])
+        loss_counts, losses = enumerate_gaze_losses(report, versions, layer_ids)
+        summary = "; ".join(f"{name}: {count}" for name, count in loss_counts.items())
+        gaze_c = gaze["v3"]["layers"]["C"]["metrics"]["common_intersection"]["test"]
+        c_candidates = (
+            (name, tool["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"])
+            for name, tool in tools.items()
+        )
+        best_c_name, best_c = min(c_candidates, key=lambda pair: pair[1]["leaked_bytes"])
+        lines.extend([
+            "", "## Where Gaze trails", "",
+            f"On the v3 layer C common-intersection test half, Gaze leaks {gaze_c['leaked_bytes']:,} B "
+            f"across {gaze_c['leaking_documents']:,}/{gaze_c['pii_documents']:,} PII documents; "
+            f"{best_c_name} leaks {best_c['leaked_bytes']:,} B across "
+            f"{best_c['leaking_documents']:,}/{best_c['pii_documents']:,}. This is a measured Gaze loss.",
+            "",
+            "Competitors have a lower leak, false-positive, or redaction-load value, or a "
+            "better typed-entity value, in the following measured cells. Lower redaction load "
+            "alone can reflect missed PII. Each pair reads competitor vs Gaze. Full aggregate "
+            "rows span both halves and use v3's audited gold-gap FP credit; detailed rows use "
+            "raw FP and also show validation and test separately.",
+            "", f"Loss counts by metric: {summary or 'none'}.",
+            "", "<details>", f"<summary>All {len(losses):,} losing rows</summary>", "",
+            *(f"- {loss}" for loss in losses), "", "</details>",
+        ])
         lines.extend(["", "## Gaze ablations", "",
                       "Rules only, rules plus NER, and full setup use the same test documents and scorer.", "",
                       "| Contract | Layer | Gaze configuration | Leaked B | FP B | PII docs | Leaking docs | Entity F1 | Entity F2 |",

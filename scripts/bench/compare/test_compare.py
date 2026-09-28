@@ -66,6 +66,26 @@ def test_unmapped_tool_label_fails_closed() -> None:
         compare.validate_labels([compare.score.Span(0, 1, "UNKNOWN")], {})
 
 
+def test_gaze_byte_equality_fails_on_each_mismatch() -> None:
+    expected = {field: 0 for field in ("leaked_bytes", "false_positive_bytes",
+                                       "gold_gap_protected_bytes", "false_positive_bytes_after_gold_gap")}
+    compare.assert_gaze_byte_equality(expected, expected, "v3", "C")
+    for field in expected:
+        measured = dict(expected, **{field: 1})
+        with pytest.raises(ValueError, match=f"Gaze byte mismatch: v3/C/{field}"):
+            compare.assert_gaze_byte_equality(measured, expected, "v3", "C")
+
+
+def test_loss_enumerator_includes_mutated_heldout_cell() -> None:
+    report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
+    gaze = report["gaze"]["v3"]["layers"]["C"]["metrics"]["common_intersection"]["test"]
+    report["tools"]["opf"]["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"] = copy.deepcopy(gaze)
+    report["tools"]["opf"]["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"]["leaked_bytes"] -= 1
+    page = render.render(report, "comparison.json")
+    assert (f"v3 C common_intersection test opf: Leaked B "
+            f"{gaze['leaked_bytes'] - 1:,} vs {gaze['leaked_bytes']:,}") in page
+
+
 def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
     row = {
         "leaked_bytes": 1,
@@ -248,6 +268,7 @@ def test_validate_current_flags_competitor_input_but_not_gaze_drift(monkeypatch:
         "compare_sha256": render.digest_file(Path(compare.__file__)),
         "opf_adapter_sha256": render.digest_file(render.BENCH / "opf_daemon.py"),
         "requirements_sha256": render.digest_file(compare.MAP_PATH.with_name("requirements.lock")),
+        "comparison_metrics_sha256": render.digest_file(compare.MAP_PATH.with_name("comparison_metrics.py")),
     })
     monkeypatch.setattr(compare.agentic, "prepare", lambda _repo: SimpleNamespace(manifest=report["corpus"]["agentic"]))
     monkeypatch.setattr(compare.agentic, "load_contract", lambda _repo: SimpleNamespace(sha256=report["contracts"]["agentic"]))

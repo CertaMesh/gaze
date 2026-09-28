@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import comparison_metrics as metrics
 import gaze_bench_score as score
+import compare
 
 
 def test_split_is_deterministic_and_disjoint() -> None:
@@ -27,6 +28,42 @@ def test_exact_typed_and_document_metrics() -> None:
     assert result["typed_entities"]["tp"] == 1
     assert result["typed_entities"]["fp"] == 1
     assert result["typed_entities"]["fn"] == 1
+
+
+def test_family_mapping_keeps_bytes_but_gives_no_typed_credit() -> None:
+    text = "Dr. Schmidt"
+    document = score.Document("synthetic", text, "en", "", "synthetic",
+                              (score.Span(4, 11, "SURNAME"),))
+    mapping = {"custom:family:name.counter": ("SURNAME",)}
+    accumulator = metrics.ComparisonMetrics(
+        mapping, typed_mapping=compare.typed_mapping_for_contract(mapping, "v3")
+    )
+    accumulator.add(document, [score.Span(4, 11, "custom:family:name.counter")])
+    result = accumulator.result()
+    assert result["leaked_bytes"] == 0
+    assert result["false_positive_bytes"] == 0
+    assert result["typed_entities"]["tp"] == 0
+    assert result["typed_entities"]["fp"] == 1
+    assert result["typed_entities"]["fn"] == 1
+
+
+def test_v1_secret_types_get_credit_only_under_v1() -> None:
+    for native, gold in (("custom:password", "PASSWORD"),
+                         ("custom:security_token", "SECURITYTOKEN"),
+                         ("custom:secret", "PASSWORD"),
+                         ("secret", "SECURITYTOKEN")):
+        mapping = {native: ()}
+        document = score.Document("synthetic", "secret", "en", "", "synthetic",
+                                  (score.Span(0, 6, gold),))
+        prediction = [score.Span(0, 6, native)]
+        for version, expected_tp in (("v1", 1), ("v2", 0), ("v3", 0)):
+            accumulator = metrics.ComparisonMetrics(
+                mapping, typed_mapping=compare.typed_mapping_for_contract(mapping, version)
+            )
+            accumulator.add(document, prediction)
+            result = accumulator.result()
+            assert result["leaked_bytes"] == 0
+            assert result["typed_entities"]["tp"] == expected_tp
 
 
 def test_common_view_ignores_noncommon_gold() -> None:
