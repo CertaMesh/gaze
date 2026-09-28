@@ -280,9 +280,11 @@ class GuardTest(unittest.TestCase):
         import render_theirbench as render
 
         entry = synthetic()["benchmarks"]["presidio-research"]
-        self.assertEqual(render.own_metric_cell("piibench-commercial", entry, "opf", "f2"), render.HELD)
-        self.assertEqual(render.own_metric_cell("piibench-commercial", entry, "gaze-full", "f2"), "0.500")
-        self.assertEqual(render.own_metric_cell("presidio-research", entry, "opf", "f2"), "0.500")
+        own_pb, own_pr = render.metrics("piibench-commercial")[-1], render.metrics("presidio-research")[-1]
+        entry["own_metric"] = {tool: {"f1": 0.5, "f2": 0.5} for tool in entry["rows"]}
+        self.assertEqual(render.cell(own_pb, "piibench-commercial", entry, "opf"), render.HELD)
+        self.assertEqual(render.cell(own_pb, "piibench-commercial", entry, "gaze-full"), "0.500")
+        self.assertEqual(render.cell(own_pr, "presidio-research", entry, "opf"), "0.500")
 
     def test_backend_code_drift_refuses_to_run(self) -> None:
         import backends
@@ -308,27 +310,48 @@ class GuardTest(unittest.TestCase):
 
 
 class NotBestTest(unittest.TestCase):
-    def test_every_row_beating_gaze_is_named_with_its_fp(self) -> None:
+    def test_every_column_is_compared_including_doc_leak_rate(self) -> None:
         import render_theirbench as render
 
         entry = synthetic()["benchmarks"]["presidio-research"]
-        entry["rows"]["presidio-en"] = row(5)
-        entry["rows"]["presidio-all"] = row(5)
-        entry["own_metric"]["presidio-all"] = {"f2": 0.5}
-        entry["own_metric"]["opf"] = {"f2": 0.9}
+        entry["rows"]["gaze-full"]["product_coverage"]["document_leak_rate"] = 0.484
+        entry["rows"]["presidio-strong"]["product_coverage"]["document_leak_rate"] = 0.344
         lines = render.not_best("presidio-research", entry)
-        self.assertIn("presidio-all / presidio-en leaks 5 B against Gaze full's 10 B, at 10 false-positive "
-                      "bytes against Gaze's 10.", lines[0])
-        self.assertTrue(any("opf scores 0.900" in line for line in lines))
-        self.assertFalse(any("presidio-strong" in line for line in lines))  # 30 B > Gaze's 10 B
+        self.assertIn("- Doc leak rate: presidio-strong 34.4% (FP B 10); Gaze full 48.4% (FP B 10).", lines)
+        self.assertTrue(any(line.startswith("- Leaked B: presidio-en 5 (FP B 10)") for line in lines))
 
-    def test_gaze_best_everywhere_says_so(self) -> None:
+    def test_held_cells_are_never_compared(self) -> None:
         import render_theirbench as render
 
         entry = synthetic()["benchmarks"]["presidio-research"]
-        entry["rows"] = {tool: result for tool, result in entry["rows"].items() if tool != "presidio-en"}
+        entry["rows"]["opf"]["product_coverage"]["typed_entities"]["f1"] = 0.99  # opf is held
+        self.assertFalse(any(line.startswith("- Typed F1") for line in render.not_best("presidio-research", entry)))
+
+    def test_fallback_does_not_claim_held_columns(self) -> None:
+        import render_theirbench as render
+
+        entry = synthetic()["benchmarks"]["presidio-research"]
+        entry["rows"] = {tool: result for tool, result in entry["rows"].items()
+                         if tool in ("gaze-full", "presidio-strong")}
+        entry["rows"]["presidio-strong"]["product_coverage"]["false_positive_bytes"] = 99
+        entry["rows"]["presidio-strong"]["product_coverage"]["typed_entities"] = {"f1": 0.1, "f2": 0.1}
+        entry["own_metric"]["presidio-strong"] = {"f2": 0.1}
         self.assertEqual(render.not_best("presidio-research", entry),
-                         ["- Gaze full leaks the fewest bytes on both views and leads the set's own metric."])
+                         ["- Gaze full is best on every column that is not held."])
+
+
+class HarnessTagTest(unittest.TestCase):
+    def test_tag_must_point_at_the_recorded_commit(self) -> None:
+        import render_theirbench as render
+
+        entry = {"harness_revision": "aaa", "rescored_with": {"harness_revision": "bbb"}}
+        tags = {"measured": "bench/m", "rescored": "bench/r"}
+        good = {"bench/m": "aaa", "bench/r": "bbb"}
+        self.assertEqual(render.checked_harness_tags(entry, tags, good.get), tags)
+        with self.assertRaisesRegex(ValueError, "rescored harness commit"):
+            render.checked_harness_tags(entry, tags, {"bench/m": "aaa", "bench/r": "aaa"}.get)
+        with self.assertRaises(ValueError):
+            render.checked_harness_tags(entry, {"other": "bench/m"}, good.get)
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,6 +34,10 @@
       "gaze_crates_tree": "97e45cfe07d185efe1890c4c983b4971fc43cce8",
       "hardware": "macOS-26.5-arm64-arm-64bit",
       "harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "harness_tags": {
+        "measured": "bench/theirbench-measured-a8293dc0",
+        "rescored": "bench/theirbench-rescored-b47f4ec1"
+      },
       "identity": {
         "documents": 5000,
         "excluded": {
@@ -12097,6 +12101,10 @@
       "gaze_crates_tree": "97e45cfe07d185efe1890c4c983b4971fc43cce8",
       "hardware": "macOS-26.5-arm64-arm-64bit",
       "harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
+      "harness_tags": {
+        "measured": "bench/theirbench-measured-a8293dc0",
+        "rescored": "bench/theirbench-rescored-b47f4ec1"
+      },
       "identity": {
         "commit": "6db3769a3388b4075b93ab2229c5e0b9c30137f7",
         "documents": 1500,

@@ -800,7 +800,7 @@ Report-only: these sets are never used to design or tune Gaze rules. Every gold 
 #### PIIBench-commercial (four permissively licensed PIIBench sources, test_5k)
 
 - Published Presidio span F1 0.1385 is on the full ten-source mix (1,398 records) and is quoted, not reproduced. PIIBench's own harness gives Presidio 0.1789 on this commercial subset.
-- Only four of PIIBench's ten sources run (Gretel finance, Nemotron-PII, Few-NERD, FiNER-139); the other six are excluded for their licences (ai4privacy 400k and 300k: custom, commercial use needs a licence; MultiNERD: CC-BY-NC-SA-4.0; CoNLL-2003: non-commercial research; Isotonic 200k: CC-BY-NC-4.0; WikiANN: unknown).
+- Only these sources run: gretelai/synthetic_pii_finance_multilingual, nvidia/Nemotron-PII, DFKI-SLT/few-nerd, nlpaueb/finer-139. Excluded for their licences: Babelscape/multinerd: CC-BY-NC-SA-4.0; Isotonic/pii-masking-200k: CC-BY-NC-4.0 on its dataset card (the paper lists Apache-2.0); ai4privacy/pii-masking-300k: custom licence; commercial use requires a licence from ai4privacy; ai4privacy/pii-masking-400k: custom licence; commercial use requires a licence from ai4privacy; conll2003: Reuters corpus, non-commercial research agreement; wikiann: dataset card licence is unknown.
 - PIIBench's current code keeps 71 label types where its paper reports 48: its normaliser maps only ai4privacy-style names. `MISC` and `FINANCIAL_ENTITY` are gold.
 
 ```mermaid
@@ -835,15 +835,14 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 
 Where Gaze full is not best:
 
-- On all gold labels, presidio-strong-high-recall leaks 84,965 B against Gaze full's 105,859 B, at 92,491 false-positive bytes against Gaze's 48,477.
-- On all gold labels, presidio-strong leaks 87,853 B against Gaze full's 105,859 B, at 88,715 false-positive bytes against Gaze's 48,477.
-- On all gold labels, presidio-all / presidio-en / presidio-en-de leaks 87,936 B against Gaze full's 105,859 B, at 235,332 false-positive bytes against Gaze's 48,477.
-- On the common-intersection labels, datafog-gliner leaks 25,463 B against Gaze full's 32,495 B, at 17,966 false-positive bytes against Gaze's 11,058.
-- On the common-intersection labels, datafog-spacy leaks 29,383 B against Gaze full's 32,495 B, at 64,787 false-positive bytes against Gaze's 11,058.
+- Leaked B: presidio-strong-high-recall 84,965 (FP B 92,491); presidio-strong 87,853 (FP B 88,715); presidio-all / presidio-en / presidio-en-de 87,936 (FP B 235,332); Gaze full 105,859 (FP B 48,477).
+- FP B: datafog-core 4,529 (Leaked B 222,697); datafog-regex 4,926 (Leaked B 223,137); scrubadub-base 9,971 (Leaked B 223,156); opf 12,174 (Leaked B 170,336); Gaze full 48,477 (Leaked B 105,859).
+- Doc leak rate: presidio-strong-high-recall 70.1% (FP B 92,491); presidio-strong 70.2% (FP B 88,715); datafog-gliner 75.6% (FP B 71,574); gliner-high-recall 77.5% (FP B 118,822); Gaze full 79.5% (FP B 48,477).
+- Leaked B, common: datafog-gliner 25,463 (FP B 71,574); datafog-spacy 29,383 (FP B 219,413); Gaze full 32,495 (FP B 48,477).
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
-Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `b1446215`; harness `b47f4ec1`. Gaze ran on crates tree `97e45cfe`.
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `b1446215`; harness `b47f4ec1`. Gaze ran on crates tree `97e45cfe`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-b47f4ec1`.
 
 #### Presidio Research synthetic set (synth_dataset_v2, 1,500 documents)
 
@@ -882,14 +881,14 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 
 Where Gaze full is not best:
 
-- On all gold labels, gliner-high-recall leaks 8,158 B against Gaze full's 9,519 B, at 7,031 false-positive bytes against Gaze's 1,363.
-- On the common-intersection labels, gliner-high-recall leaks 4,482 B against Gaze full's 8,080 B, at 1,589 false-positive bytes against Gaze's 488.
-- On the common-intersection labels, datafog-gliner leaks 5,807 B against Gaze full's 8,080 B, at 1,387 false-positive bytes against Gaze's 488.
-- On the common-intersection labels, opf leaks 5,905 B against Gaze full's 8,080 B, at 534 false-positive bytes against Gaze's 488.
+- Leaked B: gliner-high-recall 8,158 (FP B 7,031); Gaze full 9,519 (FP B 1,363).
+- FP B: datafog-core 0 (Leaked B 34,810); datafog-regex 0 (Leaked B 35,039); scrubadub-base 6 (Leaked B 35,019); opf 667 (Leaked B 15,305); Gaze full 1,363 (Leaked B 9,519).
+- Doc leak rate: datafog-gliner 34.4% (FP B 5,525); gliner-high-recall 34.8% (FP B 7,031); presidio-all / presidio-en / presidio-en-de 43.7% (FP B 4,467); gliner 44.7% (FP B 4,884); Gaze full 48.4% (FP B 1,363).
+- Leaked B, common: gliner-high-recall 4,482 (FP B 7,031); datafog-gliner 5,807 (FP B 5,525); opf 5,905 (FP B 667); Gaze full 8,080 (FP B 1,363).
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
-Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `b1446215`; harness `b47f4ec1`. Gaze ran on crates tree `97e45cfe`.
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `b1446215`; harness `b47f4ec1`. Gaze ran on crates tree `97e45cfe`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-b47f4ec1`.
 
 Not run:
 
