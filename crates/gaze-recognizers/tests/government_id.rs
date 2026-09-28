@@ -449,6 +449,99 @@ fn a4_negative_shapes_are_untouched() {
     assert_unchanged("invoice 123-456-789 has no tax cue anywhere near it");
 }
 
+#[test]
+fn labelled_identifier_values_are_captured_without_the_field_name() {
+    for (input, value, class) in [
+        (
+            "Tax Number: 67-853-422 is on file.",
+            "67-853-422",
+            "tax_number",
+        ),
+        (
+            "Permis de conduire: 987654321.",
+            "987654321",
+            "driver_license",
+        ),
+        (
+            "Rijbewijsnummer:\u{00A0}NL-12345678.",
+            "NL-12345678",
+            "driver_license",
+        ),
+        (
+            "Identification card: 5123-6789-0456.",
+            "5123-6789-0456",
+            "national_id",
+        ),
+        (
+            r#"{"carte_d'identité":"FR12345678"}"#,
+            "FR12345678",
+            "national_id",
+        ),
+        (
+            r#"{"numéro_fiscal":"FR-12345678"}"#,
+            "FR-12345678",
+            "tax_number",
+        ),
+        (
+            "Cartão de identidade | PT12345678",
+            "PT12345678",
+            "national_id",
+        ),
+    ] {
+        let cleaned = clean(input);
+        assert!(
+            !cleaned.contains(value),
+            "value leaked: {input:?} -> {cleaned:?}"
+        );
+        assert!(
+            cleaned.contains(&format!(":Custom:{class}_")),
+            "wrong class: {input:?} -> {cleaned:?}"
+        );
+    }
+}
+
+#[test]
+fn labelled_identifier_field_boundaries_reject_lookalikes() {
+    for input in [
+        "order_id: 5123-6789-0456",
+        "invoice_number: 67-853-422",
+        "Identification card: A12345678901234567890",
+        "Permis de conduire:\n987654321",
+        "Tax Number: 12345678901",
+        "Permis de conduire: 2024-09-28",
+        "Identification card: 2024/09/28",
+    ] {
+        assert_unchanged(input);
+    }
+}
+
+#[test]
+fn labelled_identifier_json_restores_exact_input() {
+    let input = "{\"rijbewijsnummer\":\"NL-12345678\",\"note\":\"synthetic\"}";
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(input.to_string()),
+            &chain,
+            &DictionaryBundle::default(),
+        )
+        .expect("clean");
+    let CleanDocument::Text(cleaned) = clean else {
+        panic!("expected text");
+    };
+    assert!(cleaned.contains("rijbewijsnummer"));
+    assert!(!cleaned.contains("NL-12345678"));
+    assert_eq!(
+        pipeline
+            .restore_strict_text(&session, &cleaned)
+            .expect("restore"),
+        input
+    );
+}
+
 // ------------------------------------------------------- cross-class collision determinism
 //
 // The numeric silhouettes genuinely overlap across these classes: `d3-d2-d4` appears in SSN
