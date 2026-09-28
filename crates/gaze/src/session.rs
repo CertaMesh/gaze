@@ -1697,6 +1697,20 @@ struct StructuralFinding {
 fn authorized_structural_values_from_state(state: &SessionState) -> BTreeSet<(PiiClass, String)> {
     let mut authorized = BTreeSet::new();
     for entry in snapshot_entries_from_state(state) {
+        // A cued checksum failure is only recognizable in its sentence. The manifest stores
+        // the value alone, so authorize its canonical form directly from the typed entry.
+        if let PiiClass::Custom(class) = &entry.class {
+            let canonical = match class.as_str() {
+                "iban" => Some(iban_canonicalize(
+                    &crate::normalize::normalize(&entry.raw).text,
+                )),
+                "credit_card" => Some(ascii_digits(&crate::normalize::normalize(&entry.raw).text)),
+                _ => None,
+            };
+            if let Some(canonical) = canonical {
+                authorized.insert((entry.class.clone(), canonical));
+            }
+        }
         for finding in structural_findings(&entry.raw) {
             authorized.insert((finding.class, finding.canonical));
         }
@@ -1724,7 +1738,8 @@ fn restore_boundary_events(
 }
 
 /// Outbound DLP scan of model output at the restore boundary, before tokens are restored:
-/// flags structural identifiers the manifest did not authorize. The patterns run on the same
+/// reports financial identifiers using the same structural and cued shapes as the forward
+/// recognizers, including checksum failures. The patterns run on the same
 /// normalized detection view as the pipeline (`crate::normalize`), so a Zs-grouped (NBSP,
 /// NARROW NBSP, THIN SPACE, ...) or fullwidth IBAN or card is found exactly as its ASCII form
 /// is (solo todo #3827). `location` and `raw` are mapped back to the caller's original bytes;
@@ -1799,25 +1814,45 @@ fn collect_phone_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
 }
 
 fn collect_iban_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
-    for matched in iban_pattern().find_iter(text) {
-        let raw = matched.as_str();
-        let canonical = iban_canonicalize(raw);
-        if !iban_mod97_check(&canonical) {
-            continue;
-        }
-        findings.push(StructuralFinding {
-            class: PiiClass::custom("iban").expect("valid custom class"),
-            raw: raw.to_string(),
-            canonical,
-            location: matched.range(),
-        });
+    for matched in iban_structural_pattern().find_iter(text) {
+        collect_iban_match(text, matched.range(), findings);
     }
+    for captures in iban_cued_pattern().captures_iter(text) {
+        let matched = captures.get(1).expect("IBAN cue value capture");
+        collect_iban_match(text, matched.range(), findings);
+    }
+}
+
+fn collect_iban_match(text: &str, location: Range<usize>, findings: &mut Vec<StructuralFinding>) {
+    if gaze_types::word_run_extends_identifier(text, location.end) {
+        return;
+    }
+    let raw = &text[location.clone()];
+    findings.push(StructuralFinding {
+        class: PiiClass::custom("iban").expect("valid custom class"),
+        raw: raw.to_string(),
+        canonical: iban_canonicalize(raw),
+        location,
+    });
 }
 
 fn collect_credit_card_findings(
     view: &crate::normalize::NormalizedText,
     findings: &mut Vec<StructuralFinding>,
 ) {
+    // The cued rule records a Luhn failure for a whole card layout. Scan it first, then
+    // include the structural scanner's Luhn-valid windows; overlap resolution keeps the
+    // longer cued value, including a trailing three-digit group.
+    for captures in card_cued_pattern().captures_iter(&view.text) {
+        let matched = captures.get(1).expect("card cue value capture");
+        let raw = matched.as_str();
+        findings.push(StructuralFinding {
+            class: PiiClass::custom("credit_card").expect("valid custom class"),
+            raw: raw.to_string(),
+            canonical: ascii_digits(raw),
+            location: matched.range(),
+        });
+    }
     // The forward `card.structural` recognizer segments runs with the same code
     // (`gaze_types::payment_card`), so both directions agree on what a card is.
     for run in card_run_pattern().find_iter(&view.text) {
@@ -1869,12 +1904,88 @@ fn phone_pattern() -> &'static Regex {
     })
 }
 
-fn iban_pattern() -> &'static Regex {
+// These patterns are byte-for-byte copies of the bundled forward recognizers. The
+// rulepack parity test below makes a change to either direction update both.
+const IBAN_STRUCTURAL_PATTERN: &str = r###"(?x)\b(?:
+  (?:NO)\d{2}(?:\x20?[A-Z0-9]{4}){2}\x20?[A-Z0-9]{3}
+| (?:BE)\d{2}(?:\x20?[A-Z0-9]{4}){3}
+| (?:DK|FI|FK|FO|GL|NL|SD)\d{2}(?:\x20?[A-Z0-9]{4}){3}\x20?[A-Z0-9]{2}
+| (?:MK|SI)\d{2}(?:\x20?[A-Z0-9]{4}){3}\x20?[A-Z0-9]{3}
+| (?:AT|BA|EE|KZ|LT|LU|MN|XK)\d{2}(?:\x20?[A-Z0-9]{4}){4}
+| (?:CH|HR|LI|LV)\d{2}(?:\x20?[A-Z0-9]{4}){4}\x20?[A-Z0-9]{1}
+| (?:BG|BH|CR|DE|GB|GE|IE|ME|RS|VA)\d{2}(?:\x20?[A-Z0-9]{4}){4}\x20?[A-Z0-9]{2}
+| (?:AE|GI|IL|IQ|OM|SO|TL)\d{2}(?:\x20?[A-Z0-9]{4}){4}\x20?[A-Z0-9]{3}
+| (?:AD|CZ|ES|MD|PK|RO|SA|SE|SK|TN|VG)\d{2}(?:\x20?[A-Z0-9]{4}){5}
+| (?:LY|PT|ST)\d{2}(?:\x20?[A-Z0-9]{4}){5}\x20?[A-Z0-9]{1}
+| (?:IS|TR)\d{2}(?:\x20?[A-Z0-9]{4}){5}\x20?[A-Z0-9]{2}
+| (?:BI|DJ|FR|GR|IT|MC|MR|SM)\d{2}(?:\x20?[A-Z0-9]{4}){5}\x20?[A-Z0-9]{3}
+| (?:AL|AZ|BY|CY|DO|GT|HN|HU|LB|NI|PL|SV)\d{2}(?:\x20?[A-Z0-9]{4}){6}
+| (?:BR|EG|PS|QA|UA)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{1}
+| (?:JO|KW|MU|YE)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{2}
+| (?:MT|SC)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{3}
+| (?:LC)\d{2}(?:\x20?[A-Z0-9]{4}){7}
+| (?:RU)\d{2}(?:\x20?[A-Z0-9]{4}){7}\x20?[A-Z0-9]{1}
+)
+"###;
+
+const IBAN_CUED_PATTERN: &str = r###"(?x)
+(?i:\biban(?:[\x20_-]?(?:number|no|nr|nummer|code))?)\b\.?
+# cue-window:start
+(?:
+  ["'\x20]*:\x20*\{\x20*"(?:number|num|pan|value|iban)"\x20*:\x20*"
+| ["'\x20]*,?\x20*(?:\b(?:is|ist|lautet|are|bitte|please)\b|\([^)\d\n]{0,24}\))\x20*:\x20*
+| ["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
+)
+# cue-window:end
+\b(
+  (?:A[FGIMOQ-SUWX]|B[BDFJL-OQSTVWZ]|C[ACDFGIK-OU-X]|D[MZ]|E[CHRT]|F[JM]|G[ADF-HMNPQSUWY]|H[KMT]|I[DM-OR]|J[EMP]|K[EG-IMNPRY]|L[AKRS]|M[AF-HLMO-QSV-Z]|N[ACE-GPRUZ]|P[AE-HMNRWY]|R[EW]|S[BGHJLNRSX-Z]|T[CDF-HJKMOTVWZ]|U[GKMSYZ]|V[CEINU]|W[FS]|YT|Z[AMW])\d{2}
+  (?:
+    [A-Z]{0,4}\d{6,26}
+  | (?:[\x20\x{00A0}\x{202F}-][A-Z]{1,4})?
+    (?:[\x20\x{00A0}\x{202F}-][A-Z]*\d[A-Z0-9]*){3,8}
+  )
+)
+"###;
+
+const CARD_CUED_PATTERN: &str = r###"(?x)
+(?i:
+  \b(?:(?:credit|debit|payment|bank|prepaid|gift)[\x20_-]?)?cards?(?:[\x20_-]?(?:number|num|no|nr|holder))?\b\.?
+| \b(?:kredit|debit|bank|ec|giro|geld|prepaid)[\x20-]?karten?(?:nummer|nummern|daten|nr)?\b\.?
+| \bkarten?(?:nummer|nummern|nr)\b\.?
+| \bkarten?\b[^\d\n.;!?:=]{0,24}?\b(?:nummer|nr)\b\.?
+| \b(?:visa|mastercard|master\x20card|amex|american\x20express|maestro|diners(?:\x20club)?|jcb|unionpay|girocard)\b
+)
+# cue-window:start
+(?:
+  ["'\x20]*:\x20*\{\x20*"(?:number|num|pan|value|iban)"\x20*:\x20*"
+| ["'\x20]*,?\x20*(?:\b(?:is|ist|lautet|are|bitte|please)\b|\([^)\d\n]{0,24}\))\x20*:\x20*
+| ["'\x20]*[:,=]?[^\d\n.;!?:,=]{0,32}?
+)
+# cue-window:end
+\b(
+  \d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{3}
+| \d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}[\x20\x{00A0}\x{202F}-]\d{4}
+| \d{4}[\x20\x{00A0}\x{202F}-]\d{6}[\x20\x{00A0}\x{202F}-]\d{4,5}
+| [2-6]\d{15,18}
+| 3\d{13,14}
+)
+(?:[\x20\x{00A0}\x{202F}-]\d{3})?
+(?:[^\d\x20\x{00A0}\x{202F}-]|[\x20\x{00A0}\x{202F}-][^\d]|[\x20\x{00A0}\x{202F}-]?\z)
+"###;
+
+fn iban_structural_pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
-    PATTERN.get_or_init(|| {
-        Regex::new(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b")
-            .expect("IBAN restore DLP regex compiles")
-    })
+    PATTERN.get_or_init(|| Regex::new(IBAN_STRUCTURAL_PATTERN).expect("IBAN structural DLP regex"))
+}
+
+fn iban_cued_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| Regex::new(IBAN_CUED_PATTERN).expect("IBAN cued DLP regex"))
+}
+
+fn card_cued_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| Regex::new(CARD_CUED_PATTERN).expect("card cued DLP regex"))
 }
 
 fn card_run_pattern() -> &'static Regex {
@@ -1932,32 +2043,6 @@ fn iban_canonicalize(input: &str) -> String {
         .filter(|ch| !ch.is_ascii_whitespace())
         .flat_map(char::to_uppercase)
         .collect()
-}
-
-fn iban_mod97_check(input: &str) -> bool {
-    let canonical = iban_canonicalize(input);
-    if !(15..=34).contains(&canonical.len()) {
-        return false;
-    }
-    if !canonical.chars().all(|ch| ch.is_ascii_alphanumeric()) {
-        return false;
-    }
-
-    let mut remainder = 0u32;
-    for ch in canonical[4..].chars().chain(canonical[..4].chars()) {
-        match ch {
-            '0'..='9' => {
-                remainder = (remainder * 10 + ch.to_digit(10).expect("digit")) % 97;
-            }
-            'A'..='Z' => {
-                let value = u32::from(ch) - u32::from('A') + 10;
-                remainder = (remainder * 10 + value / 10) % 97;
-                remainder = (remainder * 10 + value % 10) % 97;
-            }
-            _ => return false,
-        }
-    }
-    remainder == 1
 }
 
 #[derive(Debug, Clone)]
@@ -2187,6 +2272,52 @@ fn snapshot_signing_preimage(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn restore_financial_patterns_match_forward_rulepack() {
+        let text = "IBAN DE89 3704 0044 0532 0130 01";
+        assert_eq!(
+            iban_structural_pattern()
+                .find(text)
+                .map(|matched| matched.as_str()),
+            Some("DE89 3704 0044 0532 0130 01")
+        );
+        let core: toml::Value = gaze_recognizers::embedded("core")
+            .expect("core rulepack")
+            .parse()
+            .expect("core TOML");
+        let rules = core["recognizers"].as_array().expect("recognizers");
+        for (id, pattern, on_fail) in [
+            ("iban.structural", IBAN_STRUCTURAL_PATTERN, "record"),
+            ("iban.cued", IBAN_CUED_PATTERN, "record"),
+            ("card.cued", CARD_CUED_PATTERN, "record"),
+            (
+                "card.structural",
+                gaze_types::payment_card::CARD_RUN_PATTERN,
+                "veto",
+            ),
+        ] {
+            let rule = rules
+                .iter()
+                .find(|rule| rule["id"].as_str() == Some(id))
+                .unwrap_or_else(|| panic!("missing {id}"));
+            assert_eq!(rule["match"]["pattern"].as_str(), Some(pattern), "{id}");
+            let actual_on_fail = rule
+                .get("validator")
+                .and_then(|validator| validator.get("on_fail"))
+                .and_then(toml::Value::as_str)
+                .unwrap_or("veto");
+            assert_eq!(actual_on_fail, on_fail, "{id}");
+            if id.ends_with(".cued") {
+                assert_eq!(
+                    rule["match"]["capture_groups"][0].as_integer(),
+                    Some(1),
+                    "{id}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn restore_strict_text_rejects_malformed_family() {
@@ -3453,33 +3584,34 @@ mod tests {
     }
 
     #[test]
-    fn restore_dlp_ignores_zero_pan_and_still_flags_valid_card() {
+    fn restore_dlp_reports_cued_zero_pan_but_ignores_noncard_zero_runs() {
         for text in [
             "Card 0000000000000",
-            "Card 0000 0000 0000 0000",
             "Card 00000000000000000000000000000000000000",
         ] {
             assert!(structural_findings(text).is_empty(), "{text}");
         }
-        let findings = structural_findings("Card 4111 1111 1111 1111");
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].class, PiiClass::custom("credit_card").unwrap());
+        for text in ["Card 0000 0000 0000 0000", "Card 4111 1111 1111 1111"] {
+            let findings = structural_findings(text);
+            assert_eq!(findings.len(), 1, "{text}");
+            assert_eq!(findings[0].class, PiiClass::custom("credit_card").unwrap());
+        }
     }
 
     #[test]
     fn restore_dlp_zs_separators_scan_exactly_like_an_ascii_space() {
-        // Benign Zs-heavy text stays clean; valid identifiers stay flagged. Each line is scanned
+        // Benign Zs-heavy text stays clean; accepted identifiers stay flagged. Each line is scanned
         // with ASCII spaces and with every Zs separator, and the findings must agree.
         let benign = [
             "Prix : 1 234 567,89 € TTC",
             "Budget 1 000 000,00 EUR pour 2026",
             "Ref 4012 8888 8888 1882 (checksum invalid)",
-            "GB82 WEST 1234 5698 7654 33 (mod-97 invalid)",
             "le 25 09 2026 à 12 h 30, version 1 2 3",
             "+44 7700 900",
         ];
         let flagged = [
             "pay GB82 WEST 1234 5698 7654 32 now",
+            "GB82 WEST 1234 5698 7654 33 (mod-97 invalid)",
             "card 4012 8888 8888 1881 ok",
         ];
         for separator in RESTORE_DLP_ZS_SEPARATORS {

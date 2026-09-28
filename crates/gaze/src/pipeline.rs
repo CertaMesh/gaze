@@ -7922,7 +7922,10 @@ mod tests {
         let restored = pipeline
             .restore_strict_text(
                 &session,
-                &format!("{token} raw alice@example.invalid fresh bob@example.invalid"),
+                &format!(
+                    "{token} raw alice@example.invalid fresh bob@example.invalid \
+                     IBAN DE89 3704 0044 0532 0130 01 card number 4532 7812 3456 7890"
+                ),
             )
             .expect("restore remains audit-only");
 
@@ -7932,16 +7935,24 @@ mod tests {
             .iter()
             .filter(|entry| entry.provenance_stage.as_deref() == Some("restore_boundary_dlp"))
             .collect::<Vec<_>>();
-        assert_eq!(dlp_entries.len(), 2);
+        assert_eq!(dlp_entries.len(), 4);
         assert!(dlp_entries
             .iter()
             .any(|entry| entry.source == "manifest_bypass"));
         assert!(dlp_entries
             .iter()
             .any(|entry| entry.source == "fresh_pii_detected"));
+        for class in ["iban", "credit_card"] {
+            assert!(dlp_entries.iter().any(|entry| {
+                entry.source == "fresh_pii_detected"
+                    && entry.class == PiiClass::custom(class).unwrap()
+            }));
+        }
         let serialized = serde_json::to_string(&dlp_entries).expect("audit json");
         assert!(!serialized.contains("alice@example.invalid"));
         assert!(!serialized.contains("bob@example.invalid"));
+        assert!(!serialized.contains("DE89 3704 0044 0532 0130 01"));
+        assert!(!serialized.contains("4532 7812 3456 7890"));
         assert!(serialized.contains("sha256:"));
     }
 
