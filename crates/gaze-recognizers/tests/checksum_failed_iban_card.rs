@@ -183,6 +183,9 @@ fn restore_boundary_obeys_financial_shape_and_cue_negatives() {
         "IBAN US29CITI12345678901234_x9",
     ] {
         assert!(financial_events(text).is_empty(), "{}", shape(text));
+        let cleaned = clean(text);
+        assert!(!cleaned.contains(":Custom:iban_"), "{}", shape(text));
+        assert!(!cleaned.contains(":Custom:credit_card_"), "{}", shape(text));
     }
 }
 
