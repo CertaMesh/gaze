@@ -975,8 +975,8 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             view = render.contract_history(self.history, version)
             bars = render.readme_comparison_bars(view, self.comparison, version)
             self.assertEqual(len(bars), 4)
-            revision = self.comparison["gaze"][f"v{version}"]["gaze_revision"][:8]
-            self.assertIn(f"Gaze comparison {revision}", bars[0][0])
+            revision = self.comparison["gaze_main_revision"][:8]
+            self.assertIn(f"Gaze main {revision}, unreleased", bars[0][0])
             self.assertIn("5 languages, spaCy lg", bars[-1][0])
             self.assertEqual(
                 bars[0][1],
@@ -1016,6 +1016,10 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             report.write_text(json.dumps(self.comparison), encoding="utf-8")
             args = ["--doc", str(doc), "--readme", str(readme), "--comparison", str(report)]
             self.assertEqual(render.main(args + ["--check"]), 0)
+            changed = copy.deepcopy(self.comparison)
+            changed["gaze_main_revision"] = "a" * 40
+            report.write_text(json.dumps(changed), encoding="utf-8")
+            self.assertEqual(render.main(args + ["--check"]), 1)
             changed = copy.deepcopy(self.comparison)
             changed["tools"]["gliner"]["contracts"]["v3"]["C"]["leaked_bytes"] += 1
             report.write_text(json.dumps(changed), encoding="utf-8")

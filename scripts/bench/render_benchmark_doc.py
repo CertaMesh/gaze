@@ -1544,6 +1544,13 @@ def readme_comparison_bars(
     if contract not in comparison["gaze"]:
         return []
     gaze = comparison["gaze"][contract]
+    main_revision = comparison.get("gaze_main_revision")
+    if not isinstance(main_revision, str) or not re.fullmatch(r"[0-9a-f]{40}", main_revision):
+        raise RenderError("comparison report needs the main commit for Gaze's measured crates tree")
+    release = next(
+        (row["version"] for row in history["releases"] if row["commit"] == main_revision),
+        "unreleased",
+    )
     gold = latest["arms"][shipped_default_arm(latest)]["gold_pii_utf8_bytes"]
 
     def label(base: str, leaked: int) -> str:
@@ -1557,7 +1564,7 @@ def readme_comparison_bars(
         )
 
     leaked = gaze["layers"]["C"]["leaked_bytes"]
-    bars = [(label(f"Gaze comparison {gaze['gaze_revision'][:8]}", leaked), leaked)]
+    bars = [(label(f"Gaze main {main_revision[:8]}, {release}", leaked), leaked)]
     best: dict[str, tuple[str, Mapping[str, Any], Mapping[str, Any]]] = {}
     for name, tool in comparison["tools"].items():
         row = tool["contracts"].get(contract, {}).get("C")
@@ -1612,8 +1619,8 @@ def _readme_contract_chart(
         bars.extend(readme_comparison_bars(history, comparison, version))
     caption = (
         f"The comparison bars use the same {comparison['corpus']['layers']['C']['documents']:,} "
-        "layer C documents and scorer; "
-        "Gaze comparison is the run measured with the competitors. "
+        "layer C documents and scorer. "
+        "The Gaze main bar is the run measured with the competitors. "
         "Skipped documents count their gold bytes as leaked. "
         "Configurations and false-positive bytes are in "
         "[`competitors.md`](docs/reference/benchmarks/competitors.md)."
