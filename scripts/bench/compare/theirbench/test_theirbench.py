@@ -141,17 +141,12 @@ class RenderTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not measured"):
             render.chart_rows(entry)
 
-    def test_contended_or_unrecorded_latency_is_not_published(self) -> None:
+    def test_no_latency_is_published(self) -> None:
         import render_theirbench as render
 
-        entry = synthetic()["benchmarks"]["presidio-research"]
-        self.assertEqual(render.latency_cell(entry, "opf"), "1.0")
-        entry["provenance"]["opf"] = {"cpu": {"contended": True}}
-        self.assertEqual(render.latency_cell(entry, "opf"), render.QUIET)
-        entry["provenance"]["opf"] = {"cpu": {"contended": False, "valid": False}}
-        self.assertEqual(render.latency_cell(entry, "opf"), render.QUIET)
-        del entry["provenance"]["gaze-full"]
-        self.assertEqual(render.latency_cell(entry, "gaze-full"), render.QUIET)
+        body = render.render(synthetic())
+        self.assertNotIn("p50", body)
+        self.assertNotIn(" ms", body)
 
     def test_check_detects_drift(self) -> None:
         import render_theirbench as render

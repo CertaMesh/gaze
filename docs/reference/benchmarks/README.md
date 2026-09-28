@@ -794,6 +794,93 @@ decide which sets run; the tooling and the sets that are not run are described
 in [`scripts/bench/compare/theirbench/`](../../../scripts/bench/compare/theirbench/README.md).
 
 <!-- BEGIN GENERATED: their-benchmarks -->
+
+Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. Chart bars are configurations declared before measuring; the table lists every measured row. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Both sets are English only, so Presidio's three language configurations give identical rows.
+
+#### PIIBench-commercial (four permissively licensed PIIBench sources, test_5k)
+
+- Published Presidio span F1 0.1385 is on the full ten-source mix (1,398 records) and is quoted, not reproduced. PIIBench's own harness gives Presidio 0.1789 on this commercial subset.
+- Only four of PIIBench's ten sources run (Gretel finance, Nemotron-PII, Few-NERD, FiNER-139); the other six are excluded for their licences (ai4privacy 400k and 300k: custom, commercial use needs a licence; MultiNERD: CC-BY-NC-SA-4.0; CoNLL-2003: non-commercial research; Isotonic 200k: CC-BY-NC-4.0; WikiANN: unknown).
+- PIIBench's current code keeps 71 label types where its paper reports 48: its normaliser maps only ai4privacy-style names. `MISC` and `FINANCIAL_ENTITY` are gold.
+
+```mermaid
+xychart-beta horizontal
+    title "Leaked PII bytes, piibench-commercial - lower is better"
+    x-axis ["gaze-full (40.3%)", "datafog-core (84.8%)", "datafog-spacy (43.7%)", "gliner (48.5%)", "opf (64.8%)", "presidio-strong (33.4%)", "scrubadub-spacy (55.2%)"]
+    y-axis "Leaked PII bytes" 0 --> 244966
+    bar [105859, 222697, 114880, 127361, 170336, 87853, 145119]
+```
+
+Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_DEBIT_CARD, DATE, DATE_OF_BIRTH, DATE_TIME, EMAIL, FAX_NUMBER, LOC, PHONE_NUMBER, POSTCODE, STREET_ADDRESS.
+
+| Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (span F1, exact span + type, PIIBench seqeval) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gaze-full | 105,859 | 48,477 | 79.5% | held (typed-metric review) | held (typed-metric review) | 32,495 | held (typed-metric review) |
+| gaze-rules-ner | 113,938 | 46,131 | 79.6% | held (typed-metric review) | held (typed-metric review) | 37,167 | held (typed-metric review) |
+| gaze-rules-only | 211,924 | 11,715 | 99.9% | held (typed-metric review) | held (typed-metric review) | 60,319 | held (typed-metric review) |
+| datafog-core | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
+| datafog-gliner | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
+| datafog-regex | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
+| datafog-spacy | 114,880 | 219,413 | 82.0% | 0.201 | 0.228 | 29,383 | 0.147 |
+| gliner | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
+| gliner-high-recall | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
+| opf | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
+| presidio-all | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-en-de | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
+| presidio-strong | 87,853 | 88,715 | 70.2% | 0.301 | 0.318 | 32,815 | 0.247 |
+| presidio-strong-high-recall | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
+| scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
+| scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
+
+Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
+
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `b1446215`; harness `b47f4ec1`.
+
+#### Presidio Research synthetic set (synth_dataset_v2, 1,500 documents)
+
+- Presidio custom (notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb): published F2 0.91; reproduced 0.91 with the evaluator at `e2140e12`, the version that produced the published number; 0.848 with the pinned evaluator, which scores every row below.
+- Presidio vanilla (notebooks/4_Evaluate_Presidio_Analyzer.ipynb): published F2 0.661; reproduced 0.664 with the evaluator at `ac490f9b`, the version that produced the published number; 0.593 with the pinned evaluator, which scores every row below.
+
+```mermaid
+xychart-beta horizontal
+    title "Leaked PII bytes, presidio-research - lower is better"
+    x-axis ["gaze-full (24.1%)", "datafog-core (88.1%)", "datafog-spacy (39.9%)", "gliner (33.7%)", "opf (38.7%)", "presidio-strong (31.3%)", "scrubadub-spacy (51.2%)"]
+    y-axis "Leaked PII bytes" 0 --> 38291
+    bar [9519, 34810, 15769, 13326, 15305, 12383, 20226]
+```
+
+Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAIL_ADDRESS, PHONE_NUMBER, STREET_ADDRESS, ZIP_CODE.
+
+| Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (F2, binary PII vs O, presidio-evaluator) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gaze-full | 9,519 | 1,363 | 48.4% | held (typed-metric review) | held (typed-metric review) | 8,080 | 0.709 |
+| gaze-rules-ner | 10,322 | 1,361 | 48.7% | held (typed-metric review) | held (typed-metric review) | 8,746 | 0.682 |
+| gaze-rules-only | 32,001 | 4 | 83.6% | held (typed-metric review) | held (typed-metric review) | 14,409 | 0.187 |
+| datafog-core | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
+| datafog-gliner | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
+| datafog-regex | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
+| datafog-spacy | 15,769 | 4,015 | 53.1% | 0.470 | 0.458 | 13,290 | 0.572 |
+| gliner | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
+| gliner-high-recall | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
+| opf | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
+| presidio-all | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-en-de | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
+| presidio-strong | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
+| presidio-strong-high-recall | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
+| scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
+| scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
+
+Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
+
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `b1446215`; harness `b47f4ec1`.
+
+Not run:
+
+- PIIBench full ten-source mix: five sources carry non-commercial or custom-academic licences and WikiANN's licence is unknown; not downloaded or run.
+- ai4privacy/pii-masking-300k (OPF's published set): custom licence; commercial use requires a licence from ai4privacy; not downloaded or run.
+
 <!-- END GENERATED: their-benchmarks -->
 
 ## Safety-Net Matrix

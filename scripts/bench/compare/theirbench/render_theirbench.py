@@ -27,7 +27,6 @@ OWN_METRIC = {"presidio-research": ("f2", "F2, binary PII vs O, presidio-evaluat
               "piibench-commercial": ("f1", "span F1, exact span + type, PIIBench seqeval")}
 GAZE_ROWS = ("gaze-full", "gaze-rules-ner", "gaze-rules-only")
 HELD = "held (typed-metric review)"
-QUIET = "not measured under a quiet machine"
 NOT_RUN = {
     "PIIBench full ten-source mix": "five sources carry non-commercial or custom-academic licences and "
                                     "WikiANN's licence is unknown; not downloaded or run",
@@ -137,14 +136,6 @@ def own_metric_cell(name: str, entry: Mapping[str, Any], tool: str, metric: str)
     return f"{entry['own_metric'][tool][metric]:.3f}"
 
 
-def latency_cell(entry: Mapping[str, Any], tool: str) -> str:
-    cpu = entry["provenance"].get(tool, {}).get("cpu")
-    if cpu is None or cpu["contended"] or not cpu.get("valid", False):
-        return QUIET
-    p50 = entry["rows"][tool]["latency"]["p50_ms"]
-    return "n/a" if p50 is None else f"{p50:.1f}"
-
-
 def render(data: Mapping[str, Any]) -> str:
     lines = [
         "Report-only: these sets are never used to design or tune Gaze rules. Every gold "
@@ -152,7 +143,11 @@ def render(data: Mapping[str, Any]) -> str:
         "same scorer code as the main comparison; each benchmark's own metric comes from "
         "its own evaluator, fed the same spans. Lower leaked bytes is better. Chart bars are "
         "configurations declared before measuring; the table lists every measured row. "
-        f"Latency reads \"{QUIET}\" when processes outside the measured tool used more than one core during its run.",
+        "No latency is published here: the machine was shared during these runs, and "
+        "per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the "
+        "main comparison's configurations; Presidio's default rows keep score threshold 0.0, so "
+        "they differ from the notebook's vanilla configuration (threshold 0.4). Both sets are "
+        "English only, so Presidio's three language configurations give identical rows.",
         "",
     ]
     for name, entry in data["benchmarks"].items():
@@ -192,8 +187,8 @@ def render(data: Mapping[str, Any]) -> str:
                   f"Gold PII bytes: {gold:,}. Common-intersection labels: "
                   f"{', '.join(entry['common_intersection_labels']) or 'none'}.", "",
                   f"| Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | "
-                  f"Own metric ({metric_label}) | p50 ms |",
-                  "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
+                  f"Own metric ({metric_label}) |",
+                  "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
         order = [*GAZE_ROWS, *sorted(tool for tool in rows if tool not in GAZE_ROWS)]
         for tool in order:
             if tool not in rows:
@@ -204,8 +199,7 @@ def render(data: Mapping[str, Any]) -> str:
             lines.append(
                 f"| {tool} | {product['leaked_bytes']:,} | {product['false_positive_bytes']:,} | "
                 f"{pct(product['document_leak_rate'])} | {f1} | {f2} | "
-                f"{common['leaked_bytes']:,} | {own_metric_cell(name, entry, tool, metric)} | "
-                f"{latency_cell(entry, tool)} |")
+                f"{common['leaked_bytes']:,} | {own_metric_cell(name, entry, tool, metric)} |")
         rescored = entry["rescored_with"]
         lines += ["", f"Typed cells read \"{HELD}\" for tools whose labels pass through collision-family "
                   "or secret/password/token mappings, which the comparison's typed-scoring fix changed; "

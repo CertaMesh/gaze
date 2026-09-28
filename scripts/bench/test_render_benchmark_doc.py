@@ -897,7 +897,18 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             (render.DEFAULT_DOC, 6),  # comparison + leaked trend, per contract
         ):
             contract, labelled = None, []
+            # Only the blocks this renderer owns; other generated blocks (for
+            # example the competitors'-own-benchmarks charts) carry no contract.
+            owned, inside = [], None
             for line in path.read_text(encoding="utf-8").splitlines():
+                names = (*render.BLOCK_NAMES, *render.README_BLOCK_NAMES)
+                if any(line.strip() == render.begin_marker(name) for name in names):
+                    inside = True
+                elif any(line.strip() == render.end_marker(name) for name in names):
+                    inside = None
+                elif inside:
+                    owned.append(line)
+            for line in owned:
                 stripped = line.strip()
                 if stripped.startswith("title "):
                     contract = int(title_re.search(stripped).group(1))
