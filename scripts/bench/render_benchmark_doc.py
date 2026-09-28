@@ -1499,6 +1499,17 @@ def _competitor_label(name: str, tool: Mapping[str, Any]) -> str:
     provenance = tool["provenance"]
     if provenance.get("chart_label"):
         return str(provenance["chart_label"])
+    if name == "presidio-strong":
+        return (f"Presidio {provenance['analyzer_version']}, "
+                f"{len(provenance['supported_languages'])} languages, "
+                "English transformer + spaCy lg, all applicable recognizers")
+    if name == "datafog-core":
+        return f"DataFog Core {provenance['version']}, built-in recognizers"
+    if name.startswith("datafog-"):
+        return f"DataFog Python {provenance['version']}, {provenance['engine']} engine"
+    if name.startswith("scrubadub-"):
+        plugin = " + spaCy en_core_web_lg" if provenance.get("plugin_version") else " built-ins"
+        return f"scrubadub {provenance['version']}{plugin}"
     family = _competitor_family(name)
     if family == "presidio":
         languages = provenance["supported_languages"]

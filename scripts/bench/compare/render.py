@@ -169,8 +169,9 @@ def render(report: dict[str, object], source: str) -> str:
         "",
         "Same corpus and scorer; tools run with documented configurations. "
         "UTF-8 byte counts use the Gaze scorer. For v3, FP is the scorer's "
-        "false-positive count after its audited gold-gap credit. CPU-host p50/p95 "
-        "is warm per-document wall-clock inference/clean time on the same machine. "
+        "false-positive count after its audited gold-gap credit. "
+        + ("CPU-host p50/p95 is warm per-document wall-clock inference/clean time on the same machine. "
+           if latency_publishable else "") +
         "Presidio all runs English, German, Dutch, French, and Portuguese spaCy models "
         "with the documented German recognizers. Presidio English default is a secondary row. "
         + ("Latency includes processed documents only. " if latency_publishable else "") + latency_note +
@@ -183,8 +184,9 @@ def render(report: dict[str, object], source: str) -> str:
         "",
         f"Gaze measured at `{gaze['v3']['gaze_revision']}` "
         f"(release `{report['latest_release_at_measurement']['version']}`). "
-        f"Home-normalized setup policy SHA-256: `{report['policy_sha256_home_normalized']}`. "
-        "The measured call scopes differ by tool, so latency is descriptive.",
+        f"Home-normalized setup policy SHA-256: `{report['policy_sha256_home_normalized']}`."
+        + (" The measured call scopes differ by tool, so latency is descriptive."
+           if latency_publishable else ""),
         "",
         "Competitor runtimes: Presidio "
         f"{tools['presidio-en']['provenance']['analyzer_version']} with spaCy "
@@ -280,6 +282,30 @@ def render(report: dict[str, object], source: str) -> str:
                             f"{entity['fn']:,} | {entity['precision']:.3f} | {entity['recall']:.3f} | "
                             f"{entity['f1']:.3f} | {entity['f2']:.3f} |"
                         )
+        losses = []
+        gaze_d_test = gaze["v3"]["layers"]["D"]["metrics"]["product_coverage"]["test"]
+        scrub_d_test = tools["scrubadub-base"]["contracts"]["v3"]["D"]["metrics"]["product_coverage"]["test"]
+        if (scrub_d_test["leaked_bytes"] == gaze_d_test["leaked_bytes"]
+                and scrub_d_test["false_positive_bytes"] < gaze_d_test["false_positive_bytes"]):
+            losses.append(
+                "On layer D's fixed test half, scrubadub "
+                f"{tools['scrubadub-base']['provenance']['version']} built-ins leaked "
+                f"{scrub_d_test['leaked_bytes']:,} B and added {scrub_d_test['false_positive_bytes']:,} "
+                f"false-positive B; Gaze full leaked {gaze_d_test['leaked_bytes']:,} B and added "
+                f"{gaze_d_test['false_positive_bytes']:,} false-positive B."
+            )
+        gaze_r_full = gaze["v3"]["layers"]["R"]
+        opf_r_full = tools["opf"]["contracts"]["v3"]["R"]
+        if opf_r_full["leaked_bytes"] < gaze_r_full["leaked_bytes"]:
+            losses.append(
+                "On the full layer R aggregate (a diagnostic spanning both halves), "
+                f"OPF {tools['opf']['provenance']['runtime']['version']} default Viterbi leaked "
+                f"{opf_r_full['leaked_bytes']:,} B versus Gaze full's "
+                f"{gaze_r_full['leaked_bytes']:,} B."
+            )
+        if losses:
+            lines.extend(["", "**Where Gaze trails under the shared v3 contract, reviewed mapping, and byte scorer:** "
+                          + " ".join(losses)])
         lines.extend(["", "## Gaze ablations", "",
                       "Rules only, rules plus NER, and full setup use the same test documents and scorer.", "",
                       "| Contract | Layer | Gaze configuration | Leaked B | FP B | PII docs | Leaking docs | Entity F1 | Entity F2 |",

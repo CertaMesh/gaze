@@ -1009,6 +1009,17 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             bars[gliner_index][1], report["tools"]["gliner"]["contracts"]["v3"]["C"]["leaked_bytes"]
         )
 
+    def test_selected_bars_name_the_measured_configuration(self):
+        bars = render.readme_comparison_bars(
+            render.contract_history(self.history, 3), self.comparison, 3
+        )
+        labels = " ".join(label for label, _ in bars)
+        for configuration in (
+            "English transformer + spaCy lg", "DataFog Core 0.3.0, built-in",
+            "DataFog Python 4.8.1, spacy engine", "scrubadub 2.0.0 + spaCy",
+        ):
+            self.assertIn(configuration, labels)
+
     def test_comparison_mutation_fails_check(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
