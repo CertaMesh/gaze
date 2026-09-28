@@ -11,6 +11,9 @@ pub(crate) enum CliError {
     InputTooLarge,
     InvalidEncoding,
     EvalSchema,
+    EvalSchemaLine {
+        line: usize,
+    },
     PolicyConfig,
     PolicyConfigDetail(String),
     PolicySchemaUnsupported {
@@ -66,7 +69,8 @@ impl CliError {
             | Self::EmptyInput
             | Self::InputTooLarge
             | Self::InvalidEncoding
-            | Self::EvalSchema => 1,
+            | Self::EvalSchema
+            | Self::EvalSchemaLine { .. } => 1,
             Self::PolicyConfig
             | Self::PolicyConfigDetail(_)
             | Self::PolicySchemaUnsupported { .. }
@@ -99,7 +103,7 @@ impl CliError {
             Self::EmptyInput => "EmptyInput",
             Self::InputTooLarge => "InputTooLarge",
             Self::InvalidEncoding => "InvalidEncoding",
-            Self::EvalSchema => "EvalSchema",
+            Self::EvalSchema | Self::EvalSchemaLine { .. } => "EvalSchema",
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
             Self::PolicySchemaUnsupported { .. } => "PolicySchemaUnsupported",
             Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",
@@ -129,6 +133,12 @@ impl CliError {
 
     pub(crate) fn emit_stderr(&self) {
         match self {
+            Self::EvalSchemaLine { line } => eprintln!(
+                r#"{{"error":"{}","exit":{},"line":{}}}"#,
+                self.variant_name(),
+                self.exit_code(),
+                line
+            ),
             Self::PolicySchemaUnsupported { found, supported } => {
                 let found = serde_json::to_string(found)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());

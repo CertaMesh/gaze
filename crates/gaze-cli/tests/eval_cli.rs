@@ -55,6 +55,9 @@ fn eval_human_golden_and_json_metrics() {
 fn eval_schema_error_never_echoes_text() {
     let secret = "alice@example.invalid";
     let file = corpus(secret, json!([{"start": 1, "end": 200, "label": "email"}]));
+    let first = json!({"text":"abc","spans":[]});
+    let second = fs::read_to_string(file.path()).unwrap();
+    fs::write(file.path(), format!("{first}\n{second}")).unwrap();
     let output = Command::cargo_bin("gaze")
         .expect("gaze binary")
         .args(["eval", file.path().to_str().unwrap(), "--json"])
@@ -64,7 +67,7 @@ fn eval_schema_error_never_echoes_text() {
     assert!(output.stdout.is_empty());
     assert_eq!(
         String::from_utf8(output.stderr).unwrap(),
-        "{\"error\":\"EvalSchema\",\"exit\":1}\n"
+        "{\"error\":\"EvalSchema\",\"exit\":1,\"line\":2}\n"
     );
 }
 

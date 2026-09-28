@@ -272,12 +272,13 @@ pub(crate) fn run(args: Args) -> Result<(), CliError> {
         pipeline
     };
     let mut score = Score::default();
-    for line in source.lines() {
+    for (index, line) in source.lines().enumerate() {
+        let schema_error = || CliError::EvalSchemaLine { line: index + 1 };
         if line.trim().is_empty() {
-            return Err(CliError::EvalSchema);
+            return Err(schema_error());
         }
-        let doc: Document = serde_json::from_str(line).map_err(|_| CliError::EvalSchema)?;
-        let spans = validate_document(&doc, &labels)?;
+        let doc: Document = serde_json::from_str(line).map_err(|_| schema_error())?;
+        let spans = validate_document(&doc, &labels).map_err(|_| schema_error())?;
         let session = Session::from_policy(&resolved.policy).map_err(|_| CliError::Pipeline)?;
         let (clean, manifest, _) = pipeline
             .clean_with_safety_net_policy_detect_context(

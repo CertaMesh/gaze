@@ -24,6 +24,8 @@ gaze eval annotated.jsonl --label-map labels.json --policy gaze.toml --locale en
 
 Omit `--policy` to use the bundled `core` policy, as in policy-free `gaze clean`. `--locale` accepts a comma-separated priority chain. A policy's Nym safety net is loaded when configured and available; a missing bundle fails the run. Each document gets a fresh session. The command reads at most 64 MiB per input file and prints no partial report if a row fails validation.
 
+Invalid rows return a typed `EvalSchema` error with the JSONL line number and no source text.
+
 The evaluator does not accept `gaze clean`'s explicit OpenAI Filter or safety-net registry flags. Scores from this command therefore describe the policy-selected pipeline, not a run that used those command-line overrides.
 
 ## Read the score
