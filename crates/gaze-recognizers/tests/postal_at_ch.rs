@@ -123,7 +123,11 @@ fn new_zealand_postcode_needs_a_postal_or_address_anchor() {
         let cleaned = clean_in(&nz, text);
         assert_code_removed(&cleaned, "9016", "en-NZ");
     }
-    for text in ["The report was filed in March 2024.", "Order 9016 shipped."] {
+    for text in [
+        "The report was filed in March 2024.",
+        "Order 9016 shipped.",
+        "42 Model Road, report 2024",
+    ] {
         let cleaned = clean_in(&nz, text);
         assert!(
             !cleaned.contains(":Custom:postal_code_"),

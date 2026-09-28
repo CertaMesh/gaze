@@ -1049,7 +1049,7 @@ pattern = '''(?ix)
 (?:
   \b(?:postcode|postal[\x20\t_-]*code|zip(?:[\x20\t_-]*code)?)\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?([0-9]{4})\b
  |
-  \b[0-9]{1,5}[\x20\t\x{A0}\x{202F}]+[\p{L}'-]+(?:[\x20\t\x{A0}\x{202F}]+[\p{L}'-]+){0,2}[\x20\t\x{A0}\x{202F}]+(?:road|rd|street|st|avenue|ave|lane|ln|crescent|terrace|drive|place|rise|close|way)\b[\x20\t\x{A0}\x{202F},]+\p{Lu}[\p{L}'-]+(?:[\x20\t\x{A0}\x{202F}]+\p{Lu}[\p{L}'-]+){0,2}[\x20\t\x{A0}\x{202F},]+([0-9]{4})\b
+  \b[0-9]{1,5}[\x20\t\x{A0}\x{202F}]+[\p{L}'-]+(?:[\x20\t\x{A0}\x{202F}]+[\p{L}'-]+){0,2}[\x20\t\x{A0}\x{202F}]+(?:road|rd|street|st|avenue|ave|lane|ln|crescent|terrace|drive|place|rise|close|way)\b[\x20\t\x{A0}\x{202F},]+(?-i:\p{Lu})[\p{L}'-]+(?:[\x20\t\x{A0}\x{202F}]+(?-i:\p{Lu})[\p{L}'-]+){0,2}[\x20\t\x{A0}\x{202F},]+([0-9]{4})\b
 )'''
 capture_groups = [1, 2]
 
