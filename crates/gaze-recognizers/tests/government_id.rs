@@ -502,6 +502,33 @@ fn labelled_identifier_values_are_captured_without_the_field_name() {
             "PT12345678",
             "national_id",
         ),
+        (
+            "Steuernummer lautet AB12 CD3456.",
+            "AB12 CD3456",
+            "tax_number",
+        ),
+        ("Tax number AB12-CD3456", "AB12-CD3456", "tax_number"),
+        (
+            "Führerschein Nr. DE 1234ABCD ist gültig.",
+            "DE 1234ABCD",
+            "driver_license",
+        ),
+        (
+            "Carte d'identité est FR23/AB4567.",
+            "FR23/AB4567",
+            "national_id",
+        ),
+        ("Tax number:\n  AB12-CD3456", "AB12-CD3456", "tax_number"),
+        (
+            "Rijbewijsnummer\r\n NL12345678",
+            "NL12345678",
+            "driver_license",
+        ),
+        (
+            "national_id:\u{00A0}\"NL23.456789\"",
+            "NL23.456789",
+            "national_id",
+        ),
     ] {
         let cleaned = clean(input);
         assert!(
@@ -522,12 +549,15 @@ fn labelled_identifier_field_boundaries_reject_lookalikes() {
         "international_id: NL12345678",
         "invoice_number: 67-853-422",
         "Identification card: A12345678901234567890",
-        "Permis de conduire:\n987654321",
+        "Permis de conduire:\nnotes\n987654321",
         "Tax Number: 12345678901",
         "Permis de conduire: 2024-09-28",
         "Identification card: 2024/09/28",
         "ID card number, 28/09/2024",
         "Identification card: 1234.50",
+        "Tax number is invoice 123-456-789",
+        "Tax number invoice AB12-CD3456",
+        "Tax number: AB12-CD3456ZZZZZZZZZZZZ",
     ] {
         assert_unchanged(input);
     }
@@ -535,29 +565,35 @@ fn labelled_identifier_field_boundaries_reject_lookalikes() {
 
 #[test]
 fn labelled_identifier_json_restores_exact_input() {
-    let input = "{\"rijbewijsnummer\":\"NL-12345678\",\"note\":\"synthetic\"}";
     let chain = [LocaleTag::Global];
     let pipeline = pipeline_for(&chain);
-    let session = Session::new(Scope::Ephemeral).expect("session");
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_detect_context(
-            &session,
-            RawDocument::Text(input.to_string()),
-            &chain,
-            &DictionaryBundle::default(),
-        )
-        .expect("clean");
-    let CleanDocument::Text(cleaned) = clean else {
-        panic!("expected text");
-    };
-    assert!(cleaned.contains("rijbewijsnummer"));
-    assert!(!cleaned.contains("NL-12345678"));
-    assert_eq!(
-        pipeline
-            .restore_strict_text(&session, &cleaned)
-            .expect("restore"),
-        input
-    );
+    for (input, value) in [
+        (
+            "{\"rijbewijsnummer\":\"NL-12345678\",\"note\":\"synthetic\"}",
+            "NL-12345678",
+        ),
+        ("Tax number:\n  AB12-CD3456", "AB12-CD3456"),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text");
+        };
+        assert!(!cleaned.contains(value));
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&session, &cleaned)
+                .expect("restore"),
+            input
+        );
+    }
 }
 
 // ------------------------------------------------------- cross-class collision determinism
