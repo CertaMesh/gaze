@@ -381,7 +381,8 @@ def render(report: dict[str, object], source: str) -> str:
             "better typed-entity value, in the following measured cells. Lower redaction load "
             "alone can reflect missed PII. Each pair reads competitor vs Gaze. Full aggregate "
             "rows span both halves and use v3's audited gold-gap FP credit; detailed rows use "
-            "raw FP and also show validation and test separately.",
+            "raw FP and also show validation and test separately. Counts below are metric cells; "
+            "overlapping views and splits must not be summed as independent cases.",
             "", f"Loss counts by metric: {summary or 'none'}.",
             "", "<details>", f"<summary>All {len(losses):,} losing rows</summary>", "",
             *(f"- {loss}" for loss in losses), "", "</details>",
