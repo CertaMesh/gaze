@@ -67,11 +67,13 @@ VALID = "valid"
 INVALID = "invalid"
 UNCHECKED = "unchecked"
 BENIGN = "benign"
-# Labels whose checksum-invalid gold the gate credits like valid gold. User
-# ruling 2026-09-27: IBAN and payment card numbers are tokenized even when
-# mod-97 or Luhn fails, so a leaked invalid one is a real leak. Every other
-# label's checksum-invalid gold stays reported, not gated (ruling 2026-09-26).
-CREDITABLE_INVALID_LABELS = frozenset({"IBAN", "CREDITCARDNUMBER"})
+# Gate credit contract v2 (user rulings 2026-09-27 and 2026-09-28): leaked
+# checksum-invalid gold counts for every class we intentionally tokenize when
+# cued. Layer D guards the benign twin shapes; phone has no layer A family yet.
+GATE_CREDIT_VERSION = 2
+CREDITABLE_INVALID_LABELS = frozenset({
+    "IBAN", "CREDITCARDNUMBER", "PHONENUMBER", "TAXNUM", "CPF", "BSN", "NHSNUMBER",
+})
 
 
 class LayerError(ValueError):
@@ -716,9 +718,8 @@ COUNTERWEIGHT_EXEMPT: dict[tuple[str, str, str], str] = {
 # The counterweight families that price a checksum-less rule for each label in
 # CREDITABLE_INVALID_LABELS. Crediting invalid gold must never pay for false
 # positives on its benign twin shape, so `decide` fails any rise there with no
-# net-bytes offset. Derived from COUNTERWEIGHTS: card -> ref_number_16; IBAN has
-# none by design (its COUNTERWEIGHT_EXEMPT reason: a mod-97-failing IBAN shape
-# has no common benign use).
+# net-bytes offset. Derived from COUNTERWEIGHTS; IBAN and phone have no layer D
+# counterweight (IBAN is exempt; phone has no layer A family).
 CREDIT_GUARD_FAMILIES: dict[str, tuple[str, ...]] = {
     label: tuple(sorted({
         counterweight
@@ -1883,7 +1884,7 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
     checksum-invalid twins; layer C excludes Kiji gold its validator fails,
     per label from the validator split. Layers D and R have no such gold.
     The labels in `CREDITABLE_INVALID_LABELS` are the exception: their
-    invalid gold is gated like valid gold (user ruling 2026-09-27).
+    invalid gold is gated like valid gold (user rulings 2026-09-27 and 2026-09-28).
     Each row also carries `guard_false_positive`: layer D false-positive bytes
     per CREDIT_GUARD_FAMILIES family (empty for other layers).
     """
@@ -2084,6 +2085,7 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         for families in CREDIT_GUARD_FAMILIES.values() for family in families
     }
     return {"verdict": verdict, "reason": reason, "summary": summary, "layers": rows,
+            "gate_credit_version": GATE_CREDIT_VERSION,
             "credit_guard": credit_guard}
 
 
@@ -2250,8 +2252,9 @@ def gate_markdown(result: Mapping[str, object]) -> str:
                       "checksum-invalid gold; any rise fails): " + ", ".join(
                           f"{family} {counts['base']} -> {counts['candidate']}"
                           for family, counts in guard.items())]
-        lines += ["", "Gated leak excludes gold that fails its checksum (layer A twins, layer C "
-                  "validator-failed Kiji gold), except IBAN and card numbers, which are gated; "
+        lines += ["", f"Gate credit contract v{GATE_CREDIT_VERSION}: gated leak excludes gold that fails its checksum "
+                  "(layer A twins, layer C validator-failed Kiji gold), except IBAN, card, "
+                  "phone, TAXNUM, CPF, BSN, and NHS numbers, which are gated; "
                   "the excluded bytes are reported in the twin columns. "
                   "The gate is necessary, not sufficient: review still judges precision."]
     return "\n".join(lines) + "\n"

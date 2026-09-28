@@ -1210,22 +1210,15 @@ are refused; `--allow-legacy-policy-inputs` permits a comparison only when
 **both** historical cards lack it. That explicit mode cannot prove external
 file or model comparability and must not be used for a new detection merge.
 
-**Gated gold** is the gold a precise rule can reach. Layer A leaves out its
-checksum-invalid twins, and layer C leaves out the Kiji gold that fails its
-own validator (from the per-label validator split). Both kinds stay in the
-headline and the census, and the gate reports them beside its verdict. Their
-bytes are left out of the net-bytes credit, but a rise in them still fails the
-gate. Only a rule without a checksum can reach them, and the layer D
-counterweights already price that kind of rule separately.
-
-IBAN (`IBAN`) and payment card (`CREDITCARDNUMBER`) gold is the exception:
-its checksum-invalid gold is gated like valid gold, in layer A and in layer C
-(`CREDITABLE_INVALID_LABELS` in `agentic_layers.py`). The user ruled on
-2026-09-27 that Gaze tokenizes IBAN and card numbers even when mod-97 or Luhn
-fails, because a mistyped or masked account or card number is still someone's
-financial data. A leak of one is therefore a real leak, not gold only a
-careless rule could reach. Every other label keeps the exclusion. The
-headline does not change; only the gate's credit does.
+**Gated gold**, under gate credit contract v2, includes checksum-invalid gold
+for `IBAN` and `CREDITCARDNUMBER` (user ruling 2026-09-27) and for
+`PHONENUMBER`, `TAXNUM` (Steuer-ID), `CPF`, `BSN`, and `NHSNUMBER` (user ruling
+2026-09-28: credit every class tokenized when cued). Layer A counts those
+labels' invalid twins like valid gold. Layer C counts their validator-failed
+Kiji gold from the per-label validator split. The gate reports other invalid
+gold outside net-bytes credit, and any rise in its leaked bytes still fails.
+The headline and census count all gold and do not change. Layer A currently
+has no phone family, so phone's new credit is measurable only in layer C.
 
 The credit comes with a **credit guard**. A rule that tags every
 space-grouped 16-digit run would earn thousands of credited card bytes and
@@ -1233,16 +1226,19 @@ pass on net bytes, so the credit must never pay for false positives on the
 benign twin shape. The gate fails any candidate whose layer D false-positive
 bytes rise on a credited label's counterweight family, with no net-bytes
 offset. `CREDIT_GUARD_FAMILIES` derives the families from `COUNTERWEIGHTS`:
-`ref_number_16` for `CREDITCARDNUMBER`, none for `IBAN` (its twins are exempt
-from counterweights because a mod-97-failing IBAN shape has no common benign
-use). A scorecard without the guarded family's cells is refused. Re-scored from the
-committed release records under contract v2, the gated leaked bytes become:
+`ref_number_16` for cards, `ref_number_11` for Steuer-ID and CPF,
+`ref_number_9` for BSN, and `ref_number_10` for NHS numbers. IBAN is
+counterweight-exempt because a mod-97-failing IBAN shape has no common benign
+use. Phone has no layer A family or layer D counterweight yet. A scorecard
+without a guarded family's cells is refused. Re-scored from the committed
+release records under scored-label contract v2, the gated leaked bytes change
+from the IBAN/card-only credit to gate credit contract v2:
 
 | Release | Layer C before | Layer C after | Layer A before | Layer A after |
 | --- | ---: | ---: | ---: | ---: |
-| v0.14.0 | 17,009 | 19,832 | 7,397 | 19,409 |
-| v0.15.0 | 8,067 | 11,043 | 1,227 | 12,835 |
-| v0.15.1 | 8,067 | 11,043 | 1,227 | 12,662 |
+| v0.14.0 | 19,832 | 22,144 | 19,409 | 22,551 |
+| v0.15.0 | 11,043 | 13,319 | 12,835 | 15,672 |
+| v0.15.1 | 11,043 | 13,319 | 12,662 | 15,499 |
 
 `ReleaseGateCreditTests` in `test_agentic_layers.py` pins this table against
 the committed records.
@@ -1256,17 +1252,19 @@ could turn valid PII into "failed its checksum" and drop it from the gated
 bytes. The gate then needs an explicit review decision.
 
 [`gate-pin-mutants.json`](../../../scripts/bench/fixtures/agentic/gate-pin-mutants.json)
-pins the true verdicts of two real full-harness runs against main on generator
-v3. It remains a historical pin for the gate arithmetic:
+pins the verdicts of two real full-harness runs against main on generator v3.
+It remains a historical pin for the IBAN/card-only credit guard; its saved
+aggregates do not contain the new `ref_number_9`, `ref_number_10`, or
+`ref_number_11` guard counts needed to judge those mutants under contract v2:
 
 - **The spaced 16-digit rule fails.** It saves 15 gated leaked bytes and adds
   551 false-positive bytes. Its 1,830 byte Kiji "gain" is entirely card and
   IBAN gold that fails Luhn or mod-97. This verdict predates the IBAN/card
   credit above. With that credit alone it would pass on net bytes; the
-  current gate fails it on the credit guard, because it raises layer D false
+  IBAN/card-era gate fails it on the credit guard, because it raises layer D false
   positives on `ref_number_16`. `credit_guard` in the pin records that count,
   measured fresh on generator v4 for main and both mutants.
-- **The bare 9-digit rule passes.** It saves 353 gated leaked bytes: 180 of
+- **The bare 9-digit rule passed that gate.** It saves 353 gated leaked bytes: 180 of
   valid BSN, and 173 of Kiji driver-licence, ID-card, national-ID, SSN and
   building numbers. It adds 295 false-positive bytes.
 
@@ -1274,7 +1272,7 @@ v3. It remains a historical pin for the gate arithmetic:
 ([Benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate), rule 5). It
 measures only these corpora. A bare 9-digit rule would be refused in review
 for the false positives it causes on reference numbers outside the corpus,
-even though it passes here.
+regardless of that historical pass.
 
 The gate prints every layer's numbers, twins included. It exits `0` on
 pass, `1` on fail, and `2` when the two scorecards differ in policy, arm

@@ -609,7 +609,7 @@ def _scorecard(
         }
         if layer == "C":
             block["validator_recall_by_label"] = {
-                "TAXNUM": {"production_recall_by_gold_validity": {
+                "OTHER": {"production_recall_by_gold_validity": {
                     "validator_passed_gold": {"leaked_utf8_bytes": 0},
                     "validator_failed_gold": {"leaked_utf8_bytes": c_invalid_leak},
                 }},
@@ -618,11 +618,15 @@ def _scorecard(
         if layer == "D":
             block["per_cell"] = {
                 "D|ref_number_16|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": guard_fp}},
+                **{
+                    f"D|{family}|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": 0}}
+                    for family in ("ref_number_9", "ref_number_10", "ref_number_11")
+                },
             }
         if layer == "A":
             block["per_cell"] = {
-                "A|bsn|csv|valid": {"utf8_bytes": {"leaked": leaks["A"]}},
-                "A|bsn|csv|invalid": {"utf8_bytes": {"leaked": twin_leak}},
+                "A|other|csv|valid": {"utf8_bytes": {"leaked": leaks["A"]}},
+                "A|other|csv|invalid": {"utf8_bytes": {"leaked": twin_leak}},
             }
         return block
 
@@ -1009,9 +1013,9 @@ class GateTests(unittest.TestCase):
                 self.assertEqual(result["verdict"], "pass")
 
     def test_checksum_invalid_gold_of_other_labels_stays_ungated(self) -> None:
-        base = self._with_invalid(_scorecard(self.BASE, self.FP), "A|steuer_id|csv|invalid", "TAXNUM", 300)
+        base = self._with_invalid(_scorecard(self.BASE, self.FP), "A|other|csv|invalid", "OTHER", 300)
         candidate = self._with_invalid(
-            _scorecard(self.BASE, {**self.FP, "D": 7 + 100}), "A|steuer_id|csv|invalid", "TAXNUM", 0)
+            _scorecard(self.BASE, {**self.FP, "D": 7 + 100}), "A|other|csv|invalid", "OTHER", 0)
         result = agentic.gate(base, candidate)
         self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 300)
         self.assertEqual(result["layers"]["C"]["twin_leaked_base"], 300)
@@ -1045,15 +1049,56 @@ class GateTests(unittest.TestCase):
             agentic.gate(_scorecard(self.BASE, self.FP), candidate)
 
     def test_credit_guard_families_come_from_the_counterweights(self) -> None:
-        # Card is priced by its benign 16-digit twin; IBAN has none by design.
         self.assertEqual(agentic.CREDIT_GUARD_FAMILIES,
-                         {"CREDITCARDNUMBER": ("ref_number_16",), "IBAN": ()})
+                         {"CREDITCARDNUMBER": ("ref_number_16",), "IBAN": (),
+                          "TAXNUM": ("ref_number_11",), "CPF": ("ref_number_11",),
+                          "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
+                          "PHONENUMBER": ()})
         self.assertEqual(set(agentic.CREDIT_GUARD_FAMILIES), agentic.CREDITABLE_INVALID_LABELS)
 
-    def test_creditable_invalid_labels_are_exactly_iban_and_card(self) -> None:
-        self.assertEqual(agentic.CREDITABLE_INVALID_LABELS, {"IBAN", "CREDITCARDNUMBER"})
+    def test_creditable_invalid_labels_are_exactly_the_user_ruled_classes(self) -> None:
+        self.assertEqual(agentic.GATE_CREDIT_VERSION, 2)
+        self.assertEqual(agentic.CREDITABLE_INVALID_LABELS,
+                         {"IBAN", "CREDITCARDNUMBER", "PHONENUMBER", "TAXNUM",
+                          "CPF", "BSN", "NHSNUMBER"})
         labels = {family.label for family in agentic.IDENTIFIER_FAMILIES}
-        self.assertLessEqual(agentic.CREDITABLE_INVALID_LABELS, labels)
+        self.assertLessEqual(agentic.CREDITABLE_INVALID_LABELS - {"PHONENUMBER"}, labels)
+
+    def test_cued_invalid_gold_is_credited_for_each_new_class(self) -> None:
+        for family, label in (("steuer_id", "TAXNUM"), ("cpf", "CPF"),
+                              ("bsn", "BSN"), ("nhs", "NHSNUMBER")):
+            with self.subTest(label=label):
+                cell = f"A|{family}|prose_cue|invalid"
+                base = self._with_invalid(_scorecard(self.BASE, self.FP), cell, label, 300)
+                candidate = self._with_invalid(_scorecard(self.BASE, self.FP), cell, label, 0)
+                result = agentic.gate(base, candidate)
+                self.assertEqual(result["gate_credit_version"], 2)
+                self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 0)
+                self.assertEqual(result["layers"]["C"]["twin_leaked_base"], 0)
+                self.assertEqual(result["summary"]["leaked_bytes_decrease"], 600)
+                self.assertEqual(result["verdict"], "pass")
+
+    def test_failed_validator_phone_gold_is_credited_in_layer_c(self) -> None:
+        base = self._with_invalid(_scorecard(self.BASE, self.FP),
+                                  "A|other|prose_cue|invalid", "PHONENUMBER", 300)
+        candidate = self._with_invalid(_scorecard(self.BASE, self.FP),
+                                       "A|other|prose_cue|invalid", "PHONENUMBER", 0)
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 300)
+        self.assertEqual(result["layers"]["C"]["twin_leaked_base"], 0)
+        self.assertEqual(result["summary"]["leaked_bytes_decrease"], 300)
+        self.assertEqual(result["verdict"], "pass")
+
+    def test_uncued_counterweight_fp_cannot_be_paid_for_by_credit(self) -> None:
+        for family in ("ref_number_9", "ref_number_10", "ref_number_11", "ref_number_16"):
+            with self.subTest(family=family):
+                base = _scorecard(self.BASE, self.FP)
+                candidate = _scorecard({**self.BASE, "C": self.BASE["C"] - 100},
+                                       {**self.FP, "D": self.FP["D"] + 1})
+                candidate["layers"]["D"]["runs"][0]["per_cell"][f"D|{family}|prose|benign"]["utf8_bytes"]["false_positive"] = 1
+                result = agentic.gate(base, candidate)
+                self.assertEqual(result["verdict"], "fail")
+                self.assertIn("credit guard", result["reason"])
 
     def test_kiji_gold_that_fails_its_validator_is_reported_not_gated(self) -> None:
         base = _scorecard(self.BASE, self.FP, c_invalid_leak=400)
@@ -1459,15 +1504,15 @@ class PolicyDeltaGateTests(unittest.TestCase):
 
 class ReleaseGateCreditTests(unittest.TestCase):
     """The displayed releases re-scored from their committed records under the
-    IBAN/card credit (user ruling 2026-09-27): only IBAN and card bytes move
+    cued-class credit (user ruling 2026-09-28): newly credited invalid bytes move
     from the twin column into gated leaks; the headline never changes."""
 
     BENCH = REPO_ROOT / "docs/reference/benchmarks"
     # release: (C gated before, C gated after, A gated before, A gated after), contract v2.
     EXPECTED = {
-        "v0.14.0": (17_009, 19_832, 7_397, 19_409),
-        "v0.15.0": (8_067, 11_043, 1_227, 12_835),
-        "v0.15.1": (8_067, 11_043, 1_227, 12_662),
+        "v0.14.0": (19_832, 22_144, 19_409, 22_551),
+        "v0.15.0": (11_043, 13_319, 12_835, 15_672),
+        "v0.15.1": (11_043, 13_319, 12_662, 15_499),
     }
 
     def totals(self, release: str, creditable: frozenset[str]) -> dict:
@@ -1482,12 +1527,13 @@ class ReleaseGateCreditTests(unittest.TestCase):
     def test_release_totals_before_and_after_the_credit(self) -> None:
         for release, (c_before, c_after, a_before, a_after) in self.EXPECTED.items():
             with self.subTest(release=release):
-                before = self.totals(release, frozenset())
+                before = self.totals(release, frozenset({"IBAN", "CREDITCARDNUMBER"}))
                 after = self.totals(release, agentic.CREDITABLE_INVALID_LABELS)
                 self.assertEqual((before["C"]["leaked"], after["C"]["leaked"]), (c_before, c_after))
                 self.assertEqual((before["A"]["leaked"], after["A"]["leaked"]), (a_before, a_after))
                 for layer in agentic.GATE_LAYERS:
                     self.assertEqual(before[layer]["headline_leaked"], after[layer]["headline_leaked"])
+                    self.assertEqual(before[layer]["false_positive"], after[layer]["false_positive"])
                     self.assertEqual(
                         before[layer]["leaked"] + before[layer]["twin_leaked"],
                         after[layer]["leaked"] + after[layer]["twin_leaked"],
@@ -1495,14 +1541,13 @@ class ReleaseGateCreditTests(unittest.TestCase):
 
 
 class MutantGatePinTests(unittest.TestCase):
-    """True verdicts of real full-harness runs: main vs main plus each over-broad rule.
+    """Historical v1-credit verdicts of full-harness runs against over-broad rules.
 
     `fixtures/agentic/gate-pin-mutants.json` holds `layer_totals` of three full
     runs (provenance inside). A mutant changes the policy, so `gate` rightly
     calls the pair not comparable; `decide` is the rule it faces. The gate is
-    necessary, not sufficient: the bare 9-digit rule passes it on these
-    corpora and would still be refused in review for its FP on reference
-    numbers outside them.
+    necessary, not sufficient. This pin records only the card counterweight,
+    so it cannot judge the later v2-credit gate's additional guard families.
     """
 
     @classmethod
@@ -1511,10 +1556,15 @@ class MutantGatePinTests(unittest.TestCase):
         cls.pin = json.loads(path.read_text(encoding="utf-8"))
 
     def verdict(self, mutant: str) -> dict:
-        result = agentic.decide(self.with_equal_restore(self.pin["totals"]["main"]),
-                                self.with_equal_restore(self.pin["totals"][mutant]))
+        with mock.patch.object(agentic, "CREDIT_GUARD_FAMILIES", self.old_credit_guard()):
+            result = agentic.decide(self.with_equal_restore(self.pin["totals"]["main"]),
+                                    self.with_equal_restore(self.pin["totals"][mutant]))
         self.assertEqual({**result["summary"], "verdict": result["verdict"]}, self.pin["expected"][mutant])
         return result
+
+    @staticmethod
+    def old_credit_guard() -> dict[str, tuple[str, ...]]:
+        return {"CREDITCARDNUMBER": ("ref_number_16",), "IBAN": ()}
 
     @staticmethod
     def with_equal_restore(totals: dict, guard_fp: int = 0) -> dict:
@@ -1549,18 +1599,21 @@ class MutantGatePinTests(unittest.TestCase):
     def test_credited_twins_alone_would_let_the_spaced_sixteen_digit_mutant_pass(self) -> None:
         # Why the credit guard exists: with checksum-failed gold credited, the
         # spaced 16-digit rule "saves" thousands of bytes and passes on net bytes.
-        result = agentic.decide(self.all_gold(self.with_equal_restore(self.pin["totals"]["main"])),
-                                self.all_gold(self.with_equal_restore(self.pin["totals"]["mutant_spaced_sixteen_digits"])))
+        with mock.patch.object(agentic, "CREDIT_GUARD_FAMILIES", self.old_credit_guard()):
+            result = agentic.decide(self.all_gold(self.with_equal_restore(self.pin["totals"]["main"])),
+                                    self.all_gold(self.with_equal_restore(self.pin["totals"]["mutant_spaced_sixteen_digits"])))
         self.assertEqual(result["verdict"], "pass")
 
-    def test_spaced_sixteen_digit_mutant_fails_the_current_gate_on_the_credit_guard(self) -> None:
-        result = agentic.decide(self.measured("main"), self.measured("mutant_spaced_sixteen_digits"))
+    def test_spaced_sixteen_digit_mutant_fails_the_v1_credit_guard(self) -> None:
+        with mock.patch.object(agentic, "CREDIT_GUARD_FAMILIES", self.old_credit_guard()):
+            result = agentic.decide(self.measured("main"), self.measured("mutant_spaced_sixteen_digits"))
         self.assertEqual(result["verdict"], "fail")
         self.assertIn("credit guard", result["reason"])
         self.assertIn("ref_number_16", result["reason"])
 
-    def test_bare_nine_digit_mutant_still_passes_the_current_gate(self) -> None:
-        result = agentic.decide(self.measured("main"), self.measured("mutant_bare_nine_digits"))
+    def test_bare_nine_digit_mutant_passed_the_v1_credit_guard(self) -> None:
+        with mock.patch.object(agentic, "CREDIT_GUARD_FAMILIES", self.old_credit_guard()):
+            result = agentic.decide(self.measured("main"), self.measured("mutant_bare_nine_digits"))
         self.assertEqual(result["verdict"], "pass")
 
     def test_credit_guard_measurement_records_its_provenance(self) -> None:
