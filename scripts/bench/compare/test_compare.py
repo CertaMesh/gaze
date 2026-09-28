@@ -4,6 +4,7 @@ import json
 import copy
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -86,6 +87,50 @@ def test_loss_enumerator_includes_mutated_heldout_cell() -> None:
     page = render.render(report, "comparison.json")
     assert (f"v3 {layer_display_name('C')} common_intersection test opf: Leaked B "
             f"{gaze['leaked_bytes'] - 1:,} vs {gaze['leaked_bytes']:,}") in page
+
+
+def test_highlighted_loss_sentence_requires_a_leaked_byte_loss() -> None:
+    report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
+    gaze = report["gaze"]["v3"]["layers"]["C"]["metrics"]["common_intersection"]["test"]
+    for tool in report["tools"].values():
+        tool["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"]["leaked_bytes"] = gaze["leaked_bytes"]
+    page = render.render(report, "comparison.json")
+    assert "This is a measured Gaze loss." not in page
+
+
+def _assert_table_columns_match(markdown: str) -> int:
+    lines = markdown.splitlines()
+    tables = 0
+    for index, line in enumerate(lines[1:], 1):
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if not line.startswith("|") or not all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
+            continue
+        header = lines[index - 1]
+        assert header.startswith("|"), f"delimiter without header at line {index + 1}"
+        assert header.count("|") == line.count("|"), f"table width differs at line {index + 1}"
+        tables += 1
+    assert tables, "no Markdown tables found"
+    return tables
+
+
+def test_every_generated_table_has_matching_header_and_delimiter() -> None:
+    from render_benchmark_doc import (
+        empty_history, load_history, render_current_release, render_history, render_latency,
+    )
+
+    report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
+    history = load_history(compare.REPO / "docs/reference/benchmarks/release-history.json")
+    outputs = (
+        render.render(report, "comparison.json"),
+        render_current_release(history),
+        render_history(history),
+        render_history(empty_history()),
+        render_latency(history, {}),
+    )
+    assert sum(_assert_table_columns_match(output) for output in outputs) >= 8
+    broken = outputs[0].replace("| --- |", "| --- | --- |", 1)
+    with pytest.raises(AssertionError, match="table width differs"):
+        _assert_table_columns_match(broken)
 
 
 def test_corpus_display_names_drive_both_public_renderers(monkeypatch: pytest.MonkeyPatch) -> None:

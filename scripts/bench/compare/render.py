@@ -12,6 +12,7 @@ REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
 import compare  # noqa: E402
 from layer_display import layer_display_name  # noqa: E402
+from markdown_table import table_header  # noqa: E402
 
 ORDER = ("gaze", *compare.TOOLS)
 
@@ -247,6 +248,15 @@ def render(report: dict[str, object], source: str) -> str:
         f"{skipped_example['skipped_documents']:,} skipped non-English documents. "
         if skipped_example and skipped_example["skipped_documents"] else ""
     )
+    summary_columns = [
+        ("Contract", False), ("Layer", False), ("Tool", False),
+        ("Leaked B", True), ("FP B", True), ("Processed", True),
+        ("Skipped", True), ("Skipped gold B", True),
+    ]
+    summary_columns += (
+        [("CPU-host p50 ms", True), ("CPU-host p95 ms", True)]
+        if latency_publishable else [("Latency", False)]
+    )
     lines = [
         "# Competitor comparison",
         "",
@@ -281,10 +291,7 @@ def render(report: dict[str, object], source: str) -> str:
         "",
         f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published.",
         "",
-        "| Contract | Layer | Tool | Leaked B | FP B | Processed | Skipped | Skipped gold B | "
-        + ("CPU-host p50 ms | CPU-host p95 ms |" if latency_publishable else "Latency |"),
-        "|---|---|---|---:|---:|---:|---:|---:|"
-        + ("---:|---:|" if latency_publishable else "---|"),
+        *table_header(summary_columns),
     ]
     lower_leak = []
     lower_fp_at_equal_leak = []
@@ -342,8 +349,15 @@ def render(report: dict[str, object], source: str) -> str:
             "Common intersection scores only classes claimed by every listed configuration. "
             "Entity scores require an exact UTF-8 byte span and a compatible reviewed label mapping.",
             "", f"Common classes: {', '.join(report['common_intersection_labels'])}.",
-            "", "| Contract | Layer | View | Tool | PII docs | Leaked B | FP B | Leaking docs | Doc leak % | Leaking entities | Entity leak % | Redaction load % | TP | FP | FN | Entity P | Entity R | F1 | F2 |",
-            "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "", *table_header([
+                ("Contract", False), ("Layer", False), ("View", False), ("Tool", False),
+                ("PII docs", True), ("Leaked B", True), ("FP B", True),
+                ("Leaking docs", True), ("Doc leak %", True),
+                ("Leaking entities", True), ("Entity leak %", True),
+                ("Redaction load %", True), ("TP", True), ("FP", True),
+                ("FN", True), ("Entity P", True), ("Entity R", True),
+                ("F1", True), ("F2", True),
+            ]),
         ])
         for version in versions:
             for layer in layer_ids:
@@ -375,13 +389,18 @@ def render(report: dict[str, object], source: str) -> str:
             for name, tool in tools.items()
         )
         best_c_name, best_c = min(c_candidates, key=lambda pair: pair[1]["leaked_bytes"])
-        lines.extend([
-            "", "## Where Gaze trails", "",
+        highlighted = (
             f"On the v3 {layer_display_name('C')} common-intersection test half, "
             f"Gaze leaks {gaze_c['leaked_bytes']:,} B "
             f"across {gaze_c['leaking_documents']:,}/{gaze_c['pii_documents']:,} PII documents; "
             f"{best_c_name} leaks {best_c['leaked_bytes']:,} B across "
-            f"{best_c['leaking_documents']:,}/{best_c['pii_documents']:,}. This is a measured Gaze loss.",
+            f"{best_c['leaking_documents']:,}/{best_c['pii_documents']:,}."
+        )
+        if best_c["leaked_bytes"] < gaze_c["leaked_bytes"]:
+            highlighted += " This is a measured Gaze loss."
+        lines.extend([
+            "", "## Where Gaze trails", "",
+            highlighted,
             "",
             "Competitors have a lower leak, false-positive, or redaction-load value, or a "
             "better typed-entity value, in the following measured cells. Lower redaction load "
@@ -395,8 +414,11 @@ def render(report: dict[str, object], source: str) -> str:
         ])
         lines.extend(["", "## Gaze ablations", "",
                       "Rules only, rules plus NER, and full setup use the same test documents and scorer.", "",
-                      "| Contract | Layer | Gaze configuration | Leaked B | FP B | PII docs | Leaking docs | Entity F1 | Entity F2 |",
-                      "|---|---|---|---:|---:|---:|---:|---:|---:|"])
+                      *table_header([
+                          ("Contract", False), ("Layer", False), ("Gaze configuration", False),
+                          ("Leaked B", True), ("FP B", True), ("PII docs", True),
+                          ("Leaking docs", True), ("Entity F1", True), ("Entity F2", True),
+                      ])])
         for version in versions:
             for layer in layer_ids:
                 for name in ("rules-only", "rules-ner", "full"):

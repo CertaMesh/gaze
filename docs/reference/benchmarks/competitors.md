@@ -11,7 +11,7 @@ Competitor runtimes: Presidio 2.2.364 with spaCy 3.7.5; GLiNER 0.2.29 at model s
 Aggregate source: [`comparison.json`](comparison.json). Raw document outputs are not published.
 
 | Contract | Layer | Tool | Leaked B | FP B | Processed | Skipped | Skipped gold B | Latency |
-|---|---|---|---:|---:|---:|---:|---:|---|
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | v3 | Synthetic identifiers in agentic formats | gaze | 5,738 | 882 | 2,310 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic identifiers in agentic formats | presidio-all | 21,837 | 10,760 | 2,310 | 0 | 0 | not measured under a quiet machine |
 | v3 | Synthetic identifiers in agentic formats | presidio-en | 34,733 | 4,075 | 990 | 1,320 | 28,151 | not measured under a quiet machine |
@@ -200,7 +200,7 @@ The validation/test split is fixed by document ID. Thresholds are selected on va
 Common classes: CREDITCARDNUMBER, DATEOFBIRTH, EMAIL, PHONENUMBER, ZIP.
 
 | Contract | Layer | View | Tool | PII docs | Leaked B | FP B | Leaking docs | Doc leak % | Leaking entities | Entity leak % | Redaction load % | TP | FP | FN | Entity P | Entity R | F1 | F2 |
-|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | v3 | Synthetic identifiers in agentic formats | product_coverage | gaze | 1,119 | 2,861 | 421 | 205 | 18.3 | 234 | 17.1 | 27.3 | 349 | 862 | 1,023 | 0.288 | 0.254 | 0.270 | 0.260 |
 | v3 | Synthetic identifiers in agentic formats | product_coverage | presidio-all | 1,119 | 10,209 | 5,468 | 535 | 47.8 | 618 | 45.0 | 24.3 | 271 | 1,161 | 1,101 | 0.189 | 0.198 | 0.193 | 0.196 |
 | v3 | Synthetic identifiers in agentic formats | product_coverage | presidio-en | 1,119 | 16,395 | 2,379 | 791 | 70.7 | 908 | 66.2 | 12.1 | 127 | 574 | 1,245 | 0.181 | 0.093 | 0.123 | 0.103 |
@@ -1267,7 +1267,7 @@ Loss counts by metric: Redaction load %: 468; FP: 417; Entity P: 219; F1: 159; L
 Rules only, rules plus NER, and full setup use the same test documents and scorer.
 
 | Contract | Layer | Gaze configuration | Leaked B | FP B | PII docs | Leaking docs | Entity F1 | Entity F2 |
-|---|---|---|---:|---:|---:|---:|---:|---:|
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | v3 | Synthetic identifiers in agentic formats | rules-only | 3,274 | 36 | 1,119 | 229 | 0.279 | 0.262 |
 | v3 | Synthetic identifiers in agentic formats | rules-ner | 2,968 | 365 | 1,119 | 209 | 0.270 | 0.259 |
 | v3 | Synthetic identifiers in agentic formats | full | 2,861 | 421 | 1,119 | 205 | 0.270 | 0.260 |

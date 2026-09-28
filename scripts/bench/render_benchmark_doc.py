@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from layer_display import layer_display_name
+from markdown_table import table_header
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCH_DIR = REPO_ROOT / "docs" / "reference" / "benchmarks"
@@ -1157,8 +1158,7 @@ def render_current_release(history: Mapping[str, Any]) -> str:
     )
     lines.extend(
         [
-            "| Provenance | Value |",
-            "| --- | --- |",
+            *table_header([("Provenance", False), ("Value", False)]),
             f"| Release | `{entry['version']}` |",
             f"| Commit | `{entry['commit']}` |",
             f"| Measured | {entry['date']} |",
@@ -1227,11 +1227,7 @@ def _arm_table(entry: Mapping[str, Any]) -> list[str]:
         # right beside it so the two add up to v2's false-positive bytes.
         at = next(i for i, c in enumerate(columns) if c[1] == "false_positive_utf8_bytes")
         columns.insert(at + 1, ("Gold-gap credited bytes info", "gold_gap_protected_bytes", "int"))
-    headers = ["Arm info"] + [column[0] for column in columns]
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| --- | " + " | ".join(["---:"] * len(columns)) + " |",
-    ]
+    lines = table_header([("Arm info", False)] + [(column[0], True) for column in columns])
     for arm, block in entry["arms"].items():
         cells = [_fmt(kind, block[field]) for _, field, kind in columns]
         label = f"`{arm}`"
@@ -1250,8 +1246,8 @@ def render_validator_recall(entry: Mapping[str, Any]) -> list[str]:
         "split the surviving bytes above, they do not replace them. Shape recall "
         "is what a shape-only match (validator ignored) would cover.",
         "",
-        "| Label | Validator | " + " | ".join(c[0] for c in VALIDATOR_COLUMNS) + " |",
-        "| --- | --- | " + " | ".join(["---:"] * len(VALIDATOR_COLUMNS)) + " |",
+        *table_header([("Label", False), ("Validator", False)]
+                      + [(column[0], True) for column in VALIDATOR_COLUMNS]),
     ]
     for label, row in entry["validator_recall"].items():
         cells = [_fmt(kind, row[field]) for _, field, kind in VALIDATOR_COLUMNS]
@@ -1656,12 +1652,13 @@ def _readme_contract_chart(
 def render_history(history: Mapping[str, Any]) -> str:
     releases = history["releases"]
     if not releases:
-        return (
-            "| Release | Measured | Commit | Machine | Scorecard | "
-            "Surviving PII bytes ↓ |\n"
-            "| --- | --- | --- | --- | --- | ---: |\n"
-            "| *none yet* | — | — | — | — | — |"
-        )
+        return "\n".join([
+            *table_header([
+                ("Release", False), ("Measured", False), ("Commit", False),
+                ("Machine", False), ("Scorecard", False), ("Surviving PII bytes ↓", True),
+            ]),
+            "| *none yet* | — | — | — | — | — |",
+        ])
     # Rows that record their own shipped arm were appended with the refusal-aware
     # layout. A history of legacy rows alone keeps the original table byte for byte.
     groups = displayed_groups(history)
@@ -1671,11 +1668,10 @@ def render_history(history: Mapping[str, Any]) -> str:
     if any("shipped_default_arm" in entry for entry in releases):
         return render_history_with_refusals(groups)
     latest_default_arm = shipped_default_arm(releases[-1])
-    lines = [
-        "| Release | Measured | Commit | Machine | Scorecard | "
-        "Surviving PII bytes ↓ |",
-        "| --- | --- | --- | --- | --- | ---: |",
-    ]
+    lines = table_header([
+        ("Release", False), ("Measured", False), ("Commit", False),
+        ("Machine", False), ("Scorecard", False), ("Surviving PII bytes ↓", True),
+    ])
     for group in groups:
         entry = group[-1]
         # Each row reports the arm it shipped; name it when that differs from
@@ -1749,13 +1745,14 @@ def common_set_surviving_bytes(releases: Sequence[Mapping[str, Any]]) -> list[in
 
 def render_history_with_refusals(groups: Sequence[Sequence[Mapping[str, Any]]]) -> str:
     common = common_set_surviving_bytes([group[-1] for group in groups])
-    lines = [
-        "| Release | Measured | Commit | Machine | Scorecard | Shipped arm | "
-        "Refused ↓ | Leaked PII bytes, all processed ↓ | "
-        "Leaked PII bytes, common documents ↓ | False-positive bytes ↔ | "
-        "Restore exact ↑ | clean p95 ms ↓ |",
-        "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ]
+    lines = table_header([
+        ("Release", False), ("Measured", False), ("Commit", False),
+        ("Machine", False), ("Scorecard", False), ("Shipped arm", False),
+        ("Refused ↓", True), ("Leaked PII bytes, all processed ↓", True),
+        ("Leaked PII bytes, common documents ↓", True),
+        ("False-positive bytes ↔", True), ("Restore exact ↑", True),
+        ("clean p95 ms ↓", True),
+    ])
     for group, common_bytes in zip(groups, common):
         entry = group[-1]
         default_arm = shipped_default_arm(entry)
@@ -1807,10 +1804,7 @@ def render_history_by_contract(
                 ]
             )
         cells_by_version[version] = column
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join(["---"] * 6 + ["---:"] * (len(headers) - 6)) + " |",
-    ]
+    lines = table_header([(header, index >= 6) for index, header in enumerate(headers)])
     for index, group in enumerate(groups):
         entry = group[-1]
         default_arm = shipped_default_arm(entry)
@@ -1955,16 +1949,16 @@ def render_latency(
     if not history["releases"]:
         return "> Latency renders once a release has been measured."
     latency = latency or {}
-    pipeline = [
-        "| Release | Setup | Warm p50 ms ↓ | Warm p95 ms ↓ | "
-        "Cold first document ms ↓ | Peak RSS MiB ↓ |",
-        "| --- | --- | ---: | ---: | ---: | ---: |",
-    ]
-    cli = [
-        "| Release | Setup | One-shot p50 ms ↓ | One-shot p95 ms ↓ | "
-        "Daemon warm p50 ms ↓ | Daemon warm p95 ms ↓ |",
-        "| --- | --- | ---: | ---: | ---: | ---: |",
-    ]
+    pipeline = table_header([
+        ("Release", False), ("Setup", False), ("Warm p50 ms ↓", True),
+        ("Warm p95 ms ↓", True), ("Cold first document ms ↓", True),
+        ("Peak RSS MiB ↓", True),
+    ])
+    cli = table_header([
+        ("Release", False), ("Setup", False), ("One-shot p50 ms ↓", True),
+        ("One-shot p95 ms ↓", True), ("Daemon warm p50 ms ↓", True),
+        ("Daemon warm p95 ms ↓", True),
+    ])
     notes = []
     for group in displayed_groups(history):
         version = group[-1]["version"]
