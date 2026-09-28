@@ -40,6 +40,7 @@ CONTRACTS = {
 }
 TOOLS = ("presidio-all", "presidio-en", "presidio-en-de", "gliner", "opf")
 PRESIDIO_LANGUAGES = ("en", "de", "nl", "fr", "pt")
+PRESIDIO_ANONYMIZER_VERSION = "2.2.364"
 GERMAN_RECOGNIZERS = (
     "DeTaxId", "DeTaxNumber", "DePassport", "DeIdCard", "DeSocialSecurity",
     "DeHealthInsurance", "DeKfz", "DeHandelsregister", "DePlz",
@@ -49,6 +50,17 @@ SPACY_MODELS = {
     "en": "en_core_web_lg", "de": "de_core_news_lg", "nl": "nl_core_news_lg",
     "fr": "fr_core_news_lg", "pt": "pt_core_news_lg",
 }
+
+
+def presidio_languages(tool: str) -> tuple[str, ...]:
+    configurations = {
+        "presidio-all": PRESIDIO_LANGUAGES,
+        "presidio-en": ("en",),
+        "presidio-en-de": ("en", "de"),
+    }
+    if tool not in configurations:
+        raise ValueError(f"unknown Presidio configuration: {tool}")
+    return configurations[tool]
 
 
 def digest_file(path: Path) -> str:
@@ -219,6 +231,12 @@ def resolved_presidio_spans(anonymizer: object, text: str, found: Sequence[objec
 
 class Presidio:
     def __init__(self, models: dict[str, Path]) -> None:
+        version = package_version("presidio-anonymizer")
+        if version != PRESIDIO_ANONYMIZER_VERSION:
+            raise RuntimeError(
+                f"raw-coordinate resolution requires presidio-anonymizer=="
+                f"{PRESIDIO_ANONYMIZER_VERSION}; found {version}"
+            )
         from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
         from presidio_analyzer.nlp_engine import NlpEngineProvider
         from presidio_analyzer import predefined_recognizers
@@ -494,10 +512,11 @@ def main() -> int:
     args = parser.parse_args()
     selected = TOOLS if args.tool == "all" else (args.tool,)
     if args.validate_args_only:
-        required = ("en", "de", "nl", "fr", "pt") if args.tool == "all" else (
-            ("en",) if args.tool == "presidio-en" else
-            (("en", "de") if args.tool == "presidio-en-de" else ())
-        )
+        required = tuple(dict.fromkeys(
+            language
+            for name in selected if name.startswith("presidio")
+            for language in presidio_languages(name)
+        ))
         missing = [f"--{lang}-model" for lang in required if getattr(args, f"{lang}_model") is None]
         if "gliner" in selected and args.gliner_model is None:
             missing.append("--gliner-model")
@@ -569,9 +588,7 @@ def main() -> int:
                 report["skipped"]["opf"] = "local OPF runtime or checkpoint not configured"
                 continue
             if name.startswith("presidio"):
-                requested = ("en",) if name == "presidio-en" else (
-                    ("en", "de") if name == "presidio-en-de" else PRESIDIO_LANGUAGES
-                )
+                requested = presidio_languages(name)
                 model_paths = {lang: getattr(args, f"{lang}_model") for lang in requested}
                 if any(path is None for path in model_paths.values()):
                     raise ValueError(f"{name} needs model paths for {', '.join(requested)}")
