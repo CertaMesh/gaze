@@ -1314,6 +1314,11 @@ Both options are off by default.
 ### Measured adjacency layer history
 
 The release rows below use generator v4's test partition and the setup policy.
+The older `agentic_layers` aggregates embedded in
+[`release-history.json`](release-history.json) use generator corpus `c751da0b…`
+and are retained as historical data. They do not feed this A/D/R table; its
+measurements come from the [v4 ledger](agentic-adjacency-v4-history.json) on
+corpus `387a35ac…`.
 Record the three past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
 committed ledger. Do not edit the rows by hand.

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "comment": "Release-keyed benchmark history. One entry per released version, appended by scripts/bench/render_benchmark_doc.py --append-history from that release's committed scorecard-vX.Y.Z.json.",
+  "comment": "Release-keyed benchmark history. One entry per released version, appended by scripts/bench/render_benchmark_doc.py --append-history from that release's committed scorecard-vX.Y.Z.json. Embedded agentic_layers aggregates with generator corpus c751da0b are historical and are not the displayed A/D/R release history; use agentic-adjacency-v4-history.json for those current measurements.",
   "shipped_default_arm": "full-stack-kiji-resolve",
   "releases": [
     {
