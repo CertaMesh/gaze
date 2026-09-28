@@ -2,6 +2,8 @@
 
 Same corpus and scorer; tools run with documented configurations. UTF-8 byte counts use the Gaze scorer. For v3, FP is the scorer's false-positive count after its audited gold-gap credit. CPU-host p50/p95 is warm per-document wall-clock inference/clean time on the same machine. Presidio all runs English, German, Dutch, French, and Portuguese spaCy models with the documented German recognizers. Presidio English default is a secondary row. Latency includes processed documents only. Gaze p50 exceeds Presidio all in 12/12 comparable layer-contract rows on this host. This measures detection; competitor restore and manifest behavior is not scored.
 
+Leaked and false-positive byte counts are class-agnostic. A skipped document's scored gold counts in full as leaked. Subtract Skipped gold B from Leaked B to get leakage on processed documents. For example, Presidio English-only v3 A leaks 34,733 B, including 28,151 B of scored gold from 1,320 skipped non-English documents. The reviewed label map affects only v3's repeated-gold credit.
+
 Gaze measured at `b77dce0e42b9be464d369d1984215792d6133d1a` (release `v0.15.1`). Home-normalized setup policy SHA-256: `481f5df7a9b0b562bf2c2db7274cfbf2ea701231c52f1287b27de00554453ff1`. The measured call scopes differ by tool, so latency is descriptive.
 
 Competitor runtimes: Presidio 2.2.364 with spaCy 3.7.5; GLiNER 0.2.29 at model snapshot `1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d`. GLiNER uses model-card labels, library threshold 0.5. OpenAI Privacy Filter (OPF) 0.1.0 at source `f7f00ca7fb869683eb732c010299d901457f19c3`.

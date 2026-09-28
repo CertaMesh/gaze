@@ -25,6 +25,7 @@ def validate_current(report: dict[str, object]) -> None:
     expected = {
         "scorer": (report["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
         "dataset loader": (report["dataset_loader_sha256"], digest_file(BENCH / "dataiku_en_de_gaze_bench.py")),
+        "benchmark runner": (report["runner_sha256"], digest_file(BENCH / "run_no_opf_benchmark.py")),
         "mapping": (report["mapping_sha256"], digest_file(Path(__file__).with_name("label-map.json"))),
         "model pins": (report.get("model_pins_sha256"), digest_file(compare.MODEL_PINS_PATH)),
         "comparison adapter": (report.get("compare_sha256"), digest_file(Path(compare.__file__))),
@@ -117,6 +118,13 @@ def render(report: dict[str, object], source: str) -> str:
         "comparable layer-contract rows on this host. "
         if latency_pairs else "No comparable Gaze and Presidio all latency rows. "
     )
+    skipped_example = tools["presidio-en"]["contracts"]["v3"].get("A")
+    skipped_example_note = (
+        f"For example, Presidio English-only v3 A leaks {skipped_example['leaked_bytes']:,} B, "
+        f"including {skipped_example['skipped_gold_bytes']:,} B of scored gold from "
+        f"{skipped_example['skipped_documents']:,} skipped non-English documents. "
+        if skipped_example and skipped_example["skipped_documents"] else ""
+    )
     lines = [
         "# Competitor comparison",
         "",
@@ -128,6 +136,11 @@ def render(report: dict[str, object], source: str) -> str:
         "with the documented German recognizers. Presidio English default is a secondary row. "
         "Latency includes processed documents only. " + latency_note +
         "This measures detection; competitor restore and manifest behavior is not scored.",
+        "",
+        "Leaked and false-positive byte counts are class-agnostic. A skipped document's "
+        "scored gold counts in full as leaked. Subtract Skipped gold B from Leaked B to "
+        "get leakage on processed documents. " + skipped_example_note +
+        "The reviewed label map affects only v3's repeated-gold credit.",
         "",
         f"Gaze measured at `{gaze['v3']['gaze_revision']}` "
         f"(release `{report['latest_release_at_measurement']['version']}`). "
