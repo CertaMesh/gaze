@@ -16,10 +16,10 @@
   },
   "rows": {
     "file": "docs/reference/benchmarks/leak-ledger/ledger-74701b227385.jsonl.gz",
-    "sha256": "00a319386294c11a6f0df8c6ec5af6ec4a19a801664f734dd740f69fbbeb4c42"
+    "sha256": "4a3163a72470db3a9185d5c40361e222c37f00661cc494ddc69d7e56bcf3ac77"
   },
   "attested": {
-    "probe_binary_sha256": "693a84d6d71f969d1356de3eb1609a1dd2ea41eefbfdd075b2e5a085a4672d51",
+    "probe_binary_sha256": "efe88943dc343ba5c2c6b3eeebabe03400e733db01c42090ae67be32d77299f0",
     "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
     "documents_trace_checked": 6160,
     "note": "The probe binary is the bench producer with the candidate-pool dump; every document's final trace equalled the record's."

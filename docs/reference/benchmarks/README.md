@@ -637,13 +637,15 @@ agentic layers A, D and R, and gives it one root cause:
 | a no candidate | no recognizer produced anything overlapping the span; the closest one within 16 bytes is noted |
 | b vetoed | a validator vetoed an overlapping candidate, a candidate was dropped before resolution (locale claim), or only a recognizer outside the locale chain matched |
 | c lost in resolution | an overlapping candidate lost to another winner; the winner's class and the audit tier are noted |
-| d partial span | a token covers part of the value and the rest stays raw |
+| d partial span | a token covers part of the value and the rest stays raw; the sub-kind says whether a candidate that would have covered more lost resolution, was vetoed, won primary resolution but left the trace, or never existed |
 | e repeat not swept | the same value is protected elsewhere in the document but not here |
 | f junk-shaped gold | no candidate, and the gold looks like junk (an identifier label with no digit or at most four alphanumerics); it stays in the target until an audited contract change |
 | g other | a primary-resolution winner covers the span but the final trace does not |
 
-The first matching cause wins, in the order d, b (validator), c, b (dropped
-or locale-gated), e, f, a; g is the remainder.
+The first matching cause wins, in the order d, b (validator), g, c, b (dropped
+before resolution), b (locale-gated), e, f, a. One ordered table in the script
+drives the classification, the row schema that `check` enforces, and the table
+below.
 
 [`scripts/bench/leak_ledger.py`](../../../scripts/bench/leak_ledger.py)
 `probe` joins a clean-tree runner record with the candidate pool that the
@@ -655,7 +657,10 @@ rule IDs) under [`leak-ledger/`](leak-ledger/), indexed by
 binary: it re-derives the leaked spans and their bytes from the record,
 requires the rows to match them exactly, and requires every label's total to
 equal the scorecard's `per_label_recall` leaked bytes under every
-scored-label contract and the agentic layer contract.
+scored-label contract and the agentic layer contract. Every row must carry
+exactly its cause's detail fields, so relabelling a cause without its evidence
+fails `check` for every label, including the credential labels that only
+contract v1 scores; those are rendered in their own table below.
 
 <!-- BEGIN GENERATED: leak-ledger -->
 
@@ -699,6 +704,21 @@ Agentic layers by cause (bytes, agentic layer contract):
 | A | 1,608 | 4,053 | · | 77 | · | · | · | 5,738 |
 | D | · | · | · | · | · | · | · | 0 |
 | R | 228 | · | · | · | 6 | · | · | 234 |
+
+Partial spans (d) by what a fuller candidate met (bytes):
+
+| Layer | lost_resolution | vetoed | resolved_not_emitted | no_full_candidate | Total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| C | · | 21 | · | 707 | 728 |
+| A | · | 48 | · | 29 | 77 |
+| R | · | · | · | · | 0 |
+
+Layer C labels outside contract v3 (scored by v1 only):
+
+| Label | a | b | c | d | e | f | g | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| PASSWORD | 1,990 | · | · | 24 | · | · | · | 2,014 |
+| SECURITYTOKEN | 4,106 | · | · | 70 | · | · | · | 4,176 |
 
 Top 10 layer C clusters (label, cause, mechanism):
 
