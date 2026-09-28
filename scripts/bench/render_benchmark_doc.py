@@ -32,6 +32,8 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from layer_display import layer_display_name
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCH_DIR = REPO_ROOT / "docs" / "reference" / "benchmarks"
 DEFAULT_DOC = BENCH_DIR / "README.md"
@@ -1628,7 +1630,7 @@ def _readme_contract_chart(
         bars.extend(readme_comparison_bars(history, comparison, version))
     caption = (
         f"The comparison bars use the same {comparison['corpus']['layers']['C']['documents']:,} "
-        "layer C documents and scorer. "
+        f"documents from {layer_display_name('C')} and the same scorer. "
         "The Gaze main bar is the run measured with the competitors. "
         "Competitor bars use the declared configurations in "
         "[`chart-configs.json`](scripts/bench/compare/chart-configs.json), "

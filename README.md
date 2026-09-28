@@ -29,7 +29,7 @@ The [v0.15.1 release benchmark](docs/reference/benchmarks/README.md#current-rele
 
 <!-- BEGIN GENERATED: readme-chart -->
 
-Leaked PII bytes per setup, scored labels v3, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 layer C documents and scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
+Leaked PII bytes per setup, scored labels v3, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 documents from Kiji EN/DE holdout and A4 negatives and the same scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
 
 ```mermaid
 %%{init: {'xyChart': {'width': 1200, 'height': 500}}}%%
@@ -40,7 +40,7 @@ xychart-beta horizontal
     bar [13319, 22144, 23428, 90253, 9256, 25314, 103617, 29142, 84397, 20152, 24080]
 ```
 
-Leaked PII bytes per setup, scored labels v2, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 layer C documents and scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
+Leaked PII bytes per setup, scored labels v2, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 documents from Kiji EN/DE holdout and A4 negatives and the same scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
 
 ```mermaid
 %%{init: {'xyChart': {'width': 1200, 'height': 500}}}%%
@@ -51,7 +51,7 @@ xychart-beta horizontal
     bar [13319, 22144, 23428, 90253, 9256, 25314, 103617, 29142, 84397, 20152, 24080]
 ```
 
-Leaked PII bytes per setup, scored labels v1, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes. The comparison bars use the same 2,910 layer C documents and scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
+Leaked PII bytes per setup, scored labels v1, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes. The comparison bars use the same 2,910 documents from Kiji EN/DE holdout and A4 negatives and the same scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
 
 ```mermaid
 %%{init: {'xyChart': {'width': 1200, 'height': 500}}}%%

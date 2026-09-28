@@ -13,6 +13,8 @@ import pytest
 
 import compare
 import render
+import layer_display
+from layer_display import layer_display_name
 
 
 def test_native_character_offsets_become_utf8_bytes() -> None:
@@ -82,8 +84,53 @@ def test_loss_enumerator_includes_mutated_heldout_cell() -> None:
     report["tools"]["opf"]["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"] = copy.deepcopy(gaze)
     report["tools"]["opf"]["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"]["leaked_bytes"] -= 1
     page = render.render(report, "comparison.json")
-    assert (f"v3 C common_intersection test opf: Leaked B "
+    assert (f"v3 {layer_display_name('C')} common_intersection test opf: Leaked B "
             f"{gaze['leaked_bytes'] - 1:,} vs {gaze['leaked_bytes']:,}") in page
+
+
+def test_corpus_display_names_drive_both_public_renderers(monkeypatch: pytest.MonkeyPatch) -> None:
+    from render_benchmark_doc import render_readme_chart
+
+    assert set(layer_display.LAYER_DISPLAY_NAMES) == {"C", "A", "D", "R"}
+    report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
+    history = json.loads((compare.REPO / "docs/reference/benchmarks/release-history.json").read_text())
+    current_page = render.render(report, "comparison.json")
+    current_chart = render_readme_chart(history, report)
+    assert layer_display_name("C") in current_page
+    assert layer_display_name("C") in current_chart
+    monkeypatch.setitem(layer_display.LAYER_DISPLAY_NAMES, "C", "Mutated corpus name")
+    assert "Mutated corpus name" in render.render(report, "comparison.json")
+    assert "Mutated corpus name" in render_readme_chart(history, report)
+    assert current_page != render.render(report, "comparison.json")
+    assert current_chart != render_readme_chart(history, report)
+
+
+def test_local_prediction_replay_matches_live_metrics_without_text(tmp_path: Path) -> None:
+    document = compare.score.Document(
+        "synthetic-1", "alice@example.invalid", "en", "", "synthetic",
+        (compare.score.Span(0, 21, "EMAIL"),),
+    )
+    layers = {"C": [document]}
+    mapping = {"EMAIL": ("EMAIL",)}
+    predictions = [compare.score.Span(0, 21, "EMAIL")]
+    live = compare.measure("synthetic-tool", lambda _document: predictions, layers, mapping,
+                           common_labels=frozenset({"EMAIL"}), predictions_dir=tmp_path)
+    saved = compare.prediction_path(tmp_path, "C", "synthetic-tool")
+    row = json.loads(saved.read_text())
+    assert row == {"uid": "synthetic-1", "spans": [{"start": 0, "end": 21, "label": "EMAIL"}]}
+    replay = compare.rescore_predictions("synthetic-tool", layers, mapping,
+                                         frozenset({"EMAIL"}), tmp_path)
+    for version in compare.CONTRACTS:
+        current = live["contracts"][version]["C"]
+        restored = replay["contracts"][version]["C"]
+        assert current["metrics"] == restored["metrics"]
+        for field in ("leaked_bytes", "false_positive_bytes", "gold_gap_protected_bytes",
+                      "false_positive_bytes_after_gold_gap", "documents", "processed_documents"):
+            assert current[field] == restored[field]
+    saved.write_text(json.dumps({**row, "text": document.text}) + "\n")
+    with pytest.raises(ValueError, match="shape mismatch"):
+        compare.rescore_predictions("synthetic-tool", layers, mapping,
+                                    frozenset({"EMAIL"}), tmp_path)
 
 
 def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
@@ -115,7 +162,7 @@ def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
         "skipped": {"opf": "synthetic test"},
     }
     page = render.render(report, "comparison.json")
-    assert "| v3 | A | gaze | 1 | 2 | 1 | 0 | 0 | 3.0 | 4.0 |" in page
+    assert f"| v3 | {layer_display_name('A')} | gaze | 1 | 2 | 1 | 0 | 0 | 3.0 | 4.0 |" in page
     assert "Gaze p50 exceeds Presidio all in 0/3" in page
     faster_presidio = copy.deepcopy(report)
     for version in ("v1", "v2", "v3"):

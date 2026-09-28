@@ -2,8 +2,10 @@
 
 `compare.py` loads canonical C/A/D/R documents and scores every row through
 `gaze_bench_score.MetricAccumulator` and `comparison_metrics.ComparisonMetrics`.
-Only aggregate JSON is published. Raw text, detections, and per-document output
-stay in memory. Product coverage scores unsupported gold as leaked. Common
+Only aggregate JSON is published. Raw text stays in memory.
+`GAZE_COMPARE_PREDICTIONS_DIR` stores native spans and labels, without document
+text, outside the repository for exact offline `--rescore-predictions` runs.
+Product coverage scores unsupported gold as leaked. Common
 intersection scores only canonical labels claimed by every configuration; the
 intersection and each native-to-canonical mapping are in the report. The full
 product score has the existing v1/v2/v3 byte semantics, including v3 gold-gap
@@ -88,7 +90,8 @@ GAZE_COMPARE_FR_MODEL, GAZE_COMPARE_PT_MODEL, GAZE_COMPARE_GLINER_MODEL,
 GAZE_COMPARE_GLINER_TOKENIZER, GAZE_COMPARE_TRANSFORMER_MODEL,
 GAZE_COMPARE_BINARY, GAZE_COMPARE_MODEL_DIR, GAZE_COMPARE_POLICY,
 GAZE_COMPARE_POLICY_RULES, GAZE_COMPARE_POLICY_RULES_NER,
-GAZE_COMPARE_OPF_PYTHON, GAZE_COMPARE_OPF_CHECKPOINT, GAZE_COMPARE_OUTPUT
+GAZE_COMPARE_OPF_PYTHON, GAZE_COMPARE_OPF_CHECKPOINT, GAZE_COMPARE_OUTPUT,
+GAZE_COMPARE_PREDICTIONS_DIR (absolute path outside this repository)
 ```
 
 Then run `scripts/bench/compare/run-full.sh` on a quiet CPU host. It runs each
@@ -101,6 +104,11 @@ count and load1 before/after. A sample above one core marks that configuration
 contended. The public page withholds p50/p95 and timing comparisons; a separate
 quiet-machine timing run can use the sampler to publish speed claims.
 `--dry-run` checks arguments without loading data.
+To re-derive metrics after a scorer-only fix, run `compare.py --dataset
+target/bench-data/dataiku-en-de/test.parquet --output
+target/bench-data/compare-3909/comparison.json --rescore-predictions
+/absolute/local/predictions`. Replay verifies document order and every byte
+aggregate before replacing typed metrics; it never calls a model.
 Copy the report to `docs/reference/benchmarks/comparison.json`, render
 `competitors.md`, and run `render.py --check`. The renderer verifies input
 hashes, model pins, tool roster, and document counts. The report records split

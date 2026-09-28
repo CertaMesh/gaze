@@ -544,11 +544,78 @@ def common_claimed_labels(mappings: dict[str, dict[str, tuple[str, ...]]]) -> fr
     return frozenset.intersection(*(frozenset(labels) for labels in capabilities))
 
 
+def prediction_path(root: Path, layer: str, name: str) -> Path:
+    return root / layer / "pred" / f"{name}.jsonl"
+
+
+def write_prediction_row(sink: object, document: score.Document,
+                         predictions: Sequence[score.Span]) -> None:
+    row = {"uid": document.uid,
+           "spans": [{"start": span.start, "end": span.end, "label": span.label}
+                     for span in predictions]}
+    sink.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+class PredictionSink:
+    def __init__(self, root: Path | None, layer: str, name: str) -> None:
+        self.path = prediction_path(root, layer, name) if root is not None else None
+        self.sink = None
+        if self.path is not None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.sink = self.path.with_suffix(".jsonl.partial").open("w", encoding="utf-8")
+
+    def add(self, document: score.Document, predictions: Sequence[score.Span]) -> None:
+        if self.sink is not None:
+            write_prediction_row(self.sink, document, predictions)
+
+    def finish(self) -> None:
+        if self.sink is not None:
+            self.sink.close()
+            self.path.with_suffix(".jsonl.partial").replace(self.path)
+
+
+def load_prediction_rows(path: Path, documents: Sequence[score.Document]) -> dict[str, list[score.Span]]:
+    rows = path.read_text(encoding="utf-8").splitlines()
+    if len(rows) != len(documents):
+        raise ValueError(f"prediction count mismatch: {path}: {len(rows)} != {len(documents)}")
+    result = {}
+    for index, (raw, document) in enumerate(zip(rows, documents, strict=True), 1):
+        row = json.loads(raw)
+        if set(row) != {"uid", "spans"} or row["uid"] != document.uid:
+            raise ValueError(f"prediction order or shape mismatch: {path}:{index}")
+        if not isinstance(row["spans"], list):
+            raise ValueError(f"invalid prediction spans: {path}:{index}")
+        spans = []
+        for item in row["spans"]:
+            if not isinstance(item, dict) or set(item) != {"start", "end", "label"} or not isinstance(item["label"], str):
+                raise ValueError(f"invalid prediction span: {path}:{index}")
+            if type(item["start"]) is not int or type(item["end"]) is not int:
+                raise ValueError(f"invalid prediction offsets: {path}:{index}")
+            if not 0 <= item["start"] < item["end"] <= len(document.text.encode("utf-8")):
+                raise ValueError(f"prediction outside document: {path}:{index}")
+            spans.append(score.Span(item["start"], item["end"], item["label"]))
+        result[document.uid] = spans
+    return result
+
+
+def rescore_predictions(
+    name: str, layers: dict[str, list[score.Document]], mapping: dict[str, tuple[str, ...]],
+    common_labels: frozenset[str], root: Path,
+    supported_languages: Sequence[str] | None = None,
+) -> dict[str, object]:
+    stored = {}
+    for layer, documents in layers.items():
+        stored.update(load_prediction_rows(prediction_path(root, layer, name), documents))
+    return measure(name, lambda document: stored[document.uid], layers, mapping,
+                   supported_languages, common_labels)
+
+
 def measure(
     name: str, predictor: Callable[[score.Document], list[score.Span]],
     layers: dict[str, list[score.Document]], mapping: dict[str, tuple[str, ...]],
     supported_languages: Sequence[str] | None = None,
     common_labels: frozenset[str] | None = None,
+    predictions_dir: Path | None = None,
 ) -> dict[str, object]:
     if common_labels is None:
         common_labels = frozenset(label for labels in mapping.values() for label in labels)
@@ -561,6 +628,7 @@ def measure(
     for version in contracts:
         output["contracts"][version] = {}
     for layer, documents in layers.items():
+        prediction_sink = PredictionSink(predictions_dir, layer, name)
         timers = []
         skipped_gold_bytes = {key: 0 for key in contracts}
         skipped_documents = 0
@@ -591,6 +659,7 @@ def measure(
                     ) from error
                 timers.append((time.perf_counter() - start) * 1000)
             validate_labels(predictions, mapping)
+            prediction_sink.add(document, predictions)
             if name == "opf":
                 predictions = [dataclasses.replace(s, label="custom:secret") if s.label == "secret" else s for s in predictions]
             for version, contract in contracts.items():
@@ -609,6 +678,7 @@ def measure(
                     view[split_for_id(document.uid)].add(applied, predictions)
             if index % 500 == 0:
                 print(f"{name}: scored {index}/{len(documents)} in layer {layer}", file=sys.stderr, flush=True)
+        prediction_sink.finish()
         latency = {"p50_ms": round(score.percentile(timers, 0.5), 3) if timers else None,
                    "p95_ms": round(score.percentile(timers, 0.95), 3) if timers else None,
                    "samples": len(timers)}
@@ -635,11 +705,13 @@ def measure_gaze(
     name: str, binary: Path, policy: Path, model_dir: Path,
     layers: dict[str, list[score.Document]], mapping: dict[str, tuple[str, ...]],
     common_labels: frozenset[str], diagnostics: Path,
+    predictions_dir: Path | None = None,
 ) -> dict[str, object]:
     contracts = {key: runner.load_scored_label_contract(REPO, path) for key, path in CONTRACTS.items()}
     agentic_contract = agentic.load_contract(REPO)
     output: dict[str, object] = {version: {} for version in contracts}
     for layer, documents in layers.items():
+        prediction_sink = PredictionSink(predictions_dir, layer, f"gaze-{name}")
         byte = {version: score.MetricAccumulator() for version in contracts}
         detailed = {
             version: {
@@ -655,6 +727,7 @@ def measure_gaze(
                 raise RuntimeError(f"{name} refused {document.uid}; compare refusal handling before publishing")
             predictions = score.final_trace_predictions(document, response)
             validate_labels(predictions, mapping)
+            prediction_sink.add(document, predictions)
             for version, contract in contracts.items():
                 applied = score.apply_scored_label_contract(
                     [document], agentic_contract if layer in {"A", "D", "R"} else contract,
@@ -668,6 +741,7 @@ def measure_gaze(
             None, None, None, 0.5, diagnostics / name / layer,
             policy_path=policy, record_document=record,
         )
+        prediction_sink.finish()
         latency = run["latency_ms"]["clean_ms"]
         for version, accumulator in byte.items():
             result = accumulator.result()
@@ -691,6 +765,64 @@ def write_report(path: Path, report: dict[str, object]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def mapping_for_tool(name: str, mappings: dict[str, dict[str, tuple[str, ...]]]) -> dict[str, tuple[str, ...]]:
+    if name.startswith("presidio"):
+        return mappings["presidio"]
+    if name.startswith("gliner"):
+        return mappings["gliner"]
+    if name == "opf":
+        return mappings["opf"]
+    if name == "datafog-core":
+        return mappings["datafog-core"]
+    if name.startswith("datafog-"):
+        return mappings["datafog-python"]
+    if name.startswith("scrubadub-"):
+        return mappings["scrubadub"]
+    raise ValueError(f"unknown comparison tool: {name}")
+
+
+def rescore_report(report: dict[str, object], layers: dict[str, list[score.Document]],
+                   mappings: dict[str, dict[str, tuple[str, ...]]], root: Path) -> None:
+    common_labels = common_claimed_labels(mappings)
+    byte_fields = ("leaked_bytes", "false_positive_bytes", "gold_gap_protected_bytes",
+                   "false_positive_bytes_after_gold_gap", "documents", "processed_documents",
+                   "skipped_documents", "skipped_gold_bytes")
+
+    def replace_metrics(old: dict[str, object], new: dict[str, object], row: str) -> None:
+        for field in byte_fields:
+            if old[field] != new[field]:
+                raise ValueError(f"rescore changed {row}/{field}: {old[field]} != {new[field]}")
+        old["metrics"] = new["metrics"]
+
+    for name, tool in report["tools"].items():
+        languages = tool["provenance"].get("supported_languages") if name.startswith("presidio") else None
+        rescored = rescore_predictions(name, layers, mapping_for_tool(name, mappings),
+                                       common_labels, root, languages)
+        for version in CONTRACTS:
+            for layer in layers:
+                replace_metrics(tool["contracts"][version][layer],
+                                rescored["contracts"][version][layer], f"{name}/{version}/{layer}")
+    for config in ("rules-only", "rules-ner", "full"):
+        name = f"gaze-{config}"
+        rescored = rescore_predictions(name, layers, mappings["gaze"], common_labels, root)
+        rows = report["gaze"] if config == "full" else report["gaze_ablations"][config]
+        for version in CONTRACTS:
+            for layer in layers:
+                old = rows[version]["layers"][layer] if config == "full" else rows[version][layer]
+                replace_metrics(old, rescored["contracts"][version][layer],
+                                f"{name}/{version}/{layer}")
+    report["rescore_source_revision"] = report["harness_revision"]
+    report["harness_revision"] = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
+    ).strip()
+    report["harness_dirty"] = bool(subprocess.check_output(
+        ["git", "status", "--porcelain"], cwd=REPO, text=True
+    ).strip())
+    report["compare_sha256"] = digest_file(Path(__file__))
+    report["comparison_metrics_sha256"] = digest_file(Path(__file__).with_name("comparison_metrics.py"))
+    report["generated_at"] = datetime.now(timezone.utc).isoformat()
 
 
 def select_thresholds(report: dict[str, object]) -> None:
@@ -731,6 +863,8 @@ def main() -> int:
     parser.add_argument("--gaze-policy-rules", type=Path)
     parser.add_argument("--gaze-policy-rules-ner", type=Path)
     parser.add_argument("--measure-gaze", action="store_true")
+    parser.add_argument("--predictions-dir", type=Path)
+    parser.add_argument("--rescore-predictions", type=Path)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--opf-python", type=Path)
     parser.add_argument("--opf-checkpoint", type=Path)
@@ -743,6 +877,9 @@ def main() -> int:
     for version in CONTRACTS:
         parser.add_argument(f"--gaze-scorecard-{version}", type=Path)
     args = parser.parse_args()
+    for path in (args.predictions_dir, args.rescore_predictions):
+        if path is not None and path.resolve().is_relative_to(REPO):
+            raise ValueError("per-document predictions must stay outside the repository")
     selected = TOOLS if args.tool == "all" else (args.tool,)
     if args.validate_args_only:
         required = tuple(dict.fromkeys(
@@ -768,6 +905,23 @@ def main() -> int:
     layers, corpus = load_corpus(args.dataset, args.pack_dir)
     preflight_contracts(layers)
     mappings = load_mapping()
+    if args.rescore_predictions is not None:
+        if args.tool != "all" or args.resume or args.measure_gaze:
+            raise ValueError("prediction replay re-scores the complete report only")
+        existing = json.loads(args.output.read_text(encoding="utf-8"))
+        if existing["corpus"] != corpus:
+            raise ValueError("rescore corpus differs from measured report")
+        expected_contracts = {
+            **{version: runner.load_scored_label_contract(REPO, path).sha256
+               for version, path in CONTRACTS.items()},
+            "agentic": agentic.load_contract(REPO).sha256,
+        }
+        if existing["contracts"] != expected_contracts or existing["mapping_sha256"] != digest_file(MAP_PATH):
+            raise ValueError("rescore contracts or native mapping differ from measured report")
+        rescore_report(existing, layers, mappings, args.rescore_predictions)
+        write_report(args.output, existing)
+        print("COMPARISON_RESCORED", file=sys.stderr, flush=True)
+        return 0
     latest_release = json.loads(
         (REPO / "docs/reference/benchmarks/release-history.json").read_text(encoding="utf-8")
     )["releases"][-1]
@@ -861,7 +1015,7 @@ def main() -> int:
             with ForeignCpuSampler() as sampler:
                 measured = measure_gaze(name, args.gaze_binary, policy, args.gaze_model_dir,
                                         layers, mappings["gaze"], common_labels,
-                                        args.output.parent / "diagnostics")
+                                        args.output.parent / "diagnostics", args.predictions_dir)
             report.setdefault("contention_samples", {})[f"gaze-{name}"] = sampler.result()
             if name == "full":
                 for version in CONTRACTS:
@@ -976,7 +1130,7 @@ def main() -> int:
                     measured = measure(
                         name, backend.predict, layers, mapping,
                         backend.languages if isinstance(backend, Presidio) else None,
-                        common_labels,
+                        common_labels, args.predictions_dir,
                     )
                 report.setdefault("contention_samples", {})[name] = sampler.result()
                 measured["host_load_1m_before_after"] = sampler.result()["load1_before_after"]

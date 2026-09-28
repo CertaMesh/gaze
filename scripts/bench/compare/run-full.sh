@@ -33,6 +33,10 @@ args=(
     --gaze-policy "${GAZE_COMPARE_POLICY:-target/bench-data/compare-3909/policy.toml}"
     --output "$output"
 )
+if [[ ${1:-} != --dry-run ]]; then
+    : "${GAZE_COMPARE_PREDICTIONS_DIR:?set GAZE_COMPARE_PREDICTIONS_DIR outside the repository}"
+    args+=(--predictions-dir "$GAZE_COMPARE_PREDICTIONS_DIR")
+fi
 if [[ -n "${GAZE_COMPARE_OPF_PYTHON:-}" || -n "${GAZE_COMPARE_OPF_CHECKPOINT:-}" ]]; then
     : "${GAZE_COMPARE_OPF_PYTHON:?set GAZE_COMPARE_OPF_PYTHON}"
     : "${GAZE_COMPARE_OPF_CHECKPOINT:?set GAZE_COMPARE_OPF_CHECKPOINT}"

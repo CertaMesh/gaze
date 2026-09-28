@@ -11,6 +11,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
 import compare  # noqa: E402
+from layer_display import layer_display_name  # noqa: E402
 
 ORDER = ("gaze", *compare.TOOLS)
 
@@ -74,7 +75,8 @@ def enumerate_gaze_losses(report: dict[str, object], versions: tuple[str, ...],
                         counts[f"full aggregate {metric}"] = counts.get(f"full aggregate {metric}", 0) + 1
                         differences.append(f"{metric} {_display_metric(left, metric)} vs {_display_metric(right, metric)}")
                 if differences:
-                    entries.append(f"{version} {layer} full aggregate {name}: " + "; ".join(differences))
+                    entries.append(f"{version} {layer_display_name(layer)} full aggregate {name}: "
+                                   + "; ".join(differences))
                 for view in ("product_coverage", "common_intersection"):
                     for split in ("full", "validation", "test"):
                         a = tool["metrics"][view][split]
@@ -89,7 +91,8 @@ def enumerate_gaze_losses(report: dict[str, object], versions: tuple[str, ...],
                                 )
                         if differences:
                             entries.append(
-                                f"{version} {layer} {view} {split} {name}: " + "; ".join(differences)
+                                f"{version} {layer_display_name(layer)} {view} {split} {name}: "
+                                + "; ".join(differences)
                             )
     return counts, entries
 
@@ -238,7 +241,8 @@ def render(report: dict[str, object], source: str) -> str:
     ) if latency_publishable else "Latency was not measured under a quiet machine; timing comparisons are withheld. "
     skipped_example = tools["presidio-en"]["contracts"]["v3"].get("A")
     skipped_example_note = (
-        f"For example, Presidio English-only v3 A leaks {skipped_example['leaked_bytes']:,} B, "
+        f"For example, Presidio English-only v3 {layer_display_name('A')} leaks "
+        f"{skipped_example['leaked_bytes']:,} B, "
         f"including {skipped_example['skipped_gold_bytes']:,} B of scored gold from "
         f"{skipped_example['skipped_documents']:,} skipped non-English documents. "
         if skipped_example and skipped_example["skipped_documents"] else ""
@@ -305,7 +309,7 @@ def render(report: dict[str, object], source: str) -> str:
                 else:
                     timing = "not measured under a quiet machine |"
                 lines.append(
-                    f"| {version} | {layer} | {name} | {row['leaked_bytes']:,} | {fp:,} | "
+                    f"| {version} | {layer_display_name(layer)} | {name} | {row['leaked_bytes']:,} | {fp:,} | "
                     f"{row.get('processed_documents', row['documents']):,} | "
                     f"{row.get('skipped_documents', 0):,} | {row.get('skipped_gold_bytes', 0):,} | "
                     + timing
@@ -316,12 +320,12 @@ def render(report: dict[str, object], source: str) -> str:
                         gaze_fp = gaze_row["false_positive_bytes"]
                     if row["leaked_bytes"] < gaze_row["leaked_bytes"]:
                         lower_leak.append(
-                            f"{layer}: {name} leaks {row['leaked_bytes']:,} B versus Gaze "
+                            f"{layer_display_name(layer)}: {name} leaks {row['leaked_bytes']:,} B versus Gaze "
                             f"{gaze_row['leaked_bytes']:,} B"
                         )
                     elif row["leaked_bytes"] == gaze_row["leaked_bytes"] and fp < gaze_fp:
                         lower_fp_at_equal_leak.append(
-                            f"{layer}: {name} has {fp:,} FP B versus Gaze {gaze_fp:,} FP B"
+                            f"{layer_display_name(layer)}: {name} has {fp:,} FP B versus Gaze {gaze_fp:,} FP B"
                         )
     if report.get("schema_version", 1) < 2:
         lines.extend([
@@ -354,7 +358,8 @@ def render(report: dict[str, object], source: str) -> str:
                         metric = row["metrics"][view]["test"]
                         entity = metric["typed_entities"]
                         lines.append(
-                            f"| {version} | {layer} | {view} | {name} | {metric['pii_documents']:,} | "
+                            f"| {version} | {layer_display_name(layer)} | {view} | {name} | "
+                            f"{metric['pii_documents']:,} | "
                             f"{metric['leaked_bytes']:,} | {metric['false_positive_bytes']:,} | "
                             f"{metric['leaking_documents']:,} | {100 * metric['document_leak_rate']:.1f} | "
                             f"{metric['leaking_entities']:,} | {100 * metric['leaked_entity_rate']:.1f} | "
@@ -372,7 +377,8 @@ def render(report: dict[str, object], source: str) -> str:
         best_c_name, best_c = min(c_candidates, key=lambda pair: pair[1]["leaked_bytes"])
         lines.extend([
             "", "## Where Gaze trails", "",
-            f"On the v3 layer C common-intersection test half, Gaze leaks {gaze_c['leaked_bytes']:,} B "
+            f"On the v3 {layer_display_name('C')} common-intersection test half, "
+            f"Gaze leaks {gaze_c['leaked_bytes']:,} B "
             f"across {gaze_c['leaking_documents']:,}/{gaze_c['pii_documents']:,} PII documents; "
             f"{best_c_name} leaks {best_c['leaked_bytes']:,} B across "
             f"{best_c['leaking_documents']:,}/{best_c['pii_documents']:,}. This is a measured Gaze loss.",
@@ -398,7 +404,8 @@ def render(report: dict[str, object], source: str) -> str:
                            else report["gaze_ablations"][name][version][layer])
                     metric = row["metrics"]["product_coverage"]["test"]
                     typed = metric["typed_entities"]
-                    lines.append(f"| {version} | {layer} | {name} | {metric['leaked_bytes']:,} | "
+                    lines.append(f"| {version} | {layer_display_name(layer)} | {name} | "
+                                 f"{metric['leaked_bytes']:,} | "
                                  f"{metric['false_positive_bytes']:,} | {metric['pii_documents']:,} | "
                                  f"{metric['leaking_documents']:,} | {typed['f1']:.3f} | {typed['f2']:.3f} |")
         lines.extend(["", "Threshold choice uses validation only: " + "; ".join(
