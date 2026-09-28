@@ -26,6 +26,12 @@ TITLES = {
 OWN_METRIC = {"presidio-research": ("f2", "F2, binary PII vs O, presidio-evaluator"),
               "piibench-commercial": ("f1", "span F1, exact span + type, PIIBench seqeval")}
 GAZE_ROWS = ("gaze-full", "gaze-rules-ner", "gaze-rules-only")
+# STEER 2: chart bars are configurations declared before measuring, never
+# the lowest-leak row. Replaced by the comparison's declared chart list once
+# Track B publishes it; copied into the JSON at assemble time.
+DECLARED_CHART_ROWS = ("gaze-full", "presidio-strong", "gliner", "opf", "datafog-core",
+                       "datafog-gliner", "scrubadub-spacy")
+QUIET = "not measured under a quiet machine"
 NOT_RUN = {
     "PIIBench full ten-source mix": "five sources carry non-commercial or custom-academic licences and "
                                     "WikiANN's licence is unknown; not downloaded or run",
@@ -87,6 +93,8 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str]) -> d
             raise ValueError(f"{name}: no own-scorer result for {missing}")
         if not entry["reproduction"]:
             raise ValueError(f"{name}: the vendor number must be reproduced before anything is published")
+    for entry in benchmarks.values():
+        entry["chart_rows"] = [tool for tool in DECLARED_CHART_ROWS if tool in entry["rows"]]
     return {"schema_version": 1, "report_only": "never used to design or tune Gaze rules",
             "not_run": NOT_RUN, "benchmarks": benchmarks}
 
@@ -99,17 +107,20 @@ def gold_bytes(cell: Mapping[str, Any]) -> int:
     return cell["true_positive_bytes"] + cell["leaked_bytes"]
 
 
-def best_rows(rows: Mapping[str, Any]) -> list[str]:
-    """Gaze's shipped setup plus the lowest-leak row of every other tool family."""
-    chosen = {"gaze": "gaze-full"}
-    for tool, result in rows.items():
-        key = family(tool)
-        if key == "gaze":
-            continue
-        leaked = result["product_coverage"]["leaked_bytes"]
-        if key not in chosen or leaked < rows[chosen[key]]["product_coverage"]["leaked_bytes"]:
-            chosen[key] = tool
-    return sorted(chosen.values(), key=lambda tool: rows[tool]["product_coverage"]["leaked_bytes"])
+def chart_rows(entry: Mapping[str, Any]) -> list[str]:
+    """The declared rows, in declared order; measured leak never chooses."""
+    missing = sorted(set(entry["chart_rows"]) - set(entry["rows"]))
+    if missing:
+        raise ValueError(f"declared chart rows were not measured: {missing}")
+    return list(entry["chart_rows"])
+
+
+def latency_cell(entry: Mapping[str, Any], tool: str) -> str:
+    load = entry["provenance"].get(tool, {}).get("load")
+    if load is None or load["contended"]:
+        return QUIET
+    p50 = entry["rows"][tool]["latency"]["p50_ms"]
+    return "n/a" if p50 is None else f"{p50:.1f}"
 
 
 def render(data: Mapping[str, Any]) -> str:
@@ -117,7 +128,9 @@ def render(data: Mapping[str, Any]) -> str:
         "Report-only: these sets are never used to design or tune Gaze rules. Every gold "
         "label counts (no scored-label contract). Leaked and false-positive bytes use the "
         "same scorer code as the main comparison; each benchmark's own metric comes from "
-        "its own evaluator, fed the same spans. Lower leaked bytes is better.",
+        "its own evaluator, fed the same spans. Lower leaked bytes is better. Chart bars are "
+        "configurations declared before measuring; the table lists every measured row. "
+        f"Latency reads \"{QUIET}\" when load1 exceeded 2.0 during that row's run.",
         "",
     ]
     for name, entry in data["benchmarks"].items():
@@ -137,7 +150,7 @@ def render(data: Mapping[str, Any]) -> str:
                          f"harness gives Presidio {repro['reproduced_commercial']['f1']} on this commercial subset.")
         lines += ["", "```mermaid", "xychart-beta horizontal",
                   f'    title "Leaked PII bytes, {name} - lower is better"']
-        chart = best_rows(rows)
+        chart = chart_rows(entry)
         labels = ", ".join(f'"{tool} ({pct(rows[tool]["product_coverage"]["leaked_bytes"] / gold)})"' for tool in chart)
         top = max(rows[tool]["product_coverage"]["leaked_bytes"] for tool in chart)
         lines += [f"    x-axis [{labels}]", f'    y-axis "Leaked PII bytes" 0 --> {top + max(1, top // 10)}',
@@ -154,12 +167,11 @@ def render(data: Mapping[str, Any]) -> str:
                 continue
             product, common = rows[tool]["product_coverage"], rows[tool]["common_intersection"]
             typed = product["typed_entities"]
-            p50 = rows[tool]["latency"]["p50_ms"]
             lines.append(
                 f"| {tool} | {product['leaked_bytes']:,} | {product['false_positive_bytes']:,} | "
                 f"{pct(product['document_leak_rate'])} | {typed['f1']:.3f} | {typed['f2']:.3f} | "
                 f"{common['leaked_bytes']:,} | {entry['own_metric'][tool][metric]:.3f} | "
-                f"{'n/a' if p50 is None else f'{p50:.1f}'} |")
+                f"{latency_cell(entry, tool)} |")
         lines += ["", f"Hardware: {entry['hardware']}. Harness `{entry['harness_revision'][:8]}`.", ""]
     lines += ["Not run:", ""] + [f"- {name}: {reason}." for name, reason in data["not_run"].items()]
     return "\n".join(lines)

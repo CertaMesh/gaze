@@ -107,21 +107,46 @@ def row(leaked: int) -> dict:
 
 
 def synthetic() -> dict:
-    rows = {"gaze-full": row(10), "gaze-rules-only": row(40), "presidio-en": row(50),
+    rows = {"gaze-full": row(10), "gaze-rules-only": row(40), "presidio-en": row(5),
             "presidio-strong": row(30), "opf": row(20)}
+    quiet = {"load": {"contended": False}}
     return {"not_run": {"x": "licence"}, "benchmarks": {"presidio-research": {
-        "rows": rows, "common_intersection_labels": ["EMAIL_ADDRESS"], "hardware": "hw",
+        "rows": rows, "chart_rows": ["gaze-full", "presidio-strong", "opf"],
+        "provenance": {tool: quiet for tool in rows},
+        "common_intersection_labels": ["EMAIL_ADDRESS"], "hardware": "hw",
         "harness_revision": "0123456789", "own_metric": {tool: {"f2": 0.5} for tool in rows},
         "reproduction": {"published": {"vanilla": {"f2": 0.661, "source": "nb4"}},
                          "reproduced": {"vanilla": {"f2": 0.66}}}}}}
 
 
 class RenderTest(unittest.TestCase):
-    def test_chart_shows_gaze_and_best_row_per_family(self) -> None:
+    def test_chart_uses_declared_rows_not_lowest_leak(self) -> None:
         import render_theirbench as render
 
-        rows = synthetic()["benchmarks"]["presidio-research"]["rows"]
-        self.assertEqual(render.best_rows(rows), ["gaze-full", "opf", "presidio-strong"])
+        entry = synthetic()["benchmarks"]["presidio-research"]
+        # presidio-en leaks least but is not declared; it must not be charted.
+        self.assertEqual(render.chart_rows(entry), ["gaze-full", "presidio-strong", "opf"])
+        body = render.render(synthetic())
+        chart = body[body.index("x-axis"):body.index("bar [")]
+        self.assertNotIn("presidio-en", chart)
+
+    def test_declared_row_must_be_measured(self) -> None:
+        import render_theirbench as render
+
+        entry = synthetic()["benchmarks"]["presidio-research"]
+        entry["chart_rows"].append("scrubadub-spacy")
+        with self.assertRaisesRegex(ValueError, "not measured"):
+            render.chart_rows(entry)
+
+    def test_contended_or_unrecorded_latency_is_not_published(self) -> None:
+        import render_theirbench as render
+
+        entry = synthetic()["benchmarks"]["presidio-research"]
+        self.assertEqual(render.latency_cell(entry, "opf"), "1.0")
+        entry["provenance"]["opf"] = {"load": {"contended": True}}
+        self.assertEqual(render.latency_cell(entry, "opf"), render.QUIET)
+        del entry["provenance"]["gaze-full"]
+        self.assertEqual(render.latency_cell(entry, "gaze-full"), render.QUIET)
 
     def test_check_detects_drift(self) -> None:
         import render_theirbench as render
@@ -138,6 +163,7 @@ class RenderTest(unittest.TestCase):
             self.assertIn("presidio-strong", doc.read_text(encoding="utf-8"))
             changed = synthetic()
             changed["benchmarks"]["presidio-research"]["rows"]["opf"] = row(25)
+            self.assertIn("presidio-strong", doc.read_text(encoding="utf-8"))
             data.write_text(json.dumps(changed), encoding="utf-8")
             self.assertEqual(render.main([*args, "--check"]), 1)
 
@@ -155,6 +181,24 @@ class RenderTest(unittest.TestCase):
                               encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "smoke"):
                 render.assemble([report], [f"presidio-research={smoke}"], [])
+
+
+class LoadWatchTest(unittest.TestCase):
+    def test_any_sample_above_two_marks_contended(self) -> None:
+        import os
+        from unittest import mock
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        sys.modules.setdefault("compare", mock.MagicMock())
+        sys.modules.setdefault("comparison_metrics", mock.MagicMock())
+        import theirbench
+
+        with mock.patch.object(theirbench, "busy_processes", lambda: 0):
+            watch = theirbench.LoadWatch(interval=3600)
+        for loads, contended in (([1.0, 1.5, 1.9], False), ([1.0, 2.5, 1.0], True), ([2.1], True)):
+            watch.samples, watch.busy = loads, [0]
+            self.assertEqual(watch.result()["contended"], contended)
+            self.assertEqual(watch.result()["load1_max"], max(loads))
 
 
 if __name__ == "__main__":
