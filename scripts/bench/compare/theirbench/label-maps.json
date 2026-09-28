@@ -1,0 +1,411 @@
+{
+  "_comment": "Reviewed mapping for competitors' own benchmarks. Leak/FP bytes are class-agnostic; these tables only drive the typed-entity metrics and the common-intersection view. `gold` maps each benchmark's native gold label to canonical labels (the 25 main-corpus labels plus the `extension_labels`). `tool_extension` adds canonical labels that a tool label covers but that the main corpus never annotates, so compare/label-map.json maps it to nothing or to a narrower label. The composed tool-label -> native-gold-label table is derived from both, never written by hand.",
+  "extension_labels": [
+    "IPADDRESS",
+    "DATE",
+    "TIME",
+    "AGE",
+    "TITLE",
+    "NRP",
+    "LOCATION",
+    "DOMAIN",
+    "PASSWORD",
+    "SECRET",
+    "ACCOUNTNUM",
+    "ROUTING",
+    "MACADDRESS"
+  ],
+  "gold": {
+    "presidio-research": {
+      "PERSON": [
+        "FIRSTNAME",
+        "SURNAME"
+      ],
+      "STREET_ADDRESS": [
+        "STREET",
+        "BUILDINGNUM",
+        "CITY",
+        "ZIP",
+        "STATE",
+        "REGION",
+        "COUNTRY",
+        "LOCATION"
+      ],
+      "GPE": [
+        "CITY",
+        "COUNTRY",
+        "STATE",
+        "REGION",
+        "LOCATION"
+      ],
+      "ORGANIZATION": [
+        "ORGANIZATION",
+        "COMPANYNAME"
+      ],
+      "CREDIT_CARD": [
+        "CREDITCARDNUMBER"
+      ],
+      "DATE_TIME": [
+        "DATE",
+        "DATEOFBIRTH",
+        "TIME"
+      ],
+      "TITLE": [
+        "TITLE"
+      ],
+      "PHONE_NUMBER": [
+        "PHONENUMBER"
+      ],
+      "AGE": [
+        "AGE"
+      ],
+      "NRP": [
+        "NRP"
+      ],
+      "EMAIL_ADDRESS": [
+        "EMAIL"
+      ],
+      "ZIP_CODE": [
+        "ZIP"
+      ],
+      "DOMAIN_NAME": [
+        "DOMAIN",
+        "URL"
+      ],
+      "IBAN_CODE": [
+        "IBAN"
+      ],
+      "US_SSN": [
+        "SSN"
+      ],
+      "IP_ADDRESS": [
+        "IPADDRESS"
+      ],
+      "US_DRIVER_LICENSE": [
+        "DRIVERLICENSENUM"
+      ]
+    },
+    "piibench-commercial": {
+      "DATE": [
+        "DATE",
+        "DATEOFBIRTH"
+      ],
+      "LOC": [
+        "STREET",
+        "BUILDINGNUM",
+        "CITY",
+        "ZIP",
+        "STATE",
+        "REGION",
+        "COUNTRY",
+        "LOCATION"
+      ],
+      "MISC": [],
+      "PERSON": [
+        "FIRSTNAME",
+        "SURNAME"
+      ],
+      "ORG": [
+        "ORGANIZATION",
+        "COMPANYNAME"
+      ],
+      "NAME": [
+        "FIRSTNAME",
+        "SURNAME"
+      ],
+      "COMPANY_NAME": [
+        "ORGANIZATION",
+        "COMPANYNAME"
+      ],
+      "COMPANY": [
+        "ORGANIZATION",
+        "COMPANYNAME"
+      ],
+      "FIRST_NAME": [
+        "FIRSTNAME"
+      ],
+      "STREET_ADDRESS": [
+        "STREET",
+        "BUILDINGNUM",
+        "CITY",
+        "ZIP",
+        "STATE",
+        "REGION",
+        "COUNTRY",
+        "LOCATION"
+      ],
+      "EMAIL": [
+        "EMAIL"
+      ],
+      "FINANCIAL_ENTITY": [],
+      "LAST_NAME": [
+        "SURNAME"
+      ],
+      "URL": [
+        "URL",
+        "DOMAIN"
+      ],
+      "TIME": [
+        "TIME"
+      ],
+      "PHONE_NUMBER": [
+        "PHONENUMBER"
+      ],
+      "OCCUPATION": [],
+      "COUNTRY": [
+        "COUNTRY",
+        "LOCATION"
+      ],
+      "CUSTOMER_ID": [],
+      "STATE": [
+        "STATE",
+        "REGION",
+        "LOCATION"
+      ],
+      "CITY": [
+        "CITY",
+        "LOCATION"
+      ],
+      "EMPLOYEE_ID": [],
+      "DATE_OF_BIRTH": [
+        "DATEOFBIRTH",
+        "DATE"
+      ],
+      "DATE_TIME": [
+        "DATE",
+        "TIME"
+      ],
+      "IPV4": [
+        "IPADDRESS"
+      ],
+      "IPV6": [
+        "IPADDRESS"
+      ],
+      "USER_NAME": [
+        "USERNAME"
+      ],
+      "EDUCATION_LEVEL": [],
+      "PASSWORD": [
+        "PASSWORD"
+      ],
+      "BIOMETRIC_IDENTIFIER": [],
+      "ACCOUNT_NUMBER": [
+        "ACCOUNTNUM",
+        "IBAN"
+      ],
+      "CREDIT_DEBIT_CARD": [
+        "CREDITCARDNUMBER"
+      ],
+      "VEHICLE_IDENTIFIER": [],
+      "BANK_ROUTING_NUMBER": [
+        "ROUTING"
+      ],
+      "POSTCODE": [
+        "ZIP"
+      ],
+      "COORDINATE": [],
+      "CERTIFICATE_LICENSE_NUMBER": [],
+      "PIN": [],
+      "API_KEY": [
+        "SECRET"
+      ],
+      "RACE_ETHNICITY": [
+        "NRP"
+      ],
+      "SSN": [
+        "SSN"
+      ],
+      "LANGUAGE": [],
+      "MAC_ADDRESS": [
+        "MACADDRESS"
+      ],
+      "EMPLOYMENT_STATUS": [],
+      "LICENSE_PLATE": [
+        "LICENSEPLATENUM"
+      ],
+      "COUNTY": [
+        "REGION",
+        "LOCATION"
+      ],
+      "DEVICE_IDENTIFIER": [],
+      "HTTP_COOKIE": [
+        "SECRET"
+      ],
+      "MEDICAL_RECORD_NUMBER": [],
+      "FAX_NUMBER": [
+        "PHONENUMBER"
+      ],
+      "AGE": [
+        "AGE"
+      ],
+      "HEALTH_PLAN_BENEFICIARY_NUMBER": [],
+      "GENDER": [],
+      "SWIFT_BIC": [],
+      "BLOOD_TYPE": [],
+      "NATIONAL_ID": [
+        "NATIONALID",
+        "IDCARDNUM"
+      ],
+      "POLITICAL_VIEW": [
+        "NRP"
+      ],
+      "RELIGIOUS_BELIEF": [
+        "NRP"
+      ],
+      "CVV": [],
+      "UNIQUE_ID": [],
+      "SEXUALITY": [],
+      "TAX_ID": [
+        "TAXNUM"
+      ],
+      "SWIFT_BIC_CODE": [],
+      "IBAN": [
+        "IBAN"
+      ],
+      "CREDIT_CARD_SECURITY_CODE": [],
+      "ACCOUNT_PIN": [],
+      "PASSPORT_NUMBER": [
+        "PASSPORTID"
+      ],
+      "CREDIT_CARD_NUMBER": [
+        "CREDITCARDNUMBER"
+      ],
+      "DRIVER_LICENSE_NUMBER": [
+        "DRIVERLICENSENUM"
+      ],
+      "BBAN": [
+        "ACCOUNTNUM",
+        "IBAN"
+      ],
+      "LOCAL_LATLNG": []
+    }
+  },
+  "tool_extension": {
+    "gaze": {
+      "custom:ip_address": [
+        "IPADDRESS"
+      ],
+      "custom:date": [
+        "DATE"
+      ],
+      "custom:birth_date": [
+        "DATE"
+      ],
+      "location": [
+        "LOCATION"
+      ],
+      "custom:url": [
+        "DOMAIN"
+      ],
+      "custom:password": [
+        "PASSWORD"
+      ],
+      "custom:secret": [
+        "SECRET"
+      ],
+      "custom:security_token": [
+        "SECRET"
+      ]
+    },
+    "presidio": {
+      "IP_ADDRESS": [
+        "IPADDRESS"
+      ],
+      "DATE_TIME": [
+        "DATE",
+        "TIME"
+      ],
+      "LOCATION": [
+        "LOCATION"
+      ],
+      "NRP": [
+        "NRP"
+      ],
+      "URL": [
+        "DOMAIN"
+      ],
+      "US_BANK_NUMBER": [
+        "ACCOUNTNUM"
+      ],
+      "US_ROUTING_NUMBER": [
+        "ROUTING"
+      ],
+      "MAC_ADDRESS": [
+        "MACADDRESS"
+      ]
+    },
+    "gliner": {
+      "ip address": [
+        "IPADDRESS"
+      ],
+      "date of birth": [
+        "DATE"
+      ],
+      "address": [
+        "LOCATION"
+      ],
+      "bank account number": [
+        "ACCOUNTNUM"
+      ]
+    },
+    "opf": {
+      "private_date": [
+        "DATE"
+      ],
+      "private_address": [
+        "LOCATION"
+      ],
+      "private_url": [
+        "DOMAIN"
+      ],
+      "secret": [
+        "SECRET",
+        "PASSWORD"
+      ],
+      "account_number": [
+        "ACCOUNTNUM"
+      ],
+      "custom:secret": [
+        "SECRET",
+        "PASSWORD"
+      ]
+    },
+    "datafog-core": {
+      "IP_ADDRESS": [
+        "IPADDRESS"
+      ],
+      "DATE": [
+        "DATE"
+      ]
+    },
+    "datafog-python": {
+      "IP_ADDRESS": [
+        "IPADDRESS"
+      ],
+      "DATE": [
+        "DATE"
+      ],
+      "LOCATION": [
+        "LOCATION"
+      ]
+    },
+    "scrubadub": {
+      "date_of_birth": [
+        "DATE"
+      ],
+      "location": [
+        "LOCATION"
+      ],
+      "address": [
+        "LOCATION"
+      ],
+      "url": [
+        "DOMAIN"
+      ],
+      "credential": [
+        "PASSWORD",
+        "SECRET"
+      ]
+    }
+  }
+}
