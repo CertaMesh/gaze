@@ -20,7 +20,7 @@ Filter (OPF) runs only when its local runtime and checkpoint are configured.
 Use Python 3.12. Install the hash-pinned `requirements.lock` into a session-local
 virtual environment with `uv pip sync`. Install spaCy wheel models separately
 at pinned versions: `en_core_web_lg` 3.7.1, `de_core_news_lg` 3.7.0,
-`nl_core_news_sm` 3.7.0, `fr_core_news_sm` 3.7.0, and `pt_core_news_sm` 3.7.0.
+`nl_core_news_lg` 3.7.0, `fr_core_news_lg` 3.7.0, and `pt_core_news_lg` 3.7.0.
 `model-wheels.json` pins each wheel URL and SHA-256. The report records each
 installed model's content SHA-256, wheel SHA-256, and version; review those
 against the wheel used for the run. OPF 0.1.0 uses
@@ -34,9 +34,9 @@ python scripts/bench/compare/compare.py \
   --dataset target/bench-data/dataiku-en-de/test.parquet \
   --en-model /path/to/en_core_web_lg \
   --de-model /path/to/de_core_news_lg \
-  --nl-model /path/to/nl_core_news_sm \
-  --fr-model /path/to/fr_core_news_sm \
-  --pt-model /path/to/pt_core_news_sm \
+  --nl-model /path/to/nl_core_news_lg \
+  --fr-model /path/to/fr_core_news_lg \
+  --pt-model /path/to/pt_core_news_lg \
   --gliner-model /path/to/gliner_multi_pii-v1 \
   --opf-python /path/to/opf-venv/bin/python \
   --opf-checkpoint /path/to/privacy_filter \
@@ -56,8 +56,17 @@ is present, each Gaze scorecard must carry the identical pack layer and ID
 digest. The comparison stores the hash of a home-normalized policy after
 checking its raw hash against every Gaze scorecard.
 
-Presidio's anonymizer uses the public `keep` operator so resolved spans retain
-their offsets. Skipped languages score as leaked gold, and only processed
+For repeat runs, set `GAZE_COMPARE_EN_MODEL`, `GAZE_COMPARE_DE_MODEL`,
+`GAZE_COMPARE_NL_MODEL`, `GAZE_COMPARE_FR_MODEL`,
+`GAZE_COMPARE_PT_MODEL`, `GAZE_COMPARE_GLINER_MODEL`, and
+`GAZE_COMPARE_PYTHON` (the Python 3.12 comparison environment), then run
+`scripts/bench/compare/run-full.sh`. Its `--dry-run` mode checks CLI arguments
+without loading documents or models. The wrapper passes the prepared Gaze
+scorecards and policy, including `--gaze-policy`, to the comparator.
+
+Presidio 2.2.364's pinned raw-span resolver supplies coordinates before
+anonymization. Its public `keep` operator can rewrite text when spans partly
+overlap, shifting offsets. Skipped languages score as leaked gold, and only processed
 documents enter latency. All predictions count byte-for-byte regardless of
 class. `label-map.json` controls v3 repeated-gold credit and must be reviewed
 when an adapter adds a label.
