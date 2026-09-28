@@ -1822,23 +1822,27 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
         raise LayerError(
             "scorecard predates the gold-validity digest; measure the base again on this harness"
         )
+    parameters = scorecard.get("parameters", {})
     identity = {
         "kiji_contract": score.scorecard_scored_label_contract_identity(scorecard),
         "kiji_dataset": scorecard.get("dataset", {}).get("integrity"),
         "corpus_sha256": layers.get("generator", {}).get("corpus_sha256"),
         "layer_contract": layers.get("scored_label_contract", {}).get("file_sha256"),
         "layer_c_gold_validity": gold_validity["C"],
-        "configs": scorecard.get("parameters", {}).get("configs"),
-        "policy_sha256": scorecard.get("parameters", {}).get("policy_sha256"),
+        "configs": parameters.get("configs"),
+        "policy_sha256": parameters.get("policy_sha256"),
+        "ner_threshold": parameters.get("ner_threshold"),
     }
     missing = [
         key for key, value in identity.items()
-        if value is None or (
+        if (value is None and key != "ner_threshold") or (
             key == "kiji_contract"
             and None in value
             and value != (score.SCORED_LABEL_CONTRACT_V1_ID, 1, None)
         )
     ]
+    if "ner_threshold" not in parameters:
+        missing.append("ner_threshold")
     if missing:
         raise LayerError(
             f"scorecard has no gate identity for {', '.join(missing)}; "
@@ -2092,7 +2096,7 @@ def _scorecard_policy(scorecard: Mapping[str, object], label: str) -> tuple[dict
     if not isinstance(path, str) or not isinstance(recorded, str):
         raise LayerError(f"{label} scorecard has no policy path and SHA-256 provenance")
     try:
-        raw = Path(path).read_bytes()
+        raw = Path(path).expanduser().read_bytes()
     except OSError as error:
         raise LayerError(f"cannot read {label} policy {path}: {error}") from error
     digest = hashlib.sha256(raw).hexdigest()
@@ -2115,7 +2119,21 @@ def _toml_equal(left: object, right: object) -> bool:
         return len(left) == len(right) and all(
             _toml_equal(a, b) for a, b in zip(left, right, strict=True)
         )
+    if isinstance(left, str):
+        return normalize_home_path(left) == normalize_home_path(right)
     return left == right
+
+
+def normalize_home_path(value: str) -> str:
+    """Keep paths below the current home portable without changing other values."""
+    path = Path(value)
+    if not path.is_absolute():
+        return value
+    try:
+        relative = path.relative_to(Path.home())
+    except ValueError:
+        return value
+    return str(Path("~") / relative)
 
 
 def _policy_delta_comparison(
@@ -2187,6 +2205,7 @@ def gate(
         key for key in base_identity
         if base_identity[key] != candidate_identity[key]
         and (key != "policy_sha256" or policy_delta is None)
+        and (key != "ner_threshold" or "ner" not in added_sections)
     )
     base_dependencies = policy_dependency_identity(base, allow_legacy_policy_inputs)
     candidate_dependencies = policy_dependency_identity(candidate, allow_legacy_policy_inputs)

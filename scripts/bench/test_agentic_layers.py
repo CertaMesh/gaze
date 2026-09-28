@@ -5,6 +5,7 @@ import copy
 import hashlib
 import ipaddress
 import json
+import os
 import re
 import sys
 import tempfile
@@ -626,7 +627,7 @@ def _scorecard(
         return block
 
     return {
-        "parameters": {"configs": ["policy-file"], "policy_sha256": "p"},
+        "parameters": {"configs": ["policy-file"], "policy_sha256": "p", "ner_threshold": 0.3},
         "runner_provenance": {"model_bundles": [], "policy_dependencies": {"files": {}}},
         "dataset": {"integrity": {"sha256": "k"}},
         "scoring": {"scored_label_contract": {"id": "scored-labels-v2", "version": 2, "file_sha256": "c"}},
@@ -1249,6 +1250,7 @@ class PolicyDeltaGateTests(unittest.TestCase):
         tamper_policy: str | None = None,
         remove_delta: bool = False,
         wrong_digest: tuple[str, str] | None = None,
+        ner_thresholds: tuple[float | None, float | None] = (0.3, 0.3),
     ) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             paths = {name: Path(directory) / f"{name}.toml" for name in ("base", "candidate", "delta")}
@@ -1256,6 +1258,7 @@ class PolicyDeltaGateTests(unittest.TestCase):
                 paths[name].write_text(contents, encoding="utf-8")
             base = _scorecard(self.BASE_LEAKS)
             candidate = _scorecard({**self.BASE_LEAKS, "R": 10})
+            base["parameters"]["ner_threshold"], candidate["parameters"]["ner_threshold"] = ner_thresholds
             for label, card in (("base", base), ("candidate", candidate)):
                 digest = hashlib.sha256(paths[label].read_bytes()).hexdigest()
                 card["parameters"]["policy_sha256"] = digest
@@ -1298,6 +1301,58 @@ class PolicyDeltaGateTests(unittest.TestCase):
         self.assertEqual(set(result["policy_digests"]), {"base", "candidate", "delta"})
         self.assertIn("Policy SHA-256 digests", agentic.gate_markdown(result))
         self.assertIn("delta.toml", agentic.gate_markdown(result).splitlines()[0])
+
+    def test_ner_threshold_changes_only_with_declared_ner_section(self) -> None:
+        result = self.compare(
+            "[rules]\nenabled=true\n",
+            "[rules]\nenabled=true\n[ner]\nthreshold=0.42\n",
+            "[ner]\nthreshold=0.42\n",
+            ner_thresholds=(None, 0.42),
+        )
+        self.assertEqual(result["verdict"], "pass")
+        result = self.compare(
+            "[rules]\nenabled=true\n",
+            "[rules]\nenabled=true\n[extension]\nenabled=true\n",
+            "[extension]\nenabled=true\n",
+            ner_thresholds=(None, 0.42),
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+        self.assertIn("ner_threshold", result["differing"])
+
+    def test_missing_ner_threshold_is_refused(self) -> None:
+        card = _scorecard(self.BASE_LEAKS)
+        del card["parameters"]["ner_threshold"]
+        with self.assertRaisesRegex(agentic.LayerError, "ner_threshold"):
+            agentic.gate(card, _scorecard(self.BASE_LEAKS))
+
+    def test_policy_delta_normalizes_home_paths_only(self) -> None:
+        home = Path.home()
+        self.assertEqual(agentic.normalize_home_path(str(home / "models/davlan")), "~/models/davlan")
+        self.assertEqual(agentic.normalize_home_path("/private/tmp/davlan"), "/private/tmp/davlan")
+        result = self.compare(
+            f'[rules]\nmodel_dir="{home}/models/base"\n',
+            '[rules]\nmodel_dir="~/models/base"\n[ner]\nmodel_dir="~/models/davlan"\n',
+            f'[ner]\nmodel_dir="{home}/models/davlan"\n',
+        )
+        self.assertEqual(result["verdict"], "pass")
+        result = self.compare(
+            '[rules]\nmodel_dir="/private/tmp/base"\n',
+            '[rules]\nmodel_dir="/private/tmp/other"\n[ner]\nenabled=true\n',
+            '[ner]\nenabled=true\n',
+        )
+        self.assertEqual(result["verdict"], "not_comparable")
+
+    def test_policy_provenance_home_path_is_read_and_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ, {"HOME": directory}):
+            policy = Path(directory) / "policy.toml"
+            policy.write_text("[rules]\nenabled=true\n", encoding="utf-8")
+            digest = hashlib.sha256(policy.read_bytes()).hexdigest()
+            card = _scorecard(self.BASE_LEAKS)
+            card["parameters"]["policy_sha256"] = digest
+            card["runner_provenance"]["policy"] = {
+                "path": "~/policy.toml", "sha256": digest,
+            }
+            self.assertEqual(agentic._scorecard_policy(card, "base"), ({"rules": {"enabled": True}}, digest))
 
     def test_undeclared_extra_key_is_not_comparable(self) -> None:
         result = self.compare(
