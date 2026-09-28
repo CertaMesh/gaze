@@ -1713,10 +1713,9 @@ kind = "regex"
 pattern = '''(?ix)
 (?:
   \b(?:age|aged|alter|âge|âgé(?:e)?|idade)[\x20\t\x{A0}\x{202F}:="']*(?:de[\x20\t\x{A0}\x{202F}]+)?((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b
- |\b((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?[\x20\t\x{A0}\x{202F}-]+old|jahre?[\x20\t\x{A0}\x{202F}]+alt|year[\x20\t\x{A0}\x{202F}-]+old|ans?\b)
- |\bmit[\x20\t\x{A0}\x{202F}]+((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}]+jahren\b
+ |\b((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?[\x20\t\x{A0}\x{202F}-]+old|jahre?[\x20\t\x{A0}\x{202F}]+alt)\b
 )'''
-capture_groups = [1, 2, 3]
+capture_groups = [1, 2]
 
 [recognizers.scoring]
 base = 0.90

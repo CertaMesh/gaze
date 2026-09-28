@@ -104,7 +104,6 @@ fn age_cues_cover_prose_fields_and_spacing() {
         ("The applicant is 34 years old.", "34"),
         ("Alter: 38 Jahre", "38"),
         ("Sie ist 29 Jahre alt.", "29"),
-        ("Mit 29 Jahren zog sie um.", "29"),
         ("L'homme est âgé de 42 ans.", "42"),
         ("{\"age\": 45}", "45"),
         ("age=45", "45"),
@@ -123,6 +122,8 @@ fn age_lookalikes_stay_raw() {
         "Version 34 shipped.",
         "age: 290",
         "Apt 45, Model Road",
+        "Mit 29 Jahren Erfahrung führt er das Team.",
+        "Depuis 29 ans, le produit existe.",
     ] {
         let cleaned = clean_and_restore(&pipeline(), text);
         assert!(
