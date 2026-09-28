@@ -21,6 +21,7 @@ and fails on drift.
 | [Current release](#current-release) | the headline table |
 | [Charts](#charts) | per-arm and release-over-release |
 | [Release history](#release-history) | one row per released version |
+| [Leak ledger](#leak-ledger) | every leaked gold byte by root cause |
 | [Safety-Net Matrix](#safety-net-matrix) | backend pins and matrix shape |
 | [NER Model Leaderboard](#ner-model-leaderboard) | candidate backends |
 | [How to reproduce](#how-to-reproduce) | commands, harness, hardware |
@@ -624,6 +625,122 @@ Shipped releases, one column per release:
 | Davlan NER | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
 
 <!-- END GENERATED: mechanism-arms -->
+
+---
+
+## Leak ledger
+
+The headline says how many gold bytes leak; the leak ledger says why each one
+does. For one commit it lists every gold span with at least one raw byte left
+in the output, under the `gaze setup` policy, for layer C and the generated
+agentic layers A, D and R, and gives it one root cause:
+
+| Cause | Meaning |
+| --- | --- |
+| a no candidate | no recognizer produced anything overlapping the span; the closest one within 16 bytes is noted |
+| b vetoed | a validator vetoed an overlapping candidate, a candidate was dropped before resolution (locale claim), or only a recognizer outside the locale chain matched |
+| c lost in resolution | an overlapping candidate lost to another winner; the winner's class and the audit tier are noted |
+| d partial span | a token covers part of the value and the rest stays raw; the sub-kind says whether a candidate that would have covered more lost resolution, was vetoed, won primary resolution but left the trace, or never existed |
+| e repeat not swept | the same value is protected elsewhere in the document but not here |
+| f junk-shaped gold | no candidate, and the gold looks like junk (an identifier label with no digit or at most four alphanumerics); it stays in the target until an audited contract change |
+| g other | a primary-resolution winner covers the span but the final trace does not |
+
+The first matching cause wins, in the order d, b (validator), g, c, b (dropped
+before resolution), b (locale-gated), e, f, a. One ordered table in the script
+drives the classification, the row schema that `check` enforces, and the table
+below.
+
+[`scripts/bench/leak_ledger.py`](../../../scripts/bench/leak_ledger.py)
+`probe` joins a clean-tree runner record with the candidate pool that the
+bench producer prints under `GAZE_BENCH_CANDIDATE_POOL=1`, and refuses unless
+every document's final trace equals the record's. It commits the record and
+one value-free row per leaked span (document ID, label, byte offsets, cause,
+rule IDs) under [`leak-ledger/`](leak-ledger/), indexed by
+[`leak-ledger.json`](leak-ledger.json). `check` needs no corpus, model or
+binary: it re-derives the leaked spans and their bytes from the record,
+requires the rows to match them exactly, and requires every label's total to
+equal the scorecard's `per_label_recall` leaked bytes under every
+scored-label contract and the agentic layer contract. Every row must carry
+exactly its cause's detail fields, so relabelling a cause without its evidence
+fails `check` for every label, including the credential labels that only
+contract v1 scores; those are rendered in their own table below.
+
+<!-- BEGIN GENERATED: leak-ledger -->
+
+Main `1809f6a3fbd2` (record measured on `74701b227385` with a byte-identical release producer `0239a5f66ea0`), `gaze setup` policy `f909a23aecac`, scored-label contract v3. Leaked bytes per gold span, summed per label (the scorecard's `per_label_recall`); overlapping gold counts once per span, so the label sum (9,283 B) can exceed the headline leaked bytes (9,256 B).
+
+Layer C by label and cause (bytes):
+
+| Label | a no candidate | b vetoed | c lost in resolution | d partial span | e repeat not swept | f junk-shaped gold | g other | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| TAXNUM | 1,590 | 142 | · | 106 | · | 12 | · | 1,850 |
+| PHONENUMBER | 97 | 862 | · | 21 | · | · | · | 980 |
+| DATEOFBIRTH | 782 | · | · | 28 | · | · | · | 810 |
+| DRIVERLICENSENUM | 752 | · | · | 14 | · | 34 | · | 800 |
+| NATIONALID | 464 | 80 | · | · | · | 38 | · | 582 |
+| URL | 251 | · | · | 235 | · | · | · | 486 |
+| SSN | 402 | 16 | · | · | 4 | 51 | · | 473 |
+| IDCARDNUM | 408 | 30 | · | 14 | · | · | · | 452 |
+| ZIP | 444 | · | · | 4 | 4 | · | · | 452 |
+| AGE | 414 | · | · | · | 2 | · | · | 416 |
+| BUILDINGNUM | 224 | 1 | · | 11 | 39 | · | · | 275 |
+| STREET | 145 | · | · | 112 | 9 | · | · | 266 |
+| CREDITCARDNUMBER | · | 152 | · | · | · | 100 | · | 252 |
+| IBAN | 174 | 24 | · | 4 | · | 12 | · | 214 |
+| FIRSTNAME | 123 | · | · | · | 4 | · | · | 127 |
+| LICENSEPLATENUM | 25 | · | · | 75 | · | 22 | · | 122 |
+| PASSPORTID | 107 | · | · | · | · | 11 | · | 118 |
+| STATE | 107 | · | · | 7 | 2 | · | · | 116 |
+| SURNAME | 110 | · | · | · | · | · | · | 110 |
+| COMPANYNAME | 73 | · | · | 36 | · | · | · | 109 |
+| COUNTRY | 79 | · | · | 2 | 14 | · | · | 95 |
+| CITY | 34 | · | · | 17 | 22 | · | · | 73 |
+| USERNAME | 48 | · | · | 23 | · | · | · | 71 |
+| EMAIL | · | · | · | 19 | · | · | · | 19 |
+| TITLE | 15 | · | · | · | · | · | · | 15 |
+| **all** | **6,868** | **1,307** | **·** | **728** | **100** | **280** | **·** | **9,283** |
+
+Agentic layers by cause (bytes, agentic layer contract):
+
+| Layer | a | b | c | d | e | f | g | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | 1,608 | 4,053 | · | 77 | · | · | · | 5,738 |
+| D | · | · | · | · | · | · | · | 0 |
+| R | 228 | · | · | · | 6 | · | · | 234 |
+
+Partial spans (d) by what a fuller candidate met (bytes):
+
+| Layer | lost_resolution | vetoed | resolved_not_emitted | no_full_candidate | Total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| C | · | 21 | · | 707 | 728 |
+| A | · | 48 | · | 29 | 77 |
+| R | · | · | · | · | 0 |
+
+Layer C labels outside contract v3 (scored by v1 only):
+
+| Label | a | b | c | d | e | f | g | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| PASSWORD | 1,990 | · | · | 24 | · | · | · | 2,014 |
+| SECURITYTOKEN | 4,106 | · | · | 70 | · | · | · | 4,176 |
+
+Top 10 layer C clusters (label, cause, mechanism):
+
+| Label | Cause | Mechanism | Spans | Bytes |
+| --- | --- | --- | ---: | ---: |
+| TAXNUM | a no candidate | nothing near | 124 | 1,443 |
+| PHONENUMBER | b vetoed | validator `phone.national.us` | 53 | 715 |
+| DRIVERLICENSENUM | a no candidate | nothing near | 63 | 661 |
+| DATEOFBIRTH | a no candidate | nothing near | 39 | 445 |
+| NATIONALID | a no candidate | nothing near | 36 | 411 |
+| IDCARDNUM | a no candidate | nothing near | 31 | 313 |
+| SSN | a no candidate | nothing near | 26 | 302 |
+| ZIP | a no candidate | closest `location` (compatible) | 71 | 274 |
+| AGE | a no candidate | closest `name` | 120 | 240 |
+| BUILDINGNUM | a no candidate | closest `location` (compatible) | 83 | 201 |
+
+Junk-shaped gold in layer C: 48 spans, 284 leaked bytes (280 B with no candidate, cause f). They stay in the target until an audited contract change.
+
+<!-- END GENERATED: leak-ledger -->
 
 ---
 

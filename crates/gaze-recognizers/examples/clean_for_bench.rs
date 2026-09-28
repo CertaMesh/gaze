@@ -5,11 +5,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use gaze::{
-    Action, CleanDocument, Context, DictionaryBundle, EmittedTokenSpan, FallbackReason,
-    GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleChain, LocaleTag, NerPolicy,
-    PiiClass, Pipeline, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
-    RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope,
-    Session,
+    Action, Candidate, CleanDocument, Context, DetectContext, DictionaryBundle, EmittedTokenSpan,
+    FallbackReason, GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis,
+    LocaleChain, LocaleTag, NerPolicy, PiiClass, Pipeline, RedactionEntry, RedactionLogError,
+    RedactionLogger, RuleSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback,
+    SafetyNetMode, SafetyNetPolicy, Scope, Session,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -400,6 +400,11 @@ fn handle_request_with_policy(
             (None, None)
         };
 
+    let candidate_pool = if std::env::var_os("GAZE_BENCH_CANDIDATE_POOL").is_some() {
+        Some(candidate_pool(full, &raw_text, locale_chain, dictionaries)?)
+    } else {
+        None
+    };
     let manifest_spans = serialize_manifest(manifest);
     let final_protection_trace = serialize_final_protection_trace(final_protection_trace);
     let initial_safety_net_stats = SafetyNetStats::from(&report.stats);
@@ -443,6 +448,7 @@ fn handle_request_with_policy(
         },
         final_protection_trace,
         audit_rows: None,
+        candidate_pool,
     }))
 }
 
@@ -469,6 +475,8 @@ struct Response {
     final_protection_trace: Vec<FinalProtectionTraceItem>,
     #[serde(skip_serializing_if = "Option::is_none")]
     audit_rows: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    candidate_pool: Option<CandidatePool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1088,6 +1096,120 @@ fn serialize_final_protection_trace(
         .collect()
 }
 
+/// Every candidate the registry saw for one document, for the leak ledger
+/// (`scripts/bench/leak_ledger.py`). The final trace names only what protected
+/// bytes; a leaked span's cause (no candidate, vetoed, lost in resolution,
+/// locale-gated) is only visible in the pool. Offsets are raw input bytes.
+#[derive(Debug, Serialize)]
+struct CandidatePool {
+    /// Eligible recognizers' raw output: before the locale claim, validator veto and resolution.
+    detected: Vec<PoolCandidate>,
+    /// Winners of primary resolution; `decided_by` is the tier that settled each one.
+    resolved: Vec<PoolCandidate>,
+    /// Candidates the validator vetoed before resolution.
+    vetoed: Vec<PoolCandidate>,
+    /// What document-basis recognizers outside the locale chain would have found.
+    locale_gated: Vec<PoolCandidate>,
+}
+
+#[derive(Debug, Serialize)]
+struct PoolCandidate {
+    raw_start: usize,
+    raw_end: usize,
+    class: String,
+    recognizer_id: String,
+    score: f32,
+    decided_by: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+
+fn candidate_pool(
+    pipeline: &Pipeline,
+    raw_text: &str,
+    locale_chain: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
+) -> Result<CandidatePool, Box<dyn std::error::Error>> {
+    let (text, spans) = normalize_like_pipeline(raw_text);
+    let registry = pipeline.registry();
+    let ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(&spans);
+    let convert = |candidate: &Candidate, reason: Option<String>| -> Option<PoolCandidate> {
+        if candidate.span.is_empty() || candidate.span.end > spans.len() {
+            return None;
+        }
+        Some(PoolCandidate {
+            raw_start: spans[candidate.span.start].0,
+            raw_end: spans[candidate.span.end - 1].1,
+            class: candidate.class.to_canonical_str(),
+            recognizer_id: candidate.recognizer_id.clone(),
+            score: candidate.score,
+            decided_by: format!("{:?}", candidate.decided_by),
+            reason,
+        })
+    };
+    let detected = registry.detect_all(&text, &ctx)?;
+    let (resolved, vetoed) = registry.detect_all_resolved(&text, &ctx)?;
+    let chain = LocaleChain::from(locale_chain);
+    let mut locale_gated = Vec::new();
+    for id in registry.recognizer_ids() {
+        let Some(recognizer) = registry.recognizer(id) else {
+            continue;
+        };
+        if recognizer.locale_basis() != LocaleBasis::Document
+            || recognizer.requires_prior_candidates()
+            || recognizer.locales().is_empty()
+            || chain.intersects(recognizer.locales())
+        {
+            continue;
+        }
+        let gated_ctx =
+            DetectContext::new(recognizer.locales(), dictionaries).with_source_spans(&spans);
+        locale_gated.extend(recognizer.detect(&text, &gated_ctx)?);
+    }
+    Ok(CandidatePool {
+        detected: detected.iter().filter_map(|c| convert(c, None)).collect(),
+        resolved: resolved.iter().filter_map(|c| convert(c, None)).collect(),
+        vetoed: vetoed
+            .iter()
+            .filter_map(|v| convert(&v.candidate, Some(format!("{:?}", v.reason))))
+            .collect(),
+        locale_gated: locale_gated
+            .iter()
+            .filter_map(|c| convert(c, None))
+            .collect(),
+    })
+}
+
+/// The pipeline's detection view of `raw`: the text recognizers see and, per byte,
+/// the raw byte range it came from. A copy of the private `gaze::normalize`, which
+/// the pipeline runs before detection;
+/// `candidate_pool_spans_match_the_pipeline_trace_on_normalized_text` pins the two.
+fn normalize_like_pipeline(raw: &str) -> (String, Vec<(usize, usize)>) {
+    use unicode_normalization::UnicodeNormalization;
+    let mut text = String::new();
+    let mut spans = Vec::new();
+    for (start, ch) in raw.char_indices() {
+        let end = start + ch.len_utf8();
+        if matches!(ch, '\u{200C}' | '\u{200D}') {
+            continue;
+        }
+        let mapped = match ch {
+            '\u{00A0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200A}'
+            | '\u{202F}'
+            | '\u{205F}'
+            | '\u{3000}' => ' ',
+            '\u{FF01}'..='\u{FF5E}' => char::from_u32(ch as u32 - 0xFEE0).unwrap_or(ch),
+            _ => ch,
+        };
+        let normalized = mapped.to_string().nfc().collect::<String>();
+        text.push_str(&normalized);
+        spans.extend(std::iter::repeat_n((start, end), normalized.len()));
+    }
+    (text, spans)
+}
+
 fn manifest_integrity(
     session: &Session,
     raw_text: &str,
@@ -1489,6 +1611,47 @@ mod tests {
             missing_recognizers,
             gaze_assembly::BuildError::NoRecognizers
         ));
+    }
+
+    /// The leak ledger reads pool spans in raw bytes through the copied normalizer. Text the
+    /// normalizer rewrites (a dropped ZERO WIDTH JOINER, folded NBSP / NARROW NBSP group
+    /// separators, fullwidth digits) must still give the pool's resolved winners exactly the
+    /// raw spans the pipeline's own trace reports.
+    #[test]
+    fn candidate_pool_spans_match_the_pipeline_trace_on_normalized_text() {
+        let text = "Mail\u{200D} jane.roe@example.invalid, IBAN DE89\u{00A0}3704\u{202F}0044 0532 \
+                    0130 00, Tel \u{FF0B}49 30 1234567, from 10.1.2.3.";
+        let config = BenchConfig::RuleFloorExtended;
+        let full = build_pipeline(config).expect("rule floor");
+        let response = rule_floor_response("pool-1", "en-US", text);
+        let pool = candidate_pool(
+            &full,
+            text,
+            &[LocaleTag::parse("en-US").expect("locale")],
+            &DictionaryBundle::default(),
+        )
+        .expect("candidate pool");
+        let trace = response
+            .final_protection_trace
+            .iter()
+            .map(|item| (item.raw_start, item.raw_end))
+            .collect::<BTreeSet<_>>();
+        let resolved = pool
+            .resolved
+            .iter()
+            .map(|item| (item.raw_start, item.raw_end))
+            .collect::<BTreeSet<_>>();
+        assert!(
+            trace.len() >= 3,
+            "trace too small to pin anything: {trace:?}"
+        );
+        assert_eq!(resolved, trace);
+        let (normalized, _) = normalize_like_pipeline(text);
+        assert_ne!(
+            normalized.len(),
+            text.len(),
+            "the fixture must exercise normalization"
+        );
     }
 
     #[test]

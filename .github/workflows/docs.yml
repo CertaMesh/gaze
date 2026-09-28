@@ -25,6 +25,9 @@ jobs:
       - name: mechanism arm table matches its committed observation records
         run: python3 scripts/bench/mechanism_arms.py check
 
+      - name: leak ledger matches its committed observation record
+        run: python3 scripts/bench/leak_ledger.py check
+
       - name: benchmark renderer contract tests
         run: python3 -m unittest discover -s scripts/bench -p 'test_render_*doc.py'
 
