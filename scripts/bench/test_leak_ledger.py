@@ -265,6 +265,39 @@ class CheckTests(unittest.TestCase):
         with self.assertRaisesRegex(ledger.LedgerError, "no kind of cause"):
             ledger.validate_rows(rows, self.expected)
 
+    def test_partial_lost_evidence_matches_its_kind(self):
+        for kind, lost in (
+            ("lost_resolution", []), ("vetoed", []),
+            ("no_full_candidate", [{"recognizer": "ner", "class": "name", "tier": "ClassPriority"}]),
+        ):
+            with self.subTest(kind=kind):
+                rows = copy.deepcopy(self.rows)
+                target = next(item for item in rows if item["cause"] == "d")
+                target["detail"].update(kind=kind, lost=lost)
+                with self.assertRaisesRegex(ledger.LedgerError, "lost evidence"):
+                    ledger.validate_rows(rows, self.expected)
+
+    def test_probe_only_details_are_pinned_independently_of_rows_hash(self):
+        def detail(document_id, start, label):
+            matches = [item["detail"] for item in self.rows
+                       if item["layer"] == "C" and item["document_id"] == document_id
+                       and item["start"] == start and item["label"] == label]
+            self.assertEqual(len(matches), 1)
+            return matches[0]
+
+        self.assertEqual(detail("dataiku-test-1263", 75, "PASSWORD"), {
+            "by": [{"class": "custom:username", "sources": "nym-small-int8", "stage": "safety_net"}],
+            "kind": "no_full_candidate", "lost": [],
+        })
+        self.assertEqual(detail("dataiku-test-3521", 228, "SECURITYTOKEN"), {
+            "by": [{"class": "custom:license_plate", "sources": "nym-small-int8", "stage": "safety_net"}],
+            "kind": "no_full_candidate", "lost": [],
+        })
+        self.assertEqual(detail("dataiku-test-1009", 47, "AGE"), {
+            "closest": {"class": "location", "compatible": False,
+                        "from": "pool", "gap": 2, "recognizer": "ner"},
+        })
+
     def test_unknown_cause_is_refused(self):
         rows = copy.deepcopy(self.rows)
         rows[0]["cause"] = "z"
