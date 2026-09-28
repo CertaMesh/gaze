@@ -109,7 +109,7 @@ def row(leaked: int) -> dict:
 def synthetic() -> dict:
     rows = {"gaze-full": row(10), "gaze-rules-only": row(40), "presidio-en": row(5),
             "presidio-strong": row(30), "opf": row(20)}
-    quiet = {"cpu": {"contended": False}}
+    quiet = {"cpu": {"contended": False, "valid": True}}
     return {"not_run": {"x": "licence"}, "benchmarks": {"presidio-research": {
         "rows": rows, "chart_rows": ["gaze-full", "presidio-strong", "opf"],
         "provenance": {tool: quiet for tool in rows},
@@ -146,6 +146,8 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(render.latency_cell(entry, "opf"), "1.0")
         entry["provenance"]["opf"] = {"cpu": {"contended": True}}
         self.assertEqual(render.latency_cell(entry, "opf"), render.QUIET)
+        entry["provenance"]["opf"] = {"cpu": {"contended": False, "valid": False}}
+        self.assertEqual(render.latency_cell(entry, "opf"), render.QUIET)
         del entry["provenance"]["gaze-full"]
         self.assertEqual(render.latency_cell(entry, "gaze-full"), render.QUIET)
 
@@ -179,7 +181,8 @@ class RenderTest(unittest.TestCase):
             report.write_text(json.dumps({"harness_dirty": False, "benchmark": "presidio-research", "rows": {},
                                           **{k: None for k in ("identity", "harness_revision", "gaze_crates_tree",
                                                                "label_maps_sha256", "mapping_sha256", "hardware",
-                                                               "common_intersection_labels", "splits", "provenance")}}),
+                                                               "common_intersection_labels", "splits", "provenance",
+                                                               "comparison_revision", "comparison_sha256")}}),
                               encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "smoke"):
                 render.assemble([report], [f"presidio-research={smoke}"], [])
@@ -198,6 +201,28 @@ class ForeignCpuTest(unittest.TestCase):
         for peak, contended in ((100.0, False), (100.1, True)):
             watch.samples = [{"foreign_cpu_percent": 10.0}, {"foreign_cpu_percent": peak}]
             self.assertEqual(watch.result()["contended"], contended)
+
+
+class PinnedComparisonTest(unittest.TestCase):
+    def test_comparison_files_match_the_pinned_revision(self) -> None:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        import backends
+
+        self.assertEqual(backends.verify_pinned_comparison(), backends.PINNED_SHA256)
+        original = backends.PINNED_SHA256["compare.py"]
+        try:
+            backends.PINNED_SHA256["compare.py"] = "0" * 64
+            with self.assertRaises(SystemExit):
+                backends.verify_pinned_comparison()
+        finally:
+            backends.PINNED_SHA256["compare.py"] = original
+
+    def test_chart_configs_are_the_comparison_declared_rows(self) -> None:
+        import backends
+
+        configs = backends.chart_configs()
+        self.assertEqual(configs["presidio"], "presidio-strong")
+        self.assertTrue(set(configs.values()) <= set(backends.compare.TOOLS))
 
 if __name__ == "__main__":
     unittest.main()
