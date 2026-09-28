@@ -395,7 +395,25 @@
     "custom:eth_address": [],
     "custom:password": [],
     "custom:security_token": [],
-    "custom:secret": []
+    "custom:secret": [],
+    "custom:family:name.counter": [
+      "FIRSTNAME",
+      "SURNAME"
+    ],
+    "custom:family:phone-or-imei": [
+      "PHONENUMBER"
+    ],
+    "custom:family:payment-card-or-iban": [
+      "CREDITCARDNUMBER",
+      "IBAN"
+    ],
+    "custom:family:government-id": [
+      "SSN",
+      "TAXNUM",
+      "NATIONALID",
+      "IDCARDNUM",
+      "PASSPORTID"
+    ]
   },
   "datafog-core": {
     "EMAIL": [
