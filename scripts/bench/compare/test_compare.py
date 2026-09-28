@@ -243,7 +243,6 @@ def test_validate_current_flags_competitor_input_but_not_gaze_drift(monkeypatch:
     report.update({
         "scorer_sha256": render.digest_file(render.BENCH / "gaze_bench_score.py"),
         "dataset_loader_sha256": render.digest_file(render.BENCH / "dataiku_en_de_gaze_bench.py"),
-        "runner_sha256": render.digest_file(render.BENCH / "run_no_opf_benchmark.py"),
         "mapping_sha256": render.digest_file(compare.MAP_PATH),
         "model_pins_sha256": render.digest_file(compare.MODEL_PINS_PATH),
         "compare_sha256": render.digest_file(Path(compare.__file__)),
@@ -252,6 +251,7 @@ def test_validate_current_flags_competitor_input_but_not_gaze_drift(monkeypatch:
     })
     monkeypatch.setattr(compare.agentic, "prepare", lambda _repo: SimpleNamespace(manifest=report["corpus"]["agentic"]))
     monkeypatch.setattr(compare.agentic, "load_contract", lambda _repo: SimpleNamespace(sha256=report["contracts"]["agentic"]))
+    report["runner_sha256"] = "changed Gaze runner"
     report["gaze_crates_tree"] = "changed Gaze crates"
     report["latest_release_at_measurement"] = {"version": "older release", "scorecard_sha256": "changed"}
     render.validate_current(report)
@@ -266,19 +266,6 @@ def test_validate_current_flags_competitor_input_but_not_gaze_drift(monkeypatch:
     report["model_pins_sha256"] = "changed model pins"
     with pytest.raises(ValueError, match="model pins changed"):
         render.validate_current(report)
-
-
-def test_page_check_rejects_runner_hash_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    published = compare.REPO / "docs/reference/benchmarks"
-    report = json.loads((published / "comparison.json").read_text(encoding="utf-8"))
-    report_path = tmp_path / "comparison.json"
-    page_path = tmp_path / "competitors.md"
-    page_path.write_text(render.render(report, report_path.name), encoding="utf-8")
-    report["runner_sha256"] = "changed runner"
-    report_path.write_text(json.dumps(report), encoding="utf-8")
-    monkeypatch.setattr(sys, "argv", ["render.py", str(report_path), "--page", str(page_path), "--check"])
-    with pytest.raises(ValueError, match="benchmark runner changed"):
-        render.main()
 
 
 def test_public_page_rejects_partial_competitor_run() -> None:
