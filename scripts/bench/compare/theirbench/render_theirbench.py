@@ -26,6 +26,7 @@ TITLES = {
 OWN_METRIC = {"presidio-research": ("f2", "F2, binary PII vs O, presidio-evaluator"),
               "piibench-commercial": ("f1", "span F1, exact span + type, PIIBench seqeval")}
 GAZE_ROWS = ("gaze-full", "gaze-rules-ner", "gaze-rules-only")
+HELD = "held (typed-metric review)"
 QUIET = "not measured under a quiet machine"
 NOT_RUN = {
     "PIIBench full ten-source mix": "five sources carry non-commercial or custom-academic licences and "
@@ -60,6 +61,8 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
         report = json.loads(path.read_text(encoding="utf-8"))
         if report.get("preflight"):
             raise ValueError(f"{path}: preflight results are never published")
+        if "rescored_with" not in report or report["rescored_with"]["harness_dirty"]:
+            raise ValueError(f"{path}: publish only after a clean --rescore on the fixed typed metrics")
         if report["harness_dirty"]:
             raise ValueError(f"{path}: measured on a dirty harness")
         name = report["benchmark"]
@@ -67,7 +70,7 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
         benchmarks[name] = {key: report[key] for key in (
             "identity", "harness_revision", "gaze_crates_tree", "label_maps_sha256", "mapping_sha256",
             "hardware", "common_intersection_labels", "splits", "provenance",
-            "comparison_revision", "comparison_sha256")}
+            "comparison_revision", "comparison_sha256", "typed_hold", "rescored_with")}
         benchmarks[name]["rows"] = rows
         benchmarks[name]["own_metric"] = {}
         benchmarks[name]["reproduction"] = {}
@@ -121,6 +124,17 @@ def chart_rows(entry: Mapping[str, Any]) -> list[str]:
     if missing:
         raise ValueError(f"declared chart rows were not measured: {missing}")
     return list(entry["chart_rows"])
+
+
+def held(entry: Mapping[str, Any], tool: str) -> bool:
+    return family(tool) in entry.get("typed_hold", ())
+
+
+def own_metric_cell(name: str, entry: Mapping[str, Any], tool: str, metric: str) -> str:
+    # Presidio Research's binary PII-vs-O F2 ignores types; PIIBench's seqeval F1 does not.
+    if name == "piibench-commercial" and held(entry, tool):
+        return HELD
+    return f"{entry['own_metric'][tool][metric]:.3f}"
 
 
 def latency_cell(entry: Mapping[str, Any], tool: str) -> str:
@@ -186,12 +200,19 @@ def render(data: Mapping[str, Any]) -> str:
                 continue
             product, common = rows[tool]["product_coverage"], rows[tool]["common_intersection"]
             typed = product["typed_entities"]
+            f1, f2 = (HELD, HELD) if held(entry, tool) else (f"{typed['f1']:.3f}", f"{typed['f2']:.3f}")
             lines.append(
                 f"| {tool} | {product['leaked_bytes']:,} | {product['false_positive_bytes']:,} | "
-                f"{pct(product['document_leak_rate'])} | {typed['f1']:.3f} | {typed['f2']:.3f} | "
-                f"{common['leaked_bytes']:,} | {entry['own_metric'][tool][metric]:.3f} | "
+                f"{pct(product['document_leak_rate'])} | {f1} | {f2} | "
+                f"{common['leaked_bytes']:,} | {own_metric_cell(name, entry, tool, metric)} | "
                 f"{latency_cell(entry, tool)} |")
-        lines += ["", f"Hardware: {entry['hardware']}. Harness `{entry['harness_revision'][:8]}`.", ""]
+        rescored = entry["rescored_with"]
+        lines += ["", f"Typed cells read \"{HELD}\" for tools whose labels pass through collision-family "
+                  "or secret/password/token mappings, which the comparison's typed-scoring fix changed; "
+                  "leaked and false-positive bytes do not depend on labels and are unaffected.",
+                  "", f"Hardware: {entry['hardware']}. Measured with comparison code `{entry['comparison_revision']}`, "
+                  f"typed metrics rescored with `{rescored['comparison_revision']}`; harness "
+                  f"`{rescored['harness_revision'][:8]}`.", ""]
     lines += ["Not run:", ""] + [f"- {name}: {reason}." for name, reason in data["not_run"].items()]
     return "\n".join(lines)
 

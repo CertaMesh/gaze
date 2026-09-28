@@ -111,7 +111,9 @@ def synthetic() -> dict:
             "presidio-strong": row(30), "opf": row(20)}
     quiet = {"cpu": {"contended": False, "valid": True}}
     return {"not_run": {"x": "licence"}, "benchmarks": {"presidio-research": {
-        "rows": rows, "chart_rows": ["gaze-full", "presidio-strong", "opf"],
+        "rows": rows, "chart_rows": ["gaze-full", "presidio-strong", "opf"], "typed_hold": ["opf"],
+        "comparison_revision": "154f3da6",
+        "rescored_with": {"comparison_revision": "b1446215", "harness_revision": "abcdef0123", "harness_dirty": False},
         "provenance": {tool: quiet for tool in rows},
         "common_intersection_labels": ["EMAIL_ADDRESS"], "hardware": "hw",
         "harness_revision": "0123456789", "own_metric": {tool: {"f2": 0.5} for tool in rows},
@@ -179,6 +181,7 @@ class RenderTest(unittest.TestCase):
             smoke.write_text(json.dumps({"smoke_limit": 30, "system": "x", "scored": {}}), encoding="utf-8")
             report = Path(root) / "report.json"
             report.write_text(json.dumps({"harness_dirty": False, "benchmark": "presidio-research", "rows": {},
+                                          "chart_configs": {}, "rescored_with": {"harness_dirty": False},
                                           **{k: None for k in ("identity", "harness_revision", "gaze_crates_tree",
                                                                "label_maps_sha256", "mapping_sha256", "hardware",
                                                                "common_intersection_labels", "splits", "provenance",
@@ -223,6 +226,57 @@ class PinnedComparisonTest(unittest.TestCase):
         configs = backends.chart_configs()
         self.assertEqual(configs["presidio"], "presidio-strong")
         self.assertTrue(set(configs.values()) <= set(backends.compare.TOOLS))
+
+
+class HoldAndRescoreTest(unittest.TestCase):
+    def test_held_typed_cells_and_no_bare_layer_codes(self) -> None:
+        import render_theirbench as render
+
+        body = render.render(synthetic())
+        opf = next(line for line in body.splitlines() if line.startswith("| opf |"))
+        gaze = next(line for line in body.splitlines() if line.startswith("| gaze-full |"))
+        self.assertEqual(opf.count(render.HELD), 2)
+        self.assertNotIn(render.HELD, gaze)
+        self.assertIn("0.500", opf)  # Presidio Research F2 is type-agnostic, never held
+        import re
+        self.assertIsNone(re.search(r"(?<![A-Za-z0-9_-])[CADR](?![A-Za-z0-9_-])", body.replace("| ", "")))
+
+    def test_hold_rule_covers_families_and_secrets_only(self) -> None:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        import theirbench
+
+        maps = {"gaze": {"custom:family:x": [], "email": []}, "opf": {"secret": []},
+                "scrubadub": {"credential": []}, "presidio": {"PERSON": []}, "gliner": {"passport number": []}}
+        self.assertEqual(theirbench.typed_hold(maps), ["gaze", "opf", "scrubadub"])
+
+    def test_rescore_refuses_moved_bytes(self) -> None:
+        import theirbench
+        from loaders import score
+
+        document = score.Document("d0", "Mail anna@example.invalid now", "en", "", "t",
+                                  (score.Span(5, 25, "EMAIL"),))
+        mapping = {"email": ("EMAIL",)}
+        with tempfile.TemporaryDirectory() as root:
+            pred = Path(root)
+            (pred / "x.test.jsonl").write_text(json.dumps({"index": 0, "spans": [[5, 25, "email"]]}) + "\n",
+                                               encoding="utf-8")
+            cells = theirbench.Cells(mapping, frozenset({"EMAIL"}))
+            cells.add(document, [score.Span(5, 25, "email")])
+            report = {"rows": {"x": {"test": cells.result()}}}
+            original = theirbench.tool_family
+            theirbench.tool_family = lambda name: "fam"
+            try:
+                theirbench.rescore(report, {"test": [document]}, {"fam": mapping}, frozenset({"EMAIL"}), pred)
+                report["rows"]["x"]["test"]["product_coverage"]["leaked_bytes"] = 7
+                with self.assertRaisesRegex(SystemExit, "leaked_bytes"):
+                    theirbench.rescore(report, {"test": [document]}, {"fam": mapping}, frozenset({"EMAIL"}), pred)
+            finally:
+                theirbench.tool_family = original
+
+    def test_measured_backend_code_is_unchanged(self) -> None:
+        import backends
+
+        self.assertEqual(backends.backend_code_sha256(), backends.BACKEND_CODE_SHA256)
 
 if __name__ == "__main__":
     unittest.main()

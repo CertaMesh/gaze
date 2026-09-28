@@ -82,6 +82,8 @@ def main() -> int:
         order = [label[2:] for label in json.loads(
             (args.data_dir / "data/label_mapping.json").read_text(encoding="utf-8"))["labels"] if label.startswith("B-")]
         mapping = {tool: replay_label(natives, rb, order) for tool, natives in composed.items()}
+        # As the comparison's typed scoring: a collision-family token earns no typed credit.
+        mapping.update({label: None for label in mapping if label.startswith("custom:family:")})
         if args.system.startswith("presidio"):
             # PIIBench's own harness decides Presidio's labels, including the ones it discards.
             mapping.update({label: rb.PRESIDIO_LABEL_MAP[label] for label in mapping if label in rb.PRESIDIO_LABEL_MAP})
