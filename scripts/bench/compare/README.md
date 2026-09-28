@@ -11,6 +11,11 @@ credit. Additional metrics are document leak rate (PII-bearing documents with
 at least one leaked byte), leaked-entity rate (gold entities with at least one
 uncovered byte), redaction load (predicted bytes / scored document bytes), and
 exact typed-span precision/recall/F1/F2 with raw TP/FP/FN.
+The byte scorer keeps the reviewed native mapping. Exact typed scoring gives
+ambiguous `custom:family:*` labels no typed credit; Gaze password/token and
+OPF secret labels can match PASSWORD/SECURITYTOKEN only under v1. The public
+page lists every metric cell where a competitor scores better than Gaze, with
+overlapping views and splits identified as such.
 
 The SHA-256 first byte of each stable document ID defines a fixed validation
 half (`<128`) and disjoint test half. Candidate thresholds are declared in
