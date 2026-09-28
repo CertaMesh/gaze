@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import warnings
 from collections import defaultdict
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -262,6 +263,11 @@ class Presidio:
         self.analyzer = AnalyzerEngine(nlp_engine=engine, registry=registry, supported_languages=languages)
         self.english_analyzer = None
         if transformer is not None:
+            # Upstream's warning interpolates the document text; detection is unchanged.
+            warnings.filterwarnings(
+                "ignore", message="Skipping annotation, .*overlapping or can't be aligned",
+                module="spacy_huggingface_pipelines.token_classification",
+            )
             hf_engine = NlpEngineProvider(nlp_configuration={
                 "nlp_engine_name": "transformers",
                 "models": [{"lang_code": "en", "model_name": {
@@ -496,7 +502,8 @@ def common_claimed_labels(mappings: dict[str, dict[str, tuple[str, ...]]]) -> fr
         if name == "datafog-python":
             mapping = {key: value for key, value in mapping.items() if key in
                        {"EMAIL", "PHONE", "SSN", "CREDIT_CARD", "IP_ADDRESS", "DATE", "ZIP_CODE",
-                        "DE_VAT_ID", "DE_IBAN", "DE_TAX_ID", "DE_POSTAL_CODE", "DE_PASSPORT", "DE_RESIDENCE_PERMIT"}}
+                        "DE_VAT_ID", "DE_IBAN", "DE_TAX_ID", "DE_SOCIAL_SECURITY_NUMBER",
+                        "DE_POSTAL_CODE", "DE_PASSPORT_NUMBER", "DE_RESIDENCE_PERMIT_NUMBER"}}
         if name == "scrubadub":
             mapping = {key: value for key, value in mapping.items() if key not in
                        {"name", "organization", "location"}}
@@ -878,6 +885,7 @@ def main() -> int:
                     provenance["transformer"] = {
                         "repo": "dslim/bert-base-NER", "revision": "d1a3e8f13f8c3566299d95fcfc9a8d2382a9affc",
                         "sha256": digest_tree(args.transformer_model),
+                        "unaligned_annotation_warning_suppressed": True,
                     }
                 mapping = mappings["presidio"]
             elif name in {"gliner", "gliner-high-recall"}:

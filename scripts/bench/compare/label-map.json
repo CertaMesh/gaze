@@ -512,6 +512,16 @@
     ],
     "URL": [
       "URL"
+    ],
+    "DE_SOCIAL_SECURITY_NUMBER": [
+      "SSN",
+      "NATIONALID"
+    ],
+    "DE_PASSPORT_NUMBER": [
+      "PASSPORTID"
+    ],
+    "DE_RESIDENCE_PERMIT_NUMBER": [
+      "NATIONALID"
     ]
   },
   "scrubadub": {
