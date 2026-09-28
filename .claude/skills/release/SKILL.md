@@ -44,6 +44,11 @@ Run from `main` after all release-blocker PRs are merged.
     evidence under the
     [benchmark gain gate](../../../AGENTS.md#benchmark-gain-gate), and that
     past-release rows were re-measured if the benchmark itself changed.
+11. Re-run `scripts/bench/compare/compare.py` for this release's Gaze rows and
+    every competitor on the same corpus, contracts, and variant packs. Update
+    `comparison.json` and `competitors.md`; retain aggregate results and model
+    hashes. The PR docs gate checks competitor inputs, while this release step
+    refreshes the Gaze revision shown on the page.
 
 If any step fails, stop and fix the release branch. Do not tag around a red
 checklist.

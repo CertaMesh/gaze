@@ -252,6 +252,7 @@
     "version": "v0.15.1"
   },
   "mapping_sha256": "f1aed7b898cfe59a4a4ec75e6b91b2bc336a4175fdf99504579fe92709ef6e60",
+  "policy_sha256_home_normalized": "481f5df7a9b0b562bf2c2db7274cfbf2ea701231c52f1287b27de00554453ff1",
   "runner_sha256": "b3f30d124bbaa060e76fb55748213d9f93dd22fd4e474bafe183f561d1ba4e02",
   "schema_version": 1,
   "scorer_sha256": "10954991346dbf835d0c4fb89cb7a6888dc94652195077f4381b200f4bcde79c",
@@ -640,7 +641,7 @@
         "checkpoint_sha256": "7962be95ebe85491799c225cadaed7d1ac5aef82b530d4d3f02d0ec7e14239e5",
         "decode": "default viterbi, typed output, cpu",
         "runtime": {
-          "python": "/opt/homebrew/Cellar/python@3.10/3.10.20_1/Frameworks/Python.framework/Versions/3.10/bin/python3.10",
+          "python_version": "Python 3.10.20",
           "source_dirty": false,
           "source_revision": "f7f00ca7fb869683eb732c010299d901457f19c3",
           "version": "0.1.0"
