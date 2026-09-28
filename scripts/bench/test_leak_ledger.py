@@ -56,8 +56,48 @@ class CauseTests(unittest.TestCase):
             row(*IBAN, "IBAN", covered=10), [trace(5, 15, "custom:iban", "iban.structural")],
             pool(vetoed=[item(*IBAN, "custom:credit_card", "card.structural", reason="LuhnFailed")]),
         )
-        self.assertEqual(result["cause"], "d")
+        self.assertEqual((result["cause"], result["detail"]["kind"]), ("d", "vetoed"))
         self.assertEqual(result["detail"]["by"][0]["sources"], "iban.structural")
+        self.assertEqual(result["detail"]["lost"],
+                         [{"recognizer": "card.structural", "class": "custom:credit_card",
+                           "tier": "ValidatorVeto"}])
+
+    def test_full_candidate_losing_to_a_shorter_winner_is_d_lost_resolution(self):
+        # The review's case: the whole IBAN was found, but a shorter NER winner took
+        # six of its bytes and the rest shipped raw. That is a resolution loss.
+        full = item(*IBAN, "custom:iban", "iban.structural")
+        short = item(5, 11, "name", "ner")
+        result = classify(
+            row(*IBAN, "IBAN", covered=6), [trace(5, 11, "name", "ner")],
+            pool(detected=[full, short], resolved=[short]),
+            losers=[("iban.structural", "ClassPriority")],
+        )
+        self.assertEqual((result["cause"], result["detail"]["kind"]), ("d", "lost_resolution"))
+        self.assertEqual(result["detail"]["lost"],
+                         [{"recognizer": "iban.structural", "class": "custom:iban",
+                           "tier": "ClassPriority"}])
+
+    def test_fuller_candidate_that_was_vetoed_is_d_vetoed_not_a_resolution_loss(self):
+        full = item(*IBAN, "custom:iban", "iban.structural")
+        result = classify(
+            row(*IBAN, "IBAN", covered=6), [trace(5, 11, "custom:phone", "phone.de")],
+            pool(detected=[full], vetoed=[{**full, "reason": "IbanMod97Failed"}]),
+        )
+        self.assertEqual(result["detail"]["kind"], "vetoed")
+        self.assertEqual([item["tier"] for item in result["detail"]["lost"]], ["ValidatorVeto"])
+
+    def test_partial_span_without_a_fuller_candidate_is_d_no_full_candidate(self):
+        short = item(5, 11, "custom:iban", "iban.cue")
+        result = classify(row(*IBAN, "IBAN", covered=6), [trace(5, 11, "custom:iban", "iban.cue")],
+                          pool(detected=[short], resolved=[short]))
+        self.assertEqual(result["detail"]["kind"], "no_full_candidate")
+        self.assertEqual(result["detail"]["lost"], [])
+
+    def test_fuller_primary_winner_missing_from_the_trace_is_d_resolved_not_emitted(self):
+        full = item(*IBAN, "custom:iban", "iban.structural")
+        result = classify(row(*IBAN, "IBAN", covered=6), [trace(5, 11, "name", "ner")],
+                          pool(detected=[full], resolved=[full]))
+        self.assertEqual(result["detail"]["kind"], "resolved_not_emitted")
 
     def test_validator_veto_is_b_with_rule_and_reason(self):
         result = classify(row(*TAX, "TAXNUM"), pool_items=pool(
@@ -187,7 +227,42 @@ class CheckTests(unittest.TestCase):
         rows = copy.deepcopy(self.rows)
         target = next(item for item in rows if item["covered"] == 0)
         target["cause"] = "d"
+        target["detail"] = {"kind": "no_full_candidate", "by": [], "lost": []}
         with self.assertRaisesRegex(ledger.LedgerError, "partial-span"):
+            ledger.validate_rows(rows, self.expected)
+
+    def test_relabelled_cause_without_its_evidence_is_refused_for_every_label(self):
+        # PASSWORD is outside contracts v2 and v3; its causes must be pinned too.
+        rows = copy.deepcopy(self.rows)
+        target = next(item for item in rows if item["label"] == "PASSWORD" and item["cause"] == "a")
+        target["cause"] = "g"
+        with self.assertRaisesRegex(ledger.LedgerError, "detail does not match"):
+            ledger.validate_rows(rows, self.expected)
+
+    def test_relabel_that_keeps_the_schema_changes_the_rendered_table(self):
+        rows = copy.deepcopy(self.rows)
+        target = next(item for item in rows if item["label"] == "PASSWORD" and item["cause"] == "a")
+        other = next(item for item in rows if item["cause"] == "f")
+        target["cause"], target["junk_shape"] = "f", other["junk_shape"]
+        ledger.validate_rows(rows, self.expected)
+        contracts = ledger._contracts()
+        totals = ledger.reconcile(self.rows, self.record_path, contracts, ledger._layer_contract())
+        before = ledger.render(self.rows, self.index, totals, contracts[3], ledger._layer_contract())
+        after = ledger.render(rows, self.index, totals, contracts[3], ledger._layer_contract())
+        self.assertNotEqual(before, after)
+
+    def test_vetoed_row_without_a_kind_is_a_ledger_error_not_a_key_error(self):
+        rows = copy.deepcopy(self.rows)
+        target = next(item for item in rows if item["cause"] == "b")
+        del target["detail"]["kind"]
+        with self.assertRaises(ledger.LedgerError):
+            ledger.validate_rows(rows, self.expected)
+
+    def test_unknown_partial_kind_is_refused(self):
+        rows = copy.deepcopy(self.rows)
+        target = next(item for item in rows if item["cause"] == "d")
+        target["detail"]["kind"] = "bogus"
+        with self.assertRaisesRegex(ledger.LedgerError, "no kind of cause"):
             ledger.validate_rows(rows, self.expected)
 
     def test_unknown_cause_is_refused(self):

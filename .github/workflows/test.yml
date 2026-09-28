@@ -247,6 +247,10 @@ jobs:
         run: |
           cargo build --locked -p gaze-cli --bin gaze
           cargo build --locked -p gaze-recognizers --example clean_for_bench
+      # `cargo test --workspace` builds examples but never runs their unit tests; the
+      # leak ledger's pool-dump pins (normalizer copy vs the pipeline trace) live here.
+      - name: Run bench producer example tests
+        run: cargo test --locked -p gaze-recognizers --all-features --example clean_for_bench
       - name: Check policy and CLI equivalence on committed sample
         run: uv run --project scripts/bench python scripts/bench/check_policy_equivalence.py --self-check
 

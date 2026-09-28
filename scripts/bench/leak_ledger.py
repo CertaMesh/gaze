@@ -13,17 +13,10 @@ hold exactly those rows, requires every label's total to equal the scorecard's
 `per_label_recall` leaked bytes under every scored-label contract, and fails if
 the rendered table drifted. Only the cause column comes from the probe.
 
-Causes, first match wins, in this order:
-
-  d  partial span: a token covers part of the value; the rest stays raw
-  b  vetoed: a validator vetoed an overlapping candidate
-  c  lost in resolution: an overlapping candidate lost to another winner
-  b  dropped before resolution (locale claim) or locale-gated recognizer
-  e  repeat copy not swept: the same value is protected elsewhere in the document
-  f  junk-shaped gold with no candidate at all (a candidate for an audited
-     contract change, never excluded here)
-  a  no candidate from any recognizer, with the closest recognizer noted
-  g  other: a primary-resolution winner covers it, yet the final trace does not
+Causes come from one ordered table, `STEPS`; the first step that matches wins.
+`CAUSES` gives each cause letter its title, the detail fields a row of it must
+carry and how the table names its mechanism. `classify`, `validate_rows` and
+the renderer all read these two tables.
 """
 
 from __future__ import annotations
@@ -39,7 +32,8 @@ import subprocess
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import gaze_bench_score as score
 import scorecard_record as record
@@ -57,16 +51,6 @@ HEADLINE_CONTRACT = 3
 CONFIG = "policy-file"
 LAYERS = ("C", "A", "D", "R")
 
-CAUSES = {
-    "a": "no candidate",
-    "b": "vetoed",
-    "c": "lost in resolution",
-    "d": "partial span",
-    "e": "repeat not swept",
-    "f": "junk-shaped gold",
-    "g": "other",
-}
-B_KINDS = ("validator", "pre_resolution_drop", "locale_gate")
 
 # Identifier labels: a real value carries at least one digit and more than
 # four alphanumerics. A value that does not is junk-shaped (the bare word
@@ -178,69 +162,236 @@ def _best(items: Sequence[Mapping[str, Any]], start: int, end: int, compatible) 
     ))
 
 
+@dataclass(frozen=True)
+class Span:
+    """One leaked gold span with everything a step may read."""
+
+    row: Mapping[str, Any]
+    text: bytes
+    trace: Sequence[Mapping[str, Any]]
+    pool: Mapping[str, Sequence[Mapping[str, Any]]]
+    compatible_pairs: frozenset[tuple[str, str]]
+    losers: Sequence[tuple[str, str]]
+
+    @property
+    def start(self) -> int:
+        return self.row["start"]
+
+    @property
+    def end(self) -> int:
+        return self.row["end"]
+
+    def compatible(self, predicted: str) -> bool:
+        return (predicted, self.row["label"]) in self.compatible_pairs
+
+    def overlapping(self, part: str) -> list[Mapping[str, Any]]:
+        return [item for item in self.pool[part] if _overlaps(item, self.start, self.end)]
+
+    def best(self, items: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+        return _best(items, self.start, self.end, self.compatible)
+
+    def tier(self, recognizer: str) -> str:
+        # Audit loser rows name the tier but carry no span; a recognizer that
+        # lost twice in one document under different tiers is reported as both.
+        tiers = sorted({
+            tier for name, tier in self.losers if name == recognizer and tier != "ValidatorVeto"
+        })
+        return "+".join(tiers) if tiers else "unlogged"
+
+    def resolved(self, item: Mapping[str, Any]) -> bool:
+        key = (item["raw_start"], item["raw_end"], item["recognizer_id"])
+        return any(
+            (other["raw_start"], other["raw_end"], other["recognizer_id"]) == key
+            for other in self.pool["resolved"]
+        )
+
+
+def _partial(span: Span) -> dict[str, Any] | None:
+    """d: a token covers part of the value. The sub-kind says whether a candidate
+    that would have covered more lost resolution, was vetoed, won primary
+    resolution yet left the trace, or never existed."""
+    covered = span.row["covered"]
+    if not covered:
+        return None
+    by = sorted({
+        (item["class"], "+".join(item["provenance"]["source_ids"]), item["provenance"]["stage"])
+        for item in span.trace if _overlaps(item, span.start, span.end)
+    })
+    fuller = {
+        part: [item for item in span.overlapping(part)
+               if _overlap_length(item, span.start, span.end) > covered]
+        for part in ("detected", "vetoed")
+    }
+    # A vetoed candidate is missing from the resolved winners too; it did not lose resolution.
+    vetoed = {(item["raw_start"], item["raw_end"], item["recognizer_id"]) for item in span.pool["vetoed"]}
+    lost = [
+        item for item in fuller["detected"]
+        if not span.resolved(item)
+        and (item["raw_start"], item["raw_end"], item["recognizer_id"]) not in vetoed
+    ]
+    emitted = [item for item in fuller["detected"] if span.resolved(item)]
+    if lost:
+        kind = "lost_resolution"
+    elif fuller["vetoed"]:
+        kind = "vetoed"
+    elif emitted:
+        kind = "resolved_not_emitted"
+    else:
+        kind = "no_full_candidate"
+    losing = sorted({
+        (item["recognizer_id"], item["class"], span.tier(item["recognizer_id"])) for item in lost
+    } | {
+        (item["recognizer_id"], item["class"], "ValidatorVeto") for item in fuller["vetoed"]
+    })
+    return {
+        "kind": kind,
+        "by": [{"class": c, "sources": s, "stage": st} for c, s, st in by],
+        "lost": [{"recognizer": r, "class": c, "tier": t} for r, c, t in losing],
+    }
+
+
+def _validator_veto(span: Span) -> dict[str, Any] | None:
+    vetoed = span.overlapping("vetoed")
+    if not vetoed:
+        return None
+    item = span.best(vetoed)
+    return {"kind": "validator", **_pool_ref(item), "reason": item.get("reason")}
+
+
+def _loser(span: Span) -> Mapping[str, Any] | None:
+    detected = span.overlapping("detected")
+    return span.best(detected) if detected else None
+
+
+def _winner_not_emitted(span: Span) -> dict[str, Any] | None:
+    loser = _loser(span)
+    if loser is None or not span.resolved(loser):
+        return None
+    return {"note": "primary_winner_not_in_final_trace", **_pool_ref(loser)}
+
+
+def _lost_to_winner(span: Span) -> dict[str, Any] | None:
+    loser = _loser(span)
+    if loser is None:
+        return None
+    winners = [
+        item for item in span.pool["resolved"]
+        if _overlaps(item, loser["raw_start"], loser["raw_end"])
+    ]
+    if not winners:
+        return None
+    winner = _best(winners, loser["raw_start"], loser["raw_end"], lambda _: False)
+    return {
+        "loser": loser["recognizer_id"], "loser_class": loser["class"],
+        "winner": winner["recognizer_id"], "winner_class": winner["class"],
+        "tier": span.tier(loser["recognizer_id"]),
+    }
+
+
+def _pre_resolution_drop(span: Span) -> dict[str, Any] | None:
+    loser = _loser(span)
+    if loser is None:
+        return None
+    return {"kind": "pre_resolution_drop", **_pool_ref(loser), "reason": None}
+
+
+def _locale_gated(span: Span) -> dict[str, Any] | None:
+    gated = span.overlapping("locale_gated")
+    if not gated:
+        return None
+    return {"kind": "locale_gate", **_pool_ref(span.best(gated)), "reason": None}
+
+
+def _repeat(span: Span) -> dict[str, Any] | None:
+    return _protected_copy(span.text[span.start:span.end], span.start, span.text, span.trace)
+
+
+def _junk(span: Span) -> dict[str, Any] | None:
+    if junk_shape(span.row["label"], span.text[span.start:span.end]) is None:
+        return None
+    return {"closest": _closest(span.start, span.end, span.trace, span.pool, span.compatible)}
+
+
+def _nothing(span: Span) -> dict[str, Any]:
+    return {"closest": _closest(span.start, span.end, span.trace, span.pool, span.compatible)}
+
+
+@dataclass(frozen=True)
+class Step:
+    letter: str
+    predicate: Callable[[Span], dict[str, Any] | None]
+
+
+# First match wins. `_nothing` always matches, so every span gets a cause.
+STEPS = (
+    Step("d", _partial),
+    Step("b", _validator_veto),
+    Step("g", _winner_not_emitted),
+    Step("c", _lost_to_winner),
+    Step("b", _pre_resolution_drop),
+    Step("b", _locale_gated),
+    Step("e", _repeat),
+    Step("f", _junk),
+    Step("a", _nothing),
+)
+
+
+def _closest_name(detail: Mapping[str, Any]) -> str:
+    closest = detail["closest"]
+    if closest is None:
+        return "nothing near"
+    return f"closest `{closest['class']}`" + (" (compatible)" if closest["compatible"] else "")
+
+
+def _partial_name(detail: Mapping[str, Any]) -> str:
+    covered = ", ".join(sorted({item["class"] for item in detail["by"]}))
+    if detail["kind"] == "no_full_candidate":
+        return f"covered by {covered}; no fuller candidate"
+    losing = ", ".join(sorted({f"`{item['recognizer']}`" for item in detail["lost"]}))
+    return f"{detail['kind']}: {losing or 'resolved winner'} over {covered}"
+
+
+@dataclass(frozen=True)
+class Cause:
+    title: str
+    fields: frozenset[str]
+    name: Callable[[Mapping[str, Any]], str]
+    kinds: tuple[str, ...] = ()
+
+
+CAUSES = {
+    "a": Cause("no candidate", frozenset({"closest"}), _closest_name),
+    "b": Cause("vetoed", frozenset({"kind", "recognizer", "class", "reason"}),
+               lambda d: f"{d['kind']} `{d['recognizer']}`",
+               ("validator", "pre_resolution_drop", "locale_gate")),
+    "c": Cause("lost in resolution",
+               frozenset({"loser", "loser_class", "winner", "winner_class", "tier"}),
+               lambda d: f"`{d['loser']}` lost to `{d['winner_class']}` ({d['tier']})"),
+    "d": Cause("partial span", frozenset({"kind", "by", "lost"}), _partial_name,
+               ("lost_resolution", "vetoed", "resolved_not_emitted", "no_full_candidate")),
+    "e": Cause("repeat not swept", frozenset({"copy_classes", "copy_stages", "copy_sources"}),
+               lambda d: "copy protected by " + ", ".join(d["copy_stages"])),
+    "f": Cause("junk-shaped gold", frozenset({"closest"}), _closest_name),
+    "g": Cause("other", frozenset({"note", "recognizer", "class"}), lambda d: d["note"]),
+}
+ROW_FIELDS = frozenset({
+    "layer", "document_id", "label", "start", "end", "leaked", "covered",
+    "cause", "detail", "junk_shape",
+})
+
+
 def classify(
     row: Mapping[str, Any], text: bytes, trace: Sequence[Mapping[str, Any]],
     pool: Mapping[str, Sequence[Mapping[str, Any]]], compatible_pairs: frozenset[tuple[str, str]],
     losers: Sequence[tuple[str, str]] = (),
 ) -> dict[str, Any]:
-    start, end, label = row["start"], row["end"], row["label"]
-    value = text[start:end]
-    junk = junk_shape(label, value)
-
-    def compatible(predicted: str) -> bool:
-        return (predicted, label) in compatible_pairs
-
-    def cause(letter: str, **detail: Any) -> dict[str, Any]:
-        return {**row, "cause": letter, "detail": detail, "junk_shape": junk}
-
-    if row["covered"]:
-        by = sorted({
-            (item["class"], "+".join(item["provenance"]["source_ids"]), item["provenance"]["stage"])
-            for item in trace if _overlaps(item, start, end)
-        })
-        return cause("d", by=[{"class": c, "sources": s, "stage": st} for c, s, st in by])
-    vetoed = [item for item in pool["vetoed"] if _overlaps(item, start, end)]
-    if vetoed:
-        item = _best(vetoed, start, end, compatible)
-        return cause("b", kind="validator", **_pool_ref(item), reason=item.get("reason"))
-    detected = [item for item in pool["detected"] if _overlaps(item, start, end)]
-    if detected:
-        loser = _best(detected, start, end, compatible)
-        same = [
-            item for item in pool["resolved"]
-            if (item["raw_start"], item["raw_end"], item["recognizer_id"])
-            == (loser["raw_start"], loser["raw_end"], loser["recognizer_id"])
-        ]
-        if same:
-            return cause("g", note="primary_winner_not_in_final_trace", **_pool_ref(loser))
-        winners = [
-            item for item in pool["resolved"]
-            if _overlaps(item, loser["raw_start"], loser["raw_end"])
-        ]
-        if winners:
-            winner = _best(winners, loser["raw_start"], loser["raw_end"], lambda _: False)
-            # Audit loser rows name the tier but carry no span; a recognizer that
-            # lost twice in one document under different tiers is reported as both.
-            tiers = sorted({
-                tier for recognizer, tier in losers
-                if recognizer == loser["recognizer_id"] and tier != "ValidatorVeto"
-            })
-            return cause(
-                "c", loser=loser["recognizer_id"], loser_class=loser["class"],
-                winner=winner["recognizer_id"], winner_class=winner["class"],
-                tier="+".join(tiers) if tiers else "unlogged",
-            )
-        return cause("b", kind="pre_resolution_drop", **_pool_ref(loser), reason=None)
-    gated = [item for item in pool["locale_gated"] if _overlaps(item, start, end)]
-    if gated:
-        item = _best(gated, start, end, compatible)
-        return cause("b", kind="locale_gate", **_pool_ref(item), reason=None)
-    copy = _protected_copy(value, start, text, trace)
-    if copy is not None:
-        return cause("e", **copy)
-    if junk is not None:
-        return cause("f", closest=_closest(start, end, trace, pool, compatible))
-    return cause("a", closest=_closest(start, end, trace, pool, compatible))
+    span = Span(row, text, trace, pool, compatible_pairs, losers)
+    junk = junk_shape(row["label"], text[row["start"]:row["end"]])
+    for step in STEPS:
+        detail = step.predicate(span)
+        if detail is not None:
+            return {**row, "cause": step.letter, "detail": detail, "junk_shape": junk}
+    raise AssertionError("the last step always matches")
 
 
 def _protected_copy(
@@ -461,21 +612,31 @@ def _scored(label: str, contract: score.ScoredLabelContract) -> bool:
 
 
 def validate_rows(rows: Sequence[Mapping[str, Any]], expected: Sequence[Mapping[str, Any]]) -> None:
+    """The rows are exactly the record's leaked spans, and each one is a
+    well-formed row of its cause: `CAUSES` fixes the detail fields and kinds, so
+    relabelling a row's cause without its evidence fails here, for every label."""
+    for row in rows:
+        if set(row) != ROW_FIELDS:
+            raise LedgerError(f"row fields {sorted(set(row) ^ ROW_FIELDS)} differ from the schema")
     keys = ("layer", "document_id", "label", "start", "end", "leaked", "covered")
     if [tuple(row[key] for key in keys) for row in rows] != [
         tuple(row[key] for key in keys) for row in expected
     ]:
         raise LedgerError("ledger rows differ from the leaked spans the record re-derives")
     for row in rows:
-        letter = row["cause"]
-        if letter not in CAUSES:
-            raise LedgerError(f"unknown cause {letter!r}")
-        if (letter == "d") != (row["covered"] > 0):
-            raise LedgerError(f"{row['document_id']}: partial-span cause disagrees with coverage")
-        if letter == "b" and row["detail"].get("kind") not in B_KINDS:
-            raise LedgerError(f"{row['document_id']}: vetoed row without a known kind")
-        if letter == "f" and row["junk_shape"] is None:
-            raise LedgerError(f"{row['document_id']}: junk cause without a junk shape")
+        where = f"{row['layer']}/{row['document_id']}:{row['start']}-{row['end']}"
+        cause = CAUSES.get(row["cause"])
+        if cause is None:
+            raise LedgerError(f"{where}: unknown cause {row['cause']!r}")
+        detail = row["detail"]
+        if not isinstance(detail, Mapping) or set(detail) != cause.fields:
+            raise LedgerError(f"{where}: detail does not match cause {row['cause']!r}")
+        if cause.kinds and detail["kind"] not in cause.kinds:
+            raise LedgerError(f"{where}: {detail['kind']!r} is no kind of cause {row['cause']!r}")
+        if (row["cause"] == "d") != (row["covered"] > 0):
+            raise LedgerError(f"{where}: partial-span cause disagrees with coverage")
+        if row["cause"] == "f" and row["junk_shape"] is None:
+            raise LedgerError(f"{where}: junk cause without a junk shape")
 
 
 def reconcile(
@@ -538,7 +699,8 @@ def render(rows: Sequence[Mapping[str, Any]], index: Mapping[str, Any],
         "",
         "Layer C by label and cause (bytes):",
         "",
-        "| Label | " + " | ".join(f"{letter} {CAUSES[letter]}" for letter in letters) + " | Total |",
+        "| Label | " + " | ".join(f"{letter} {CAUSES[letter].title}" for letter in letters)
+        + " | Total |",
         "| --- | " + " | ".join("---:" for _ in letters) + " | ---: |",
     ]
     by_label: dict[str, Counter] = defaultdict(Counter)
@@ -563,10 +725,33 @@ def render(rows: Sequence[Mapping[str, Any]], index: Mapping[str, Any],
                 counts[row["cause"]] += row["leaked"]
         lines.append(f"| {layer} | " + " | ".join(_fmt(counts[letter]) for letter in letters)
                      + f" | {sum(counts.values()):,} |")
+    kinds = CAUSES["d"].kinds
+    lines += ["", "Partial spans (d) by what a fuller candidate met (bytes):", "",
+              "| Layer | " + " | ".join(kinds) + " | Total |",
+              "| --- | " + " | ".join("---:" for _ in kinds) + " | ---: |"]
+    for layer, selected in (("C", contract), ("A", layer_contract), ("R", layer_contract)):
+        counts = Counter()
+        for row in rows:
+            if row["layer"] == layer and row["cause"] == "d" and _scored(row["label"], selected):
+                counts[row["detail"]["kind"]] += row["leaked"]
+        lines.append(f"| {layer} | " + " | ".join(_fmt(counts[kind]) for kind in kinds)
+                     + f" | {sum(counts.values()):,} |")
+    outside = [row for row in rows if row["layer"] == "C" and not _scored(row["label"], contract)]
+    if outside:
+        lines += ["", f"Layer C labels outside contract v{HEADLINE_CONTRACT} (scored by v1 only):",
+                  "", "| Label | " + " | ".join(letters) + " | Total |",
+                  "| --- | " + " | ".join("---:" for _ in letters) + " | ---: |"]
+        outside_by_label: dict[str, Counter] = defaultdict(Counter)
+        for row in outside:
+            outside_by_label[row["label"]][row["cause"]] += row["leaked"]
+        for label in sorted(outside_by_label):
+            counts = outside_by_label[label]
+            lines.append(f"| {label} | " + " | ".join(_fmt(counts[letter]) for letter in letters)
+                         + f" | {sum(counts.values()):,} |")
     lines += ["", "Top 10 layer C clusters (label, cause, mechanism):", "",
               "| Label | Cause | Mechanism | Spans | Bytes |", "| --- | --- | --- | ---: | ---: |"]
     for (label, letter, key), (spans, count) in clusters(scored_c)[:10]:
-        lines.append(f"| {label} | {letter} {CAUSES[letter]} | {key} | {spans} | {count:,} |")
+        lines.append(f"| {label} | {letter} {CAUSES[letter].title} | {key} | {spans} | {count:,} |")
     junk = [row for row in scored_c if row["junk_shape"] is not None]
     lines += ["", f"Junk-shaped gold in layer C: {len(junk)} spans, "
               f"{sum(row['leaked'] for row in junk):,} leaked bytes "
@@ -576,21 +761,7 @@ def render(rows: Sequence[Mapping[str, Any]], index: Mapping[str, Any],
 
 
 def mechanism(row: Mapping[str, Any]) -> str:
-    detail = row["detail"]
-    letter = row["cause"]
-    if letter == "d":
-        return "covered by " + ", ".join(sorted({item["class"] for item in detail["by"]}))
-    if letter == "b":
-        return f"{detail['kind']} `{detail['recognizer']}`"
-    if letter == "c":
-        return f"`{detail['loser']}` lost to `{detail['winner_class']}` ({detail['tier']})"
-    if letter == "e":
-        return "copy protected by " + ", ".join(detail["copy_stages"])
-    if letter in {"a", "f"}:
-        closest = detail["closest"]
-        return "nothing near" if closest is None else (
-            f"closest `{closest['class']}`" + (" (compatible)" if closest["compatible"] else ""))
-    return detail["note"]
+    return CAUSES[row["cause"]].name(row["detail"])
 
 
 def clusters(rows: Sequence[Mapping[str, Any]]) -> list:
