@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(REPO / "scripts/bench"))
+from markdown_table import table_header  # noqa: E402
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
 DOC = REPO / "docs/reference/benchmarks/README.md"
 BLOCK = "their-benchmarks"
@@ -70,6 +72,7 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
             "identity", "harness_revision", "gaze_crates_tree", "label_maps_sha256", "mapping_sha256",
             "hardware", "common_intersection_labels", "splits", "provenance",
             "comparison_revision", "comparison_sha256", "typed_hold", "rescored_with")}
+        benchmarks[name]["gaze_crates_tree"] = report["gaze_crates_tree"]
         benchmarks[name]["rows"] = rows
         benchmarks[name]["own_metric"] = {}
         benchmarks[name]["reproduction"] = {}
@@ -219,9 +222,9 @@ def render(data: Mapping[str, Any]) -> str:
                   "```", "",
                   f"Gold PII bytes: {gold:,}. Common-intersection labels: "
                   f"{', '.join(entry['common_intersection_labels']) or 'none'}.", "",
-                  f"| Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | "
-                  f"Own metric ({metric_label}) |",
-                  "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
+                  *table_header([("Tool", False), ("Leaked B", True), ("FP B", True), ("Doc leak rate", True),
+                                 ("Typed F1", True), ("Typed F2", True), ("Leaked B, common", True),
+                                 (f"Own metric ({metric_label})", True)])]
         order = [*GAZE_ROWS, *sorted(tool for tool in rows if tool not in GAZE_ROWS)]
         for tool in order:
             if tool not in rows:
@@ -240,7 +243,7 @@ def render(data: Mapping[str, Any]) -> str:
                   "leaked and false-positive bytes do not depend on labels and are unaffected.",
                   "", f"Hardware: {entry['hardware']}. Measured with comparison code `{entry['comparison_revision']}`, "
                   f"typed metrics rescored with `{rescored['comparison_revision']}`; harness "
-                  f"`{rescored['harness_revision'][:8]}`.", ""]
+                  f"`{rescored['harness_revision'][:8]}`. Gaze ran on crates tree `{entry['gaze_crates_tree'][:8]}`.", ""]
     lines += ["Not run:", ""] + [f"- {name}: {reason}." for name, reason in data["not_run"].items()]
     return "\n".join(lines)
 

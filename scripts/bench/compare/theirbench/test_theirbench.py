@@ -112,7 +112,7 @@ def synthetic() -> dict:
     quiet = {"cpu": {"contended": False, "valid": True}}
     return {"not_run": {"x": "licence"}, "benchmarks": {"presidio-research": {
         "rows": rows, "chart_rows": ["gaze-full", "presidio-strong", "opf"], "typed_hold": ["opf"],
-        "comparison_revision": "154f3da6",
+        "comparison_revision": "154f3da6", "gaze_crates_tree": "97e45cfe07d1",
         "rescored_with": {"comparison_revision": "b1446215", "harness_revision": "abcdef0123", "harness_dirty": False},
         "provenance": {tool: quiet for tool in rows},
         "common_intersection_labels": ["EMAIL_ADDRESS"], "hardware": "hw",
