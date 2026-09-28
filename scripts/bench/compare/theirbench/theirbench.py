@@ -81,9 +81,10 @@ def common_intersection(composed: Mapping[str, Mapping[str, Sequence[str]]]) -> 
 
 class Cells:
     def __init__(self, mapping: Mapping[str, Sequence[str]], common: frozenset[str]) -> None:
+        typed = backends.typed_mapping(dict(mapping))
         self.views = {
-            "product_coverage": ComparisonMetrics(mapping, None),
-            "common_intersection": ComparisonMetrics(mapping, common),
+            "product_coverage": ComparisonMetrics(mapping, None, typed),
+            "common_intersection": ComparisonMetrics(mapping, common, typed),
         }
 
     def add(self, document: score.Document, predictions: Sequence[score.Span]) -> None:
@@ -157,6 +158,39 @@ def measure_gaze(
     return result
 
 
+# Tool families whose typed cells stay held: their label maps pass through labels
+# the comparison's typed-scoring fix touched (collision families, secrets).
+TYPED_HOLD_PATTERN = ("custom:family:", "secret", "password", "token", "credential")
+
+
+def typed_hold(mappings: Mapping[str, Mapping[str, Sequence[str]]]) -> list[str]:
+    return sorted(family for family, table in mappings.items()
+                  if any(marker in label for label in table for marker in TYPED_HOLD_PATTERN))
+
+
+def rescore(report: dict, splits: Mapping[str, Sequence[score.Document]],
+            composed: Mapping[str, Mapping[str, Sequence[str]]], common: frozenset[str],
+            predictions_dir: Path) -> None:
+    """Recompute every row from stored predictions; only typed cells may change."""
+    for name, result in report["rows"].items():
+        mapping = composed[tool_family(name)]
+        for split, documents in splits.items():
+            cells = Cells(mapping, common)
+            rows = (predictions_dir / f"{name}.{split}.jsonl").read_text(encoding="utf-8").splitlines()
+            if len(rows) != len(documents):
+                raise SystemExit(f"{name}/{split}: stored predictions do not cover the documents")
+            for document, line in zip(documents, rows):
+                stored = json.loads(line)["spans"]
+                cells.add(document, compare.byte_spans(document.text, [tuple(span) for span in stored]))
+            fresh = cells.result()
+            for view, values in fresh.items():
+                old = result[split][view]
+                moved = sorted(key for key in values if key != "typed_entities" and values[key] != old[key])
+                if moved:
+                    raise SystemExit(f"rescore moved non-typed metrics for {name}/{split}/{view}: {moved}")
+                old["typed_entities"] = values["typed_entities"]
+
+
 def latency(timers: Sequence[float]) -> dict[str, object]:
     return {"p50_ms": round(score.percentile(timers, 0.5), 3) if timers else None,
             "p95_ms": round(score.percentile(timers, 0.95), 3) if timers else None,
@@ -175,6 +209,8 @@ def main() -> int:
     parser.add_argument("--gaze-policy-rules-ner", type=Path)
     parser.add_argument("--predictions-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--rescore", action="store_true",
+                        help="recompute metrics from stored predictions with the pinned metric code; no models run")
     parser.add_argument("--preflight", type=int, metavar="N",
                         help="STEER 4 label preflight: first N documents per source; never published")
     backends.add_tool_arguments(parser)
@@ -217,6 +253,20 @@ def main() -> int:
     }
     if report["identity"] != identity or report["common_intersection_labels"] != sorted(common):
         raise SystemExit("--output was produced for a different benchmark identity or roster")
+    report["typed_hold"] = typed_hold(mappings)
+    if args.rescore:
+        if not report["rows"]:
+            raise SystemExit("--rescore needs a measured --output report")
+        rescore(report, splits, composed, common, args.predictions_dir)
+        report["rescored_with"] = {
+            "comparison_revision": backends.COMPARISON_REVISION, "comparison_sha256": pinned,
+            "harness_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=compare.REPO, text=True).strip(),
+            "harness_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=compare.REPO, text=True).strip()),
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+        compare.write_report(args.output, report)
+        print(f"THEIRBENCH_RESCORED {args.benchmark} {len(report['rows'])} rows", file=sys.stderr)
+        return 0
     with tempfile.TemporaryDirectory(prefix="gaze-theirbench-") as scratch:
         for name in selected:
             if name in report["rows"]:

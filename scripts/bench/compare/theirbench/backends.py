@@ -21,10 +21,18 @@ if getattr(sys.modules.get("compare"), "__file__", "") is None:
     del sys.modules["compare"]
 import compare  # noqa: E402
 
-COMPARISON_REVISION = "154f3da6"
+COMPARISON_REVISION = "b1446215"
+# The rows were measured with compare.py at 154f3da6. Its backend construction
+# and tool adapters are byte-identical at COMPARISON_REVISION (the later
+# commits changed typed scoring and reporting only); BACKEND_CODE_SHA256 pins
+# exactly that code, so a measured row always matches the code named here.
+MEASURED_REVISION = "154f3da6"
+BACKEND_CODE_SHA256 = "3604a9cf3e420db14bae23b6f36d850ae55a93234fc82f2101bb235ad0a2720b"
+BACKEND_CODE_PARTS = ("class Presidio", "class Gliner", "class DataFogCore", "class DataFogPython",
+                      "class Scrubadub", "class Opf", "def resolved_presidio_spans", "def byte_spans")
 PINNED_SHA256 = {
-    "compare.py": "becbfc3dcafa69bb42d645f2c80055a68908e23fdc75c252dd01fb4e96ededb6",
-    "comparison_metrics.py": "bd29a2c0d508bd950be572f59e27ea6000af2bd4c984271a21a554668f1af1c5",
+    "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
+    "comparison_metrics.py": "451b608228cdc0ed33057d86e0ea6c4401584834a9626e6b448db1a4c10f999d",
     "label-map.json": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e",
     "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
     "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
@@ -38,7 +46,26 @@ def verify_pinned_comparison() -> dict[str, str]:
     if changed:
         raise SystemExit(f"{changed} differ from comparison revision {COMPARISON_REVISION}; "
                          "mirror the change in theirbench/backends.py and re-pin")
+    if backend_code_sha256() != BACKEND_CODE_SHA256:
+        raise SystemExit(f"compare.py backend construction differs from measured revision {MEASURED_REVISION}")
     return actual
+
+
+def backend_code_sha256() -> str:
+    """Hash of compare.main()'s backend construction plus every tool adapter."""
+    source = (COMPARE_DIR / "compare.py").read_text(encoding="utf-8")
+    start = source.index('            if name.startswith("presidio"):')
+    parts = [source[start:source.index("            try:\n                # Warm the model", start)]]
+    for name in BACKEND_CODE_PARTS:
+        begin = source.index(name)
+        parts.append(source[begin:source.index("\n\n\n", begin)])
+    return hashlib.sha256("\n#####\n".join(parts).encode()).hexdigest()
+
+
+def typed_mapping(mapping: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+    """The comparison's typed map for a set without scored-label contract v1:
+    collision-family tokens earn no typed credit."""
+    return compare.typed_mapping_for_contract(dict(mapping), "none")
 
 
 def chart_configs() -> dict[str, str]:
