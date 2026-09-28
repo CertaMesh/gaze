@@ -120,7 +120,16 @@ def explicit_counterweights(
             if counts[kind] >= 16:
                 return
             uid = f"known-record-{language}-{kind}-{counts[kind]:02d}"
-            if label:
+            if label == "NAME_ORDER":
+                surname, first_name = value.split()
+                start = text.encode("utf-8").index(value.encode("utf-8"))
+                surname_end = start + len(surname.encode("utf-8"))
+                first_start = surname_end + 1
+                spans = (
+                    score.Span(start, surname_end, "SURNAME"),
+                    score.Span(first_start, first_start + len(first_name.encode("utf-8")), "FIRSTNAME"),
+                )
+            elif label:
                 start = text.encode("utf-8").index(value.encode("utf-8"))
                 spans = (score.Span(start, start + len(value.encode("utf-8")), label),)
             else:
@@ -151,7 +160,7 @@ def explicit_counterweights(
                         add("surname", f"The unrelated author surname is {parts[-1]}.", context)
                         if all(part.isalpha() and len(part) >= 3 for part in parts):
                             reversed_name = f"{parts[-1]} {parts[0]}"
-                            add("name_order", f"Contact: {reversed_name}.", context, "GIVENNAME", reversed_name)
+                            add("name_order", f"Contact: {reversed_name}.", context, "NAME_ORDER", reversed_name)
                 elif class_name == "Email" and value.isascii() and "@" in value:
                     mixed = value.swapcase()
                     if mixed != value:
