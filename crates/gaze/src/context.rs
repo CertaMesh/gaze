@@ -33,6 +33,7 @@ const MAX_RECORD_FIELDS: usize = 32;
 const MAX_VALUE_BYTES: usize = 256;
 const MAX_VARIANTS_PER_FIELD: usize = 2;
 pub const RECORD_DICTIONARY_PREFIX: &str = "__record_v2_";
+const HIDDEN_CONTEXT_NAME: &str = "<context>";
 
 /// Stable internal key for a typed record slot. The class digest avoids
 /// exposing adopter class names in dictionary IDs and audit source IDs.
@@ -127,8 +128,8 @@ impl Context {
         if raw.len() > MAX_CONTEXT_BYTES {
             return Err(ContextError::TooLarge);
         }
-        let strict = serde_json::from_str::<UniqueJsonValue>(raw).map_err(ContextError::Json)?;
-        let raw = serde_json::from_value::<RawContext>(strict.0).map_err(ContextError::Json)?;
+        let strict = serde_json::from_str::<UniqueJsonValue>(raw).map_err(safe_json_error)?;
+        let raw = serde_json::from_value::<RawContext>(strict.0).map_err(safe_json_error)?;
         Self::from_raw(raw)
     }
 
@@ -147,17 +148,21 @@ impl Context {
         let mut class_map = HashMap::with_capacity(raw.class_map.len());
         for (name, class) in raw.class_map {
             let parsed = PiiClass::from_policy_name(&class)
-                .ok_or_else(|| ContextError::UnknownClass(class.clone()))?;
+                .ok_or_else(|| ContextError::UnknownClass(HIDDEN_CONTEXT_NAME.into()))?;
             class_map.insert(name, parsed);
         }
 
         let mut dictionaries = HashMap::with_capacity(raw.dictionaries.len());
         for (name, dictionary) in raw.dictionaries {
             if dictionary.terms.is_empty() {
-                return Err(ContextError::EmptyDictionary { name });
+                return Err(ContextError::EmptyDictionary {
+                    name: HIDDEN_CONTEXT_NAME.into(),
+                });
             }
             if !dictionary.case_sensitive && dictionary.terms.iter().any(|term| !term.is_ascii()) {
-                return Err(ContextError::UnicodeInsensitiveDictionaryUnsupported { name });
+                return Err(ContextError::UnicodeInsensitiveDictionaryUnsupported {
+                    name: HIDDEN_CONTEXT_NAME.into(),
+                });
             }
             dictionaries.insert(
                 name,
@@ -173,11 +178,7 @@ impl Context {
             _ => {}
         }
         if let Some(record) = raw.record.as_ref() {
-            if serde_json::to_vec(record)
-                .map_err(ContextError::Json)?
-                .len()
-                > MAX_RECORD_BYTES
-            {
+            if serde_json::to_vec(record).map_err(safe_json_error)?.len() > MAX_RECORD_BYTES {
                 return Err(ContextError::RecordLimit);
             }
             let mut leaves = Vec::new();
@@ -222,6 +223,12 @@ impl Context {
             fields: raw.fields,
         })
     }
+}
+
+fn safe_json_error(_: serde_json::Error) -> ContextError {
+    ContextError::Json(<serde_json::Error as de::Error>::custom(
+        "invalid context JSON",
+    ))
 }
 
 // serde_json::Value silently keeps the last duplicate object key. A duplicate
@@ -467,6 +474,8 @@ mod tests {
             let err = Context::from_json_str(&raw).unwrap_err();
             assert!(!err.to_string().contains("private marker"));
             assert!(!err.to_string().contains("Alice Smith"));
+            assert!(!format!("{err:?}").contains("private marker"));
+            assert!(!format!("{err:?}").contains("Alice Smith"));
         }
     }
 
@@ -474,6 +483,7 @@ mod tests {
     fn context_json_parse_error_hides_untrusted_field_names() {
         let err = Context::from_json_str(r#"{"private marker":"value"}"#).unwrap_err();
         assert_eq!(err.to_string(), "failed to parse context JSON");
+        assert!(!format!("{err:?}").contains("private marker"));
     }
 
     #[test]
@@ -483,5 +493,6 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err.to_string(), "failed to parse context JSON");
+        assert!(!format!("{err:?}").contains("private marker"));
     }
 }
