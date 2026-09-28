@@ -12,6 +12,7 @@ the crate-level overview these deep-dives sit under.
 The redact ↔ restore contract that everything else protects.
 
 - **[How Gaze works](how-gaze-works.md)** — start here: one document from input to restore, the seven steps, the modes, and a glossary.
+- **[Feature comparison](feature-comparison.md)** — sourced capabilities and limits alongside other PII tools.
 - **[AI support drafts in production](support-drafts-in-production.md)** — how an app, Gaze,
   and the LLM split a support reply so the model never sees the customer.
 - **[Restore boundary](core/restore-boundary.md)** — what the manifest-first restore path

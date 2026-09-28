@@ -127,6 +127,7 @@ the policy.
 ## Where next
 
 - [How Gaze works](docs/explanation/how-gaze-works.md): a support ticket from input to restore, the seven steps, the safety-net modes, and a glossary.
+- [Feature comparison](docs/explanation/feature-comparison.md): sourced capabilities and limits alongside Presidio, DataFog, scrubadub, GLiNER, OPF, and LLM Guard.
 - [Getting started](docs/tutorials/getting-started.md): the same round trip from Rust, in about ten minutes.
 - [Use the `gaze setup` policy from Rust](docs/how-to/rust-library.md): the Nym-enabled pipeline as a library.
 - [Audit and restore](docs/how-to/audit-and-restore.md): the metadata audit log and the restore contract.
