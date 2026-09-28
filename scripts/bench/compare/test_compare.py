@@ -159,6 +159,23 @@ def test_presidio_partial_overlap_keeps_raw_coordinates() -> None:
     assert compare.resolved_presidio_spans(backend.anonymizer, text, found) == expected
 
 
+def test_presidio_languages_cover_each_configuration() -> None:
+    assert compare.presidio_languages("presidio-all") == ("en", "de", "nl", "fr", "pt")
+    assert compare.presidio_languages("presidio-en") == ("en",)
+    assert compare.presidio_languages("presidio-en-de") == ("en", "de")
+    with pytest.raises(ValueError, match="unknown Presidio configuration"):
+        compare.presidio_languages("gliner")
+
+
+def test_presidio_anonymizer_version_mismatch_fails_before_model_load(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    assert compare.package_version("presidio-anonymizer") == compare.PRESIDIO_ANONYMIZER_VERSION
+    monkeypatch.setattr(compare, "package_version", lambda _name: "2.2.365")
+    with pytest.raises(RuntimeError, match="requires presidio-anonymizer==2.2.364"):
+        compare.Presidio({"en": tmp_path / "missing-model"})
+
+
 def test_german_presidio_labels_are_reviewed() -> None:
     from presidio_analyzer import predefined_recognizers
 
