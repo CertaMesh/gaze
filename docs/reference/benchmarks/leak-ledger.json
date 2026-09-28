@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "comment": "Leak ledger: every leaked gold byte of one commit by root cause. Written by scripts/bench/leak_ledger.py probe; checked by its check command.",
+  "revision": "74701b22738551b6bc5587cfbb6b4faec3807ee1",
+  "main_revision": "1809f6a3fbd2",
+  "reused_record": {
+    "record_revision": "74701b22738551b6bc5587cfbb6b4faec3807ee1",
+    "producer_sha256": "0239a5f66ea0ac182fc6ae33cf5d97b605bcae461692d9c208057b7d7ae13145"
+  },
+  "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+  "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+  "sampling_seed": 20260710,
+  "record": {
+    "file": "docs/reference/benchmarks/leak-ledger/observations-74701b227385.jsonl.gz",
+    "sha256": "f457afe767aae0d111d4024407f532bc3705d6de3ce62470187063136e117470"
+  },
+  "rows": {
+    "file": "docs/reference/benchmarks/leak-ledger/ledger-74701b227385.jsonl.gz",
+    "sha256": "00a319386294c11a6f0df8c6ec5af6ec4a19a801664f734dd740f69fbbeb4c42"
+  },
+  "attested": {
+    "probe_binary_sha256": "693a84d6d71f969d1356de3eb1609a1dd2ea41eefbfdd075b2e5a085a4672d51",
+    "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+    "documents_trace_checked": 6160,
+    "note": "The probe binary is the bench producer with the candidate-pool dump; every document's final trace equalled the record's."
+  }
+}

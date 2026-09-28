@@ -659,6 +659,64 @@ scored-label contract and the agentic layer contract.
 
 <!-- BEGIN GENERATED: leak-ledger -->
 
+Main `1809f6a3fbd2` (record measured on `74701b227385` with a byte-identical release producer `0239a5f66ea0`), `gaze setup` policy `f909a23aecac`, scored-label contract v3. Leaked bytes per gold span, summed per label (the scorecard's `per_label_recall`); overlapping gold counts once per span, so the label sum (9,283 B) can exceed the headline leaked bytes (9,256 B).
+
+Layer C by label and cause (bytes):
+
+| Label | a no candidate | b vetoed | c lost in resolution | d partial span | e repeat not swept | f junk-shaped gold | g other | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| TAXNUM | 1,590 | 142 | · | 106 | · | 12 | · | 1,850 |
+| PHONENUMBER | 97 | 862 | · | 21 | · | · | · | 980 |
+| DATEOFBIRTH | 782 | · | · | 28 | · | · | · | 810 |
+| DRIVERLICENSENUM | 752 | · | · | 14 | · | 34 | · | 800 |
+| NATIONALID | 464 | 80 | · | · | · | 38 | · | 582 |
+| URL | 251 | · | · | 235 | · | · | · | 486 |
+| SSN | 402 | 16 | · | · | 4 | 51 | · | 473 |
+| IDCARDNUM | 408 | 30 | · | 14 | · | · | · | 452 |
+| ZIP | 444 | · | · | 4 | 4 | · | · | 452 |
+| AGE | 414 | · | · | · | 2 | · | · | 416 |
+| BUILDINGNUM | 224 | 1 | · | 11 | 39 | · | · | 275 |
+| STREET | 145 | · | · | 112 | 9 | · | · | 266 |
+| CREDITCARDNUMBER | · | 152 | · | · | · | 100 | · | 252 |
+| IBAN | 174 | 24 | · | 4 | · | 12 | · | 214 |
+| FIRSTNAME | 123 | · | · | · | 4 | · | · | 127 |
+| LICENSEPLATENUM | 25 | · | · | 75 | · | 22 | · | 122 |
+| PASSPORTID | 107 | · | · | · | · | 11 | · | 118 |
+| STATE | 107 | · | · | 7 | 2 | · | · | 116 |
+| SURNAME | 110 | · | · | · | · | · | · | 110 |
+| COMPANYNAME | 73 | · | · | 36 | · | · | · | 109 |
+| COUNTRY | 79 | · | · | 2 | 14 | · | · | 95 |
+| CITY | 34 | · | · | 17 | 22 | · | · | 73 |
+| USERNAME | 48 | · | · | 23 | · | · | · | 71 |
+| EMAIL | · | · | · | 19 | · | · | · | 19 |
+| TITLE | 15 | · | · | · | · | · | · | 15 |
+| **all** | **6,868** | **1,307** | **·** | **728** | **100** | **280** | **·** | **9,283** |
+
+Agentic layers by cause (bytes, agentic layer contract):
+
+| Layer | a | b | c | d | e | f | g | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | 1,608 | 4,053 | · | 77 | · | · | · | 5,738 |
+| D | · | · | · | · | · | · | · | 0 |
+| R | 228 | · | · | · | 6 | · | · | 234 |
+
+Top 10 layer C clusters (label, cause, mechanism):
+
+| Label | Cause | Mechanism | Spans | Bytes |
+| --- | --- | --- | ---: | ---: |
+| TAXNUM | a no candidate | nothing near | 124 | 1,443 |
+| PHONENUMBER | b vetoed | validator `phone.national.us` | 53 | 715 |
+| DRIVERLICENSENUM | a no candidate | nothing near | 63 | 661 |
+| DATEOFBIRTH | a no candidate | nothing near | 39 | 445 |
+| NATIONALID | a no candidate | nothing near | 36 | 411 |
+| IDCARDNUM | a no candidate | nothing near | 31 | 313 |
+| SSN | a no candidate | nothing near | 26 | 302 |
+| ZIP | a no candidate | closest `location` (compatible) | 71 | 274 |
+| AGE | a no candidate | closest `name` | 120 | 240 |
+| BUILDINGNUM | a no candidate | closest `location` (compatible) | 83 | 201 |
+
+Junk-shaped gold in layer C: 48 spans, 284 leaked bytes (280 B with no candidate, cause f). They stay in the target until an audited contract change.
+
 <!-- END GENERATED: leak-ledger -->
 
 ---

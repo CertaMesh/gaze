@@ -5,11 +5,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use gaze::{
-    Action, Candidate, CleanDocument, Context, DetectContext, DictionaryBundle, EmittedTokenSpan, FallbackReason,
-    GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis, LocaleChain, LocaleTag, NerPolicy,
-    PiiClass, Pipeline, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
-    RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope,
-    Session,
+    Action, Candidate, CleanDocument, Context, DetectContext, DictionaryBundle, EmittedTokenSpan,
+    FallbackReason, GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis,
+    LocaleChain, LocaleTag, NerPolicy, PiiClass, Pipeline, RedactionEntry, RedactionLogError,
+    RedactionLogger, RuleSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback,
+    SafetyNetMode, SafetyNetPolicy, Scope, Session,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -1194,7 +1194,11 @@ fn normalize_like_pipeline(raw: &str) -> (String, Vec<(usize, usize)>) {
             continue;
         }
         let mapped = match ch {
-            '\u{00A0}' | '\u{1680}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}'
+            '\u{00A0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200A}'
+            | '\u{202F}'
+            | '\u{205F}'
             | '\u{3000}' => ' ',
             '\u{FF01}'..='\u{FF5E}' => char::from_u32(ch as u32 - 0xFEE0).unwrap_or(ch),
             _ => ch,
@@ -1637,10 +1641,17 @@ mod tests {
             .iter()
             .map(|item| (item.raw_start, item.raw_end))
             .collect::<BTreeSet<_>>();
-        assert!(trace.len() >= 3, "trace too small to pin anything: {trace:?}");
+        assert!(
+            trace.len() >= 3,
+            "trace too small to pin anything: {trace:?}"
+        );
         assert_eq!(resolved, trace);
         let (normalized, _) = normalize_like_pipeline(text);
-        assert_ne!(normalized.len(), text.len(), "the fixture must exercise normalization");
+        assert_ne!(
+            normalized.len(),
+            text.len(),
+            "the fixture must exercise normalization"
+        );
     }
 
     #[test]
