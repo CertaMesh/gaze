@@ -180,6 +180,15 @@ def explicit_counterweights(
                     if letter is not None:
                         near = value[:letter] + ("Z" if value[letter] != "Z" else "Y") + value[letter + 1 :]
                         add("ocr_near_miss", f"The unrelated label reads {near}.", context)
+        if counts["name_order"] == 0:
+            # A fixed synthetic fixture exercises the approved two-word order
+            # variant when the held-out gold contains no suitable full name.
+            synthetic = json.dumps({
+                "record": {"name": "Alice Smith"},
+                "field_map": {"/name": "Name"},
+            })
+            add("name_order", "Contact: Smith Alice.", synthetic, "NAME_ORDER", "Smith Alice")
+            add("surname", "The unrelated author surname is Smith.", synthetic)
     return documents, contexts
 
 
@@ -268,10 +277,15 @@ def main() -> None:
     }
     for layer, all_documents in layers.items():
         documents = all_documents[: args.max_documents] if args.max_documents else all_documents
+        if args.max_documents and layer == "D":
+            one_per_cell = {document.cell: document for document in reversed(counterweight_documents)}
+            documents = [*documents, *one_per_cell.values()]
+        core_documents = [document for document in documents if document.uid not in counterweight_contexts]
         contexts, eligible = paired_records(
-            documents, policy, known_pool if layer == "D" else None
+            core_documents, policy, known_pool if layer == "D" else None
         )
-        contexts.update({uid: context for uid, context in counterweight_contexts.items() if uid in contexts})
+        selected_ids = {document.uid for document in documents}
+        contexts.update({uid: context for uid, context in counterweight_contexts.items() if uid in selected_ids})
         if not any(contexts.values()):
             output["layers"][layer] = {"skipped": "no eligible record contexts"}
             continue
@@ -312,7 +326,14 @@ def main() -> None:
         output["layers"][layer] = {
             "documents": len(documents),
             "record_documents": sum(value is not None for value in contexts.values()),
-            "explicit_counterweight_documents": sum(uid in counterweight_contexts for uid in contexts),
+            "explicit_counterweight_documents": sum(
+                document.uid in counterweight_contexts and document.negative_category is not None
+                for document in documents
+            ),
+            "explicit_variant_documents": sum(
+                document.uid in counterweight_contexts and bool(document.spans)
+                for document in documents
+            ),
             "eligible_gold_bytes_by_label": dict(sorted(eligible.items())),
             "baseline_eligible_leaked_bytes_by_label": dict(sorted(baseline_eligible_leaks.items())),
             "exact_eligible_leaked_bytes_by_label": dict(sorted(exact_eligible_leaks.items())),

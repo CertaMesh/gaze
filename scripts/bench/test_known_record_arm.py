@@ -50,3 +50,11 @@ def test_non_reversible_policy_fails_preflight() -> None:
         assert "no reversible action" in str(error)
     else:
         raise AssertionError("unsafe policy accepted")
+
+
+def test_name_order_variant_has_a_scored_synthetic_probe() -> None:
+    single, _ = arm.record_for_document(document("single", "Alice", "FIRSTNAME"), POLICY)
+    documents, contexts = arm.explicit_counterweights({"en": [single]})
+    variant = next(item for item in documents if "name_order" in item.uid)
+    assert [span.label for span in variant.spans] == ["SURNAME", "FIRSTNAME"]
+    assert json.loads(contexts[variant.uid])["record"] == {"name": "Alice Smith"}
