@@ -1601,11 +1601,11 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:tax(?:[ _-]?(?:identification|payer))?[ _-]?(?:number|no\.?|id)|taxnum|tin|utr|tfn|ird[ _-]?number|steuernummer|steuer[ _-]?nummer|num[eé]ro[ _-]fiscal|num[eé]ro[ _-]de[ _-]contribuinte|belastingnummer)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*[:=#|][ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*([A-Z]{1,4}-?\d[A-Z0-9]{5,13}|[A-Z]{0,3}-?\d{2,4}(?:[ ./-]\d{2,4}){1,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}_./-]|\.(?:\z|[ \t\r\n]))'''
+pattern = '''(?i)(?:\b|_)(?:tax(?:[ _-]?(?:identification|payer))?[ _-]?(?:number|no\.?|id)|taxnum|tin|utr|tfn|ird[ _-]?number|steuernummer|steuer[ _-]?nummer|num[eé]ro[ _-]fiscal|num[eé]ro[ _-]de[ _-]contribuinte|belastingnummer)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*[:=#|,][ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*([A-Z]{1,4}-?\d[A-Z0-9]{5,13}|[A-Z]{0,3}-?\d{2,4}(?:[ ./-]\d{2,4}){2,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}_./-]|\.(?:\z|[ \t\r\n]))'''
 capture_groups = [1]
 
 [recognizers.context]
-reject_match_regex = '''(?:^|[^0-9])(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])(?:[^0-9]|$)'''
+reject_match_regex = '''(?:^|[^0-9])(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})(?:[^0-9]|$)'''
 
 [recognizers.scoring]
 base = 0.84
@@ -1633,11 +1633,11 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:driver'?s?[ _-]?licen[cs]e(?:[ _-]?(?:number|no\.?|nr\.?|id))?|driving[ _-]?licen[cs]e(?:[ _-]?(?:number|no\.?|id))?|licen[cs]e[ _-]?(?:number|no\.?|id)|f[uü]hrerschein(?:[ _-]?(?:nummer|nr\.?))?|f[uü]hrerausweis(?:[ _-]?nummer)?|fahrerlaubnis(?:[ _-]?nummer)?|rijbewijs(?:[ _-]?nummer)?|permis[ _-]de[ _-]conduire(?:[ _-]?(?:num[eé]ro|n[o°]))?|carta[ _-]de[ _-]condu[cç][aã]o(?:[ _-]?(?:n[uú]mero|n[o°]))?)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*[:=#|][ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*([A-Z]{1,4}-?\d[A-Z0-9]{5,13}|\d{6,12}[A-Z]{0,3}|[A-Z]{0,3}-?\d{2,4}(?:[ ./-]\d{2,4}){1,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}_./-]|\.(?:\z|[ \t\r\n]))'''
+pattern = '''(?i)(?:\b|_)(?:driver'?s?[ _-]?licen[cs]e(?:[ _-]?(?:number|no\.?|nr\.?|id))?|driving[ _-]?licen[cs]e(?:[ _-]?(?:number|no\.?|id))?|licen[cs]e[ _-]?(?:number|no\.?|id)|f[uü]hrerschein(?:[ _-]?(?:nummer|nr\.?))?|f[uü]hrerausweis(?:[ _-]?nummer)?|fahrerlaubnis(?:[ _-]?nummer)?|rijbewijs(?:[ _-]?nummer)?|permis[ _-]de[ _-]conduire(?:[ _-]?(?:num[eé]ro|n[o°]))?|carta[ _-]de[ _-]condu[cç][aã]o(?:[ _-]?(?:n[uú]mero|n[o°]))?)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*[:=#|,][ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*([A-Z]{1,4}-?\d[A-Z0-9]{5,13}|\d{6,12}[A-Z]{0,3}|[A-Z]{0,3}-?\d{2,4}(?:[ ./-]\d{2,4}){2,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}_./-]|\.(?:\z|[ \t\r\n]))'''
 capture_groups = [1]
 
 [recognizers.context]
-reject_match_regex = '''(?:^|[^0-9])(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])(?:[^0-9]|$)'''
+reject_match_regex = '''(?:^|[^0-9])(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})(?:[^0-9]|$)'''
 
 [recognizers.scoring]
 base = 0.84
@@ -1660,11 +1660,11 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:id[ _-]?card(?:[ _-]?(?:number|no\.?|nr\.?|id))?|identification[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|identity[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|personalausweis(?:[ _-]?(?:nummer|nr\.?))?|identit[aä]tskarte(?:[ _-]?(?:nummer|nr\.?))?|ausweiskarte(?:[ _-]?nummer)?|carte[ _-]d['’]identit[eé](?:[ _-]?(?:num[eé]ro|n[o°]))?|identiteitskaart(?:[ _-]?nummer)?|cart[aã]o[ _-]de[ _-]identidade(?:[ _-]?(?:n[uú]mero|n[o°]))?)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*[:=#|][ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*([A-Z]{1,4}-?\d[A-Z0-9]{5,13}|\d{6,12}[A-Z]{0,3}|[A-Z]{0,3}-?\d{2,4}(?:[ ./-]\d{2,4}){1,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}_./-]|\.(?:\z|[ \t\r\n]))'''
+pattern = '''(?i)(?:\b|_)(?:id[ _-]?card(?:[ _-]?(?:number|no\.?|nr\.?|id))?|identification[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|identity[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|personalausweis(?:[ _-]?(?:nummer|nr\.?))?|identit[aä]tskarte(?:[ _-]?(?:nummer|nr\.?))?|ausweiskarte(?:[ _-]?nummer)?|carte[ _-]d['’]identit[eé](?:[ _-]?(?:num[eé]ro|n[o°]))?|identiteitskaart(?:[ _-]?nummer)?|cart[aã]o[ _-]de[ _-]identidade(?:[ _-]?(?:n[uú]mero|n[o°]))?)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*[:=#|,][ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*([A-Z]{1,4}-?\d[A-Z0-9]{5,13}|\d{6,12}[A-Z]{0,3}|[A-Z]{0,3}-?\d{2,4}(?:[ ./-]\d{2,4}){2,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}_./-]|\.(?:\z|[ \t\r\n]))'''
 capture_groups = [1]
 
 [recognizers.context]
-reject_match_regex = '''(?:^|[^0-9])(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])(?:[^0-9]|$)'''
+reject_match_regex = '''(?:^|[^0-9])(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})(?:[^0-9]|$)'''
 
 [recognizers.scoring]
 base = 0.84

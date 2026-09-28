@@ -463,12 +463,22 @@ fn labelled_identifier_values_are_captured_without_the_field_name() {
             "driver_license",
         ),
         (
+            "Driver's licence number, 987654321 was filed.",
+            "987654321",
+            "driver_license",
+        ),
+        (
             "Rijbewijsnummer:\u{00A0}NL-12345678.",
             "NL-12345678",
             "driver_license",
         ),
         (
             "Identification card: 5123-6789-0456.",
+            "5123-6789-0456",
+            "national_id",
+        ),
+        (
+            "ID card number, 5123-6789-0456 was filed.",
             "5123-6789-0456",
             "national_id",
         ),
@@ -510,6 +520,8 @@ fn labelled_identifier_field_boundaries_reject_lookalikes() {
         "Tax Number: 12345678901",
         "Permis de conduire: 2024-09-28",
         "Identification card: 2024/09/28",
+        "ID card number, 28/09/2024",
+        "Identification card: 1234.50",
     ] {
         assert_unchanged(input);
     }
