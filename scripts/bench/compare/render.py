@@ -92,6 +92,11 @@ def render(report: dict[str, object], source: str) -> str:
                 if layer not in tool["contracts"][version]:
                     raise ValueError(f"{name} lacks layer {layer} under {version}")
 
+    opf_description = "OPF skipped."
+    if "opf" in tools:
+        runtime = tools["opf"]["provenance"]["runtime"]
+        opf_source = runtime.get("source_revision")
+        opf_description = f"OPF {runtime['version']}" + (f" at source `{opf_source}`" if opf_source else "") + "."
     lines = [
         "# Competitor comparison",
         "",
@@ -112,10 +117,7 @@ def render(report: dict[str, object], source: str) -> str:
         f"{tools['presidio-en']['provenance']['analyzer_version']} with spaCy "
         f"{tools['presidio-en']['provenance']['spacy_version']}; GLiNER "
         f"{tools['gliner']['provenance']['gliner_version']} at model snapshot "
-        f"`{tools['gliner']['provenance']['model_snapshot']}`; "
-        + (f"OPF {tools['opf']['provenance']['runtime']['version']} at source "
-           f"`{tools['opf']['provenance']['runtime']['source_revision']}`."
-           if 'opf' in tools else "OPF skipped."),
+        f"`{tools['gliner']['provenance']['model_snapshot']}`; {opf_description}",
         "",
         f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published.",
         "",
