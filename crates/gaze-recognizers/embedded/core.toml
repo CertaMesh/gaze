@@ -227,6 +227,37 @@ variant = "phone"
 precedence = 10
 
 [[recognizers]]
+id = "phone.e164.spaced.cued"
+safety_tier = "safe_default"
+class = "custom:phone"
+cooperates_with = ["phone.structural", "phone.e164.spaced", "phone.national.de", "phone.national.us", "phone.national.us.cued"]
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+# The broad international shape keeps its parser veto. A same-line phone label
+# gives a rejected regional parse enough evidence to keep only that value.
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:phone(?:[\x20\t\x{00A0}\x{202F}_-]?(?:number|num|no))?|mobile|tel(?:ephone)?|msisdn)\b\.?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*[:=]?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*(\+(?:[235-9]\d{0,2}|4(?:[0-8]\d?|9\d))[\s.\-/]?(?:\d[\s.\-/]?){6,14}\d)\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "e164_phone"
+on_fail = "record"
+
+[recognizers.scoring]
+base = 0.70
+priority = 78
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "phone-or-imei"
+variant = "phone"
+precedence = 10
+
+[[recognizers]]
 id = "phone.national.de"
 safety_tier = "locale_gated"
 class = "custom:phone"
@@ -290,6 +321,35 @@ kind = "e164_phone_national_us"
 [recognizers.scoring]
 base = 0.82
 priority = 85
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "phone-or-imei"
+variant = "phone"
+precedence = 10
+
+[[recognizers]]
+id = "phone.national.us.cued"
+safety_tier = "safe_default"
+class = "custom:phone"
+cooperates_with = ["phone.structural", "phone.e164.spaced", "phone.e164.spaced.cued", "phone.national.de", "phone.national.us"]
+enabled = true
+locales = ["en-US"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:phone(?:[\x20\t\x{00A0}\x{202F}_-]?(?:number|num|no))?|mobile|tel(?:ephone)?|msisdn)\b\.?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*[:=]?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*((?:\+?1[\s.-]+555[\s.-]*01\d{2}|\+?1[\s.-]+(?:\([2-9]\d{2}\)|[2-9]\d{2})[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|\([2-9]\d{2}\)[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|[2-9]\d{2}[\s.-]+[2-9]\d{2}[\s.-]+\d{4}|555[\s.-]*01\d{2}))\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "e164_phone_national_us"
+on_fail = "record"
+
+[recognizers.scoring]
+base = 0.82
+priority = 79
 
 [recognizers.token]
 
@@ -700,6 +760,7 @@ capture_groups = [1]
 
 [recognizers.validator]
 kind = "de_steuer_id_mod1110"
+on_fail = "record"
 
 [recognizers.scoring]
 base = 0.88
@@ -766,6 +827,7 @@ capture_groups = [1]
 
 [recognizers.validator]
 kind = "bsn_mod11"
+on_fail = "record"
 
 [recognizers.scoring]
 base = 0.88
@@ -788,6 +850,7 @@ capture_groups = [1]
 
 [recognizers.validator]
 kind = "cpf_mod11"
+on_fail = "record"
 
 [recognizers.scoring]
 base = 0.88

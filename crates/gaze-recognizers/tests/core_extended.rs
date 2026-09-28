@@ -217,6 +217,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "nir.fr",
             "pan.in",
             "phone.national.us",
+            "phone.national.us.cued",
             // Alphanumeric postal codes: letter/digit interleaving is the precision
             // mechanism, so these need no document-locale gate and run at every locale.
             "postal.ca",
@@ -232,7 +233,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 43);
+    assert_eq!(core.recognizers.len(), 45);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -1799,20 +1800,40 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         vec![
             "phone.e164.spaced",
             "phone.national.de",
-            "phone.national.us"
+            "phone.national.us",
+            "phone.e164.spaced.cued",
+            "phone.national.us.cued"
         ]
     );
     assert_eq!(
         phone_spaced.cooperates_with,
-        vec!["phone.structural", "phone.national.de", "phone.national.us"]
+        vec![
+            "phone.structural",
+            "phone.national.de",
+            "phone.national.us",
+            "phone.e164.spaced.cued",
+            "phone.national.us.cued"
+        ]
     );
     assert_eq!(
         phone_de.cooperates_with,
-        vec!["phone.structural", "phone.e164.spaced", "phone.national.us"]
+        vec![
+            "phone.structural",
+            "phone.e164.spaced",
+            "phone.national.us",
+            "phone.e164.spaced.cued",
+            "phone.national.us.cued"
+        ]
     );
     assert_eq!(
         phone_us.cooperates_with,
-        vec!["phone.structural", "phone.e164.spaced", "phone.national.de"]
+        vec![
+            "phone.structural",
+            "phone.e164.spaced",
+            "phone.national.de",
+            "phone.e164.spaced.cued",
+            "phone.national.us.cued"
+        ]
     );
 
     let one_side_removed = raw.replace("cooperates_with = [\"ip.v4\"]\n", "");
