@@ -228,7 +228,7 @@ impl Score {
         self.byte_precision = ratio(self.true_positive_bytes, self.predicted_bytes);
         self.byte_recall = ratio(self.true_positive_bytes, self.pii_bytes);
         self.byte_f1 = if self.byte_precision + self.byte_recall == 0.0 {
-            1.0
+            f64::from(self.pii_bytes == 0 && self.predicted_bytes == 0)
         } else {
             2.0 * self.byte_precision * self.byte_recall / (self.byte_precision + self.byte_recall)
         };
@@ -358,5 +358,24 @@ mod tests {
         assert_eq!(score.documents_without_leaks, 0);
         assert_eq!(score.document_leak_rate, 1.0);
         assert_eq!(score.per_class["email"].fully_covered, 0);
+    }
+
+    #[test]
+    fn zero_true_positives_have_zero_f1_unless_both_sets_are_empty() {
+        let mut missed = Score::default();
+        missed.add(
+            &[ScoredSpan {
+                range: 0..2,
+                class: "email".into(),
+            }],
+            vec![3..5],
+        );
+        missed.finish();
+        assert_eq!(missed.byte_f1, 0.0);
+
+        let mut empty = Score::default();
+        empty.add(&[], vec![]);
+        empty.finish();
+        assert_eq!(empty.byte_f1, 1.0);
     }
 }
