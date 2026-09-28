@@ -76,7 +76,7 @@ class ComparisonMetrics:
 
         unmatched = list(document.spans)
         for prediction in retained:
-            labels = (self.typed_mapping or self.mapping)[prediction.label]
+            labels = (self.mapping if self.typed_mapping is None else self.typed_mapping)[prediction.label]
             match = next((i for i, gold_span in enumerate(unmatched)
                           if prediction.start == gold_span.start
                           and prediction.end == gold_span.end
