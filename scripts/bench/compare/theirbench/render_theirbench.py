@@ -116,8 +116,8 @@ def chart_rows(entry: Mapping[str, Any]) -> list[str]:
 
 
 def latency_cell(entry: Mapping[str, Any], tool: str) -> str:
-    load = entry["provenance"].get(tool, {}).get("load")
-    if load is None or load["contended"]:
+    cpu = entry["provenance"].get(tool, {}).get("cpu")
+    if cpu is None or cpu["contended"]:
         return QUIET
     p50 = entry["rows"][tool]["latency"]["p50_ms"]
     return "n/a" if p50 is None else f"{p50:.1f}"
@@ -130,7 +130,7 @@ def render(data: Mapping[str, Any]) -> str:
         "same scorer code as the main comparison; each benchmark's own metric comes from "
         "its own evaluator, fed the same spans. Lower leaked bytes is better. Chart bars are "
         "configurations declared before measuring; the table lists every measured row. "
-        f"Latency reads \"{QUIET}\" when load1 exceeded 2.0 during that row's run.",
+        f"Latency reads \"{QUIET}\" when processes outside the measured tool used more than one core during its run.",
         "",
     ]
     for name, entry in data["benchmarks"].items():
