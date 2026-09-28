@@ -58,7 +58,8 @@ def tagged(values: list[str]) -> list[tuple[str, Path]]:
     return pairs
 
 
-def assemble(reports: list[Path], own: list[str], reproductions: list[str]) -> dict[str, Any]:
+def assemble(reports: list[Path], own: list[str], reproductions: list[str],
+             historical: list[Path] = ()) -> dict[str, Any]:
     benchmarks: dict[str, Any] = {}
     for path in reports:
         report = json.loads(path.read_text(encoding="utf-8"))
@@ -87,6 +88,13 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str]) -> d
             if name == "presidio-research"
             else {"published_full_mix": result["published_full_mix"], "reproduced_commercial": result["overall"],
                   "versions": result["versions"]})
+    for path in historical:
+        result = json.loads(path.read_text(encoding="utf-8"))
+        if result.get("smoke_limit") or not result.get("reproduction_run"):
+            raise ValueError(f"{path}: not a full historical reproduction")
+        for config, scored in result["reproduced"].items():
+            benchmarks["presidio-research"]["reproduction"].setdefault("historical", {})[config] = {
+                **scored, "evaluator_commit": result["evaluator_commit"]}
     for name, entry in benchmarks.items():
         missing = sorted(set(entry["rows"]) - set(entry["own_metric"]))
         if missing:
@@ -140,14 +148,25 @@ def render(data: Mapping[str, Any]) -> str:
         repro = entry["reproduction"]
         if name == "presidio-research":
             for config, published in repro["published"].items():
-                got = repro["reproduced"][config]
-                lines.append(f"- Vendor number reproduced first, Presidio {config}: published F2 "
-                             f"{published['f2']}, reproduced {got['f2']} ({published['source']}).")
+                old = repro.get("historical", {}).get(config)
+                if old is None:
+                    raise ValueError(f"presidio-research {config}: no historical reproduction")
+                lines.append(
+                    f"- Presidio {config} ({published['source']}): published F2 {published['f2']}; "
+                    f"reproduced {old['f2']} with the evaluator at `{old['evaluator_commit'][:8]}`, the "
+                    f"version that produced the published number; {repro['reproduced'][config]['f2']} with "
+                    f"the pinned evaluator, which scores every row below.")
         else:
             published = repro["published_full_mix"]
             lines.append(f"- Published Presidio span F1 {published['f1']} is on the full ten-source mix "
                          f"({published['records']:,} records) and is quoted, not reproduced. PIIBench's own "
                          f"harness gives Presidio {repro['reproduced_commercial']['f1']} on this commercial subset.")
+            lines.append("- Only four of PIIBench's ten sources run (Gretel finance, Nemotron-PII, Few-NERD, "
+                         "FiNER-139); the other six are excluded for their licences (ai4privacy 400k and 300k: "
+                         "custom, commercial use needs a licence; MultiNERD: CC-BY-NC-SA-4.0; CoNLL-2003: "
+                         "non-commercial research; Isotonic 200k: CC-BY-NC-4.0; WikiANN: unknown).")
+            lines.append("- PIIBench's current code keeps 71 label types where its paper reports 48: its "
+                         "normaliser maps only ai4privacy-style names. `MISC` and `FINANCIAL_ENTITY` are gold.")
         lines += ["", "```mermaid", "xychart-beta horizontal",
                   f'    title "Leaked PII bytes, {name} - lower is better"']
         chart = chart_rows(entry)
@@ -192,13 +211,15 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--report", type=Path, action="append", required=True)
     build.add_argument("--own", action="append", required=True, help="<benchmark>=<own-scorer result>")
     build.add_argument("--reproduction", action="append", required=True, help="<benchmark>=<vendor reproduction>")
+    build.add_argument("--historical", type=Path, action="append", default=[],
+                       help="presidio_research_repro.py --reproduction result")
     show = sub.add_parser("render")
     show.add_argument("--check", action="store_true")
     show.add_argument("--data", type=Path, default=DATA)
     show.add_argument("--doc", type=Path, default=DOC)
     args = parser.parse_args(argv)
     if args.command == "assemble":
-        DATA.write_text(json.dumps(assemble(args.report, args.own, args.reproduction), indent=2,
+        DATA.write_text(json.dumps(assemble(args.report, args.own, args.reproduction, args.historical), indent=2,
                                    sort_keys=True) + "\n", encoding="utf-8")
         return 0
     data = json.loads(args.data.read_text(encoding="utf-8"))

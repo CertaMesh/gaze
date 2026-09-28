@@ -20,6 +20,16 @@ mkdir -p "$out"
     --openmed-model "$THEIRBENCH_OPENMED" --output "$out/presidio-research-repro.json"
 "$THEIRBENCH_VENDOR_PYTHON" "$here/piibench_repro.py" --checkout "$THEIRBENCH_PIIBENCH" \
     --data-dir "$THEIRBENCH_PIIBENCH_DATA" --output "$out/piibench-repro.json"
+# The published notebook numbers predate later evaluator fixes: reproduce each
+# with the evaluator commit that produced it (REPRODUCTION_COMMITS), imported
+# from a checkout at that commit.
+: "${THEIRBENCH_PR_VANILLA_CHECKOUT:?set THEIRBENCH_PR_VANILLA_CHECKOUT to presidio-research at REPRODUCTION_COMMITS[vanilla]}"
+: "${THEIRBENCH_PR_CUSTOM_CHECKOUT:?set THEIRBENCH_PR_CUSTOM_CHECKOUT to presidio-research at REPRODUCTION_COMMITS[custom]}"
+PYTHONPATH="$THEIRBENCH_PR_VANILLA_CHECKOUT" "$THEIRBENCH_VENDOR_PYTHON" "$here/presidio_research_repro.py" \
+    --reproduction --config vanilla --checkout "$THEIRBENCH_PR_VANILLA_CHECKOUT" --output "$out/historical-vanilla.json"
+PYTHONPATH="$THEIRBENCH_PR_CUSTOM_CHECKOUT" "$THEIRBENCH_VENDOR_PYTHON" "$here/presidio_research_repro.py" \
+    --reproduction --config custom --checkout "$THEIRBENCH_PR_CUSTOM_CHECKOUT" \
+    --openmed-model "$THEIRBENCH_OPENMED" --output "$out/historical-custom.json"
 
 # The remaining arguments are compare.py's tool flags (models, Gaze binary and policies).
 "$THEIRBENCH_COMPARE_PYTHON" "$here/theirbench.py" --benchmark presidio-research \
@@ -51,5 +61,6 @@ done
 "$THEIRBENCH_COMPARE_PYTHON" "$here/render_theirbench.py" assemble \
     --report "$out/presidio-research.json" --report "$out/piibench-commercial.json" "${own[@]}" \
     --reproduction "presidio-research=$out/presidio-research-repro.json" \
-    --reproduction "piibench-commercial=$out/piibench-repro.json"
+    --reproduction "piibench-commercial=$out/piibench-repro.json" \
+    --historical "$out/historical-vanilla.json" --historical "$out/historical-custom.json"
 "$THEIRBENCH_COMPARE_PYTHON" "$here/render_theirbench.py" render

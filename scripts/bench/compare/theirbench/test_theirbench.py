@@ -116,7 +116,8 @@ def synthetic() -> dict:
         "common_intersection_labels": ["EMAIL_ADDRESS"], "hardware": "hw",
         "harness_revision": "0123456789", "own_metric": {tool: {"f2": 0.5} for tool in rows},
         "reproduction": {"published": {"vanilla": {"f2": 0.661, "source": "nb4"}},
-                         "reproduced": {"vanilla": {"f2": 0.66}}}}}}
+                         "reproduced": {"vanilla": {"f2": 0.59}},
+                         "historical": {"vanilla": {"f2": 0.664, "evaluator_commit": "ac490f9b9611"}}}}}}
 
 
 class RenderTest(unittest.TestCase):
@@ -161,6 +162,7 @@ class RenderTest(unittest.TestCase):
             self.assertEqual(render.main(args), 0)
             self.assertEqual(render.main([*args, "--check"]), 0)
             self.assertIn("presidio-strong", doc.read_text(encoding="utf-8"))
+            self.assertIn("reproduced 0.664 with the evaluator at `ac490f9b`", doc.read_text(encoding="utf-8"))
             changed = synthetic()
             changed["benchmarks"]["presidio-research"]["rows"]["opf"] = row(25)
             self.assertIn("presidio-strong", doc.read_text(encoding="utf-8"))
