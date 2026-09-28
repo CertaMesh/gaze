@@ -331,7 +331,8 @@ fn nym_policy_with_an_unmapped_label_fails_at_load() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(out.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("GIVEN_NAME"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("invalid [safety_net.nym]"));
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("GIVEN_NAME"));
 }
 
 #[test]

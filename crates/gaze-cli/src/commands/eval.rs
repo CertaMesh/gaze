@@ -6,14 +6,14 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use clap::Args as ClapArgs;
-use gaze::{CleanDocument, PiiClass, RawDocument, SafetyNetPolicy, Session};
+use gaze::{CleanDocument, PiiClass, RawDocument, Session};
 use serde::{Deserialize, Serialize};
 
-use crate::clean_overrides::CleanOverrides;
-#[cfg(feature = "safety-net-nym")]
-use crate::commands::DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES;
+use super::shared_args::CleanPipelineArgs;
 use crate::error::CliError;
-use crate::pipeline::build::resolve_pipeline;
+use crate::pipeline::{
+    enforce_safety_net_mode, map_safety_net_pipeline_error, prepare_clean_pipeline,
+};
 
 const MAX_CORPUS_BYTES: u64 = 64 * 1024 * 1024;
 
@@ -21,12 +21,8 @@ const MAX_CORPUS_BYTES: u64 = 64 * 1024 * 1024;
 pub(crate) struct Args {
     /// Owner-side JSONL corpus with text and UTF-8 byte spans.
     annotated: PathBuf,
-    /// Policy TOML; absent means the same bundled core policy as `gaze clean`.
-    #[arg(long)]
-    policy: Option<PathBuf>,
-    /// Active locale fallback chain, comma separated and priority ordered.
-    #[arg(long, value_delimiter = ',')]
-    locale: Vec<String>,
+    #[command(flatten)]
+    pipeline: CleanPipelineArgs,
     /// JSON object mapping corpus labels to Gaze policy class names.
     #[arg(long)]
     label_map: Option<PathBuf>,
@@ -238,39 +234,9 @@ impl Score {
 pub(crate) fn run(args: Args) -> Result<(), CliError> {
     let source = read_limited(&args.annotated)?;
     let labels = label_map(args.label_map.as_deref())?;
-    let resolved = resolve_pipeline(
-        args.policy.as_deref(),
-        &CleanOverrides::default(),
-        &args.locale,
-        None,
-        None,
-        None,
-    )?;
+    let options = args.pipeline.options("json", MAX_CORPUS_BYTES, None);
+    let (resolved, safety_policy) = prepare_clean_pipeline(&options, None)?;
     let pipeline = resolved.pipeline;
-    let pipeline = if resolved.policy.safety_net.backend == gaze::SafetyNetPolicyBackend::Nym {
-        #[cfg(feature = "safety-net-nym")]
-        {
-            let model_dir = std::env::var_os("GAZE_NYM_MODEL_DIR").map(PathBuf::from);
-            gaze_assembly::attach_nym_safety_net(
-                pipeline,
-                &resolved.policy,
-                model_dir.as_deref(),
-                Some(DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES),
-                None,
-            )
-            .map_err(|_| {
-                CliError::SafetyNetPolicyConfigDetail(
-                    "policy Nym bundle unavailable; run gaze setup --safety-net nym".into(),
-                )
-            })?
-        }
-        #[cfg(not(feature = "safety-net-nym"))]
-        return Err(CliError::SafetyNetConfigDetail(
-            "policy safety net nym requires the safety-net-nym feature".into(),
-        ));
-    } else {
-        pipeline
-    };
     let mut score = Score::default();
     for (index, line) in source.lines().enumerate() {
         let schema_error = || CliError::EvalSchemaLine { line: index + 1 };
@@ -279,16 +245,18 @@ pub(crate) fn run(args: Args) -> Result<(), CliError> {
         }
         let doc: Document = serde_json::from_str(line).map_err(|_| schema_error())?;
         let spans = validate_document(&doc, &labels).map_err(|_| schema_error())?;
-        let session = Session::from_policy(&resolved.policy).map_err(|_| CliError::Pipeline)?;
-        let (clean, manifest, _) = pipeline
+        let session = Session::from_policy_with_ttl_override(&resolved.policy, options.session_ttl)
+            .map_err(|_| CliError::Pipeline)?;
+        let (clean, manifest, report) = pipeline
             .clean_with_safety_net_policy_detect_context(
                 &session,
                 RawDocument::Text(doc.text.clone()),
                 resolved.locale_chain.as_slice(),
                 &resolved.dictionaries,
-                SafetyNetPolicy::default(),
+                safety_policy,
             )
-            .map_err(|_| CliError::Pipeline)?;
+            .map_err(map_safety_net_pipeline_error)?;
+        enforce_safety_net_mode(&report, safety_policy)?;
         if !matches!(clean, CleanDocument::Text(_)) {
             return Err(CliError::Pipeline);
         }

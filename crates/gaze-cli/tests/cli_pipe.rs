@@ -3754,7 +3754,7 @@ fn rulepack_rejects_unknown_validator_kind() {
         json!({
             "error": "PolicyConfig",
             "exit": 2,
-            "detail": "recognizer error: unsupported validator: iban_modxx"
+            "detail": "invalid recognizer configuration"
         })
     );
 }
@@ -3777,7 +3777,7 @@ fn rulepack_rejects_unknown_normalizer_kind() {
         json!({
             "error": "PolicyConfig",
             "exit": 2,
-            "detail": "recognizer error: unsupported normalizer: iban_canonicalx"
+            "detail": "invalid recognizer configuration"
         })
     );
 }
@@ -3800,7 +3800,7 @@ fn rulepack_rejects_typo_validator_kind() {
         json!({
             "error": "PolicyConfig",
             "exit": 2,
-            "detail": "recognizer error: unsupported validator: email_rfx"
+            "detail": "invalid recognizer configuration"
         })
     );
 }
@@ -4187,7 +4187,7 @@ fn t09a_bundled_rulepack_unknown_name_surfaces_detail() {
     let out = clean_raw_with_args(&["--rulepack-bundled=does-not-exist"], "anything");
     assert_eq!(out.status.code(), Some(2));
     assert_policy_config_detail_contains(&out.stderr, "unknown bundled rulepack");
-    assert_policy_config_detail_contains(&out.stderr, "does-not-exist");
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("does-not-exist"));
 }
 
 #[test]
@@ -4764,7 +4764,7 @@ action = "preserve"
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
-    assert_policy_config_detail_contains(&out.stderr, "parse policy.toml");
+    assert_policy_config_detail_contains(&out.stderr, "policy TOML parse error at line");
 }
 
 // Dogfooding F#6: policy.toml schema_version mismatch must fail closed with a
@@ -4806,7 +4806,7 @@ action = "preserve"
     let value = parse_stderr_variant(&out.stderr);
     assert_eq!(value["error"], "PolicySchemaUnsupported");
     assert_eq!(value["exit"], 2);
-    assert_eq!(value["found"], "9.9.0");
+    assert_eq!(value["found"], "<redacted>");
     assert_eq!(value["supported"], "0.1.");
 }
 

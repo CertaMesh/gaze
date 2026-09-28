@@ -1082,7 +1082,7 @@ mod tests {
             unreachable!("expected clean command");
         };
 
-        assert_eq!(args.openai_filter_device, OpenAiFilterDevice::Auto);
+        assert_eq!(args.pipeline.openai_filter_device, OpenAiFilterDevice::Auto);
     }
 
     /// Clap keys an argument on its Rust field name, not on its `--long` name,
