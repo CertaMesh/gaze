@@ -12,6 +12,7 @@ longer identifier.
 
 The rules do not infer a class from a bare value or a generic `id` or `number` field. A field
 name supplies the class, and the value must contain a digit. The tax fallback excludes bare
-digits so an invalid German Steuer-ID stays subject to its checksum validator. These are
+digits so an invalid German Steuer-ID stays subject to its checksum validator. All three
+fallbacks reject year-first calendar dates that can resemble grouped identifiers. These are
 precision boundaries, not claims that every real identifier will fit the fallback. Benchmark
 evidence and hand-written shape probes are required before adding a new label or value shape.
