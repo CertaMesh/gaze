@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import copy
 import hashlib
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -77,11 +80,11 @@ def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
         "policy_sha256_home_normalized": "synthetic",
         "harness_dirty": False,
         "latest_release_at_measurement": {"version": "v0.0.0"},
-        "gaze": {version: {"layers": {"A": row}, "gaze_revision": "synthetic",
+        "gaze": {version: {"layers": {"A": copy.deepcopy(row)}, "gaze_revision": "synthetic",
                            "policy_sha256": "synthetic"} for version in ("v1", "v2", "v3")},
         "tools": {
             name: {
-                "contracts": {version: {"A": row} for version in ("v1", "v2", "v3")},
+                "contracts": {version: {"A": copy.deepcopy(row)} for version in ("v1", "v2", "v3")},
                 "provenance": {"analyzer_version": "test", "spacy_version": "test",
                                "gliner_version": "test", "model_snapshot": "test",
                                "models": {"en": {"sha256": "test", "wheel_sha256": "test"}},
@@ -91,12 +94,22 @@ def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
         },
         "skipped": {"opf": "synthetic test"},
     }
-    assert "| v3 | A | gaze | 1 | 2 | 1 | 0 | 0 | 3.0 | 4.0 |" in render.render(report, "comparison.json")
+    page = render.render(report, "comparison.json")
+    assert "| v3 | A | gaze | 1 | 2 | 1 | 0 | 0 | 3.0 | 4.0 |" in page
+    assert "Gaze p50 exceeds Presidio all in 0/3" in page
+    faster_presidio = copy.deepcopy(report)
+    for version in ("v1", "v2", "v3"):
+        faster_presidio["tools"]["presidio-all"]["contracts"][version]["A"]["latency"]["p50_ms"] = 2
+    assert "Gaze p50 exceeds Presidio all in 3/3" in render.render(faster_presidio, "comparison.json")
     for field, value in (("documents", 2), ("processed_documents", 2)):
         broken = copy.deepcopy(report)
         broken["tools"]["presidio-all"]["contracts"]["v3"]["A"][field] = value
         with pytest.raises(ValueError, match="document count"):
             render.render(broken, "comparison.json")
+    broken = copy.deepcopy(report)
+    broken["tools"]["presidio-all"]["contracts"]["v3"]["A"]["latency"]["samples"] = 0
+    with pytest.raises(ValueError, match="latency includes skipped documents"):
+        render.render(broken, "comparison.json")
     broken = copy.deepcopy(report)
     broken["tools"]["gliner"]["provenance"]["model_sha256"] = ""
     with pytest.raises(ValueError, match="model hash"):
@@ -123,16 +136,14 @@ def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
         render.render(broken, "comparison.json")
 
 
-def test_presidio_keep_spans_match_previous_resolution_on_synthetic_text() -> None:
+def test_presidio_partial_overlap_keeps_raw_coordinates() -> None:
     from presidio_analyzer import RecognizerResult
     from presidio_anonymizer import AnonymizerEngine
-    from presidio_anonymizer.entities import ConflictResolutionStrategy
 
-    text = "Dr. Schmidt emailed alice@example.invalid."
+    text = "x" * 127 + "Northwind Demo Postal 12345" + "x" * 15
     found = [
-        RecognizerResult("PERSON", 0, 11, 0.9),
-        RecognizerResult("PERSON", 4, 11, 0.7),
-        RecognizerResult("EMAIL_ADDRESS", 20, 41, 0.9),
+        RecognizerResult("ORGANIZATION", 127, 150, 0.9),
+        RecognizerResult("DE_PLZ", 147, 152, 0.8),
     ]
     backend = compare.Presidio.__new__(compare.Presidio)
     backend.languages = ["en"]
@@ -140,15 +151,12 @@ def test_presidio_keep_spans_match_previous_resolution_on_synthetic_text() -> No
     backend.anonymizer = AnonymizerEngine()
     document = compare.score.Document("synthetic", text, "en", "", "synthetic", ())
     actual = backend.predict(document)
-
-    copied = backend.anonymizer._copy_recognizer_results(found)
-    copied.sort(key=lambda item: (item.start, item.end))
-    resolved = backend.anonymizer._remove_conflicts_and_get_text_manipulation_data(
-        copied, ConflictResolutionStrategy.MERGE_SIMILAR_OR_CONTAINED
-    )
-    resolved = backend.anonymizer._merge_entities_with_spaces_between(text, resolved)
-    expected = compare.byte_spans(text, [(item.start, item.end, item.entity_type) for item in resolved])
-    assert sorted(actual, key=lambda item: item.start) == sorted(expected, key=lambda item: item.start)
+    expected = [
+        compare.score.Span(127, 150, "ORGANIZATION"),
+        compare.score.Span(147, 152, "DE_PLZ"),
+    ]
+    assert actual == expected
+    assert compare.resolved_presidio_spans(backend.anonymizer, text, found) == expected
 
 
 def test_german_presidio_labels_are_reviewed() -> None:
@@ -196,6 +204,21 @@ def test_spacy_model_provenance_uses_pinned_wheel(tmp_path: Path, monkeypatch: p
     (model / "meta.json").write_text('{"version":"0.0.0","license":"MIT"}')
     with pytest.raises(ValueError, match="pinned wheel"):
         compare.model_info(model, "en")
+
+
+def test_run_full_wrapper_parses_every_model_and_policy_arg() -> None:
+    env = os.environ.copy()
+    env["GAZE_COMPARE_PYTHON"] = sys.executable
+    for language in compare.PRESIDIO_LANGUAGES:
+        env[f"GAZE_COMPARE_{language.upper()}_MODEL"] = f"/synthetic/{language}_model"
+    env["GAZE_COMPARE_GLINER_MODEL"] = "/synthetic/gliner_model"
+    result = subprocess.run(
+        ["bash", str(compare.MAP_PATH.with_name("run-full.sh")), "--dry-run"],
+        cwd=compare.REPO, env=env, text=True, capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "COMPARISON_ARGS_OK"
 
 
 def test_validate_current_flags_competitor_input_but_not_gaze_drift(monkeypatch: pytest.MonkeyPatch) -> None:

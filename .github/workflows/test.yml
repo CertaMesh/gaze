@@ -240,17 +240,17 @@ jobs:
           enable-cache: true
           cache-dependency-glob: scripts/bench/uv.lock
       - name: Sync locked benchmark environment
-        run: uv sync --project scripts/bench --locked
+        run: uv sync --project scripts/bench --locked --group comparison-test
       - name: Run benchmark scorer and comparator tests
-        run: uv run --project scripts/bench python -m unittest discover -s scripts/bench
+        run: uv run --project scripts/bench --group comparison-test python -m unittest discover -s scripts/bench
       - name: Run competitor adapter contract tests
-        run: uv run --project scripts/bench python -m pytest -q scripts/bench/compare/test_compare.py
+        run: uv run --project scripts/bench --group comparison-test python -m pytest -q scripts/bench/compare/test_compare.py
       - name: Build model-free equivalence binaries
         run: |
           cargo build --locked -p gaze-cli --bin gaze
           cargo build --locked -p gaze-recognizers --example clean_for_bench
       - name: Check policy and CLI equivalence on committed sample
-        run: uv run --project scripts/bench python scripts/bench/check_policy_equivalence.py --self-check
+        run: uv run --project scripts/bench --group comparison-test python scripts/bench/check_policy_equivalence.py --self-check
 
   xtask-gates:
     name: xtask gates

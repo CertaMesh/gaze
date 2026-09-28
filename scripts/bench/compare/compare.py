@@ -46,8 +46,8 @@ GERMAN_RECOGNIZERS = (
 )
 GLINER_REPO = "urchade/gliner_multi_pii-v1"
 SPACY_MODELS = {
-    "en": "en_core_web_lg", "de": "de_core_news_lg", "nl": "nl_core_news_sm",
-    "fr": "fr_core_news_sm", "pt": "pt_core_news_sm",
+    "en": "en_core_web_lg", "de": "de_core_news_lg", "nl": "nl_core_news_lg",
+    "fr": "fr_core_news_lg", "pt": "pt_core_news_lg",
 }
 
 
@@ -204,6 +204,19 @@ def preflight_contracts(layers: dict[str, list[score.Document]]) -> None:
     )
 
 
+def resolved_presidio_spans(anonymizer: object, text: str, found: Sequence[object]) -> list[score.Span]:
+    """Use Presidio's pinned 2.2.364 resolver, whose offsets stay in raw text."""
+    from presidio_anonymizer.entities import ConflictResolutionStrategy
+
+    copied = anonymizer._copy_recognizer_results(found)
+    copied.sort(key=lambda item: (item.start, item.end))
+    resolved = anonymizer._remove_conflicts_and_get_text_manipulation_data(
+        copied, ConflictResolutionStrategy.MERGE_SIMILAR_OR_CONTAINED
+    )
+    resolved = anonymizer._merge_entities_with_spaces_between(text, resolved)
+    return byte_spans(text, [(item.start, item.end, item.entity_type) for item in resolved])
+
+
 class Presidio:
     def __init__(self, models: dict[str, Path]) -> None:
         from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
@@ -227,16 +240,7 @@ class Presidio:
         if document.language not in self.languages:
             return []
         found = self.analyzer.analyze(text=document.text, language=document.language)
-        from presidio_anonymizer.entities import OperatorConfig
-
-        # Keep preserves the original offsets after Presidio resolves overlaps.
-        output = self.anonymizer.anonymize(
-            text=document.text, analyzer_results=found,
-            operators={"DEFAULT": OperatorConfig("keep")},
-        )
-        if output.text != document.text:
-            raise RuntimeError("Presidio keep operator changed document text")
-        return byte_spans(document.text, [(item.start, item.end, item.entity_type) for item in output.items])
+        return resolved_presidio_spans(self.anonymizer, document.text, found)
 
 
 class Gliner:
@@ -484,10 +488,25 @@ def main() -> int:
         default=REPO / "docs/reference/benchmarks/variant-packs",
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--validate-args-only", action="store_true")
     for version in CONTRACTS:
         parser.add_argument(f"--gaze-scorecard-{version}", type=Path)
     args = parser.parse_args()
     selected = TOOLS if args.tool == "all" else (args.tool,)
+    if args.validate_args_only:
+        required = ("en", "de", "nl", "fr", "pt") if args.tool == "all" else (
+            ("en",) if args.tool == "presidio-en" else
+            (("en", "de") if args.tool == "presidio-en-de" else ())
+        )
+        missing = [f"--{lang}-model" for lang in required if getattr(args, f"{lang}_model") is None]
+        if "gliner" in selected and args.gliner_model is None:
+            missing.append("--gliner-model")
+        if any(getattr(args, f"gaze_scorecard_{version}") for version in CONTRACTS) and args.gaze_policy is None:
+            missing.append("--gaze-policy")
+        if missing:
+            parser.error("missing comparison inputs: " + ", ".join(missing))
+        print("COMPARISON_ARGS_OK")
+        return 0
     if args.pack_dir != REPO / "docs/reference/benchmarks/variant-packs" and not args.pack_dir.is_dir():
         raise FileNotFoundError(f"variant pack directory missing: {args.pack_dir}")
     layers, corpus = load_corpus(args.dataset, args.pack_dir)
@@ -565,7 +584,7 @@ def main() -> int:
                     "supported_languages": backend.languages,
                     "recognizers": "Presidio built-in defaults plus nine documented German recognizers when de is enabled",
                     "german_recognizers": list(GERMAN_RECOGNIZERS) if "de" in requested else [],
-                    "anonymizer": "public keep operator with default conflict and whitespace resolution",
+                    "anonymizer": "Presidio 2.2.364 raw-coordinate resolution with default conflict and whitespace rules",
                 }
                 mapping = mappings["presidio"]
             elif name == "gliner":

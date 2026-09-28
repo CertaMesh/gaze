@@ -105,6 +105,18 @@ def render(report: dict[str, object], source: str) -> str:
         runtime = tools["opf"]["provenance"]["runtime"]
         opf_source = runtime.get("source_revision")
         opf_description = f"OpenAI Privacy Filter (OPF) {runtime['version']}" + (f" at source `{opf_source}`" if opf_source else "") + "."
+    latency_pairs = [
+        (gaze[version]["layers"][layer]["latency"]["p50_ms"],
+         tools["presidio-all"]["contracts"][version][layer]["latency"]["p50_ms"])
+        for version in versions for layer in layer_ids
+    ]
+    latency_pairs = [(g, p) for g, p in latency_pairs if g is not None and p is not None]
+    slower_rows = sum(g > p for g, p in latency_pairs)
+    latency_note = (
+        f"Gaze p50 exceeds Presidio all in {slower_rows}/{len(latency_pairs)} "
+        "comparable layer-contract rows on this host. "
+        if latency_pairs else "No comparable Gaze and Presidio all latency rows. "
+    )
     lines = [
         "# Competitor comparison",
         "",
@@ -114,8 +126,7 @@ def render(report: dict[str, object], source: str) -> str:
         "is warm per-document wall-clock inference/clean time on the same machine. "
         "Presidio all runs English, German, Dutch, French, and Portuguese spaCy models "
         "with the documented German recognizers. Presidio English default is a secondary row. "
-        "Latency includes processed documents only. Gaze is slower than Presidio on this host. "
-        "Latency varied by about 2x between identical runs here. "
+        "Latency includes processed documents only. " + latency_note +
         "This measures detection; competitor restore and manifest behavior is not scored.",
         "",
         f"Gaze measured at `{gaze['v3']['gaze_revision']}` "
