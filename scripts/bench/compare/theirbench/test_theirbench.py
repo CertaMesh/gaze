@@ -109,7 +109,7 @@ def row(leaked: int) -> dict:
 def synthetic() -> dict:
     rows = {"gaze-full": row(10), "gaze-rules-only": row(40), "presidio-en": row(5),
             "presidio-strong": row(30), "opf": row(20)}
-    quiet = {"load": {"contended": False}}
+    quiet = {"cpu": {"contended": False}}
     return {"not_run": {"x": "licence"}, "benchmarks": {"presidio-research": {
         "rows": rows, "chart_rows": ["gaze-full", "presidio-strong", "opf"],
         "provenance": {tool: quiet for tool in rows},
@@ -143,7 +143,7 @@ class RenderTest(unittest.TestCase):
 
         entry = synthetic()["benchmarks"]["presidio-research"]
         self.assertEqual(render.latency_cell(entry, "opf"), "1.0")
-        entry["provenance"]["opf"] = {"load": {"contended": True}}
+        entry["provenance"]["opf"] = {"cpu": {"contended": True}}
         self.assertEqual(render.latency_cell(entry, "opf"), render.QUIET)
         del entry["provenance"]["gaze-full"]
         self.assertEqual(render.latency_cell(entry, "gaze-full"), render.QUIET)
@@ -183,23 +183,19 @@ class RenderTest(unittest.TestCase):
                 render.assemble([report], [f"presidio-research={smoke}"], [])
 
 
-class LoadWatchTest(unittest.TestCase):
-    def test_any_sample_above_two_marks_contended(self) -> None:
-        import os
-        from unittest import mock
+class ForeignCpuTest(unittest.TestCase):
+    def test_own_tree_is_excluded_and_one_core_marks_contended(self) -> None:
+        import cpu_watch
 
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-        sys.modules.setdefault("compare", mock.MagicMock())
-        sys.modules.setdefault("comparison_metrics", mock.MagicMock())
-        import theirbench
-
-        with mock.patch.object(theirbench, "busy_processes", lambda: 0):
-            watch = theirbench.LoadWatch(interval=3600)
-        for loads, contended in (([1.0, 1.5, 1.9], False), ([1.0, 2.5, 1.0], True), ([2.1], True)):
-            watch.samples, watch.busy = loads, [0]
+        rows = [(1, 0, 90.0, "launchd"), (100, 1, 570.0, "python"), (101, 100, 300.0, "opf"),
+                (200, 1, 60.0, "cargo"), (201, 200, 50.0, "rustc"), (300, 1, 3.0, "idle")]
+        total, top = cpu_watch.foreign_cpu(rows, root=100)
+        self.assertEqual(total, 200.0)  # launchd + cargo + rustc; own tree and <5 % noise excluded
+        self.assertEqual(top[0], ["launchd", 90.0])
+        watch = cpu_watch.ForeignCpuWatch(root=100)
+        for peak, contended in ((100.0, False), (100.1, True)):
+            watch.samples = [{"foreign_cpu_percent": 10.0}, {"foreign_cpu_percent": peak}]
             self.assertEqual(watch.result()["contended"], contended)
-            self.assertEqual(watch.result()["load1_max"], max(loads))
-
 
 if __name__ == "__main__":
     unittest.main()
