@@ -125,6 +125,17 @@ fn scrub_public_text_refuses_query_on_cited_comparison_source() {
 }
 
 #[test]
+fn scrub_public_text_refuses_fragment_on_cited_comparison_source() {
+    let output = run_gate(&workspace_root(), "comparison_source_fragment.md");
+    let text = output_text(&output);
+    assert!(
+        !output.status.success(),
+        "PII in a fragment must fail; {text}"
+    );
+    assert!(text.contains("gaze clean emitted"), "{text}");
+}
+
+#[test]
 fn scrub_public_text_fails_lookalike_repo_url() {
     let output = run_gate(&workspace_root(), "lookalike_url.md");
     let text = output_text(&output);
