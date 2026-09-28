@@ -24,6 +24,8 @@ gaze eval annotated.jsonl --label-map labels.json --policy gaze.toml --locale en
 
 Omit `--policy` to use the bundled `core` policy, as in policy-free `gaze clean`. `--locale` accepts a comma-separated priority chain. A policy's Nym safety net is loaded when configured and available; a missing bundle fails the run. Each document gets a fresh session. The command reads at most 64 MiB per input file and prints no partial report if a row fails validation.
 
+The evaluator does not accept `gaze clean`'s explicit OpenAI Filter or safety-net registry flags. Scores from this command therefore describe the policy-selected pipeline, not a run that used those command-line overrides.
+
 ## Read the score
 
 `pii_bytes` is the union of gold UTF-8 byte ranges. `predicted_bytes` is the union of Gaze's protected raw-text ranges. `true_positive_bytes` is their intersection. `leaked_bytes = pii_bytes - true_positive_bytes`; `false_positive_bytes = predicted_bytes - true_positive_bytes`. `document_leak_rate` is the fraction of documents with at least one unprotected gold byte; `zero_leak_document_rate` is its complement. Documents with no gold spans count as zero leak. Byte precision, recall, and F1 follow the benchmark's byte definitions, including its `0/0 = 1` convention.
