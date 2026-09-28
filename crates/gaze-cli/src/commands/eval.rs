@@ -205,21 +205,23 @@ impl Score {
         self.pii_bytes += gold_bytes;
         self.predicted_bytes += predicted_bytes;
         self.true_positive_bytes += covered;
-        self.leaked_bytes += gold_bytes - covered;
-        self.false_positive_bytes += predicted_bytes - covered;
         for span in spans {
             let score = self.per_class.entry(span.class.clone()).or_default();
             let bytes = span.range.end - span.range.start;
             let covered = intersection(std::slice::from_ref(&span.range), &predicted);
             score.gold_bytes += bytes;
             score.covered_bytes += covered;
-            score.leaked_bytes += bytes - covered;
             score.entities += 1;
             score.fully_covered += usize::from(covered == bytes);
         }
     }
 
     fn finish(&mut self) {
+        self.leaked_bytes = self.pii_bytes - self.true_positive_bytes;
+        self.false_positive_bytes = self.predicted_bytes - self.true_positive_bytes;
+        for row in self.per_class.values_mut() {
+            row.leaked_bytes = row.gold_bytes - row.covered_bytes;
+        }
         self.documents_with_leaks = self.documents - self.documents_without_leaks;
         self.zero_leak_document_rate = ratio(self.documents_without_leaks, self.documents);
         self.document_leak_rate = ratio(self.documents_with_leaks, self.documents);
