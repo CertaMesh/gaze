@@ -84,6 +84,52 @@ fn assert_birth_date(text: &str, date: &str) {
     );
 }
 
+fn assert_age(text: &str, age: &str) {
+    let cleaned = clean_and_restore(&pipeline(), text);
+    assert!(
+        !without_tokens(&cleaned).contains(age),
+        "age leaked: {text:?} -> {cleaned:?}"
+    );
+    assert!(
+        cleaned.contains(":Custom:age_"),
+        "age took the wrong class: {text:?} -> {cleaned:?}"
+    );
+}
+
+#[test]
+fn age_cues_cover_prose_fields_and_spacing() {
+    for (text, age) in [
+        ("Applicant, aged 29, arrived.", "29"),
+        ("The 34-year-old applicant arrived.", "34"),
+        ("The applicant is 34 years old.", "34"),
+        ("Alter: 38 Jahre", "38"),
+        ("Sie ist 29 Jahre alt.", "29"),
+        ("Mit 29 Jahren zog sie um.", "29"),
+        ("L'homme est âgé de 42 ans.", "42"),
+        ("{\"age\": 45}", "45"),
+        ("age=45", "45"),
+        ("age:\u{00a0}45", "45"),
+    ] {
+        assert_age(text, age);
+    }
+}
+
+#[test]
+fn age_lookalikes_stay_raw() {
+    for text in [
+        "Order 29 shipped.",
+        "Version 34 shipped.",
+        "age: 290",
+        "Apt 45, Model Road",
+    ] {
+        let cleaned = clean_and_restore(&pipeline(), text);
+        assert!(
+            !cleaned.contains(":Custom:age_"),
+            "false age match: {text:?} -> {cleaned:?}"
+        );
+    }
+}
+
 macro_rules! birth_date_cases {
     ($($name:ident: $text:expr => $date:expr;)+) => {
         $(
@@ -111,6 +157,7 @@ birth_date_cases! {
     cue_de_geb_datum: "Geb.-Datum: 30.05.1971" => "30.05.1971";
     cue_de_geburtstag: "Sein Geburtstag ist am 30.05.1971." => "30.05.1971";
     cue_de_geboren_am: "Frau Müller, geboren am 30.05.1971, wohnt" => "30.05.1971";
+    cue_de_geboren_wurde_ich_am: "Geboren wurde ich am 30.05.1971." => "30.05.1971";
     cue_de_trailing_geboren: "Ich wurde am 30.05.1971 geboren." => "30.05.1971";
     cue_de_trailing_geboren_with_place: "Ich wurde am 30.05.1971 in Hamburg geboren." => "30.05.1971";
     cue_fr_nee_le: "Marie Dupont, née le 02/11/1992, habite" => "02/11/1992";

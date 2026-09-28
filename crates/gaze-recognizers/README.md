@@ -217,9 +217,9 @@ Full contract:
 
 ## Explicit birth-date and credential fields
 
-The embedded `gaze-core` rulepack version **0.6.0** contains 41 recognizers.
-Two project-authored `safe_default` rules with `locales = ["global"]` add
-birth-date and credential field recognition through the existing assembly and
+The embedded `gaze-core` rulepack version **0.6.0** contains 45 recognizers.
+Three project-authored `safe_default` rules with `locales = ["global"]` add
+birth-date, age and credential field recognition through the existing assembly and
 `RegexDetector` machinery, once their bundle is loaded.
 `birth_date.cue` ships in `core`. `password.field` ships in the opt-in
 `secrets` bundle, because credentials are not PII; load it with
@@ -229,7 +229,11 @@ in core 0.6.0.
 | Rule / custom class | Bundle | Complete, case-insensitive cues |
 | --- | --- | --- |
 | `birth_date.cue` / `custom:birth_date` | `core` | en `DOB`, `D.O.B.`, `date of birth`, `birth date`, `birthday`, `born`; de `Geburtsdatum`, `Geb.-Datum`, `geb.`, `Geburtstag`, `geboren`, trailing `am <date> geboren`; fr `né`/`née`, `date de naissance`; nl `geboortedatum`; da `fødselsdato`, `fødselsdag`, `født`; es `fecha de nacimiento`, `nacido`/`nacida`, `nació` |
+| `age.cue` / `custom:age` | `core` | `aged 29`, `29 years old`, `29-year-old`, `Alter: 29`, `29 Jahre alt`, `âgé de 29`, `idade: 29`; only the number is tokenized |
 | `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
+
+`postal.nz` recognizes a four-digit New Zealand postcode after a postal label or
+at the end of a street-address frame with a town. A bare four-digit number stays raw.
 
 ### Supported grammar
 

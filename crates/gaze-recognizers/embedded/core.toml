@@ -903,9 +903,9 @@ priority = 86
 # Postal collision policy (supersedes the research-855 two-rule note, which described a world with
 # only `postal.de` and `postal.us` in it).
 #
-# `custom:postal_code` is served by seven recognizers in two groups that cannot overlap:
+# `custom:postal_code` is served by eight recognizers in two groups that cannot overlap:
 #
-#   NUMERIC — document-basis, locale-gated: `postal.de`, `postal.us`, `postal.at_ch`, `postal.au`
+#   NUMERIC — document-basis, locale-gated: `postal.de`, `postal.us`, `postal.at_ch`, `postal.nz`, `postal.au`
 #     `postal.de` / `postal.us` accept naked five-digit strings, a shape that carries no structural
 #     signal whatsoever and is indistinguishable from a year, an order number, or an amount. The
 #     DOCUMENT-locale gate is the only thing standing in for that missing structure, which is why
@@ -931,7 +931,7 @@ priority = 86
 id = "postal.de"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.us", "postal.at_ch", "postal.nz", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-DE"]
 locale_basis = "document"
@@ -950,7 +950,7 @@ priority = 70
 id = "postal.us"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.at_ch", "postal.nz", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-US"]
 locale_basis = "document"
@@ -1009,14 +1009,48 @@ priority = 70
 id = "postal.at_ch"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.nz", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-AT", "de-CH"]
 locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?:(?i:\b(?:plz|postleitzahl|post[ \t]?code|postal[ \t]code|zip(?:[ \t]?code)?))[ \t]*[:#.]?[ \u{00A0}\u{202F}]*((?:(?:A|CH|FL)-)?\d{4})\b|(?:\A|[^#])\b((?:(?:A|CH|FL)-)?\d{4}),?[ \u{00A0}\u{202F}]{1,3}(?:\p{Lu}[\p{L}\-]{2,}|St(?:\.[ \u{00A0}\u{202F}]?|[ \u{00A0}\u{202F}])\p{Lu}))'''
+pattern = '''(?:(?i:\b(?:plz|postleitzahl|post[- \t]?code|postal[- \t]?code|zip(?:[- \t]?code)?))[ \t]*[:#.]?[ \u{00A0}\u{202F}]*(?:(?i:ist|lautet)[ \t\u{00A0}\u{202F}]+)?((?:(?:A|CH|FL)-)?\d{4})\b|(?:\A|[^#])\b((?:(?:A|CH|FL)-)?\d{4}),?[ \u{00A0}\u{202F}]{1,3}(?:\p{Lu}[\p{L}\-]{2,}|St(?:\.[ \u{00A0}\u{202F}]?|[ \u{00A0}\u{202F}])\p{Lu}))'''
+capture_groups = [1, 2]
+
+[recognizers.scoring]
+base = 0.70
+priority = 70
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# New Zealand postcodes are four digits (NZ Post addressing standard:
+# https://www.nzpost.co.nz/personal/sending-in-nz/postcodes). A bare four-digit number also names
+# years and quantities, so this rule needs either an explicit postal cue or a
+# street-address frame ending in a locality and postcode. Only the postcode is
+# captured; the locality and street keep their own recognizer provenance.
+[[recognizers]]
+id = "postal.nz"
+safety_tier = "locale_gated"
+class = "custom:postal_code"
+enabled = true
+locales = ["en-NZ"]
+locale_basis = "document"
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?ix)
+(?:
+  \b(?:postcode|postal[\x20\t_-]*code|zip(?:[\x20\t_-]*code)?)\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?([0-9]{4})\b
+ |
+  \b[0-9]{1,5}[\x20\t\x{A0}\x{202F}]+[\p{L}'-]+(?:[\x20\t\x{A0}\x{202F}]+[\p{L}'-]+){0,2}[\x20\t\x{A0}\x{202F}]+(?:road|rd|street|st|avenue|ave|lane|ln|crescent|terrace|drive|place|rise|close|way)\b[\x20\t\x{A0}\x{202F},]+\p{Lu}[\p{L}'-]+(?:[\x20\t\x{A0}\x{202F}]+\p{Lu}[\p{L}'-]+){0,2}[\x20\t\x{A0}\x{202F},]+([0-9]{4})\b
+)'''
 capture_groups = [1, 2]
 
 [recognizers.scoring]
@@ -1045,7 +1079,7 @@ license = "Apache-2.0"
 id = "postal.au"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.nz", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-AU"]
 locale_basis = "document"
@@ -1095,7 +1129,7 @@ license = "Apache-2.0"
 id = "postal.ca"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.nz", "postal.au", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-CA"]
 locale_basis = "format"
@@ -1151,7 +1185,7 @@ license = "Apache-2.0"
 id = "postal.gb"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.nz", "postal.au", "postal.ca", "postal.ie"]
 enabled = true
 locales = ["en-GB"]
 locale_basis = "format"
@@ -1203,7 +1237,7 @@ license = "Apache-2.0"
 id = "postal.ie"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.nz", "postal.au", "postal.ca", "postal.gb"]
 enabled = true
 locales = ["en-IE"]
 locale_basis = "format"
@@ -1626,7 +1660,7 @@ pattern = '''
 | geb\.
 )
 (?: [\s"'\\:=,()–-]+
-  | (?:is|was|ist|war|lautet|der|den|am|on|of|the|le|est|op|er|el|es|at)\b
+  | (?:is|was|ist|war|lautet|wurde|ich|sie|der|den|am|on|of|the|le|est|op|er|el|es|at)\b
 ){0,8}
 (
     [0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])
@@ -1650,6 +1684,37 @@ pattern = '''
 [\x20\t\x{A0}\x{202F}]+(?:in[\x20\t\x{A0}\x{202F}]+[\p{L}-]+[\x20\t\x{A0}\x{202F}]+)?geboren\b
 '''
 capture_groups = [1, 2]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# An age is a quasi-identifier only when age words attach to the number. Bare
+# two-digit numbers also name amounts, counts, dates and building numbers.
+# Capture only the number so restore keeps the surrounding sentence unchanged.
+[[recognizers]]
+id = "age.cue"
+safety_tier = "safe_default"
+class = "custom:age"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?ix)
+(?:
+  \b(?:age|aged|alter|âge|âgé(?:e)?|idade)[\x20\t\x{A0}\x{202F}:="']*(?:de[\x20\t\x{A0}\x{202F}]+)?((?:[1-9]|[1-9][0-9]|1[01][0-9]|120))\b
+ |\b((?:[1-9]|[1-9][0-9]|1[01][0-9]|120))\b[\x20\t\x{A0}\x{202F}-]+(?:years?[\x20\t\x{A0}\x{202F}-]+old|jahre?[\x20\t\x{A0}\x{202F}]+alt|year[\x20\t\x{A0}\x{202F}-]+old|ans?\b)
+ |\bmit[\x20\t\x{A0}\x{202F}]+((?:[1-9]|[1-9][0-9]|1[01][0-9]|120))\b[\x20\t\x{A0}\x{202F}]+jahren\b
+)'''
+capture_groups = [1, 2, 3]
 
 [recognizers.scoring]
 base = 0.90

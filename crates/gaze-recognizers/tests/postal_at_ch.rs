@@ -99,6 +99,39 @@ fn postal_code_inside_fixed_token_hex_does_not_count_as_surviving() {
 
 const AT_CH: [LocaleTag; 2] = [LocaleTag::DeAt, LocaleTag::DeCh];
 
+#[test]
+fn postal_cues_accept_link_words_and_hyphens() {
+    for (text, cue) in [
+        ("Postleitzahl ist 8010", "Postleitzahl"),
+        ("ZIP-Code 8010", "ZIP-Code"),
+        ("Post-code: 8010", "Post-code"),
+    ] {
+        assert_removed(text, "8010", &[cue]);
+    }
+}
+
+#[test]
+fn new_zealand_postcode_needs_a_postal_or_address_anchor() {
+    let nz = [LocaleTag::parse("en-NZ").expect("locale")];
+    for text in [
+        "Postcode: 9016",
+        "Postal code is 9016",
+        "42 Model Road, Arcadia, 9016",
+        "42 Model Road, Arcadia 9016",
+        "{\"zip_code\": \"9016\"}",
+    ] {
+        let cleaned = clean_in(&nz, text);
+        assert_code_removed(&cleaned, "9016", "en-NZ");
+    }
+    for text in ["The report was filed in March 2024.", "Order 9016 shipped."] {
+        let cleaned = clean_in(&nz, text);
+        assert!(
+            !cleaned.contains(":Custom:postal_code_"),
+            "{text}: {cleaned}"
+        );
+    }
+}
+
 fn assert_code_removed(cleaned: &str, code: &str, locale: &str) {
     assert!(
         !without_tokens(cleaned).contains(code),
