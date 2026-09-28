@@ -497,3 +497,29 @@ fn anchored_four_digit_codes_restore_exactly() {
         assert_eq!(restored, original, "manifest-first restore must round-trip");
     }
 }
+
+#[test]
+fn address_anchored_four_digit_postcode_restores_exactly() {
+    let locale = [LocaleTag::Global];
+    let pipeline = pipeline_for(&locale);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let original = "42 Model Road, Arcadia 9016";
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(original.to_string()),
+            &locale,
+            &DictionaryBundle::default(),
+        )
+        .expect("clean");
+    let CleanDocument::Text(cleaned) = clean else {
+        panic!("expected text");
+    };
+    assert_code_removed(&cleaned, "9016", "global");
+    assert_eq!(
+        pipeline
+            .restore_strict_text(&session, &cleaned)
+            .expect("restore"),
+        original
+    );
+}
