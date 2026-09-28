@@ -16,6 +16,7 @@ import subprocess
 import tomllib
 from collections import Counter
 from pathlib import Path
+from unittest.mock import patch
 
 import agentic_layers as agentic
 import dataiku_en_de_gaze_bench as dataiku
@@ -44,6 +45,24 @@ LABEL_CLASS = {
 }
 MAX_FIELDS = 32
 MAX_VALUE_BYTES = 256
+
+
+def run_with_record_context(
+    contexts: dict[str, str | None], **kwargs: object
+) -> dict[str, object]:
+    """Inject oracle context at the transport boundary, leaving the scorer intact."""
+    base_transport = score.BenchSubprocess
+
+    class RecordTransport(base_transport):
+        def exchange(self, request: dict[str, object]) -> dict[str, object]:
+            enriched = dict(request)
+            context = contexts[request["fixture_id"]]
+            if context is not None:
+                enriched["context_json"] = context
+            return super().exchange(enriched)
+
+    with patch.object(score, "BenchSubprocess", RecordTransport):
+        return score.run_config(**kwargs)
 
 
 def class_action(policy: dict, class_name: str) -> str | None:
@@ -311,17 +330,17 @@ def main() -> None:
         baseline = score.run_config(
             **kwargs, base_environment=clean_environment, record_document=baseline_record
         )
-        exact_record_run = score.run_config(
+        exact_record_run = run_with_record_context(
+            contexts,
             **kwargs,
             base_environment={**clean_environment, "GAZE_BENCH_KNOWN_RECORD_ARM": "1", "GAZE_BENCH_RECORD_EXACT_ONLY": "1"},
             record_document=exact_record,
-            context_for_document=lambda document: contexts[document.uid],
         )
-        with_record = score.run_config(
+        with_record = run_with_record_context(
+            contexts,
             **kwargs,
             base_environment={**clean_environment, "GAZE_BENCH_KNOWN_RECORD_ARM": "1"},
             record_document=record_record,
-            context_for_document=lambda document: contexts[document.uid],
         )
         output["layers"][layer] = {
             "documents": len(documents),

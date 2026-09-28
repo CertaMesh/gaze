@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Iterable, Mapping, Sequence
 
 from bench_subprocess import BenchSubprocess, producer_boundary
 
@@ -2371,7 +2371,6 @@ def run_config(
     split_composite_source_ids: bool = False,
     record_document: object | None = None,
     replay_responses: Mapping[str, dict[str, object]] | None = None,
-    context_for_document: Callable[[Document], str | None] | None = None,
 ) -> dict[str, object]:
     # Checked before the subprocess starts, not on the first response.
     _check_replacing_actions(replacing_actions)
@@ -2435,10 +2434,6 @@ def run_config(
             "locale_chain": document.locale_chain,
             "text": document.text,
         }
-        if context_for_document is not None:
-            context_json = context_for_document(document)
-            if context_json is not None:
-                request["context_json"] = context_json
         request_started = time.perf_counter()
         response = validate_response(
             document,

@@ -1,10 +1,40 @@
 import json
+from unittest.mock import patch
 
 import gaze_bench_score as score
 import known_record_arm as arm
 
 
 POLICY = {"rule": [{"kind": "default", "action": "tokenize"}]}
+
+
+def test_oracle_transport_injects_context_without_changing_scorer() -> None:
+    requests = []
+
+    class FakeTransport:
+        def exchange(self, request):
+            requests.append(request)
+            return {"ok": True}
+
+    def fake_run_config(**kwargs):
+        transport = score.BenchSubprocess()
+        transport.exchange({"fixture_id": "known", "text": "synthetic"})
+        transport.exchange({"fixture_id": "unknown", "text": "synthetic"})
+        return {"scored": True}
+
+    with patch.object(score, "BenchSubprocess", FakeTransport), patch.object(
+        score, "run_config", fake_run_config
+    ):
+        result = arm.run_with_record_context(
+            {"known": '{"record":{}}', "unknown": None}
+        )
+        assert score.BenchSubprocess is FakeTransport
+
+    assert result == {"scored": True}
+    assert requests == [
+        {"fixture_id": "known", "text": "synthetic", "context_json": '{"record":{}}'},
+        {"fixture_id": "unknown", "text": "synthetic"},
+    ]
 
 
 def document(uid: str, text: str, label: str | None) -> score.Document:
