@@ -39,7 +39,7 @@ git clone https://github.com/pritesh-2711/pii-bench "$PB_CHECKOUT" && git -C "$P
   --checkout "$PB_CHECKOUT" --output-dir "$PB_DATA"
 
 # 3. Reproduce the vendors' numbers first, with their own tools. The published
-#    Presidio Research numbers predate later evaluator fixes, so run.sh also
+#    Presidio Research numbers predate later evaluator fixes, so run-theirbench.sh also
 #    reproduces each with the evaluator commit that produced it
 #    (REPRODUCTION_COMMITS in presidio_research_repro.py).
 "$VENDOR_ENV/bin/python" scripts/bench/compare/theirbench/presidio_research_repro.py \
