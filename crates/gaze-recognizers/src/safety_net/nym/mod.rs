@@ -173,6 +173,9 @@ fn span_to_suspect(
     let threshold = operating_point
         .threshold(span.label)
         .ok_or_else(|| invalid("nym returned a label that is not enabled"))?;
+    if is_json_page_number(clean_text, &span) {
+        return Ok(None);
+    }
     let range = span.start..span.end;
     let Some(kind) = context.manifest.diff_against(&range, &class) else {
         return Ok(None);
@@ -186,6 +189,32 @@ fn span_to_suspect(
         raw_label(span.label, threshold),
         context.field_path.map(str::to_string),
     )))
+}
+
+/// A JSON pagination field is metadata even when Nym calls its number a building number.
+fn is_json_page_number(text: &str, span: &NymSpan) -> bool {
+    if span.label != NymLabel::BuildingNumber {
+        return false;
+    }
+    let value = &text[span.start..span.end];
+    if !value.bytes().all(|byte| byte.is_ascii_digit())
+        || gaze_types::is_inside_word(text, span.start)
+        || gaze_types::is_inside_word(text, span.end)
+    {
+        return false;
+    }
+    let before = text[..span.start].trim_end();
+    let Some(before) = before.strip_suffix(':') else {
+        return false;
+    };
+    let Some(before) = before.trim_end().strip_suffix("\"page\"") else {
+        return false;
+    };
+    matches!(before.trim_end().chars().next_back(), Some('{' | ','))
+        && matches!(
+            text[span.end..].trim_start().chars().next(),
+            Some(',' | '}')
+        )
 }
 
 /// `LABEL>=THRESHOLD`, the audit spelling of which rule fired.
@@ -229,6 +258,61 @@ mod tests {
         assert_eq!(suspect.class, PiiClass::custom("license_plate").unwrap());
         assert_eq!(suspect.kind, LeakKind::Uncovered);
         assert_eq!(raw_label(NymLabel::DateOfBirth, 0.9), "DATE_OF_BIRTH>=0.9");
+    }
+
+    #[test]
+    fn nym_building_number_ignores_numeric_json_page_field() {
+        let manifest = Manifest::default();
+        for text in [
+            "{\"operation\":\"fetch\",\"caseId\":\"1234567890\",\"page\":1}",
+            "{\"page\" : 12, \"house_number\": 1}",
+            "{\"page\":\n  123}",
+        ] {
+            let page_start = text.find("\"page\"").unwrap();
+            let start = text[page_start..].find(':').unwrap() + page_start + 1;
+            let start = start + text[start..].find(|ch: char| ch.is_ascii_digit()).unwrap();
+            let end = start + text[start..].bytes().take_while(u8::is_ascii_digit).count();
+            let span = NymSpan {
+                start,
+                end,
+                label: NymLabel::BuildingNumber,
+                score: 0.99,
+            };
+            assert!(
+                span_to_suspect(span, text, &NymOperatingPoint::op_b(), context(&manifest))
+                    .unwrap()
+                    .is_none(),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn nym_building_number_keeps_address_digits_and_non_json_values() {
+        let manifest = Manifest::default();
+        for (text, value) in [
+            ("{\"page\": 1, \"house_number\": 7}", "7"),
+            ("{\"address\": \"Main Street 1\"}", "1"),
+            ("{\"caseId\": \"1234567890\"}", "1234567890"),
+            ("{\"orderRef\": \"AB12-34\"}", "AB12-34"),
+            ("{\"trackingNumber\": \"9274891234\"}", "9274891234"),
+            ("page=1", "1"),
+            ("{\"page\": \"1\"}", "1"),
+        ] {
+            let start = text.rfind(value).unwrap();
+            let span = NymSpan {
+                start,
+                end: start + value.len(),
+                label: NymLabel::BuildingNumber,
+                score: 0.99,
+            };
+            assert!(
+                span_to_suspect(span, text, &NymOperatingPoint::op_b(), context(&manifest))
+                    .unwrap()
+                    .is_some(),
+                "{text}"
+            );
+        }
     }
 
     #[test]
