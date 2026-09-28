@@ -136,6 +136,39 @@ def own_metric_cell(name: str, entry: Mapping[str, Any], tool: str, metric: str)
     return f"{entry['own_metric'][tool][metric]:.3f}"
 
 
+def not_best(name: str, entry: Mapping[str, Any]) -> list[str]:
+    """Every measured row that beats Gaze's full setup, with the FP trade-off beside it.
+
+    Derived from the data, never written by hand. Rows with identical numbers
+    (for example Presidio's language configurations on an English-only set)
+    are named together.
+    """
+    rows, gaze = entry["rows"], entry["rows"]["gaze-full"]
+    metric, label = OWN_METRIC[name]
+    lines = []
+    for view, title in (("product_coverage", "all gold labels"),
+                        ("common_intersection", "the common-intersection labels")):
+        ours = gaze[view]
+        groups: dict[tuple[int, int], list[str]] = {}
+        for tool, result in rows.items():
+            cell = result[view]
+            if family(tool) != "gaze" and cell["leaked_bytes"] < ours["leaked_bytes"]:
+                groups.setdefault((cell["leaked_bytes"], cell["false_positive_bytes"]), []).append(tool)
+        for (leaked, fp), tools in sorted(groups.items()):
+            lines.append(f"- On {title}, {' / '.join(sorted(tools))} leaks {leaked:,} B against Gaze full's "
+                         f"{ours['leaked_bytes']:,} B, at {fp:,} false-positive bytes against Gaze's "
+                         f"{ours['false_positive_bytes']:,}.")
+    if not held(entry, "gaze-full") or name != "piibench-commercial":
+        ours = entry["own_metric"]["gaze-full"][metric]
+        better = sorted((tool for tool in rows if family(tool) != "gaze" and not
+                         (name == "piibench-commercial" and held(entry, tool))
+                         and entry["own_metric"][tool][metric] > ours))
+        for tool in better:
+            lines.append(f"- On the set's own metric, {tool} scores {entry['own_metric'][tool][metric]:.3f} "
+                         f"against Gaze full's {ours:.3f}.")
+    return lines or ["- Gaze full leaks the fewest bytes on both views and leads the set's own metric."]
+
+
 def render(data: Mapping[str, Any]) -> str:
     lines = [
         "Report-only: these sets are never used to design or tune Gaze rules. Every gold "
@@ -201,6 +234,7 @@ def render(data: Mapping[str, Any]) -> str:
                 f"{pct(product['document_leak_rate'])} | {f1} | {f2} | "
                 f"{common['leaked_bytes']:,} | {own_metric_cell(name, entry, tool, metric)} |")
         rescored = entry["rescored_with"]
+        lines += ["", "Where Gaze full is not best:", "", *not_best(name, entry)]
         lines += ["", f"Typed cells read \"{HELD}\" for tools whose labels pass through collision-family "
                   "or secret/password/token mappings, which the comparison's typed-scoring fix changed; "
                   "leaked and false-positive bytes do not depend on labels and are unaffected.",

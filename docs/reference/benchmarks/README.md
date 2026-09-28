@@ -833,6 +833,14 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
 | scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
 
+Where Gaze full is not best:
+
+- On all gold labels, presidio-strong-high-recall leaks 84,965 B against Gaze full's 105,859 B, at 92,491 false-positive bytes against Gaze's 48,477.
+- On all gold labels, presidio-strong leaks 87,853 B against Gaze full's 105,859 B, at 88,715 false-positive bytes against Gaze's 48,477.
+- On all gold labels, presidio-all / presidio-en / presidio-en-de leaks 87,936 B against Gaze full's 105,859 B, at 235,332 false-positive bytes against Gaze's 48,477.
+- On the common-intersection labels, datafog-gliner leaks 25,463 B against Gaze full's 32,495 B, at 17,966 false-positive bytes against Gaze's 11,058.
+- On the common-intersection labels, datafog-spacy leaks 29,383 B against Gaze full's 32,495 B, at 64,787 false-positive bytes against Gaze's 11,058.
+
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
 Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `b1446215`; harness `b47f4ec1`.
@@ -871,6 +879,13 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | presidio-strong-high-recall | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
 | scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
 | scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
+
+Where Gaze full is not best:
+
+- On all gold labels, gliner-high-recall leaks 8,158 B against Gaze full's 9,519 B, at 7,031 false-positive bytes against Gaze's 1,363.
+- On the common-intersection labels, gliner-high-recall leaks 4,482 B against Gaze full's 8,080 B, at 1,589 false-positive bytes against Gaze's 488.
+- On the common-intersection labels, datafog-gliner leaks 5,807 B against Gaze full's 8,080 B, at 1,387 false-positive bytes against Gaze's 488.
+- On the common-intersection labels, opf leaks 5,905 B against Gaze full's 8,080 B, at 534 false-positive bytes against Gaze's 488.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 

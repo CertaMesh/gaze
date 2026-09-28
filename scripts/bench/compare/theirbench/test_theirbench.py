@@ -306,5 +306,29 @@ class GuardTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "rescore"):
                     render.assemble([report], [], [])
 
+
+class NotBestTest(unittest.TestCase):
+    def test_every_row_beating_gaze_is_named_with_its_fp(self) -> None:
+        import render_theirbench as render
+
+        entry = synthetic()["benchmarks"]["presidio-research"]
+        entry["rows"]["presidio-en"] = row(5)
+        entry["rows"]["presidio-all"] = row(5)
+        entry["own_metric"]["presidio-all"] = {"f2": 0.5}
+        entry["own_metric"]["opf"] = {"f2": 0.9}
+        lines = render.not_best("presidio-research", entry)
+        self.assertIn("presidio-all / presidio-en leaks 5 B against Gaze full's 10 B, at 10 false-positive "
+                      "bytes against Gaze's 10.", lines[0])
+        self.assertTrue(any("opf scores 0.900" in line for line in lines))
+        self.assertFalse(any("presidio-strong" in line for line in lines))  # 30 B > Gaze's 10 B
+
+    def test_gaze_best_everywhere_says_so(self) -> None:
+        import render_theirbench as render
+
+        entry = synthetic()["benchmarks"]["presidio-research"]
+        entry["rows"] = {tool: result for tool, result in entry["rows"].items() if tool != "presidio-en"}
+        self.assertEqual(render.not_best("presidio-research", entry),
+                         ["- Gaze full leaks the fewest bytes on both views and leads the set's own metric."])
+
 if __name__ == "__main__":
     unittest.main()
