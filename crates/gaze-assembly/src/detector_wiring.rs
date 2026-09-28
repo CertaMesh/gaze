@@ -431,13 +431,18 @@ pub(crate) fn register_context_dictionaries(
                 PiiClass::custom(name).map_err(gaze::Error::from)?,
             )?,
         };
-        builder.recognizer(DictionaryRecognizer::new(
+        let recognizer = DictionaryRecognizer::new(
             format!("context/{name}"),
             class,
             name,
             context.dictionaries[name].case_sensitive,
             "counter",
-        ));
+        );
+        builder.recognizer(if name.starts_with(RECORD_DICTIONARY_PREFIX) {
+            recognizer.with_cache_capacity(1)
+        } else {
+            recognizer
+        });
     }
 
     Ok(())

@@ -29,6 +29,7 @@ pub struct DictionaryRecognizer {
     score: f32,
     priority: i32,
     compiled_dictionaries: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
+    cache_capacity: usize,
 }
 
 impl DictionaryRecognizer {
@@ -73,6 +74,7 @@ impl DictionaryRecognizer {
             score,
             priority,
             compiled_dictionaries: Mutex::new(HashMap::new()),
+            cache_capacity: usize::MAX,
         }
     }
 
@@ -82,6 +84,12 @@ impl DictionaryRecognizer {
 
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
+    }
+
+    /// Limit retained automata when one registered slot receives changing values.
+    pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
+        self.cache_capacity = capacity.max(1);
+        self
     }
 
     /// Overrides how the recognizer's locale metadata affects eligibility.
@@ -96,14 +104,20 @@ impl DictionaryRecognizer {
             .compiled_dictionaries
             .lock()
             .expect("dictionary automaton cache poisoned");
-        Arc::clone(compiled.entry(key).or_insert_with(|| {
-            Arc::new(
-                AhoCorasickBuilder::new()
-                    .ascii_case_insensitive(!entry.case_sensitive())
-                    .build(entry.terms())
-                    .expect("DictionaryEntry validates terms before automaton construction"),
-            )
-        }))
+        if let Some(existing) = compiled.get(&key) {
+            return Arc::clone(existing);
+        }
+        if compiled.len() >= self.cache_capacity {
+            compiled.clear();
+        }
+        let automaton = Arc::new(
+            AhoCorasickBuilder::new()
+                .ascii_case_insensitive(!entry.case_sensitive())
+                .build(entry.terms())
+                .expect("DictionaryEntry validates terms before automaton construction"),
+        );
+        compiled.insert(key, Arc::clone(&automaton));
+        automaton
     }
 }
 
@@ -255,6 +269,35 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].span, 16..25);
         assert_eq!(hits[0].class, PiiClass::Custom("class_alpha".to_string()));
+    }
+
+    #[test]
+    fn changing_record_slot_keeps_only_the_current_automaton() {
+        let recognizer = DictionaryRecognizer::new(
+            "context/record-slot",
+            PiiClass::Name,
+            "record-slot",
+            true,
+            "counter",
+        )
+        .with_cache_capacity(1);
+        for value in ["Alice Smith", "Bob Schmidt"] {
+            let context = TypedContext {
+                dictionaries: HashMap::from([(
+                    "record-slot".to_string(),
+                    ContextDictionary {
+                        terms: vec![value.to_string()],
+                        case_sensitive: true,
+                    },
+                )]),
+                class_map: HashMap::new(),
+                fields: Map::new(),
+            };
+            let bundle = dictionary_bundle_from_context(&context);
+            let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+            assert_eq!(recognizer.detect(value, &detect_context).unwrap().len(), 1);
+            assert_eq!(recognizer.compiled_dictionaries.lock().unwrap().len(), 1);
+        }
     }
 
     #[test]
