@@ -6,6 +6,7 @@ use std::path::Path;
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::PiiClass;
@@ -32,6 +33,13 @@ const MAX_RECORD_FIELDS: usize = 32;
 const MAX_VALUE_BYTES: usize = 256;
 const MAX_VARIANTS_PER_FIELD: usize = 2;
 pub const RECORD_DICTIONARY_PREFIX: &str = "__record_v2_";
+
+/// Stable internal key for a typed record slot. The class digest avoids
+/// exposing adopter class names in dictionary IDs and audit source IDs.
+pub fn record_dictionary_name(class: &PiiClass, slot: usize) -> String {
+    let digest = Sha256::digest(class.to_canonical_str().as_bytes());
+    format!("{RECORD_DICTIONARY_PREFIX}{}_{slot}", hex::encode(digest))
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -177,7 +185,8 @@ impl Context {
             if leaves.is_empty() || leaves.len() != raw.field_map.len() {
                 return Err(ContextError::InvalidRecordMapping);
             }
-            for (index, (path, value)) in leaves.into_iter().enumerate() {
+            let mut class_slots = HashMap::<PiiClass, usize>::new();
+            for (path, value) in leaves {
                 let class = raw
                     .field_map
                     .get(&path)
@@ -192,7 +201,9 @@ impl Context {
                 if terms.len() > MAX_VARIANTS_PER_FIELD {
                     return Err(ContextError::RecordLimit);
                 }
-                let name = format!("{RECORD_DICTIONARY_PREFIX}{index}");
+                let slot = class_slots.entry(class.clone()).or_default();
+                let name = record_dictionary_name(&class, *slot);
+                *slot += 1;
                 dictionaries.insert(
                     name.clone(),
                     ContextDictionary {

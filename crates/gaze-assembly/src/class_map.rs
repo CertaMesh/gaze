@@ -55,3 +55,18 @@ pub(crate) fn class_has_tokenize_or_stricter_action(
     }
     Ok(false)
 }
+
+/// The first matching rule must keep record-supplied values restorable.
+pub fn class_has_reversible_action(rules: &[RuleSpec], class: &PiiClass) -> bool {
+    rules
+        .iter()
+        .find_map(|rule| match rule {
+            RuleSpec::Class {
+                class: named,
+                action,
+            } if named == class => Some(action),
+            RuleSpec::Default { action } => Some(action),
+            _ => None,
+        })
+        .is_some_and(|action| matches!(action, Action::Tokenize | Action::FormatPreserve))
+}

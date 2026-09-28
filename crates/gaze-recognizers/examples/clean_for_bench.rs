@@ -5,11 +5,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use gaze::{
-    Action, Candidate, CleanDocument, Context, DetectContext, DictionaryBundle, EmittedTokenSpan,
-    FallbackReason, GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis,
-    LocaleChain, LocaleTag, NerPolicy, PiiClass, Pipeline, RedactionEntry, RedactionLogError,
-    RedactionLogger, RuleSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback,
-    SafetyNetMode, SafetyNetPolicy, Scope, Session,
+    record_dictionary_name, Action, Candidate, CleanDocument, Context, ContextDictionary,
+    DetectContext, DictionaryBundle, EmittedTokenSpan, FallbackReason,
+    GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis, LocaleChain, LocaleTag,
+    NerPolicy, PiiClass, Pipeline, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec,
+    Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    Scope, Session, RECORD_DICTIONARY_PREFIX,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -78,9 +79,6 @@ struct NerSettings {
 
 struct PolicyRun {
     pipeline: Pipeline,
-    policy: gaze::Policy,
-    rulepacks: Vec<Rulepack>,
-    ner_threshold: f32,
     locale_chain: LocaleChain,
     dictionaries: DictionaryBundle,
 }
@@ -308,27 +306,25 @@ fn handle_request_with_policy(
     request: Request,
     policy_run: Option<&PolicyRun>,
 ) -> Result<Outcome, Box<dyn std::error::Error>> {
-    let record_run = if let Some(raw) = request.context_json.as_deref() {
+    let record_dictionaries = if let Some(raw) = request.context_json.as_deref() {
         let policy_run = policy_run.ok_or("record context requires policy-file config")?;
         let context = Context::from_json_str(raw)?;
-        let inputs = gaze_assembly::resolve_policy_inputs(
-            &policy_run.policy,
-            Some(&context),
-            None,
-            Some(policy_run.ner_threshold),
-        )?;
-        let pipeline = gaze_assembly::build_pipeline(
-            &policy_run.policy,
-            &context,
-            &policy_run.rulepacks,
-            &policy_run.locale_chain,
-            Some(policy_run.ner_threshold),
-        )?;
-        Some((pipeline, inputs.dictionaries))
+        if std::env::var_os("GAZE_BENCH_KNOWN_RECORD_ARM").is_none()
+            || context.dictionaries.is_empty()
+            || context
+                .dictionaries
+                .keys()
+                .any(|name| !name.starts_with(RECORD_DICTIONARY_PREFIX))
+        {
+            return Err("record context requires the known-record benchmark arm".into());
+        }
+        Some(DictionaryBundle::merge(
+            policy_run.dictionaries.clone(),
+            gaze::dictionary_bundle_from_context(&context),
+        ))
     } else {
         None
     };
-    let full = record_run.as_ref().map_or(full, |run| &run.0);
     let request_locales = request
         .locale_chain
         .iter()
@@ -338,9 +334,8 @@ fn handle_request_with_policy(
         .map(|run| run.locale_chain.as_slice())
         .unwrap_or(&request_locales);
     let empty_dictionaries = DictionaryBundle::default();
-    let dictionaries = record_run
+    let dictionaries = record_dictionaries
         .as_ref()
-        .map(|run| &run.1)
         .or_else(|| policy_run.map(|run| &run.dictionaries))
         .unwrap_or(&empty_dictionaries);
     let session_hex = match request.session_hex.as_deref() {
@@ -828,21 +823,55 @@ fn build_policy_run() -> Result<PolicyRun, Box<dyn std::error::Error>> {
         std::env::var_os("GAZE_BENCH_POLICY").ok_or("policy-file requires GAZE_BENCH_POLICY")?;
     let policy = gaze::Policy::load_for_cli(std::path::Path::new(&path))?;
     let inputs = gaze_assembly::resolve_policy_inputs(&policy, None, None, None)?;
+    let context = if std::env::var_os("GAZE_BENCH_KNOWN_RECORD_ARM").is_some() {
+        record_registry_context(&policy)
+    } else {
+        empty_context()
+    };
     let pipeline = gaze_assembly::build_pipeline(
         &policy,
-        &empty_context(),
+        &context,
         &inputs.rulepacks,
         &inputs.locale_chain,
         Some(inputs.ner_threshold),
     )?;
     Ok(PolicyRun {
         pipeline,
-        policy,
-        rulepacks: inputs.rulepacks,
-        ner_threshold: inputs.ner_threshold,
         locale_chain: inputs.locale_chain,
         dictionaries: inputs.dictionaries,
     })
+}
+
+fn record_registry_context(policy: &gaze::Policy) -> Context {
+    let classes = [
+        PiiClass::Email,
+        PiiClass::Name,
+        PiiClass::Location,
+        PiiClass::Custom("phone".into()),
+        PiiClass::Custom("iban".into()),
+        PiiClass::Custom("credit_card".into()),
+        PiiClass::Custom("passport".into()),
+        PiiClass::Custom("national_id".into()),
+        PiiClass::Custom("steuer_id".into()),
+    ];
+    let mut context = empty_context();
+    for class in classes {
+        if !gaze_assembly::class_has_reversible_action(&policy.rules, &class) {
+            continue;
+        }
+        for slot in 0..32 {
+            let name = record_dictionary_name(&class, slot);
+            context.dictionaries.insert(
+                name.clone(),
+                ContextDictionary {
+                    terms: vec!["record-slot-never-matches".into()],
+                    case_sensitive: class != PiiClass::Email,
+                },
+            );
+            context.class_map.insert(name, class.clone());
+        }
+    }
+    context
 }
 
 fn ner_settings_from_env() -> Result<NerSettings, BenchmarkBuildError> {
@@ -1294,6 +1323,55 @@ fn manifest_integrity(
 mod tests {
     use super::*;
     use gaze::RawDocument;
+
+    #[test]
+    fn known_record_registry_matches_per_document_context() {
+        let context = Context::from_json_str(
+            r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"}}"#,
+        )
+        .unwrap();
+        let mut policy = gaze::Policy::default();
+        policy.rules = vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }];
+        let locales = LocaleChain::from_tags(vec![LocaleTag::EnUs]);
+        let dynamic =
+            gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+        let registered = gaze_assembly::build_pipeline(
+            &policy,
+            &record_registry_context(&policy),
+            &[],
+            &locales,
+            None,
+        )
+        .unwrap();
+        let dictionaries = gaze::dictionary_bundle_from_context(&context);
+        for pipeline in [&dynamic, &registered] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let raw = "Smith Alice emailed ALICE@EXAMPLE.INVALID";
+            let cleaned = pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(raw.into()),
+                    locales.as_slice(),
+                    &dictionaries,
+                )
+                .unwrap();
+            let CleanDocument::Text(text) = cleaned else {
+                panic!("text expected")
+            };
+            assert!(text.contains(":Name_1>"));
+            assert!(text.contains(":Email_1>"));
+            assert_eq!(
+                pipeline
+                    .restore_with_telemetry(&session, &text)
+                    .unwrap()
+                    .0
+                    .text,
+                raw
+            );
+        }
+    }
 
     const PRODUCER_DETERMINISM_CHILD: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_CHILD";
     const PRODUCER_DETERMINISM_BEGIN: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_BEGIN";

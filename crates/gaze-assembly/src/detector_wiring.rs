@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use gaze::{
-    Action, Context, DetectorKind, LocaleBasis, LocaleChain, LocaleTag, PiiClass, PolicyError,
-    RawMatch, RuleSpec, Rulepack, RulepackError, SafetyTier, RECORD_DICTIONARY_PREFIX,
+    Context, DetectorKind, LocaleBasis, LocaleChain, LocaleTag, PiiClass, PolicyError, RawMatch,
+    Rulepack, RulepackError, SafetyTier, RECORD_DICTIONARY_PREFIX,
 };
 use gaze_recognizers::{
     AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -10,7 +10,9 @@ use gaze_recognizers::{
 };
 
 use crate::{
-    class_map::{class_for_dictionary, class_has_tokenize_or_stricter_action},
+    class_map::{
+        class_for_dictionary, class_has_reversible_action, class_has_tokenize_or_stricter_action,
+    },
     registration::AssemblyBuilder,
     template::lower_regex_pattern,
     BuildError,
@@ -409,7 +411,7 @@ pub(crate) fn register_context_dictionaries(
                 .get(name)
                 .ok_or(BuildError::RecordPolicy)?;
             if registered_dictionaries.contains(name)
-                || !has_reversible_action(&policy.rules, class)
+                || !class_has_reversible_action(&policy.rules, class)
             {
                 return Err(BuildError::RecordPolicy);
             }
@@ -439,18 +441,4 @@ pub(crate) fn register_context_dictionaries(
     }
 
     Ok(())
-}
-
-fn has_reversible_action(rules: &[RuleSpec], class: &PiiClass) -> bool {
-    rules
-        .iter()
-        .find_map(|rule| match rule {
-            RuleSpec::Class {
-                class: named,
-                action,
-            } if named == class => Some(action),
-            RuleSpec::Default { action } => Some(action),
-            _ => None,
-        })
-        .is_some_and(|action| matches!(action, Action::Tokenize | Action::FormatPreserve))
 }

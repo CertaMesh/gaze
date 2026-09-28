@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import tomllib
 from collections import Counter
@@ -260,6 +261,7 @@ def main() -> None:
         baseline = score.run_config(**kwargs, record_document=baseline_record)
         with_record = score.run_config(
             **kwargs,
+            base_environment={**os.environ, "GAZE_BENCH_KNOWN_RECORD_ARM": "1"},
             record_document=record_record,
             context_for_document=lambda document: contexts[document.uid],
         )
