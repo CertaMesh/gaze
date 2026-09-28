@@ -319,6 +319,36 @@ mod tests {
     }
 
     #[test]
+    fn record_name_full_fold_detects_original_bytes() {
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([(
+                "record-name".into(),
+                ContextDictionary {
+                    terms: vec!["JÖRG STRASSE".into()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+        };
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "context/record-name",
+            PiiClass::Name,
+            "record-name",
+            true,
+            "counter",
+        )
+        .with_unicode_case_insensitive();
+        let raw = "Jörg Straße";
+        let hits = recognizer.detect(raw, &detect_context).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].span, 0..raw.len());
+        assert_eq!(hits[0].canonical_form.as_deref(), Some(raw));
+    }
+
+    #[test]
     fn recognizer_detects_dictionary_hits_from_context_bundle() {
         let ctx = TypedContext {
             dictionaries: HashMap::from([(

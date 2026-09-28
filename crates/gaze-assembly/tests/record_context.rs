@@ -87,14 +87,15 @@ fn record_unicode_name_case_match_restores_source_bytes() {
 
 #[test]
 fn record_full_unicode_fold_preserves_original_byte_span() {
-    let context =
-        Context::from_json_str(r#"{"record":{"name":"Jörg Straße"},"field_map":{"/name":"Name"}}"#)
-            .unwrap();
+    let context = Context::from_json_str(
+        r#"{"record":{"name":"JÖRG STRASSE"},"field_map":{"/name":"Name"}}"#,
+    )
+    .unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);
     let pipeline = build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None)
         .expect("record pipeline");
     let session = Session::new(Scope::Ephemeral).unwrap();
-    let raw = "JÖRG STRASSE wrote to Jörg Straße.";
+    let raw = "Jörg Straße wrote to JÖRG STRASSE.";
     let bundle = gaze::dictionary_bundle_from_context(&context);
     let clean = pipeline
         .pseudonymize_with_detect_context(
