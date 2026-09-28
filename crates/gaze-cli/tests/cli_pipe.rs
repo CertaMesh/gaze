@@ -3495,7 +3495,7 @@ fn record_context_errors_and_unmatched_values_do_not_echo_context() {
 }
 
 #[test]
-fn record_context_cli_round_trips_name_order_and_email_case() {
+fn record_context_cli_round_trips_name_case_and_email_exact() {
     let dir = tempdir().unwrap();
     let context_path = dir.path().join("context.json");
     fs::write(
@@ -3503,14 +3503,14 @@ fn record_context_cli_round_trips_name_order_and_email_case() {
         r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"}}"#,
     )
     .unwrap();
-    let input = "Smith Alice sent ALICE@EXAMPLE.INVALID";
+    let input = "ALICE SMITH sent alice@example.invalid";
     let response = clean_json_with_args(
         &[&format!("--context-json={}", context_path.display())],
         input,
     );
     let clean = response["clean_text"].as_str().unwrap();
-    assert!(!clean.contains("Smith Alice"));
-    assert!(!clean.contains("ALICE@EXAMPLE.INVALID"));
+    assert!(!clean.contains("ALICE SMITH"));
+    assert!(!clean.contains("alice@example.invalid"));
     assert_eq!(
         restore_success_text(response["session_blob"].as_str().unwrap(), clean),
         input

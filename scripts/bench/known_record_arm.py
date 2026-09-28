@@ -45,6 +45,7 @@ LABEL_CLASS = {
 }
 MAX_FIELDS = 32
 MAX_VALUE_BYTES = 256
+COMMON_NAME_WORDS = frozenset({"will", "may", "can", "bill", "mark", "rose", "die", "der", "den", "sie", "und", "war", "ist"})
 
 
 def run_with_record_context(
@@ -74,6 +75,20 @@ def class_action(policy: dict, class_name: str) -> str | None:
     return None
 
 
+def safe_record_value(value: str, class_name: str) -> bool:
+    letters = sum(ch.isalpha() for ch in value)
+    digits = sum(ch.isnumeric() for ch in value)
+    return (
+        value == value.strip()
+        and "  " not in value
+        and not any(ch.isspace() and ch != " " for ch in value)
+        and letters + digits >= 3
+        and (letters > 0 or digits >= 4)
+        and (letters == 0 or letters >= 3 or digits >= 4)
+        and not (class_name == "Name" and " " not in value and value.lower() in COMMON_NAME_WORDS)
+    )
+
+
 def record_for_document(document: score.Document, policy: dict) -> tuple[str | None, Counter[str]]:
     encoded = document.text.encode("utf-8")
     fields: dict[str, str] = {}
@@ -86,7 +101,7 @@ def record_for_document(document: score.Document, policy: dict) -> tuple[str | N
         if class_action(policy, class_name) not in {"tokenize", "format_preserve"}:
             raise ValueError(f"policy has no reversible action for selected class {class_name}")
         value = encoded[span.start : span.end].decode("utf-8")
-        if not value.strip() or len(value.encode("utf-8")) > MAX_VALUE_BYTES:
+        if not safe_record_value(value, class_name) or len(value.encode("utf-8")) > MAX_VALUE_BYTES:
             continue
         if len(fields) >= MAX_FIELDS:
             break
@@ -129,30 +144,16 @@ def paired_records(
 def explicit_counterweights(
     known_pool: dict[str, list[str]],
 ) -> tuple[list[score.Document], dict[str, str]]:
-    """Price collisions and nearby benign text; include email/name variant positives."""
+    """Price collisions and nearby benign text with paired known values."""
     documents: list[score.Document] = []
     contexts: dict[str, str] = {}
     for language, pool in sorted(known_pool.items()):
         counts: Counter[str] = Counter()
 
-        def add(kind: str, text: str, context: str, label: str | None = None, value: str = "") -> None:
+        def add(kind: str, text: str, context: str) -> None:
             if counts[kind] >= 16:
                 return
             uid = f"known-record-{language}-{kind}-{counts[kind]:02d}"
-            if label == "NAME_ORDER":
-                surname, first_name = value.split()
-                start = text.encode("utf-8").index(value.encode("utf-8"))
-                surname_end = start + len(surname.encode("utf-8"))
-                first_start = surname_end + 1
-                spans = (
-                    score.Span(start, surname_end, "SURNAME"),
-                    score.Span(first_start, first_start + len(first_name.encode("utf-8")), "FIRSTNAME"),
-                )
-            elif label:
-                start = text.encode("utf-8").index(value.encode("utf-8"))
-                spans = (score.Span(start, start + len(value.encode("utf-8")), label),)
-            else:
-                spans = ()
             documents.append(
                 score.Document(
                     uid=uid,
@@ -160,9 +161,9 @@ def explicit_counterweights(
                     language=language,
                     region="",
                     source_dataset="known-record-oracle-counterweight",
-                    spans=spans,
-                    negative_category=None if label else f"record_{kind}",
-                    cell=f"D|record_{kind}|synthetic|{'positive' if label else 'benign'}",
+                    spans=(),
+                    negative_category=f"record_{kind}",
+                    cell=f"D|record_{kind}|synthetic|benign",
                 )
             )
             contexts[uid] = context
@@ -177,13 +178,6 @@ def explicit_counterweights(
                     parts = value.split()
                     if len(parts) == 2:
                         add("surname", f"The unrelated author surname is {parts[-1]}.", context)
-                        if all(part.isalpha() and len(part) >= 3 for part in parts):
-                            reversed_name = f"{parts[-1]} {parts[0]}"
-                            add("name_order", f"Contact: {reversed_name}.", context, "NAME_ORDER", reversed_name)
-                elif class_name == "Email" and value.isascii() and "@" in value:
-                    mixed = value.swapcase()
-                    if mixed != value:
-                        add("mixed_case_email", f"Contact: {mixed}.", context, "EMAIL", mixed)
                 elif class_name in {"custom:iban", "custom:credit_card", "custom:phone"}:
                     add("reference", f"The synthetic catalog reference is {value}.", context)
                     digit = next((i for i in range(len(value) - 1, -1, -1) if value[i].isdigit()), None)
@@ -199,15 +193,6 @@ def explicit_counterweights(
                     if letter is not None:
                         near = value[:letter] + ("Z" if value[letter] != "Z" else "Y") + value[letter + 1 :]
                         add("ocr_near_miss", f"The unrelated label reads {near}.", context)
-        if counts["name_order"] == 0:
-            # A fixed synthetic fixture exercises the approved two-word order
-            # variant when the held-out gold contains no suitable full name.
-            synthetic = json.dumps({
-                "record": {"name": "Alice Smith"},
-                "field_map": {"/name": "Name"},
-            })
-            add("name_order", "Contact: Smith Alice.", synthetic, "NAME_ORDER", "Smith Alice")
-            add("surname", "The unrelated author surname is Smith.", synthetic)
     return documents, contexts
 
 
@@ -322,19 +307,11 @@ def main() -> None:
             policy_path=policy_path,
         )
         baseline_eligible_leaks, baseline_record = eligible_leak_counter(contexts)
-        exact_eligible_leaks, exact_record = eligible_leak_counter(contexts)
         record_eligible_leaks, record_record = eligible_leak_counter(contexts)
         clean_environment = dict(os.environ)
         clean_environment.pop("GAZE_BENCH_KNOWN_RECORD_ARM", None)
-        clean_environment.pop("GAZE_BENCH_RECORD_EXACT_ONLY", None)
         baseline = score.run_config(
             **kwargs, base_environment=clean_environment, record_document=baseline_record
-        )
-        exact_record_run = run_with_record_context(
-            contexts,
-            **kwargs,
-            base_environment={**clean_environment, "GAZE_BENCH_KNOWN_RECORD_ARM": "1", "GAZE_BENCH_RECORD_EXACT_ONLY": "1"},
-            record_document=exact_record,
         )
         with_record = run_with_record_context(
             contexts,
@@ -349,13 +326,8 @@ def main() -> None:
                 document.uid in counterweight_contexts and document.negative_category is not None
                 for document in documents
             ),
-            "explicit_variant_documents": sum(
-                document.uid in counterweight_contexts and bool(document.spans)
-                for document in documents
-            ),
             "eligible_gold_bytes_by_label": dict(sorted(eligible.items())),
             "baseline_eligible_leaked_bytes_by_label": dict(sorted(baseline_eligible_leaks.items())),
-            "exact_eligible_leaked_bytes_by_label": dict(sorted(exact_eligible_leaks.items())),
             "with_record_eligible_leaked_bytes_by_label": dict(sorted(record_eligible_leaks.items())),
             "baseline": {
                 key: baseline[key]
@@ -363,10 +335,6 @@ def main() -> None:
             },
             "with_record": {
                 key: with_record[key]
-                for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")
-            },
-            "exact_record": {
-                key: exact_record_run[key]
                 for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")
             },
         }

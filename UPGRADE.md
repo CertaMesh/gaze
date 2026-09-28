@@ -46,6 +46,12 @@ re-tokenize stored manifests.
 
 ### TL;DR
 
+**Context JSON callers:** files over 4 MiB now fail with a typed size error.
+Duplicate keys now fail instead of silently keeping the last value. JSON parse
+errors are generic and no longer include source text; use a local JSON
+validator when you need line-level diagnostics. These changes also apply when
+the new `record`/`field_map` envelope is absent.
+
 1. **Custom `gaze-proxy` adapters must declare a contract.** Add a
    `contract()` method to every `ProviderAdapter` you implement.
 2. **`session_blob` moves to envelope version 6.** Blobs written by v0.16

@@ -71,7 +71,9 @@ pub use registry::{
     Recognizer, RecognizerRegistry, RecognizerRegistryBuilder, ValidationResult, Validator,
 };
 pub use resolver::{resolve_candidates, resolve_candidates_with_policy};
-pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};
+pub use rule::{
+    first_matching_action, Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext,
+};
 pub use rulepack::{
     recognizer_composition_validator, AnchoredBoundary, ContextSpec, CuePosition, LocaleBucket,
     LocaleCueBundle, LocaleData, NameShape, NormalizerSpec, RawMatch, RecognizerSpec, Rulepack,

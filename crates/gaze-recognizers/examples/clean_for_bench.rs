@@ -308,7 +308,7 @@ fn handle_request_with_policy(
 ) -> Result<Outcome, Box<dyn std::error::Error>> {
     let record_dictionaries = if let Some(raw) = request.context_json.as_deref() {
         let policy_run = policy_run.ok_or("record context requires policy-file config")?;
-        let mut context = Context::from_json_str(raw)?;
+        let context = Context::from_json_str(raw)?;
         if std::env::var_os("GAZE_BENCH_KNOWN_RECORD_ARM").is_none()
             || context.dictionaries.is_empty()
             || context
@@ -317,12 +317,6 @@ fn handle_request_with_policy(
                 .any(|name| !name.starts_with(RECORD_DICTIONARY_PREFIX))
         {
             return Err("record context requires the known-record benchmark arm".into());
-        }
-        if std::env::var_os("GAZE_BENCH_RECORD_EXACT_ONLY").is_some() {
-            for dictionary in context.dictionaries.values_mut() {
-                dictionary.terms.truncate(1);
-                dictionary.case_sensitive = true;
-            }
         }
         Some(DictionaryBundle::merge(
             policy_run.dictionaries.clone(),
@@ -871,7 +865,7 @@ fn record_registry_context(policy: &gaze::Policy) -> Context {
                 name.clone(),
                 ContextDictionary {
                     terms: vec!["record-slot-never-matches".into()],
-                    case_sensitive: class != PiiClass::Email,
+                    case_sensitive: true,
                 },
             );
             context.class_map.insert(name, class.clone());
@@ -1354,7 +1348,7 @@ mod tests {
         let dictionaries = gaze::dictionary_bundle_from_context(&context);
         for pipeline in [&dynamic, &registered] {
             let session = Session::new(Scope::Ephemeral).unwrap();
-            let raw = "Smith Alice emailed ALICE@EXAMPLE.INVALID";
+            let raw = "ALICE SMITH emailed alice@example.invalid";
             let cleaned = pipeline
                 .pseudonymize_with_detect_context(
                     &session,

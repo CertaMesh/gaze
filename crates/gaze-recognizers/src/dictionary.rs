@@ -8,6 +8,7 @@ use gaze_types::{
     Candidate, ConflictTier, DetectContext, DictionaryEntry, LocaleBasis, LocaleTag, PiiClass,
     Recognizer,
 };
+use regex::{Regex, RegexBuilder};
 
 /// Lookup-based [`Recognizer`] for tenant-specific PII.
 ///
@@ -29,6 +30,8 @@ pub struct DictionaryRecognizer {
     score: f32,
     priority: i32,
     compiled_dictionaries: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
+    compiled_unicode: Mutex<HashMap<DictionaryCacheKey, Arc<Vec<Regex>>>>,
+    unicode_case_insensitive: bool,
     cache_capacity: usize,
 }
 
@@ -74,6 +77,8 @@ impl DictionaryRecognizer {
             score,
             priority,
             compiled_dictionaries: Mutex::new(HashMap::new()),
+            compiled_unicode: Mutex::new(HashMap::new()),
+            unicode_case_insensitive: false,
             cache_capacity: usize::MAX,
         }
     }
@@ -89,6 +94,12 @@ impl DictionaryRecognizer {
     /// Limit retained automata when one registered slot receives changing values.
     pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
         self.cache_capacity = capacity.max(1);
+        self
+    }
+
+    /// Record names need Unicode case matching while preserving source byte offsets.
+    pub fn with_unicode_case_insensitive(mut self) -> Self {
+        self.unicode_case_insensitive = true;
         self
     }
 
@@ -118,6 +129,35 @@ impl DictionaryRecognizer {
         );
         compiled.insert(key, Arc::clone(&automaton));
         automaton
+    }
+
+    fn unicode_patterns_for(&self, entry: &DictionaryEntry) -> Arc<Vec<Regex>> {
+        let key = DictionaryCacheKey::from_entry(entry);
+        let mut compiled = self
+            .compiled_unicode
+            .lock()
+            .expect("dictionary Unicode cache poisoned");
+        if let Some(existing) = compiled.get(&key) {
+            return Arc::clone(existing);
+        }
+        if compiled.len() >= self.cache_capacity {
+            compiled.clear();
+        }
+        let patterns = Arc::new(
+            entry
+                .terms()
+                .iter()
+                .map(|term| {
+                    RegexBuilder::new(&regex::escape(term))
+                        .case_insensitive(true)
+                        .unicode(true)
+                        .build()
+                        .expect("literal dictionary term is a valid regex")
+                })
+                .collect(),
+        );
+        compiled.insert(key, Arc::clone(&patterns));
+        patterns
     }
 }
 
@@ -160,25 +200,37 @@ impl Recognizer for DictionaryRecognizer {
         let Some(entry) = ctx.dictionaries.get(&self.dictionary_name) else {
             return Ok(Vec::new());
         };
-        let automaton = self.automaton_for(entry);
+        let matches = if self.unicode_case_insensitive {
+            let patterns = self.unicode_patterns_for(entry);
+            patterns
+                .iter()
+                .enumerate()
+                .flat_map(|(index, pattern)| {
+                    pattern
+                        .find_iter(input)
+                        .map(move |hit| (hit.start(), hit.end(), index))
+                })
+                .collect::<Vec<_>>()
+        } else {
+            self.automaton_for(entry)
+                .find_iter(input)
+                .map(|hit| (hit.start(), hit.end(), hit.pattern().as_usize()))
+                .collect::<Vec<_>>()
+        };
 
-        Ok(automaton
-            .find_iter(input)
-            .filter(|m| is_token_boundary_match(input, m.start(), m.end()))
-            .map(|m| {
+        Ok(matches
+            .into_iter()
+            .filter(|(start, end, _)| is_token_boundary_match(input, *start, *end))
+            .map(|(start, end, index)| {
                 Candidate::new(
-                    m.start()..m.end(),
+                    start..end,
                     self.class.clone(),
                     self.id.clone(),
                     self.score,
                     self.priority,
-                    Some(input[m.start()..m.end()].to_string()),
+                    Some(input[start..end].to_string()),
                     self.token_family.clone(),
-                    format!(
-                        "dictionary:{}[#{}]",
-                        self.dictionary_name,
-                        m.pattern().as_usize()
-                    ),
+                    format!("dictionary:{}[#{}]", self.dictionary_name, index),
                     ConflictTier::None,
                     Vec::new(),
                 )

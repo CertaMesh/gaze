@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- **Context JSON is size-bounded and duplicate-key strict.** Files larger than
+  4 MiB and JSON objects with duplicate keys now fail closed. Parse errors are
+  generic to avoid echoing raw context into logs. See UPGRADE.md.
+
 - **Repeat-value sweep evidence is declared per emitter, and the default is
   `Learned`** (solo todo #3884). `Recognizer` and `Detector` gain
   `fn evidence(&self) -> EvidenceKind`, which defaults to

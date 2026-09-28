@@ -31,7 +31,6 @@ const MAX_RECORD_BYTES: usize = 65_536;
 const MAX_RECORD_DEPTH: usize = 4;
 const MAX_RECORD_FIELDS: usize = 32;
 const MAX_VALUE_BYTES: usize = 256;
-const MAX_VARIANTS_PER_FIELD: usize = 2;
 pub const RECORD_DICTIONARY_PREFIX: &str = "record-v2-";
 const HIDDEN_CONTEXT_NAME: &str = "<context>";
 
@@ -109,8 +108,10 @@ pub enum ContextError {
     IncompleteRecord,
     #[error("record field mapping is incomplete or invalid")]
     InvalidRecordMapping,
-    #[error("record exceeds depth, field, value, or variant limits")]
+    #[error("record exceeds depth, field, or value limits")]
     RecordLimit,
+    #[error("record value is too short or ambiguous to match safely")]
+    UnsafeRecordValue,
 }
 
 impl Context {
@@ -194,24 +195,16 @@ impl Context {
                     .get(&path)
                     .and_then(|name| PiiClass::from_policy_name(name))
                     .ok_or(ContextError::InvalidRecordMapping)?;
-                let mut terms = vec![value.to_string()];
-                if class == PiiClass::Name {
-                    if let Some(reversed) = reversed_full_name(value) {
-                        terms.push(reversed);
-                    }
-                }
-                if terms.len() > MAX_VARIANTS_PER_FIELD {
-                    return Err(ContextError::RecordLimit);
-                }
+                validate_record_value(value, &class)?;
                 let slot = class_slots.entry(class.clone()).or_default();
                 let name = record_dictionary_name(&class, *slot);
                 *slot += 1;
                 dictionaries.insert(
                     name.clone(),
                     ContextDictionary {
-                        terms,
-                        // Only ASCII email values use insensitive matching.
-                        case_sensitive: !(class == PiiClass::Email && value.is_ascii()),
+                        terms: vec![value.to_string()],
+                        // The record-name recognizer handles Unicode case matching.
+                        case_sensitive: true,
                     },
                 );
                 class_map.insert(name, class);
@@ -330,6 +323,12 @@ fn collect_record_leaves<'a>(
             if text.len() > MAX_VALUE_BYTES || leaves.len() >= MAX_RECORD_FIELDS {
                 return Err(ContextError::RecordLimit);
             }
+            if text.trim() != text
+                || text.contains("  ")
+                || text.chars().any(|ch| ch.is_whitespace() && ch != ' ')
+            {
+                return Err(ContextError::InvalidRecordMapping);
+            }
             leaves.push((path.to_string(), text));
         }
         _ => return Err(ContextError::InvalidRecordMapping),
@@ -337,16 +336,29 @@ fn collect_record_leaves<'a>(
     Ok(())
 }
 
-fn reversed_full_name(value: &str) -> Option<String> {
-    let parts = value.split_whitespace().collect::<Vec<_>>();
-    if parts.len() != 2
-        || !parts
-            .iter()
-            .all(|part| part.chars().count() >= 3 && part.chars().all(char::is_alphabetic))
+fn validate_record_value(value: &str, class: &PiiClass) -> Result<(), ContextError> {
+    let letters = value.chars().filter(|ch| ch.is_alphabetic()).count();
+    let digits = value.chars().filter(|ch| ch.is_numeric()).count();
+    if letters + digits < 3
+        || (letters == 0 && digits < 4)
+        || (letters > 0 && letters < 3 && digits < 4)
     {
-        return None;
+        return Err(ContextError::UnsafeRecordValue);
     }
-    Some(format!("{} {}", parts[1], parts[0]))
+    if class == &PiiClass::Name && !value.contains(' ') {
+        // Small EN/DE stop-list for names that routinely occur as prose words.
+        const COMMON_NAME_WORDS: &[&str] = &[
+            "will", "may", "can", "bill", "mark", "rose", "die", "der", "den", "sie", "und", "war",
+            "ist",
+        ];
+        if COMMON_NAME_WORDS
+            .iter()
+            .any(|word| value.to_lowercase() == *word)
+        {
+            return Err(ContextError::UnsafeRecordValue);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -453,7 +465,7 @@ mod tests {
             .find(|(_, class)| **class == PiiClass::Name)
             .map(|(name, _)| name)
             .unwrap();
-        assert_eq!(ctx.dictionaries[name].terms, ["Alice Smith", "Smith Alice"]);
+        assert_eq!(ctx.dictionaries[name].terms, ["Alice Smith"]);
         assert!(name
             .bytes()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'));
@@ -464,7 +476,7 @@ mod tests {
             .find(|(_, class)| **class == PiiClass::Email)
             .map(|(name, _)| name)
             .unwrap();
-        assert!(!ctx.dictionaries[email].case_sensitive);
+        assert!(ctx.dictionaries[email].case_sensitive);
     }
 
     #[test]
@@ -499,5 +511,30 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.to_string(), "failed to parse context JSON");
         assert!(!format!("{err:?}").contains("private marker"));
+    }
+
+    #[test]
+    fn record_rejects_noncanonical_spacing_without_echo() {
+        for value in [" Alice Smith ", "Alice  Smith", "Alice\u{a0}Smith"] {
+            let raw = serde_json::json!({"record":{"name":value},"field_map":{"/name":"Name"}});
+            let err = Context::from_json_str(&raw.to_string()).unwrap_err();
+            assert!(matches!(err, ContextError::InvalidRecordMapping));
+            assert!(!err.to_string().contains(value));
+        }
+    }
+
+    #[test]
+    fn record_rejects_short_and_common_word_values() {
+        for (value, class) in [
+            ("A", "Name"),
+            ("Will", "Name"),
+            ("12", "custom:phone"),
+            ("A12", "custom:order_id"),
+        ] {
+            let raw = serde_json::json!({"record":{"value":value},"field_map":{"/value":class}});
+            let err = Context::from_json_str(&raw.to_string()).unwrap_err();
+            assert!(matches!(err, ContextError::UnsafeRecordValue));
+            assert!(!err.to_string().contains(value));
+        }
     }
 }

@@ -1,4 +1,6 @@
 import json
+import re
+from pathlib import Path
 from unittest.mock import patch
 
 import gaze_bench_score as score
@@ -58,7 +60,7 @@ def test_gold_value_becomes_explicit_record_field() -> None:
     assert eligible == {"EMAIL": len("alice@example.invalid")}
 
 
-def test_negative_receives_paired_record_and_variant_gold_is_scored() -> None:
+def test_negative_receives_paired_record_and_counterweights() -> None:
     positive = document("positive", "Alice Smith", "GIVENNAME")
     negative = document("negative", "The catalog is open.", None)
     contexts, _ = arm.paired_records([positive, negative], POLICY)
@@ -69,7 +71,6 @@ def test_negative_receives_paired_record_and_variant_gold_is_scored() -> None:
     assert {item.negative_category for item in counters if item.negative_category} == {
         "record_homonym", "record_surname"
     }
-    assert any(item.spans and item.cell.endswith("positive") for item in counters)
 
 
 def test_non_reversible_policy_fails_preflight() -> None:
@@ -82,9 +83,16 @@ def test_non_reversible_policy_fails_preflight() -> None:
         raise AssertionError("unsafe policy accepted")
 
 
-def test_name_order_variant_has_a_scored_synthetic_probe() -> None:
-    single, _ = arm.record_for_document(document("single", "Alice", "FIRSTNAME"), POLICY)
-    documents, contexts = arm.explicit_counterweights({"en": [single]})
-    variant = next(item for item in documents if "name_order" in item.uid)
-    assert [span.label for span in variant.spans] == ["SURNAME", "FIRSTNAME"]
-    assert json.loads(contexts[variant.uid])["record"] == {"name": "Alice Smith"}
+def test_unsafe_record_value_is_excluded_from_oracle() -> None:
+    raw, eligible = arm.record_for_document(document("short", "12", "PHONENUMBER"), POLICY)
+    assert raw is None
+    assert not eligible
+
+
+def test_registered_record_classes_cover_oracle_label_classes() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "crates/gaze-recognizers/examples/clean_for_bench.rs").read_text()
+    declarations = source.split("fn record_registry_context", 1)[1].split("let mut context", 1)[0]
+    builtin = set(re.findall(r"PiiClass::(Email|Name|Location)\b", declarations))
+    custom = {f"custom:{name}" for name in re.findall(r'PiiClass::Custom\("([^"]+)"\.into\(\)\)', declarations)}
+    assert builtin | custom == set(arm.LABEL_CLASS.values())

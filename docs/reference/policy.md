@@ -175,6 +175,44 @@ Input:  "Reference ORD-12345 is shipped."
 Output: "Reference <{session_hex}:Custom:order_id_1> is shipped."
 ```
 
+#### Caller-known record context (prototype)
+
+`gaze clean --context-json context.json` also accepts a caller-known record and
+an explicit JSON path-to-class map:
+
+```json
+{
+  "record": {"customer": {"name": "Alice Smith", "email": "alice@example.invalid"}},
+  "field_map": {"/customer/name": "Name", "/customer/email": "Email"}
+}
+```
+
+Every nonempty string leaf in `record` needs one mapping, and every mapping
+must point to a leaf and name a built-in or `custom:<name>` Gaze class. Arrays,
+nulls, duplicate JSON keys, unknown classes, unknown fields and ambiguous
+values reject the call. Strings must have canonical spacing: no leading or
+trailing whitespace, repeated spaces, tabs, newlines or nonbreaking spaces.
+Single-letter values, values with fewer than three letters or digits, and
+digit-only values shorter than four digits are rejected. A small English/German
+common-word list also rejects single-token names such as `Will`; these checks
+reduce false positives, but a longer common word can still collide with prose.
+
+Gaze matches each full value literally. `Name` values also match Unicode case
+changes while preserving the original matched bytes for restore. The prototype
+does not match reversed name order, email case changes, fragments or fuzzy
+spellings. Each record dictionary uses the existing class action and manifest
+path; its class must resolve to `tokenize` or `format_preserve`. A nonreversible
+column action in the policy rejects record context, even if a default action is
+reversible. Record values and field names stay out of errors and audit source
+IDs; failures report a generic typed error. Do not put the context JSON in a
+command argument or log it in your app.
+
+The context JSON is limited to 4 MiB; the encoded record to 64 KiB; nesting to
+four object levels; 32 string leaves; and each value to 256 UTF-8 bytes. The
+internal `record-v2-` dictionary prefix is reserved. Existing `dictionaries`,
+`class_map` and `fields` remain available in the same envelope. Record context
+is call-scoped in `gaze clean`; the daemon still refuses per-document context.
+
 ### Class naming rules
 
 - Built-in class names (`Email`, `Name`, `Location`, `Organization`) live in the

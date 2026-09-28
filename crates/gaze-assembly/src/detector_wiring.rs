@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use gaze::{
-    Context, DetectorKind, LocaleBasis, LocaleChain, LocaleTag, PiiClass, PolicyError, RawMatch,
-    Rulepack, RulepackError, SafetyTier, RECORD_DICTIONARY_PREFIX,
+    Action, Context, DetectorKind, LocaleBasis, LocaleChain, LocaleTag, PiiClass, PolicyError,
+    RawMatch, RuleSpec, Rulepack, RulepackError, SafetyTier, RECORD_DICTIONARY_PREFIX,
 };
 use gaze_recognizers::{
     AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -404,6 +404,16 @@ pub(crate) fn register_context_dictionaries(
     context: &Context,
     registered_dictionaries: &BTreeSet<String>,
 ) -> Result<(), BuildError> {
+    if context
+        .dictionaries
+        .keys()
+        .any(|name| name.starts_with(RECORD_DICTIONARY_PREFIX))
+        && policy.rules.iter().any(|rule| {
+            matches!(rule, RuleSpec::Column { action, .. } if !matches!(action, Action::Tokenize | Action::FormatPreserve))
+        })
+    {
+        return Err(BuildError::RecordPolicy);
+    }
     for name in context.dictionaries.keys() {
         if name.starts_with(RECORD_DICTIONARY_PREFIX) {
             let class = context
@@ -433,13 +443,18 @@ pub(crate) fn register_context_dictionaries(
         };
         let recognizer = DictionaryRecognizer::new(
             format!("context/{name}"),
-            class,
+            class.clone(),
             name,
             context.dictionaries[name].case_sensitive,
             "counter",
         );
         builder.recognizer(if name.starts_with(RECORD_DICTIONARY_PREFIX) {
-            recognizer.with_cache_capacity(1)
+            let recognizer = recognizer.with_cache_capacity(1);
+            if class == PiiClass::Name {
+                recognizer.with_unicode_case_insensitive()
+            } else {
+                recognizer
+            }
         } else {
             recognizer
         });
