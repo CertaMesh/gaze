@@ -18,3 +18,5 @@ digits so an invalid German Steuer-ID stays subject to its checksum validator. A
 fallbacks reject calendar dates that can resemble grouped identifiers. These are
 precision boundaries, not claims that every real identifier will fit the fallback. Benchmark
 evidence and hand-written shape probes are required before adding a new label or value shape.
+An unpunctuated `license number` remains outside the driver-licence fallback because it can
+refer to a non-personal licence.
