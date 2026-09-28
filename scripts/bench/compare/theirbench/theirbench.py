@@ -185,9 +185,11 @@ def main() -> int:
         splits = {split: preflight_sample(documents, args.preflight) for split, documents in splits.items()}
     mappings = compare.load_mapping()
     selected = args.tool or [*GAZE_ROWS, *compare.TOOLS]
+    # The whole roster, not just --tool: the common intersection must not depend
+    # on which subset one invocation runs (runs resume into one report).
     composed = {
         family: loaders.compose_mapping(family, mappings[family], args.benchmark)
-        for family in {tool_family(name) for name in selected}
+        for family in sorted({tool_family(name) for name in (*GAZE_ROWS, *compare.TOOLS)})
     }
     common = common_intersection(composed)
     args.predictions_dir.mkdir(parents=True, exist_ok=True)
