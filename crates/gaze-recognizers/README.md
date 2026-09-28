@@ -215,25 +215,25 @@ recognizer declares `mandatory_anchor` without a matching bundled cue block.
 Full contract:
 [`docs/explanation/detection/anchor-resolution.md`](../../docs/explanation/detection/anchor-resolution.md).
 
-## Explicit birth-date and credential fields
+## Explicit birth-date, age, postcode and credential fields
 
 The embedded `gaze-core` rulepack version **0.6.0** contains 45 recognizers.
-Four project-authored `safe_default` rules with `locales = ["global"]` add
-birth-date, age, postcode and credential field recognition through the existing assembly and
-`RegexDetector` machinery, once their bundle is loaded.
-`birth_date.cue` ships in `core`. `password.field` ships in the opt-in
+`birth_date.cue` and `age.cue` are global `safe_default` rules in `core`.
+`postal.address_four_digit` is document-locale-gated to `en-NZ`.
+`password.field` ships in the opt-in
 `secrets` bundle, because credentials are not PII; load it with
 `bundled = ["core", "secrets"]`. The former `username.field` rule was removed
 in core 0.6.0.
 
-| Rule / custom class | Bundle | Complete, case-insensitive cues |
+| Rule / custom class | Bundle | Cues and frames |
 | --- | --- | --- |
-| `birth_date.cue` / `custom:birth_date` | `core` | en `DOB`, `D.O.B.`, `date of birth`, `birth date`, `birthday`, `born`; de `Geburtsdatum`, `Geb.-Datum`, `geb.`, `Geburtstag`, `geboren`, trailing `am <date> geboren`; fr `né`/`née`, `date de naissance`; nl `geboortedatum`; da `fødselsdato`, `fødselsdag`, `født`; es `fecha de nacimiento`, `nacido`/`nacida`, `nació` |
-| `age.cue` / `custom:age` | `core` | `aged N`, `N years old`, `N-year-old`, `Alter: N`, `N Jahre alt`, `âgé de N`, `idade: N`; only the number is tokenized |
+| `birth_date.cue` / `custom:birth_date` | `core` | en `DOB`, `D.O.B.`, `date of birth`, `birth date`, `birthday`, `born`; de `Geburtsdatum`, `Geb.-Datum`, `geb.`, `Geburtstag`, `geboren`, trailing `am <date> geboren`; fr `né`/`née`, `date de naissance`; nl `geboortedatum`; pt `data de nascimento`; da `fødselsdato`, `fødselsdag`, `født`; es `fecha de nacimiento`, `nacido`/`nacida`, `nació` |
+| `age.cue` / `custom:age` | `core` | Structured `age`, `Alter`, `âge`, `idade`, `leeftijd` fields, or person-framed `aged N`, `N years old`, `N-year-old`, `N Jahre alt`, `âgé de N`; only the number is tokenized |
 | `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
 
-`postal.address_four_digit` recognizes a four-digit postcode after a postal label or
-at the end of a street-address frame with a town. A bare four-digit number stays raw.
+With an `en-NZ` document locale, `postal.address_four_digit` recognizes a
+four-digit postcode after a postal label or at the end of a street-address
+frame with a town. A bare four-digit number stays raw.
 
 ### Supported grammar
 

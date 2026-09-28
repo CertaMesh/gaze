@@ -1029,18 +1029,15 @@ priority = 70
 origin = "project-authored"
 license = "Apache-2.0"
 
-# Four-digit postcodes, including New Zealand postcodes (NZ Post addressing standard:
-# https://www.nzpost.co.nz/personal/sending-in-nz/postcodes), can follow a postal label or a
-# street address and town. A bare four-digit number also names
-# years and quantities, so this global rule needs either an explicit postal cue
-# or a street-address frame ending in a locality and postcode. Only the postcode is
-# captured; the locality and street keep their own recognizer provenance.
+# Four-digit New Zealand postcodes need a document locale gate: a street and town
+# frame can also end in a year or amount outside an NZ address. The explicit postal
+# label and address branches capture only the code for exact restore.
 [[recognizers]]
 id = "postal.address_four_digit"
-safety_tier = "safe_default"
+safety_tier = "locale_gated"
 class = "custom:postal_code"
 enabled = true
-locales = ["global"]
+locales = ["en-NZ"]
 locale_basis = "document"
 cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 
@@ -1649,6 +1646,7 @@ pattern = '''
     | geboren
     | geboortedatum
     | date[\x20_-]de[\x20_-]naissance
+    | data[\x20_-]de[\x20_-]nascimento
     | née
     | né
     | fødselsdato
@@ -1662,7 +1660,7 @@ pattern = '''
 | geb\.
 )
 (?: [\s"'\\:=,()–-]+
-  | (?:is|was|ist|war|lautet|wurde|ich|sie|der|den|am|on|of|the|le|est|op|er|el|es|at)\b
+  | (?:is|was|ist|war|lautet|wurde|ich|sie|der|den|am|on|of|the|le|est|op|er|el|es|at|é)\b
 ){0,8}
 (
     [0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])
@@ -1697,9 +1695,8 @@ priority = 100
 origin = "project-authored"
 license = "Apache-2.0"
 
-# An age is a quasi-identifier only when age words attach to the number. Bare
-# two-digit numbers also name amounts, counts, dates and building numbers.
-# Capture only the number so restore keeps the surrounding sentence unchanged.
+# An age needs a structured field or a person frame. Shorter units are durations,
+# and object ages are not person quasi-identifiers. Capture only the number.
 [[recognizers]]
 id = "age.cue"
 safety_tier = "safe_default"
@@ -1712,10 +1709,30 @@ locale_basis = "document"
 kind = "regex"
 pattern = '''(?ix)
 (?:
-  \b(?:age|aged|alter|âge|âgé(?:e)?|idade)[\x20\t\x{A0}\x{202F}:="']*(?:de[\x20\t\x{A0}\x{202F}]+)?((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b
- |\b((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?[\x20\t\x{A0}\x{202F}-]+old|jahre?[\x20\t\x{A0}\x{202F}]+alt)\b
+  # Labeled fields can cross a line break after the separator.
+  \b(?:age|âge|idade|leeftijd|(?-i:Alter))\b[\x20\t\x{A0}\x{202F}"']*[:=][\x20\t\x{A0}\x{202F}\r\n"']*
+  ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))
+  (?:[\x20\t\x{A0}\x{202F}]*(?:years?|yrs?|y|jahre?|jaar|ans?)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+ |
+  # An unlabeled age line needs a year unit, or a terminal value boundary.
+  (?:\A|[\r\n])[\x20\t]*(?:age|âge|idade|leeftijd|(?-i:Alter))[\x20\t\x{A0}\x{202F}]+
+  ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))
+  (?:[\x20\t\x{A0}\x{202F}]*(?:years?|yrs?|y|jahre?|jaar|ans?)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+ |
+  # Person words license prose without matching object ages.
+  \b(?:applicant|patient|person|woman|man|child|girl|boy|adult|candidate|customer|client|user|employee|resident|suspect|she|he|they|ich|sie|er|frau|mann|kind|bewerber(?:in)?|homme|femme|elle|il|pessoa|mulher|homem|persoon|vrouw)\b
+  [^\n.!?]{0,32}?
+  \b(?:aged|âgé(?:e)?|âge|age|(?-i:Alter)|idade|leeftijd|is|was|ist|war|est|é|tem|heeft)\b
+  [\x20\t\x{A0}\x{202F}:="']*(?:de[\x20\t\x{A0}\x{202F}]+)?
+  ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b
+  (?:[\x20\t\x{A0}\x{202F}-]*(?:years?[\x20\t\x{A0}\x{202F}-]+old|yrs?[\x20\t\x{A0}\x{202F}-]+old|jahre?[\x20\t\x{A0}\x{202F}]+alt|jaar[\x20\t\x{A0}\x{202F}]+oud|ans?)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+ |
+  # Attributive person ages and standalone "yrs old" records.
+  \b((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?|yrs?)[\x20\t\x{A0}\x{202F}-]+old[\x20\t\x{A0}\x{202F}-]+(?:applicant|patient|person|woman|man|child|girl|boy|adult|candidate|customer|client|user|employee|resident|suspect)\b
+ |
+  (?:\A|[\r\n])[\x20\t]*((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?|yrs?)[\x20\t\x{A0}\x{202F}-]+old\b
 )'''
-capture_groups = [1, 2]
+capture_groups = [1, 2, 3, 4, 5]
 
 [recognizers.scoring]
 base = 0.90

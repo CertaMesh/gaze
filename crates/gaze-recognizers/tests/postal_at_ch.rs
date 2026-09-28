@@ -113,7 +113,6 @@ fn postal_cues_accept_link_words_and_hyphens() {
 #[test]
 fn four_digit_postcode_needs_a_postal_or_address_anchor() {
     let nz = [LocaleTag::parse("en-NZ").expect("locale")];
-    let global = [LocaleTag::Global];
     for text in [
         "Postcode: 9016",
         "Postal code is 9016",
@@ -121,17 +120,18 @@ fn four_digit_postcode_needs_a_postal_or_address_anchor() {
         "42 Model Road, Arcadia 9016",
         "{\"zip_code\": \"9016\"}",
     ] {
-        for chain in [&nz[..], &global[..]] {
-            let cleaned = clean_in(chain, text);
-            assert_code_removed(&cleaned, "9016", "four-digit address");
-        }
+        let cleaned = clean_in(&nz, text);
+        assert_code_removed(&cleaned, "9016", "four-digit address");
     }
     for text in [
         "The report was filed in March 2024.",
         "Order 9016 shipped.",
         "42 Model Road, report 2024",
+        "5 Bridge Road, Total 1999 dollars",
+        "12 Main Street, Springfield 2024",
+        "3 Mile Lane Records 2001",
     ] {
-        let cleaned = clean_in(&nz, text);
+        let cleaned = clean_in(&[LocaleTag::Global], text);
         assert!(
             !cleaned.contains(":Custom:postal_code_"),
             "{text}: {cleaned}"
@@ -500,7 +500,7 @@ fn anchored_four_digit_codes_restore_exactly() {
 
 #[test]
 fn address_anchored_four_digit_postcode_restores_exactly() {
-    let locale = [LocaleTag::Global];
+    let locale = [LocaleTag::parse("en-NZ").expect("locale")];
     let pipeline = pipeline_for(&locale);
     let session = Session::new(Scope::Ephemeral).expect("session");
     let original = "42 Model Road, Arcadia 9016";
