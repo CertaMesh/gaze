@@ -317,6 +317,9 @@ fn pipeline_builder_from_policy(
 fn map_build_error(err: gaze_assembly::BuildError) -> CliError {
     match err {
         gaze_assembly::BuildError::NoRecognizers => map_policy_error(PolicyError::NoDetectors),
+        gaze_assembly::BuildError::RecordPolicy => {
+            CliError::PolicyConfigDetail("record context requires a reversible class action and an unused reserved dictionary name".to_string())
+        }
         gaze_assembly::BuildError::Policy(err) => map_policy_error(err),
         gaze_assembly::BuildError::Rulepack(err) => map_pipeline_error(gaze::Error::Rulepack(err)),
         gaze_assembly::BuildError::Pipeline(err) => map_pipeline_error(err),
