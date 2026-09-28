@@ -89,6 +89,18 @@ def test_unsafe_record_value_is_excluded_from_oracle() -> None:
     assert not eligible
 
 
+def test_oracle_filters_values_that_record_parser_rejects() -> None:
+    for value, class_name in [
+        (" Alice Smith ", "Name"),
+        ("Alice  Smith", "Name"),
+        ("Alice\u00a0Smith", "Name"),
+        ("Will", "Name"),
+        ("A12", "custom:order_id"),
+    ]:
+        assert not arm.safe_record_value(value, class_name)
+    assert arm.safe_record_value("Jörg Straße", "Name")
+
+
 def test_registered_record_classes_cover_oracle_label_classes() -> None:
     root = Path(__file__).resolve().parents[2]
     source = (root / "crates/gaze-recognizers/examples/clean_for_bench.rs").read_text()
