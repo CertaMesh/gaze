@@ -6,6 +6,7 @@ use gaze::{
 };
 use gaze_recognizers::{
     AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
+    ValidatorOnFail,
 };
 
 use crate::{
@@ -181,7 +182,13 @@ pub(crate) fn register_rulepack_recognizers(
                             .as_ref()
                             .and_then(|context| context.reject_match_regex.as_deref()),
                     )?
-                    .with_locale_basis(recognizer.locale_basis),
+                    .with_locale_basis(recognizer.locale_basis)
+                    .with_validator_on_fail(
+                        recognizer
+                            .validator
+                            .as_ref()
+                            .map_or(ValidatorOnFail::Veto, |validator| validator.on_fail),
+                    )?,
                 );
             }
             RawMatch::Dictionary {

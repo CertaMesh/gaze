@@ -18,7 +18,7 @@ use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
     LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
     RedactionLogger, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet, SafetyNetContext,
-    SafetyNetError,
+    SafetyNetError, ValidatorFailReason,
 };
 use thiserror::Error;
 
@@ -2812,6 +2812,9 @@ impl Pipeline {
         if let Some(record) = detection.ambiguity_record.clone() {
             entry = entry.with_ambiguity_record(record);
         }
+        if let Some(reason) = detection.validator_fail_reason {
+            entry = entry.with_validator_fail_reason(reason);
+        }
         if detection.collision_family.is_some() || detection.collision_variant.is_some() {
             entry = entry.with_collision_metadata(
                 detection.collision_family.clone(),
@@ -2958,6 +2961,8 @@ struct IndexedDetection {
     evidence: ManifestEvidence,
     /// Set on a swept copy: how it relates to its source value.
     sweep_link: Option<SweepLink>,
+    /// Set when the value was kept although its checksum failed (`ValidatorOnFail::Record`).
+    validator_fail_reason: Option<ValidatorFailReason>,
 }
 
 struct CleanText {
@@ -5313,6 +5318,7 @@ fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<I
                     // Losers are logged, never minted.
                     evidence: ManifestEvidence::Learned,
                     sweep_link: None,
+                    validator_fail_reason: None,
                 }
             })
         })
@@ -5361,6 +5367,7 @@ fn indexed_detection_from_candidate(
         collision_variant,
         evidence,
         sweep_link: None,
+        validator_fail_reason: candidate.validator_fail_reason,
     }
 }
 

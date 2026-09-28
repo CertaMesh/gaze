@@ -1,6 +1,6 @@
 use gaze_types::{
     Candidate, ConflictTier, DetectContext, Detection, Detector, LocaleBasis, LocaleTag, PiiClass,
-    Recognizer, ValidatorKind,
+    Recognizer, ValidatorKind, ValidatorOnFail,
 };
 use regex::Regex;
 
@@ -55,6 +55,7 @@ pub struct RegexDetector {
     exclusions: Vec<String>,
     reject_match_regex: Option<Regex>,
     validator_kind: Option<ValidatorKind>,
+    validator_on_fail: ValidatorOnFail,
     normalizer_kind: Option<NormalizerKind>,
     ascii_email_boundary: bool,
     /// The candidate must not be a prefix of a longer identifier: the word run after it may hold
@@ -125,6 +126,7 @@ impl RegexDetector {
                 .collect(),
             reject_match_regex: None,
             validator_kind,
+            validator_on_fail: ValidatorOnFail::Veto,
             normalizer_kind,
             ascii_email_boundary,
             identifier_run_boundary,
@@ -223,6 +225,10 @@ impl Recognizer for RegexDetector {
         self.validator_kind
     }
 
+    fn validator_on_fail(&self) -> ValidatorOnFail {
+        self.validator_on_fail
+    }
+
     fn locales(&self) -> &[LocaleTag] {
         &self.locales
     }
@@ -238,6 +244,37 @@ impl Recognizer for RegexDetector {
 }
 
 impl RegexDetector {
+    /// What validator veto does when this recognizer's validator fails. `Record` is accepted
+    /// only for IBAN mod-97 and Luhn (`ValidatorKind::allows_recorded_failure`), and never on a
+    /// card-run recognizer: it offers every digit run in the text, so keeping the ones that fail
+    /// Luhn would tokenize every long number.
+    pub fn with_validator_on_fail(mut self, on_fail: ValidatorOnFail) -> Result<Self> {
+        if on_fail == ValidatorOnFail::Record {
+            let refuse = |kind: String, reason| RecognizerError::UnsupportedValidatorOnFail {
+                recognizer_id: self.source.clone(),
+                kind,
+                reason,
+            };
+            let Some(kind) = self.validator_kind else {
+                return Err(refuse("none".into(), "the recognizer has no validator"));
+            };
+            if !kind.allows_recorded_failure() {
+                return Err(refuse(
+                    format!("{kind:?}"),
+                    "only iban_mod97 and luhn may keep a failed candidate",
+                ));
+            }
+            if self.card_runs {
+                return Err(refuse(
+                    format!("{kind:?}"),
+                    "a card-run recognizer offers every digit run; anchor the card with a cue",
+                ));
+            }
+        }
+        self.validator_on_fail = on_fail;
+        Ok(self)
+    }
+
     /// A rulepack guard can refuse a full regex match before its capture is emitted.
     pub fn with_rejection_pattern(mut self, match_pattern: Option<&str>) -> Result<Self> {
         self.reject_match_regex = match_pattern

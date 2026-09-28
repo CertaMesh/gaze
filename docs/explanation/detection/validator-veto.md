@@ -24,6 +24,44 @@ For each candidate:
 6. `ValidatorOutcome::Fail { reason }` removes the candidate before conflict
    resolution and returns `VetoedCandidate { candidate, reason }` for audit
    emission.
+7. The exception: when the recognizer declares `on_fail = "record"`
+   (`Recognizer::validator_on_fail`) and the validator is `iban_mod97` or
+   `luhn`, a `Fail` keeps the candidate. It carries
+   `validator_fail_reason = Some(reason)` and `EvidenceKind::Learned`.
+
+## Recorded failures: IBAN and payment cards
+
+A mistyped or masked IBAN or card number is still someone's financial data,
+so Gaze tokenizes an IBAN- or card-shaped span even when mod-97 or Luhn fails
+(user ruling 2026-09-27, solo todo 3906). The checksum stops being the
+precision; shape and context take its place:
+
+| Recognizer | What tokenizes without a passing checksum |
+| --- | --- |
+| `iban.structural` | A registry country code at that country's exact ISO 13616 length, with or without a cue |
+| `iban.cued` | A real ISO 3166-1 country code (or `UK`) outside the IBAN registry, two digits and a BBAN (up to four letters then 6 to 26 digits compact, or three to eight digit-bearing groups) within 32 characters after the word `IBAN` on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it). Registry countries stay with `iban.structural`, which knows their exact length, so a registry IBAN with a dropped digit is not covered |
+| `card.cued` | A card layout within 32 characters after a card cue (`card` family, German card compounds, a bare `Karte` only with `Nummer`/`Nr`, card brands) on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it): 4-4-4-4-3 (whole), 4-4-4-4, 4-6-5, 4-6-4, compact 16 to 19 digits starting 2-6, or compact 14 to 15 digits starting 3. Compact phone numbers and epoch-millisecond timestamps do not qualify. A span that holds a card stays whole, so a cued 4-4-4-4-3 number is one token even when its first 16 digits pass Luhn (without a cue `card.structural` still keeps a valid card's CVV outside, todo 3843). A Luhn-failing 13- or 15-digit compact card not starting with 3 stays raw (phone and timestamp tradeoff) |
+
+`card.structural` keeps vetoing a Luhn failure. It offers every digit run in
+the text, and without a cue a 16-digit run is as likely an order, voucher or
+tracking number. `RegexDetector::with_validator_on_fail` refuses
+`on_fail = "record"` on such a card-run recognizer, and the rulepack loader
+refuses it for every validator other than `iban_mod97` and `luhn`
+(`RulepackError::UnsupportedValidatorOnFail`), so a tax, national-ID or other
+checksum cannot be relaxed by accident.
+
+A kept failure stays traceable and contained:
+
+- The winner's audit row carries `validator_fail_reason`
+  (`IbanMod97Failed`, `LuhnFailed`) with `conflict_loser: false`.
+- Its evidence is `Learned`, so the repeat-value sweep never copies the value
+  to an uncued occurrence. The resolver and the sweep treat a candidate as
+  validated only when it has a canonical form and no recorded failure; the
+  IBAN normalizer's canonical form alone proves nothing.
+- A merge of two candidates over the same span keeps the recorded failure.
+
+The restore-boundary outbound scan (`structural_findings` in `session.rs`)
+still reports only mod-97-valid IBANs and Luhn-valid cards.
 
 `ConflictTier::Validator` means the same-class containment tie-breaker when
 the byte-coverage safeguard retains prior arbitration.
