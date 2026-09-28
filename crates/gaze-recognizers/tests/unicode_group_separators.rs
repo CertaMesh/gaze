@@ -165,11 +165,22 @@ fn national_ids_with_unicode_group_separators_are_tokenized() {
 }
 
 #[test]
-fn checksum_invalid_values_with_unicode_separators_stay_vetoed() {
-    // Validator-veto contract: a failing checksum is logged as a loser and the text is untouched.
-    // The tail `3704…0130 09` also fails Luhn, so no card rule can claim it either.
-    assert_untouched("IBAN DE89{sep}3704{sep}0044{sep}0532{sep}0130{sep}09 bitte.");
-    assert_untouched("Card 4111{sep}1111{sep}1111{sep}1112 on file.");
+fn checksum_invalid_iban_and_card_with_unicode_separators_are_still_tokenized() {
+    // Solo todo 3906: an IBAN- or card-shaped value is tokenized even when mod-97 or Luhn fails
+    // (the failure is recorded on the audit row, not a veto). The IBAN resolves through its
+    // family token here, as a valid one does with the core pack alone; `iban` accepts both.
+    assert_grouped_value_tokenized(
+        "IBAN DE89{sep}3704{sep}0044{sep}0532{sep}0130{sep}09 bitte.",
+        "DE89{sep}3704{sep}0044{sep}0532{sep}0130{sep}09",
+        "iban",
+    );
+    assert_grouped_value_tokenized(
+        "Card 4111{sep}1111{sep}1111{sep}1112 on file.",
+        "4111{sep}1111{sep}1111{sep}1112",
+        "credit_card",
+    );
+    // Without a card cue the Luhn veto stands.
+    assert_untouched("Order 4111{sep}1111{sep}1111{sep}1112 shipped.");
 }
 
 #[test]

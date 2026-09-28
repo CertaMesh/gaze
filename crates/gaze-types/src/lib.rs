@@ -717,7 +717,38 @@ pub enum Region {
     Us,
 }
 
+/// What validator veto does with a candidate whose validator fails.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ValidatorOnFail {
+    /// Drop the candidate and log it as a loser decided by `ConflictTier::ValidatorVeto`.
+    #[default]
+    Veto,
+    /// Keep the candidate, write the failure on its audit row and never let the repeat-value
+    /// sweep spread its value. Only [`ValidatorKind::allows_recorded_failure`] kinds take it.
+    Record,
+}
+
+impl ValidatorOnFail {
+    /// Parses a rulepack `on_fail` value (`veto` or `record`).
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "veto" => Some(Self::Veto),
+            "record" => Some(Self::Record),
+            _ => None,
+        }
+    }
+}
+
 impl ValidatorKind {
+    /// Whether a checksum failure of this kind may keep its candidate
+    /// ([`ValidatorOnFail::Record`]). Only IBAN mod-97 and Luhn: a mistyped or masked IBAN or
+    /// card number is still someone's financial data (user ruling 2026-09-27). Every other
+    /// validator vetoes on failure.
+    pub fn allows_recorded_failure(self) -> bool {
+        matches!(self, Self::Luhn | Self::IbanMod97)
+    }
+
     /// Parses a policy validator kind.
     pub fn parse(s: &str) -> Result<Self, ValidatorKindParseError> {
         match s {
@@ -4127,6 +4158,12 @@ pub trait Recognizer: Send + Sync {
     fn validator_kind(&self) -> Option<ValidatorKind> {
         None
     }
+    /// What validator veto does when [`Self::validator_kind`] fails. Defaults to
+    /// [`ValidatorOnFail::Veto`]; validator veto honours [`ValidatorOnFail::Record`] only for
+    /// kinds where [`ValidatorKind::allows_recorded_failure`] holds.
+    fn validator_on_fail(&self) -> ValidatorOnFail {
+        ValidatorOnFail::Veto
+    }
     /// Locales where this recognizer is active.
     fn locales(&self) -> &[LocaleTag] {
         &[LocaleTag::Global]
@@ -4215,6 +4252,9 @@ pub struct Candidate {
     /// What the candidate rests on. [`Candidate::new`] starts at [`EvidenceKind::Learned`];
     /// the registry overwrites it with the emitting recognizer's [`Recognizer::evidence`].
     pub evidence: EvidenceKind,
+    /// Set when validator veto kept the candidate although its validator failed
+    /// ([`ValidatorOnFail::Record`]); written on the winner's audit row.
+    pub validator_fail_reason: Option<ValidatorFailReason>,
 }
 
 impl Candidate {
@@ -4247,7 +4287,16 @@ impl Candidate {
             decided_by,
             merged_sources,
             evidence: EvidenceKind::Learned,
+            validator_fail_reason: None,
         }
+    }
+
+    /// Whether a validator passed on this candidate: it carries a canonical form and no recorded
+    /// failure. A canonical form alone proves nothing: an IBAN or card kept by
+    /// [`ValidatorOnFail::Record`] may carry its normalizer's canonical form. The resolver's
+    /// evidence tiers and the repeat-value sweep both ask this.
+    pub fn checksum_validated(&self) -> bool {
+        self.canonical_form.is_some() && self.validator_fail_reason.is_none()
     }
 
     /// Returns this candidate with its evidence kind set.

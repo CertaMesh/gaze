@@ -3,10 +3,12 @@
 import copy
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import unittest
 from argparse import Namespace
+from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
@@ -601,6 +603,87 @@ class ModelValidationTests(unittest.TestCase):
 
 
 class PolicyNerSettingsTests(unittest.TestCase):
+    def test_run_records_absent_ner_and_portable_policy_path(self) -> None:
+        class StopAfterProvenance(Exception):
+            pass
+
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            root = Path(directory).resolve()
+            policy = root / "policy.toml"
+            policy.write_text("[rules]\nenabled=true\n", encoding="utf-8")
+            dataset = root / "dataset.parquet"
+            dataset.write_bytes(b"synthetic dataset")
+            binary = root / "target/debug/examples/clean_for_bench"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"synthetic binary")
+            stack.enter_context(mock.patch.dict(os.environ, {
+                "HOME": directory, "CARGO_TARGET_DIR": str(root / "target"),
+            }))
+            stack.enter_context(mock.patch.object(Path, "home", return_value=root))
+            args = runner.parse_args([
+                "quick", "--policy", str(policy), "--dataset", str(dataset),
+                "--no-agentic-layers", "--no-download", "--skip-build",
+            ])
+            patches = (
+                (runner, "load_scored_label_contract", {"return_value": object()}),
+                (runner.dataiku, "verify_dataset", {}),
+                (runner.dataiku, "load_documents", {"return_value": ([object()], {})}),
+                (runner, "load_negative_documents", {"return_value": ([], {})}),
+                (runner.score, "stratified_sample", {"side_effect": lambda docs, *_args, **_kwargs: (docs, {})}),
+                (runner.score, "apply_scored_label_contract", {"side_effect": lambda docs, *_args: docs}),
+                (runner.score, "validator_probe_binary", {"return_value": binary}),
+                (runner.score, "collect_validator_measurements", {
+                    "return_value": {"schema_version": 1, "validator_recognizers": [], "documents": {}},
+                }),
+                (runner.score, "validator_gold_census", {"return_value": {}}),
+                (runner.records, "filter_measurements", {"side_effect": lambda data, *_args: data}),
+                (runner, "composite_dataset_report", {"return_value": ({}, {"integrity": {"sha256": "0" * 64}})}),
+                (runner.records, "RecordWriter", {}),
+                (runner, "execute_measurements", {"return_value": ([], [])}),
+                (runner.score, "scored_label_contract_report", {"return_value": {}}),
+            )
+            for target, name, options in patches:
+                stack.enter_context(mock.patch.object(target, name, **options))
+            assemble = stack.enter_context(mock.patch.object(runner.score, "assemble_scorecard", return_value={}))
+            readiness = stack.enter_context(mock.patch.object(
+                runner.score, "evaluate_release_readiness", side_effect=StopAfterProvenance,
+            ))
+            with self.assertRaises(StopAfterProvenance):
+                runner.run(args)
+            self.assertIsNone(assemble.call_args.kwargs["parameters"]["ner_threshold"])
+            provenance = readiness.call_args.args[0]["runner_provenance"]
+            self.assertEqual(provenance["model_bundles"], [])
+            self.assertEqual(provenance["policy"]["path"], "~/policy.toml")
+            self.assertEqual(Path(provenance["policy"]["path"]).expanduser().resolve(), policy)
+
+    def test_policy_without_ner_records_no_threshold_or_bundle(self) -> None:
+        with mock.patch.object(runner, "validate_required_models") as validate:
+            self.assertEqual(
+                runner.policy_ner_provenance(
+                    Path("/synthetic"), Path("/synthetic/missing-davlan"), 0.3, {}
+                ),
+                (None, []),
+            )
+            validate.assert_not_called()
+
+    def test_policy_with_ner_records_threshold_and_validated_bundle(self) -> None:
+        bundle = {"model_id": "davlan-mbert-ner-hrl-onnx", "observed_sha256": "a" * 64}
+        with mock.patch.object(runner, "validate_required_models", return_value=[bundle]) as validate:
+            self.assertEqual(
+                runner.policy_ner_provenance(
+                    Path("/synthetic"), Path("/synthetic/davlan"), 0.42, {"ner": {}}
+                ),
+                (0.42, [bundle]),
+            )
+            validate.assert_called_once()
+
+    def test_legacy_run_still_requires_davlan(self) -> None:
+        with mock.patch.object(runner, "validate_required_models", side_effect=runner.ModelBundleError("missing")):
+            with self.assertRaisesRegex(runner.ModelBundleError, "missing"):
+                runner.policy_ner_provenance(
+                    Path("/synthetic"), Path("/synthetic/missing-davlan"), 0.3, None
+                )
+
     def test_policy_without_ner_keeps_cli_defaults(self) -> None:
         model = Path("/synthetic/default-davlan")
         self.assertEqual(

@@ -2806,14 +2806,23 @@ fn s2_cli_bundled_smoke_emits_formatted_phase2_tokens() {
 }
 
 #[test]
-fn s2_cli_bundled_smoke_drops_luhn_failing_formatted_cc() {
+fn s2_cli_bundled_smoke_luhn_failing_formatted_cc_tokenizes_only_after_a_card_cue() {
+    // Solo todo 3906: a Luhn-failing card after a card cue is still a card.
     let value = clean_json_with_args(
         &["--rulepack-bundled", "core,core-extended"],
         "Card 4111 1111 1111 1112",
     );
     let clean = value["clean_text"].as_str().unwrap();
+    assert!(clean.starts_with("Card <"), "{clean}");
+    assert!(clean.contains("Custom:credit_card"), "{clean}");
+    assert!(!clean.contains("1112"), "{clean}");
 
-    assert!(!clean.contains("Custom:credit_card"), "{clean}");
+    // Without a cue the Luhn veto stands: an order number is not a card.
+    let value = clean_json_with_args(
+        &["--rulepack-bundled", "core,core-extended"],
+        "Order 4111 1111 1111 1112",
+    );
+    assert_eq!(value["clean_text"], "Order 4111 1111 1111 1112");
     assert_eq!(value["stats"]["detections"], 0);
 }
 
@@ -3162,7 +3171,7 @@ fn s2_core_extended_tenant_like_numeric_ids_are_not_phone_tokens() {
 }
 
 #[test]
-fn s2_core_extended_cli_validator_backed_iban_and_cards_emit_or_drop() {
+fn s2_core_extended_cli_validator_backed_iban_and_cards_emit_by_shape_and_cue() {
     let (_dir, policy) =
         write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
 
@@ -3194,16 +3203,35 @@ fn s2_core_extended_cli_validator_backed_iban_and_cards_emit_or_drop() {
         );
     }
 
+    // Checksum-failing values after a card or IBAN cue are still tokenized (solo todo 3906);
+    // the same card digits without a cue keep the Luhn veto.
+    for (label, number) in [
+        ("Card ", "4111111111111112"),
+        ("Card ", "5555555555554445"),
+        ("Card ", "378282246310006"),
+        ("IBAN ", "GB99WEST12345698765432"),
+        ("IBAN ", "DE99370400440532013000"),
+    ] {
+        let input = format!("{label}{number}");
+        let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], &input);
+        let clean = value["clean_text"].as_str().unwrap();
+        assert!(
+            clean.starts_with(label) && !clean.contains(number),
+            "{input}: {clean}"
+        );
+        assert_eq!(value["stats"]["detections"], 1, "{input}");
+        assert_eq!(
+            restore_success_text(value["session_blob"].as_str().unwrap(), clean),
+            input
+        );
+    }
     for input in [
-        "Card 4111111111111112",
-        "Card 5555555555554445",
-        "Card 378282246310006",
-        "IBAN GB99WEST12345698765432",
-        "IBAN DE99370400440532013000",
+        "Ref 4111111111111112",
+        "Ref 5555555555554445",
+        "Ref 378282246310006",
     ] {
         let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
-        let clean = value["clean_text"].as_str().unwrap();
-        assert_eq!(clean, input, "{input}");
+        assert_eq!(value["clean_text"], input, "{input}");
         assert_eq!(value["stats"]["detections"], 0, "{input}");
     }
 

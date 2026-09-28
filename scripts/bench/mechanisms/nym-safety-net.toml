@@ -3,4 +3,5 @@
 backend = "nym"
 
 [safety_net.nym]
-model_dir = "/Users/krishankoenig/.local/share/gaze/models/nym-small-int8"
+# Gaze does not yet expand ~ here (todo 3917); the delta comparison normalizes it.
+model_dir = "~/.local/share/gaze/models/nym-small-int8"

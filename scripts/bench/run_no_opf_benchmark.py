@@ -1002,6 +1002,14 @@ def policy_ner_settings(
     return model, threshold
 
 
+def policy_ner_provenance(
+    repo_root: Path, model: Path, threshold: float, policy_data: dict[str, Any] | None
+) -> tuple[float | None, list[dict[str, object]]]:
+    if policy_data is not None and "ner" not in policy_data:
+        return None, []
+    return threshold, validate_required_models(repo_root, model)
+
+
 def run(args: argparse.Namespace) -> int:
     repo_root = Path(__file__).resolve().parents[2]
     if args.compare_baseline is not None:
@@ -1072,7 +1080,9 @@ def run(args: argparse.Namespace) -> int:
     except agentic.LayerError as error:
         raise CandidateError(f"agentic layers: {error}") from error
 
-    model_provenance = validate_required_models(repo_root, davlan_model)
+    recorded_threshold, model_provenance = policy_ner_provenance(
+        repo_root, davlan_model, effective_threshold, policy_data
+    )
     if nym_bundle_sha is not None:
         model_provenance.append(
             {
@@ -1187,7 +1197,7 @@ def run(args: argparse.Namespace) -> int:
             "binary_profile": profile,
             "max_documents": max_documents,
             "sampling_seed": args.seed,
-            "ner_threshold": effective_threshold,
+            "ner_threshold": recorded_threshold,
             "warmup_count": args.warmups,
             "measured_repetitions": args.measured_repetitions,
             "opf": False,
@@ -1202,7 +1212,8 @@ def run(args: argparse.Namespace) -> int:
         "profile": args.profile,
         "model_bundles": model_provenance,
         "policy_dependencies": policy_dependencies,
-        "policy": {"path": str(policy_path), "sha256": policy_sha} if policy_path else None,
+        "policy": {"path": agentic.normalize_home_path(str(policy_path)), "sha256": policy_sha}
+        if policy_path else None,
         "hardware": platform.platform() + "; " + platform.processor(),
         "warmup_count": args.warmups,
         "measured_repetitions": args.measured_repetitions,

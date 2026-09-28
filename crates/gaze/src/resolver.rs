@@ -582,8 +582,8 @@ fn arbitrate(
         && overlap == Overlap::Containment
         && existing.class == candidate.class
     {
-        let candidate_validated = candidate.canonical_form.is_some();
-        let existing_validated = existing.canonical_form.is_some();
+        let candidate_validated = candidate.checksum_validated();
+        let existing_validated = existing.checksum_validated();
         if candidate_validated != existing_validated {
             return if candidate_validated {
                 Arbitration::CandidateWins(ConflictTier::Validator)
@@ -697,7 +697,7 @@ fn evidence_tier(
     policy: &FamilyPolicyTable,
     anchor_ctx: Option<AnchorContext<'_>>,
 ) -> EvidenceTier {
-    if candidate.canonical_form.is_some() {
+    if candidate.checksum_validated() {
         return EvidenceTier::Validated;
     }
     if candidate.source.starts_with("structural.") {
@@ -787,6 +787,10 @@ fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
     if existing.canonical_form.is_none() {
         existing.canonical_form = candidate.canonical_form;
     }
+    // A recorded checksum failure sticks: the merged value was never validated.
+    existing.validator_fail_reason = existing
+        .validator_fail_reason
+        .or(candidate.validator_fail_reason);
     existing.decided_by = ConflictTier::Merged;
     existing.merged_sources.push(candidate.source);
 }
@@ -1044,6 +1048,44 @@ mod tests {
             Vec::new(),
         )
         .with_evidence(evidence)
+    }
+
+    /// A canonical form proves a validator passed only when no failure was recorded: an IBAN or
+    /// card kept by `ValidatorOnFail::Record` must not rank as validated (solo todo 3906).
+    #[test]
+    fn a_recorded_checksum_failure_is_not_validated_evidence() {
+        let class = PiiClass::custom("iban").expect("class");
+        let mut failed = candidate(0..4, class.clone(), 0.7, "iban.structural");
+        failed.canonical_form = Some("DE99".into());
+        assert!(failed.checksum_validated());
+        failed.validator_fail_reason = Some(gaze_types::ValidatorFailReason::IbanMod97Failed);
+        assert!(!failed.checksum_validated());
+        let policy = crate::RecognizerRegistry::builder().build();
+        assert_eq!(
+            evidence_tier(&failed, policy.family_policy(), None),
+            EvidenceTier::Pattern
+        );
+    }
+
+    #[test]
+    fn a_merge_keeps_a_recorded_checksum_failure_from_either_side() {
+        let class = PiiClass::custom("iban").expect("class");
+        let mut failed = candidate(0..4, class.clone(), 0.7, "iban.cued");
+        failed.validator_fail_reason = Some(gaze_types::ValidatorFailReason::IbanMod97Failed);
+        let clean = candidate(0..4, class, 0.7, "iban.structural");
+
+        let mut existing = clean.clone();
+        merge_same_span_same_class(&mut existing, failed.clone());
+        assert_eq!(
+            existing.validator_fail_reason,
+            Some(gaze_types::ValidatorFailReason::IbanMod97Failed)
+        );
+        let mut existing = failed;
+        merge_same_span_same_class(&mut existing, clean);
+        assert_eq!(
+            existing.validator_fail_reason,
+            Some(gaze_types::ValidatorFailReason::IbanMod97Failed)
+        );
     }
 
     /// Two variants of one collision family at equal precedence: the shape
