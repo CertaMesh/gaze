@@ -7,7 +7,8 @@ use gaze::{
 };
 use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind, ValidatorOnFail};
 use gaze_types::{
-    DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer, ValidatorOutcome,
+    DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer, ValidatorFailReason,
+    ValidatorOutcome,
 };
 use std::sync::{Arc, Mutex};
 
@@ -608,6 +609,29 @@ fn overlapping_phone_recognizers_pick_single_winners_without_span_loss() {
         }),
         "expected phone.e164.spaced to lose at least one same-class overlap: {entries:?}"
     );
+}
+
+#[test]
+fn cued_parser_failed_us_phone_keeps_reason_without_sweeping_a_lookalike() {
+    let rulepack = core_extended();
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_from_rulepack(&rulepack).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    // NANPA's reserved 555-01xx range; a seven-digit value fails the US region parser.
+    let input = "phoneNumber=555-0199; Order: 555-0199";
+
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+    assert_eq!(clean.matches("555-0199").count(), 1, "{clean}");
+    assert_eq!(restore_tokens(&session, &clean), input);
+
+    let entries = entries.lock().unwrap();
+    assert!(entries.iter().any(|entry| {
+        !entry.conflict_loser
+            && entry.recognizer_id.as_deref() == Some("phone.national.us.cued")
+            && entry.validator_fail_reason == Some(ValidatorFailReason::PhoneNationalRegionMismatch)
+    }));
 }
 
 #[test]
