@@ -14,7 +14,7 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import agentic_layers as agentic
 import dataiku_en_de_gaze_bench as dataiku
@@ -982,6 +982,26 @@ def validate_cli_guards(args: argparse.Namespace) -> None:
         )
 
 
+def policy_ner_settings(
+    policy_data: dict[str, Any],
+    policy_path: Path,
+    default_model: Path,
+    default_threshold: float,
+) -> tuple[Path, float]:
+    if "ner" not in policy_data:
+        return default_model, default_threshold
+    try:
+        ner = policy_data["ner"]
+        model_path = Path(ner["model_dir"]).expanduser()
+        model = (
+            model_path if model_path.is_absolute() else policy_path.parent / model_path
+        ).resolve()
+        threshold = float(ner["threshold"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise CandidateError(f"policy NER settings are invalid: {error}") from error
+    return model, threshold
+
+
 def run(args: argparse.Namespace) -> int:
     repo_root = Path(__file__).resolve().parents[2]
     if args.compare_baseline is not None:
@@ -1008,15 +1028,9 @@ def run(args: argparse.Namespace) -> int:
             policy_data = tomllib.loads(policy_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
             raise CandidateError(f"cannot read policy {policy_path}: {error}") from error
-        try:
-            ner = policy_data["ner"]
-            model_path = Path(ner["model_dir"]).expanduser()
-            davlan_model = (
-                model_path if model_path.is_absolute() else policy_path.parent / model_path
-            ).resolve()
-            effective_threshold = float(ner["threshold"])
-        except (KeyError, TypeError, ValueError) as error:
-            raise CandidateError(f"policy NER settings are missing or invalid: {error}") from error
+        davlan_model, effective_threshold = policy_ner_settings(
+            policy_data, policy_path, davlan_model, effective_threshold
+        )
         if policy_data.get("safety_net", {}).get("backend") == "nym":
             try:
                 nym_path = Path(

@@ -488,6 +488,8 @@ def validate(ledger: Mapping[str, Any], root: Path = ROOT) -> None:
         seen.add(entry["id"])
         if not isinstance(entry.get("added_in"), str) or not ADDED_IN.fullmatch(entry["added_in"]):
             raise MechanismError(f"{where}: invalid added_in")
+        if entry.get("availability_basis", "mechanism") not in ("mechanism", "setup default"):
+            raise MechanismError(f"{where}: invalid availability_basis")
         if not isinstance(entry.get("title"), str) or not entry["title"].strip():
             raise MechanismError(f"{where}: title is missing")
         if not isinstance(entry.get("shipped"), str) or not entry["shipped"].strip():
@@ -581,7 +583,8 @@ def _before(version: str, added_in: str) -> bool:
 def release_cell(entry: Mapping[str, Any], version: str) -> str:
     """One mechanism's cell for a shipped release: numbers or an explicit reason."""
     if _before(version, entry["added_in"]):
-        return f"not available: mechanism added in {entry['added_in']}"
+        basis = entry.get("availability_basis", "mechanism")
+        return f"not available: {basis} added in {entry['added_in']}"
     measured = next((m for m in entry["measurements"] if m["release"] == version), None)
     if measured is None:
         return "not measured for this release"
