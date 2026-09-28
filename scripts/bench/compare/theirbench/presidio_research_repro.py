@@ -26,6 +26,13 @@ from pathlib import Path
 REPO = "microsoft/presidio-research"
 COMMIT = "6db3769a3388b4075b93ab2229c5e0b9c30137f7"
 DATASET = "data/synth_dataset_v2.json"
+# The commits whose evaluator produced each published notebook number. The
+# numbers predate later evaluator fixes, so they reproduce only there; every
+# published row is scored with COMMIT's evaluator, the same code for all.
+REPRODUCTION_COMMITS = {
+    "vanilla": "ac490f9b961126eb7bbb31fc7e7f225fa154316f",  # last commit that wrote notebook 4's outputs
+    "custom": "e2140e12adcb1441ae442485781ffe4c22100309",   # evaluator at the notebook 5 run (2026-07-23 10:25); outputs committed in f2285ca
+}
 OPENMED_MODEL = "OpenMed/OpenMed-PII-SuperClinical-Large-434M-v1"
 OPENMED_REVISION = "df7af994d39d358e52f929ff1b3a40d894adf022"
 PUBLISHED = {
@@ -148,7 +155,8 @@ def precomputed_model(dataset, predictions: Path, labels: dict[str, list[str]]):
 
 
 def evaluate(config: str, dataset_path: Path, model_path: str | None, limit: int | None,
-             predictions: Path | None = None, labels: dict[str, list[str]] | None = None) -> dict:
+             predictions: Path | None = None, labels: dict[str, list[str]] | None = None,
+             resolution_rule: str = "pinned") -> dict:
     from presidio_evaluator import InputSample
     from presidio_evaluator.entity_mapping import CanonicalMapper
     from presidio_evaluator.evaluation import SpanEvaluator
@@ -178,7 +186,12 @@ def evaluate(config: str, dataset_path: Path, model_path: str | None, limit: int
         mapper.suppress_prediction_only()
         resolutions = {}
         for issue in mapper.get_issues():
-            if issue.type.value in ("unresolved", "prediction_only"):
+            if resolution_rule == "f2285ca":
+                # Notebook 5 as it ran for the published 0.91: suppress every
+                # warning- or error-severity issue.
+                if issue.severity.value in ("warning", "error"):
+                    resolutions.update(dict.fromkeys(issue.labels))
+            elif issue.type.value in ("unresolved", "prediction_only"):
                 resolutions.update(dict.fromkeys(issue.labels))
         if resolutions:
             mapper.map(resolutions)
@@ -206,13 +219,25 @@ def main() -> int:
                         help="theirbench.py predictions for one system; scored like notebook 4")
     parser.add_argument("--labels", type=Path, help="theirbench.py composed label map for that system")
     parser.add_argument("--system", help="name recorded for --predictions")
+    parser.add_argument("--reproduction", action="store_true",
+                        help="checkout is at REPRODUCTION_COMMITS[config] (one --config), notebook-5 rule as of f2285ca")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     import subprocess
 
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=args.checkout, text=True).strip()
-    if head != COMMIT:
-        raise SystemExit(f"presidio-research checkout is at {head}, expected {COMMIT}")
+    expected = COMMIT
+    if args.reproduction:
+        if args.config == "all" or args.predictions is not None:
+            raise SystemExit("--reproduction takes exactly one --config and no --predictions")
+        expected = REPRODUCTION_COMMITS[args.config]
+    if not head.startswith(expected):
+        raise SystemExit(f"presidio-research checkout is at {head}, expected {expected}")
+    import presidio_evaluator
+
+    if not Path(presidio_evaluator.__file__).resolve().is_relative_to(args.checkout.resolve()) and args.reproduction:
+        # A historical run must import the evaluator from that checkout, not the pinned wheel.
+        raise SystemExit("run --reproduction with PYTHONPATH set to the checkout")
     dataset_path = args.checkout / DATASET
     configs = ("vanilla", "custom") if args.config == "all" else (args.config,)
     if args.predictions is None and "custom" in configs and not args.openmed_model:
@@ -227,7 +252,7 @@ def main() -> int:
             "en-core-web-lg", "transformers", "torch")},
         "openmed": {"model": OPENMED_MODEL, "revision": OPENMED_REVISION},
         "hardware": platform.platform(), "python": sys.version.split()[0],
-        "smoke_limit": args.limit,
+        "smoke_limit": args.limit, "evaluator_commit": head, "reproduction_run": args.reproduction,
         "published": {name: PUBLISHED[name] for name in configs},
         "reproduced": {},
     }
@@ -238,7 +263,8 @@ def main() -> int:
         report["scored"] = evaluate("precomputed", dataset_path, None, args.limit, args.predictions, labels)
         print(f"{args.system}: {report['scored']}", file=sys.stderr, flush=True)
     for config in configs if args.predictions is None else ():
-        report["reproduced"][config] = evaluate(config, dataset_path, args.openmed_model, args.limit)
+        report["reproduced"][config] = evaluate(config, dataset_path, args.openmed_model, args.limit,
+                                                resolution_rule="f2285ca" if args.reproduction else "pinned")
         print(f"{config}: {report['reproduced'][config]}", file=sys.stderr, flush=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0
