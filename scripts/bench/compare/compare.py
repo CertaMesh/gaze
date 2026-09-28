@@ -30,6 +30,7 @@ import agentic_layers as agentic  # noqa: E402
 import dataiku_en_de_gaze_bench as dataiku  # noqa: E402
 import gaze_bench_score as score  # noqa: E402
 import run_no_opf_benchmark as runner  # noqa: E402
+from comparison_metrics import ComparisonMetrics, split_for_id  # noqa: E402
 
 MAP_PATH = Path(__file__).with_name("label-map.json")
 MODEL_PINS_PATH = Path(__file__).with_name("model-wheels.json")
@@ -38,7 +39,12 @@ CONTRACTS = {
     "v2": Path("docs/reference/benchmarks/scored-labels-v2.json"),
     "v3": Path("docs/reference/benchmarks/scored-labels-v3.json"),
 }
-TOOLS = ("presidio-all", "presidio-en", "presidio-en-de", "gliner", "opf")
+TOOLS = (
+    "presidio-all", "presidio-en", "presidio-en-de", "presidio-strong",
+    "presidio-strong-high-recall",
+    "datafog-core", "datafog-regex", "datafog-spacy", "datafog-gliner",
+    "scrubadub-base", "scrubadub-spacy", "gliner", "gliner-high-recall", "opf",
+)
 PRESIDIO_LANGUAGES = ("en", "de", "nl", "fr", "pt")
 PRESIDIO_ANONYMIZER_VERSION = "2.2.364"
 GERMAN_RECOGNIZERS = (
@@ -57,6 +63,8 @@ def presidio_languages(tool: str) -> tuple[str, ...]:
         "presidio-all": PRESIDIO_LANGUAGES,
         "presidio-en": ("en",),
         "presidio-en-de": ("en", "de"),
+        "presidio-strong": PRESIDIO_LANGUAGES,
+        "presidio-strong-high-recall": PRESIDIO_LANGUAGES,
     }
     if tool not in configurations:
         raise ValueError(f"unknown Presidio configuration: {tool}")
@@ -98,7 +106,7 @@ def byte_spans(text: str, found: Sequence[tuple[int, int, str]]) -> list[score.S
 
 def load_mapping() -> dict[str, dict[str, tuple[str, ...]]]:
     raw = json.loads(MAP_PATH.read_text(encoding="utf-8"))
-    if set(raw) != {"presidio", "gliner", "opf"}:
+    if set(raw) != {"presidio", "gliner", "opf", "gaze", "datafog-core", "datafog-python", "scrubadub"}:
         raise ValueError("label map must cover each tool")
     return {
         tool: {label: tuple(labels) for label, labels in table.items()}
@@ -230,7 +238,8 @@ def resolved_presidio_spans(anonymizer: object, text: str, found: Sequence[objec
 
 
 class Presidio:
-    def __init__(self, models: dict[str, Path]) -> None:
+    def __init__(self, models: dict[str, Path], transformer: Path | None = None,
+                 threshold: float = 0.0) -> None:
         version = package_version("presidio-anonymizer")
         if version != PRESIDIO_ANONYMIZER_VERSION:
             raise RuntimeError(
@@ -251,26 +260,84 @@ class Presidio:
             for name in GERMAN_RECOGNIZERS:
                 registry.add_recognizer(getattr(predefined_recognizers, name + "Recognizer")())
         self.analyzer = AnalyzerEngine(nlp_engine=engine, registry=registry, supported_languages=languages)
+        self.english_analyzer = None
+        if transformer is not None:
+            hf_engine = NlpEngineProvider(nlp_configuration={
+                "nlp_engine_name": "transformers",
+                "models": [{"lang_code": "en", "model_name": {
+                    "spacy": str(models["en"]), "transformers": str(transformer),
+                }}],
+                "ner_model_configuration": {
+                    "model_to_presidio_entity_mapping": {"PER": "PERSON", "ORG": "ORGANIZATION", "LOC": "LOCATION", "MISC": "NRP"},
+                    "low_confidence_score_multiplier": 0.4,
+                    "low_score_entity_names": ["ORG"],
+                },
+            }).create_engine()
+            english_registry = RecognizerRegistry(supported_languages=["en"])
+            english_registry.load_predefined_recognizers(languages=["en"])
+            self.english_analyzer = AnalyzerEngine(
+                nlp_engine=hf_engine, registry=english_registry, supported_languages=["en"],
+            )
         self.anonymizer = AnonymizerEngine()
         self.languages = languages
+        self.threshold = threshold
 
     def predict(self, document: score.Document) -> list[score.Span]:
         if document.language not in self.languages:
             return []
-        found = self.analyzer.analyze(text=document.text, language=document.language)
+        english_analyzer = getattr(self, "english_analyzer", None)
+        analyzer = english_analyzer if document.language == "en" and english_analyzer else self.analyzer
+        found = analyzer.analyze(text=document.text, language=document.language,
+                                 score_threshold=getattr(self, "threshold", 0.0))
         return resolved_presidio_spans(self.anonymizer, document.text, found)
 
 
 class Gliner:
-    def __init__(self, path: Path, labels: Sequence[str]) -> None:
+    def __init__(self, path: Path, labels: Sequence[str], threshold: float = 0.5) -> None:
         from gliner import GLiNER
 
         self.model = GLiNER.from_pretrained(str(path)).to("cpu")
         self.labels = list(labels)
+        self.threshold = threshold
 
     def predict(self, document: score.Document) -> list[score.Span]:
-        found = self.model.predict_entities(document.text, self.labels)
+        found = self.model.predict_entities(document.text, self.labels, threshold=self.threshold)
         return byte_spans(document.text, [(item["start"], item["end"], item["label"]) for item in found])
+
+
+class DataFogCore:
+    def predict(self, document: score.Document) -> list[score.Span]:
+        import datafog_core
+        found = datafog_core.scan(document.text)
+        result = [score.Span(item.byte_range.start, item.byte_range.end, item.entity_type) for item in found]
+        return result
+
+
+class DataFogPython:
+    def __init__(self, engine: str) -> None:
+        self.engine = engine
+
+    def predict(self, document: score.Document) -> list[score.Span]:
+        import datafog
+        result = datafog.scan(document.text, engine=self.engine,
+                              locales=["de"] if document.language == "de" else None)
+        return byte_spans(document.text, [(item.start, item.end, item.type) for item in result.entities])
+
+
+class Scrubadub:
+    def __init__(self, spacy_model: str | None = None) -> None:
+        import scrubadub
+        self.scrubbers = {}
+        for language, locale in (("en", "en_US"), ("de", "de_DE")):
+            scrubber = scrubadub.Scrubber(locale=locale)
+            if spacy_model and language == "en":
+                from scrubadub_spacy.detectors import SpacyEntityDetector
+                scrubber.add_detector(SpacyEntityDetector(model=spacy_model, locale=locale))
+            self.scrubbers[language] = scrubber
+
+    def predict(self, document: score.Document) -> list[score.Span]:
+        found = self.scrubbers[document.language].iter_filth(document.text)
+        return byte_spans(document.text, [(item.beg, item.end, item.type) for item in found])
 
 
 class Opf:
@@ -415,11 +482,36 @@ def gaze_row(path: Path, version: str, corpus: dict[str, object]) -> dict[str, o
             "hardware": card["runner_provenance"]["hardware"], "layers": table}
 
 
+def main_revision_for_tree(tree: str) -> str:
+    main = subprocess.check_output(["git", "rev-parse", "origin/main"], cwd=REPO, text=True).strip()
+    if crates_tree(main) != tree:
+        raise ValueError("main crates tree differs from the measured Gaze detection tree")
+    return main
+
+
+def common_claimed_labels(mappings: dict[str, dict[str, tuple[str, ...]]]) -> frozenset[str]:
+    capabilities = []
+    for name in ("gaze", "presidio", "gliner", "opf", "datafog-core", "datafog-python", "scrubadub"):
+        mapping = mappings[name]
+        if name == "datafog-python":
+            mapping = {key: value for key, value in mapping.items() if key in
+                       {"EMAIL", "PHONE", "SSN", "CREDIT_CARD", "IP_ADDRESS", "DATE", "ZIP_CODE",
+                        "DE_VAT_ID", "DE_IBAN", "DE_TAX_ID", "DE_POSTAL_CODE", "DE_PASSPORT", "DE_RESIDENCE_PERMIT"}}
+        if name == "scrubadub":
+            mapping = {key: value for key, value in mapping.items() if key not in
+                       {"name", "organization", "location"}}
+        capabilities.append({label for labels in mapping.values() for label in labels})
+    return frozenset.intersection(*(frozenset(labels) for labels in capabilities))
+
+
 def measure(
     name: str, predictor: Callable[[score.Document], list[score.Span]],
     layers: dict[str, list[score.Document]], mapping: dict[str, tuple[str, ...]],
     supported_languages: Sequence[str] | None = None,
+    common_labels: frozenset[str] | None = None,
 ) -> dict[str, object]:
+    if common_labels is None:
+        common_labels = frozenset(label for labels in mapping.values() for label in labels)
     contracts = {
         key: runner.load_scored_label_contract(REPO, path)
         for key, path in CONTRACTS.items()
@@ -433,6 +525,16 @@ def measure(
         skipped_gold_bytes = {key: 0 for key in contracts}
         skipped_documents = 0
         accumulators = {key: score.MetricAccumulator() for key in contracts}
+        detailed = {
+            version: {
+                view: {
+                    split: ComparisonMetrics(mapping, common_labels if view == "common_intersection" else None)
+                    for split in ("full", "validation", "test")
+                }
+                for view in ("product_coverage", "common_intersection")
+            }
+            for version in contracts
+        }
         for index, document in enumerate(documents, 1):
             skipped = supported_languages is not None and document.language not in supported_languages
             if skipped:
@@ -461,6 +563,9 @@ def measure(
                         score.merge_intervals((span.start, span.end) for span in applied.spans)
                     )
                 accumulators[version].add(mapped_document(applied, mapping), predictions)
+                for view in detailed[version].values():
+                    view["full"].add(applied, predictions)
+                    view[split_for_id(document.uid)].add(applied, predictions)
             if index % 500 == 0:
                 print(f"{name}: scored {index}/{len(documents)} in layer {layer}", file=sys.stderr, flush=True)
         latency = {"p50_ms": round(score.percentile(timers, 0.5), 3) if timers else None,
@@ -477,6 +582,64 @@ def measure(
                 "skipped_documents": skipped_documents,
                 "skipped_gold_bytes": skipped_gold_bytes[version],
                 "latency": latency,
+                "metrics": {
+                    view: {split: cell.result() for split, cell in splits.items()}
+                    for view, splits in detailed[version].items()
+                },
+            }
+    return output
+
+
+def measure_gaze(
+    name: str, binary: Path, policy: Path, model_dir: Path,
+    layers: dict[str, list[score.Document]], mapping: dict[str, tuple[str, ...]],
+    common_labels: frozenset[str], diagnostics: Path,
+) -> dict[str, object]:
+    contracts = {key: runner.load_scored_label_contract(REPO, path) for key, path in CONTRACTS.items()}
+    agentic_contract = agentic.load_contract(REPO)
+    output: dict[str, object] = {version: {} for version in contracts}
+    for layer, documents in layers.items():
+        byte = {version: score.MetricAccumulator() for version in contracts}
+        detailed = {
+            version: {
+                view: {split: ComparisonMetrics(mapping, common_labels if view == "common_intersection" else None)
+                       for split in ("full", "validation", "test")}
+                for view in ("product_coverage", "common_intersection")
+            }
+            for version in contracts
+        }
+        def record(_config: str, document: score.Document, response: dict[str, object], _measurements: object) -> None:
+            if "pipeline_error_code" in response:
+                raise RuntimeError(f"{name} refused {document.uid}; compare refusal handling before publishing")
+            predictions = score.final_trace_predictions(document, response)
+            validate_labels(predictions, mapping)
+            for version, contract in contracts.items():
+                applied = score.apply_scored_label_contract(
+                    [document], agentic_contract if layer in {"A", "D", "R"} else contract,
+                )[0]
+                byte[version].add(mapped_document(applied, mapping), predictions)
+                for view in detailed[version].values():
+                    view["full"].add(applied, predictions)
+                    view[split_for_id(document.uid)].add(applied, predictions)
+        run = score.run_config(
+            REPO, binary, "policy-file", documents, model_dir,
+            None, None, None, 0.5, diagnostics / name / layer,
+            policy_path=policy, record_document=record,
+        )
+        latency = run["latency_ms"]["clean_ms"]
+        for version, accumulator in byte.items():
+            result = accumulator.result()
+            output[version][layer] = {
+                "leaked_bytes": result["utf8_bytes"]["leaked"],
+                "false_positive_bytes": result["utf8_bytes"]["false_positive"],
+                "gold_gap_protected_bytes": result.get("gold_gap", {}).get("gold_gap_protected_bytes", 0),
+                "false_positive_bytes_after_gold_gap": result.get("gold_gap", {}).get("false_positive_bytes_after_gold_gap"),
+                "documents": result["documents"], "processed_documents": result["documents"],
+                "skipped_documents": 0, "skipped_gold_bytes": 0,
+                "latency": {"p50_ms": round(latency["median"], 3),
+                            "p95_ms": round(latency["p95"], 3), "samples": result["documents"]},
+                "metrics": {view: {split: cell.result() for split, cell in splits.items()}
+                            for view, splits in detailed[version].items()},
             }
     return output
 
@@ -486,6 +649,26 @@ def write_report(path: Path, report: dict[str, object]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def select_thresholds(report: dict[str, object]) -> None:
+    choices = {
+        "presidio-strong": ("presidio-strong", "presidio-strong-high-recall"),
+        "gliner": ("gliner", "gliner-high-recall"),
+    }
+    for family, names in choices.items():
+        if not all(name in report["tools"] for name in names):
+            continue
+        def validation_key(name: str) -> tuple[int, int]:
+            cells = report["tools"][name]["contracts"]["v3"]
+            metrics = [cell["metrics"]["product_coverage"]["validation"] for cell in cells.values()]
+            return (sum(item["leaked_bytes"] for item in metrics),
+                    sum(item["false_positive_bytes"] for item in metrics))
+        report.setdefault("selected_threshold_rows", {})[family] = min(names, key=validation_key)
+        report.setdefault("threshold_validation", {})[family] = {
+            name: {"leaked_bytes": validation_key(name)[0],
+                   "false_positive_bytes": validation_key(name)[1]} for name in names
+        }
 
 
 def main() -> int:
@@ -499,6 +682,14 @@ def main() -> int:
     parser.add_argument("--pt-model", type=Path)
     parser.add_argument("--gaze-policy", type=Path)
     parser.add_argument("--gliner-model", type=Path)
+    parser.add_argument("--gliner-tokenizer", type=Path)
+    parser.add_argument("--transformer-model", type=Path)
+    parser.add_argument("--gaze-binary", type=Path)
+    parser.add_argument("--gaze-model-dir", type=Path)
+    parser.add_argument("--gaze-policy-rules", type=Path)
+    parser.add_argument("--gaze-policy-rules-ner", type=Path)
+    parser.add_argument("--measure-gaze", action="store_true")
+    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--opf-python", type=Path)
     parser.add_argument("--opf-checkpoint", type=Path)
     parser.add_argument(
@@ -518,8 +709,12 @@ def main() -> int:
             for language in presidio_languages(name)
         ))
         missing = [f"--{lang}-model" for lang in required if getattr(args, f"{lang}_model") is None]
-        if "gliner" in selected and args.gliner_model is None:
+        if any(name in {"gliner", "gliner-high-recall", "datafog-gliner"} for name in selected) and args.gliner_model is None:
             missing.append("--gliner-model")
+        if any(name in {"gliner", "gliner-high-recall", "datafog-gliner"} for name in selected) and args.gliner_tokenizer is None:
+            missing.append("--gliner-tokenizer")
+        if any(name.startswith("presidio-strong") for name in selected) and args.transformer_model is None:
+            missing.append("--transformer-model")
         if any(getattr(args, f"gaze_scorecard_{version}") for version in CONTRACTS) and args.gaze_policy is None:
             missing.append("--gaze-policy")
         if missing:
@@ -535,7 +730,7 @@ def main() -> int:
         (REPO / "docs/reference/benchmarks/release-history.json").read_text(encoding="utf-8")
     )["releases"][-1]
     report: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "description": "same corpus and scorer; tools run with documented configurations",
         "harness_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip(),
@@ -552,6 +747,8 @@ def main() -> int:
         "compare_sha256": digest_file(Path(__file__)),
         "opf_adapter_sha256": digest_file(BENCH / "opf_daemon.py"),
         "requirements_sha256": digest_file(Path(__file__).with_name("requirements.lock")),
+        "scrubadub_requirements_sha256": digest_file(Path(__file__).with_name("requirements-scrubadub.lock")),
+        "comparison_metrics_sha256": digest_file(Path(__file__).with_name("comparison_metrics.py")),
         "mapping_sha256": digest_file(MAP_PATH),
         "model_pins_sha256": digest_file(MODEL_PINS_PATH),
         "contracts": {
@@ -562,37 +759,106 @@ def main() -> int:
             "agentic": agentic.load_contract(REPO).sha256,
         },
         "hardware": platform.platform(), "device": "cpu", "corpus": corpus,
-        "tools": {}, "skipped": {}, "gaze": {},
+        "tools": {}, "skipped": {}, "gaze": {}, "gaze_ablations": {},
     }
+    if args.resume:
+        previous = json.loads(args.output.read_text(encoding="utf-8"))
+        for key in ("corpus", "mapping_sha256", "model_pins_sha256", "compare_sha256",
+                    "comparison_metrics_sha256", "gaze_crates_tree", "contracts"):
+            if previous[key] != report[key]:
+                raise ValueError(f"resume input differs in {key}")
+        report = previous
     for version in CONTRACTS:
         path = getattr(args, f"gaze_scorecard_{version}")
-        if path is not None:
+        if path is not None and not args.resume:
             report["gaze"][version] = gaze_row(path, version, corpus)
+    if args.measure_gaze and not report["gaze"]:
+        previous = json.loads((REPO / "docs/reference/benchmarks/comparison.json").read_text(encoding="utf-8"))
+        if previous["corpus"] != corpus or previous["contracts"] != report["contracts"]:
+            raise ValueError("committed Gaze comparison corpus or contracts differ")
+        report["gaze"] = previous["gaze"]
     for key in ("gaze_revision", "policy_sha256", "hardware"):
         if len({row[key] for row in report["gaze"].values()}) > 1:
             raise ValueError(f"Gaze scorecards for the three contracts use different {key}")
-    if any(crates_tree(row["gaze_revision"]) != report["gaze_crates_tree"] for row in report["gaze"].values()):
+    if not args.measure_gaze and any(crates_tree(row["gaze_revision"]) != report["gaze_crates_tree"] for row in report["gaze"].values()):
         raise ValueError("Gaze scorecards were not measured on this detection tree")
+    report["gaze_main_revision"] = main_revision_for_tree(report["gaze_crates_tree"])
     if report["gaze"]:
         if args.gaze_policy is None:
             raise ValueError("Gaze scorecards require --gaze-policy for portable provenance")
         report["policy_sha256_home_normalized"] = normalized_policy_sha256(
             args.gaze_policy, next(iter(report["gaze"].values()))["policy_sha256"]
         )
+    common_labels = common_claimed_labels(mappings)
+    report["common_intersection_labels"] = sorted(common_labels)
+    report["heldout_split"] = {
+        "rule": "validation iff first byte of SHA-256(UTF-8 document id) < 128; test otherwise",
+        "implementation_sha256": digest_file(Path(__file__).with_name("comparison_metrics.py")),
+        "layers": {
+            layer: {
+                split: {
+                    "documents": len(selected),
+                    "ids_sha256": score.document_ids_digest([doc.uid for doc in selected]),
+                }
+                for split in ("validation", "test")
+                for selected in ([doc for doc in documents if split_for_id(doc.uid) == split],)
+            }
+            for layer, documents in layers.items()
+        },
+    }
+    if args.measure_gaze:
+        if args.resume or args.gaze_binary is None or args.gaze_model_dir is None:
+            raise ValueError("Gaze measurement needs a fresh report, binary and model directory")
+        expected = json.loads((REPO / "docs/reference/benchmarks/comparison.json").read_text(encoding="utf-8"))
+        for name, policy in (("rules-only", args.gaze_policy_rules),
+                             ("rules-ner", args.gaze_policy_rules_ner),
+                             ("full", args.gaze_policy)):
+            if policy is None:
+                raise ValueError(f"missing Gaze {name} policy")
+            measured = measure_gaze(name, args.gaze_binary, policy, args.gaze_model_dir,
+                                    layers, mappings["gaze"], common_labels,
+                                    args.output.parent / "diagnostics")
+            if name == "full":
+                for version in CONTRACTS:
+                    for layer in layers:
+                        new = measured[version][layer]
+                        old = expected["gaze"][version]["layers"][layer]
+                        for field in ("leaked_bytes", "false_positive_bytes",
+                                      "gold_gap_protected_bytes", "false_positive_bytes_after_gold_gap"):
+                            if new[field] != old[field]:
+                                raise ValueError(f"Gaze byte mismatch: {version}/{layer}/{field}: {new[field]} != {old[field]}")
+                        report["gaze"][version]["layers"][layer] = new
+                    report["gaze"][version]["prior_scorecard_revision"] = report["gaze"][version]["gaze_revision"]
+                    report["gaze"][version]["gaze_revision"] = report["gaze_main_revision"]
+                    report["gaze"][version]["scorecard"] = "re-inferred by compare.py"
+                report["gaze_inference"] = {
+                    "binary_sha256": digest_file(args.gaze_binary),
+                    "main_revision": report["gaze_main_revision"],
+                    "policy_sha256": digest_file(policy),
+                    "model_sha256": digest_tree(args.gaze_model_dir),
+                    "byte_counts_equal_prior_report": True,
+                }
+            else:
+                report["gaze_ablations"][name] = measured
+            write_report(args.output, report)
     with tempfile.TemporaryDirectory(prefix="gaze-comparison-") as temporary:
         for name in selected:
             backend = None
-            if name == "opf" and args.tool == "all" and (
-                args.opf_python is None or args.opf_checkpoint is None
-            ):
+            if name == "opf" and (args.opf_python is None or args.opf_checkpoint is None):
                 report["skipped"]["opf"] = "local OPF runtime or checkpoint not configured"
+                write_report(args.output, report)
                 continue
             if name.startswith("presidio"):
                 requested = presidio_languages(name)
                 model_paths = {lang: getattr(args, f"{lang}_model") for lang in requested}
                 if any(path is None for path in model_paths.values()):
                     raise ValueError(f"{name} needs model paths for {', '.join(requested)}")
-                backend = Presidio(model_paths)
+                strong = name.startswith("presidio-strong")
+                if strong and args.transformer_model is None:
+                    raise ValueError("Presidio strong needs --transformer-model")
+                threshold = 0.0 if name.endswith("high-recall") else 0.3 if strong else 0.0
+                backend = Presidio(model_paths, args.transformer_model if strong else None,
+                                   threshold=threshold)
                 provenance = {
                     "analyzer_version": package_version("presidio-analyzer"),
                     "anonymizer_version": package_version("presidio-anonymizer"),
@@ -602,20 +868,52 @@ def main() -> int:
                     "recognizers": "Presidio built-in defaults plus nine documented German recognizers when de is enabled",
                     "german_recognizers": list(GERMAN_RECOGNIZERS) if "de" in requested else [],
                     "anonymizer": "Presidio 2.2.364 raw-coordinate resolution with default conflict and whitespace rules",
+                    "score_threshold": threshold,
+                    "context_enhancer": "LemmaContextAwareEnhancer (AnalyzerEngine default)",
                 }
+                if strong:
+                    provenance["transformer"] = {
+                        "repo": "dslim/bert-base-NER", "revision": "d1a3e8f13f8c3566299d95fcfc9a8d2382a9affc",
+                        "sha256": digest_tree(args.transformer_model),
+                    }
                 mapping = mappings["presidio"]
-            elif name == "gliner":
+            elif name in {"gliner", "gliner-high-recall"}:
                 if args.gliner_model is None:
                     raise ValueError("GLiNER needs --gliner-model")
-                backend = Gliner(args.gliner_model, tuple(mappings["gliner"]))
+                threshold = 0.3 if name == "gliner-high-recall" else 0.5
+                backend = Gliner(args.gliner_model, tuple(mappings["gliner"]), threshold)
                 provenance = {"gliner_version": package_version("gliner"),
                               "model_repo": GLINER_REPO,
                               "model_sha256": digest_tree(args.gliner_model),
                               "model_snapshot": args.gliner_model.name,
+                              "tokenizer_revision": args.gliner_tokenizer.name,
+                              "tokenizer_sha256": digest_tree(args.gliner_tokenizer),
                               "labels": list(mappings["gliner"]),
-                              "threshold": 0.5, "flat_ner": True,
-                              "threshold_source": "predict_entities library default"}
+                              "threshold": threshold, "flat_ner": True,
+                              "threshold_source": "library default" if threshold == 0.5 else "predeclared high-recall sweep"}
                 mapping = mappings["gliner"]
+            elif name == "datafog-core":
+                backend = DataFogCore()
+                provenance = {"version": package_version("datafog-core"), "mode": "built-in text recognizers only"}
+                mapping = mappings["datafog-core"]
+            elif name.startswith("datafog-"):
+                engine = name.removeprefix("datafog-")
+                backend = DataFogPython(engine)
+                provenance = {"version": package_version("datafog"), "engine": engine,
+                              "model_sha256": digest_tree(args.gliner_model) if engine == "gliner" else None,
+                              "tokenizer_revision": args.gliner_tokenizer.name if engine == "gliner" else None,
+                              "tokenizer_sha256": digest_tree(args.gliner_tokenizer) if engine == "gliner" else None,
+                              "spacy_model": model_info(args.en_model, "en") if engine == "spacy" else None}
+                mapping = mappings["datafog-python"]
+            elif name.startswith("scrubadub-"):
+                if name == "scrubadub-spacy" and args.en_model is None:
+                    raise ValueError("scrubadub spaCy needs --en-model")
+                backend = Scrubadub(SPACY_MODELS["en"] if name == "scrubadub-spacy" else None)
+                provenance = {"version": package_version("scrubadub"),
+                              "plugin_version": package_version("scrubadub-spacy") if name == "scrubadub-spacy" else None,
+                              "spacy_model": model_info(args.en_model, "en") if name == "scrubadub-spacy" else None,
+                              "mode": "autoloaded built-in detectors plus spaCy" if name == "scrubadub-spacy" else "autoloaded built-in detectors"}
+                mapping = mappings["scrubadub"]
             else:
                 if args.opf_python is None or args.opf_checkpoint is None:
                     raise ValueError("OPF needs --opf-python and --opf-checkpoint")
@@ -632,10 +930,12 @@ def main() -> int:
                 measured = measure(
                     name, backend.predict, layers, mapping,
                     backend.languages if isinstance(backend, Presidio) else None,
+                    common_labels,
                 )
                 measured["host_load_1m_before_after"] = [round(load_before[0], 2), round(os.getloadavg()[0], 2)]
                 measured["provenance"] = provenance
                 report["tools"][name] = measured
+                select_thresholds(report)
                 write_report(args.output, report)
                 print(f"COMPARISON_DONE {name}", file=sys.stderr, flush=True)
             finally:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the full comparison against scorecards prepared for the same corpus.
+# Measure each configuration on the same corpus and retain one aggregate report.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -18,6 +18,7 @@ fi
 : "${GAZE_COMPARE_GLINER_MODEL:?set GAZE_COMPARE_GLINER_MODEL}"
 : "${GAZE_COMPARE_PYTHON:?set GAZE_COMPARE_PYTHON to the comparison virtualenv Python}"
 
+output="${GAZE_COMPARE_OUTPUT:-target/bench-data/compare-3909/comparison.json}"
 args=(
     --dataset "${GAZE_COMPARE_DATASET:-target/bench-data/dataiku-en-de/test.parquet}"
     --en-model "$GAZE_COMPARE_EN_MODEL"
@@ -26,11 +27,10 @@ args=(
     --fr-model "$GAZE_COMPARE_FR_MODEL"
     --pt-model "$GAZE_COMPARE_PT_MODEL"
     --gliner-model "$GAZE_COMPARE_GLINER_MODEL"
+    --gliner-tokenizer "${GAZE_COMPARE_GLINER_TOKENIZER:-/synthetic/gliner_tokenizer}"
+    --transformer-model "${GAZE_COMPARE_TRANSFORMER_MODEL:-/synthetic/transformer_model}"
     --gaze-policy "${GAZE_COMPARE_POLICY:-target/bench-data/compare-3909/policy.toml}"
-    --gaze-scorecard-v1 "${GAZE_COMPARE_SCORECARD_V1:-target/bench-data/compare-3909/gaze-v1/full/scorecard-v4.json}"
-    --gaze-scorecard-v2 "${GAZE_COMPARE_SCORECARD_V2:-target/bench-data/compare-3909/gaze-v2/full/scorecard-v4.json}"
-    --gaze-scorecard-v3 "${GAZE_COMPARE_SCORECARD_V3:-target/bench-data/compare-3909/gaze-v3/full/scorecard-v4.json}"
-    --output "${GAZE_COMPARE_OUTPUT:-target/bench-data/compare-3909/comparison.json}"
+    --output "$output"
 )
 if [[ -n "${GAZE_COMPARE_OPF_PYTHON:-}" || -n "${GAZE_COMPARE_OPF_CHECKPOINT:-}" ]]; then
     : "${GAZE_COMPARE_OPF_PYTHON:?set GAZE_COMPARE_OPF_PYTHON}"
@@ -38,7 +38,29 @@ if [[ -n "${GAZE_COMPARE_OPF_PYTHON:-}" || -n "${GAZE_COMPARE_OPF_CHECKPOINT:-}"
     args+=(--opf-python "$GAZE_COMPARE_OPF_PYTHON" --opf-checkpoint "$GAZE_COMPARE_OPF_CHECKPOINT")
 fi
 if [[ ${1:-} == --dry-run ]]; then
-    args+=(--validate-args-only)
+    "$GAZE_COMPARE_PYTHON" scripts/bench/compare/compare.py "${args[@]}" \
+        --tool all --validate-args-only
+    exit
 fi
 
-"$GAZE_COMPARE_PYTHON" scripts/bench/compare/compare.py "${args[@]}"
+: "${GAZE_COMPARE_SCRUB_PYTHON:?set GAZE_COMPARE_SCRUB_PYTHON to the scrubadub virtualenv Python}"
+: "${GAZE_COMPARE_BINARY:?set GAZE_COMPARE_BINARY to clean_for_bench}"
+: "${GAZE_COMPARE_MODEL_DIR:?set GAZE_COMPARE_MODEL_DIR to the Gaze NER model}"
+: "${GAZE_COMPARE_POLICY_RULES:?set GAZE_COMPARE_POLICY_RULES}"
+: "${GAZE_COMPARE_POLICY_RULES_NER:?set GAZE_COMPARE_POLICY_RULES_NER}"
+: "${GAZE_COMPARE_TRANSFORMER_MODEL:?set GAZE_COMPARE_TRANSFORMER_MODEL}"
+: "${GAZE_COMPARE_GLINER_TOKENIZER:?set GAZE_COMPARE_GLINER_TOKENIZER}"
+
+"$GAZE_COMPARE_PYTHON" scripts/bench/compare/compare.py "${args[@]}" \
+    --tool presidio-all --measure-gaze --gaze-binary "$GAZE_COMPARE_BINARY" \
+    --gaze-model-dir "$GAZE_COMPARE_MODEL_DIR" \
+    --gaze-policy-rules "$GAZE_COMPARE_POLICY_RULES" \
+    --gaze-policy-rules-ner "$GAZE_COMPARE_POLICY_RULES_NER"
+
+for tool in presidio-en presidio-en-de presidio-strong presidio-strong-high-recall \
+    datafog-core datafog-regex datafog-spacy datafog-gliner gliner gliner-high-recall opf; do
+    "$GAZE_COMPARE_PYTHON" scripts/bench/compare/compare.py "${args[@]}" --tool "$tool" --resume
+done
+for tool in scrubadub-base scrubadub-spacy; do
+    "$GAZE_COMPARE_SCRUB_PYTHON" scripts/bench/compare/compare.py "${args[@]}" --tool "$tool" --resume
+done

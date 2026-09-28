@@ -1,118 +1,571 @@
 {
   "presidio": {
-    "PERSON": ["FIRSTNAME", "SURNAME"],
-    "LOCATION": ["BUILDINGNUM", "CITY", "COUNTRY", "REGION", "STATE", "STREET", "ZIP"],
-    "ORGANIZATION": ["COMPANYNAME", "ORGANIZATION"],
+    "PERSON": [
+      "FIRSTNAME",
+      "SURNAME"
+    ],
+    "LOCATION": [
+      "BUILDINGNUM",
+      "CITY",
+      "COUNTRY",
+      "REGION",
+      "STATE",
+      "STREET",
+      "ZIP"
+    ],
+    "ORGANIZATION": [
+      "COMPANYNAME",
+      "ORGANIZATION"
+    ],
     "NRP": [],
-    "DATE_TIME": ["DATEOFBIRTH"],
-    "EMAIL_ADDRESS": ["EMAIL"],
-    "PHONE_NUMBER": ["PHONENUMBER"],
-    "CREDIT_CARD": ["CREDITCARDNUMBER"],
-    "IBAN_CODE": ["IBAN"],
+    "DATE_TIME": [
+      "DATEOFBIRTH"
+    ],
+    "EMAIL_ADDRESS": [
+      "EMAIL"
+    ],
+    "PHONE_NUMBER": [
+      "PHONENUMBER"
+    ],
+    "CREDIT_CARD": [
+      "CREDITCARDNUMBER"
+    ],
+    "IBAN_CODE": [
+      "IBAN"
+    ],
     "IP_ADDRESS": [],
     "MAC_ADDRESS": [],
-    "URL": ["URL"],
-    "US_SSN": ["SSN"],
-    "US_PASSPORT": ["PASSPORTID"],
-    "US_DRIVER_LICENSE": ["DRIVERLICENSENUM"],
+    "URL": [
+      "URL"
+    ],
+    "US_SSN": [
+      "SSN"
+    ],
+    "US_PASSPORT": [
+      "PASSPORTID"
+    ],
+    "US_DRIVER_LICENSE": [
+      "DRIVERLICENSENUM"
+    ],
     "US_BANK_NUMBER": [],
     "US_ROUTING_NUMBER": [],
-    "US_ITIN": ["TAXNUM"],
+    "US_ITIN": [
+      "TAXNUM"
+    ],
     "UK_NHS": [],
-    "UK_NINO": ["NATIONALID"],
-    "AU_ABN": ["TAXNUM"],
-    "AU_ACN": ["TAXNUM"],
-    "AU_TFN": ["TAXNUM"],
+    "UK_NINO": [
+      "NATIONALID"
+    ],
+    "AU_ABN": [
+      "TAXNUM"
+    ],
+    "AU_ACN": [
+      "TAXNUM"
+    ],
+    "AU_TFN": [
+      "TAXNUM"
+    ],
     "AU_MEDICARE": [],
-    "IN_AADHAAR": ["NATIONALID"],
-    "IN_PAN": ["TAXNUM"],
-    "IN_VEHICLE_REGISTRATION": ["LICENSEPLATENUM"],
-    "IN_VOTER": ["NATIONALID"],
-    "IN_PASSPORT": ["PASSPORTID"],
-    "SG_NRIC_FIN": ["NATIONALID"],
-    "ES_NIF": ["NATIONALID"],
-    "ES_NIE": ["NATIONALID"],
-    "IT_FISCAL_CODE": ["TAXNUM"],
-    "IT_DRIVER_LICENSE": ["DRIVERLICENSENUM"],
-    "IT_VAT_CODE": ["TAXNUM"],
-    "IT_PASSPORT": ["PASSPORTID"],
-    "IT_IDENTITY_CARD": ["IDCARDNUM"],
-    "PL_PESEL": ["NATIONALID"],
-    "DE_TAX_ID": ["TAXNUM"],
-    "DE_TAX_NUMBER": ["TAXNUM"],
-    "DE_ID_CARD": ["IDCARDNUM"],
-    "DE_PASSPORT": ["PASSPORTID"],
-    "DE_SOCIAL_SECURITY": ["SSN", "NATIONALID"],
+    "IN_AADHAAR": [
+      "NATIONALID"
+    ],
+    "IN_PAN": [
+      "TAXNUM"
+    ],
+    "IN_VEHICLE_REGISTRATION": [
+      "LICENSEPLATENUM"
+    ],
+    "IN_VOTER": [
+      "NATIONALID"
+    ],
+    "IN_PASSPORT": [
+      "PASSPORTID"
+    ],
+    "SG_NRIC_FIN": [
+      "NATIONALID"
+    ],
+    "ES_NIF": [
+      "NATIONALID"
+    ],
+    "ES_NIE": [
+      "NATIONALID"
+    ],
+    "IT_FISCAL_CODE": [
+      "TAXNUM"
+    ],
+    "IT_DRIVER_LICENSE": [
+      "DRIVERLICENSENUM"
+    ],
+    "IT_VAT_CODE": [
+      "TAXNUM"
+    ],
+    "IT_PASSPORT": [
+      "PASSPORTID"
+    ],
+    "IT_IDENTITY_CARD": [
+      "IDCARDNUM"
+    ],
+    "PL_PESEL": [
+      "NATIONALID"
+    ],
+    "DE_TAX_ID": [
+      "TAXNUM"
+    ],
+    "DE_TAX_NUMBER": [
+      "TAXNUM"
+    ],
+    "DE_ID_CARD": [
+      "IDCARDNUM"
+    ],
+    "DE_PASSPORT": [
+      "PASSPORTID"
+    ],
+    "DE_SOCIAL_SECURITY": [
+      "SSN",
+      "NATIONALID"
+    ],
     "DE_HEALTH_INSURANCE": [],
-    "DE_KFZ": ["LICENSEPLATENUM"],
+    "DE_KFZ": [
+      "LICENSEPLATENUM"
+    ],
     "DE_HANDELSREGISTER": [],
-    "DE_PLZ": ["ZIP"],
+    "DE_PLZ": [
+      "ZIP"
+    ],
     "CRYPTO": [],
     "MEDICAL_LICENSE": []
   },
   "gliner": {
-    "person": ["FIRSTNAME", "SURNAME"],
-    "organization": ["COMPANYNAME", "ORGANIZATION"],
-    "phone number": ["PHONENUMBER"],
-    "address": ["BUILDINGNUM", "CITY", "COUNTRY", "REGION", "STATE", "STREET", "ZIP"],
-    "passport number": ["PASSPORTID"],
-    "email": ["EMAIL"],
-    "credit card number": ["CREDITCARDNUMBER"],
-    "social security number": ["SSN"],
+    "person": [
+      "FIRSTNAME",
+      "SURNAME"
+    ],
+    "organization": [
+      "COMPANYNAME",
+      "ORGANIZATION"
+    ],
+    "phone number": [
+      "PHONENUMBER"
+    ],
+    "address": [
+      "BUILDINGNUM",
+      "CITY",
+      "COUNTRY",
+      "REGION",
+      "STATE",
+      "STREET",
+      "ZIP"
+    ],
+    "passport number": [
+      "PASSPORTID"
+    ],
+    "email": [
+      "EMAIL"
+    ],
+    "credit card number": [
+      "CREDITCARDNUMBER"
+    ],
+    "social security number": [
+      "SSN"
+    ],
     "health insurance id number": [],
-    "date of birth": ["DATEOFBIRTH"],
-    "mobile phone number": ["PHONENUMBER"],
-    "bank account number": ["IBAN"],
+    "date of birth": [
+      "DATEOFBIRTH"
+    ],
+    "mobile phone number": [
+      "PHONENUMBER"
+    ],
+    "bank account number": [
+      "IBAN"
+    ],
     "medication": [],
-    "cpf": ["NATIONALID", "TAXNUM"],
-    "driver's license number": ["DRIVERLICENSENUM"],
-    "tax identification number": ["TAXNUM"],
+    "cpf": [
+      "NATIONALID",
+      "TAXNUM"
+    ],
+    "driver's license number": [
+      "DRIVERLICENSENUM"
+    ],
+    "tax identification number": [
+      "TAXNUM"
+    ],
     "medical condition": [],
-    "identity card number": ["IDCARDNUM"],
-    "national id number": ["NATIONALID", "IDCARDNUM"],
+    "identity card number": [
+      "IDCARDNUM"
+    ],
+    "national id number": [
+      "NATIONALID",
+      "IDCARDNUM"
+    ],
     "ip address": [],
-    "email address": ["EMAIL"],
-    "iban": ["IBAN"],
+    "email address": [
+      "EMAIL"
+    ],
+    "iban": [
+      "IBAN"
+    ],
     "credit card expiration date": [],
-    "username": ["USERNAME"],
+    "username": [
+      "USERNAME"
+    ],
     "health insurance number": [],
     "registration number": [],
     "student id number": [],
     "insurance number": [],
     "flight number": [],
-    "landline phone number": ["PHONENUMBER"],
+    "landline phone number": [
+      "PHONENUMBER"
+    ],
     "blood type": [],
     "cvv": [],
     "reservation number": [],
     "digital signature": [],
-    "social media handle": ["USERNAME"],
-    "license plate number": ["LICENSEPLATENUM"],
-    "cnpj": ["NATIONALID", "TAXNUM"],
-    "postal code": ["ZIP"],
-    "passport_number": ["PASSPORTID"],
+    "social media handle": [
+      "USERNAME"
+    ],
+    "license plate number": [
+      "LICENSEPLATENUM"
+    ],
+    "cnpj": [
+      "NATIONALID",
+      "TAXNUM"
+    ],
+    "postal code": [
+      "ZIP"
+    ],
+    "passport_number": [
+      "PASSPORTID"
+    ],
     "serial number": [],
-    "vehicle registration number": ["LICENSEPLATENUM"],
+    "vehicle registration number": [
+      "LICENSEPLATENUM"
+    ],
     "credit card brand": [],
-    "fax number": ["PHONENUMBER"],
+    "fax number": [
+      "PHONENUMBER"
+    ],
     "visa number": [],
-    "insurance company": ["COMPANYNAME", "ORGANIZATION"],
-    "identity document number": ["IDCARDNUM", "NATIONALID"],
+    "insurance company": [
+      "COMPANYNAME",
+      "ORGANIZATION"
+    ],
+    "identity document number": [
+      "IDCARDNUM",
+      "NATIONALID"
+    ],
     "transaction number": [],
     "national health insurance number": [],
     "cvc": [],
     "birth certificate number": [],
     "train ticket number": [],
     "passport expiration date": [],
-    "social_security_number": ["SSN"]
+    "social_security_number": [
+      "SSN"
+    ]
   },
   "opf": {
-    "private_person": ["FIRSTNAME", "SURNAME"],
-    "private_address": ["BUILDINGNUM", "CITY", "COUNTRY", "REGION", "STATE", "STREET", "ZIP"],
-    "private_email": ["EMAIL"],
-    "private_phone": ["PHONENUMBER"],
-    "private_url": ["URL"],
-    "private_date": ["DATEOFBIRTH"],
-    "account_number": ["CREDITCARDNUMBER", "IBAN"],
+    "private_person": [
+      "FIRSTNAME",
+      "SURNAME"
+    ],
+    "private_address": [
+      "BUILDINGNUM",
+      "CITY",
+      "COUNTRY",
+      "REGION",
+      "STATE",
+      "STREET",
+      "ZIP"
+    ],
+    "private_email": [
+      "EMAIL"
+    ],
+    "private_phone": [
+      "PHONENUMBER"
+    ],
+    "private_url": [
+      "URL"
+    ],
+    "private_date": [
+      "DATEOFBIRTH"
+    ],
+    "account_number": [
+      "CREDITCARDNUMBER",
+      "IBAN"
+    ],
     "secret": []
+  },
+  "gaze": {
+    "email": [
+      "EMAIL"
+    ],
+    "name": [
+      "FIRSTNAME",
+      "SURNAME"
+    ],
+    "location": [
+      "BUILDINGNUM",
+      "CITY",
+      "COUNTRY",
+      "REGION",
+      "STATE",
+      "STREET",
+      "ZIP"
+    ],
+    "organization": [
+      "COMPANYNAME",
+      "ORGANIZATION"
+    ],
+    "custom:phone": [
+      "PHONENUMBER"
+    ],
+    "custom:iban": [
+      "IBAN"
+    ],
+    "custom:credit_card": [
+      "CREDITCARDNUMBER"
+    ],
+    "custom:ip_address": [],
+    "custom:birth_date": [
+      "DATEOFBIRTH"
+    ],
+    "custom:date": [
+      "DATEOFBIRTH"
+    ],
+    "custom:postal_code": [
+      "ZIP"
+    ],
+    "custom:url": [
+      "URL"
+    ],
+    "custom:ssn": [
+      "SSN"
+    ],
+    "custom:tax_number": [
+      "TAXNUM"
+    ],
+    "custom:steuer_id": [
+      "TAXNUM"
+    ],
+    "custom:driver_license": [
+      "DRIVERLICENSENUM"
+    ],
+    "custom:national_id": [
+      "NATIONALID"
+    ],
+    "custom:passport": [
+      "PASSPORTID"
+    ],
+    "custom:building_number": [
+      "BUILDINGNUM"
+    ],
+    "custom:license_plate": [
+      "LICENSEPLATENUM"
+    ],
+    "custom:username": [
+      "USERNAME"
+    ],
+    "custom:vat_id": [
+      "TAXNUM"
+    ],
+    "custom:nino": [
+      "NATIONALID"
+    ],
+    "custom:pan": [
+      "TAXNUM"
+    ],
+    "custom:aadhaar": [
+      "NATIONALID"
+    ],
+    "custom:nir": [
+      "NATIONALID"
+    ],
+    "custom:bsn": [
+      "NATIONALID"
+    ],
+    "custom:cpf": [
+      "NATIONALID",
+      "TAXNUM"
+    ],
+    "custom:cnpj": [
+      "NATIONALID",
+      "TAXNUM"
+    ],
+    "custom:nhs_number": [],
+    "custom:eth_address": [],
+    "custom:password": [],
+    "custom:security_token": [],
+    "custom:secret": []
+  },
+  "datafog-core": {
+    "EMAIL": [
+      "EMAIL"
+    ],
+    "PHONE": [
+      "PHONENUMBER"
+    ],
+    "SSN": [
+      "SSN"
+    ],
+    "CREDIT_CARD": [
+      "CREDITCARDNUMBER"
+    ],
+    "IP_ADDRESS": [],
+    "DATE": [
+      "DATEOFBIRTH"
+    ],
+    "ZIP_CODE": [
+      "ZIP"
+    ]
+  },
+  "datafog-python": {
+    "EMAIL": [
+      "EMAIL"
+    ],
+    "PHONE": [
+      "PHONENUMBER"
+    ],
+    "SSN": [
+      "SSN"
+    ],
+    "CREDIT_CARD": [
+      "CREDITCARDNUMBER"
+    ],
+    "IP_ADDRESS": [],
+    "DATE": [
+      "DATEOFBIRTH"
+    ],
+    "ZIP_CODE": [
+      "ZIP"
+    ],
+    "PERSON": [
+      "FIRSTNAME",
+      "SURNAME"
+    ],
+    "ORGANIZATION": [
+      "COMPANYNAME",
+      "ORGANIZATION"
+    ],
+    "LOCATION": [
+      "BUILDINGNUM",
+      "CITY",
+      "COUNTRY",
+      "REGION",
+      "STATE",
+      "STREET",
+      "ZIP"
+    ],
+    "DE_VAT_ID": [
+      "TAXNUM"
+    ],
+    "DE_IBAN": [
+      "IBAN"
+    ],
+    "DE_TAX_ID": [
+      "TAXNUM"
+    ],
+    "DE_POSTAL_CODE": [
+      "ZIP"
+    ],
+    "DE_PASSPORT": [
+      "PASSPORTID"
+    ],
+    "DE_RESIDENCE_PERMIT": [
+      "NATIONALID"
+    ],
+    "ADDRESS": [
+      "BUILDINGNUM",
+      "CITY",
+      "COUNTRY",
+      "REGION",
+      "STATE",
+      "STREET",
+      "ZIP"
+    ],
+    "MEDICAL_RECORD_NUMBER": [],
+    "ACCOUNT_NUMBER": [
+      "IBAN"
+    ],
+    "LICENSE_NUMBER": [
+      "DRIVERLICENSENUM"
+    ],
+    "PASSPORT_NUMBER": [
+      "PASSPORTID"
+    ],
+    "URL": [
+      "URL"
+    ]
+  },
+  "scrubadub": {
+    "email": [
+      "EMAIL"
+    ],
+    "phone": [
+      "PHONENUMBER"
+    ],
+    "credit_card": [
+      "CREDITCARDNUMBER"
+    ],
+    "social_security_number": [
+      "SSN"
+    ],
+    "date_of_birth": [
+      "DATEOFBIRTH"
+    ],
+    "postal_code": [
+      "ZIP"
+    ],
+    "name": [
+      "FIRSTNAME",
+      "SURNAME"
+    ],
+    "organization": [
+      "COMPANYNAME",
+      "ORGANIZATION"
+    ],
+    "location": [
+      "BUILDINGNUM",
+      "CITY",
+      "COUNTRY",
+      "REGION",
+      "STATE",
+      "STREET",
+      "ZIP"
+    ],
+    "url": [
+      "URL"
+    ],
+    "credential": [],
+    "drivers_licence": [
+      "DRIVERLICENSENUM"
+    ],
+    "national_insurance_number": [
+      "NATIONALID"
+    ],
+    "tax_reference_number": [
+      "TAXNUM"
+    ],
+    "twitter": [
+      "USERNAME"
+    ],
+    "vehicle_licence_plate": [
+      "LICENSEPLATENUM"
+    ],
+    "postalcode": [
+      "ZIP"
+    ],
+    "address": [
+      "BUILDINGNUM",
+      "CITY",
+      "COUNTRY",
+      "REGION",
+      "STATE",
+      "STREET",
+      "ZIP"
+    ],
+    "skype": [
+      "USERNAME"
+    ],
+    "unknown": []
   }
 }

@@ -43,6 +43,15 @@ def validate_current(report: dict[str, object]) -> None:
             report["contracts"]["agentic"], compare.agentic.load_contract(REPO).sha256,
         ),
     }
+    if report.get("schema_version", 1) >= 2:
+        expected["scrubadub dependency pins"] = (
+            report.get("scrubadub_requirements_sha256"),
+            digest_file(Path(__file__).with_name("requirements-scrubadub.lock")),
+        )
+        expected["comparison metrics"] = (
+            report.get("comparison_metrics_sha256"),
+            digest_file(Path(__file__).with_name("comparison_metrics.py")),
+        )
     for version, path in compare.CONTRACTS.items():
         expected[f"{version} scored labels"] = (
             report["contracts"][version], compare.runner.load_scored_label_contract(REPO, path).sha256,
@@ -69,6 +78,8 @@ def render(report: dict[str, object], source: str) -> str:
     if report.get("harness_dirty") is not False:
         raise ValueError("public comparison needs a clean harness")
     required = {"presidio-all", "presidio-en", "presidio-en-de", "gliner"}
+    if report.get("schema_version", 1) >= 2:
+        required.update(set(compare.TOOLS) - {"opf"})
     if not required.issubset(tools) or ("opf" not in tools and "opf" not in report.get("skipped", {})):
         raise ValueError("public comparison needs every configured competitor or an explicit OPF skip")
     layer_ids = list(report["corpus"]["layers"])
@@ -82,7 +93,15 @@ def render(report: dict[str, object], source: str) -> str:
             models = tool["provenance"]["models"]
             if not models or any(not model.get("sha256") or not model.get("wheel_sha256") for model in models.values()):
                 raise ValueError(f"{name} lacks a model hash")
-        elif not tool["provenance"].get("model_sha256" if name == "gliner" else "checkpoint_sha256"):
+        elif name.startswith("gliner") and not tool["provenance"].get("model_sha256"):
+            raise ValueError(f"{name} lacks a model hash")
+        elif name == "opf" and not tool["provenance"].get("checkpoint_sha256"):
+            raise ValueError(f"{name} lacks a model hash")
+        elif name == "datafog-gliner" and not tool["provenance"].get("model_sha256"):
+            raise ValueError(f"{name} lacks a model hash")
+        elif name == "datafog-spacy" and not tool["provenance"].get("spacy_model", {}).get("sha256"):
+            raise ValueError(f"{name} lacks a model hash")
+        elif name == "scrubadub-spacy" and not tool["provenance"].get("spacy_model", {}).get("sha256"):
             raise ValueError(f"{name} lacks a model hash")
     for version in versions:
         for layer in layer_ids:
@@ -139,7 +158,7 @@ def render(report: dict[str, object], source: str) -> str:
         "Leaked and false-positive byte counts are class-agnostic. A skipped document's "
         "scored gold counts in full as leaked. Subtract Skipped gold B from Leaked B to "
         "get leakage on processed documents. " + skipped_example_note +
-        "The reviewed label map affects only v3's repeated-gold credit.",
+        "The reviewed label map controls v3's repeated-gold credit and the exact typed-span metrics below.",
         "",
         f"Gaze measured at `{gaze['v3']['gaze_revision']}` "
         f"(release `{report['latest_release_at_measurement']['version']}`). "
@@ -196,12 +215,60 @@ def render(report: dict[str, object], source: str) -> str:
                         lower_fp_at_equal_leak.append(
                             f"{layer}: {name} has {fp:,} FP B versus Gaze {gaze_fp:,} FP B"
                         )
-    lines.extend([
-        "", "**Where Gaze leaks more under v3:** "
-        + ("; ".join(lower_leak) if lower_leak else "none in these measured rows") + ".",
-        "", "**Where a competitor has fewer false positives at equal v3 leakage:** "
-        + ("; ".join(lower_fp_at_equal_leak) if lower_fp_at_equal_leak else "none in these measured rows") + ".",
-    ])
+    if report.get("schema_version", 1) < 2:
+        lines.extend([
+            "", "**Where Gaze leaks more under v3:** "
+            + ("; ".join(lower_leak) if lower_leak else "none in these measured rows") + ".",
+            "", "**Where a competitor has fewer false positives at equal v3 leakage:** "
+            + ("; ".join(lower_fp_at_equal_leak) if lower_fp_at_equal_leak else "none in these measured rows") + ".",
+        ])
+    if report.get("schema_version", 1) >= 2:
+        lines.extend([
+            "", "## Heldout safety and entity metrics", "",
+            "The validation/test split is fixed by document ID. Thresholds are selected on validation; "
+            "the table below reports the disjoint test half. Product coverage scores unsupported gold as missed. "
+            "Common intersection scores only classes claimed by every listed configuration. "
+            "Entity scores require an exact UTF-8 byte span and a compatible reviewed label mapping.",
+            "", f"Common classes: {', '.join(report['common_intersection_labels'])}.",
+            "", "| Contract | Layer | View | Tool | PII docs | Leaking docs | Doc leak % | Leaking entities | Entity leak % | Redaction load % | TP | FP | FN | Entity P | Entity R | F1 | F2 |",
+            "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ])
+        for version in versions:
+            for layer in layer_ids:
+                for view in ("product_coverage", "common_intersection"):
+                    for name in ORDER:
+                        if name == "gaze":
+                            row = gaze[version]["layers"][layer]
+                        elif name in tools:
+                            row = tools[name]["contracts"][version][layer]
+                        else:
+                            continue
+                        metric = row["metrics"][view]["test"]
+                        entity = metric["typed_entities"]
+                        lines.append(
+                            f"| {version} | {layer} | {view} | {name} | {metric['pii_documents']:,} | "
+                            f"{metric['leaking_documents']:,} | {100 * metric['document_leak_rate']:.1f} | "
+                            f"{metric['leaking_entities']:,} | {100 * metric['leaked_entity_rate']:.1f} | "
+                            f"{100 * metric['redaction_load']:.1f} | {entity['tp']:,} | {entity['fp']:,} | "
+                            f"{entity['fn']:,} | {entity['precision']:.3f} | {entity['recall']:.3f} | "
+                            f"{entity['f1']:.3f} | {entity['f2']:.3f} |"
+                        )
+        lines.extend(["", "## Gaze ablations", "",
+                      "Rules only, rules plus NER, and full setup use the same test documents and scorer.", "",
+                      "| Contract | Layer | Gaze configuration | Leaked B | FP B | PII docs | Leaking docs | Entity F1 | Entity F2 |",
+                      "|---|---|---|---:|---:|---:|---:|---:|---:|"])
+        for version in versions:
+            for layer in layer_ids:
+                for name in ("rules-only", "rules-ner", "full"):
+                    row = (gaze[version]["layers"][layer] if name == "full"
+                           else report["gaze_ablations"][name][version][layer])
+                    metric = row["metrics"]["product_coverage"]["test"]
+                    typed = metric["typed_entities"]
+                    lines.append(f"| {version} | {layer} | {name} | {metric['leaked_bytes']:,} | "
+                                 f"{metric['false_positive_bytes']:,} | {metric['pii_documents']:,} | "
+                                 f"{metric['leaking_documents']:,} | {typed['f1']:.3f} | {typed['f2']:.3f} |")
+        lines.extend(["", "Threshold choice uses validation only: " + "; ".join(
+            f"{group} → {selected}" for group, selected in report.get("selected_threshold_rows", {}).items()) + "."])
     skipped = report.get("skipped", {})
     if skipped:
         lines.extend(["", "**Skipped:** " + "; ".join(f"{name}: {reason}" for name, reason in skipped.items()) + "."])
