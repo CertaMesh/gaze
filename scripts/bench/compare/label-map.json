@@ -39,8 +39,14 @@
     "IT_IDENTITY_CARD": ["IDCARDNUM"],
     "PL_PESEL": ["NATIONALID"],
     "DE_TAX_ID": ["TAXNUM"],
+    "DE_TAX_NUMBER": ["TAXNUM"],
     "DE_ID_CARD": ["IDCARDNUM"],
     "DE_PASSPORT": ["PASSPORTID"],
+    "DE_SOCIAL_SECURITY": ["SSN", "NATIONALID"],
+    "DE_HEALTH_INSURANCE": [],
+    "DE_KFZ": ["LICENSEPLATENUM"],
+    "DE_HANDELSREGISTER": [],
+    "DE_PLZ": ["ZIP"],
     "CRYPTO": [],
     "MEDICAL_LICENSE": []
   },
@@ -106,7 +112,7 @@
     "private_phone": ["PHONENUMBER"],
     "private_url": ["URL"],
     "private_date": ["DATEOFBIRTH"],
-    "account_number": ["IBAN"],
+    "account_number": ["CREDITCARDNUMBER", "IBAN"],
     "secret": []
   }
 }

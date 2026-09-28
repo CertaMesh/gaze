@@ -6,13 +6,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import subprocess
-import sys
 from pathlib import Path
 
-ORDER = ("gaze", "presidio-en", "presidio-en-de", "gliner", "opf")
 REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
+import compare  # noqa: E402
+
+ORDER = ("gaze", *compare.TOOLS)
 
 
 def digest_file(path: Path) -> str:
@@ -21,49 +21,35 @@ def digest_file(path: Path) -> str:
 
 def validate_current(report: dict[str, object]) -> None:
     """Reject a published comparison when benchmark inputs have changed."""
-    sys.path.insert(0, str(BENCH))
-    import agentic_layers
-    import dataiku_en_de_gaze_bench as dataiku
-    import run_no_opf_benchmark as runner
-
     corpus = report["corpus"]
-    latest_release = json.loads(
-        (REPO / "docs/reference/benchmarks/release-history.json").read_text(encoding="utf-8")
-    )["releases"][-1]
     expected = {
         "scorer": (report["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
-        "Gaze runner": (report["runner_sha256"], digest_file(BENCH / "run_no_opf_benchmark.py")),
         "dataset loader": (report["dataset_loader_sha256"], digest_file(BENCH / "dataiku_en_de_gaze_bench.py")),
         "mapping": (report["mapping_sha256"], digest_file(Path(__file__).with_name("label-map.json"))),
-        "Gaze detection tree": (
-            report["gaze_crates_tree"],
-            subprocess.check_output(["git", "rev-parse", "HEAD:crates"], cwd=REPO, text=True).strip(),
-        ),
-        "latest release": (
-            report["latest_release_at_measurement"],
-            {key: latest_release[key] for key in ("version", "scorecard_sha256")},
-        ),
-        "main dataset": (corpus["main_dataset"]["sha256"], dataiku.DATASET_SHA256),
+        "model pins": (report.get("model_pins_sha256"), digest_file(compare.MODEL_PINS_PATH)),
+        "comparison adapter": (report.get("compare_sha256"), digest_file(Path(compare.__file__))),
+        "OPF adapter": (report.get("opf_adapter_sha256"), digest_file(BENCH / "opf_daemon.py")),
+        "dependency pins": (report.get("requirements_sha256"), digest_file(Path(__file__).with_name("requirements.lock"))),
+        "main dataset": (corpus["main_dataset"]["sha256"], compare.dataiku.DATASET_SHA256),
         "negative corpus": (
             corpus["negative_corpus_sha256"],
             digest_file(REPO / "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl"),
         ),
         "agentic layers": (
             corpus["agentic"]["corpus_sha256"],
-            agentic_layers.prepare(REPO).manifest["corpus_sha256"],
+            compare.agentic.prepare(REPO).manifest["corpus_sha256"],
         ),
         "agentic scored labels": (
-            report["contracts"]["agentic"], agentic_layers.load_contract(REPO).sha256,
+            report["contracts"]["agentic"], compare.agentic.load_contract(REPO).sha256,
         ),
     }
-    for version, path in (("v1", None), ("v2", Path("docs/reference/benchmarks/scored-labels-v2.json")),
-                          ("v3", Path("docs/reference/benchmarks/scored-labels-v3.json"))):
+    for version, path in compare.CONTRACTS.items():
         expected[f"{version} scored labels"] = (
-            report["contracts"][version], runner.load_scored_label_contract(REPO, path).sha256,
+            report["contracts"][version], compare.runner.load_scored_label_contract(REPO, path).sha256,
         )
     for name, (recorded, current) in expected.items():
         if recorded != current:
-            raise ValueError(f"{name} changed; rerun every competitor")
+            raise ValueError(f"{name} changed; rerun affected competitor rows on the same corpus")
     pack_dir = REPO / "docs/reference/benchmarks/variant-packs"
     current_packs = {
         path.relative_to(REPO).as_posix(): digest_file(path)
@@ -80,49 +66,75 @@ def render(report: dict[str, object], source: str) -> str:
     versions = ("v3", "v2", "v1")
     if set(gaze) != set(versions):
         raise ValueError("public comparison needs a Gaze scorecard for v3, v2, and v1")
-    required = {"presidio-en", "presidio-en-de", "gliner"}
+    if report.get("harness_dirty") is not False:
+        raise ValueError("public comparison needs a clean harness")
+    required = {"presidio-all", "presidio-en", "presidio-en-de", "gliner"}
     if not required.issubset(tools) or ("opf" not in tools and "opf" not in report.get("skipped", {})):
         raise ValueError("public comparison needs every configured competitor or an explicit OPF skip")
     layer_ids = list(report["corpus"]["layers"])
+    revisions = {row["gaze_revision"] for row in gaze.values()}
+    if len(revisions) != 1:
+        raise ValueError("Gaze contracts have different measured revisions")
+    if "opf" in tools and tools["opf"]["provenance"]["runtime"].get("source_dirty") is not False:
+        raise ValueError("OPF source was dirty or unverified during measurement")
+    for name, tool in tools.items():
+        if name.startswith("presidio"):
+            models = tool["provenance"]["models"]
+            if not models or any(not model.get("sha256") or not model.get("wheel_sha256") for model in models.values()):
+                raise ValueError(f"{name} lacks a model hash")
+        elif not tool["provenance"].get("model_sha256" if name == "gliner" else "checkpoint_sha256"):
+            raise ValueError(f"{name} lacks a model hash")
     for version in versions:
         for layer in layer_ids:
             if layer not in gaze[version]["layers"]:
                 raise ValueError(f"Gaze lacks layer {layer} under {version}")
+            count = report["corpus"]["layers"][layer]["documents"]
+            if gaze[version]["layers"][layer]["documents"] != count:
+                raise ValueError(f"Gaze document count differs in {layer} under {version}")
             for name, tool in tools.items():
                 if layer not in tool["contracts"][version]:
                     raise ValueError(f"{name} lacks layer {layer} under {version}")
+                row = tool["contracts"][version][layer]
+                if row["documents"] != count or row["processed_documents"] + row["skipped_documents"] != count:
+                    raise ValueError(f"{name} document count differs in {layer} under {version}")
+                if row["latency"]["samples"] != row["processed_documents"]:
+                    raise ValueError(f"{name} latency includes skipped documents")
 
-    opf_description = "OPF skipped."
+    opf_description = "OpenAI Privacy Filter (OPF) skipped."
     if "opf" in tools:
         runtime = tools["opf"]["provenance"]["runtime"]
         opf_source = runtime.get("source_revision")
-        opf_description = f"OPF {runtime['version']}" + (f" at source `{opf_source}`" if opf_source else "") + "."
+        opf_description = f"OpenAI Privacy Filter (OPF) {runtime['version']}" + (f" at source `{opf_source}`" if opf_source else "") + "."
     lines = [
         "# Competitor comparison",
         "",
-        "Same corpus and scorer; tools run with their documented defaults. "
+        "Same corpus and scorer; tools run with documented configurations. "
         "UTF-8 byte counts use the Gaze scorer. For v3, FP is the scorer's "
         "false-positive count after its audited gold-gap credit. CPU-host p50/p95 "
         "is warm per-document wall-clock inference/clean time on the same machine. "
-        "Presidio English default leaves non-English documents unprocessed; "
-        "the English/German row leaves Dutch, French, and Portuguese documents unprocessed. "
-        "A 0.0 ms median can therefore mean a skipped language. "
+        "Presidio all runs English, German, Dutch, French, and Portuguese spaCy models "
+        "with the documented German recognizers. Presidio English default is a secondary row. "
+        "Latency includes processed documents only. Gaze is slower than Presidio on this host. "
+        "Latency varied by about 2x between identical runs here. "
         "This measures detection; competitor restore and manifest behavior is not scored.",
         "",
-        f"Gaze revision: `{gaze['v3']['gaze_revision']}`; "
-        f"setup policy SHA-256: `{gaze['v3']['policy_sha256']}`. "
+        f"Gaze measured at `{gaze['v3']['gaze_revision']}` "
+        f"(release `{report['latest_release_at_measurement']['version']}`). "
+        f"Home-normalized setup policy SHA-256: `{report['policy_sha256_home_normalized']}`. "
         "The measured call scopes differ by tool, so latency is descriptive.",
         "",
         "Competitor runtimes: Presidio "
         f"{tools['presidio-en']['provenance']['analyzer_version']} with spaCy "
         f"{tools['presidio-en']['provenance']['spacy_version']}; GLiNER "
         f"{tools['gliner']['provenance']['gliner_version']} at model snapshot "
-        f"`{tools['gliner']['provenance']['model_snapshot']}`; {opf_description}",
+        f"`{tools['gliner']['provenance']['model_snapshot']}`. "
+        f"GLiNER uses model-card labels, library threshold 0.5. "
+        f"{opf_description}",
         "",
         f"Aggregate source: [`{source}`]({source}). Raw document outputs are not published.",
         "",
-        "| Contract | Layer | Tool | Leaked B | FP B | CPU-host p50 ms | CPU-host p95 ms |",
-        "|---|---|---|---:|---:|---:|---:|",
+        "| Contract | Layer | Tool | Leaked B | FP B | Processed | Skipped | Skipped gold B | CPU-host p50 ms | CPU-host p95 ms |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     lower_leak = []
     lower_fp_at_equal_leak = []
@@ -140,9 +152,13 @@ def render(report: dict[str, object], source: str) -> str:
                 if version == "v3" and row["false_positive_bytes_after_gold_gap"] is not None:
                     fp = row["false_positive_bytes_after_gold_gap"]
                 latency = row["latency"]
+                p50 = "n/a" if latency["p50_ms"] is None else f"{latency['p50_ms']:.1f}"
+                p95 = "n/a" if latency["p95_ms"] is None else f"{latency['p95_ms']:.1f}"
                 lines.append(
                     f"| {version} | {layer} | {name} | {row['leaked_bytes']:,} | {fp:,} | "
-                    f"{latency['p50_ms']:.1f} | {latency['p95_ms']:.1f} |"
+                    f"{row.get('processed_documents', row['documents']):,} | "
+                    f"{row.get('skipped_documents', 0):,} | {row.get('skipped_gold_bytes', 0):,} | "
+                    f"{p50} | {p95} |"
                 )
                 if name != "gaze" and version == "v3":
                     gaze_fp = gaze_row["false_positive_bytes_after_gold_gap"]

@@ -32,12 +32,23 @@ import gaze_bench_score as score  # noqa: E402
 import run_no_opf_benchmark as runner  # noqa: E402
 
 MAP_PATH = Path(__file__).with_name("label-map.json")
+MODEL_PINS_PATH = Path(__file__).with_name("model-wheels.json")
 CONTRACTS = {
     "v1": None,
     "v2": Path("docs/reference/benchmarks/scored-labels-v2.json"),
     "v3": Path("docs/reference/benchmarks/scored-labels-v3.json"),
 }
-TOOLS = ("presidio-en", "presidio-en-de", "gliner", "opf")
+TOOLS = ("presidio-all", "presidio-en", "presidio-en-de", "gliner", "opf")
+PRESIDIO_LANGUAGES = ("en", "de", "nl", "fr", "pt")
+GERMAN_RECOGNIZERS = (
+    "DeTaxId", "DeTaxNumber", "DePassport", "DeIdCard", "DeSocialSecurity",
+    "DeHealthInsurance", "DeKfz", "DeHandelsregister", "DePlz",
+)
+GLINER_REPO = "urchade/gliner_multi_pii-v1"
+SPACY_MODELS = {
+    "en": "en_core_web_lg", "de": "de_core_news_lg", "nl": "nl_core_news_sm",
+    "fr": "fr_core_news_sm", "pt": "pt_core_news_sm",
+}
 
 
 def digest_file(path: Path) -> str:
@@ -194,42 +205,38 @@ def preflight_contracts(layers: dict[str, list[score.Document]]) -> None:
 
 
 class Presidio:
-    def __init__(self, en_model: Path, de_model: Path | None) -> None:
+    def __init__(self, models: dict[str, Path]) -> None:
         from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
         from presidio_analyzer.nlp_engine import NlpEngineProvider
+        from presidio_analyzer import predefined_recognizers
         from presidio_anonymizer import AnonymizerEngine
-        from presidio_anonymizer.entities import ConflictResolutionStrategy
 
-        models = [{"lang_code": "en", "model_name": str(en_model)}]
-        languages = ["en"]
-        if de_model is not None:
-            models.append({"lang_code": "de", "model_name": str(de_model)})
-            languages.append("de")
-        engine = NlpEngineProvider(nlp_configuration={"nlp_engine_name": "spacy", "models": models}).create_engine()
+        languages = list(models)
+        configured = [{"lang_code": language, "model_name": str(path)} for language, path in models.items()]
+        engine = NlpEngineProvider(nlp_configuration={"nlp_engine_name": "spacy", "models": configured}).create_engine()
         registry = RecognizerRegistry(supported_languages=languages)
         registry.load_predefined_recognizers(languages=languages)
+        if "de" in languages:
+            for name in GERMAN_RECOGNIZERS:
+                registry.add_recognizer(getattr(predefined_recognizers, name + "Recognizer")())
         self.analyzer = AnalyzerEngine(nlp_engine=engine, registry=registry, supported_languages=languages)
         self.anonymizer = AnonymizerEngine()
-        self.conflict_resolution = ConflictResolutionStrategy.MERGE_SIMILAR_OR_CONTAINED
         self.languages = languages
 
     def predict(self, document: score.Document) -> list[score.Span]:
         if document.language not in self.languages:
             return []
         found = self.analyzer.analyze(text=document.text, language=document.language)
-        # This is the anonymizer's default conflict and whitespace resolution.
-        # Its output item offsets refer to replacement text, so capture the
-        # resolved raw spans before invoking the same default replacement.
-        copied = self.anonymizer._copy_recognizer_results(found)
-        copied.sort(key=lambda item: (item.start, item.end))
-        resolved = self.anonymizer._remove_conflicts_and_get_text_manipulation_data(
-            copied, self.conflict_resolution
+        from presidio_anonymizer.entities import OperatorConfig
+
+        # Keep preserves the original offsets after Presidio resolves overlaps.
+        output = self.anonymizer.anonymize(
+            text=document.text, analyzer_results=found,
+            operators={"DEFAULT": OperatorConfig("keep")},
         )
-        resolved = self.anonymizer._merge_entities_with_spaces_between(document.text, resolved)
-        output = self.anonymizer.anonymize(text=document.text, analyzer_results=found)
-        if len(output.items) != len(resolved):
-            raise RuntimeError("Presidio anonymizer did not process every resolved span")
-        return byte_spans(document.text, [(item.start, item.end, item.entity_type) for item in resolved])
+        if output.text != document.text:
+            raise RuntimeError("Presidio keep operator changed document text")
+        return byte_spans(document.text, [(item.start, item.end, item.entity_type) for item in output.items])
 
 
 class Gliner:
@@ -293,9 +300,23 @@ def crates_tree(revision: str) -> str:
     ).strip()
 
 
-def model_info(path: Path) -> dict[str, str]:
+def model_info(path: Path, language: str) -> dict[str, str]:
     meta = json.loads((path / "meta.json").read_text(encoding="utf-8"))
-    return {"version": meta["version"], "license": meta["license"], "sha256": digest_tree(path)}
+    name = SPACY_MODELS[language]
+    pin = json.loads(MODEL_PINS_PATH.read_text(encoding="utf-8"))[name]
+    if meta["version"] != pin["version"]:
+        raise ValueError(f"{name} installed version differs from pinned wheel")
+    return {"version": meta["version"], "license": meta["license"],
+            "sha256": digest_tree(path), "wheel_sha256": pin["sha256"],
+            "wheel_source": pin["url"]}
+
+
+def normalized_policy_sha256(path: Path, expected_raw_sha256: str) -> str:
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != expected_raw_sha256:
+        raise ValueError("Gaze policy differs from the scored policy")
+    normalized = raw.replace(str(Path.home()).encode(), b"$HOME")
+    return hashlib.sha256(normalized).hexdigest()
 
 
 def opf_runtime_info(python: Path) -> dict[str, object]:
@@ -306,7 +327,8 @@ def opf_runtime_info(python: Path) -> dict[str, object]:
         text=True,
     )
     info = json.loads(raw)
-    result: dict[str, object] = {"version": info["version"], "python": portable_path(python)}
+    python_version = subprocess.check_output([str(python), "--version"], text=True).strip()
+    result: dict[str, object] = {"version": info["version"], "python_version": python_version}
     if info["direct_url"]:
         from urllib.parse import unquote, urlparse
 
@@ -365,7 +387,7 @@ def gaze_row(path: Path, version: str, corpus: dict[str, object]) -> dict[str, o
         }
         if table[layer]["documents"] != corpus["layers"][layer]["documents"]:
             raise ValueError(f"{path}: Gaze and competitor document counts differ in {layer}")
-    return {"scorecard": path.as_posix(), "scorecard_sha256": digest_file(path),
+    return {"scorecard": portable_path(path), "scorecard_sha256": digest_file(path),
             "gaze_revision": card["gaze"]["revision"],
             "policy_sha256": card["parameters"]["policy_sha256"],
             "hardware": card["runner_provenance"]["hardware"], "layers": table}
@@ -374,6 +396,7 @@ def gaze_row(path: Path, version: str, corpus: dict[str, object]) -> dict[str, o
 def measure(
     name: str, predictor: Callable[[score.Document], list[score.Span]],
     layers: dict[str, list[score.Document]], mapping: dict[str, tuple[str, ...]],
+    supported_languages: Sequence[str] | None = None,
 ) -> dict[str, object]:
     contracts = {
         key: runner.load_scored_label_contract(REPO, path)
@@ -385,16 +408,23 @@ def measure(
         output["contracts"][version] = {}
     for layer, documents in layers.items():
         timers = []
+        skipped_gold_bytes = {key: 0 for key in contracts}
+        skipped_documents = 0
         accumulators = {key: score.MetricAccumulator() for key in contracts}
         for index, document in enumerate(documents, 1):
-            start = time.perf_counter()
-            try:
-                predictions = predictor(document)
-            except TimeoutError as error:
-                raise RuntimeError(
-                    f"{name} timed out in layer {layer} at document {index}/{len(documents)}"
-                ) from error
-            timers.append((time.perf_counter() - start) * 1000)
+            skipped = supported_languages is not None and document.language not in supported_languages
+            if skipped:
+                predictions = []
+                skipped_documents += 1
+            else:
+                start = time.perf_counter()
+                try:
+                    predictions = predictor(document)
+                except TimeoutError as error:
+                    raise RuntimeError(
+                        f"{name} timed out in layer {layer} at document {index}/{len(documents)}"
+                    ) from error
+                timers.append((time.perf_counter() - start) * 1000)
             validate_labels(predictions, mapping)
             if name == "opf":
                 predictions = [dataclasses.replace(s, label="custom:secret") if s.label == "secret" else s for s in predictions]
@@ -404,11 +434,15 @@ def measure(
                     if layer in {"A", "D", "R"}
                     else score.apply_scored_label_contract([document], contract)[0]
                 )
+                if skipped:
+                    skipped_gold_bytes[version] += score.interval_length(
+                        score.merge_intervals((span.start, span.end) for span in applied.spans)
+                    )
                 accumulators[version].add(mapped_document(applied, mapping), predictions)
             if index % 500 == 0:
                 print(f"{name}: scored {index}/{len(documents)} in layer {layer}", file=sys.stderr, flush=True)
-        latency = {"p50_ms": round(score.percentile(timers, 0.5), 3),
-                   "p95_ms": round(score.percentile(timers, 0.95), 3),
+        latency = {"p50_ms": round(score.percentile(timers, 0.5), 3) if timers else None,
+                   "p95_ms": round(score.percentile(timers, 0.95), 3) if timers else None,
                    "samples": len(timers)}
         for version, accumulator in accumulators.items():
             result = accumulator.result()
@@ -417,7 +451,10 @@ def measure(
                 "false_positive_bytes": result["utf8_bytes"]["false_positive"],
                 "gold_gap_protected_bytes": result.get("gold_gap", {}).get("gold_gap_protected_bytes", 0),
                 "false_positive_bytes_after_gold_gap": result.get("gold_gap", {}).get("false_positive_bytes_after_gold_gap"),
-                "documents": result["documents"], "latency": latency,
+                "documents": result["documents"], "processed_documents": len(timers),
+                "skipped_documents": skipped_documents,
+                "skipped_gold_bytes": skipped_gold_bytes[version],
+                "latency": latency,
             }
     return output
 
@@ -435,6 +472,10 @@ def main() -> int:
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--en-model", type=Path)
     parser.add_argument("--de-model", type=Path)
+    parser.add_argument("--nl-model", type=Path)
+    parser.add_argument("--fr-model", type=Path)
+    parser.add_argument("--pt-model", type=Path)
+    parser.add_argument("--gaze-policy", type=Path)
     parser.add_argument("--gliner-model", type=Path)
     parser.add_argument("--opf-python", type=Path)
     parser.add_argument("--opf-checkpoint", type=Path)
@@ -458,7 +499,7 @@ def main() -> int:
     report: dict[str, object] = {
         "schema_version": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "description": "same corpus and scorer; tools run with their documented defaults",
+        "description": "same corpus and scorer; tools run with documented configurations",
         "harness_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip(),
         "harness_dirty": bool(subprocess.check_output(
             ["git", "status", "--porcelain"], cwd=REPO, text=True
@@ -470,7 +511,11 @@ def main() -> int:
             key: latest_release[key] for key in ("version", "scorecard_sha256")
         },
         "scorer_sha256": digest_file(BENCH / "gaze_bench_score.py"),
+        "compare_sha256": digest_file(Path(__file__)),
+        "opf_adapter_sha256": digest_file(BENCH / "opf_daemon.py"),
+        "requirements_sha256": digest_file(Path(__file__).with_name("requirements.lock")),
         "mapping_sha256": digest_file(MAP_PATH),
+        "model_pins_sha256": digest_file(MODEL_PINS_PATH),
         "contracts": {
             **{
                 version: runner.load_scored_label_contract(REPO, path).sha256
@@ -490,6 +535,12 @@ def main() -> int:
             raise ValueError(f"Gaze scorecards for the three contracts use different {key}")
     if any(crates_tree(row["gaze_revision"]) != report["gaze_crates_tree"] for row in report["gaze"].values()):
         raise ValueError("Gaze scorecards were not measured on this detection tree")
+    if report["gaze"]:
+        if args.gaze_policy is None:
+            raise ValueError("Gaze scorecards require --gaze-policy for portable provenance")
+        report["policy_sha256_home_normalized"] = normalized_policy_sha256(
+            args.gaze_policy, next(iter(report["gaze"].values()))["policy_sha256"]
+        )
     with tempfile.TemporaryDirectory(prefix="gaze-comparison-") as temporary:
         for name in selected:
             backend = None
@@ -499,18 +550,22 @@ def main() -> int:
                 report["skipped"]["opf"] = "local OPF runtime or checkpoint not configured"
                 continue
             if name.startswith("presidio"):
-                if args.en_model is None or (name == "presidio-en-de" and args.de_model is None):
-                    raise ValueError("Presidio needs --en-model and multilingual needs --de-model")
-                backend = Presidio(args.en_model, args.de_model if name == "presidio-en-de" else None)
+                requested = ("en",) if name == "presidio-en" else (
+                    ("en", "de") if name == "presidio-en-de" else PRESIDIO_LANGUAGES
+                )
+                model_paths = {lang: getattr(args, f"{lang}_model") for lang in requested}
+                if any(path is None for path in model_paths.values()):
+                    raise ValueError(f"{name} needs model paths for {', '.join(requested)}")
+                backend = Presidio(model_paths)
                 provenance = {
                     "analyzer_version": package_version("presidio-analyzer"),
                     "anonymizer_version": package_version("presidio-anonymizer"),
                     "spacy_version": package_version("spacy"),
-                    "en_model": model_info(args.en_model),
-                    **({"de_model": model_info(args.de_model)} if name == "presidio-en-de" else {}),
+                    "models": {lang: model_info(path, lang) for lang, path in model_paths.items()},
                     "supported_languages": backend.languages,
-                    "recognizers": "Presidio built-in registry defaults for supported languages",
-                    "anonymizer": "default replace, default conflict and whitespace resolution",
+                    "recognizers": "Presidio built-in defaults plus nine documented German recognizers when de is enabled",
+                    "german_recognizers": list(GERMAN_RECOGNIZERS) if "de" in requested else [],
+                    "anonymizer": "public keep operator with default conflict and whitespace resolution",
                 }
                 mapping = mappings["presidio"]
             elif name == "gliner":
@@ -518,6 +573,7 @@ def main() -> int:
                     raise ValueError("GLiNER needs --gliner-model")
                 backend = Gliner(args.gliner_model, tuple(mappings["gliner"]))
                 provenance = {"gliner_version": package_version("gliner"),
+                              "model_repo": GLINER_REPO,
                               "model_sha256": digest_tree(args.gliner_model),
                               "model_snapshot": args.gliner_model.name,
                               "labels": list(mappings["gliner"]),
@@ -537,7 +593,10 @@ def main() -> int:
                 # Warm the model outside the measured per-document latency.
                 backend.predict(score.Document("warmup", "alice@example.invalid", "en", "", "synthetic", ()))
                 load_before = os.getloadavg()
-                measured = measure(name, backend.predict, layers, mapping)
+                measured = measure(
+                    name, backend.predict, layers, mapping,
+                    backend.languages if isinstance(backend, Presidio) else None,
+                )
                 measured["host_load_1m_before_after"] = [round(load_before[0], 2), round(os.getloadavg()[0], 2)]
                 measured["provenance"] = provenance
                 report["tools"][name] = measured
