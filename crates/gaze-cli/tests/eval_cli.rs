@@ -236,6 +236,9 @@ fn adopter_files_in_wrong_slots_never_echo_their_contents() {
         if expected.contains("parse error") {
             assert!(stderr.contains("line "), "{args:?}: {stderr}");
             assert!(stderr.contains("column "), "{args:?}: {stderr}");
+        } else if *expected == "EvalSchema" {
+            assert!(stderr.contains("\"line\":"), "{args:?}: {stderr}");
+            assert!(stderr.contains("\"column\":"), "{args:?}: {stderr}");
         }
         assert!(!stderr.contains(secret), "{args:?}: {stderr}");
         assert!(!stderr.contains("\"text\""), "{args:?}: {stderr}");

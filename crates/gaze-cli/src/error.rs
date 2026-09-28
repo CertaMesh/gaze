@@ -14,6 +14,10 @@ pub(crate) enum CliError {
     EvalSchemaLine {
         line: usize,
     },
+    EvalSchemaLocation {
+        line: usize,
+        column: usize,
+    },
     PolicyConfig,
     PolicyConfigDetail(String),
     PolicySchemaUnsupported {
@@ -70,7 +74,8 @@ impl CliError {
             | Self::InputTooLarge
             | Self::InvalidEncoding
             | Self::EvalSchema
-            | Self::EvalSchemaLine { .. } => 1,
+            | Self::EvalSchemaLine { .. }
+            | Self::EvalSchemaLocation { .. } => 1,
             Self::PolicyConfig
             | Self::PolicyConfigDetail(_)
             | Self::PolicySchemaUnsupported { .. }
@@ -103,7 +108,9 @@ impl CliError {
             Self::EmptyInput => "EmptyInput",
             Self::InputTooLarge => "InputTooLarge",
             Self::InvalidEncoding => "InvalidEncoding",
-            Self::EvalSchema | Self::EvalSchemaLine { .. } => "EvalSchema",
+            Self::EvalSchema | Self::EvalSchemaLine { .. } | Self::EvalSchemaLocation { .. } => {
+                "EvalSchema"
+            }
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
             Self::PolicySchemaUnsupported { .. } => "PolicySchemaUnsupported",
             Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",
@@ -138,6 +145,13 @@ impl CliError {
                 self.variant_name(),
                 self.exit_code(),
                 line
+            ),
+            Self::EvalSchemaLocation { line, column } => eprintln!(
+                r#"{{"error":"{}","exit":{},"line":{},"column":{}}}"#,
+                self.variant_name(),
+                self.exit_code(),
+                line,
+                column
             ),
             Self::PolicySchemaUnsupported { found, supported } => {
                 let found = serde_json::to_string(found)

@@ -102,7 +102,10 @@ fn label_map(path: Option<&Path>) -> Result<BTreeMap<String, PiiClass>, CliError
     };
     let source = read_limited(path)?;
     let raw: BTreeMap<String, String> =
-        serde_json::from_str(&source).map_err(|_| CliError::EvalSchema)?;
+        serde_json::from_str(&source).map_err(|err| CliError::EvalSchemaLocation {
+            line: err.line(),
+            column: err.column(),
+        })?;
     if raw.is_empty() {
         return Err(CliError::EvalSchema);
     }
