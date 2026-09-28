@@ -244,6 +244,7 @@
     }
   },
   "gaze_crates_tree": "981ab369487751fc5cf0f3a781ff3002ce8ad3bf",
+  "gaze_main_revision": "1809f6a3743e40c036bf2441e5709ace89ff56f1",
   "generated_at": "2026-09-28T02:40:57.831369+00:00",
   "hardware": "macOS-26.5-arm64-arm-64bit",
   "harness_dirty": false,

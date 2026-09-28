@@ -860,11 +860,12 @@ class ShippedDefaultChartsTest(unittest.TestCase):
 
     def test_committed_chart_labels_carry_each_bars_leak_rate(self):
         """Every x-axis label in both committed files ends with the leak rate
-        of the arm it names under the chart's own contract, read from the
-        history (and consistent with leaked / gold bytes), rounded to one
-        decimal."""
+        of the arm it names under the chart's own contract, read from release
+        history or the same-run comparison, rounded to one decimal."""
         committed = render.load_history(render.DEFAULT_HISTORY)
+        comparison = json.loads(render.DEFAULT_COMPARISON.read_text(encoding="utf-8"))
         arms_by_contract = {}
+        comparison_rates = {}
         for version in render.shown_contracts(committed):
             view = render.contract_history(committed, version)
             arms = {}
@@ -877,6 +878,12 @@ class ShippedDefaultChartsTest(unittest.TestCase):
                     if arm != default:
                         arms[f"{label} {render.ARM_CHART_LABELS.get(arm, arm)}"] = block
             arms_by_contract[version] = arms
+            latest = view["releases"][-1]
+            gold = latest["arms"][render.shipped_default_arm(latest)]["gold_pii_utf8_bytes"]
+            comparison_rates[version] = {
+                label.rsplit(" (", 1)[0]: round(leaked / gold * 100, 1)
+                for label, leaked in render.readme_comparison_bars(view, comparison, version)
+            }
         for arms in arms_by_contract.values():
             for arm in arms.values():
                 self.assertEqual(
@@ -902,8 +909,13 @@ class ShippedDefaultChartsTest(unittest.TestCase):
                     with self.subTest(path=path.name, contract=contract, label=item):
                         match = label_re.match(f'"{item}"')
                         self.assertIsNotNone(match, item)
-                        arm = arms_by_contract[contract][match.group(1)]
-                        self.assertEqual(float(match.group(2)), round(arm["leak_rate"] * 100, 1))
+                        base = match.group(1)
+                        rate = (
+                            round(arms_by_contract[contract][base]["leak_rate"] * 100, 1)
+                            if base in arms_by_contract[contract]
+                            else comparison_rates[contract][base]
+                        )
+                        self.assertEqual(float(match.group(2)), rate)
 
     def test_root_readme_chart_matches_the_readme_table(self):
         """The hand-written README table and the generated chart show one set of numbers."""
@@ -950,6 +962,68 @@ class ShippedDefaultChartsTest(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(render.main(argv + ["--check"]), 1)
+
+
+class ReadmeCompetitorChartTest(unittest.TestCase):
+    def setUp(self):
+        self.history = render.load_history(render.DEFAULT_HISTORY)
+        self.comparison = json.loads(render.DEFAULT_COMPARISON.read_text(encoding="utf-8"))
+
+    def test_every_contract_uses_the_measured_gaze_and_best_competitor_rows(self):
+        chart = render.render_readme_chart(self.history, self.comparison)
+        for version in (3, 2, 1):
+            view = render.contract_history(self.history, version)
+            bars = render.readme_comparison_bars(view, self.comparison, version)
+            self.assertEqual(len(bars), 4)
+            revision = self.comparison["gaze_main_revision"][:8]
+            self.assertIn(f"Gaze main {revision}, unreleased", bars[0][0])
+            self.assertIn("5 languages, spaCy lg", bars[-1][0])
+            self.assertEqual(
+                bars[0][1],
+                self.comparison["gaze"][f"v{version}"]["layers"]["C"]["leaked_bytes"],
+            )
+            self.assertEqual(
+                bars[-1][1],
+                self.comparison["tools"]["presidio-all"]["contracts"][f"v{version}"]["C"]["leaked_bytes"],
+            )
+        self.assertIn("comparison.json", chart)
+        self.assertEqual(chart.count("'width': 1200"), 3)
+
+    def test_best_row_and_skipped_label_follow_comparison_data(self):
+        report = copy.deepcopy(self.comparison)
+        report["tools"]["gliner-best"] = copy.deepcopy(report["tools"]["gliner"])
+        report["tools"]["gliner-best"]["provenance"]["configuration"] = (
+            "best-of-sweep, threshold 0.7"
+        )
+        report["tools"]["gliner-best"]["contracts"]["v3"]["C"]["leaked_bytes"] = 19000
+        report["tools"]["presidio-en"]["contracts"]["v3"]["C"]["leaked_bytes"] = 30000
+        report["tools"]["presidio-en"]["contracts"]["v3"]["C"]["skipped_gold_bytes"] = 28000
+        bars = render.readme_comparison_bars(
+            render.contract_history(self.history, 3), report, 3
+        )
+        self.assertIn("best-of-sweep, threshold 0.7", bars[1][0])
+        self.assertEqual(bars[1][1], 19000)
+        self.assertIn("1 language", bars[-1][0])
+        self.assertIn("1365 skipped", bars[-1][0])
+        self.assertEqual(bars[-1][1], 30000)
+
+    def test_comparison_mutation_fails_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc, readme, report = root / "doc.md", root / "README.md", root / "comparison.json"
+            doc.write_text(render.DEFAULT_DOC.read_text(encoding="utf-8"), encoding="utf-8")
+            readme.write_text(render.DEFAULT_README.read_text(encoding="utf-8"), encoding="utf-8")
+            report.write_text(json.dumps(self.comparison), encoding="utf-8")
+            args = ["--doc", str(doc), "--readme", str(readme), "--comparison", str(report)]
+            self.assertEqual(render.main(args + ["--check"]), 0)
+            changed = copy.deepcopy(self.comparison)
+            changed["gaze_main_revision"] = "a" * 40
+            report.write_text(json.dumps(changed), encoding="utf-8")
+            self.assertEqual(render.main(args + ["--check"]), 1)
+            changed = copy.deepcopy(self.comparison)
+            changed["tools"]["gliner"]["contracts"]["v3"]["C"]["leaked_bytes"] += 1
+            report.write_text(json.dumps(changed), encoding="utf-8")
+            self.assertEqual(render.main(args + ["--check"]), 1)
 
 
 class VersionOrderTest(unittest.TestCase):
