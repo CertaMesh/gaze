@@ -8,7 +8,7 @@ use gaze_types::{
     Candidate, ConflictTier, DetectContext, DictionaryEntry, LocaleBasis, LocaleTag, PiiClass,
     Recognizer,
 };
-use regex::{Regex, RegexBuilder};
+use unicode_casefold::UnicodeCaseFold;
 
 /// Lookup-based [`Recognizer`] for tenant-specific PII.
 ///
@@ -30,7 +30,7 @@ pub struct DictionaryRecognizer {
     score: f32,
     priority: i32,
     compiled_dictionaries: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
-    compiled_unicode: Mutex<HashMap<DictionaryCacheKey, Arc<Vec<Regex>>>>,
+    compiled_unicode: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
     unicode_case_insensitive: bool,
     cache_capacity: usize,
 }
@@ -131,7 +131,7 @@ impl DictionaryRecognizer {
         automaton
     }
 
-    fn unicode_patterns_for(&self, entry: &DictionaryEntry) -> Arc<Vec<Regex>> {
+    fn unicode_automaton_for(&self, entry: &DictionaryEntry) -> Arc<AhoCorasick> {
         let key = DictionaryCacheKey::from_entry(entry);
         let mut compiled = self
             .compiled_unicode
@@ -143,21 +143,18 @@ impl DictionaryRecognizer {
         if compiled.len() >= self.cache_capacity {
             compiled.clear();
         }
-        let patterns = Arc::new(
-            entry
-                .terms()
-                .iter()
-                .map(|term| {
-                    RegexBuilder::new(&regex::escape(term))
-                        .case_insensitive(true)
-                        .unicode(true)
-                        .build()
-                        .expect("literal dictionary term is a valid regex")
-                })
-                .collect(),
+        let folded_terms = entry
+            .terms()
+            .iter()
+            .map(|term| term.as_str().case_fold().collect::<String>())
+            .collect::<Vec<_>>();
+        let automaton = Arc::new(
+            AhoCorasickBuilder::new()
+                .build(folded_terms)
+                .expect("DictionaryEntry validates terms before automaton construction"),
         );
-        compiled.insert(key, Arc::clone(&patterns));
-        patterns
+        compiled.insert(key, Arc::clone(&automaton));
+        automaton
     }
 }
 
@@ -201,14 +198,15 @@ impl Recognizer for DictionaryRecognizer {
             return Ok(Vec::new());
         };
         let matches = if self.unicode_case_insensitive {
-            let patterns = self.unicode_patterns_for(entry);
-            patterns
-                .iter()
-                .enumerate()
-                .flat_map(|(index, pattern)| {
-                    pattern
-                        .find_iter(input)
-                        .map(move |hit| (hit.start(), hit.end(), index))
+            let (folded, starts, ends) = fold_with_original_offsets(input);
+            self.unicode_automaton_for(entry)
+                .find_iter(&folded)
+                .filter_map(|hit| {
+                    Some((
+                        *starts.get(&hit.start())?,
+                        *ends.get(&hit.end())?,
+                        hit.pattern().as_usize(),
+                    ))
                 })
                 .collect::<Vec<_>>()
         } else {
@@ -256,6 +254,24 @@ impl Recognizer for DictionaryRecognizer {
     }
 }
 
+// Full Unicode folds can expand one character (for example, ß -> ss).
+// Only complete original-character boundaries may become token spans.
+fn fold_with_original_offsets(
+    input: &str,
+) -> (String, HashMap<usize, usize>, HashMap<usize, usize>) {
+    let mut folded = String::with_capacity(input.len());
+    let mut starts = HashMap::new();
+    let mut ends = HashMap::new();
+    for (start, ch) in input.char_indices() {
+        starts.insert(folded.len(), start);
+        for mapped in ch.case_fold() {
+            folded.push(mapped);
+        }
+        ends.insert(folded.len(), start + ch.len_utf8());
+    }
+    (folded, starts, ends)
+}
+
 fn is_token_boundary_match(input: &str, start: usize, end: usize) -> bool {
     !has_identifier_char_before(input, start) && !has_identifier_char_after(input, end)
 }
@@ -291,6 +307,16 @@ mod tests {
     use serde_json::Map;
 
     use super::*;
+
+    #[test]
+    fn full_fold_does_not_create_partial_original_character_spans() {
+        let (folded, starts, ends) = fold_with_original_offsets("AßB");
+        assert_eq!(folded, "assb");
+        assert_eq!(starts.get(&1), Some(&1));
+        assert!(!starts.contains_key(&2));
+        assert!(!ends.contains_key(&2));
+        assert_eq!(ends.get(&3), Some(&3));
+    }
 
     #[test]
     fn recognizer_detects_dictionary_hits_from_context_bundle() {

@@ -24,7 +24,7 @@ nonreversible column action rejects record mode because it could leave a
 matching value raw in that column. Audit source IDs describe a class and slot,
 never the supplied value.
 
-This mode matches a full value. Names also match Unicode case changes; the
+This mode matches a full value. Names also match full Unicode case folds; the
 original casing is kept in the manifest for exact restore. It does not infer
 name order, email case changes, abbreviations, fragments or typos. A short
 value or a common single-word name can collide with unrelated prose, so the

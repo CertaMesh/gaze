@@ -200,8 +200,8 @@ digit-only values shorter than four digits are rejected. A small English/German
 common-word list also rejects single-token names such as `Will`; these checks
 reduce false positives, but a longer common word can still collide with prose.
 
-Gaze matches each full value literally. `Name` values also match Unicode case
-changes while preserving the original matched bytes for restore. The prototype
+Gaze matches each full value literally. `Name` values also match full Unicode
+case folds, including `ß`/`SS`, while preserving the original matched bytes for restore. The prototype
 does not match reversed name order, email case changes, fragments or fuzzy
 spellings. Each record dictionary uses the existing class action and manifest
 path; its class must resolve to `tokenize` or `format_preserve`. A nonreversible
