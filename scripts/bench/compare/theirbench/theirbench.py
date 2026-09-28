@@ -16,6 +16,7 @@ and stay out of the repository.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import platform
@@ -32,7 +33,8 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
 import compare  # noqa: E402
-from cpu_watch import ForeignCpuWatch  # noqa: E402
+import backends  # noqa: E402
+from cpu_contention import ForeignCpuSampler  # noqa: E402
 import loaders  # noqa: E402
 from comparison_metrics import ComparisonMetrics  # noqa: E402
 
@@ -59,6 +61,16 @@ def load_benchmark(args: argparse.Namespace) -> tuple[dict[str, list[score.Docum
         return {"test": documents}, identity
     splits, identity = loaders.load_piibench_commercial(args.piibench_data)
     return splits, identity
+
+
+def preflight_sample(documents: Sequence[score.Document], per_source: int) -> list[score.Document]:
+    taken: dict[str, int] = {}
+    sample = []
+    for document in documents:
+        if taken.get(document.source_dataset, 0) < per_source:
+            taken[document.source_dataset] = taken.get(document.source_dataset, 0) + 1
+            sample.append(document)
+    return sample
 
 
 def common_intersection(composed: Mapping[str, Mapping[str, Sequence[str]]]) -> frozenset[str]:
@@ -102,6 +114,10 @@ def measure_tool(
                 started = time.perf_counter()
                 predictions = predictor(document)
                 timers.append((time.perf_counter() - started) * 1000)
+                if name == "opf":
+                    # As compare.measure does: OPF's native secret is scored as custom:secret.
+                    predictions = [dataclasses.replace(s, label="custom:secret") if s.label == "secret" else s
+                                   for s in predictions]
                 compare.validate_labels(predictions, mapping)
                 cells.add(document, predictions)
                 sink.write(json.dumps({"index": index, "spans": char_spans(document, predictions)}) + "\n")
@@ -159,9 +175,14 @@ def main() -> int:
     parser.add_argument("--gaze-policy-rules-ner", type=Path)
     parser.add_argument("--predictions-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    compare.add_tool_arguments(parser)
+    parser.add_argument("--preflight", type=int, metavar="N",
+                        help="STEER 4 label preflight: first N documents per source; never published")
+    backends.add_tool_arguments(parser)
     args = parser.parse_args()
+    pinned = backends.verify_pinned_comparison()
     splits, identity = load_benchmark(args)
+    if args.preflight:
+        splits = {split: preflight_sample(documents, args.preflight) for split, documents in splits.items()}
     mappings = compare.load_mapping()
     selected = args.tool or [*GAZE_ROWS, *compare.TOOLS]
     composed = {
@@ -183,12 +204,14 @@ def main() -> int:
         "harness_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=compare.REPO, text=True).strip()),
         "gaze_crates_tree": compare.crates_tree("HEAD"),
         "label_maps_sha256": compare.digest_file(loaders.LABEL_MAPS),
+        "comparison_revision": backends.COMPARISON_REVISION, "comparison_sha256": pinned,
+        "chart_configs": backends.chart_configs(),
         "mapping_sha256": compare.digest_file(compare.MAP_PATH),
         "hardware": platform.platform(), "device": "cpu",
         "common_intersection_labels": sorted(common),
         "splits": {split: {"documents": len(docs), "ids_sha256": score.document_ids_digest([d.uid for d in docs])}
                    for split, docs in splits.items()},
-        "rows": {}, "provenance": {},
+        "rows": {}, "provenance": {}, "preflight": args.preflight,
     }
     if report["identity"] != identity or report["common_intersection_labels"] != sorted(common):
         raise SystemExit("--output was produced for a different benchmark identity or roster")
@@ -203,19 +226,19 @@ def main() -> int:
                           "gaze-full": args.gaze_policy}[name]
                 if policy is None or args.gaze_binary is None or args.gaze_model_dir is None:
                     raise SystemExit(f"{name} needs --gaze-binary, --gaze-model-dir and its policy")
-                with ForeignCpuWatch() as watch:
+                with ForeignCpuSampler() as watch:
                     report["rows"][name] = measure_gaze(name, args, policy, splits, mapping, common,
                                                         args.predictions_dir, Path(scratch))
                 report["provenance"][name] = {"policy_sha256_home_normalized": compare.normalized_policy_sha256(
                     policy, compare.digest_file(policy)), "cpu": watch.result()}
             else:
-                backend, provenance, _ = compare.build_backend(name, args, mappings, Path(scratch))
+                backend, provenance, _ = backends.build_backend(name, args, mappings, Path(scratch))
                 if backend is None:
                     report["provenance"][name] = provenance
                     continue
                 try:
                     backend.predict(score.Document("warmup", "alice@example.invalid", "en", "", "synthetic", ()))
-                    with ForeignCpuWatch() as watch:
+                    with ForeignCpuSampler() as watch:
                         report["rows"][name] = measure_tool(name, backend.predict, splits, mapping, common,
                                                             args.predictions_dir)
                     report["provenance"][name] = {**provenance, "cpu": watch.result()}

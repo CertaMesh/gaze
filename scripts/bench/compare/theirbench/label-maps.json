@@ -364,6 +364,10 @@
       ],
       "account_number": [
         "ACCOUNTNUM"
+      ],
+      "custom:secret": [
+        "SECRET",
+        "PASSWORD"
       ]
     },
     "datafog-core": {
