@@ -118,26 +118,11 @@ pub(crate) fn policy_nym_was_overridden(options: &CleanOptions<'_>, policy: &gaz
 
 pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
     require_json_format(options.format)?;
-    let cli_ner_threshold = options
-        .ner_threshold
-        .map(validate_ner_threshold)
-        .transpose()
-        .map_err(map_policy_error)?;
-    let clean_overrides = clean_overrides_from_options(&options)?;
     let raw = read_stdin_text(options.max_bytes)?;
 
     let counter = Arc::new(CountingLogger::new(options.audit_db).map_err(|_| CliError::Pipeline)?);
-    let context = options
-        .context_json
-        .map(TypedContext::load)
-        .transpose()
-        .map_err(|err| CliError::PolicyConfigDetail(format!("context json: {err}")))?;
-    let resolved = resolve_pipeline(
-        options.policy,
-        &clean_overrides,
-        options.locale,
-        cli_ner_threshold,
-        context,
+    let (resolved, policy) = prepare_clean_pipeline(
+        &options,
         Some(Arc::clone(&counter) as Arc<dyn RedactionLogger>),
     )?;
     let dictionary_stats = resolved.dictionaries.stats();
@@ -145,11 +130,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let loaded_rulepacks = resolved.rulepacks;
     let locale_chain = resolved.locale_chain;
     let dictionaries = resolved.dictionaries;
-    let pipeline = maybe_register_safety_net(resolved.pipeline, &options, &effective_policy)?;
-    validate_safety_net_tolerant_gate(options.safety_net_mode, options.safety_net_fallback)?;
-    // Lowered once, here. The library owns the (mode, fallback) -> decision mapping; the CLI
-    // reads it rather than re-deriving which flag is consulted when.
-    let policy = safety_net_policy(options.safety_net_mode, options.safety_net_fallback);
+    let pipeline = resolved.pipeline;
 
     let session = Session::from_policy_with_ttl_override(&effective_policy, options.session_ttl)
         .map_err(|_| CliError::Pipeline)?;
@@ -236,6 +217,56 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     }
     println!("{json}");
     Ok(())
+}
+
+/// Assemble the same policy, context, overrides, and safety nets for both verbs.
+pub(crate) fn prepare_clean_pipeline(
+    options: &CleanOptions<'_>,
+    logger: Option<Arc<dyn RedactionLogger>>,
+) -> Result<
+    (
+        crate::pipeline::build::ResolvedPipeline,
+        gaze::SafetyNetPolicy,
+    ),
+    CliError,
+> {
+    let cli_ner_threshold = options
+        .ner_threshold
+        .map(validate_ner_threshold)
+        .transpose()
+        .map_err(map_policy_error)?;
+    let clean_overrides = clean_overrides_from_options(options)?;
+    let context = options
+        .context_json
+        .map(TypedContext::load)
+        .transpose()
+        .map_err(map_context_error)?;
+    let mut resolved = resolve_pipeline(
+        options.policy,
+        &clean_overrides,
+        options.locale,
+        cli_ner_threshold,
+        context,
+        logger,
+    )?;
+    resolved.pipeline = maybe_register_safety_net(resolved.pipeline, options, &resolved.policy)?;
+    validate_safety_net_tolerant_gate(options.safety_net_mode, options.safety_net_fallback)?;
+    Ok((
+        resolved,
+        safety_net_policy(options.safety_net_mode, options.safety_net_fallback),
+    ))
+}
+
+fn map_context_error(err: gaze::ContextError) -> CliError {
+    match err {
+        gaze::ContextError::Io(_) => CliError::PolicyOpen,
+        gaze::ContextError::Json(err) => CliError::PolicyConfigDetail(format!(
+            "context JSON parse error at line {}, column {}",
+            err.line(),
+            err.column()
+        )),
+        _ => CliError::PolicyConfigDetail("invalid context JSON configuration".into()),
+    }
 }
 
 pub(crate) fn maybe_register_safety_net(

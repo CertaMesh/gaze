@@ -10,6 +10,14 @@ pub(crate) enum CliError {
     EmptyInput,
     InputTooLarge,
     InvalidEncoding,
+    EvalSchema,
+    EvalSchemaLine {
+        line: usize,
+    },
+    EvalSchemaLocation {
+        line: usize,
+        column: usize,
+    },
     PolicyConfig,
     PolicyConfigDetail(String),
     PolicySchemaUnsupported {
@@ -61,7 +69,13 @@ pub(crate) enum CliError {
 impl CliError {
     pub(crate) fn exit_code(&self) -> u8 {
         match self {
-            Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
+            Self::StdinParse
+            | Self::EmptyInput
+            | Self::InputTooLarge
+            | Self::InvalidEncoding
+            | Self::EvalSchema
+            | Self::EvalSchemaLine { .. }
+            | Self::EvalSchemaLocation { .. } => 1,
             Self::PolicyConfig
             | Self::PolicyConfigDetail(_)
             | Self::PolicySchemaUnsupported { .. }
@@ -94,6 +108,9 @@ impl CliError {
             Self::EmptyInput => "EmptyInput",
             Self::InputTooLarge => "InputTooLarge",
             Self::InvalidEncoding => "InvalidEncoding",
+            Self::EvalSchema | Self::EvalSchemaLine { .. } | Self::EvalSchemaLocation { .. } => {
+                "EvalSchema"
+            }
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
             Self::PolicySchemaUnsupported { .. } => "PolicySchemaUnsupported",
             Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",
@@ -123,6 +140,19 @@ impl CliError {
 
     pub(crate) fn emit_stderr(&self) {
         match self {
+            Self::EvalSchemaLine { line } => eprintln!(
+                r#"{{"error":"{}","exit":{},"line":{}}}"#,
+                self.variant_name(),
+                self.exit_code(),
+                line
+            ),
+            Self::EvalSchemaLocation { line, column } => eprintln!(
+                r#"{{"error":"{}","exit":{},"line":{},"column":{}}}"#,
+                self.variant_name(),
+                self.exit_code(),
+                line,
+                column
+            ),
             Self::PolicySchemaUnsupported { found, supported } => {
                 let found = serde_json::to_string(found)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
