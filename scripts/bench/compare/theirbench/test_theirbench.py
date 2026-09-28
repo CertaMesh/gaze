@@ -96,5 +96,66 @@ class PiibenchLoaderTest(unittest.TestCase):
                 loaders.load_piibench_commercial(data)
 
 
+def cell(leaked: int, fp: int = 10) -> dict:
+    return {"leaked_bytes": leaked, "false_positive_bytes": fp, "true_positive_bytes": 100 - leaked,
+            "document_leak_rate": 0.5, "typed_entities": {"f1": 0.4, "f2": 0.5}}
+
+
+def row(leaked: int) -> dict:
+    return {"product_coverage": cell(leaked), "common_intersection": cell(leaked // 2),
+            "latency": {"p50_ms": 1.0}}
+
+
+def synthetic() -> dict:
+    rows = {"gaze-full": row(10), "gaze-rules-only": row(40), "presidio-en": row(50),
+            "presidio-strong": row(30), "opf": row(20)}
+    return {"not_run": {"x": "licence"}, "benchmarks": {"presidio-research": {
+        "rows": rows, "common_intersection_labels": ["EMAIL_ADDRESS"], "hardware": "hw",
+        "harness_revision": "0123456789", "own_metric": {tool: {"f2": 0.5} for tool in rows},
+        "reproduction": {"published": {"vanilla": {"f2": 0.661, "source": "nb4"}},
+                         "reproduced": {"vanilla": {"f2": 0.66}}}}}}
+
+
+class RenderTest(unittest.TestCase):
+    def test_chart_shows_gaze_and_best_row_per_family(self) -> None:
+        import render_theirbench as render
+
+        rows = synthetic()["benchmarks"]["presidio-research"]["rows"]
+        self.assertEqual(render.best_rows(rows), ["gaze-full", "opf", "presidio-strong"])
+
+    def test_check_detects_drift(self) -> None:
+        import render_theirbench as render
+
+        with tempfile.TemporaryDirectory() as root:
+            data, doc = Path(root) / "data.json", Path(root) / "README.md"
+            data.write_text(json.dumps(synthetic()), encoding="utf-8")
+            doc.write_text("x\n<!-- BEGIN GENERATED: their-benchmarks -->\n<!-- END GENERATED: their-benchmarks -->\n",
+                           encoding="utf-8")
+            args = ["render", "--data", str(data), "--doc", str(doc)]
+            self.assertEqual(render.main([*args, "--check"]), 1)
+            self.assertEqual(render.main(args), 0)
+            self.assertEqual(render.main([*args, "--check"]), 0)
+            self.assertIn("presidio-strong", doc.read_text(encoding="utf-8"))
+            changed = synthetic()
+            changed["benchmarks"]["presidio-research"]["rows"]["opf"] = row(25)
+            data.write_text(json.dumps(changed), encoding="utf-8")
+            self.assertEqual(render.main([*args, "--check"]), 1)
+
+    def test_smoke_results_are_refused(self) -> None:
+        import render_theirbench as render
+
+        with tempfile.TemporaryDirectory() as root:
+            smoke = Path(root) / "smoke.json"
+            smoke.write_text(json.dumps({"smoke_limit": 30, "system": "x", "scored": {}}), encoding="utf-8")
+            report = Path(root) / "report.json"
+            report.write_text(json.dumps({"harness_dirty": False, "benchmark": "presidio-research", "rows": {},
+                                          **{k: None for k in ("identity", "harness_revision", "gaze_crates_tree",
+                                                               "label_maps_sha256", "mapping_sha256", "hardware",
+                                                               "common_intersection_labels", "splits", "provenance")}}),
+                              encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "smoke"):
+                render.assemble([report], [f"presidio-research={smoke}"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

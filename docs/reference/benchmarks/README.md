@@ -22,6 +22,7 @@ and fails on drift.
 | [Charts](#charts) | per-arm and release-over-release |
 | [Release history](#release-history) | one row per released version |
 | [Leak ledger](#leak-ledger) | every leaked gold byte by root cause |
+| [Competitors' own benchmarks](#competitors-own-benchmarks) | Gaze and competitors on Presidio Research and PIIBench-commercial |
 | [Safety-Net Matrix](#safety-net-matrix) | backend pins and matrix shape |
 | [NER Model Leaderboard](#ner-model-leaderboard) | candidate backends |
 | [How to reproduce](#how-to-reproduce) | commands, harness, hardware |
@@ -777,6 +778,19 @@ row.
 <!-- END GENERATED: latency -->
 
 ---
+
+## Competitors' own benchmarks
+
+The [competitor comparison](competitors.md) runs other tools on Gaze's corpus.
+This section turns that around: Gaze and the same tools, in the same
+configurations, run on the sets that competitors publish their own numbers on.
+Each vendor's published number is reproduced with the vendor's own tool first,
+and every row is also scored by the benchmark's own evaluator. Licences
+decide which sets run; the tooling and the sets that are not run are described
+in [`scripts/bench/compare/theirbench/`](../../../scripts/bench/compare/theirbench/README.md).
+
+<!-- BEGIN GENERATED: their-benchmarks -->
+<!-- END GENERATED: their-benchmarks -->
 
 ## Safety-Net Matrix
 
