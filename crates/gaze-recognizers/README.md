@@ -229,7 +229,7 @@ in core 0.6.0.
 | Rule / custom class | Bundle | Complete, case-insensitive cues |
 | --- | --- | --- |
 | `birth_date.cue` / `custom:birth_date` | `core` | en `DOB`, `D.O.B.`, `date of birth`, `birth date`, `birthday`, `born`; de `Geburtsdatum`, `Geb.-Datum`, `geb.`, `Geburtstag`, `geboren`, trailing `am <date> geboren`; fr `né`/`née`, `date de naissance`; nl `geboortedatum`; da `fødselsdato`, `fødselsdag`, `født`; es `fecha de nacimiento`, `nacido`/`nacida`, `nació` |
-| `age.cue` / `custom:age` | `core` | `aged 29`, `29 years old`, `29-year-old`, `Alter: 29`, `29 Jahre alt`, `âgé de 29`, `idade: 29`; only the number is tokenized |
+| `age.cue` / `custom:age` | `core` | `aged N`, `N years old`, `N-year-old`, `Alter: N`, `N Jahre alt`, `âgé de N`, `idade: N`; only the number is tokenized |
 | `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
 
 `postal.address_four_digit` recognizes a four-digit postcode after a postal label or
