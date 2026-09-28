@@ -905,7 +905,7 @@ priority = 86
 #
 # `custom:postal_code` is served by eight recognizers in two groups that cannot overlap:
 #
-#   NUMERIC — document-basis, locale-gated: `postal.de`, `postal.us`, `postal.at_ch`, `postal.nz`, `postal.au`
+#   NUMERIC — document-basis: `postal.de`, `postal.us`, `postal.at_ch`, `postal.address_four_digit`, `postal.au`
 #     `postal.de` / `postal.us` accept naked five-digit strings, a shape that carries no structural
 #     signal whatsoever and is indistinguishable from a year, an order number, or an amount. The
 #     DOCUMENT-locale gate is the only thing standing in for that missing structure, which is why
@@ -931,7 +931,7 @@ priority = 86
 id = "postal.de"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.us", "postal.at_ch", "postal.nz", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.us", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-DE"]
 locale_basis = "document"
@@ -950,7 +950,7 @@ priority = 70
 id = "postal.us"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.at_ch", "postal.nz", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-US"]
 locale_basis = "document"
@@ -1009,7 +1009,7 @@ priority = 70
 id = "postal.at_ch"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.nz", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.address_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-AT", "de-CH"]
 locale_basis = "document"
@@ -1029,17 +1029,18 @@ priority = 70
 origin = "project-authored"
 license = "Apache-2.0"
 
-# New Zealand postcodes are four digits (NZ Post addressing standard:
-# https://www.nzpost.co.nz/personal/sending-in-nz/postcodes). A bare four-digit number also names
-# years and quantities, so this rule needs either an explicit postal cue or a
-# street-address frame ending in a locality and postcode. Only the postcode is
+# Four-digit postcodes, including New Zealand postcodes (NZ Post addressing standard:
+# https://www.nzpost.co.nz/personal/sending-in-nz/postcodes), can follow a postal label or a
+# street address and town. A bare four-digit number also names
+# years and quantities, so this global rule needs either an explicit postal cue
+# or a street-address frame ending in a locality and postcode. Only the postcode is
 # captured; the locality and street keep their own recognizer provenance.
 [[recognizers]]
-id = "postal.nz"
-safety_tier = "locale_gated"
+id = "postal.address_four_digit"
+safety_tier = "safe_default"
 class = "custom:postal_code"
 enabled = true
-locales = ["en-NZ"]
+locales = ["global"]
 locale_basis = "document"
 cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 
@@ -1079,7 +1080,7 @@ license = "Apache-2.0"
 id = "postal.au"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.nz", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.address_four_digit", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-AU"]
 locale_basis = "document"
@@ -1129,7 +1130,7 @@ license = "Apache-2.0"
 id = "postal.ca"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.nz", "postal.au", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-CA"]
 locale_basis = "format"
@@ -1185,7 +1186,7 @@ license = "Apache-2.0"
 id = "postal.gb"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.nz", "postal.au", "postal.ca", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.ca", "postal.ie"]
 enabled = true
 locales = ["en-GB"]
 locale_basis = "format"
@@ -1237,7 +1238,7 @@ license = "Apache-2.0"
 id = "postal.ie"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.nz", "postal.au", "postal.ca", "postal.gb"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.ca", "postal.gb"]
 enabled = true
 locales = ["en-IE"]
 locale_basis = "format"

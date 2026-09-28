@@ -232,7 +232,7 @@ in core 0.6.0.
 | `age.cue` / `custom:age` | `core` | `aged 29`, `29 years old`, `29-year-old`, `Alter: 29`, `29 Jahre alt`, `âgé de 29`, `idade: 29`; only the number is tokenized |
 | `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
 
-`postal.nz` recognizes a four-digit New Zealand postcode after a postal label or
+`postal.address_four_digit` recognizes a four-digit postcode after a postal label or
 at the end of a street-address frame with a town. A bare four-digit number stays raw.
 
 ### Supported grammar

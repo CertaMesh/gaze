@@ -111,8 +111,9 @@ fn postal_cues_accept_link_words_and_hyphens() {
 }
 
 #[test]
-fn new_zealand_postcode_needs_a_postal_or_address_anchor() {
+fn four_digit_postcode_needs_a_postal_or_address_anchor() {
     let nz = [LocaleTag::parse("en-NZ").expect("locale")];
+    let global = [LocaleTag::Global];
     for text in [
         "Postcode: 9016",
         "Postal code is 9016",
@@ -120,8 +121,10 @@ fn new_zealand_postcode_needs_a_postal_or_address_anchor() {
         "42 Model Road, Arcadia 9016",
         "{\"zip_code\": \"9016\"}",
     ] {
-        let cleaned = clean_in(&nz, text);
-        assert_code_removed(&cleaned, "9016", "en-NZ");
+        for chain in [&nz[..], &global[..]] {
+            let cleaned = clean_in(chain, text);
+            assert_code_removed(&cleaned, "9016", "four-digit address");
+        }
     }
     for text in [
         "The report was filed in March 2024.",
