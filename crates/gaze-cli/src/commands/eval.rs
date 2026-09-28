@@ -368,7 +368,7 @@ mod tests {
                 range: 0..2,
                 class: "email".into(),
             }],
-            vec![3..5],
+            std::iter::once(3..5).collect(),
         );
         missed.finish();
         assert_eq!(missed.byte_f1, 0.0);
