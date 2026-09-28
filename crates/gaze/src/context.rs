@@ -32,14 +32,14 @@ const MAX_RECORD_DEPTH: usize = 4;
 const MAX_RECORD_FIELDS: usize = 32;
 const MAX_VALUE_BYTES: usize = 256;
 const MAX_VARIANTS_PER_FIELD: usize = 2;
-pub const RECORD_DICTIONARY_PREFIX: &str = "__record_v2_";
+pub const RECORD_DICTIONARY_PREFIX: &str = "record-v2-";
 const HIDDEN_CONTEXT_NAME: &str = "<context>";
 
 /// Stable internal key for a typed record slot. The class digest avoids
 /// exposing adopter class names in dictionary IDs and audit source IDs.
 pub fn record_dictionary_name(class: &PiiClass, slot: usize) -> String {
     let digest = Sha256::digest(class.to_canonical_str().as_bytes());
-    format!("{RECORD_DICTIONARY_PREFIX}{}_{slot}", hex::encode(digest))
+    format!("{RECORD_DICTIONARY_PREFIX}{}-{slot}", hex::encode(digest))
 }
 
 #[derive(Debug, Deserialize)]
@@ -454,6 +454,9 @@ mod tests {
             .map(|(name, _)| name)
             .unwrap();
         assert_eq!(ctx.dictionaries[name].terms, ["Alice Smith", "Smith Alice"]);
+        assert!(name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'));
         assert!(ctx.dictionaries[name].case_sensitive);
         let email = ctx
             .class_map
