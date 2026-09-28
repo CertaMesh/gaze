@@ -141,6 +141,7 @@ impl Context {
         if raw
             .dictionaries
             .keys()
+            .chain(raw.class_map.keys())
             .any(|name| name.starts_with(RECORD_DICTIONARY_PREFIX))
         {
             return Err(ContextError::InvalidRecordMapping);
@@ -470,6 +471,7 @@ mod tests {
             r#"{"record":{"customer":{"name":"private marker"}},"field_map":{"/customer/name":"unknown:private marker"}}"#.to_string(),
             r#"{"record":{"customer":{"name":"private marker"}},"field_map":{"/wrong":"Name"}}"#.to_string(),
             serde_json::json!({"record":{"name":"X".repeat(MAX_VALUE_BYTES + 1)},"field_map":{"/name":"Name"}}).to_string(),
+            format!(r#"{{"class_map":{{"{}collision":"Name"}}}}"#, RECORD_DICTIONARY_PREFIX),
         ] {
             let err = Context::from_json_str(&raw).unwrap_err();
             assert!(!err.to_string().contains("private marker"));
