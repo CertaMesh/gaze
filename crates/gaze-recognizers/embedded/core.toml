@@ -1660,7 +1660,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:id[ _-]?card(?:[ _-]?(?:number|no\.?|nr\.?|id))?|identification[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|identity[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|personalausweis(?:[ _-]?(?:nummer|nr\.?))?|identit[aä]tskarte(?:[ _-]?(?:nummer|nr\.?))?|ausweiskarte(?:[ _-]?nummer)?|carte[ _-]d['’]identit[eé](?:[ _-]?(?:num[eé]ro|n[o°]))?|identiteitskaart(?:[ _-]?nummer)?|cart[aã]o[ _-]de[ _-]identidade(?:[ _-]?(?:n[uú]mero|n[o°]))?)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*[:=#|,][ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*([A-Z]{1,4}-?\d[A-Z0-9]{5,13}|\d{6,12}[A-Z]{0,3}|[A-Z]{0,3}-?\d{2,4}(?:[ ./-]\d{2,4}){2,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}_./-]|\.(?:\z|[ \t\r\n]))'''
+pattern = '''(?i)(?:\b|_)(?:national[ _-]?(?:id|identification)(?:[ _-]?(?:number|no\.?|nr\.?))?|id[ _-]?card(?:[ _-]?(?:number|no\.?|nr\.?|id))?|identification[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|identity[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|personalausweis(?:[ _-]?(?:nummer|nr\.?))?|identit[aä]tskarte(?:[ _-]?(?:nummer|nr\.?))?|ausweiskarte(?:[ _-]?nummer)?|carte[ _-]d['’]identit[eé](?:[ _-]?(?:num[eé]ro|n[o°]))?|identiteitskaart(?:[ _-]?nummer)?|cart[aã]o[ _-]de[ _-]identidade(?:[ _-]?(?:n[uú]mero|n[o°]))?)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*[:=#|,][ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*([A-Z]{1,4}-?\d[A-Z0-9]{5,13}|\d{6,12}[A-Z]{0,3}|[A-Z]{0,3}-?\d{2,4}(?:[ ./-]\d{2,4}){2,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}_./-]|\.(?:\z|[ \t\r\n]))'''
 capture_groups = [1]
 
 [recognizers.context]

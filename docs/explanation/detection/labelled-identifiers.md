@@ -1,6 +1,6 @@
 # Labelled identifiers
 
-The bundled tax-number, driver-licence, and ID-card fallbacks read a class-specific field name,
+The bundled tax-number, driver-licence, and national-ID or ID-card fallbacks read a class-specific field name,
 an explicit separator (`:`, `=`, `#`, `|`, or a comma), then one digit-bearing identifier on the same line.
 They cover form fields, JSON keys, logs, and table cells whose values do not fit a country's
 fixed identifier shape. English, German, French, Dutch, and Portuguese labels are included.

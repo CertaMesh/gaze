@@ -483,6 +483,11 @@ fn labelled_identifier_values_are_captured_without_the_field_name() {
             "national_id",
         ),
         (
+            r#"{"national_id":"NL12345678"}"#,
+            "NL12345678",
+            "national_id",
+        ),
+        (
             r#"{"carte_d'identité":"FR12345678"}"#,
             "FR12345678",
             "national_id",
@@ -514,6 +519,7 @@ fn labelled_identifier_values_are_captured_without_the_field_name() {
 fn labelled_identifier_field_boundaries_reject_lookalikes() {
     for input in [
         "order_id: 5123-6789-0456",
+        "international_id: NL12345678",
         "invoice_number: 67-853-422",
         "Identification card: A12345678901234567890",
         "Permis de conduire:\n987654321",
