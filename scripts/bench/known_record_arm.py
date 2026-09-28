@@ -110,44 +110,67 @@ def paired_records(
 def explicit_counterweights(
     known_pool: dict[str, list[str]],
 ) -> tuple[list[score.Document], dict[str, str]]:
-    """Price exact-value homonyms and identifier-shaped product references."""
+    """Price collisions and nearby benign text; include email/name variant positives."""
     documents: list[score.Document] = []
     contexts: dict[str, str] = {}
     for language, pool in sorted(known_pool.items()):
         counts: Counter[str] = Counter()
+
+        def add(kind: str, text: str, context: str, label: str | None = None, value: str = "") -> None:
+            if counts[kind] >= 16:
+                return
+            uid = f"known-record-{language}-{kind}-{counts[kind]:02d}"
+            if label:
+                start = text.encode("utf-8").index(value.encode("utf-8"))
+                spans = (score.Span(start, start + len(value.encode("utf-8")), label),)
+            else:
+                spans = ()
+            documents.append(
+                score.Document(
+                    uid=uid,
+                    text=text,
+                    language=language,
+                    region="",
+                    source_dataset="known-record-oracle-counterweight",
+                    spans=spans,
+                    negative_category=None if label else f"record_{kind}",
+                    cell=f"D|record_{kind}|synthetic|{'positive' if label else 'benign'}",
+                )
+            )
+            contexts[uid] = context
+            counts[kind] += 1
+
         for context in pool:
             parsed = json.loads(context)
             for key, value in parsed["record"].items():
                 class_name = parsed["field_map"][f"/{key}"]
-                kind = "homonym" if class_name == "Name" else "reference"
-                if kind == "reference" and class_name not in {
-                    "custom:iban", "custom:credit_card", "custom:phone"
-                }:
-                    continue
-                if counts[kind] >= 16:
-                    continue
-                uid = f"known-record-counterweight-{language}-{kind}-{counts[kind]:02d}"
-                text = (
-                    f"The fictional product is called {value}."
-                    if kind == "homonym"
-                    else f"The synthetic catalog reference is {value}."
-                )
-                documents.append(
-                    score.Document(
-                        uid=uid,
-                        text=text,
-                        language=language,
-                        region="",
-                        source_dataset="known-record-oracle-counterweight",
-                        spans=(),
-                        negative_category=f"record_{kind}",
-                        cell=f"D|record_{kind}|synthetic|benign",
-                    )
-                )
-                contexts[uid] = context
-                counts[kind] += 1
-            if counts["homonym"] >= 16 and counts["reference"] >= 16:
-                break
+                if class_name == "Name":
+                    add("homonym", f"The fictional product is called {value}.", context)
+                    parts = value.split()
+                    if len(parts) == 2:
+                        add("surname", f"The unrelated author surname is {parts[-1]}.", context)
+                        if all(part.isalpha() and len(part) >= 3 for part in parts):
+                            reversed_name = f"{parts[-1]} {parts[0]}"
+                            add("name_order", f"Contact: {reversed_name}.", context, "GIVENNAME", reversed_name)
+                elif class_name == "Email" and value.isascii() and "@" in value:
+                    mixed = value.swapcase()
+                    if mixed != value:
+                        add("mixed_case_email", f"Contact: {mixed}.", context, "EMAIL", mixed)
+                elif class_name in {"custom:iban", "custom:credit_card", "custom:phone"}:
+                    add("reference", f"The synthetic catalog reference is {value}.", context)
+                    digit = next((i for i in range(len(value) - 1, -1, -1) if value[i].isdigit()), None)
+                    if digit is not None:
+                        nearby = value[:digit] + str((int(value[digit]) + 1) % 10) + value[digit + 1 :]
+                        add("nearby_digits", f"The unrelated catalog reference is {nearby}.", context)
+                elif class_name == "Location":
+                    part = next((word for word in value.split() if len(word) >= 4), None)
+                    if part:
+                        add("partial_address", f"The film title contains {part}.", context)
+                if class_name.startswith("custom:"):
+                    letter = next((i for i, char in enumerate(value) if char.isascii() and char.isalpha()), None)
+                    if letter is not None:
+                        near = value[:letter] + ("Z" if value[letter] != "Z" else "Y") + value[letter + 1 :]
+                        add("ocr_near_miss", f"The unrelated label reads {near}.", context)
     return documents, contexts
 
 
@@ -217,7 +240,7 @@ def main() -> None:
         ["git", "rev-parse", "HEAD"], cwd=repo, text=True
     ).strip()
     known_pool: dict[str, list[str]] = {}
-    for document in layers["A"]:
+    for document in [*layers["C"], *layers["A"]]:
         context, _ = record_for_document(document, policy)
         if context is not None:
             known_pool.setdefault(document.language, []).append(context)
@@ -257,11 +280,23 @@ def main() -> None:
             policy_path=policy_path,
         )
         baseline_eligible_leaks, baseline_record = eligible_leak_counter(contexts)
+        exact_eligible_leaks, exact_record = eligible_leak_counter(contexts)
         record_eligible_leaks, record_record = eligible_leak_counter(contexts)
-        baseline = score.run_config(**kwargs, record_document=baseline_record)
+        clean_environment = dict(os.environ)
+        clean_environment.pop("GAZE_BENCH_KNOWN_RECORD_ARM", None)
+        clean_environment.pop("GAZE_BENCH_RECORD_EXACT_ONLY", None)
+        baseline = score.run_config(
+            **kwargs, base_environment=clean_environment, record_document=baseline_record
+        )
+        exact_record_run = score.run_config(
+            **kwargs,
+            base_environment={**clean_environment, "GAZE_BENCH_KNOWN_RECORD_ARM": "1", "GAZE_BENCH_RECORD_EXACT_ONLY": "1"},
+            record_document=exact_record,
+            context_for_document=lambda document: contexts[document.uid],
+        )
         with_record = score.run_config(
             **kwargs,
-            base_environment={**os.environ, "GAZE_BENCH_KNOWN_RECORD_ARM": "1"},
+            base_environment={**clean_environment, "GAZE_BENCH_KNOWN_RECORD_ARM": "1"},
             record_document=record_record,
             context_for_document=lambda document: contexts[document.uid],
         )
@@ -271,6 +306,7 @@ def main() -> None:
             "explicit_counterweight_documents": sum(uid in counterweight_contexts for uid in contexts),
             "eligible_gold_bytes_by_label": dict(sorted(eligible.items())),
             "baseline_eligible_leaked_bytes_by_label": dict(sorted(baseline_eligible_leaks.items())),
+            "exact_eligible_leaked_bytes_by_label": dict(sorted(exact_eligible_leaks.items())),
             "with_record_eligible_leaked_bytes_by_label": dict(sorted(record_eligible_leaks.items())),
             "baseline": {
                 key: baseline[key]
@@ -278,6 +314,10 @@ def main() -> None:
             },
             "with_record": {
                 key: with_record[key]
+                for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")
+            },
+            "exact_record": {
+                key: exact_record_run[key]
                 for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")
             },
         }

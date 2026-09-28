@@ -28,14 +28,18 @@ def test_gold_value_becomes_explicit_record_field() -> None:
     assert eligible == {"EMAIL": len("alice@example.invalid")}
 
 
-def test_negative_receives_paired_record_and_counterweight_is_benign() -> None:
+def test_negative_receives_paired_record_and_variant_gold_is_scored() -> None:
     positive = document("positive", "Alice Smith", "GIVENNAME")
     negative = document("negative", "The catalog is open.", None)
     contexts, _ = arm.paired_records([positive, negative], POLICY)
     assert contexts[negative.uid] == contexts[positive.uid]
     counters, explicit = arm.explicit_counterweights({"en": [contexts[positive.uid]]})
-    assert counters and all(not item.spans for item in counters)
-    assert explicit[counters[0].uid] == contexts[positive.uid]
+    assert counters and all(explicit[item.uid] == contexts[positive.uid] for item in counters)
+    assert all(not item.spans for item in counters if item.negative_category)
+    assert {item.negative_category for item in counters if item.negative_category} == {
+        "record_homonym", "record_surname"
+    }
+    assert any(item.spans and item.cell.endswith("positive") for item in counters)
 
 
 def test_non_reversible_policy_fails_preflight() -> None:
