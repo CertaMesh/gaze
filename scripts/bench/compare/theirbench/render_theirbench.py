@@ -26,11 +26,6 @@ TITLES = {
 OWN_METRIC = {"presidio-research": ("f2", "F2, binary PII vs O, presidio-evaluator"),
               "piibench-commercial": ("f1", "span F1, exact span + type, PIIBench seqeval")}
 GAZE_ROWS = ("gaze-full", "gaze-rules-ner", "gaze-rules-only")
-# STEER 2: chart bars are configurations declared before measuring, never
-# the lowest-leak row. Replaced by the comparison's declared chart list once
-# Track B publishes it; copied into the JSON at assemble time.
-DECLARED_CHART_ROWS = ("gaze-full", "presidio-strong", "gliner", "opf", "datafog-core",
-                       "datafog-gliner", "scrubadub-spacy")
 QUIET = "not measured under a quiet machine"
 NOT_RUN = {
     "PIIBench full ten-source mix": "five sources carry non-commercial or custom-academic licences and "
@@ -63,13 +58,16 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
     benchmarks: dict[str, Any] = {}
     for path in reports:
         report = json.loads(path.read_text(encoding="utf-8"))
+        if report.get("preflight"):
+            raise ValueError(f"{path}: preflight results are never published")
         if report["harness_dirty"]:
             raise ValueError(f"{path}: measured on a dirty harness")
         name = report["benchmark"]
         rows = {tool: result["test"] for tool, result in report["rows"].items()}
         benchmarks[name] = {key: report[key] for key in (
             "identity", "harness_revision", "gaze_crates_tree", "label_maps_sha256", "mapping_sha256",
-            "hardware", "common_intersection_labels", "splits", "provenance")}
+            "hardware", "common_intersection_labels", "splits", "provenance",
+            "comparison_revision", "comparison_sha256")}
         benchmarks[name]["rows"] = rows
         benchmarks[name]["own_metric"] = {}
         benchmarks[name]["reproduction"] = {}
@@ -101,8 +99,10 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
             raise ValueError(f"{name}: no own-scorer result for {missing}")
         if not entry["reproduction"]:
             raise ValueError(f"{name}: the vendor number must be reproduced before anything is published")
-    for entry in benchmarks.values():
-        entry["chart_rows"] = [tool for tool in DECLARED_CHART_ROWS if tool in entry["rows"]]
+    for path in reports:
+        report = json.loads(path.read_text(encoding="utf-8"))
+        # STEER 2: bars are the comparison's declared configurations, never the lowest-leak row.
+        benchmarks[report["benchmark"]]["chart_rows"] = ["gaze-full", *report["chart_configs"].values()]
     return {"schema_version": 1, "report_only": "never used to design or tune Gaze rules",
             "not_run": NOT_RUN, "benchmarks": benchmarks}
 
@@ -125,7 +125,7 @@ def chart_rows(entry: Mapping[str, Any]) -> list[str]:
 
 def latency_cell(entry: Mapping[str, Any], tool: str) -> str:
     cpu = entry["provenance"].get(tool, {}).get("cpu")
-    if cpu is None or cpu["contended"]:
+    if cpu is None or cpu["contended"] or not cpu.get("valid", False):
         return QUIET
     p50 = entry["rows"][tool]["latency"]["p50_ms"]
     return "n/a" if p50 is None else f"{p50:.1f}"
