@@ -1012,6 +1012,17 @@ class GateTests(unittest.TestCase):
                 self.assertEqual(result["summary"]["leaked_bytes_decrease"], 600)
                 self.assertEqual(result["verdict"], "pass")
 
+    def test_iban_and_card_uncued_invalid_twins_keep_all_surface_credit(self) -> None:
+        for family, label in (("iban_de", "IBAN"), ("card", "CREDITCARDNUMBER")):
+            with self.subTest(label=label):
+                cell = f"A|{family}|prose_nocue|invalid"
+                base = self._with_invalid(_scorecard(self.BASE, self.FP), cell, "OTHER", 300)
+                candidate = self._with_invalid(_scorecard(self.BASE, self.FP), cell, "OTHER", 0)
+                result = agentic.gate(base, candidate)
+                self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 0)
+                self.assertEqual(result["layers"]["A"]["leaked_base"], self.BASE["A"] + 300)
+                self.assertEqual(result["summary"]["leaked_bytes_decrease"], 300)
+
     def test_checksum_invalid_gold_of_other_labels_stays_ungated(self) -> None:
         base = self._with_invalid(_scorecard(self.BASE, self.FP), "A|other|csv|invalid", "OTHER", 300)
         candidate = self._with_invalid(
@@ -1054,15 +1065,22 @@ class GateTests(unittest.TestCase):
                           "TAXNUM": ("ref_number_11",), "CPF": ("ref_number_11",),
                           "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
                           "PHONENUMBER": ()})
-        self.assertEqual(set(agentic.CREDIT_GUARD_FAMILIES), agentic.CREDITABLE_INVALID_LABELS)
+        self.assertEqual(set(agentic.CREDIT_GUARD_FAMILIES), set(agentic.CREDIT_SCOPE_BY_LABEL))
 
-    def test_creditable_invalid_labels_are_exactly_the_user_ruled_classes(self) -> None:
+    def test_invalid_gold_credit_scopes_match_the_two_user_rulings(self) -> None:
         self.assertEqual(agentic.GATE_CREDIT_VERSION, 2)
-        self.assertEqual(agentic.CREDITABLE_INVALID_LABELS,
-                         {"IBAN", "CREDITCARDNUMBER", "PHONENUMBER", "TAXNUM",
-                          "CPF", "BSN", "NHSNUMBER"})
+        self.assertEqual(agentic.CREDIT_SCOPE_BY_LABEL, {
+            "IBAN": agentic.CreditScope.ALL,
+            "CREDITCARDNUMBER": agentic.CreditScope.ALL,
+            "PHONENUMBER": agentic.CreditScope.CUED,
+            "TAXNUM": agentic.CreditScope.CUED,
+            "CPF": agentic.CreditScope.CUED,
+            "BSN": agentic.CreditScope.CUED,
+            "NHSNUMBER": agentic.CreditScope.CUED,
+        })
         labels = {family.label for family in agentic.IDENTIFIER_FAMILIES}
-        self.assertLessEqual(agentic.CREDITABLE_INVALID_LABELS - {"PHONENUMBER"}, labels)
+        self.assertLessEqual(set(agentic.CREDIT_SCOPE_BY_LABEL) - {"PHONENUMBER"}, labels)
+        self.assertNotIn("PHONENUMBER", labels)
 
     def test_cued_invalid_gold_is_credited_for_each_new_class(self) -> None:
         for family, label in (("steuer_id", "TAXNUM"), ("cpf", "CPF"),
@@ -1077,6 +1095,19 @@ class GateTests(unittest.TestCase):
                 self.assertEqual(result["layers"]["C"]["twin_leaked_base"], 0)
                 self.assertEqual(result["summary"]["leaked_bytes_decrease"], 600)
                 self.assertEqual(result["verdict"], "pass")
+
+    def test_uncued_invalid_twins_stay_excluded_for_each_new_layer_a_class(self) -> None:
+        for family in ("steuer_id", "cpf", "bsn", "nhs"):
+            with self.subTest(family=family):
+                cell = f"A|{family}|prose_nocue|invalid"
+                base = self._with_invalid(_scorecard(self.BASE, self.FP), cell, "OTHER", 300)
+                candidate = self._with_invalid(
+                    _scorecard(self.BASE, {**self.FP, "D": self.FP["D"] + 100}), cell, "OTHER", 0)
+                result = agentic.gate(base, candidate)
+                self.assertEqual(result["layers"]["A"]["twin_leaked_base"], 300)
+                self.assertEqual(result["layers"]["A"]["leaked_base"], self.BASE["A"])
+                self.assertEqual(result["summary"]["leaked_bytes_decrease"], 0)
+                self.assertEqual(result["verdict"], "fail")
 
     def test_failed_validator_phone_gold_is_credited_in_layer_c(self) -> None:
         base = self._with_invalid(_scorecard(self.BASE, self.FP),
@@ -1510,16 +1541,16 @@ class ReleaseGateCreditTests(unittest.TestCase):
     BENCH = REPO_ROOT / "docs/reference/benchmarks"
     # release: (C gated before, C gated after, A gated before, A gated after), contract v2.
     EXPECTED = {
-        "v0.14.0": (19_832, 22_144, 19_409, 22_551),
-        "v0.15.0": (11_043, 13_319, 12_835, 15_672),
-        "v0.15.1": (11_043, 13_319, 12_662, 15_499),
+        "v0.14.0": (19_832, 22_144, 19_409, 22_132),
+        "v0.15.0": (11_043, 13_319, 12_835, 15_280),
+        "v0.15.1": (11_043, 13_319, 12_662, 15_107),
     }
 
-    def totals(self, release: str, creditable: frozenset[str]) -> dict:
+    def totals(self, release: str, scopes: dict[str, agentic.CreditScope]) -> dict:
         import gzip
         layers = json.loads(gzip.open(self.BENCH / f"agentic-layers-{release}.json.gz").read())["layers"]
         scorecard = json.loads((self.BENCH / f"scorecard-{release}-scored-labels-v2.json").read_text())
-        with mock.patch.object(agentic, "CREDITABLE_INVALID_LABELS", creditable):
+        with mock.patch.object(agentic, "CREDIT_SCOPE_BY_LABEL", scopes):
             # Each release is gated on the arm it shipped, recorded on its layer runs.
             config = layers["A"]["runs"][0]["config"]
             return agentic.layer_totals({**scorecard, "layers": layers}, config)
@@ -1527,8 +1558,11 @@ class ReleaseGateCreditTests(unittest.TestCase):
     def test_release_totals_before_and_after_the_credit(self) -> None:
         for release, (c_before, c_after, a_before, a_after) in self.EXPECTED.items():
             with self.subTest(release=release):
-                before = self.totals(release, frozenset({"IBAN", "CREDITCARDNUMBER"}))
-                after = self.totals(release, agentic.CREDITABLE_INVALID_LABELS)
+                before = self.totals(release, {
+                    "IBAN": agentic.CreditScope.ALL,
+                    "CREDITCARDNUMBER": agentic.CreditScope.ALL,
+                })
+                after = self.totals(release, agentic.CREDIT_SCOPE_BY_LABEL)
                 self.assertEqual((before["C"]["leaked"], after["C"]["leaked"]), (c_before, c_after))
                 self.assertEqual((before["A"]["leaked"], after["A"]["leaked"]), (a_before, a_after))
                 for layer in agentic.GATE_LAYERS:

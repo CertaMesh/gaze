@@ -1213,12 +1213,23 @@ file or model comparability and must not be used for a new detection merge.
 **Gated gold**, under gate credit contract v2, includes checksum-invalid gold
 for `IBAN` and `CREDITCARDNUMBER` (user ruling 2026-09-27) and for
 `PHONENUMBER`, `TAXNUM` (Steuer-ID), `CPF`, `BSN`, and `NHSNUMBER` (user ruling
-2026-09-28: credit every class tokenized when cued). Layer A counts those
-labels' invalid twins like valid gold. Layer C counts their validator-failed
-Kiji gold from the per-label validator split. The gate reports other invalid
-gold outside net-bytes credit, and any rise in its leaked bytes still fails.
-The headline and census count all gold and do not change. Layer A currently
-has no phone family, so phone's new credit is measurable only in layer C.
+2026-09-28: credit each class when cued). Layer A credits the IBAN and card
+twins on every surface, but credits the newer classes that have layer A
+families only on cued surfaces. Their uncued `prose_nocue` twins remain outside
+net-bytes credit.
+Layer C counts validator-failed Kiji gold for all seven labels from its
+per-label validator split. Other invalid gold stays outside net-bytes credit,
+and any rise in its leaked bytes still fails. The headline and census count
+all gold and do not change. Layer A has no phone family, so phone's new credit
+is measurable only in layer C.
+
+**Layer C cue limit:** its scorecards and saved observations have no per-gold
+cue marker, so the gate currently credits all validator-failed `PHONENUMBER`,
+`TAXNUM`, `CPF`, `BSN`, and `NHSNUMBER` gold there, including unlabelled values
+E1 may still veto. A cue-aware C split is feasible only after a reviewed cue
+annotation is added for each gold span and saved in the observation record;
+the current aggregate scorecards cannot reconstruct it. That is a separate
+benchmark contract change and remeasurement.
 
 The credit comes with a **credit guard**. A rule that tags every
 space-grouped 16-digit run would earn thousands of credited card bytes and
@@ -1236,9 +1247,9 @@ from the IBAN/card-only credit to gate credit contract v2:
 
 | Release | Layer C before | Layer C after | Layer A before | Layer A after |
 | --- | ---: | ---: | ---: | ---: |
-| v0.14.0 | 19,832 | 22,144 | 19,409 | 22,551 |
-| v0.15.0 | 11,043 | 13,319 | 12,835 | 15,672 |
-| v0.15.1 | 11,043 | 13,319 | 12,662 | 15,499 |
+| v0.14.0 | 19,832 | 22,144 | 19,409 | 22,132 |
+| v0.15.0 | 11,043 | 13,319 | 12,835 | 15,280 |
+| v0.15.1 | 11,043 | 13,319 | 12,662 | 15,107 |
 
 `ReleaseGateCreditTests` in `test_agentic_layers.py` pins this table against
 the committed records.
