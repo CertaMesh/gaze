@@ -279,5 +279,37 @@ class HoldAndRescoreTest(unittest.TestCase):
 
         self.assertEqual(backends.backend_code_sha256(), backends.BACKEND_CODE_SHA256)
 
+
+class GuardTest(unittest.TestCase):
+    def test_piibench_typed_seqeval_is_held_for_held_tools(self) -> None:
+        import render_theirbench as render
+
+        entry = synthetic()["benchmarks"]["presidio-research"]
+        self.assertEqual(render.own_metric_cell("piibench-commercial", entry, "opf", "f2"), render.HELD)
+        self.assertEqual(render.own_metric_cell("piibench-commercial", entry, "gaze-full", "f2"), "0.500")
+        self.assertEqual(render.own_metric_cell("presidio-research", entry, "opf", "f2"), "0.500")
+
+    def test_backend_code_drift_refuses_to_run(self) -> None:
+        import backends
+
+        original = backends.BACKEND_CODE_SHA256
+        try:
+            backends.BACKEND_CODE_SHA256 = "0" * 64
+            with self.assertRaisesRegex(SystemExit, "backend construction"):
+                backends.verify_pinned_comparison()
+        finally:
+            backends.BACKEND_CODE_SHA256 = original
+
+    def test_unrescored_or_dirty_rescore_is_never_published(self) -> None:
+        import render_theirbench as render
+
+        base = {"harness_dirty": False, "benchmark": "presidio-research", "rows": {}, "chart_configs": {}}
+        with tempfile.TemporaryDirectory() as root:
+            for extra in ({}, {"rescored_with": {"harness_dirty": True}}):
+                report = Path(root) / "report.json"
+                report.write_text(json.dumps({**base, **extra}), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "rescore"):
+                    render.assemble([report], [], [])
+
 if __name__ == "__main__":
     unittest.main()
