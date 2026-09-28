@@ -1,0 +1,27 @@
+{
+  "en_core_web_lg": {
+    "version": "3.7.1",
+    "sha256": "ab70aeb6172cde82508f7739f35ebc9918a3d07debeed637403c8f794ba3d3dc",
+    "url": "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl"
+  },
+  "de_core_news_lg": {
+    "version": "3.7.0",
+    "sha256": "1451e06dedb5c3bb096127bf7c2117c253265fdfcad29ee488ff57bec5f78eaa",
+    "url": "https://github.com/explosion/spacy-models/releases/download/de_core_news_lg-3.7.0/de_core_news_lg-3.7.0-py3-none-any.whl"
+  },
+  "nl_core_news_lg": {
+    "version": "3.7.0",
+    "sha256": "02194e98105584a6e5008a523a94a5d6e4da2feb0964741646c507c8e20730d4",
+    "url": "https://github.com/explosion/spacy-models/releases/download/nl_core_news_lg-3.7.0/nl_core_news_lg-3.7.0-py3-none-any.whl"
+  },
+  "fr_core_news_lg": {
+    "version": "3.7.0",
+    "sha256": "c2d98eb9073ff0f3d865179448e7f1868f27b2643c0e7215acc2438cd9eae554",
+    "url": "https://github.com/explosion/spacy-models/releases/download/fr_core_news_lg-3.7.0/fr_core_news_lg-3.7.0-py3-none-any.whl"
+  },
+  "pt_core_news_lg": {
+    "version": "3.7.0",
+    "sha256": "4eed7801647c39ced078eb325d0ff8eb2ea5d4945501b8ee898dced85c686717",
+    "url": "https://github.com/explosion/spacy-models/releases/download/pt_core_news_lg-3.7.0/pt_core_news_lg-3.7.0-py3-none-any.whl"
+  }
+}

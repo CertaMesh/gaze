@@ -1,0 +1,1436 @@
+{
+  "compare_sha256": "22854124bb6ce387577cc6bcf2a7e3c1114210bb2aee523e9a222c5a017b7521",
+  "contracts": {
+    "agentic": "d30ee303effc9a0de004531d12e85deb530d5eb74a1298e5d4432da4cfd6fce0",
+    "v1": null,
+    "v2": "b23c7220b548f135a902b5146d35e28001773a4ef430efb0e9d9839d01cee787",
+    "v3": "d849109f57f0f04bfbf722c7e8679164de16d99bf5eeeaea83f2968c0877baad"
+  },
+  "corpus": {
+    "agentic": {
+      "corpus_sha256": "387a35ac155153e9b58a26ec7946b3d459b0d094fffdd5f05de39558eb640604",
+      "docs_per_family": 10,
+      "documents": 3250,
+      "documents_by_layer": {
+        "A": 2310,
+        "D": 840,
+        "R": 100
+      },
+      "generator": "scripts/bench/agentic_layers.py",
+      "generator_version": 4,
+      "partition": "test",
+      "seed": 2026092602,
+      "synthetic_only": true
+    },
+    "layers": {
+      "A": {
+        "documents": 2310,
+        "ids_sha256": {
+          "algorithm": "sha256",
+          "value": "7d79a402e64dc34500cc7bca95bbf7cce22f27b4b25bcf3948f9a78ccbdc1487"
+        }
+      },
+      "C": {
+        "documents": 2910,
+        "ids_sha256": {
+          "algorithm": "sha256",
+          "value": "9a54693eb2bfa91ed8608e705e11711c41c17344a4227d3e7170aa2e7b30059f"
+        }
+      },
+      "D": {
+        "documents": 840,
+        "ids_sha256": {
+          "algorithm": "sha256",
+          "value": "25711324748677c162abb1b5f4f645528c37d5e45c563656490c438ffefb38a3"
+        }
+      },
+      "R": {
+        "documents": 100,
+        "ids_sha256": {
+          "algorithm": "sha256",
+          "value": "74b5f4b72eb4a9f1ad803cc652015ee8eeadba8305eeb8bbee577092cda056e8"
+        }
+      }
+    },
+    "main_dataset": {
+      "bytes": 2013107,
+      "invalid_bounds": 0,
+      "rows": 5150,
+      "selected_entities": 14719,
+      "sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+      "value_offset_mismatches": 0
+    },
+    "main_selection_digest": {
+      "algorithm": "sha256",
+      "value": "9a54693eb2bfa91ed8608e705e11711c41c17344a4227d3e7170aa2e7b30059f"
+    },
+    "negative_corpus_sha256": "d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116",
+    "packs": []
+  },
+  "dataset_loader_sha256": "7e4d77215f3b6eb6d46005d8020288adcf475f1700367f5a1f76e854283fb8d7",
+  "description": "same corpus and scorer; tools run with documented configurations",
+  "device": "cpu",
+  "gaze": {
+    "v1": {
+      "gaze_revision": "b77dce0e42b9be464d369d1984215792d6133d1a",
+      "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O; arm",
+      "layers": {
+        "A": {
+          "documents": 2310,
+          "false_positive_bytes": 882,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 22.421,
+            "p95_ms": 28.985,
+            "samples": 2310
+          },
+          "leaked_bytes": 5738
+        },
+        "C": {
+          "documents": 2910,
+          "false_positive_bytes": 27282,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 59.179,
+            "p95_ms": 126.292,
+            "samples": 2910
+          },
+          "leaked_bytes": 15443
+        },
+        "D": {
+          "documents": 840,
+          "false_positive_bytes": 3544,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 18.248,
+            "p95_ms": 26.675,
+            "samples": 840
+          },
+          "leaked_bytes": 0
+        },
+        "R": {
+          "documents": 100,
+          "false_positive_bytes": 419,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 37.394,
+            "p95_ms": 67.295,
+            "samples": 100
+          },
+          "leaked_bytes": 234
+        }
+      },
+      "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+      "scorecard": "target/bench-data/compare-3909-r2/gaze-v1/full/scorecard-v4.json",
+      "scorecard_sha256": "d6979ec653e622c0fd3e4736d078146f478806f50b144eb0dea318088d747231"
+    },
+    "v2": {
+      "gaze_revision": "b77dce0e42b9be464d369d1984215792d6133d1a",
+      "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O; arm",
+      "layers": {
+        "A": {
+          "documents": 2310,
+          "false_positive_bytes": 882,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 22.457,
+            "p95_ms": 29.09,
+            "samples": 2310
+          },
+          "leaked_bytes": 5738
+        },
+        "C": {
+          "documents": 2910,
+          "false_positive_bytes": 27282,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 59.237,
+            "p95_ms": 126.482,
+            "samples": 2910
+          },
+          "leaked_bytes": 9256
+        },
+        "D": {
+          "documents": 840,
+          "false_positive_bytes": 3544,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 18.246,
+            "p95_ms": 26.853,
+            "samples": 840
+          },
+          "leaked_bytes": 0
+        },
+        "R": {
+          "documents": 100,
+          "false_positive_bytes": 419,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 37.619,
+            "p95_ms": 67.971,
+            "samples": 100
+          },
+          "leaked_bytes": 234
+        }
+      },
+      "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+      "scorecard": "target/bench-data/compare-3909-r2/gaze-v2/full/scorecard-v4.json",
+      "scorecard_sha256": "1e407afd2d054a1314cf59df07447406f6544efcf5a972375bce5fa141c1234c"
+    },
+    "v3": {
+      "gaze_revision": "b77dce0e42b9be464d369d1984215792d6133d1a",
+      "hardware": "macOS-26.5-arm64-arm-64bit-Mach-O; arm",
+      "layers": {
+        "A": {
+          "documents": 2310,
+          "false_positive_bytes": 882,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 22.54,
+            "p95_ms": 29.095,
+            "samples": 2310
+          },
+          "leaked_bytes": 5738
+        },
+        "C": {
+          "documents": 2910,
+          "false_positive_bytes": 27282,
+          "false_positive_bytes_after_gold_gap": 15560,
+          "gold_gap_protected_bytes": 11722,
+          "latency": {
+            "p50_ms": 59.326,
+            "p95_ms": 127.157,
+            "samples": 2910
+          },
+          "leaked_bytes": 9256
+        },
+        "D": {
+          "documents": 840,
+          "false_positive_bytes": 3544,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 18.188,
+            "p95_ms": 26.709,
+            "samples": 840
+          },
+          "leaked_bytes": 0
+        },
+        "R": {
+          "documents": 100,
+          "false_positive_bytes": 419,
+          "false_positive_bytes_after_gold_gap": null,
+          "gold_gap_protected_bytes": 0,
+          "latency": {
+            "p50_ms": 37.743,
+            "p95_ms": 67.76,
+            "samples": 100
+          },
+          "leaked_bytes": 234
+        }
+      },
+      "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+      "scorecard": "target/bench-data/compare-3909-r2/gaze-v3/full/scorecard-v4.json",
+      "scorecard_sha256": "6697cbcc972f3b3241c72bd953ac5108c411cabf39a50f814daf63702b4c1670"
+    }
+  },
+  "gaze_crates_tree": "981ab369487751fc5cf0f3a781ff3002ce8ad3bf",
+  "generated_at": "2026-09-28T02:40:57.831369+00:00",
+  "hardware": "macOS-26.5-arm64-arm-64bit",
+  "harness_dirty": false,
+  "harness_revision": "b77dce0e42b9be464d369d1984215792d6133d1a",
+  "latest_release_at_measurement": {
+    "scorecard_sha256": "350f10a0a7a02006f16d5aab69512c5f7f63e69f8f69e263f4ae5d4c0670a1c4",
+    "version": "v0.15.1"
+  },
+  "mapping_sha256": "265a926749beea2eec02a30697a47c4698aef5c6c1f7fb7ef828a64039ae6205",
+  "model_pins_sha256": "37f35f4fc63952b486e463975836673e7e42f21030a1e725293d026076eb2645",
+  "opf_adapter_sha256": "afb3eeae8d83732b44b25b17e748266b0d06380d878769149c2735ce65de5544",
+  "policy_sha256_home_normalized": "481f5df7a9b0b562bf2c2db7274cfbf2ea701231c52f1287b27de00554453ff1",
+  "requirements_sha256": "729039091fbb6e49444597579a12cc3cb4323dde3f42a647b5dd9d896611e25c",
+  "runner_sha256": "a53c909b025777ed620a9a7e29f8293918b52c18d226cb4cc2656523d54f4b09",
+  "schema_version": 1,
+  "scorer_sha256": "10954991346dbf835d0c4fb89cb7a6888dc94652195077f4381b200f4bcde79c",
+  "skipped": {},
+  "tools": {
+    "gliner": {
+      "contracts": {
+        "v1": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 5934,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 128.017,
+              "p95_ms": 132.692,
+              "samples": 2310
+            },
+            "leaked_bytes": 13085,
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 53355,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 152.56,
+              "p95_ms": 194.202,
+              "samples": 2910
+            },
+            "leaked_bytes": 26515,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 1684,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 128.074,
+              "p95_ms": 133.218,
+              "samples": 840
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 432,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 138.6,
+              "p95_ms": 153.862,
+              "samples": 100
+            },
+            "leaked_bytes": 478,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        },
+        "v2": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 5934,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 128.017,
+              "p95_ms": 132.692,
+              "samples": 2310
+            },
+            "leaked_bytes": 13085,
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 53355,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 152.56,
+              "p95_ms": 194.202,
+              "samples": 2910
+            },
+            "leaked_bytes": 20152,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 1684,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 128.074,
+              "p95_ms": 133.218,
+              "samples": 840
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 432,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 138.6,
+              "p95_ms": 153.862,
+              "samples": 100
+            },
+            "leaked_bytes": 478,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        },
+        "v3": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 5934,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 128.017,
+              "p95_ms": 132.692,
+              "samples": 2310
+            },
+            "leaked_bytes": 13085,
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 53355,
+            "false_positive_bytes_after_gold_gap": 51384,
+            "gold_gap_protected_bytes": 1971,
+            "latency": {
+              "p50_ms": 152.56,
+              "p95_ms": 194.202,
+              "samples": 2910
+            },
+            "leaked_bytes": 20152,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 1684,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 128.074,
+              "p95_ms": 133.218,
+              "samples": 840
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 432,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 138.6,
+              "p95_ms": 153.862,
+              "samples": 100
+            },
+            "leaked_bytes": 478,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        }
+      },
+      "host_load_1m_before_after": [
+        2.22,
+        3.12
+      ],
+      "provenance": {
+        "flat_ner": true,
+        "gliner_version": "0.2.29",
+        "labels": [
+          "person",
+          "organization",
+          "phone number",
+          "address",
+          "passport number",
+          "email",
+          "credit card number",
+          "social security number",
+          "health insurance id number",
+          "date of birth",
+          "mobile phone number",
+          "bank account number",
+          "medication",
+          "cpf",
+          "driver's license number",
+          "tax identification number",
+          "medical condition",
+          "identity card number",
+          "national id number",
+          "ip address",
+          "email address",
+          "iban",
+          "credit card expiration date",
+          "username",
+          "health insurance number",
+          "registration number",
+          "student id number",
+          "insurance number",
+          "flight number",
+          "landline phone number",
+          "blood type",
+          "cvv",
+          "reservation number",
+          "digital signature",
+          "social media handle",
+          "license plate number",
+          "cnpj",
+          "postal code",
+          "passport_number",
+          "serial number",
+          "vehicle registration number",
+          "credit card brand",
+          "fax number",
+          "visa number",
+          "insurance company",
+          "identity document number",
+          "transaction number",
+          "national health insurance number",
+          "cvc",
+          "birth certificate number",
+          "train ticket number",
+          "passport expiration date",
+          "social_security_number"
+        ],
+        "model_repo": "urchade/gliner_multi_pii-v1",
+        "model_sha256": "4104bc2fd88a6d1fd3c768009b8e0475f974b1fca8dedea184b3274b4b3fb19c",
+        "model_snapshot": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+        "threshold": 0.5,
+        "threshold_source": "predict_entities library default"
+      },
+      "tool": "gliner"
+    },
+    "opf": {
+      "contracts": {
+        "v1": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 5525,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 175.384,
+              "p95_ms": 245.802,
+              "samples": 2310
+            },
+            "leaked_bytes": 10508,
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 31383,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 554.119,
+              "p95_ms": 1060.492,
+              "samples": 2910
+            },
+            "leaked_bytes": 25485,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 5589,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 152.861,
+              "p95_ms": 223.746,
+              "samples": 840
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 956,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 263.614,
+              "p95_ms": 631.539,
+              "samples": 100
+            },
+            "leaked_bytes": 182,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        },
+        "v2": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 5525,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 175.384,
+              "p95_ms": 245.802,
+              "samples": 2310
+            },
+            "leaked_bytes": 10508,
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 31254,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 554.119,
+              "p95_ms": 1060.492,
+              "samples": 2910
+            },
+            "leaked_bytes": 24080,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 5589,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 152.861,
+              "p95_ms": 223.746,
+              "samples": 840
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 956,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 263.614,
+              "p95_ms": 631.539,
+              "samples": 100
+            },
+            "leaked_bytes": 182,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        },
+        "v3": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 5525,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 175.384,
+              "p95_ms": 245.802,
+              "samples": 2310
+            },
+            "leaked_bytes": 10508,
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 31254,
+            "false_positive_bytes_after_gold_gap": 27544,
+            "gold_gap_protected_bytes": 3710,
+            "latency": {
+              "p50_ms": 554.119,
+              "p95_ms": 1060.492,
+              "samples": 2910
+            },
+            "leaked_bytes": 24080,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 5589,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 152.861,
+              "p95_ms": 223.746,
+              "samples": 840
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 956,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 263.614,
+              "p95_ms": 631.539,
+              "samples": 100
+            },
+            "leaked_bytes": 182,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        }
+      },
+      "host_load_1m_before_after": [
+        2.86,
+        5.13
+      ],
+      "provenance": {
+        "checkpoint_sha256": "7962be95ebe85491799c225cadaed7d1ac5aef82b530d4d3f02d0ec7e14239e5",
+        "decode": "default viterbi, typed output, cpu",
+        "runtime": {
+          "python_version": "Python 3.10.20",
+          "source_dirty": false,
+          "source_revision": "f7f00ca7fb869683eb732c010299d901457f19c3",
+          "version": "0.1.0"
+        },
+        "socket_timeout_seconds": 600
+      },
+      "tool": "opf"
+    },
+    "presidio-all": {
+      "contracts": {
+        "v1": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 10760,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 5.339,
+              "p95_ms": 7.358,
+              "samples": 2310
+            },
+            "leaked_bytes": 21837,
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 58274,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 13.671,
+              "p95_ms": 24.921,
+              "samples": 2910
+            },
+            "leaked_bytes": 35130,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 7983,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 4.886,
+              "p95_ms": 7.537,
+              "samples": 840
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 1278,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 8.022,
+              "p95_ms": 14.517,
+              "samples": 100
+            },
+            "leaked_bytes": 442,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        },
+        "v2": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 10760,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 5.339,
+              "p95_ms": 7.358,
+              "samples": 2310
+            },
+            "leaked_bytes": 21837,
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 58274,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 13.671,
+              "p95_ms": 24.921,
+              "samples": 2910
+            },
+            "leaked_bytes": 30615,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 7983,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 4.886,
+              "p95_ms": 7.537,
+              "samples": 840
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 1278,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 8.022,
+              "p95_ms": 14.517,
+              "samples": 100
+            },
+            "leaked_bytes": 442,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        },
+        "v3": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 10760,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 5.339,
+              "p95_ms": 7.358,
+              "samples": 2310
+            },
+            "leaked_bytes": 21837,
+            "processed_documents": 2310,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 58274,
+            "false_positive_bytes_after_gold_gap": 50429,
+            "gold_gap_protected_bytes": 7845,
+            "latency": {
+              "p50_ms": 13.671,
+              "p95_ms": 24.921,
+              "samples": 2910
+            },
+            "leaked_bytes": 30615,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 7983,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 4.886,
+              "p95_ms": 7.537,
+              "samples": 840
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 840,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 1278,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 8.022,
+              "p95_ms": 14.517,
+              "samples": 100
+            },
+            "leaked_bytes": 442,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        }
+      },
+      "host_load_1m_before_after": [
+        2.28,
+        2.39
+      ],
+      "provenance": {
+        "analyzer_version": "2.2.364",
+        "anonymizer": "Presidio 2.2.364 raw-coordinate resolution with default conflict and whitespace rules",
+        "anonymizer_version": "2.2.364",
+        "german_recognizers": [
+          "DeTaxId",
+          "DeTaxNumber",
+          "DePassport",
+          "DeIdCard",
+          "DeSocialSecurity",
+          "DeHealthInsurance",
+          "DeKfz",
+          "DeHandelsregister",
+          "DePlz"
+        ],
+        "models": {
+          "de": {
+            "license": "MIT",
+            "sha256": "c221cfaac8b215d208f99b0a199fd63b748b2d28232b27841f2fcc6b8767a79c",
+            "version": "3.7.0",
+            "wheel_sha256": "1451e06dedb5c3bb096127bf7c2117c253265fdfcad29ee488ff57bec5f78eaa",
+            "wheel_source": "https://github.com/explosion/spacy-models/releases/download/de_core_news_lg-3.7.0/de_core_news_lg-3.7.0-py3-none-any.whl"
+          },
+          "en": {
+            "license": "MIT",
+            "sha256": "01903811a45522c963428622ef431ee2c7170c4b400f5d1c06642304946323e5",
+            "version": "3.7.1",
+            "wheel_sha256": "ab70aeb6172cde82508f7739f35ebc9918a3d07debeed637403c8f794ba3d3dc",
+            "wheel_source": "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl"
+          },
+          "fr": {
+            "license": "LGPL-LR",
+            "sha256": "49112eb8786b3ed371c9986beb4b657b7e2cd69ebbdda50cf99d886630610b45",
+            "version": "3.7.0",
+            "wheel_sha256": "c2d98eb9073ff0f3d865179448e7f1868f27b2643c0e7215acc2438cd9eae554",
+            "wheel_source": "https://github.com/explosion/spacy-models/releases/download/fr_core_news_lg-3.7.0/fr_core_news_lg-3.7.0-py3-none-any.whl"
+          },
+          "nl": {
+            "license": "CC BY-SA 4.0",
+            "sha256": "474bd4152958cf3081eb9eeb8c750ad92335df5f07e4fe1da816a3ceea6ae2c4",
+            "version": "3.7.0",
+            "wheel_sha256": "02194e98105584a6e5008a523a94a5d6e4da2feb0964741646c507c8e20730d4",
+            "wheel_source": "https://github.com/explosion/spacy-models/releases/download/nl_core_news_lg-3.7.0/nl_core_news_lg-3.7.0-py3-none-any.whl"
+          },
+          "pt": {
+            "license": "CC BY-SA 4.0",
+            "sha256": "13d4619ba2865a270637826a185bbeff97e9386c381fc95835fde28dddca5b23",
+            "version": "3.7.0",
+            "wheel_sha256": "4eed7801647c39ced078eb325d0ff8eb2ea5d4945501b8ee898dced85c686717",
+            "wheel_source": "https://github.com/explosion/spacy-models/releases/download/pt_core_news_lg-3.7.0/pt_core_news_lg-3.7.0-py3-none-any.whl"
+          }
+        },
+        "recognizers": "Presidio built-in defaults plus nine documented German recognizers when de is enabled",
+        "spacy_version": "3.7.5",
+        "supported_languages": [
+          "en",
+          "de",
+          "nl",
+          "fr",
+          "pt"
+        ]
+      },
+      "tool": "presidio-all"
+    },
+    "presidio-en": {
+      "contracts": {
+        "v1": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 4075,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 5.094,
+              "p95_ms": 7.173,
+              "samples": 990
+            },
+            "leaked_bytes": 34733,
+            "processed_documents": 990,
+            "skipped_documents": 1320,
+            "skipped_gold_bytes": 28151
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 30749,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 12.882,
+              "p95_ms": 24.755,
+              "samples": 1545
+            },
+            "leaked_bytes": 76658,
+            "processed_documents": 1545,
+            "skipped_documents": 1365,
+            "skipped_gold_bytes": 57835
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 6346,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 4.712,
+              "p95_ms": 7.014,
+              "samples": 660
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 660,
+            "skipped_documents": 180,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 222,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 7.654,
+              "p95_ms": 9.128,
+              "samples": 45
+            },
+            "leaked_bytes": 2961,
+            "processed_documents": 45,
+            "skipped_documents": 55,
+            "skipped_gold_bytes": 2909
+          }
+        },
+        "v2": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 4075,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 5.094,
+              "p95_ms": 7.173,
+              "samples": 990
+            },
+            "leaked_bytes": 34733,
+            "processed_documents": 990,
+            "skipped_documents": 1320,
+            "skipped_gold_bytes": 28151
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 30749,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 12.882,
+              "p95_ms": 24.755,
+              "samples": 1545
+            },
+            "leaked_bytes": 71562,
+            "processed_documents": 1545,
+            "skipped_documents": 1365,
+            "skipped_gold_bytes": 54629
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 6346,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 4.712,
+              "p95_ms": 7.014,
+              "samples": 660
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 660,
+            "skipped_documents": 180,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 222,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 7.654,
+              "p95_ms": 9.128,
+              "samples": 45
+            },
+            "leaked_bytes": 2961,
+            "processed_documents": 45,
+            "skipped_documents": 55,
+            "skipped_gold_bytes": 2909
+          }
+        },
+        "v3": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 4075,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 5.094,
+              "p95_ms": 7.173,
+              "samples": 990
+            },
+            "leaked_bytes": 34733,
+            "processed_documents": 990,
+            "skipped_documents": 1320,
+            "skipped_gold_bytes": 28151
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 30749,
+            "false_positive_bytes_after_gold_gap": 26086,
+            "gold_gap_protected_bytes": 4663,
+            "latency": {
+              "p50_ms": 12.882,
+              "p95_ms": 24.755,
+              "samples": 1545
+            },
+            "leaked_bytes": 71562,
+            "processed_documents": 1545,
+            "skipped_documents": 1365,
+            "skipped_gold_bytes": 54629
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 6346,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 4.712,
+              "p95_ms": 7.014,
+              "samples": 660
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 660,
+            "skipped_documents": 180,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 222,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 7.654,
+              "p95_ms": 9.128,
+              "samples": 45
+            },
+            "leaked_bytes": 2961,
+            "processed_documents": 45,
+            "skipped_documents": 55,
+            "skipped_gold_bytes": 2909
+          }
+        }
+      },
+      "host_load_1m_before_after": [
+        2.39,
+        2.18
+      ],
+      "provenance": {
+        "analyzer_version": "2.2.364",
+        "anonymizer": "Presidio 2.2.364 raw-coordinate resolution with default conflict and whitespace rules",
+        "anonymizer_version": "2.2.364",
+        "german_recognizers": [],
+        "models": {
+          "en": {
+            "license": "MIT",
+            "sha256": "01903811a45522c963428622ef431ee2c7170c4b400f5d1c06642304946323e5",
+            "version": "3.7.1",
+            "wheel_sha256": "ab70aeb6172cde82508f7739f35ebc9918a3d07debeed637403c8f794ba3d3dc",
+            "wheel_source": "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl"
+          }
+        },
+        "recognizers": "Presidio built-in defaults plus nine documented German recognizers when de is enabled",
+        "spacy_version": "3.7.5",
+        "supported_languages": [
+          "en"
+        ]
+      },
+      "tool": "presidio-en"
+    },
+    "presidio-en-de": {
+      "contracts": {
+        "v1": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 8373,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 5.327,
+              "p95_ms": 7.277,
+              "samples": 1750
+            },
+            "leaked_bytes": 27307,
+            "processed_documents": 1750,
+            "skipped_documents": 560,
+            "skipped_gold_bytes": 11520
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 58274,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 13.67,
+              "p95_ms": 24.986,
+              "samples": 2910
+            },
+            "leaked_bytes": 35130,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 7752,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 4.837,
+              "p95_ms": 7.393,
+              "samples": 810
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 810,
+            "skipped_documents": 30,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 1278,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 7.857,
+              "p95_ms": 14.323,
+              "samples": 100
+            },
+            "leaked_bytes": 442,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        },
+        "v2": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 8373,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 5.327,
+              "p95_ms": 7.277,
+              "samples": 1750
+            },
+            "leaked_bytes": 27307,
+            "processed_documents": 1750,
+            "skipped_documents": 560,
+            "skipped_gold_bytes": 11520
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 58274,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 13.67,
+              "p95_ms": 24.986,
+              "samples": 2910
+            },
+            "leaked_bytes": 30615,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 7752,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 4.837,
+              "p95_ms": 7.393,
+              "samples": 810
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 810,
+            "skipped_documents": 30,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 1278,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 7.857,
+              "p95_ms": 14.323,
+              "samples": 100
+            },
+            "leaked_bytes": 442,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        },
+        "v3": {
+          "A": {
+            "documents": 2310,
+            "false_positive_bytes": 8373,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 5.327,
+              "p95_ms": 7.277,
+              "samples": 1750
+            },
+            "leaked_bytes": 27307,
+            "processed_documents": 1750,
+            "skipped_documents": 560,
+            "skipped_gold_bytes": 11520
+          },
+          "C": {
+            "documents": 2910,
+            "false_positive_bytes": 58274,
+            "false_positive_bytes_after_gold_gap": 50429,
+            "gold_gap_protected_bytes": 7845,
+            "latency": {
+              "p50_ms": 13.67,
+              "p95_ms": 24.986,
+              "samples": 2910
+            },
+            "leaked_bytes": 30615,
+            "processed_documents": 2910,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          },
+          "D": {
+            "documents": 840,
+            "false_positive_bytes": 7752,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 4.837,
+              "p95_ms": 7.393,
+              "samples": 810
+            },
+            "leaked_bytes": 0,
+            "processed_documents": 810,
+            "skipped_documents": 30,
+            "skipped_gold_bytes": 0
+          },
+          "R": {
+            "documents": 100,
+            "false_positive_bytes": 1278,
+            "false_positive_bytes_after_gold_gap": null,
+            "gold_gap_protected_bytes": 0,
+            "latency": {
+              "p50_ms": 7.857,
+              "p95_ms": 14.323,
+              "samples": 100
+            },
+            "leaked_bytes": 442,
+            "processed_documents": 100,
+            "skipped_documents": 0,
+            "skipped_gold_bytes": 0
+          }
+        }
+      },
+      "host_load_1m_before_after": [
+        2.18,
+        2.32
+      ],
+      "provenance": {
+        "analyzer_version": "2.2.364",
+        "anonymizer": "Presidio 2.2.364 raw-coordinate resolution with default conflict and whitespace rules",
+        "anonymizer_version": "2.2.364",
+        "german_recognizers": [
+          "DeTaxId",
+          "DeTaxNumber",
+          "DePassport",
+          "DeIdCard",
+          "DeSocialSecurity",
+          "DeHealthInsurance",
+          "DeKfz",
+          "DeHandelsregister",
+          "DePlz"
+        ],
+        "models": {
+          "de": {
+            "license": "MIT",
+            "sha256": "c221cfaac8b215d208f99b0a199fd63b748b2d28232b27841f2fcc6b8767a79c",
+            "version": "3.7.0",
+            "wheel_sha256": "1451e06dedb5c3bb096127bf7c2117c253265fdfcad29ee488ff57bec5f78eaa",
+            "wheel_source": "https://github.com/explosion/spacy-models/releases/download/de_core_news_lg-3.7.0/de_core_news_lg-3.7.0-py3-none-any.whl"
+          },
+          "en": {
+            "license": "MIT",
+            "sha256": "01903811a45522c963428622ef431ee2c7170c4b400f5d1c06642304946323e5",
+            "version": "3.7.1",
+            "wheel_sha256": "ab70aeb6172cde82508f7739f35ebc9918a3d07debeed637403c8f794ba3d3dc",
+            "wheel_source": "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl"
+          }
+        },
+        "recognizers": "Presidio built-in defaults plus nine documented German recognizers when de is enabled",
+        "spacy_version": "3.7.5",
+        "supported_languages": [
+          "en",
+          "de"
+        ]
+      },
+      "tool": "presidio-en-de"
+    }
+  }
+}
