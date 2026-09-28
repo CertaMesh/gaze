@@ -160,6 +160,7 @@ birth_date_cases! {
     cue_de_geboren_wurde_ich_am: "Geboren wurde ich am 30.05.1971." => "30.05.1971";
     cue_de_trailing_geboren: "Ich wurde am 30.05.1971 geboren." => "30.05.1971";
     cue_de_trailing_geboren_with_place: "Ich wurde am 30.05.1971 in Hamburg geboren." => "30.05.1971";
+    cue_de_trailing_wurde_geboren_with_name: "Am 30.05.1971 wurde Herr Max Muster in Arcadia geboren." => "30.05.1971";
     cue_fr_nee_le: "Marie Dupont, née le 02/11/1992, habite" => "02/11/1992";
     cue_fr_ne_le: "Pierre Dubois, né le 02/11/1992." => "02/11/1992";
     cue_fr_date_de_naissance: "Ma date de naissance est le 02/11/1992." => "02/11/1992";
