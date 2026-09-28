@@ -645,6 +645,10 @@ agentic layers A, D and R, and gives it one root cause:
 | f junk-shaped gold | no candidate, and the gold looks like junk (an identifier label with no digit or at most four alphanumerics); it stays in the target until an audited contract change |
 | g other | a primary-resolution winner covers the span but the final trace does not |
 
+The candidate pool covers rule and NER recognizers, but excludes Nym safety-net
+candidates. In a partial-span row, "no fuller candidate" means no fuller rule
+or NER candidate; Nym may still have protected part of the span in the final trace.
+
 The first matching cause wins, in the order d, b (validator), g, c, b (dropped
 before resolution), b (locale-gated), e, f, a. One ordered table in the script
 drives the classification, the row schema that `check` enforces, and the table

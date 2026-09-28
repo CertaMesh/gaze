@@ -633,6 +633,13 @@ def validate_rows(rows: Sequence[Mapping[str, Any]], expected: Sequence[Mapping[
             raise LedgerError(f"{where}: detail does not match cause {row['cause']!r}")
         if cause.kinds and detail["kind"] not in cause.kinds:
             raise LedgerError(f"{where}: {detail['kind']!r} is no kind of cause {row['cause']!r}")
+        if row["cause"] == "d":
+            lost = detail["lost"]
+            kind = detail["kind"]
+            if (not isinstance(lost, list)
+                    or (kind in ("lost_resolution", "vetoed") and not lost)
+                    or (kind == "no_full_candidate" and lost)):
+                raise LedgerError(f"{where}: partial-span lost evidence disagrees with {kind!r}")
         if (row["cause"] == "d") != (row["covered"] > 0):
             raise LedgerError(f"{where}: partial-span cause disagrees with coverage")
         if row["cause"] == "f" and row["junk_shape"] is None:
