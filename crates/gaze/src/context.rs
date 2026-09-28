@@ -130,6 +130,16 @@ impl Context {
             return Err(ContextError::TooLarge);
         }
         let strict = serde_json::from_str::<UniqueJsonValue>(raw).map_err(safe_json_error)?;
+        if let Value::Object(top) = &strict.0 {
+            let has_record = top.contains_key("record");
+            let has_field_map = top.contains_key("field_map");
+            if has_record != has_field_map {
+                return Err(ContextError::IncompleteRecord);
+            }
+            if top.get("record").is_some_and(Value::is_null) {
+                return Err(ContextError::InvalidRecordMapping);
+            }
+        }
         let raw = serde_json::from_value::<RawContext>(strict.0).map_err(safe_json_error)?;
         Self::from_raw(raw)
     }
@@ -535,6 +545,17 @@ mod tests {
             let err = Context::from_json_str(&raw.to_string()).unwrap_err();
             assert!(matches!(err, ContextError::UnsafeRecordValue));
             assert!(!err.to_string().contains(value));
+        }
+    }
+
+    #[test]
+    fn explicit_incomplete_or_null_record_envelope_fails_closed() {
+        for raw in [
+            r#"{"record":null,"field_map":{}}"#,
+            r#"{"field_map":{}}"#,
+            r#"{"record":{"name":"Alice Smith"}}"#,
+        ] {
+            assert!(Context::from_json_str(raw).is_err());
         }
     }
 }
