@@ -22,6 +22,7 @@ import platform
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,6 +38,45 @@ from comparison_metrics import ComparisonMetrics  # noqa: E402
 
 score = loaders.score
 BENCHMARKS = ("presidio-research", "piibench-commercial")
+CONTENDED_LOAD1 = 2.0  # STEER 3: latency above this load is not publishable
+
+
+class LoadWatch:
+    """Samples load1 and busy processes while a tool runs (STEER 3)."""
+
+    def __init__(self, interval: float = 5.0) -> None:
+        self.interval, self.samples, self.busy = interval, [os.getloadavg()[0]], [busy_processes()]
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval):
+            self.samples.append(os.getloadavg()[0])
+            self.busy.append(busy_processes())
+
+    def __enter__(self) -> "LoadWatch":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self._stop.set()
+        self._thread.join()
+        self.samples.append(os.getloadavg()[0])
+        self.busy.append(busy_processes())
+
+    def result(self) -> dict[str, object]:
+        peak = max(self.samples)
+        return {"load1_before": round(self.samples[0], 2), "load1_after": round(self.samples[-1], 2),
+                "load1_max": round(peak, 2), "busy_processes_max": max(self.busy),
+                "samples": len(self.samples), "contended": peak > CONTENDED_LOAD1}
+
+
+def busy_processes() -> int:
+    """Processes using at least half a core right now, this run excluded."""
+    output = subprocess.run(["ps", "-A", "-o", "pid=,%cpu="], capture_output=True, text=True).stdout
+    own = os.getpid()
+    return sum(1 for line in output.splitlines()
+               if (parts := line.split()) and int(parts[0]) != own and float(parts[1]) >= 50.0)
 GAZE_ROWS = ("gaze-rules-only", "gaze-rules-ner", "gaze-full")
 
 
@@ -202,10 +242,11 @@ def main() -> int:
                           "gaze-full": args.gaze_policy}[name]
                 if policy is None or args.gaze_binary is None or args.gaze_model_dir is None:
                     raise SystemExit(f"{name} needs --gaze-binary, --gaze-model-dir and its policy")
-                report["rows"][name] = measure_gaze(name, args, policy, splits, mapping, common,
-                                                    args.predictions_dir, Path(scratch))
+                with LoadWatch() as watch:
+                    report["rows"][name] = measure_gaze(name, args, policy, splits, mapping, common,
+                                                        args.predictions_dir, Path(scratch))
                 report["provenance"][name] = {"policy_sha256_home_normalized": compare.normalized_policy_sha256(
-                    policy, compare.digest_file(policy))}
+                    policy, compare.digest_file(policy)), "load": watch.result()}
             else:
                 backend, provenance, _ = compare.build_backend(name, args, mappings, Path(scratch))
                 if backend is None:
@@ -213,10 +254,10 @@ def main() -> int:
                     continue
                 try:
                     backend.predict(score.Document("warmup", "alice@example.invalid", "en", "", "synthetic", ()))
-                    load = os.getloadavg()[0]
-                    report["rows"][name] = measure_tool(name, backend.predict, splits, mapping, common,
-                                                        args.predictions_dir)
-                    report["provenance"][name] = {**provenance, "host_load_1m_before": round(load, 2)}
+                    with LoadWatch() as watch:
+                        report["rows"][name] = measure_tool(name, backend.predict, splits, mapping, common,
+                                                            args.predictions_dir)
+                    report["provenance"][name] = {**provenance, "load": watch.result()}
                 finally:
                     if hasattr(backend, "close"):
                         backend.close()
