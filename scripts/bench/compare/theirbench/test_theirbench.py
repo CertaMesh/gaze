@@ -185,7 +185,8 @@ class RenderTest(unittest.TestCase):
                                           **{k: None for k in ("identity", "harness_revision", "gaze_crates_tree",
                                                                "label_maps_sha256", "mapping_sha256", "hardware",
                                                                "common_intersection_labels", "splits", "provenance",
-                                                               "comparison_revision", "comparison_sha256")}}),
+                                                               "comparison_revision", "comparison_sha256",
+                                                               "typed_hold")}}),
                               encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "smoke"):
                 render.assemble([report], [f"presidio-research={smoke}"], [])
