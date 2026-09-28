@@ -830,7 +830,10 @@ def main() -> int:
                         report["gaze"][version]["layers"][layer] = new
                     report["gaze"][version]["prior_scorecard_revision"] = report["gaze"][version]["gaze_revision"]
                     report["gaze"][version]["gaze_revision"] = report["gaze_main_revision"]
-                    report["gaze"][version]["scorecard"] = "re-inferred by compare.py"
+                    report["gaze"][version]["prior_scorecard"] = report["gaze"][version]["scorecard"]
+                    report["gaze"][version]["prior_scorecard_sha256"] = report["gaze"][version]["scorecard_sha256"]
+                    report["gaze"][version]["scorecard"] = None
+                    report["gaze"][version]["scorecard_sha256"] = None
                 report["gaze_inference"] = {
                     "binary_sha256": digest_file(args.gaze_binary),
                     "main_revision": report["gaze_main_revision"],

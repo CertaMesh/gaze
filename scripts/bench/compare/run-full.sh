@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$repo_root"
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false
 
 if [[ $# -gt 1 || ( $# -eq 1 && $1 != --dry-run ) ]]; then
     echo "usage: run-full.sh [--dry-run]" >&2

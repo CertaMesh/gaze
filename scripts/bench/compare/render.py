@@ -93,12 +93,18 @@ def render(report: dict[str, object], source: str) -> str:
             models = tool["provenance"]["models"]
             if not models or any(not model.get("sha256") or not model.get("wheel_sha256") for model in models.values()):
                 raise ValueError(f"{name} lacks a model hash")
+            if name.startswith("presidio-strong") and not tool["provenance"].get("transformer", {}).get("sha256"):
+                raise ValueError(f"{name} lacks a transformer hash")
         elif name.startswith("gliner") and not tool["provenance"].get("model_sha256"):
             raise ValueError(f"{name} lacks a model hash")
+        elif name.startswith("gliner") and not tool["provenance"].get("tokenizer_sha256") and report.get("schema_version", 1) >= 2:
+            raise ValueError(f"{name} lacks a tokenizer hash")
         elif name == "opf" and not tool["provenance"].get("checkpoint_sha256"):
             raise ValueError(f"{name} lacks a model hash")
         elif name == "datafog-gliner" and not tool["provenance"].get("model_sha256"):
             raise ValueError(f"{name} lacks a model hash")
+        elif name == "datafog-gliner" and not tool["provenance"].get("tokenizer_sha256"):
+            raise ValueError(f"{name} lacks a tokenizer hash")
         elif name == "datafog-spacy" and not tool["provenance"].get("spacy_model", {}).get("sha256"):
             raise ValueError(f"{name} lacks a model hash")
         elif name == "scrubadub-spacy" and not tool["provenance"].get("spacy_model", {}).get("sha256"):
