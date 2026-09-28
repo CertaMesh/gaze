@@ -109,6 +109,8 @@ fn age_cues_cover_prose_fields_and_spacing() {
         ("{\"age\": 45}", "45"),
         ("age=45", "45"),
         ("age:\u{00a0}45", "45"),
+        ("age: 0", "0"),
+        ("aged 122", "122"),
     ] {
         assert_age(text, age);
     }
