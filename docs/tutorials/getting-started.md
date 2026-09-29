@@ -153,6 +153,8 @@ let context = Context {
     dictionaries: HashMap::new(),
     class_map: HashMap::new(),
     fields: Default::default(),
+    record_match_kinds: Default::default(),
+    record_value_rejections: Default::default(),
 };
 let rulepacks = Vec::new();
 let active_locales = LocaleChain::merge_policy_and_cli(None, None);
