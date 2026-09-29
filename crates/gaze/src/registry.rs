@@ -270,11 +270,51 @@ impl Default for FamilyPolicyTable {
     }
 }
 
+fn labelled_cross_class_boundary_floor(
+    recognizer_id: &str,
+    capture_end: usize,
+    first_group_end: usize,
+    validated: bool,
+) -> usize {
+    // These three rules existed before complete-value scanning. Their original capture must
+    // survive even if another class validates a substring inside it.
+    if matches!(
+        recognizer_id,
+        "tax_number.cue_anchored" | "driver_license.cue_anchored" | "national_id.cue_anchored"
+    ) || !validated
+    {
+        capture_end
+    } else {
+        first_group_end
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{ConflictTier, DictionaryBundle, LocaleTag, PiiClass};
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+    #[test]
+    fn cross_class_boundary_never_cuts_an_original_cue_capture() {
+        for rule in [
+            "tax_number.cue_anchored",
+            "driver_license.cue_anchored",
+            "national_id.cue_anchored",
+        ] {
+            for validated in [false, true] {
+                assert_eq!(
+                    labelled_cross_class_boundary_floor(rule, 20, 5, validated),
+                    20,
+                    "{rule} validated={validated}"
+                );
+            }
+        }
+        assert_eq!(
+            labelled_cross_class_boundary_floor("tax_number.labelled", 20, 5, true),
+            5
+        );
+    }
 
     struct StubRecognizer {
         class: PiiClass,
@@ -1297,11 +1337,12 @@ impl RecognizerRegistry {
                 .iter()
                 .filter(|(start, class, validated)| {
                     *start
-                        >= if *validated {
-                            first_group_end
-                        } else {
-                            capture_end
-                        }
+                        >= labelled_cross_class_boundary_floor(
+                            &candidate.recognizer_id,
+                            capture_end,
+                            first_group_end,
+                            *validated,
+                        )
                         && *start < candidate.span.end
                         && class != &candidate.class
                 })

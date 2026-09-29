@@ -1033,6 +1033,121 @@ fn cue_anchored_identifier_scans_the_whole_grouped_run() {
 }
 
 #[test]
+fn cue_anchored_dates_inside_original_capture_stay_protected() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, value, suffix) in [
+        (
+            "Steuernummer: 181/12/03/2019 bitte",
+            "181/12/03/2019",
+            "/12/03/2019",
+        ),
+        (
+            "National ID: 756.12.05.2020 ok",
+            "756.12.05.2020",
+            ".12.05.2020",
+        ),
+        (
+            "Tax number: 123 12.05.2020 ok",
+            "123 12.05.2020",
+            "12.05.2020",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        assert!(
+            !cleaned.contains(value),
+            "original capture leaked: {cleaned:?}"
+        );
+        assert!(
+            !cleaned.contains(suffix),
+            "capture suffix leaked: {cleaned:?}"
+        );
+        assert_eq!(cleaned.matches('<').count(), 1, "{cleaned:?}");
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
+fn uppercase_next_field_labels_remain_visible_with_correct_ownership() {
+    let chain = [LocaleTag::Global];
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_for(&chain).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    for (input, next_label, next_rule, token_count) in [
+        (
+            "Tax number: AB12 CD3456 DRIVER LICENSE: EF34 GH5678",
+            "DRIVER LICENSE:",
+            Some("driver_license.labelled"),
+            2,
+        ),
+        (
+            "Tax number: AB12 CD3456 PASSPORT: P12345678",
+            "PASSPORT:",
+            Some("passport.cue_anchored"),
+            2,
+        ),
+        (
+            "Tax number: AB12 CD3456 STATUS: ACTIVE",
+            "STATUS: ACTIVE",
+            None,
+            1,
+        ),
+    ] {
+        entries.lock().unwrap().clear();
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        assert!(
+            cleaned.contains(next_label),
+            "field label swallowed: {cleaned:?}"
+        );
+        assert_eq!(cleaned.matches('<').count(), token_count, "{cleaned:?}");
+        let winners: Vec<_> = entries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| !entry.conflict_loser)
+            .filter_map(|entry| entry.recognizer_id.clone())
+            .collect();
+        assert!(
+            winners.iter().any(|id| id.starts_with("tax_number.")),
+            "{winners:?}"
+        );
+        if let Some(rule) = next_rule {
+            assert!(winners.iter().any(|id| id == rule), "{winners:?}");
+        }
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
 fn labelled_identifier_boundaries_keep_value_bytes_protected() {
     let chain = [LocaleTag::Global];
     let pipeline = pipeline_for(&chain);
@@ -1087,7 +1202,7 @@ fn labelled_identifier_boundaries_keep_value_bytes_protected() {
         ("Tax number: AB12 CD3456)", &["AB12", "CD3456"]),
         ("Tax number: AB12 CD3456 ”", &["AB12", "CD3456"]),
         ("Tax number: AB12 CD3456 »", &["AB12", "CD3456"]),
-        ("tax number: ab 12345 cd", &["ab", "12345", "cd"]),
+        ("tax number: xy 12345 zq", &["xy", "12345", "zq"]),
         (
             "Tax number: AB12 CD3456. XYZ123456",
             &["AB12", "CD3456", "XYZ123456"],

@@ -344,7 +344,13 @@ impl RegexDetector {
                 let captured = self.span_from_captures(&caps);
                 let span = captured.clone().map(|span| {
                     if self.complete_labelled_value {
-                        scan_labelled_value(input, span)
+                        // Only these new fallbacks may trim a field cue inside their broad
+                        // capture. Existing cue rules must retain every originally matched byte.
+                        let trim_internal_field_boundary = matches!(
+                            self.source.as_str(),
+                            "tax_number.labelled" | "driver_license.labelled" | "id_card.labelled"
+                        );
+                        scan_labelled_value(input, span, trim_internal_field_boundary)
                     } else {
                         LabelledValueScan {
                             capture: span.clone(),
@@ -477,7 +483,11 @@ struct LabelledValueScan {
     rejected: bool,
 }
 
-fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
+fn scan_labelled_value(
+    input: &str,
+    capture: std::ops::Range<usize>,
+    trim_internal_field_boundary: bool,
+) -> LabelledValueScan {
     let mut end = capture.start;
     let mut stop_reason = None;
     let initial_lowercase = input[capture.start..]
@@ -529,11 +539,16 @@ fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> Labelled
             break;
         }
         let next = &input[next_start..next_start + next_len];
-        if starts_with_date(&input[next_start..]) {
+        // Dates never cut a proven capture. Only the new fallback rules may split an internal
+        // field label from their broad capture.
+        let beyond_capture = next_start >= capture.end;
+        if beyond_capture && starts_with_date(&input[next_start..]) {
             stop_reason = Some(LabelledValueScanReason::DateBoundary);
             break;
         }
-        if is_field_boundary(next) {
+        if (beyond_capture || trim_internal_field_boundary)
+            && (is_field_boundary(next) || is_uppercase_field_boundary(&input[next_start..]))
+        {
             stop_reason = Some(LabelledValueScanReason::LabelBoundary);
             break;
         }
@@ -548,8 +563,6 @@ fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> Labelled
         end = next_start;
         debug_assert!(end > separator_start);
     }
-    // A field boundary can occur inside the regex capture when its bounded grammar accepts
-    // another uppercase value group. In that case the original capture is not all one value.
     if stop_reason.is_none() {
         end = end.max(capture.end);
     }
@@ -594,6 +607,31 @@ fn is_field_boundary(group: &str) -> bool {
     )
 }
 
+fn is_uppercase_field_boundary(rest: &str) -> bool {
+    let bytes = rest.as_bytes();
+    let mut at = 0;
+    for _ in 0..4 {
+        let word_start = at;
+        while bytes.get(at).is_some_and(u8::is_ascii_uppercase) {
+            at += 1;
+        }
+        if at - word_start < 2 {
+            return false;
+        }
+        let spaces_start = at;
+        while bytes.get(at) == Some(&b' ') {
+            at += 1;
+        }
+        if matches!(bytes.get(at), Some(b':' | b'=' | b'\t' | b'|' | b',')) {
+            return true;
+        }
+        if at == spaces_start {
+            return false;
+        }
+    }
+    false
+}
+
 fn labelled_value_over_limit(value: &str) -> bool {
     value.len() > 40
         || value
@@ -618,6 +656,33 @@ fn is_ascii_email_continuation(ch: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scanner_never_cuts_a_proven_capture_at_any_internal_boundary() {
+        for (input, captured) in [
+            ("181/12/03/2019 bitte", "181/12/03/2019"),
+            ("AB12 SSN 12345", "AB12 SSN"),
+            ("AB12 DRIVER LICENSE: EF34", "AB12 DRIVER LICENSE"),
+            ("AB12 verified", "AB12 verified"),
+        ] {
+            let scan = scan_labelled_value(input, 0..captured.len(), false);
+            assert_eq!(&input[scan.capture], captured, "{input:?}");
+            assert!(scan.span.end >= captured.len(), "{input:?}");
+        }
+    }
+
+    #[test]
+    fn uppercase_field_boundary_requires_a_separator() {
+        for separator in [":", "=", "\t", "|", ","] {
+            let input = format!("AB12 CD3456 DRIVER LICENSE{separator} EF34 GH5678");
+            let scan = scan_labelled_value(&input, 0..11, true);
+            assert_eq!(&input[scan.span], "AB12 CD3456", "{input:?}");
+            assert_eq!(scan.reason, Some(LabelledValueScanReason::LabelBoundary));
+        }
+        let input = "AB12 CD3456 XYZ123456";
+        let scan = scan_labelled_value(input, 0..11, true);
+        assert_eq!(&input[scan.span], input);
+    }
 
     #[test]
     fn rejection_guard_checks_capture_instead_of_scanner_extension() {

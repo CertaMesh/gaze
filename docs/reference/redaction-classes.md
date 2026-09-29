@@ -146,8 +146,11 @@ remaining column is checked against the loaded rulepack by
 
 The three `*.labelled` rows are safe-default `core` rules. Their captured value,
 not the field name, becomes the token. They cooperate with the older
-`*.cue_anchored` rows of the same class. `match.complete_labelled_value` scans
-adjacent groups so a bounded regex cannot leave a value suffix raw; the
+`*.cue_anchored` rows of the same class. All six rows use
+`match.complete_labelled_value` to scan adjacent groups. An older cue rule keeps
+its full original capture even when a date-like group appears inside it; a
+following uppercase field label with a separator remains visible. Grouped runs
+can extend beyond four groups or 40 bytes with a typed audit reason; the
 [labelled-identifier explanation](../explanation/detection/labelled-identifiers.md)
 describes its stop and audit rules. The `redaction_classes_doc` test pins these
 rows and the 50-spec inventory to the loaded rulepack. The

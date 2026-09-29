@@ -9,11 +9,14 @@ fixed identifier shape. English, German, French, Dutch, and Portuguese labels ar
 Only the value becomes a token. The label and punctuation remain visible so an agent can still
 understand the field. The original value bytes go into the manifest, so strict restore returns
 the input exactly. A shared complete-value scan extends digit-bearing or uppercase groups after
-a bounded regex capture. It protects the entire adjacent value run, including values longer than
-four groups or 40 bytes; those limits produce an audit reason, not a cutoff that exposes a suffix.
-The scan stops before a date or a new field cue. A second recognizer can also establish a class
-boundary. The audit reason records the boundary without recording value bytes. Letter-led and
-digit-led groups may use spaces, dots, slashes, or hyphens.
+a bounded regex capture. It protects adjacent grouped runs even when they exceed four groups or
+40 bytes; those limits produce an audit reason, not a cutoff that exposes a suffix. The scan
+stops before a following date or field cue, including a multiword uppercase label followed by
+`:`, `=`, a tab, `|`, or a comma. A second recognizer can also establish a class boundary. The
+audit reason records the boundary without recording value bytes. Letter-led and digit-led groups
+may use spaces, dots, slashes, or hyphens. A single ungrouped value still needs a matching regex
+shape. The three older `*.cue_anchored` rules also use this scan; their original regex captures
+remain protected when a date-like group occurs inside them.
 Grouped numbers need at least three chunks, keeping ordinary decimal amounts out of this fallback.
 
 The rules do not infer a class from a bare value or a generic `id` or `number` field. A field
