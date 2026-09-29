@@ -923,6 +923,7 @@ mod tests {
         let none = graph
             .candidate_events(Vec::<Vec<CandidateEvent>>::new())
             .expect("events");
+        assert_eq!(none.len(), 3);
         assert!(none.iter().all(|e| e.outcome == CandidateOutcome::Unlinked));
         // Selected twice, or placed twice in one selection, is a contradiction.
         assert!(graph
