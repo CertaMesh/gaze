@@ -221,6 +221,43 @@ impl SafetyNet for InvalidSpanNet {
     }
 }
 
+struct RefusingNet;
+
+impl SafetyNet for RefusingNet {
+    fn id(&self) -> &str {
+        "nym-small-int8"
+    }
+
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        _clean_text: &str,
+        _context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        Ok(Vec::new())
+    }
+
+    fn check_with_telemetry(
+        &self,
+        _clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
+        Ok((
+            Vec::new(),
+            vec![LeakReportTelemetry::ModelSpanRefused {
+                safety_net_id: self.id().to_string(),
+                reason: gaze_types::SafetyNetRefusalReason::NymPaginationKeyV1,
+                span: 0..1,
+                document_kind: context.document_kind,
+                field_path: context.field_path.map(str::to_string),
+            }],
+        ))
+    }
+}
+
 fn session() -> Session {
     Session::new(Scope::Ephemeral).expect("session")
 }
@@ -1144,6 +1181,27 @@ fn scan_safety_nets_does_not_mutate_session() {
     assert_eq!(result.nets_run, 1);
     assert_eq!(result.report.stats.suspect_count, 1);
     assert_eq!(session.tokens().len(), before);
+}
+
+#[test]
+fn scan_safety_nets_preserves_typed_model_refusal_without_a_suspect() {
+    let pipeline = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(RefusingNet)
+        .build()
+        .unwrap();
+    let result = pipeline
+        .scan_safety_nets(&session(), "2", &[gaze::LocaleTag::Global])
+        .unwrap();
+    assert!(result.report.suspects.is_empty());
+    assert!(matches!(
+        result.report.telemetry.as_slice(),
+        [LeakReportTelemetry::ModelSpanRefused {
+            reason: gaze_types::SafetyNetRefusalReason::NymPaginationKeyV1,
+            span,
+            ..
+        }] if *span == (0..1)
+    ));
 }
 
 #[test]

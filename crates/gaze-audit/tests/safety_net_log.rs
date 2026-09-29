@@ -5,8 +5,8 @@ use gaze_audit::{
     DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME, SAFETY_NET_RESTRICTED_COLUMNS,
 };
 use gaze_types::{
-    Action, ConflictTier, DocumentKind, LeakKind, LeakSuspect, PiiClass, RedactionEntry,
-    RedactionLogger,
+    Action, ConflictTier, DocumentKind, LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect,
+    PiiClass, RedactionEntry, RedactionLogger, SafetyNetRefusalReason,
 };
 use rusqlite::Connection;
 use tempfile::NamedTempFile;
@@ -93,6 +93,38 @@ fn safety_net_log_insert_and_read_round_trips_bytes_free_metadata() {
         Some("decode-sha256:0f91")
     );
     assert_eq!(row.telemetry_kind.as_deref(), Some("suspect"));
+}
+
+#[test]
+fn nym_pagination_refusal_has_a_typed_audit_row_without_source_bytes() {
+    let temp = NamedTempFile::new().expect("temp db");
+    let logger = SqliteLogger::new(temp.path()).expect("sqlite logger");
+    let event = LeakReportTelemetry::ModelSpanRefused {
+        safety_net_id: "nym-small-int8".to_string(),
+        reason: SafetyNetRefusalReason::NymPaginationKeyV1,
+        span: 10..12,
+        document_kind: DocumentKind::Structured,
+        field_path: Some("$.pageSize".to_string()),
+    };
+    logger
+        .log_safety_net_report(
+            &LeakReport::from_parts(Vec::new(), vec![event]),
+            DocumentKind::Structured,
+            1_767_225_600_000,
+            Some("session-refusal".to_string()),
+        )
+        .expect("log refusal");
+    let rows = SqliteLogger::query_safety_net(temp.path(), &AuditFilter::default())
+        .expect("query safety net");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].leak_kind, "refused");
+    assert_eq!(
+        rows[0].telemetry_kind.as_deref(),
+        Some("nym_pagination_key_v1")
+    );
+    assert_eq!(rows[0].span_len, 2);
+    assert_eq!(rows[0].field_path.as_deref(), Some("$.pageSize"));
+    assert_eq!(rows[0].score, None);
 }
 
 #[test]

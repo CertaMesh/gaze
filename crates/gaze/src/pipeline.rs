@@ -1568,7 +1568,22 @@ impl Pipeline {
                 field_path,
             )
             .with_dictionaries(dictionaries);
-            let mut reported = net.check(scan.text(), context)?;
+            let (mut reported, mut net_telemetry) =
+                net.check_with_telemetry(scan.text(), context)?;
+            for event in &mut net_telemetry {
+                if let LeakReportTelemetry::ModelSpanRefused {
+                    span,
+                    field_path: event_path,
+                    ..
+                } = event
+                {
+                    *span = scan.to_clean_range(span.clone());
+                    if event_path.is_none() {
+                        *event_path = field_path.map(str::to_string);
+                    }
+                }
+            }
+            telemetry.extend(net_telemetry);
             for suspect in &mut reported {
                 suspect.span = scan.to_clean_range(suspect.span.clone());
                 if let LeakKind::PartialBleed { uncovered } = &mut suspect.kind {

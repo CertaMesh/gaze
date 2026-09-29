@@ -348,8 +348,13 @@ class MechanismArmsTest(unittest.TestCase):
         titles = [entry["title"] for entry in ledger["mechanisms"]]
         expected = [entry["title"] for entry in LEDGER["mechanisms"]] + ["Synthetic drop"]
         self.assertEqual(titles, expected)
-        for title in titles:
-            self.assertEqual(body.count(f"| {title} | `"), 3, title)
+        for entry in ledger["mechanisms"]:
+            title = entry["title"]
+            self.assertEqual(
+                body.count(f"| {title} | `"),
+                3 * len(entry["measurements"]),
+                title,
+            )
             self.assertIn(f"- **{title}** ships ", body)
         self.assertIn("| Synthetic drop | not available: mechanism added in v0.16 |", body)
 

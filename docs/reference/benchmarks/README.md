@@ -595,6 +595,13 @@ selects the locale rulepacks separately, so there is no separate
 because its CLI runtime option cannot be expressed as an additive policy
 section. These omissions do not imply that the mechanisms have zero effect.
 
+Nym's pagination guard v1 refuses only ASCII-digit `BUILDING_NUMBER` spans whose
+JSON, query, YAML, or structured field key is in the reviewed pagination/count
+key table. The refusal is reported as typed `nym_pagination_key_v1` telemetry
+and a metadata-only audit row; address fields and other Nym labels remain
+eligible. The measured Nym rows below identify the source revision of each
+guard version.
+
 <!-- BEGIN GENERATED: mechanism-arms -->
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v3 headline counts false-positive bytes after gold-gap credit.
