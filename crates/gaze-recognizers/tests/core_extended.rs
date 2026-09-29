@@ -240,7 +240,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
         "phone.national.de",
         "postal.de",
         "postal.us",
-        "postal.address_four_digit",
+        "postal.cued_four_digit",
         "postal.au",
         "age.cue",
         // Bilingual cue-anchored government-ID recognizers with no national shape stay on
@@ -1838,9 +1838,9 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
     // `str.replace` that matches nothing is a silent no-op, which would turn this probe into a
     // Potemkin pass that asserts the loader accepts an unmutated pack.
     let ca_list =
-        "cooperates_with = [\"postal.de\", \"postal.us\", \"postal.at_ch\", \"postal.address_four_digit\", \"postal.au\", \"postal.gb\", \"postal.ie\"]\n";
+        "cooperates_with = [\"postal.de\", \"postal.us\", \"postal.at_ch\", \"postal.cued_four_digit\", \"postal.au\", \"postal.gb\", \"postal.ie\"]\n";
     let de_list =
-        "cooperates_with = [\"postal.us\", \"postal.at_ch\", \"postal.address_four_digit\", \"postal.au\", \"postal.ca\", \"postal.gb\", \"postal.ie\"]\n";
+        "cooperates_with = [\"postal.us\", \"postal.at_ch\", \"postal.cued_four_digit\", \"postal.au\", \"postal.ca\", \"postal.gb\", \"postal.ie\"]\n";
     assert_eq!(
         raw.matches(ca_list).count(),
         1,

@@ -219,7 +219,7 @@ Full contract:
 
 The embedded `gaze-core` rulepack version **0.6.0** contains 45 recognizers.
 `birth_date.cue` and `age.cue` are global `safe_default` rules in `core`.
-`postal.address_four_digit` is document-locale-gated to `en-NZ`.
+`postal.cued_four_digit` is a global `safe_default` rule that needs an explicit postal label.
 `password.field` ships in the opt-in
 `secrets` bundle, because credentials are not PII; load it with
 `bundled = ["core", "secrets"]`. The former `username.field` rule was removed
@@ -231,9 +231,10 @@ in core 0.6.0.
 | `age.cue` / `custom:age` | `core` | Structured `age`, `Alter`, `âge`, `idade`, `leeftijd` fields, or person-framed `aged N`, `N years old`, `N-year-old`, `N Jahre alt`, `âgé de N`; only the number is tokenized |
 | `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
 
-With an `en-NZ` document locale, `postal.address_four_digit` recognizes a
-four-digit postcode after a postal label or at the end of a street-address
-frame with a town. A bare four-digit number stays raw.
+`postal.cued_four_digit` recognizes a four-digit value directly after
+`postcode`, `postal code`, or `zip`/`zip code`, including structured keys.
+Unlabelled street addresses and bare four-digit numbers stay raw because a
+year or amount can have the same shape.
 
 ### Supported grammar
 

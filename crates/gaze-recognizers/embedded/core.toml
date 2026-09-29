@@ -905,7 +905,7 @@ priority = 86
 #
 # `custom:postal_code` is served by eight recognizers in two groups that cannot overlap:
 #
-#   NUMERIC — document-basis: `postal.de`, `postal.us`, `postal.at_ch`, `postal.address_four_digit`, `postal.au`
+#   NUMERIC — document-basis: `postal.de`, `postal.us`, `postal.at_ch`, `postal.cued_four_digit`, `postal.au`
 #     `postal.de` / `postal.us` accept naked five-digit strings, a shape that carries no structural
 #     signal whatsoever and is indistinguishable from a year, an order number, or an amount. The
 #     DOCUMENT-locale gate is the only thing standing in for that missing structure, which is why
@@ -931,7 +931,7 @@ priority = 86
 id = "postal.de"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.us", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-DE"]
 locale_basis = "document"
@@ -950,7 +950,7 @@ priority = 70
 id = "postal.us"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-US"]
 locale_basis = "document"
@@ -1009,7 +1009,7 @@ priority = 70
 id = "postal.at_ch"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.address_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-AT", "de-CH"]
 locale_basis = "document"
@@ -1029,27 +1029,22 @@ priority = 70
 origin = "project-authored"
 license = "Apache-2.0"
 
-# Four-digit New Zealand postcodes need a document locale gate: a street and town
-# frame can also end in a year or amount outside an NZ address. The explicit postal
-# label and address branches capture only the code for exact restore.
+# A four-digit code follows an explicit postal field cue. Street-and-town frames
+# also end in years or amounts, so they do not license a match. The cue carries
+# enough meaning to use this rule globally without activating another locale.
 [[recognizers]]
-id = "postal.address_four_digit"
-safety_tier = "locale_gated"
+id = "postal.cued_four_digit"
+safety_tier = "safe_default"
 class = "custom:postal_code"
 enabled = true
-locales = ["en-NZ"]
+locales = ["global"]
 locale_basis = "document"
 cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?ix)
-(?:
-  \b(?:postcode|postal[\x20\t_-]*code|zip(?:[\x20\t_-]*code)?)\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?([0-9]{4})\b
- |
-  \b[0-9]{1,5}[\x20\t\x{A0}\x{202F}]+[\p{L}'-]+(?:[\x20\t\x{A0}\x{202F}]+[\p{L}'-]+){0,2}[\x20\t\x{A0}\x{202F}]+(?:road|rd|street|st|avenue|ave|lane|ln|crescent|terrace|drive|place|rise|close|way)\b[\x20\t\x{A0}\x{202F},]+(?-i:\p{Lu})[\p{L}'-]+(?:[\x20\t\x{A0}\x{202F}]+(?-i:\p{Lu})[\p{L}'-]+){0,2}[\x20\t\x{A0}\x{202F},]+([0-9]{4})\b
-)'''
-capture_groups = [1, 2]
+pattern = '''(?ix)\b(?:postcode|postal[\x20\t_-]*code|zip(?:[\x20\t_-]*code)?)\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?([0-9]{4})\b'''
+capture_groups = [1]
 
 [recognizers.scoring]
 base = 0.70
@@ -1077,7 +1072,7 @@ license = "Apache-2.0"
 id = "postal.au"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.address_four_digit", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-AU"]
 locale_basis = "document"
@@ -1127,7 +1122,7 @@ license = "Apache-2.0"
 id = "postal.ca"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-CA"]
 locale_basis = "format"
@@ -1183,7 +1178,7 @@ license = "Apache-2.0"
 id = "postal.gb"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.ca", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.ie"]
 enabled = true
 locales = ["en-GB"]
 locale_basis = "format"
@@ -1235,7 +1230,7 @@ license = "Apache-2.0"
 id = "postal.ie"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.address_four_digit", "postal.au", "postal.ca", "postal.gb"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb"]
 enabled = true
 locales = ["en-IE"]
 locale_basis = "format"
