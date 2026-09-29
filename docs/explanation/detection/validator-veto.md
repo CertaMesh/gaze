@@ -77,6 +77,53 @@ still reports only mod-97-valid IBANs and Luhn-valid cards.
 the byte-coverage safeguard retains prior arbitration.
 `ConflictTier::ValidatorVeto` is only used for this pre-resolver drop.
 
+## Benign lookalikes
+
+Some weak rules match a shape, not a meaning. `postal.us` matches any five
+digits, so the tail of `SKU-DEMO-73821` and the `22186` in `EUR 22186,12`
+both look like postcodes. A rule without a cue and without a checksum can
+declare the benign structures that veto it:
+
+```toml
+[recognizers.context]
+benign_lookalikes = ["joined_identifier", "currency_amount", "label_number"]
+```
+
+| Structure | Vetoes the candidate when |
+| --- | --- |
+| `joined_identifier` | It is the last hyphen segment of a token whose first segment is a reference label (`SKU`, `ORDER`, `INVOICE`, `BATCH`, `Rechnung`, ...) |
+| `currency_amount` | `EUR`, `USD`, `CHF`, `GBP`, `€`, `$` or `£` sits directly before it, or after it (past two decimals) |
+| `digit_run_fragment` | It is a strict part of one same-separator digit run holding more than 15 digits, longer than any E.164 number |
+| `label_number` | `Room`, `Raum`, `Zimmer`, `Seat`, `Gate`, `Gleis`, `Platform`, `Floor` or `Etage` sits directly before it |
+
+The check runs in this stage, before conflict resolution, because a
+benign candidate that *won* a conflict could not help: residual admission
+re-protects every byte a protective candidate claimed, even inside a
+`preserve` winner. Three rules keep a real value protected:
+
+- **Only the declaring rule's candidate goes.** Any other candidate over the
+  same bytes (a cued phone, an IBAN, a card) is untouched and still
+  protects them.
+- **A cue always wins.** A phone or postal cue word (`Tel`, `Telefon`,
+  `phone`, `PLZ`, `ZIP`, ...) on the same line within 40 bytes before the
+  candidate disables every structure.
+- **No checksum rule can opt in.** `RegexDetector::with_benign_lookalikes`
+  refuses a recognizer whose validator is a checksum
+  (`ValidatorKind::is_checksum`), so a value vouched for by its own digits,
+  or a financial number kept despite its checksum, is never waved through
+  by its surroundings.
+
+The bundled postal rules (`postal.de`, `postal.us`, `postal.at_ch`) declare
+`joined_identifier`, `currency_amount` and `label_number`; the national
+phone rules declare `joined_identifier` and `digit_run_fragment`. Each veto
+writes the usual loser row with its `Benign*` reason.
+
+Separately, the bundled IP validators reject loopback addresses
+(`127.0.0.0/8`, `::1`, and IPv4-mapped loopback): a loopback address never
+leaves the host, so it identifies no person or device. Link-local addresses
+stay protected, because their interface ID can be derived from a MAC
+address.
+
 ## Audit shape
 
 The pipeline logs one loser-only `RedactionEntry` per vetoed candidate:
@@ -122,6 +169,12 @@ compatibility.
 - `CpfMod11Failed`
 - `CnpjMod11Failed`
 - `UkNhsMod11Failed`
+- `Ipv4LoopbackRange`
+- `Ipv6LoopbackRange`
+- `BenignJoinedIdentifier`
+- `BenignCurrencyAmount`
+- `BenignDigitRunFragment`
+- `BenignLabelNumber`
 
 Phone reasons are always present in the type. They are emitted only when the
 `phone-parser` feature makes the corresponding validators available.

@@ -187,3 +187,40 @@ fn real_postcodes_phones_and_addresses_still_tokenize() {
     assert_protected("en-US", "host 10.0.0.7 up", "10.0.0.7");
     assert_protected("en-US", "peer fe80::21a:2bff:fe3c:4d5e up", "fe80::21a:2bff:fe3c:4d5e");
 }
+
+/// Real PII right next to a benign lookalike: the lookalike may leave raw, the
+/// PII never does.
+fn assert_value_protected(locale: &str, input: &str, value: &str) {
+    let (text, _) = clean(locale, input);
+    assert!(
+        !text.contains(value),
+        "{locale}: {value} must not leave raw in {input:?}, got {text:?}"
+    );
+}
+
+#[test]
+fn cued_real_pii_next_to_lookalikes_still_tokenizes() {
+    // A cued phone beside an order number and a long SKU.
+    assert_value_protected("de-DE", "Tel: 030 1234567, Bestellung ORDER-2026-145684", "1234567");
+    assert_value_protected("de-DE", "Telefon 0301234567 itemCode=0593-9506-3395-7573", "0301234567");
+    // A phone cue in front of a digit run keeps even the fragment protected.
+    assert_value_protected("de-DE", "Phone: 0593-9506-3395-7573", "9506-3395");
+    // Financial identifiers beside amounts: checksum rules never opt in.
+    assert_value_protected("en-US", "IBAN DE89 3704 0044 0532 0130 00 EUR 500,00", "3704 0044 0532");
+    assert_value_protected("en-US", "Card 4539 1488 0343 6467 USD 12.00", "4539 1488 0343 6467");
+    assert_value_protected("en-US", "paid $12.00 by card 4539148803436467", "4539148803436467");
+    // Cued and plain postcodes beside references, amounts and rooms.
+    assert_value_protected("en-US", "ZIP 90210, SKU-DEMO-73821", "90210");
+    assert_value_protected("en-US", "SKU-DEMO-73821 ships to Beverly Hills, CA 90210", "90210");
+    assert_value_protected("de-AT", "PLZ: 1010 Wien, Room 4833", "1010");
+    assert_value_protected("en-US", "EUR 12,00 to 10115 Berlin", "10115");
+    // The same five digits: vetoed as an order tail, still protected as a postcode.
+    let (text, vetoes) = clean("de-DE", "Rechnung RECHNUNG-2026-80331 an 80331 München");
+    assert!(text.starts_with("Rechnung RECHNUNG-2026-80331 an <"), "{text}");
+    assert!(!text.ends_with("80331 München"), "{text}");
+    assert!(!vetoes.is_empty());
+    // An email and a routable IP next to loopback and a reference stay protected.
+    assert_value_protected("en-US", "SKU-DEMO-73821 owner anna@example.org", "anna@example.org");
+    assert_value_protected("en-US", "proxy 127.0.0.1 forwarded client 84.12.3.4", "84.12.3.4");
+    assert_value_protected("en-US", "::1 and 2a00:1450:4001:82a::200e", "2a00:1450:4001:82a::200e");
+}
