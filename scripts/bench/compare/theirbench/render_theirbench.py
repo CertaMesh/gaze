@@ -134,6 +134,38 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
             "not_run": NOT_RUN, "benchmarks": benchmarks}
 
 
+def add_tool(data: dict[str, Any], report_path: Path, own_path: Path, tool: str) -> None:
+    """Add one separately measured competitor row to an already assembled benchmark.
+
+    The measurement is refused unless it ran on the same documents as the existing rows (identity,
+    split digests) and leaves the common-intersection label set unchanged, so the new row is
+    comparable to the old ones without re-running them. Its own harness and rescore revisions are
+    kept per row: they differ from the entry's, which describe the earlier rows.
+    """
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    if report.get("preflight"):
+        raise ValueError(f"{report_path}: preflight results are never published")
+    if "rescored_with" not in report or report["rescored_with"]["harness_dirty"] or report["harness_dirty"]:
+        raise ValueError(f"{report_path}: publish only a clean measurement rescored on a clean harness")
+    entry = data["benchmarks"][report["benchmark"]]
+    for key in ("identity", "splits", "common_intersection_labels", "mapping_sha256"):
+        if report[key] != entry[key]:
+            raise ValueError(f"{report['benchmark']}: {key} differs from the assembled rows; the row is not comparable")
+    if set(report["rows"]) != {tool}:
+        raise ValueError(f"{report_path}: expected exactly the {tool} row, found {sorted(report['rows'])}")
+    own = json.loads(own_path.read_text(encoding="utf-8"))
+    if own.get("smoke_limit") or own["system"] != tool:
+        raise ValueError(f"{own_path}: not a full own-scorer result for {tool}")
+    entry["rows"][tool] = report["rows"][tool]["test"]
+    entry["provenance"][tool] = report["provenance"][tool]
+    entry["own_metric"][tool] = own.get("scored") or own["overall"]
+    entry["typed_hold"] = sorted(set(entry["typed_hold"]) | set(report["typed_hold"]))
+    entry.setdefault("rows_measured_separately", {})[tool] = {
+        "harness_revision": report["harness_revision"], "gaze_crates_tree": report["gaze_crates_tree"],
+        "comparison_revision": report["comparison_revision"], "label_maps_sha256": report["label_maps_sha256"],
+        "rescored_with": report["rescored_with"]}
+
+
 def is_tagged_gaze_row(tool: str) -> bool:
     return tool.startswith("gaze-") and TAG.fullmatch(tool[len("gaze-"):]) is not None
 
@@ -259,6 +291,12 @@ def render(data: Mapping[str, Any]) -> str:
             lines.append(f"| {tool} | " + " | ".join(cell(metric, name, entry, tool)
                                                     for metric in metrics(name)) + " |")
         rescored = entry["rescored_with"]
+        for tool, added in sorted(entry.get("rows_measured_separately", {}).items()):
+            lines_after_table = [f"{tool} was measured separately on the same documents, with harness "
+                                 f"`{added['harness_revision'][:8]}` (typed metrics rescored with "
+                                 f"`{added['rescored_with']['harness_revision'][:8]}`); it changes neither the "
+                                 "other rows nor the common-intersection labels."]
+            lines += ["", *lines_after_table]
         if not any(is_tagged_gaze_row(tool) for tool in rows):
             latest = json.loads(RELEASE_HISTORY.read_text(encoding="utf-8"))["releases"][-1]["version"]
             lines += ["", f"Gaze {latest}: not yet measured on this set, so no Gaze row is shown."]
@@ -293,6 +331,10 @@ def main(argv: list[str] | None = None) -> int:
                        help="measured=<tag> or rescored=<tag>; must resolve to the recorded harness commit")
     build.add_argument("--historical", type=Path, action="append", default=[],
                        help="presidio_research_repro.py --reproduction result")
+    extra = sub.add_parser("add-tool")
+    extra.add_argument("--report", type=Path, required=True)
+    extra.add_argument("--own", type=Path, required=True)
+    extra.add_argument("--tool", required=True)
     show = sub.add_parser("render")
     show.add_argument("--check", action="store_true")
     show.add_argument("--data", type=Path, default=DATA)
@@ -302,6 +344,11 @@ def main(argv: list[str] | None = None) -> int:
         DATA.write_text(json.dumps(assemble(args.report, args.own, args.reproduction, args.historical,
                                        dict(item.split("=", 1) for item in args.harness_tag)), indent=2,
                                    sort_keys=True) + "\n", encoding="utf-8")
+        return 0
+    if args.command == "add-tool":
+        data = json.loads(DATA.read_text(encoding="utf-8"))
+        add_tool(data, args.report, args.own, args.tool)
+        DATA.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return 0
     data = json.loads(args.data.read_text(encoding="utf-8"))
     current = args.doc.read_text(encoding="utf-8")
