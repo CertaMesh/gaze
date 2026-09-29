@@ -19,8 +19,8 @@ def scorecard(corpus_sha256: str = render.CORPUS_SHA256) -> dict:
             "split_composite_source_ids": False,
         },
         "layers": {
-            "generator": {"generator_version": 4, "corpus_sha256": corpus_sha256},
-            "scored_label_contract": {"file_sha256": render.sha256(render.CONTRACT)},
+            "generator": {"generator_version": render.GENERATOR_VERSION, "corpus_sha256": corpus_sha256},
+            "scored_label_contract": {"file_sha256": render.CONTRACT_SHA256},
             **{
                 layer: {"runs": [{
                     "config": "policy-file",
@@ -56,10 +56,10 @@ class AdjacencyHistoryTests(unittest.TestCase):
             for version, arm in render.EXPECTED_ROWS
         ]
         history = {
-            "schema_version": 1, "generator_version": 4,
+            "schema_version": 1, "generator_version": render.GENERATOR_VERSION,
             "corpus_sha256": render.CORPUS_SHA256,
             "policy_sha256": render.POLICY_SHA256,
-            "contract_sha256": render.sha256(render.CONTRACT),
+            "contract_sha256": render.CONTRACT_SHA256,
             "rows": rows,
         }
         with tempfile.TemporaryDirectory() as temporary:

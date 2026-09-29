@@ -6,7 +6,10 @@ a cue, NBSP and NARROW NBSP spacing, log `key=value`, CSV, proxy-shaped
 tool-call JSON). Every checksum family also gets a checksum-invalid twin in the
 same shape; the twin stays scored gold, and the validator gold census reports
 the split. Layer D renders benign lookalikes (amounts, SKUs, colours, versions,
-order and tracking IDs, dates) that must stay untouched.
+order and tracking IDs, dates) that must stay untouched. Both layers also
+carry labelled postcodes and phones inside benign-looking structures (A) and
+the same structures with no cue anywhere (D), which price a benign-lookalike
+veto in both directions.
 
 Held-out protocol: every template, cue, key, name and seed is assigned to the
 `dev` or `test` partition before anything is generated, and each perturbation
@@ -36,7 +39,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 
 
-GENERATOR_VERSION = 4
+GENERATOR_VERSION = 5
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -1304,6 +1307,522 @@ def _adjacency_records(partition: str, layer: str) -> list[Record]:
 
 
 # --------------------------------------------------------------------------
+# Labelled PII inside benign lookalike structures (todo 3995). A weak postcode
+# or phone rule may be vetoed when its match sits in a benign structure: the
+# tail of an `ORDER-` style reference, after a currency code, or inside a
+# 16-digit run. Layer A puts postcodes and reserved-range phones in exactly
+# those structures, with a label that names them somewhere in the document:
+# blocks above or below, past blank lines, in seven Latin-script languages and
+# two other scripts, and in nested tool JSON, log and CSV records. Every value
+# is gold and gated. Each layer A cell names one layer D twin: the same
+# surface, value shape, benign structure and position (line, or JSON path and
+# siblings), with no cue anywhere. The generator checks every pair and fails
+# closed on a mismatch.
+
+LOOKALIKE_CELL_SURFACES = ("lookalike_prose", "lookalike_log_kv", "lookalike_csv", "lookalike_tool_json")
+DOCS_PER_LOOKALIKE_CELL = {LAYER_IDENTIFIERS: 6, LAYER_LOOKALIKES: 4}
+CUE_VOCABULARY_PATH = Path(__file__).with_name("lookalike_cue_vocabulary.json")
+
+
+def _load_cue_vocabulary() -> tuple[tuple[str, ...], frozenset[str], tuple[tuple[int, int], ...]]:
+    vocabulary = json.loads(CUE_VOCABULARY_PATH.read_text(encoding="utf-8"))
+    if vocabulary.get("schema_version") != 1:
+        raise LayerError(f"{CUE_VOCABULARY_PATH.name}: unsupported schema_version")
+    stems = tuple(stem for family in vocabulary["stems"].values() for stem in family)
+    words = frozenset(word for family in vocabulary["whole_words"].values() for word in family)
+    ranges = tuple((int(low, 16), int(high, 16)) for low, high in vocabulary["latin_letter_ranges"])
+    return stems, words, ranges
+
+
+# The veto's own cue vocabulary, one checked file shared with the Rust test.
+LOOKALIKE_CUE_STEMS, LOOKALIKE_CUE_WORDS, LATIN_LETTER_RANGES = _load_cue_vocabulary()
+# The veto's accent folding, exactly: nothing else is folded.
+_CUE_FOLD = {
+    **dict.fromkeys("àáâãäå", "a"), "ç": "c", **dict.fromkeys("èéêë", "e"),
+    **dict.fromkeys("ìíîï", "i"), "ñ": "n", **dict.fromkeys("òóôõöø", "o"),
+    **dict.fromkeys("ùúûü", "u"), "ß": "ss",
+}
+
+
+def _cue_words(text: str) -> list[str]:
+    """Words split at non-letters and lower-to-upper changes, lowercased and folded."""
+    words: list[str] = []
+    word = ""
+    previous_lower = False
+    for character in text:
+        if (not character.isalpha() or (character.isupper() and previous_lower)) and word:
+            words.append(word)
+            word = ""
+        if character.isalpha():
+            word += "".join(_CUE_FOLD.get(c, c) for c in character.lower())
+        previous_lower = character.islower()
+    return [*words, word] if word else words
+
+
+def has_lookalike_cue(text: str) -> bool:
+    return any(
+        word in LOOKALIKE_CUE_WORDS or word.startswith(LOOKALIKE_CUE_STEMS)
+        for word in _cue_words(text)
+    )
+
+
+def has_non_latin_letter(text: str) -> bool:
+    return any(
+        character.isalpha()
+        and not any(low <= ord(character) <= high for low, high in LATIN_LETTER_RANGES)
+        for character in text
+    )
+
+
+# Cue-free, Latin-only padding. {F<n>} expands to n prose lines, {L<n>} to n
+# log lines, {R<n>} to n empty CSV rows, {J<n>:<indent>} to n JSON members.
+LOOKALIKE_FILLER = {
+    "dev": ("Checked by the night shift.", "Nothing else changed in this batch.",
+            "Keep the record as it is.", "Status stays open for now.",
+            "The sync ran without errors.", "Ignore the older draft.",
+            "Queue length was normal.", "No action needed from the team.",
+            "Reviewed again this morning.", "Batch closed at noon."),
+    "test": ("Handled by the early rota.", "Nothing new since Monday.",
+             "Leave the entry unchanged.", "Marked as pending review.",
+             "The import finished cleanly.", "Skip the earlier version.",
+             "Load was within limits.", "No follow-up is required.",
+             "Looked at once more today.", "Closed out before lunch."),
+}
+LOOKALIKE_LOG_LINE = {
+    "dev": 'level=debug svc=queue msg="heartbeat" seq={i}',
+    "test": 'svc=worker msg="idle" n={i}',
+}
+LOOKALIKE_CSV_ROW = {"dev": "{i},,pending", "test": "{i},,queued"}
+LOOKALIKE_JSON_MEMBERS = {
+    "dev": (("status", "open"), ("source", "import"), ("priority", "normal"),
+            ("createdBy", "system"), ("revision", "3"), ("flags", "none"),
+            ("batch", "b7"), ("channel", "web"), ("owner", "ops")),
+    "test": (("state", "queued"), ("origin", "sync"), ("rank", "low"),
+             ("author", "robot"), ("version", "5"), ("labels", "none"),
+             ("group", "g2"), ("medium", "api"), ("team", "core")),
+}
+
+
+def _zip5(rng: Rng, partition: str) -> str:
+    low, high = {"dev": (30000, 59999), "test": (60000, 99999)}[partition]
+    return str(rng.between(low, high))
+
+
+# Phones come from reserved, non-reachable ranges (CONTRIBUTING.md, phone-number
+# fixtures): NANPA 555-01xx and the German 1555 mobile shape. The partitions
+# differ in area code (US) or in the first subscriber digits (DE).
+DE_RESERVED_SUBSCRIBER_PREFIX = {"dev": "01", "test": "02"}
+
+
+def _phone_us_reserved(rng: Rng, partition: str) -> str:
+    return f"{rng.choice(US_AREA_CODES[partition])}-555-01{rng.digits(2)}"
+
+
+def _phone_de_reserved(rng: Rng, partition: str) -> str:
+    return "01555" + DE_RESERVED_SUBSCRIBER_PREFIX[partition] + rng.digits(5)
+
+
+def _phone_de_run(rng: Rng, partition: str) -> str:
+    """A reserved German mobile shape run on to 16 digits in groups of four.
+
+    Luhn-invalid, as `_sku`: a card rule would otherwise cover the run and hide
+    what the phone rule does with it. No phone number has 16 digits, so this
+    shape is a counterweight only, never gold.
+    """
+    while True:
+        digits = "01555" + DE_RESERVED_SUBSCRIBER_PREFIX[partition][1] + rng.digits(10)
+        if not luhn_valid(digits):
+            return "-".join(_by_four(digits))
+
+
+# kind: (gold label, language, region, value maker)
+LOOKALIKE_VALUE_KINDS: dict[str, tuple[str, str, str, Callable[[Rng, str], str]]] = {
+    "zip_us": ("ZIPCODE", "en", "US", _zip5),
+    "zip_de": ("ZIPCODE", "de", "DE", _zip5),
+    "phone_us": ("TELEPHONENUM", "en", "US", _phone_us_reserved),
+    "phone_de": ("TELEPHONENUM", "de", "DE", _phone_de_reserved),
+    "phone_de_run": ("TELEPHONENUM", "de", "DE", _phone_de_run),
+}
+
+
+class BenignStructure(str, Enum):
+    JOINED_IDENTIFIER = "joined_identifier"
+    CURRENCY_AMOUNT = "currency_amount"
+    DIGIT_RUN = "digit_run"
+
+
+class LabelRelation(str, Enum):
+    """Where a layer A label stands relative to its value."""
+    ABOVE = "above"
+    ABOVE_PAST_BLANK = "above_past_blank"
+    BELOW_PAST_BLANK = "below_past_blank"
+    SAME_LINE = "same_line"
+    LOG_FIELD_ABOVE = "log_field_above"
+    CSV_HEADER = "csv_header"
+    JSON_ANCESTOR_KEY = "json_ancestor_key"
+    JSON_SIBLING_AFTER = "json_sibling_after"
+    JSON_NESTED_SIBLING_AFTER = "json_nested_sibling_after"
+    JSON_TYPE_ABOVE = "json_type_above"
+
+
+@dataclass(frozen=True)
+class LookalikeTwin:
+    """A benign structure, value shape and position: one layer D cell."""
+    family: str
+    surface: str
+    kind: str
+    structure: BenignStructure
+    templates: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class LabelledCell:
+    """One layer A cell: its twin's structure, shape and position, plus a label."""
+    family: str
+    twin: LookalikeTwin
+    label: LabelRelation
+    templates: Mapping[str, str]
+
+
+def _twin(family: str, surface: str, kind: str, structure: BenignStructure, dev: str, test: str) -> LookalikeTwin:
+    return LookalikeTwin(family, f"lookalike_{surface}", kind, structure, {"dev": dev, "test": test})
+
+
+JOINED, CURRENCY, RUN = BenignStructure.JOINED_IDENTIFIER, BenignStructure.CURRENCY_AMOUNT, BenignStructure.DIGIT_RUN
+
+# Layer D. {V} is benign; no cue word and no non-Latin letter anywhere.
+ORDER_REF_ZIP = _twin("order_ref_zip_shape", "prose", "zip_us", JOINED,
+                      "Order reference:\n{F1}\nORDER-{V}", "Reference for the parcel:\n{F7}\nREF-{V}")
+ORDER_REF_ZIP_FIRST_LINE = _twin("order_ref_zip_shape_first_line", "prose", "zip_us", JOINED,
+                                 "ORDER-{V}\n\n{F2}\nThe value above is the order reference.",
+                                 "SKU-{V}\n\nThat line is the article reference.")
+AMOUNT_ZIP = _twin("amount_zip_shape", "prose", "zip_us", CURRENCY,
+                   "Invoice total:\n{F1}\nEUR {V}", "Amount due:\n\n{F2}\nUSD {V}")
+ORDER_REF_ZIP_DE = _twin("order_ref_zip_shape_de", "prose", "zip_de", JOINED,
+                         "Bestellnummer:\n{F7}\nBESTELLUNG-{V}", "Auftrag:\n\nAUFTRAG-{V}")
+ORDER_REF_PHONE = _twin("order_ref_phone_shape", "prose", "phone_us", JOINED,
+                        "Ticket reference:\n{F2}\nTICKET-{V}", "Order:\n\n{F7}\nORDER-{V}")
+ORDER_REF_PHONE_INLINE = _twin("order_ref_phone_shape_inline", "prose", "phone_us", JOINED,
+                               "Reference: ORDER-{V}", "Ticket reference : TICKET-{V}")
+ORDER_REF_PHONE_DE = _twin("order_ref_phone_shape_de", "prose", "phone_de", JOINED,
+                           "Bestellung:\nBitte den Wert unten verwenden.\nORDER-{V}",
+                           "Vorgang:\n\n{F4}\nVORGANG-{V}")
+SKU_RUN_DE = _twin("sku_digit_run_de", "prose", "phone_de_run", RUN,
+                   "Artikelnummer:\n{F1}\n{V}", "Artikel:\n\n{F2}\n{V}")
+ORDER_LOG_ZIP = _twin("order_log_record", "log_kv", "zip_us", JOINED,
+                      "level=info event=order.update field=orderRef\n{L7}\nlevel=info event=order.update value=ORDER-{V}",
+                      "svc=orders op=set key=invoiceRef\n{L8}\nsvc=orders op=set value=INVOICE-{V}")
+ORDER_LOG_PHONE = _twin("order_log_record_phone_shape", "log_kv", "phone_us", JOINED,
+                        "level=info event=ticket.update field=ticketRef\n{L7}\nlevel=info event=ticket.update value=TICKET-{V}",
+                        "svc=orders op=set key=orderRef\n{L8}\nsvc=orders op=set value=ORDER-{V}")
+ORDER_CSV_ZIP = _twin("order_csv_record_zip_shape", "csv", "zip_us", JOINED,
+                      "row,invoiceRef,status\n{R7}\n8,INVOICE-{V},pending\n",
+                      "record_no,orderRef,state\n{R8}\n9,ORDER-{V},queued\n")
+ORDER_CSV_PHONE = _twin("order_csv_record", "csv", "phone_us", JOINED,
+                        "row,orderRef,status\n{R7}\n8,ORDER-{V},pending\n",
+                        "record_no,ticketRef,state\n{R8}\n9,TICKET-{V},queued\n")
+ORDER_JSON_NESTED = _twin("order_json_nested", "tool_json", "zip_us", JOINED,
+                          '{\n  "order": {\n    "items": {\n{J7:6}\n      "ref": "ORDER-{V}"\n    }\n  }\n}',
+                          '{\n  "invoice": {\n    "lines": {\n{J8:6}\n      "ref": "INVOICE-{V}"\n    }\n  }\n}')
+ORDER_JSON_ENTRIES = _twin(
+    "order_json_entries_array", "tool_json", "zip_us", JOINED,
+    '{\n  "account": {\n    "profile": {\n      "orders": {\n        "entries": [\n'
+    '          {\n{J7:12}\n            "code": "ORDER-{V}"\n          }\n        ]\n      }\n    }\n  }\n}',
+    '{\n  "account": {\n    "history": {\n      "tickets": {\n        "entries": [\n'
+    '          {\n{J8:12}\n            "code": "TICKET-{V}"\n          }\n        ]\n      }\n    }\n  }\n}')
+ORDER_JSON_SIBLING_ZIP = _twin("order_json_type_sibling_zip_shape", "tool_json", "zip_us", JOINED,
+                               '{\n  "value": "ORDER-{V}",\n{J3:2}\n  "type": "order"\n}',
+                               '{\n  "value": "INVOICE-{V}",\n{J4:2}\n  "type": "invoice"\n}')
+ORDER_JSON_SIBLING_PHONE = _twin("order_json_type_sibling", "tool_json", "phone_us", JOINED,
+                                 '{\n  "value": "ORDER-{V}",\n{J3:2}\n  "type": "order"\n}',
+                                 '{\n  "value": "REF-{V}",\n{J4:2}\n  "type": "ticket"\n}')
+ORDER_JSON_META = _twin("order_json_meta_after", "tool_json", "phone_us", JOINED,
+                        '{\n  "entry": {\n    "value": "ORDER-{V}",\n{J3:4}\n    "meta": {\n      "type": "order"\n    }\n  }\n}',
+                        '{\n  "entry": {\n    "value": "TICKET-{V}",\n{J4:4}\n    "meta": {\n      "type": "ticket"\n    }\n  }\n}')
+ORDER_JSON_TYPE_ABOVE = _twin(
+    "order_json_type_above", "tool_json", "phone_us", JOINED,
+    '{\n  "entry": {\n    "type": "order reference for the quarterly stock count, kept with the batch '
+    'record",\n{J7:4}\n    "value": "ORDER-{V}"\n  }\n}',
+    '{\n  "entry": {\n    "type": "ticket reference of the account, used for two-step review '
+    'and audit notices",\n{J8:4}\n    "value": "REF-{V}"\n  }\n}')
+ORDER_JSON_RECORD = _twin("order_json_record_value", "tool_json", "phone_us", JOINED,
+                          '{\n  "record": {\n{J7:4}\n    "value": "ORDER-{V}"\n  }\n}',
+                          '{\n  "ticket": {\n{J8:4}\n    "value": "INVOICE-{V}"\n  }\n}')
+
+LOOKALIKE_TWINS = (
+    ORDER_REF_ZIP, ORDER_REF_ZIP_FIRST_LINE, AMOUNT_ZIP, ORDER_REF_ZIP_DE, ORDER_REF_PHONE,
+    ORDER_REF_PHONE_INLINE, ORDER_REF_PHONE_DE, SKU_RUN_DE, ORDER_LOG_ZIP, ORDER_LOG_PHONE,
+    ORDER_CSV_ZIP, ORDER_CSV_PHONE, ORDER_JSON_NESTED, ORDER_JSON_ENTRIES, ORDER_JSON_SIBLING_ZIP,
+    ORDER_JSON_SIBLING_PHONE, ORDER_JSON_META, ORDER_JSON_TYPE_ABOVE, ORDER_JSON_RECORD,
+)
+# Twins without a layer A cell, and why none is possible.
+UNPAIRED_TWINS = {
+    "sku_digit_run_de": "no phone number has 16 digits, so a labelled 16-digit run is not one phone value",
+}
+
+
+def _labelled(family: str, twin: LookalikeTwin, label: LabelRelation, dev: str, test: str) -> LabelledCell:
+    return LabelledCell(family, twin, label, {"dev": dev, "test": test})
+
+
+R = LabelRelation
+# Layer A. {V} is the gold value.
+LOOKALIKE_GOLD_CELLS = (
+    _labelled("zip_label_above", ORDER_REF_ZIP, R.ABOVE,
+              "ZIP for delivery:\n{F1}\nORDER-{V}", "ZIP code of the recipient:\n{F2}\nORD-{V}"),
+    _labelled("zip_label_seven_above", ORDER_REF_ZIP, R.ABOVE,
+              "ZIP for delivery:\n{F7}\nORDER-{V}", "Recipient ZIP:\n{F8}\nREF-{V}"),
+    _labelled("zip_label_past_blank", ORDER_REF_ZIP, R.ABOVE_PAST_BLANK,
+              "ZIP for delivery:\n\nORDER-{V}", "ZIP of the customer:\n\n{F2}\nTICKET-{V}"),
+    _labelled("zip_label_ten_above_past_blank", ORDER_REF_ZIP, R.ABOVE_PAST_BLANK,
+              "ZIP for delivery:\n\n{F9}\nORDER-{V}", "Shipping ZIP:\n{F4}\n\n{F5}\nINVOICE-{V}"),
+    _labelled("zip_label_below_past_blank", ORDER_REF_ZIP_FIRST_LINE, R.BELOW_PAST_BLANK,
+              "ORDER-{V}\n\n{F2}\nThe value above is the ZIP for delivery.",
+              "SKU-{V}\n\nThat reference is the customer ZIP."),
+    _labelled("zip_de_label_above", ORDER_REF_ZIP_DE, R.ABOVE,
+              "Postleitzahl für die Lieferung:\n{F7}\nBESTELLUNG-{V}", "PLZ des Empfängers:\n\nAUFTRAG-{V}"),
+    _labelled("zip_label_currency", AMOUNT_ZIP, R.ABOVE,
+              "ZIP for shipping:\n{F1}\nEUR {V}", "ZIP to use:\n\n{F3}\nUSD {V}"),
+    _labelled("phone_en_label_above", ORDER_REF_PHONE, R.ABOVE,
+              "Phone number of the customer:\n{F7}\nORDER-{V}", "Customer phone:\n\n{F3}\nREF-{V}"),
+    _labelled("phone_de_label_above", ORDER_REF_PHONE_DE, R.ABOVE,
+              "Telefonnummer des Kunden:\nBitte den Wert unten verwenden.\nORDER-{V}",
+              "Telefon des Empfängers:\n\n{F6}\nBESTELLUNG-{V}"),
+    _labelled("phone_fr_label_same_line", ORDER_REF_PHONE_INLINE, R.SAME_LINE,
+              "Téléphone: ORDER-{V}", "Numéro de téléphone du client : TICKET-{V}"),
+    _labelled("phone_es_label_above", ORDER_REF_PHONE, R.ABOVE,
+              "Teléfono del cliente:\n\nORDER-{V}", "Teléfono de contacto:\n{F7}\nREF-{V}"),
+    _labelled("phone_it_label_above", ORDER_REF_PHONE, R.ABOVE,
+              "Telefono del cliente:\n{F9}\nORDER-{V}", "Numero di telefono:\n\n{F2}\nINVOICE-{V}"),
+    _labelled("phone_nl_label_above", ORDER_REF_PHONE, R.ABOVE,
+              "Telefoonnummer van de klant:\n\n{F4}\nORDER-{V}", "Mobiel nummer:\n{F8}\nTICKET-{V}"),
+    _labelled("phone_pt_label_above", ORDER_REF_PHONE, R.ABOVE,
+              "Telefone do cliente:\n{F7}\nORDER-{V}", "Número de telemóvel:\n\nREF-{V}"),
+    _labelled("phone_cyrillic_label", ORDER_REF_PHONE_INLINE, R.SAME_LINE,
+              "Телефон: ORDER-{V}", "Телефон клиента: REF-{V}"),
+    _labelled("phone_japanese_label", ORDER_REF_PHONE_INLINE, R.SAME_LINE,
+              "電話番号: ORDER-{V}", "お客様の電話番号: TICKET-{V}"),
+    _labelled("zip_log_field_above", ORDER_LOG_ZIP, R.LOG_FIELD_ABOVE,
+              "level=info event=address.update field=zipCode\n{L7}\nlevel=info event=address.update value=ORDER-{V}",
+              "svc=profile op=set key=recipientZip\n{L8}\nsvc=profile op=set value=REF-{V}"),
+    _labelled("phone_log_field_above", ORDER_LOG_PHONE, R.LOG_FIELD_ABOVE,
+              "level=info event=contact.update kind=phone\n{L7}\nlevel=info event=contact.update value=ORDER-{V}",
+              "svc=profile op=set key=mobile\n{L8}\nsvc=profile op=set value=TICKET-{V}"),
+    _labelled("zip_csv_header", ORDER_CSV_ZIP, R.CSV_HEADER,
+              "row,zipCode,status\n{R7}\n8,ORDER-{V},pending\n",
+              "record_no,recipientZip,state\n{R8}\n9,REF-{V},queued\n"),
+    _labelled("phone_csv_header", ORDER_CSV_PHONE, R.CSV_HEADER,
+              "row,phone,status\n{R7}\n8,ORDER-{V},pending\n",
+              "record_no,customerMobile,state\n{R8}\n9,TICKET-{V},queued\n"),
+    _labelled("zip_json_nested_path", ORDER_JSON_NESTED, R.JSON_ANCESTOR_KEY,
+              '{\n  "customer": {\n    "shippingAddress": {\n{J7:6}\n      "code": "ORDER-{V}"\n    }\n  }\n}',
+              '{\n  "order": {\n    "deliveryAddress": {\n{J8:6}\n      "code": "REF-{V}"\n    }\n  }\n}'),
+    _labelled("zip_json_entries_array", ORDER_JSON_ENTRIES, R.JSON_ANCESTOR_KEY,
+              '{\n  "customer": {\n    "profile": {\n      "shippingAddress": {\n        "entries": [\n'
+              '          {\n{J7:12}\n            "code": "ORDER-{V}"\n          }\n        ]\n      }\n    }\n  }\n}',
+              '{\n  "account": {\n    "profile": {\n      "billingAddress": {\n        "entries": [\n'
+              '          {\n{J8:12}\n            "code": "INVOICE-{V}"\n          }\n        ]\n      }\n    }\n  }\n}'),
+    _labelled("zip_json_label_sibling_after", ORDER_JSON_SIBLING_ZIP, R.JSON_SIBLING_AFTER,
+              '{\n  "value": "ORDER-{V}",\n{J3:2}\n  "label": "ZIP"\n}',
+              '{\n  "value": "TICKET-{V}",\n{J4:2}\n  "label": "ZIP code"\n}'),
+    _labelled("phone_json_type_sibling_after", ORDER_JSON_SIBLING_PHONE, R.JSON_SIBLING_AFTER,
+              '{\n  "value": "ORDER-{V}",\n{J3:2}\n  "type": "phone"\n}',
+              '{\n  "value": "REF-{V}",\n{J4:2}\n  "type": "mobile"\n}'),
+    _labelled("phone_json_meta_type_after", ORDER_JSON_META, R.JSON_NESTED_SIBLING_AFTER,
+              '{\n  "entry": {\n    "value": "ORDER-{V}",\n{J3:4}\n    "meta": {\n      "type": "phone"\n    }\n  }\n}',
+              '{\n  "entry": {\n    "value": "TICKET-{V}",\n{J4:4}\n    "meta": {\n      "type": "telephone"\n    }\n  }\n}'),
+    _labelled("phone_json_long_type", ORDER_JSON_TYPE_ABOVE, R.JSON_TYPE_ABOVE,
+              '{\n  "entry": {\n    "type": "phone number for customer contact and delivery coordination, '
+              'stored in the order record",\n{J7:4}\n    "value": "ORDER-{V}"\n  }\n}',
+              '{\n  "entry": {\n    "type": "mobile number of the account holder, used for two-step sign-in '
+              'and parcel notices",\n{J8:4}\n    "value": "REF-{V}"\n  }\n}'),
+    _labelled("phone_json_contact_value", ORDER_JSON_RECORD, R.JSON_ANCESTOR_KEY,
+              '{\n  "contact": {\n{J7:4}\n    "value": "ORDER-{V}"\n  }\n}',
+              '{\n  "kontakt": {\n{J8:4}\n    "value": "INVOICE-{V}"\n  }\n}'),
+)
+del R
+
+# Derived from the cells, never declared: each A cell's layer D twin.
+LOOKALIKE_COUNTERWEIGHTS: dict[str, str] = {cell.family: cell.twin.family for cell in LOOKALIKE_GOLD_CELLS}
+
+
+def _expand_padding(template: str, partition: str) -> str:
+    import re
+
+    def pad(match: "re.Match[str]") -> str:
+        kind, count = match.group(1), int(match.group(2))
+        if kind == "F":
+            return "\n".join(LOOKALIKE_FILLER[partition][:count])
+        if kind == "L":
+            return "\n".join(LOOKALIKE_LOG_LINE[partition].format(i=i) for i in range(1, count + 1))
+        if kind == "R":
+            return "\n".join(LOOKALIKE_CSV_ROW[partition].format(i=i) for i in range(1, count + 1))
+        indent = " " * int(match.group(3))
+        return "\n".join(
+            f'{indent}"{key}": "{value}",' for key, value in LOOKALIKE_JSON_MEMBERS[partition][:count]
+        )
+
+    return re.sub(r"\{([FLRJ])(\d+)(?::(\d+))?\}", pad, template)
+
+
+def value_structure(text: str, start: int, end: int) -> BenignStructure | None:
+    """The benign structure around text[start:end] (character offsets), if any."""
+    import re
+
+    before = text[:start]
+    if re.search(r"(?:^|[^A-Za-z])[A-Za-z]+-$", before):
+        return BenignStructure.JOINED_IDENTIFIER
+    if re.search(r"(?:EUR|USD) $", before):
+        return BenignStructure.CURRENCY_AMOUNT
+    if re.fullmatch(r"\d{4}(?:-\d{4}){3}", text[start:end]):
+        return BenignStructure.DIGIT_RUN
+    return None
+
+
+def value_position(text: str, start: int, end: int, surface: str) -> tuple[object, ...]:
+    """Where text[start:end] (character offsets) sits, independent of the label.
+
+    Tool JSON: the value's path from the root, each step (container kind,
+    index among its siblings, sibling count). Other surfaces: whether its line
+    is the first and the last non-blank line, and whether text precedes its
+    structure or follows the value on that line.
+    """
+    import re
+
+    if surface == "lookalike_tool_json":
+        value = text[start:end]
+
+        def find(node: object) -> list[tuple[str, int, int]] | None:
+            if isinstance(node, str):
+                return [] if value in node else None
+            children = list(node.values()) if isinstance(node, dict) else node if isinstance(node, list) else []
+            kind = "object" if isinstance(node, dict) else "array"
+            for index, child in enumerate(children):
+                path = find(child)
+                if path is not None:
+                    return [(kind, index, len(children)), *path]
+            return None
+
+        path = find(json.loads(text))
+        if path is None:
+            raise LayerError("a lookalike JSON value is not in any string")
+        return ("json", *path)
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    line_end = len(text) if line_end == -1 else line_end
+    lines = [line for line in text.split("\n") if line.strip()]
+    line = text[line_start:line_end]
+    head = re.sub(r"(?:[A-Za-z]+-|(?:EUR|USD) )$", "", text[line_start:start])
+    return (
+        "line", line == lines[0], line == lines[-1], bool(head.strip()), bool(text[end:line_end].strip())
+    )
+
+
+def _labelled_lookalike_records(cells: Sequence[LookalikeTwin | LabelledCell], partition: str, layer: str) -> list[Record]:
+    seed = PARTITION_SEEDS[partition]
+    gold = layer == LAYER_IDENTIFIERS
+    records: list[Record] = []
+    for cell in cells:
+        twin = cell.twin if isinstance(cell, LabelledCell) else cell
+        label, language, region, make = LOOKALIKE_VALUE_KINDS[twin.kind]
+        rng = Rng(seed, f"{layer}/lookalike/{cell.family}")
+        template = _expand_padding(cell.templates[partition], partition)
+        for index in range(DOCS_PER_LOOKALIKE_CELL[layer]):
+            # The benign value is a recorded span only to check its position.
+            text, spans, values = _fill_with_decoys(
+                template, {"V": (make(rng, partition), label if gold else DECOY_PREFIX + "benign")}
+            )
+            records.append(Record(
+                uid=f"agentic-{partition}-{layer}-{cell.family}-{index:03d}-{twin.surface}",
+                partition=partition, layer=layer, family=cell.family, surface=twin.surface,
+                validity=UNCHECKED if gold else BENIGN,
+                group=f"{partition}-{layer}-{cell.family}-{index:03d}",
+                template=f"lookalike/{cell.family}/{partition}",
+                language=language, region=region, text=text, gold=spans,
+            ))
+            if len(spans or values) != 1:
+                raise LayerError(f"{records[-1].uid}: expected exactly one lookalike value")
+    return records
+
+
+def lookalike_value(record: Record) -> tuple[str, int, int]:
+    """The one lookalike value of a generated A or D record, in character offsets."""
+    import re
+
+    if record.gold:
+        (gold,) = record.gold
+        start = len(record.text.encode("utf-8")[: gold.start].decode("utf-8"))
+        return gold.value, start, start + len(gold.value)
+    kind = next(twin.kind for twin in LOOKALIKE_TWINS if twin.family == record.family)
+    pattern = {"zip_us": r"\d{5}", "zip_de": r"\d{5}", "phone_us": r"\d{3}-555-01\d{2}",
+               "phone_de": r"01555\d{7}", "phone_de_run": r"\d{4}(?:-\d{4}){3}"}[kind]
+    match = list(re.finditer(rf"(?<!\d){pattern}(?!\d)", record.text))[-1]
+    return match.group(0), match.start(), match.end()
+
+
+def check_lookalike_pairs(records: Sequence[Record]) -> None:
+    """Fail closed unless every A cell and its D twin agree on value shape,
+    locale, benign structure and position, and only A carries a cue."""
+    by_family: dict[tuple[str, str], list[Record]] = defaultdict(list)
+    for record in records:
+        if record.surface.startswith("lookalike_"):
+            by_family[(record.layer, record.family)].append(record)
+    signatures: dict[tuple[str, str], set[tuple[object, ...]]] = {}
+    for (layer, family), family_records in by_family.items():
+        signature = set()
+        for record in family_records:
+            value, start, end = lookalike_value(record)
+            twin = next(
+                (cell.twin for cell in LOOKALIKE_GOLD_CELLS if cell.family == family)
+                if layer == LAYER_IDENTIFIERS
+                else (twin for twin in LOOKALIKE_TWINS if twin.family == family)
+            )
+            if value_structure(record.text, start, end) is not twin.structure:
+                raise LayerError(f"{record.uid}: value is not in a {twin.structure.value}")
+            cued = has_lookalike_cue(record.text) or has_non_latin_letter(record.text)
+            if cued != (layer == LAYER_IDENTIFIERS):
+                raise LayerError(f"{record.uid}: a layer {layer} lookalike {'lacks' if not cued else 'carries'} a cue")
+            signature.add((display_shape(value), record.language, record.region, record.surface,
+                           value_position(record.text, start, end, record.surface)))
+        if len(signature) != 1:
+            raise LayerError(f"{layer}/{family}: documents differ in shape or position")
+        signatures[(layer, family)] = signature
+    for cell in LOOKALIKE_GOLD_CELLS:
+        if signatures.get((LAYER_IDENTIFIERS, cell.family)) != signatures.get((LAYER_LOOKALIKES, cell.twin.family)):
+            raise LayerError(f"{cell.family} and its twin {cell.twin.family} differ in shape or position")
+
+
+# The surface prefix each generator version added. Every earlier document stays
+# byte identical, so an older corpus is a filter of the current one.
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_"}
+
+
+def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
+    """The documents of generator `version`, from the current generator's output."""
+    if not 3 <= version <= GENERATOR_VERSION:
+        raise LayerError(f"generator version {version} cannot be rebuilt from version {GENERATOR_VERSION}")
+    later = tuple(prefix for added, prefix in GENERATOR_ADDITIONS.items() if added > version)
+    return [record for record in records if not record.surface.startswith(later)] if later else list(records)
+
+
+# The committed contract each older generator version was scored under.
+HISTORICAL_CONTRACTS = {4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json")}
+
+
+def corpus_identity(repo_root: Path, version: int) -> tuple[str, str]:
+    """(corpus SHA-256, contract file SHA-256) of the published partition as
+    generator `version` built it, rebuilt from committed inputs only."""
+    records = records_as_of(version, generate(PUBLISHED_PARTITION))
+    contract = SCORED_LABELS_PATH if version == GENERATOR_VERSION else HISTORICAL_CONTRACTS.get(version)
+    if contract is None:
+        raise LayerError(f"no committed scored-label contract for generator version {version}")
+    return (
+        hashlib.sha256(corpus_bytes(records)).hexdigest(),
+        hashlib.sha256((repo_root / contract).read_bytes()).hexdigest(),
+    )
+
+
+# --------------------------------------------------------------------------
 # Layer R: the repeat-value slice. One document repeats a value 2-4 times in
 # different positions and shapes (every occurrence is gold) next to decoys:
 # ordinary words spelled like a name part, words containing a name part, and
@@ -1519,7 +2038,10 @@ def generate(partition: str) -> list[Record]:
         + _repeat_records(partition, seed)
         + _adjacency_records(partition, LAYER_IDENTIFIERS)
         + _adjacency_records(partition, LAYER_LOOKALIKES)
+        + _labelled_lookalike_records(LOOKALIKE_GOLD_CELLS, partition, LAYER_IDENTIFIERS)
+        + _labelled_lookalike_records(LOOKALIKE_TWINS, partition, LAYER_LOOKALIKES)
     )
+    check_lookalike_pairs(records)
     for record in records:
         encoded = record.text.encode("utf-8")
         for gold in record.gold:

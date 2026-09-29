@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "description": "Cue vocabulary of the benign-lookalike veto (#721). Any cue word or any letter outside the Latin ranges anywhere in a document disables every veto. The agentic-layer generator checks its labelled cells (A) and counterweights (D) against this file; the Rust veto test asserts its own lists equal these, order included. Matching: words split at every non-letter and at each lower-to-upper case change; lowercased and accent-folded; a word is a cue when it starts with a stem or equals a whole word.",
+  "stems": {
+    "postal": ["zip", "plz", "post", "codigo", "codice", "npa"],
+    "phone": ["tel", "phone", "fon", "fax", "mobil", "mobiel", "movil", "cell", "celular", "handy", "portable", "ruf", "anruf", "call"],
+    "address": ["contact", "contatto", "contacto", "kontakt", "addr", "adres", "adress", "anschrift", "billing", "shipping", "delivery", "liefer", "street", "strasse", "straat", "calle", "indirizzo", "direccion", "endereco", "city", "stadt", "ort", "wohn", "ville", "citta", "ciudad", "cidade", "woonplaats"]
+  },
+  "whole_words": {
+    "postal": ["cap", "cp", "cep"],
+    "phone": ["gsm"],
+    "address": ["rue", "rua"]
+  },
+  "latin_letter_ranges": [
+    ["0041", "024F"],
+    ["1E00", "1EFF"],
+    ["2C60", "2C7F"],
+    ["A720", "A7FF"],
+    ["AB30", "AB6F"],
+    ["FF21", "FF5A"]
+  ]
+}

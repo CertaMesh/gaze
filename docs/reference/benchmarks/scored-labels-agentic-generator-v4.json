@@ -4,10 +4,10 @@
   "contract_version": 2,
   "corpus": {
     "generator": "scripts/bench/agentic_layers.py",
-    "generator_version": 5,
+    "generator_version": 4,
     "published_partition": "test"
   },
-  "semantics": "Every label the agentic-layer generator emits is listed here and scored. Gold that fails its own checksum (the invalid twins) stays scored, exactly as in the Kiji validator gold census; the per-label validity split is reported beside it and never replaces it. Layer A adjacent-address gold uses synthetic private-network host endpoints associated with a user's device. Documentation, loopback and link-local ranges are benign and scored as Layer D lookalikes instead. Layer D documents carry no gold, so every byte predicted there is a false positive. A label names a value even when it stands lines away, past a blank line, below the value, in a JSON key, sibling or nested field, or a CSV header: the labelled benign-lookalike cells of layer A are gold, and their layer D counterweights carry the same structures with no cue anywhere in the document. Layer R decoys (words spelled like or containing a name part, digit runs shared with a repeated identifier) are not gold either, so a byte predicted over one is a false positive; every repeat of a real value is gold. An unlisted label fails closed, and so does a ruling on a label the generator no longer emits.",
+  "semantics": "Every label the agentic-layer generator emits is listed here and scored. Gold that fails its own checksum (the invalid twins) stays scored, exactly as in the Kiji validator gold census; the per-label validity split is reported beside it and never replaces it. Layer A adjacent-address gold uses synthetic private-network host endpoints associated with a user's device. Documentation, loopback and link-local ranges are benign and scored as Layer D lookalikes instead. Layer D documents carry no gold, so every byte predicted there is a false positive. Layer R decoys (words spelled like or containing a name part, digit runs shared with a repeated identifier) are not gold either, so a byte predicted over one is a false positive; every repeat of a real value is gold. An unlisted label fails closed, and so does a ruling on a label the generator no longer emits.",
   "labels": [
     {
       "label": "BSN",
@@ -91,14 +91,14 @@
       "scored": true,
       "category": "direct_identifier",
       "ruling": "settled",
-      "reason": "Personal phone number (German mobile, US). Includes a reserved-range phone (NANPA 555-01xx, German 01555) written as the tail of an ORDER- style reference when a label anywhere in the same document or record names it as a phone, in any language or script; the phone is gold, the reference word is not. A 16-digit run is never phone gold: no phone number has 16 digits."
+      "reason": "Personal phone number (German mobile, US)."
     },
     {
       "label": "ZIPCODE",
       "scored": true,
       "category": "direct_identifier",
       "ruling": "settled",
-      "reason": "Synthetic postal code in an adjacent address field, including intentionally unassigned CA and GB shapes. Includes a five-digit US or German postcode written inside a benign-looking structure (the tail of an ORDER- style reference, or after a currency code) when a label anywhere in the same document or record names it as a postcode."
+      "reason": "Synthetic postal code in an adjacent address field, including intentionally unassigned CA and GB shapes."
     }
   ]
 }
