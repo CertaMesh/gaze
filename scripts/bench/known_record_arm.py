@@ -22,6 +22,7 @@ from unittest.mock import patch
 import agentic_layers as agentic
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
+import known_record_attribution as attribution
 import run_no_opf_benchmark as benchmark
 
 
@@ -341,17 +342,41 @@ def main() -> None:
         )
         baseline_eligible_leaks, baseline_record = eligible_leak_counter(contexts)
         record_eligible_leaks, record_record = eligible_leak_counter(contexts)
+        recorder = attribution.AttributionRecorder.create(
+            common_words, frozenset(LABEL_CLASS)
+        )
+
+        def baseline_observer(
+            config: str, document: score.Document, response: dict, validators: object
+        ) -> None:
+            baseline_record(config, document, response, validators)
+            recorder.record_baseline(document, response)
+
+        def record_observer(
+            config: str, document: score.Document, response: dict, validators: object
+        ) -> None:
+            record_record(config, document, response, validators)
+            context = contexts[document.uid]
+            recorder.record_candidate(
+                document,
+                response,
+                record_values(context) if context is not None else [],
+                decoy=document.source_dataset == "known-record-oracle-counterweight",
+            )
+
         clean_environment = dict(os.environ)
         clean_environment.pop("GAZE_BENCH_KNOWN_RECORD_ARM", None)
         baseline = score.run_config(
-            **kwargs, base_environment=clean_environment, record_document=baseline_record
+            **kwargs, base_environment=clean_environment, record_document=baseline_observer
         )
         with_record = run_with_record_context(
             contexts,
             **kwargs,
             base_environment={**clean_environment, "GAZE_BENCH_KNOWN_RECORD_ARM": "1"},
-            record_document=record_record,
+            record_document=record_observer,
         )
+        baseline_bytes = baseline["metrics"]["utf8_bytes"]
+        record_bytes = with_record["metrics"]["utf8_bytes"]
         output["layers"][layer] = {
             "documents": len(documents),
             "record_documents": sum(value is not None for value in contexts.values()),
@@ -364,6 +389,12 @@ def main() -> None:
             "eligible_gold_bytes_by_label": dict(sorted(eligible.items())),
             "baseline_eligible_leaked_bytes_by_label": dict(sorted(baseline_eligible_leaks.items())),
             "with_record_eligible_leaked_bytes_by_label": dict(sorted(record_eligible_leaks.items())),
+            "attribution": recorder.result(
+                leaked_fall=baseline_bytes["leaked"] - record_bytes["leaked"],
+                false_positive_rise=record_bytes["false_positive"] - baseline_bytes["false_positive"],
+                eligible_leak_fall=sum(baseline_eligible_leaks.values())
+                - sum(record_eligible_leaks.values()),
+            ),
             "baseline": {
                 key: baseline[key]
                 for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")
