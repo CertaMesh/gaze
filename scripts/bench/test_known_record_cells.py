@@ -17,7 +17,7 @@ import known_record_cells as cells
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A generator change must bump GENERATOR_VERSION and this hash together.
-PINNED_CORPUS_SHA256 = "85418baa8fe1966f90069857b0610d2fdb16a492dd14b58a23140d95230e029c"
+PINNED_CORPUS_SHA256 = "224f7369e154c05bb5543181fe4dd501b5d2afadd194772bdc41ea0e4c96920b"
 
 
 def attribution_kind(text: str, record_class: str, raw: str) -> tuple[str, str]:
@@ -64,7 +64,7 @@ class KnownRecordCellTests(unittest.TestCase):
             for surface in cells.surfaces_for(variant)
         }
         self.assertEqual(present, expected)
-        self.assertEqual(len(self.pairs), 56)
+        self.assertEqual(len(self.pairs), 60)
         self.assertEqual({kind for kind, _, _ in present}, set(cells.MatchKind))
         for pair in self.pairs:
             self.assertIs(pair.positive.role, cells.Role.POSITIVE)
@@ -102,7 +102,7 @@ class KnownRecordCellTests(unittest.TestCase):
     def test_gold_labels_are_scored_under_both_contracts(self) -> None:
         for contract in ("v1", "v2"):
             documents, contexts = cells.documents(REPO_ROOT, contract, self.pairs)
-            self.assertEqual(len(documents), 112)
+            self.assertEqual(len(documents), 120)
             self.assertEqual(set(contexts), {d.uid for d in documents})
             for document in documents:
                 self.assertEqual(document.excluded_spans, (), document.uid)
@@ -202,6 +202,16 @@ class KnownRecordCellTests(unittest.TestCase):
                 if field.class_name == "custom:credit_card":
                     self.assertTrue(agentic.luhn_valid(compact), field.raw)
                     self.assertEqual(context["field_map"]["/v00/value"], "custom:credit_card")
+
+    def test_record_value_floor_refuses_a_two_letter_iban(self) -> None:
+        self.assertFalse(cells.accepted_record_value("DE08 2377 9544 7859 6896 38"))
+        self.assertTrue(cells.accepted_record_value("NL91 ABNA 0417 1643 00"))
+        self.assertTrue(cells.accepted_record_value("Ivy"))
+        self.assertFalse(cells.accepted_record_value("Al"))
+        pair = next(p for p in self.pairs if p.positive.variant == "iban_nbsp")
+        refused = dataclasses.replace(pair.positive, record=(cells.RecordField("custom:iban", "DE08 2377 9544 7859 6896 38"),))
+        with self.assertRaisesRegex(cells.CellError, "refuses a record value"):
+            cells._check_cell(refused)
 
     def test_single_line_surfaces_carry_no_line_break(self) -> None:
         for cell in self.all_cells:

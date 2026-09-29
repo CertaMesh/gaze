@@ -294,7 +294,10 @@ def _groups(value: str, size: int = 4) -> list[str]:
 def _identifier(variant: str, rng: agentic.Rng) -> tuple[str, list[str], str]:
     """(record class, display groups, gold label)."""
     if variant.startswith("iban"):
-        return "custom:iban", _groups(agentic._iban_de(rng)), "IBAN"
+        # Record values need at least three letters when they have any, so a
+        # DE IBAN (two letters) is refused as a record; NL and GB carry a bank code.
+        make = agentic._iban_nl if rng.below(2) == 0 else agentic._iban_gb
+        return "custom:iban", _groups(make(rng)), "IBAN"
     if variant.startswith("phone"):
         return "custom:phone", ["+49", "1555", "01" + rng.digits(5)], "PHONENUMBER"
     return "custom:credit_card", _groups(agentic._card(rng)), "CREDITCARDNUMBER"
@@ -314,11 +317,11 @@ STREET_SENTENCES = {
 }
 # Word uses of each listed name, one per corroborated variant; none is PII.
 WORD_USES = {
-    "Mark": ("Mark the date in the team calendar.", "The Mark II printer is back online.", "Quick note: Mark every parcel as fragile."),
-    "Will": ("Will the courier arrive before noon?", "Free Will is the book club pick.", "Quick note: Will the invoice go out today?"),
-    "Rose": ("Rose petals decorate the reception desk.", "The Rose Garden café opens at nine.", "Quick note: Rose bushes need water."),
-    "Grace": ("Grace period ends on Friday.", "The Grace Notes playlist is shared.", "Quick note: Grace period applies to invoices."),
-    "Hope": ("Hope the upload works this time.", "The Hope Valley line is delayed.", "Quick note: Hope the fix lands today."),
+    "Mark": ("Mark the date in the team calendar.", "The Mark II printer is back online.", "Quick note: Mark every parcel as fragile.", "Mark down the invoice total."),
+    "Will": ("Will the courier arrive before noon?", "Free Will is the book club pick.", "Quick note: Will the invoice go out today?", "Will this parcel ship today?"),
+    "Rose": ("Rose petals decorate the reception desk.", "The Rose Garden café opens at nine.", "Quick note: Rose bushes need water.", "Rose tea is back on the menu."),
+    "Grace": ("Grace period ends on Friday.", "The Grace Notes playlist is shared.", "Quick note: Grace period applies to invoices.", "Grace notes add colour to the tune."),
+    "Hope": ("Hope the upload works this time.", "The Hope Valley line is delayed.", "Quick note: Hope the fix lands today.", "Hope springs eternal, says the poster."),
 }
 UNLISTED_WORD_USES = {
     "Summer": "Summer schedule starts on Monday.",
@@ -326,7 +329,12 @@ UNLISTED_WORD_USES = {
     "Ivy": "Ivy covers the north wall of the depot.",
     "Autumn": "Autumn catalogue ships next week.",
 }
-CORROBORATED_VARIANTS = ("listed_adjacent_peer", "listed_surname_comma", "listed_greeting_full_name")
+CORROBORATED_VARIANTS = (
+    "listed_adjacent_peer",
+    "listed_surname_comma",
+    "listed_greeting_full_name",
+    "listed_greeting_before_full_name",
+)
 
 
 # --------------------------------------------------------------------------
@@ -450,16 +458,24 @@ def _corroborated_variant(variant: str, index: int, rng: agentic.Rng) -> tuple[F
     given = LISTED_COMMON_NAMES[index % len(LISTED_COMMON_NAMES)]
     listed = ("name_single", MatchKind.CORROBORATED_SINGLE.value)
     word_use = WORD_USES[given][CORROBORATED_VARIANTS.index(variant)]
-    if variant == "listed_greeting_full_name":
+    if variant in {"listed_greeting_full_name", "listed_greeting_before_full_name"}:
         record = (RecordField("Name", given), RecordField("Name", f"{given} {surname}"))
+        # Order matters to NER: a greeting before the full name is the shape it misses.
+        greeting_first = variant == "listed_greeting_before_full_name"
 
         def positive(b: Builder) -> list[Target]:
+            if greeting_first:
+                b.add("Hi ")
+                greeting = b.gold_span(given, "FIRSTNAME")
+                b.add(", the refund is approved. ")
             start, _ = b.gold_span(given, "FIRSTNAME")
             b.add(" ")
             _, end = b.gold_span(surname, "SURNAME")
-            b.add(" opened the ticket. Hi ")
-            greeting = b.gold_span(given, "FIRSTNAME")
-            b.add(", the refund is approved.")
+            b.add(" opened the ticket.")
+            if not greeting_first:
+                b.add(" Hi ")
+                greeting = b.gold_span(given, "FIRSTNAME")
+                b.add(", the refund is approved.")
             return [_target(greeting, 0, listed), _target((start, end), 1, ("name_multi", "exact"))]
     else:
         record = (RecordField("Name", given), RecordField("Name", surname))
@@ -665,8 +681,18 @@ def check(pairs: Sequence[Pair]) -> None:
             _check_cell(cell)
 
 
+def accepted_record_value(value: str) -> bool:
+    """The context parser's floor: three letters if any, else four digits."""
+    letters = sum(ch.isalpha() for ch in value)
+    digits = sum(ch.isnumeric() for ch in value)
+    return digits >= 4 if letters == 0 else letters >= 3
+
+
 def _check_cell(cell: Cell) -> None:
     encoded = cell.text.encode("utf-8")
+    for field in cell.record:
+        if not accepted_record_value(" ".join(field.raw.split())):
+            raise CellError(f"{cell.uid}: the context parser refuses a record value")
     if cell.role is Role.COUNTERWEIGHT and cell.gold:
         raise CellError(f"{cell.uid}: a counterweight carries gold")
     if cell.role is Role.POSITIVE and not cell.gold:
