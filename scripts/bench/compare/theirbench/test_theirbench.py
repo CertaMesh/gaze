@@ -106,6 +106,23 @@ def row(leaked: int) -> dict:
             "latency": {"p50_ms": 1.0}}
 
 
+def release_provenance() -> dict:
+    """A complete tagged-row provenance block, as theirbench.py --gaze-release-tag writes it."""
+    from tagged_gaze import RELEASE_PINS
+
+    return {
+        "tag": "v0.15.1", "commit": "e" * 40, "crates_tree": "c" * 40,
+        **RELEASE_PINS["v0.15.1"], "policy_sha256": "f" * 64,
+        "build": {"command": "cargo build --locked -q -p gaze-recognizers --example clean_for_bench "
+                             "--features safety-net-nym", "profile": "debug", "rustc": "r", "cargo": "c",
+                  "cargo_lock_sha256": "1" * 64, "rust_toolchain_sha256": "2" * 64, "binary_sha256": "b" * 64},
+        "prediction_sha256": "9" * 64,
+        "measured_with": {"harness_revision": "d" * 40, "harness_dirty": False},
+        "reproduces": {"prediction_sha256": "9" * 64, "binary_sha256": "a" * 64,
+                       "harness_revision": "d" * 40, "harness_dirty": False},
+    }
+
+
 def synthetic() -> dict:
     rows = {"gaze-full": row(10), "gaze-rules-only": row(40), "gaze-v0.15.1": row(12), "presidio-en": row(5),
             "presidio-strong": row(30), "opf": row(20)}
@@ -114,8 +131,7 @@ def synthetic() -> dict:
         "rows": rows, "chart_rows": ["gaze-full", "presidio-strong", "opf"], "typed_hold": ["opf"],
         "comparison_revision": "154f3da6", "gaze_crates_tree": "97e45cfe07d1",
         "rescored_with": {"comparison_revision": "b1446215", "harness_revision": "abcdef0123", "harness_dirty": False},
-        "provenance": {tool: (quiet if tool != "gaze-v0.15.1" else {**quiet, "release": {
-            "tag": "v0.15.1", "commit": "e" * 40, "crates_tree": "c" * 40, "binary_sha256": "b" * 64}})
+        "provenance": {tool: (quiet if tool != "gaze-v0.15.1" else {**quiet, "release": release_provenance()})
                        for tool in rows},
         "tagged_measurements": {"gaze-v0.15.1": {"harness_revision": "d" * 40}},
         "common_intersection_labels": ["EMAIL_ADDRESS"], "hardware": "hw",
@@ -366,6 +382,9 @@ class GuardTest(unittest.TestCase):
                     render.assemble([report], [], [])
 
 
+RESOLVE = lambda tag: ("e" * 40, "c" * 40)  # noqa: E731  (commit, crates tree) of the tag
+
+
 class TaggedRowTest(unittest.TestCase):
     """A tagged Gaze release joins the aggregate only from a clean checkout of its tag."""
 
@@ -385,7 +404,7 @@ class TaggedRowTest(unittest.TestCase):
             "label_maps_sha256": entry["label_maps_sha256"], "mapping_sha256": entry["mapping_sha256"],
             "typed_hold": entry["typed_hold"], "comparison_sha256": {"compare.py": "c" * 64},
             "rows": {"gaze-v0.15.1": {"test": row(12)}},
-            "provenance": {"gaze-v0.15.1": {"release": {"tag": "v0.15.1", "commit": "e" * 40}}},
+            "provenance": {"gaze-v0.15.1": {"release": release_provenance()}},
         }
         own = {"system": "gaze-v0.15.1", "scored": {"f2": 0.7}}
         return data, entry, report, own
@@ -394,14 +413,13 @@ class TaggedRowTest(unittest.TestCase):
         import render_theirbench as render
 
         data, entry, report, own = self.entry_and_report()
-        self.assertEqual(render.add_tagged(data, report, own), "gaze-v0.15.1")
+        self.assertEqual(render.add_tagged(data, report, own, RESOLVE), "gaze-v0.15.1")
         self.assertEqual(entry["own_metric"]["gaze-v0.15.1"], {"f2": 0.7})
         self.assertEqual(entry["tagged_measurements"]["gaze-v0.15.1"]["harness_revision"], "d" * 40)
-        entry["provenance"]["gaze-v0.15.1"]["release"].update(crates_tree="f" * 40, binary_sha256="a" * 64)
         body = render.render(data)
         self.assertLess(body.index("| gaze-v0.15.1 |"), body.index("| opf |"))
         self.assertNotIn("not yet measured", body)
-        self.assertIn("Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `ffffffff`", body)
+        self.assertIn("Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `cccccccc`", body)
         self.assertIn("harness `dddddddd`", body)
 
     def test_each_mismatch_refuses_the_row(self) -> None:
@@ -411,7 +429,7 @@ class TaggedRowTest(unittest.TestCase):
             data, _entry, report, own = self.entry_and_report()
             mutate(report, own)
             with self.assertRaisesRegex(ValueError, match):
-                render.add_tagged(data, report, own)
+                render.add_tagged(data, report, own, RESOLVE)
 
         refused(lambda r, o: r.update(harness_dirty=True), "clean, full")
         refused(lambda r, o: r.update(preflight=5), "clean, full")
@@ -420,6 +438,19 @@ class TaggedRowTest(unittest.TestCase):
         refused(lambda r, o: r.update(comparison_sha256={"compare.py": "0"}), "different pinned comparison")
         refused(lambda r, o: r["rows"].update({"presidio-en": {"test": row(5)}}), "exactly one")
         refused(lambda r, o: r["provenance"]["gaze-v0.15.1"].pop("release"), "does not name the release")
+        # Tagged-row identity: every link from the numbers to the tag must hold.
+        release = lambda r: r["provenance"]["gaze-v0.15.1"]["release"]  # noqa: E731
+        refused(lambda r, o: release(r).update(crates_tree="0" * 40), "the tag is")
+        refused(lambda r, o: release(r).update(commit="0" * 40), "the tag is")
+        refused(lambda r, o: release(r).update(policy_home_normalized_sha256="0" * 64), "pinned ones")
+        refused(lambda r, o: release(r).update(ner_model_tree_sha256="0" * 64), "pinned ones")
+        refused(lambda r, o: release(r).update(nym_model_tree_sha256="0" * 64), "pinned ones")
+        refused(lambda r, o: release(r).pop("build"), "no build record")
+        refused(lambda r, o: release(r)["build"].update(command="cargo build"), "no build record")
+        refused(lambda r, o: release(r)["measured_with"].update(harness_dirty=True), "dirty or unrecorded")
+        refused(lambda r, o: release(r).pop("reproduces"), "no clean earlier run")
+        refused(lambda r, o: release(r)["reproduces"].update(prediction_sha256="0" * 64), "no clean earlier run")
+        refused(lambda r, o: release(r)["reproduces"].update(harness_dirty=True), "no clean earlier run")
         refused(lambda r, o: o.update(system="gaze-full"), "own-scorer result is for")
         refused(lambda r, o: (r["rows"].update({"gaze-main": r["rows"].pop("gaze-v0.15.1")}),
                               r["provenance"].update({"gaze-main": {}})), "exactly one")
@@ -430,58 +461,165 @@ class TaggedRowTest(unittest.TestCase):
         data, entry, report, own = self.entry_and_report()
         entry["rows"]["gaze-v0.15.1"] = row(1)
         with self.assertRaisesRegex(ValueError, "already in"):
-            render.add_tagged(data, report, own)
+            render.add_tagged(data, report, own, RESOLVE)
 
-    def test_release_checkout_must_be_the_clean_tag_with_its_binary_inside(self) -> None:
+    def _temp_repo(self, tmp: str):
         import subprocess
 
+        root = Path(tmp)
+
+        def git(*args: str) -> str:
+            return subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "-c",
+                                   "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
+                                  cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+
+        git("init", "-q", "-b", "main")
+        (root / "crates").mkdir()
+        (root / "crates" / "f").write_text("x")
+        (root / ".gitignore").write_text("target\n")
+        git("add", ".gitignore", "crates")
+        git("commit", "-q", "-m", "c")
+        return root, git
+
+    def test_release_checkout_must_be_the_clean_tag(self) -> None:
         import theirbench
         from tagged_gaze import UntaggedGazeError
 
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-
-            def git(*args: str) -> str:
-                return subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "-c",
-                                       "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
-                                      cwd=root, check=True, capture_output=True, text=True).stdout.strip()
-
-            git("init", "-q", "-b", "main")
-            (root / "crates").mkdir()
-            (root / "crates" / "f").write_text("x")
-            (root / "target").mkdir()
-            (root / ".gitignore").write_text("target\n")
-            binary, policy = root / "target" / "bin", root / "policy.toml"
-            binary.write_bytes(b"binary")
-            policy.write_text("[x]\n")
-            git("add", ".gitignore", "crates", "policy.toml")
-            git("commit", "-q", "-m", "c")
+            root, git = self._temp_repo(tmp)
             git("branch", "v1.2.3")  # a branch of that name is not a release
             original = theirbench.compare.REPO
             theirbench.compare.REPO = root
             try:
                 with self.assertRaises(UntaggedGazeError):
-                    theirbench.verify_release_checkout("v1.2.3", root, binary, policy)
+                    theirbench.verify_release_checkout("v1.2.3", root)
                 git("tag", "-a", "-m", "release", "v1.2.4")
-                got = theirbench.verify_release_checkout("v1.2.4", root, binary, policy)
+                got = theirbench.verify_release_checkout("v1.2.4", root)
                 self.assertEqual(got["tag"], "v1.2.4")
-                self.assertEqual(len(got["commit"]), 40)
                 self.assertEqual(got["crates_tree"], git("rev-parse", "HEAD:crates"))
                 (root / "crates" / "f").write_text("changed")
                 with self.assertRaises(SystemExit):  # local changes
-                    theirbench.verify_release_checkout("v1.2.4", root, binary, policy)
+                    theirbench.verify_release_checkout("v1.2.4", root)
                 git("checkout", "-q", "--", "crates")
-                outside = Path(tmp).parent / "elsewhere-bin"
-                outside.write_bytes(b"binary")
-                with self.assertRaises(SystemExit):  # binary not built inside the tag's checkout
-                    theirbench.verify_release_checkout("v1.2.4", root, outside, policy)
                 (root / "later").write_text("y")
                 git("add", "later")
                 git("commit", "-q", "-m", "later")
                 with self.assertRaises(SystemExit):  # HEAD is no longer the tag's commit
-                    theirbench.verify_release_checkout("v1.2.4", root, binary, policy)
+                    theirbench.verify_release_checkout("v1.2.4", root)
             finally:
                 theirbench.compare.REPO = original
+
+    def test_a_stale_binary_can_never_be_attributed_to_the_tag(self) -> None:
+        """The harness builds the binary itself in a fresh directory; anything already there is refused."""
+        import argparse
+        from unittest import mock
+
+        import theirbench
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root, git = self._temp_repo(tmp)
+            (root / "Cargo.lock").write_text("lock")
+            (root / "rust-toolchain.toml").write_text("tc")
+            stale = Path(tmp).parent / "another-checkout-target"
+            (stale / "debug" / "examples").mkdir(parents=True, exist_ok=True)
+            (stale / "debug" / "examples" / "clean_for_bench").write_bytes(b"stale")
+            with self.assertRaisesRegex(SystemExit, "already exists"):
+                theirbench.build_tagged_binary("v1.2.4", root, stale)
+            # A build that produces no binary is refused too (nothing is borrowed from elsewhere).
+            fresh = Path(tmp).parent / "fresh-target"
+            with mock.patch.object(theirbench.subprocess, "run", return_value=None):
+                with self.assertRaisesRegex(SystemExit, "produced no"):
+                    theirbench.build_tagged_binary("v1.2.4", root, fresh)
+            # --gaze-binary is refused outright in tagged mode.
+            args = argparse.Namespace(tool=None, gaze_binary=Path("x"), gaze_release_root=root,
+                                      gaze_policy=Path("p"), output=Path(tmp) / "new.json")
+            with self.assertRaisesRegex(SystemExit, "builds its own binary"):
+                theirbench.validate_tagged_args(args)
+
+    def test_a_tagged_row_is_measured_fresh_never_resumed(self) -> None:
+        import argparse
+
+        import theirbench
+
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = Path(tmp) / "report.json"
+            existing.write_text("{}")
+            args = argparse.Namespace(tool=None, gaze_binary=None, gaze_release_root=Path(tmp),
+                                      gaze_policy=Path("p"), output=existing)
+            with self.assertRaisesRegex(SystemExit, "fresh report"):
+                theirbench.validate_tagged_args(args)
+        base = {"harness_revision": "a" * 40, "harness_dirty": False, "rows": {"opf": {}}}
+        theirbench.check_resume(base, "a" * 40, False)  # same clean commit resumes
+        for report, head, dirty, match in (
+            (base, "b" * 40, False, "recorded clean commit"),
+            (base, "a" * 40, True, "local changes"),
+            ({**base, "harness_dirty": True}, "a" * 40, False, "recorded clean commit"),
+            ({**base, "rows": {"gaze-v0.15.1": {}}}, "a" * 40, False, "never carried"),
+        ):
+            with self.assertRaisesRegex(SystemExit, match):
+                theirbench.check_resume(report, head, dirty)
+
+    def test_policy_and_model_digests_must_equal_the_pins(self) -> None:
+        import theirbench
+        from tagged_gaze import RELEASE_PINS
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ner, nym = Path(tmp) / "ner", Path(tmp) / "nym"
+            for directory in (ner, nym):
+                directory.mkdir()
+                (directory / "model.bin").write_bytes(directory.name.encode())
+            policy = Path(tmp) / "policy.toml"
+            policy.write_text(f'[safety_net.nym]\nmodel_dir = "{nym}"\n')
+            pins = {"policy_home_normalized_sha256": theirbench.compare.normalized_policy_sha256(
+                        policy, theirbench.hashlib.sha256(policy.read_bytes()).hexdigest()),
+                    "ner_model_tree_sha256": theirbench.compare.digest_tree(ner),
+                    "nym_model_tree_sha256": theirbench.compare.digest_tree(nym)}
+            original = dict(RELEASE_PINS)
+            RELEASE_PINS["v9.9.9"] = pins
+            try:
+                found = theirbench.verify_tagged_pins("v9.9.9", policy, ner)
+                self.assertEqual({k: found[k] for k in pins}, pins)
+                bad = Path(tmp) / "nym-tampered"  # digest_tree caches by path: use another directory
+                bad.mkdir()
+                (bad / "model.bin").write_bytes(b"nym")
+                (bad / "extra.bin").write_bytes(b"tampered")
+                tampered = Path(tmp) / "tampered.toml"
+                tampered.write_text(f'[safety_net.nym]\nmodel_dir = "{bad}"\n')
+                with self.assertRaisesRegex(SystemExit, "policy_home_normalized_sha256"):
+                    theirbench.verify_tagged_pins("v9.9.9", tampered, ner)  # its policy bytes differ too
+                pins["policy_home_normalized_sha256"] = theirbench.compare.normalized_policy_sha256(
+                    tampered, theirbench.hashlib.sha256(tampered.read_bytes()).hexdigest())
+                with self.assertRaisesRegex(SystemExit, "nym_model_tree_sha256"):
+                    theirbench.verify_tagged_pins("v9.9.9", tampered, ner)
+                pins["policy_home_normalized_sha256"] = theirbench.compare.normalized_policy_sha256(
+                    policy, theirbench.hashlib.sha256(policy.read_bytes()).hexdigest())
+                policy.write_text(f'[safety_net.nym]\nmodel_dir = "{nym}"\n# edited\n')
+                with self.assertRaisesRegex(SystemExit, "policy_home_normalized_sha256"):
+                    theirbench.verify_tagged_pins("v9.9.9", policy, ner)
+                with self.assertRaisesRegex(SystemExit, "no pinned"):
+                    theirbench.verify_tagged_pins("v8.8.8", policy, ner)
+            finally:
+                RELEASE_PINS.clear()
+                RELEASE_PINS.update(original)
+
+    def test_a_second_run_must_reproduce_the_predictions(self) -> None:
+        import theirbench
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first = Path(tmp) / "first.json"
+            release = {"tag": "v0.15.1", "commit": "e" * 40, "crates_tree": "c" * 40,
+                       "policy_home_normalized_sha256": "1", "ner_model_tree_sha256": "2",
+                       "nym_model_tree_sha256": "3", "prediction_sha256": "9" * 64,
+                       "build": {"binary_sha256": "b" * 64},
+                       "measured_with": {"harness_revision": "d" * 40, "harness_dirty": False}}
+            first.write_text(json.dumps({"provenance": {"gaze-v0.15.1": {"release": release}}}))
+            got = theirbench.reproduction_record(first, "gaze-v0.15.1", dict(release))
+            self.assertEqual(got["prediction_sha256"], "9" * 64)
+            self.assertEqual(got["binary_sha256"], "b" * 64)
+            with self.assertRaisesRegex(SystemExit, "prediction_sha256 differs"):
+                theirbench.reproduction_record(first, "gaze-v0.15.1", {**release, "prediction_sha256": "0" * 64})
+            with self.assertRaisesRegex(SystemExit, "crates_tree differs"):
+                theirbench.reproduction_record(first, "gaze-v0.15.1", {**release, "crates_tree": "0" * 40})
 
 
 class HarnessTagTest(unittest.TestCase):

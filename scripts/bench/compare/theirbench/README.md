@@ -64,4 +64,30 @@ uv run --project scripts/bench python scripts/bench/compare/theirbench/render_th
 uv run --project scripts/bench python scripts/bench/compare/theirbench/render_theirbench.py render
 ```
 
+## A tagged Gaze release as its own row
+
+The panels show released Gaze versions only, so a release is measured from its tag, never from `main`:
+
+```bash
+# 1. A clean checkout of the tag in its own worktree (no build there: the harness builds).
+git worktree add ../gaze-v0.15.1 v0.15.1     # or: anvil work bench-v0151 -b v0.15.1
+# 2. The release's own `gaze setup` policy (built from that checkout), unedited.
+(cd ../gaze-v0.15.1 && cargo run -q -p gaze-cli -- setup --non-interactive --force --policy-out /tmp/policy-v0.15.1.toml)
+# 3. Measure, twice, into FRESH reports (a tagged row is never resumed into an existing report).
+"$COMPARE_PYTHON" scripts/bench/compare/theirbench/theirbench.py --benchmark presidio-research \
+  --presidio-research-checkout "$PR_CHECKOUT" --predictions-dir "$OUT/pred-pr-1" --output "$OUT/pr-run1.json" \
+  --gaze-release-tag v0.15.1 --gaze-release-root ../gaze-v0.15.1 \
+  --gaze-model-dir "$NER_MODEL_DIR" --gaze-policy /tmp/policy-v0.15.1.toml
+"$COMPARE_PYTHON" scripts/bench/compare/theirbench/theirbench.py ... --output "$OUT/pr-run2.json" \
+  --gaze-release-tag v0.15.1 ... --reproduces "$OUT/pr-run1.json"
+# 4. Vendor evaluator on the same spans, then merge (repeat for PIIBench-commercial).
+"$VENDOR_PYTHON" scripts/bench/compare/theirbench/presidio_research_repro.py --checkout "$PR_CHECKOUT" \
+  --predictions "$OUT/pred-pr-2/gaze-v0.15.1.test.jsonl" --labels "$OUT/pred-pr-2/labels.gaze.json" \
+  --system gaze-v0.15.1 --output "$OUT/own-pr.json"
+python3 scripts/bench/compare/theirbench/render_theirbench.py add-tagged --report "$OUT/pr-run2.json" --own "$OUT/own-pr.json"
+python3 scripts/bench/compare/theirbench/render_theirbench.py render
+```
+
+What the harness enforces in this mode: the tag is resolved as `refs/tags/<tag>`, the checkout is exactly that commit with no local changes, the harness itself is clean and its state is re-read every run; the benchmark binary is built by the harness from that checkout into a fresh `CARGO_TARGET_DIR` (an existing directory or `--gaze-binary` is refused, so a stale executable cannot be attributed to the tag); the policy and both model bundles must equal the digests pinned in `tagged_gaze.RELEASE_PINS`. The row's provenance records the exact build command, toolchain, `Cargo.lock` hash and binary SHA-256, the pins, the prediction file's SHA-256 and, from the second run, the first run's prediction and binary hashes; `add-tagged` refuses a row whose second run did not reproduce the predictions byte for byte. Predictions themselves are never committed.
+
 Measurements take the bench machine lock. `render --check` fails when the README block drifts from `their-benchmarks.json`.

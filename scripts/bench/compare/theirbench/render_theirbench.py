@@ -20,7 +20,7 @@ from typing import Any, Callable, Mapping
 REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO / "scripts/bench"))
 from markdown_table import table_header  # noqa: E402
-from tagged_gaze import TAG, check_public  # noqa: E402
+from tagged_gaze import RELEASE_PINS, TAG, check_public, tag_commit  # noqa: E402
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
 DOC = REPO / "docs/reference/benchmarks/README.md"
 BLOCK = "their-benchmarks"
@@ -149,12 +149,19 @@ def public_rows(rows: Mapping[str, Any]) -> list[str]:
     return [*tagged, *other]
 
 
-def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any]) -> str:
+def _crates_tree(commit: str) -> str:
+    return subprocess.check_output(["git", "rev-parse", f"{commit}:crates"], cwd=REPO, text=True).strip()
+
+
+def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any],
+               resolve: Callable[[str], tuple[str, str]] | None = None) -> str:
     """Merge one tagged Gaze row (theirbench.py --gaze-release-tag) into the aggregate.
 
     The row joins only if the report measured the same benchmark identity, roster labels,
-    splits, label maps and pinned comparison code as the committed entry; the build was
-    from a clean checkout of the tag; and the row name is a new `gaze-vX.Y.Z`.
+    splits, label maps and pinned comparison code as the committed entry; came from a clean
+    harness and a clean checkout of the tag, with a binary built from it, the release's pinned
+    policy and model digests, and a second run that reproduced its predictions byte for byte.
+    `resolve(tag)` returns (commit, crates tree) of the tag; tests inject it.
     """
     if report.get("preflight") or report.get("harness_dirty") or report.get("schema_version") != 1:
         raise ValueError("only a clean, full, schema-1 report can add a tagged row")
@@ -179,15 +186,44 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         raise ValueError(f"{row} is already in {name}")
     if own["system"] != row:
         raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
+    _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
     scored = own.get("scored") or own["overall"]
     entry["rows"][row] = report["rows"][row]["test"]
     entry["own_metric"][row] = scored
     entry["provenance"][row] = report["provenance"][row]
+    reproduced = release["reproduces"]
     entry.setdefault("tagged_measurements", {})[row] = {
         "harness_revision": report["harness_revision"], "harness_dirty": False,
         "hardware": report["hardware"], "generated_at": report["generated_at"],
+        "runs": [
+            {"prediction_sha256": reproduced["prediction_sha256"], "binary_sha256": reproduced["binary_sha256"],
+             "harness_revision": reproduced["harness_revision"]},
+            {"prediction_sha256": release["prediction_sha256"], "binary_sha256": release["build"]["binary_sha256"],
+             "harness_revision": release["measured_with"]["harness_revision"]},
+        ],
     }
     return row
+
+
+def _check_release(row: str, release: Mapping[str, Any], resolve: Callable[[str], tuple[str, str]]) -> None:
+    """The release provenance must tie the numbers to the tag, one build, the pins and a reproduction."""
+    tag = release["tag"]
+    commit, tree = resolve(tag)
+    if release["commit"] != commit or release["crates_tree"] != tree:
+        raise ValueError(f"{row}: provenance names {release['commit'][:12]}/{release['crates_tree'][:12]}, "
+                         f"the tag is {commit[:12]}/{tree[:12]}")
+    pins = RELEASE_PINS.get(tag)
+    if pins is None or any(release.get(key) != value for key, value in pins.items()):
+        raise ValueError(f"{row}: policy or model digests differ from the pinned ones for {tag}")
+    build = release.get("build")
+    if not build or not build.get("binary_sha256") or "safety-net-nym" not in build.get("command", ""):
+        raise ValueError(f"{row}: no build record: the binary must be built from the tag by the harness")
+    if release.get("measured_with", {}).get("harness_dirty") is not False:
+        raise ValueError(f"{row}: measured with a dirty or unrecorded harness")
+    reproduced = release.get("reproduces")
+    if (not reproduced or reproduced["prediction_sha256"] != release.get("prediction_sha256")
+            or reproduced.get("harness_dirty") is not False):
+        raise ValueError(f"{row}: no clean earlier run reproduces these predictions")
 
 
 def pct(value: float) -> str:
@@ -304,7 +340,7 @@ def render(data: Mapping[str, Any]) -> str:
             measured = entry["tagged_measurements"][tool]
             release = entry["provenance"][tool]["release"]
             lines += ["", f"Row {tool}: a clean checkout of tag `{release['tag']}` (crates tree "
-                          f"`{release['crates_tree'][:8]}`, benchmark binary `{release['binary_sha256'][:8]}`) "
+                          f"`{release['crates_tree'][:8]}`, benchmark binary `{release['build']['binary_sha256'][:8]}`, reproduced by a second run) "
                           f"scored with harness `{measured['harness_revision'][:8]}`; no timing is published."]
         if not any(is_tagged_gaze_row(tool) for tool in rows):
             latest = json.loads(RELEASE_HISTORY.read_text(encoding="utf-8"))["releases"][-1]["version"]

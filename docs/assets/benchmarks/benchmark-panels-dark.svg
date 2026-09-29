@@ -55,11 +55,11 @@
 <line x1="452.9" x2="799.5" y1="296.0" y2="296.0" stroke="#3d444d" stroke-width="1"/>
 <line x1="452.9" x2="799.5" y1="208.0" y2="208.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="452.9" x2="799.5" y1="120.0" y2="120.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="462.3" y="157.8" width="30.7" height="138.2" rx="3" fill="#4493f8"/>
-<text x="477.7" y="151.8" font-size="12" font-weight="700" text-anchor="middle" fill="#4493f8">0.785</text>
+<rect x="462.3" y="290.0" width="30.7" height="6" rx="2" fill="none" stroke="#4493f8" stroke-width="1.5" stroke-dasharray="3 2"/>
+<text x="477.7" y="284.0" font-size="11" font-weight="700" text-anchor="middle" fill="#4493f8">pending</text>
 <text x="477.7" y="312" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">Gaze</text>
 <text x="477.7" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">0.15</text>
-<text x="477.7" y="340.0" font-size="9" text-anchor="middle" fill="#9198a1">9,769</text>
+
 <rect x="511.8" y="169.2" width="30.7" height="126.8" rx="3" fill="#6e7681"/>
 <text x="527.2" y="163.2" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">0.721</text>
 <text x="527.2" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
@@ -96,11 +96,11 @@
 <line x1="831.5" x2="1178.0" y1="296.0" y2="296.0" stroke="#3d444d" stroke-width="1"/>
 <line x1="831.5" x2="1178.0" y1="208.0" y2="208.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="831.5" x2="1178.0" y1="120.0" y2="120.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="840.9" y="187.2" width="30.7" height="108.8" rx="3" fill="#4493f8"/>
-<text x="856.2" y="181.2" font-size="12" font-weight="700" text-anchor="middle" fill="#4493f8">0.618</text>
+<rect x="840.9" y="290.0" width="30.7" height="6" rx="2" fill="none" stroke="#4493f8" stroke-width="1.5" stroke-dasharray="3 2"/>
+<text x="856.2" y="284.0" font-size="11" font-weight="700" text-anchor="middle" fill="#4493f8">pending</text>
 <text x="856.2" y="312" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">Gaze</text>
 <text x="856.2" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">0.15</text>
-<text x="856.2" y="340.0" font-size="9" text-anchor="middle" fill="#9198a1">107,701</text>
+
 <rect x="890.4" y="178.9" width="30.7" height="117.1" rx="3" fill="#6e7681"/>
 <text x="905.7" y="172.9" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">0.665</text>
 <text x="905.7" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
@@ -174,8 +174,8 @@
 <line x1="452.9" x2="799.5" y1="658.0" y2="658.0" stroke="#3d444d" stroke-width="1"/>
 <line x1="452.9" x2="799.5" y1="570.0" y2="570.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="452.9" x2="799.5" y1="482.0" y2="482.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="462.3" y="615.6" width="30.7" height="42.4" rx="3" fill="#4493f8"/>
-<text x="477.7" y="609.6" font-size="12" font-weight="700" text-anchor="middle" fill="#4493f8">10.6</text>
+<rect x="462.3" y="652.0" width="30.7" height="6" rx="2" fill="none" stroke="#4493f8" stroke-width="1.5" stroke-dasharray="3 2"/>
+<text x="477.7" y="646.0" font-size="11" font-weight="700" text-anchor="middle" fill="#4493f8">pending</text>
 <text x="477.7" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">Gaze</text>
 <text x="477.7" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">0.15</text>
 <rect x="511.8" y="556.4" width="30.7" height="101.6" rx="3" fill="#6e7681"/>
@@ -207,8 +207,8 @@
 <line x1="831.5" x2="1178.0" y1="658.0" y2="658.0" stroke="#3d444d" stroke-width="1"/>
 <line x1="831.5" x2="1178.0" y1="570.0" y2="570.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="831.5" x2="1178.0" y1="482.0" y2="482.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="840.9" y="624.8" width="30.7" height="33.2" rx="3" fill="#4493f8"/>
-<text x="856.2" y="618.8" font-size="12" font-weight="700" text-anchor="middle" fill="#4493f8">20.4</text>
+<rect x="840.9" y="652.0" width="30.7" height="6" rx="2" fill="none" stroke="#4493f8" stroke-width="1.5" stroke-dasharray="3 2"/>
+<text x="856.2" y="646.0" font-size="11" font-weight="700" text-anchor="middle" fill="#4493f8">pending</text>
 <text x="856.2" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">Gaze</text>
 <text x="856.2" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">0.15</text>
 <rect x="890.4" y="596.1" width="30.7" height="61.9" rx="3" fill="#6e7681"/>

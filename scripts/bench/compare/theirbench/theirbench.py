@@ -59,26 +59,113 @@ def _git(root: Path, *args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
 
 
-def verify_release_checkout(tag: str, root: Path, binary: Path, policy: Path) -> dict[str, object]:
+BUILD_COMMAND = ("cargo", "build", "--locked", "-q", "-p", "gaze-recognizers",
+                 "--example", "clean_for_bench", "--features", "safety-net-nym")
+
+
+def _tool_version(root: Path, *command: str) -> str:
+    return subprocess.check_output(command, cwd=root, text=True).strip()
+
+
+def verify_release_checkout(tag: str, root: Path) -> dict[str, object]:
     """A tagged Gaze row is measured from a clean checkout of the tag itself.
 
-    The tag is resolved as `refs/tags/<tag>` (never a branch of that name), the checkout
-    must be exactly that commit with no local changes, and the binary must live in it.
+    The tag is resolved as `refs/tags/<tag>` (never a branch of that name) and the checkout
+    must be exactly that commit with no local changes.
     """
     commit = tagged_gaze.tag_commit(tag, compare.REPO)
     if _git(root, "rev-parse", "HEAD") != commit:
         raise SystemExit(f"{root} is not at the commit of tag {tag} ({commit[:12]})")
     if _git(root, "status", "--porcelain"):
         raise SystemExit(f"{root} has local changes; a tagged row needs a clean checkout")
-    binary = binary.resolve()
-    if root.resolve() not in binary.parents:
-        raise SystemExit(f"{binary} is not built inside the {tag} checkout {root}")
-    return {
-        "tag": tag, "commit": commit, "crates_tree": _git(root, "rev-parse", "HEAD:crates"),
+    return {"tag": tag, "commit": commit, "crates_tree": _git(root, "rev-parse", "HEAD:crates")}
+
+
+def build_tagged_binary(tag: str, root: Path, build_dir: Path) -> tuple[Path, dict[str, object]]:
+    """Build the benchmark binary FROM the verified checkout into a fresh directory.
+
+    A pre-existing build directory (or binary) is refused: an executable left by any earlier
+    build could otherwise be attributed to the tag. The checkout must still be clean after the
+    build. Returns the binary and the exact build record.
+    """
+    if build_dir.exists():
+        raise SystemExit(f"{build_dir} already exists; a tagged row builds its binary in a fresh directory")
+    env = {**os.environ, "CARGO_TARGET_DIR": str(build_dir)}
+    subprocess.run(BUILD_COMMAND, cwd=root, env=env, check=True)
+    binary = build_dir / "debug" / "examples" / "clean_for_bench"
+    if not binary.is_file():
+        raise SystemExit(f"the {tag} build produced no {binary}")
+    if _git(root, "status", "--porcelain"):
+        raise SystemExit(f"building {tag} changed the checkout")
+    return binary, {
+        "command": " ".join(BUILD_COMMAND), "profile": "debug",
+        "rustc": _tool_version(root, "rustc", "-Vv"), "cargo": _tool_version(root, "cargo", "-V"),
+        "cargo_lock_sha256": hashlib.sha256((root / "Cargo.lock").read_bytes()).hexdigest(),
+        "rust_toolchain_sha256": hashlib.sha256((root / "rust-toolchain.toml").read_bytes()).hexdigest(),
         "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-        "binary": "clean_for_bench --features safety-net-nym, debug profile, built from the tag",
-        "policy_sha256": hashlib.sha256(policy.read_bytes()).hexdigest(),
     }
+
+
+def verify_tagged_pins(tag: str, policy: Path, ner_model_dir: Path) -> dict[str, object]:
+    """The policy and both model bundles must equal the release's pinned digests."""
+    import tomllib
+
+    pins = tagged_gaze.RELEASE_PINS.get(tag)
+    if pins is None:
+        raise SystemExit(f"no pinned policy and model digests for {tag}; add them to tagged_gaze.RELEASE_PINS")
+    raw = policy.read_bytes()
+    normalized = compare.normalized_policy_sha256(policy, hashlib.sha256(raw).hexdigest())
+    nym_dir = Path(tomllib.loads(raw.decode("utf-8"))["safety_net"]["nym"]["model_dir"])
+    found = {
+        "policy_home_normalized_sha256": normalized,
+        "ner_model_tree_sha256": compare.digest_tree(ner_model_dir),
+        "nym_model_tree_sha256": compare.digest_tree(nym_dir),
+    }
+    for key, expected in pins.items():
+        if found[key] != expected:
+            raise SystemExit(f"{tag}: {key} is {found[key]}, the pinned digest is {expected}")
+    return {**found, "policy_sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def validate_tagged_args(args: argparse.Namespace) -> None:
+    """A tagged row builds its own binary and is measured into a fresh report."""
+    if args.tool or args.gaze_binary is not None or args.gaze_release_root is None or args.gaze_policy is None:
+        raise SystemExit("--gaze-release-tag needs --gaze-release-root and --gaze-policy, "
+                         "builds its own binary (no --gaze-binary) and takes no --tool")
+    if args.output.exists():
+        raise SystemExit(f"{args.output} exists; a tagged row is measured into a fresh report, never resumed")
+
+
+def check_resume(report: dict[str, object], head: str, dirty: bool) -> None:
+    """A resumed report keeps its recorded harness state only while that is still true."""
+    if report["harness_revision"] != head or report["harness_dirty"] or dirty:
+        raise SystemExit("resuming needs the harness at the report's recorded clean commit "
+                         f"({str(report['harness_revision'])[:8]}); it is at {head[:8]}"
+                         + (" with local changes" if dirty else ""))
+    if any(tagged_row_version(name) for name in report["rows"]):
+        raise SystemExit("a tagged row is never carried into a resumed report; measure it fresh")
+
+
+def harness_state() -> tuple[str, bool]:
+    """(HEAD, has local changes) of the harness repository, read now, every run."""
+    return (_git(compare.REPO, "rev-parse", "HEAD"), bool(_git(compare.REPO, "status", "--porcelain")))
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def reproduction_record(prior: Path, name: str, release: dict[str, object]) -> dict[str, object]:
+    """Compare this tagged run with an earlier one; refuse unless the predictions are identical."""
+    before = json.loads(prior.read_text(encoding="utf-8"))["provenance"][name]["release"]
+    for key in ("tag", "commit", "crates_tree", "policy_home_normalized_sha256",
+                "ner_model_tree_sha256", "nym_model_tree_sha256", "prediction_sha256"):
+        if before[key] != release[key]:
+            raise SystemExit(f"{name} does not reproduce: {key} differs ({before[key]} vs {release[key]})")
+    return {"prediction_sha256": before["prediction_sha256"],
+            "binary_sha256": before["build"]["binary_sha256"],
+            "harness_revision": before["measured_with"]["harness_revision"],
+            "harness_dirty": before["measured_with"]["harness_dirty"]}
 
 
 def tool_family(name: str) -> str:
@@ -249,7 +336,11 @@ def main() -> int:
     parser.add_argument("--piibench-data", type=Path, help="piibench_commercial.py --output-dir")
     parser.add_argument("--tool", action="append", choices=[*compare.TOOLS, *GAZE_ROWS])
     parser.add_argument("--gaze-release-tag", help="measure this release tag as row gaze-<tag> (only)")
-    parser.add_argument("--gaze-release-root", type=Path, help="clean checkout of that tag, holding --gaze-binary")
+    parser.add_argument("--gaze-release-root", type=Path, help="clean checkout of that tag; the binary is built from it")
+    parser.add_argument("--gaze-build-dir", type=Path,
+                        help="fresh CARGO_TARGET_DIR for the tagged build; must not exist (default: target/tagged-builds/<tag>-<commit>)")
+    parser.add_argument("--reproduces", type=Path,
+                        help="a prior tagged report; this run must produce byte-identical predictions")
     parser.add_argument("--gaze-binary", type=Path)
     parser.add_argument("--gaze-model-dir", type=Path)
     parser.add_argument("--gaze-policy-rules", type=Path)
@@ -266,6 +357,19 @@ def main() -> int:
     splits, identity = load_benchmark(args)
     if args.preflight:
         splits = {split: preflight_sample(documents, args.preflight) for split, documents in splits.items()}
+    mappings = compare.load_mapping()
+    release = None
+    if args.gaze_release_tag:
+        validate_tagged_args(args)
+        release = verify_release_checkout(args.gaze_release_tag, args.gaze_release_root)
+        release.update(verify_tagged_pins(args.gaze_release_tag, args.gaze_policy, args.gaze_model_dir))
+        build_dir = args.gaze_build_dir or (
+            compare.REPO / "target" / "tagged-builds" / f"{args.gaze_release_tag}-{release['commit'][:12]}")
+        args.gaze_binary, build = build_tagged_binary(args.gaze_release_tag, args.gaze_release_root, build_dir)
+        release["build"] = build
+        selected = [f"gaze-{args.gaze_release_tag}"]
+    else:
+        selected = args.tool or [*GAZE_ROWS, *compare.TOOLS]
     mappings = compare.load_mapping()
     release = None
     if args.gaze_release_tag:
@@ -289,12 +393,12 @@ def main() -> int:
         (args.predictions_dir / f"labels.{family}.json").write_text(
             json.dumps({label: list(labels) for label, labels in table.items()}, indent=2) + "\n",
             encoding="utf-8")
+    args.output_existed = args.output.exists()
     report = json.loads(args.output.read_text(encoding="utf-8")) if args.output.exists() else {
         "schema_version": 1, "benchmark": args.benchmark, "identity": identity,
         "report_only": "never used to design or tune Gaze rules",
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "harness_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=compare.REPO, text=True).strip(),
-        "harness_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=compare.REPO, text=True).strip()),
+        "harness_revision": harness_state()[0], "harness_dirty": harness_state()[1],
         "gaze_crates_tree": compare.crates_tree("HEAD"),
         "label_maps_sha256": compare.digest_file(loaders.LABEL_MAPS),
         "comparison_revision": backends.COMPARISON_REVISION, "comparison_sha256": pinned,
@@ -308,6 +412,9 @@ def main() -> int:
     }
     if report["identity"] != identity or report["common_intersection_labels"] != sorted(common):
         raise SystemExit("--output was produced for a different benchmark identity or roster")
+    head, dirty = harness_state()
+    if args.output_existed:
+        check_resume(report, head, dirty)
     report["typed_hold"] = typed_hold(mappings)
     if args.rescore:
         if not report["rows"]:
@@ -337,8 +444,13 @@ def main() -> int:
                     report["rows"][name] = measure_gaze(name, args, policy, splits, mapping, common,
                                                         args.predictions_dir, Path(scratch))
                 report["provenance"][name] = {"policy_sha256_home_normalized": compare.normalized_policy_sha256(
-                    policy, compare.digest_file(policy)), "cpu": watch.result(),
-                    **({"release": release} if tagged_row_version(name) else {})}
+                    policy, compare.digest_file(policy)), "cpu": watch.result()}
+                if tagged_row_version(name):
+                    release["prediction_sha256"] = sha256_file(args.predictions_dir / f"{name}.test.jsonl")
+                    release["measured_with"] = {"harness_revision": head, "harness_dirty": dirty}
+                    if args.reproduces:
+                        release["reproduces"] = reproduction_record(args.reproduces, name, release)
+                    report["provenance"][name]["release"] = release
             else:
                 backend, provenance, _ = backends.build_backend(name, args, mappings, Path(scratch))
                 if backend is None:

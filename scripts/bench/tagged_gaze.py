@@ -80,3 +80,15 @@ def require_release_tag(version: str, where: str) -> str:
     require_tag(version, where)
     tag_commit(version)
     return version
+
+
+#: What a tagged release is measured with, pinned by digest and reviewed like any other pin:
+#: the `gaze setup` policy the release writes (home paths normalised) and the two model bundles
+#: it names (`compare.digest_tree`). A different policy or bundle is a different measurement.
+RELEASE_PINS = {
+    "v0.15.1": {
+        "policy_home_normalized_sha256": "481f5df7b9b0b562bf2c2db7274cfbf2ea701231c52f1287b27de00554453ff1",
+        "ner_model_tree_sha256": "1196662dfcf78d3ef4a9fbbd474d5dd4ce9e656d5fdc38ec38eff3d3249ba1fe",
+        "nym_model_tree_sha256": "1878b4af812a531f5710692287e529106951d78e0e270820b05fa8e6ae082a2d",
+    },
+}
