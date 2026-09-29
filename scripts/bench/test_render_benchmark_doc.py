@@ -1091,6 +1091,12 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         opf = next(b for b in self.panels()[0].bars if b.name == "OPF")
         self.assertAlmostEqual(opf.fp_per_1k, 1000 * fp / block["total_bytes"])
 
+    def test_the_benchmark_page_discloses_the_limit_of_the_offline_check(self):
+        text = render.DEFAULT_DOC.read_text(encoding="utf-8")
+        for phrase in ("only `record` (the corpus replay) proves the character counts",
+                       "must include the replay command's output"):
+            self.assertIn(phrase, text)
+
     def test_a_charted_version_must_be_a_real_git_tag(self):
         import tagged_gaze
 

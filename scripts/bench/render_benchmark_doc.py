@@ -1700,6 +1700,7 @@ def _source_lines(
     )
     lines.append(f"- **Metric:** {charts.METRIC_DEFINITION}")
     lines.append(f"- **False positives:** {charts.FP_NOTE}")
+    lines.append(f"- **Gaze release scores:** {charts.PROVENANCE_NOTE}")
     lines.append(
         "- **Vendors' own metrics:** "
         + "; ".join(f"{title}: {vendor}" for _, title, vendor in charts.THIRD_PARTY)

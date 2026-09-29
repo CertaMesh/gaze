@@ -204,3 +204,37 @@ def test_evidence_holds_offsets_only_no_document_text() -> None:
     for document in evidence["documents"].values():
         assert set(document) == {"gold", "cont", "size"}
         assert all(isinstance(number, int) for pair in document["gold"] + document["cont"] for number in pair)
+
+
+def test_fake_continuation_intervals_fail_the_utf8_structure_check(tmp_path) -> None:
+    """Codex's attack: mark false-positive spans as continuation bytes, forge the row to match, rehash."""
+    bench = _copy_bench(tmp_path)
+    evidence = rcl.load_evidence(bench / rcl.EVIDENCE.name)
+    entry = next(e for e in HISTORY["releases"] if e["version"] == "v0.15.1")
+    # Hide a long stretch of every document as "continuation" so its characters stop counting.
+    for document in evidence["documents"].values():
+        document["cont"] = [[5, 45]]
+    forged = rcl.recompute(entry, evidence, bench)  # what a forger would write into the row
+    assert forged["fp"] != DATA["releases"]["v0.15.1"]["char_level"]["fp"]
+    data = copy.deepcopy(DATA)
+    char = data["releases"]["v0.15.1"]["char_level"]
+    char.update(tp=forged["tp"], fp=forged["fp"], fn=forged["fn"])
+    precision = char["tp"] / (char["tp"] + char["fp"])
+    recall = char["tp"] / (char["tp"] + char["fn"])
+    char.update(precision=precision, recall=recall, f2=5 * precision * recall / (4 * precision + recall))
+    data["evidence_sha256"] = rcl.write_evidence(bench / rcl.EVIDENCE.name, evidence)
+    with pytest.raises(ValueError, match="continuation run .* is not 1-3 bytes"):
+        rcl.check(data, HISTORY, bench)
+
+
+@pytest.mark.parametrize("cont, match", [
+    ([[0, 1]], "no lead byte"),  # a continuation byte cannot start the document
+    ([[10, 12], [12, 13]], "no lead byte"),  # runs of one character are merged, never adjacent
+    ([[10, 2**31]], "is not 1-3 bytes"),
+])
+def test_continuation_shapes_an_honest_recording_never_has(cont, match) -> None:
+    evidence = rcl.load_evidence(rcl.EVIDENCE)
+    uid = next(iter(evidence["documents"]))
+    evidence["documents"][uid]["cont"] = cont
+    with pytest.raises(ValueError, match=match):
+        rcl.check_evidence_structure(evidence)

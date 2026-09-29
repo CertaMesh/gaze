@@ -182,6 +182,40 @@ def recompute(entry: dict, evidence: dict, bench_dir: Path) -> dict:
     return total
 
 
+def check_evidence_structure(evidence: dict) -> None:
+    """Interval shapes an honest recording always has; a forged `cont` cannot fake them.
+
+    Continuation bytes of one UTF-8 character number 1 to 3 and follow their lead byte,
+    so each merged run is 1 to 3 bytes long, never at byte 0, and inside the document.
+    Gold and ignored intervals must be sorted, disjoint and inside the document too.
+    """
+    for uid, document in evidence["documents"].items():
+        size = document["size"]
+        previous_end = 0
+        for start, end in document["cont"]:
+            if not (1 <= end - start <= 3):
+                raise ValueError(
+                    f"{uid}: continuation run [{start}, {end}) is not 1-3 bytes; UTF-8 "
+                    "characters have at most 3 continuation bytes"
+                )
+            if start < 1 or end > size or (previous_end and start <= previous_end):
+                raise ValueError(f"{uid}: continuation run [{start}, {end}) has no lead byte or leaves the document")
+            previous_end = end
+        for name, intervals in (("gold", document["gold"]),):
+            _check_intervals(uid, name, intervals, size)
+    for version, documents in evidence["ignored"].items():
+        for uid, intervals in documents.items():
+            _check_intervals(f"{version}/{uid}", "ignored", intervals, evidence["documents"][uid]["size"])
+
+
+def _check_intervals(where: str, name: str, intervals, size: int) -> None:
+    previous = 0
+    for start, end in intervals:
+        if not (previous <= start < end <= size):
+            raise ValueError(f"{where}: {name} interval [{start}, {end}) is unsorted, overlapping or outside the document")
+        previous = end
+
+
 def write_evidence(path: Path, evidence: dict) -> str:
     """Deterministic gzip JSON (no file name, fixed mtime, sorted keys); returns its SHA-256."""
     payload = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -311,6 +345,7 @@ def check(data: dict, history: dict, bench_dir: Path = BENCH_DIR) -> None:
     if _sha256(evidence_path) != data["evidence_sha256"]:
         raise ValueError("release-char-level-evidence.json.gz does not match its recorded hash")
     evidence = load_evidence(evidence_path)
+    check_evidence_structure(evidence)
     for version, row in data["releases"].items():
         require_release_tag(version, "release char-level")
         entry = next((e for e in history["releases"] if e["version"] == version), None)

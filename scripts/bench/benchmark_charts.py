@@ -57,6 +57,17 @@ FP_NOTE = (
 )
 
 
+#: How far the release scores can be trusted offline, and what proves them.
+PROVENANCE_NOTE = (
+    "each tagged release is scored by replaying its committed observation record over the "
+    "corpus (`compare/release_char_level.py record`). The offline `check` that CI runs proves "
+    "the stored numbers are consistent with the committed record, its evidence file and the "
+    "UTF-8 structure of that evidence; only `record` (the corpus replay) proves the character "
+    "counts, so a pull request that changes `release-char-level.json` or its evidence file "
+    "must include the replay command's output in its description."
+)
+
+
 class ChartError(Exception):
     """The committed data cannot produce a truthful chart."""
 
