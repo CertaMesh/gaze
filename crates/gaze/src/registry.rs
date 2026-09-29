@@ -652,7 +652,7 @@ mod tests {
         );
     }
 
-    /// `ClaimedSpans` reads only the start window that can overlap (todo 3895).
+    /// `ClaimedSpans` reads only the start window that can overlap.
     /// Pin it against the full scan it replaced, on random span sets that
     /// include empty, equal, nested and very long spans.
     #[test]
@@ -1008,7 +1008,7 @@ fn detect_declared(
 /// A later locale's candidate is blocked by a claimed span it partially
 /// overlaps or equals; strict same-class containment in either direction
 /// passes, so the resolver can pick the enclosing span. Checking every
-/// claimed span made each locale step O(N^2) (todo 3895). A span overlapping
+/// claimed span made each locale step O(N^2). A span overlapping
 /// `start..end` starts after `start - longest`, so only that window is read.
 #[derive(Default)]
 struct ClaimedSpans {
@@ -1318,7 +1318,7 @@ impl RecognizerRegistryBuilder {
     }
 
     /// Registers street words whose NER location span licenses an adjacent
-    /// house number in `locale` (todo 3670).
+    /// house number in `locale`.
     pub fn register_street_lexicon(
         mut self,
         locale: LocaleTag,

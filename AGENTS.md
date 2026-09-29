@@ -30,7 +30,7 @@ As of v0.9.0, the workspace has nine published-shape crates plus `xtask`:
 
 - `gaze` — core (pipeline, session, policy, registry, locale, rulepack). Re-exports `gaze_types::RedactionLogger` for source-compat. No `rusqlite` dep in any feature graph.
 - `gaze-types` — shared value contracts including the canonical `RedactionLogger` trait (serde-only, no ML/sql deps). Introduced in v0.5 Phase B.
-- `gaze-recognizers` — regex/dictionary/NER detection backends + embedded rulepacks, plus the safety-net backends (OPF subprocess and the in-process Nym-small net behind `safety-net-nym`). No net runs without a policy; the `gaze setup` policy enables Nym, while OPF and the GLiNER DOB judge (`--dob-judge`, until its bundle is shrunk, todo 3905) stay opt-in.
+- `gaze-recognizers` — regex/dictionary/NER detection backends + embedded rulepacks, plus the safety-net backends (OPF subprocess and the in-process Nym-small net behind `safety-net-nym`). No net runs without a policy; the `gaze setup` policy enables Nym, while OPF and the GLiNER DOB judge (`--dob-judge`, until its bundle is shrunk) stay opt-in.
 - `gaze-audit` — passive SQLite sink + audit-query API. `rusqlite` lives only here. Introduced in v0.5 Phase C.
 - `gaze-assembly` — policy-to-pipeline builder for CLI-style adopters.
 - `gaze-cli` — standalone `gaze` binary; only allowlisted `gaze-audit` consumer outside compatibility tests.
@@ -49,6 +49,7 @@ Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTIN
 3. **Commit discipline:** every commit must be signed (SSH commit signing is configured on this machine; delegates in unsigned sandboxes must have their commits re-created signed before merge). No commit-message prefix is required. Stage specific files by name. No `git add -A` or `git add .`. No amend, no force-push, no `--no-verify`. Commit after each logical phase, not only at the end.
 4. **Branch per task.** Work on a dedicated branch; keep `main` clean.
 5. **Completion signaling:** every agent brief includes a sentinel line (e.g. `IMPL DONE:`, `REVIEW DONE:`, `DOCS DONE:`). Print it on the final stdout line.
+6. **Never put private tracker ids in public text.** Todo, scratchpad, process and audit ids from private orchestration tools do not belong in PR titles or bodies, commit messages, CHANGELOG, docs, code comments, test comments or scripts. Describe the behavior instead ("tracked as a follow-up"). GitHub PR and issue numbers (`#723`) stay. `cargo run -p xtask -- no-internal-ids` fails the `xtask gates` CI job on a hit.
 
 ## Benchmark gain gate
 
@@ -75,7 +76,7 @@ A **layer** is one scored part of the benchmark: the primary holdout corpus (lay
 6. **Never tune a rule to the corpus.** A rule that only matches corpus-specific shapes will miss real text; see [A scorecard measures the corpus, not the recognizer](docs/reference/benchmarks/README.md#a-scorecard-measures-the-corpus-not-the-recognizer).
 7. **Evidence goes in the PR body** through the template's "Benchmark evidence" block: base and candidate sha, scorecard paths, v2 and v1 leaked bytes per layer, false-positive bytes per layer, and refusals. A PR skips the block only by ticking "not a detection change and not a benchmark change".
 
-**The headline is always the latest.** The benchmark headline uses the latest scored-label contract and benchmark data, and every past version the document displays is re-measured under it. Contract v3 becomes the headline once its gold-gap audit passes (todo 3696).
+**The headline is always the latest.** The benchmark headline uses the latest scored-label contract and benchmark data, and every past version the document displays is re-measured under it. Contract v3 becomes the headline once its gold-gap audit passes.
 
 **Benchmark changes re-measure past releases.** Any change to the benchmark itself (a layer, a scored-label contract, corpus or generated data, the scorer, or the benchmark document) re-measures every past release the document displays: the current harness drives each release tag's own detection code. A row that cannot be re-measured says why in the document. Local-only harness evidence does not count; the harness and its inputs must be committed to the repo or pinned there by hash.
 

@@ -1474,7 +1474,7 @@ fn tiny_json_limits_fail_with_closed_codes() {
 }
 
 // ---- Regression: numeric JSON-Schema literals must be PII-detected (fail closed) ----
-// Audit scratchpad #6161 Finding 1: numeric `const` / `enum` members / `minimum` /
+// Audit finding 1: numeric `const` / `enum` members / `minimum` /
 // `maximum` inside tools[].input_schema were accepted verbatim (marked as covered
 // control numbers by request_number_control, never routed through detection, and
 // dropped from the residual carrier views), so an N-only (all-digit) recognizer never

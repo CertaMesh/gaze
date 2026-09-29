@@ -1307,7 +1307,7 @@ def _adjacency_records(partition: str, layer: str) -> list[Record]:
 
 
 # --------------------------------------------------------------------------
-# Labelled PII inside benign lookalike structures (todo 3995). A weak postcode
+# Labelled PII inside benign lookalike structures. A weak postcode
 # or phone rule may be vetoed when its match sits in a benign structure: the
 # tail of an `ORDER-` style reference, after a currency code, or inside a
 # 16-digit run. Layer A puts postcodes and reserved-range phones in exactly

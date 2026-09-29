@@ -479,7 +479,7 @@ fn overlap_conflict_logs_losing_detection_without_raw_pii() {
     };
     // The name span wholly contains the email span and both are plain
     // patterns, so containment precedence hands the whole span to the
-    // container as one entity (todo #3740); the name's own action applies and
+    // container as one entity; the name's own action applies and
     // nothing of the value survives. The email is recorded as the loser.
     assert_eq!(text, "reach [REDACTED]");
 

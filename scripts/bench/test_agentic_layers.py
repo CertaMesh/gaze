@@ -420,7 +420,7 @@ class RepeatSliceTests(unittest.TestCase):
 
 
 class LabelledLookalikeCellTests(unittest.TestCase):
-    """Todo 3995: labelled PII inside benign structures is gold; each cell's
+    """Labelled PII inside benign structures is gold; each cell's
     layer D twin has the same shape, structure and position and no cue."""
 
     @classmethod

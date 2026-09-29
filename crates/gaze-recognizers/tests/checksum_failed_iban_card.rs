@@ -1,5 +1,5 @@
 //! IBAN and payment card numbers are tokenized even when mod-97 or Luhn fails (user ruling
-//! 2026-09-27, solo todo 3906): a mistyped or masked account or card number is still someone's
+//! 2026-09-27): a mistyped or masked account or card number is still someone's
 //! financial data.
 //!
 //! In these two families, values can tokenize without a passing checksum:
@@ -14,7 +14,7 @@
 //!   2-6, compact 14 to 15 from 3) within 32 characters after a card cue (`card`, German card
 //!   compounds, card brands) on the same line. A span that starts with a Luhn-valid card is
 //!   kept whole, so a cued 4-4-4-4-3 number is one token (without a cue `card.structural` still
-//!   keeps a valid card's CVV outside, todo 3843).
+//!   keeps a valid card's CVV outside).
 //!
 //! Both cued rules share one cue window: one `:`, `,` or `=` right after the cue, one nested JSON
 //! key, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or
@@ -28,7 +28,7 @@
 //! on, so a fixture cannot silently pass for the wrong reason.
 
 // drift-ack: the core no-policy snapshot's Luhn-valid card now lists `card.cued+card.structural`
-// as merged sources for the same span and class; the tokenized output is unchanged (todo 3906).
+// as merged sources for the same span and class; the tokenized output is unchanged.
 
 use std::sync::{Arc, Mutex, OnceLock};
 

@@ -869,7 +869,7 @@ The local GLiNER judge considers date-shaped spans that the rule floor has not
 already claimed as `birth_date`. It can emit a restorable `birth_date` token
 with the distinct `dob.gliner` source. It is disabled unless `enabled = true`;
 `gaze setup --dob-judge` installs the SHA-pinned int8 bundle and writes this
-block; plain `gaze setup` leaves it out until the bundle is shrunk (todo 3905). An enabled block requires `model_dir`. Missing or corrupt bundle files,
+block; plain `gaze setup` leaves it out until the bundle is shrunk. An enabled block requires `model_dir`. Missing or corrupt bundle files,
 an invalid threshold, and inference errors fail closed. `threshold` defaults
 to `0.5` and must be greater than `0.0` and less than `1.0`. The model scores
 `date of birth`, `date`, and `event date` together. The birth-date score must
@@ -1295,7 +1295,7 @@ before broadening a bucket.
 ### Street lexicons and house numbers
 
 Two more locale buckets let a street the NER model found license the house
-number beside it (solo todo #3670). They are word lists, not recognizers: a
+number beside it. They are word lists, not recognizers: a
 number is tokenized only when a winning NER `location` span ends in one of
 these words.
 

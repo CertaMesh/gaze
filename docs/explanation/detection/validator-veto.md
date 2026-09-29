@@ -34,14 +34,14 @@ For each candidate:
 
 A mistyped or masked IBAN or card number is still someone's financial data,
 so Gaze tokenizes an IBAN- or card-shaped span even when mod-97 or Luhn fails
-(user ruling 2026-09-27, solo todo 3906). The checksum stops being the
+(user ruling 2026-09-27). The checksum stops being the
 precision; shape and context take its place:
 
 | Recognizer | What tokenizes without a passing checksum |
 | --- | --- |
 | `iban.structural` | A registry country code at that country's exact ISO 13616 length, with or without a cue |
 | `iban.cued` | A real ISO 3166-1 country code (or `UK`) outside the IBAN registry, two digits and a BBAN (up to four letters then 6 to 26 digits compact, or three to eight digit-bearing groups) within 32 characters after the word `IBAN` on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it). Registry countries stay with `iban.structural`, which knows their exact length, so a registry IBAN with a dropped digit is not covered |
-| `card.cued` | A card layout within 32 characters after a card cue (`card` family, German card compounds, a bare `Karte` only with `Nummer`/`Nr`, card brands) on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it): 4-4-4-4-3 (whole), 4-4-4-4, 4-6-5, 4-6-4, compact 16 to 19 digits starting 2-6, or compact 14 to 15 digits starting 3. Compact phone numbers and epoch-millisecond timestamps do not qualify. A span that holds a card stays whole, so a cued 4-4-4-4-3 number is one token even when its first 16 digits pass Luhn (without a cue `card.structural` still keeps a valid card's CVV outside, todo 3843). A Luhn-failing 13- or 15-digit compact card not starting with 3 stays raw (phone and timestamp tradeoff) |
+| `card.cued` | A card layout within 32 characters after a card cue (`card` family, German card compounds, a bare `Karte` only with `Nummer`/`Nr`, card brands) on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it): 4-4-4-4-3 (whole), 4-4-4-4, 4-6-5, 4-6-4, compact 16 to 19 digits starting 2-6, or compact 14 to 15 digits starting 3. Compact phone numbers and epoch-millisecond timestamps do not qualify. A span that holds a card stays whole, so a cued 4-4-4-4-3 number is one token even when its first 16 digits pass Luhn (without a cue `card.structural` still keeps a valid card's CVV outside). A Luhn-failing 13- or 15-digit compact card not starting with 3 stays raw (phone and timestamp tradeoff) |
 
 Steuer-ID, BSN, and CPF rules already require a class-specific label. Their
 checksum failures now stay as tokens with typed failure reasons; all-zero
@@ -95,7 +95,7 @@ languages, typos and encodings all hide labels from a finite cue list, and
 two valid phone numbers joined in one long digit run defeat a run-length
 bound. Such vetoes were tried and removed. The future path is an
 adopter-declared benign reference pattern in policy, a positive signal from
-the data owner (todo 4005).
+the data owner.
 
 ## Audit shape
 

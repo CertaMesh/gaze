@@ -45,7 +45,7 @@ pub fn apply(
         // 19-digit card or a card and its CVV, and the digits cannot tell which, so both stay in
         // one token (the CVV is sensitive too). Its longer span then wins the same-class
         // containment over `card.structural`'s card; without a cue `card.structural` still
-        // scopes a card exactly (todo 3843). Solo todo 3906, review of #694 round 3.
+        // scopes a card exactly. Review of #694 round 3.
         let outcome = match kind.validate(raw) {
             ValidatorOutcome::Fail { .. }
                 if kind == ValidatorKind::Luhn

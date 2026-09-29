@@ -3,8 +3,7 @@
 //! These tests drive the real public proxy request path against a
 //! capturing mock upstream and assert on the bytes that would reach the provider.
 //!
-//! They began as an executed leak PROOF against `origin/main` d32ae07 (Solo todo #2400
-//! comment 1435 item 2), where each one asserted raw PII surviving to the wire. Every such
+//! They began as an executed leak PROOF against `origin/main` d32ae07, where each one asserted raw PII surviving to the wire. Every such
 //! test now asserts the fixed behavior — fail closed, or tokenized — and carries a
 //! `regression_` prefix naming both the defect it came from and the invariant it now guards,
 //! so the file doubles as the regression contract for the fix.
@@ -27,7 +26,7 @@
 //! ## Locale note
 //!
 //! Both proxy passes read one adopter-configured chain, `ProxyConfig::locale_chain` (solo
-//! todo #2403), so the residual is still neither weaker nor stronger than the primary pass.
+//! the locale-chain fix), so the residual is still neither weaker nor stronger than the primary pass.
 //! The tests below construct their proxies without configuring a locale, which leaves that
 //! chain at its default `[LocaleTag::Global]`; locale-gated recognizers (`postal.us`,
 //! `postal.de`, national phone) are therefore inert HERE by construction rather than
@@ -928,7 +927,7 @@ mod route_net;
 /// Configured-net enforcement on request text.
 ///
 /// A surfaced marker the net flags is resolved into a token before admission, the same
-/// Resolve step `gaze clean` runs (todo 3847), so it is forwarded tokenized. An unsurfaced
+/// Resolve step `gaze clean` runs, so it is forwarded tokenized. An unsurfaced
 /// marker has no surface to tokenize and is refused. A net error refuses both.
 #[tokio::test]
 async fn configured_net_request_boundary_resolves_surfaced_and_rejects_unsurfaced_markers() {
@@ -1027,7 +1026,7 @@ async fn admission_token_reflags_and_resolvable_spills_pass_but_malformed_and_er
             }),
         )
         .await;
-        // A spill covers raw bytes after the token; Resolve tokenizes them (todo 3847).
+        // A spill covers raw bytes after the token; Resolve tokenizes them.
         let accepted = matches!(mode, Mode::Reflag | Mode::Spill);
         assert_eq!(response.status().is_success(), accepted, "{mode:?}");
         if accepted {
@@ -1169,7 +1168,7 @@ async fn spawn_echo_openai(pipeline: Pipeline) -> (MockUpstream, ProxyServer) {
     (upstream, proxy)
 }
 
-/// Todo 3847: under the `gaze setup` policy the proxy refused every dated prompt with
+/// Under the `gaze setup` policy the proxy refused every dated prompt with
 /// `500 {"error":"Pipeline"}` while `gaze clean` tokenized the date. The net's finding is now
 /// resolved into a token before admission: the provider sees the token, the client sees the
 /// original bytes.
@@ -1213,7 +1212,7 @@ fn second_opinion_pipeline() -> Pipeline {
         .unwrap()
 }
 
-/// Todo 3847 parity: the proxy forwards exactly what `gaze clean` / `gaze daemon` produce for
+/// Parity: the proxy forwards exactly what `gaze clean` / `gaze daemon` produce for
 /// the same text and policy (session hex aside), and restores the original in the response.
 #[tokio::test]
 async fn regression_3847_proxy_forwards_what_clean_produces() {
@@ -1240,7 +1239,7 @@ async fn regression_3847_proxy_forwards_what_clean_produces() {
     }
 }
 
-/// Todo 3847 (b): a refusal names its typed `ProtectionError` variant, the fallback reason and
+/// Part (b): a refusal names its typed `ProtectionError` variant, the fallback reason and
 /// the suspect classes, never the flagged bytes, and nothing reaches the provider. The net's
 /// re-run finds a new suspect, so Resolve's `Strict` fallback refuses.
 #[tokio::test]
@@ -1290,7 +1289,7 @@ async fn refusal_log_child() {
     upstream.assert_nothing_forwarded().await;
 }
 
-/// Todo 3847 (b): the proxy log carries the refusal's reason and never the text. The whole
+/// Part (b): the proxy log carries the refusal's reason and never the text. The whole
 /// stderr of a refused request is one line, byte for byte.
 #[test]
 fn regression_3847_refusal_log_line_is_exactly_the_typed_refusal() {

@@ -2811,7 +2811,7 @@ fn s2_cli_bundled_smoke_emits_formatted_phase2_tokens() {
 
 #[test]
 fn s2_cli_bundled_smoke_luhn_failing_formatted_cc_tokenizes_only_after_a_card_cue() {
-    // Solo todo 3906: a Luhn-failing card after a card cue is still a card.
+    // A Luhn-failing card after a card cue is still a card.
     let value = clean_json_with_args(
         &["--rulepack-bundled", "core,core-extended"],
         "Card 4111 1111 1111 1112",
@@ -2934,7 +2934,7 @@ fn s2_cli_bundled_core_extended_no_policy_tokenizes_national_de_and_us_phones() 
     assert_eq!(us["stats"]["detections"], 1);
 }
 
-// S10-F2 (audit 7201) drift gate for the `gaze clean` path: the auto-activate
+// S10-F2  drift gate for the `gaze clean` path: the auto-activate
 // locale set must be DERIVED from the loaded rulepacks. An adopter path pack
 // with a document-basis `locale_gated` es-ES recognizer under `global` defaults
 // activates under `core-extended` (auto-activate) with no CLI/policy locale.
@@ -3207,7 +3207,7 @@ fn s2_core_extended_cli_validator_backed_iban_and_cards_emit_by_shape_and_cue() 
         );
     }
 
-    // Checksum-failing values after a card or IBAN cue are still tokenized (solo todo 3906);
+    // Checksum-failing values after a card or IBAN cue are still tokenized;
     // the same card digits without a cue keep the Luhn veto.
     for (label, number) in [
         ("Card ", "4111111111111112"),
@@ -3666,7 +3666,7 @@ action = "tokenize"
     assert_eq!(run["stats"]["detections"], 4);
 }
 
-/// Todo #3706: `gaze clean` with neither `--policy` nor `--rulepack-bundled`
+/// `gaze clean` with neither `--policy` nor `--rulepack-bundled`
 /// used to run an email-only stub, so cards, IBANs and IPs shipped raw while
 /// the run looked healthy. The policy-less default is the bundled `core` pack.
 #[test]
@@ -5248,7 +5248,7 @@ fn strict_incomplete_prefixed_wrapper_fails() {
     assert_eq!(parse_stderr_variant(&stderr)["error"], "UnknownToken");
 }
 
-/// Todo #3709: IBAN beats the card variant by collision policy, then an
+/// IBAN beats the card variant by collision policy, then an
 /// unrelated lower-priority recognizer overlaps the IBAN's last group plus the
 /// next capitalised word (the shape postal.at_ch produces). The resolver used
 /// to read the family as unsettled after that overlap, send the IBAN through
@@ -5314,7 +5314,7 @@ action = "preserve"
     }
 }
 
-/// Todo #3709 through the real trigger: under de-AT, bundled `postal.at_ch`
+/// Through the real trigger: under de-AT, bundled `postal.at_ch`
 /// matches the IBAN's last group plus the next capitalised word
 /// (`3201 Kontoinhaber`). That overlap must not reopen the collision-settled
 /// IBAN, neither under a tokenize-iban + preserve-default policy (where the
@@ -5393,7 +5393,7 @@ action = "preserve"
 }
 
 // ---------------------------------------------------------------------------
-// todo 3746: family-level tokens derive their action from their member classes'
+// Family-level tokens derive their action from their member classes'
 // rules through the real binary. A policy that names only `custom:iban` and
 // `custom:credit_card` with a `preserve` default used to ship every no-cue
 // IBAN raw because `custom:family:payment-card-or-iban` matched no rule.
@@ -5509,7 +5509,7 @@ fn clean_member_only_policy_tokenizes_trailing_number_family_tokens() {
         "Bitte überweisen auf FO14 5878 0013 4155 73 1234",
         "Bitte überweisen auf GL07 3135 5673 6936 21 1234",
         // Its digit run holds no Luhn-valid card layout window. `SA77 … 7425` did
-        // (`4281 2318 7317 7425`), which since todo 3843 makes it the Luhn-valid BBAN
+        // (`4281 2318 7317 7425`), which since the card-tail fix makes it the Luhn-valid BBAN
         // case: the settled narrow IBAN token.
         "Bitte überweisen auf SA50 3476 4281 2318 7317 7426 1234",
     ]
@@ -5611,7 +5611,7 @@ action = "preserve"
     (dir, path)
 }
 
-/// Todo 3757: a precedence tie between two policy regex recognizers emits the
+/// A precedence tie between two policy regex recognizers emits the
 /// family token, and that token takes the members' `tokenize` rule instead of
 /// the `preserve` default. Before the fix the registry could not find a policy
 /// regex recognizer by id, the derivation saw no member, and `gaze clean`

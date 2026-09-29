@@ -3,14 +3,14 @@
 
 /// `(before, card, after)`: a payment card with digits touching it. The clean text must be
 /// `before`, one token, then `after`: every card digit tokenized, nothing around it.
-/// Solo todo 3843 and REVIEW 652 round 2 (F-A, F-B).
+/// Round 2 review findings F-A and F-B.
 const CARD_SHAPES: &[(&str, &str, &str)] = &[
-    // CVV or expiry after the card (todo 3843).
+    // CVV or expiry after the card.
     ("Karte ", "4111 1111 1111 1111", " 123 (CVV)"),
     ("Karte ", "4111 1111 1111 1111", " 12 28"),
     ("Karte ", "4111111111111111", " 123"),
     ("Karte ", "4111 1111 1111 1111", " １２３"),
-    // A number before the card (todo 3843; the 21-digit run the old pattern stopped short in).
+    // A number before the card (the 21-digit run the old pattern stopped short in).
     ("Nr 7 ", "4111 1111 1111 1111", ""),
     ("Nr 12345 ", "4111 1111 1111 1111", ""),
     // F-A: a separated 4+-digit prefix, a prefix before a 19-digit card, a glued 4-digit tail.

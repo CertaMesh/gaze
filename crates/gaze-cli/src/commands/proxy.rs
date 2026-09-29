@@ -82,7 +82,7 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
     // The locale chain the pipeline was assembled under must also reach the proxy: assembly
     // decides which recognizers are registered, `ProxyConfig` decides which may fire. Dropping
     // it here is what pinned proxied traffic to `[LocaleTag::Global]` and left locale-gated
-    // recognizers inert for adopters who had configured a locale (solo todo #2403).
+    // recognizers inert for adopters who had configured a locale.
     let (pipeline, locale_chain, dictionaries, notices) =
         build_pipeline(args.policy, &args.rulepack)?;
     config = config

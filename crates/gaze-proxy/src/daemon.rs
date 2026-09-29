@@ -217,7 +217,7 @@ pub fn write_config(paths: &DaemonPaths, config: &DaemonConfig) -> Result<(), Pr
 /// it runs in the foreground or as the daemon child. The exhaustive
 /// destructuring is load-bearing — a new `DaemonConfig` field stops compiling
 /// here instead of silently never reaching the daemon, which is how `--policy`,
-/// `--rulepack`, and the adapter upstreams went missing (solo todo #2965).
+/// `--rulepack`, and the adapter upstreams went missing.
 fn serve_args(config: &DaemonConfig) -> Vec<OsString> {
     let DaemonConfig {
         bind,
@@ -338,7 +338,7 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
 /// The child resolves the configured policy, so a fail-closed load error
 /// surfaces as an immediate exit. `kill(pid, 0)` cannot see that: an unreaped
 /// child is a zombie and still answers as alive, which reported a dead daemon as
-/// started (solo todo #2965). `try_wait` reaps and reports the real status
+/// started. `try_wait` reaps and reports the real status
 /// within the same 250ms budget, returning early on failure.
 ///
 /// A failure slower than the probe window still reports success; that daemon is
@@ -1098,7 +1098,7 @@ mod tests {
         );
     }
 
-    // solo todo #2965: every field the adopter can configure has to reach the
+    // Every field the adopter can configure has to reach the
     // detached child, because the child's argv is all it ever sees.
     #[test]
     fn serve_args_forward_every_configured_field_to_the_daemon_child() {

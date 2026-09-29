@@ -1467,7 +1467,7 @@ impl Pipeline {
         })
     }
 
-    /// Repeat-value sweep (todo 3849). Copies of this document's rule-found
+    /// Repeat-value sweep. Copies of this document's rule-found
     /// winners and of the session's rule-found values that no winner covers
     /// join the pool as candidates, and the pool is resolved again, so the
     /// resolver's own rungs settle overlaps (a copy that encloses an NER
@@ -1990,7 +1990,7 @@ impl Pipeline {
                         // keeps the document restorable. A cascade of plannable suspects (each
                         // re-scan flagging the value next to the last token) outran the one
                         // follow-up round and ended here deleting a value that was never at
-                        // risk (todo 3879). Anything the planner refuses is deleted as before.
+                        // risk. Anything the planner refuses is deleted as before.
                         // Only a residual the post-resolution re-run found: a first-pass refusal
                         // is the resolver declining those suspects, and the fallback does not
                         // overrule it.
@@ -5149,7 +5149,7 @@ impl LeafOp {
     /// `Pipeline::scan_safety_nets_structured` and `Pipeline::clean_with_safety_net*`, surfaced
     /// by folding the three walkers into one. It is preserved rather than silently unified
     /// because `field_path` is adopter-visible telemetry that lands in the audit log; changing it
-    /// is a separate, announced change (solo todo #2958).
+    /// is a separate, announced change.
     fn root_path(self, key: &str) -> String {
         match self {
             LeafOp::ScanOnly => key.to_string(),
@@ -5353,7 +5353,7 @@ fn translate_vetoed_candidate(
     })
 }
 
-/// House-number candidates licensed by winning NER location spans (todo 3670).
+/// House-number candidates licensed by winning NER location spans.
 ///
 /// Reads the settled selections in normalized coordinates. A selection licenses
 /// a number only when a NER `Location` candidate is one of its members. Members
@@ -5420,7 +5420,7 @@ fn street_corroborated_house_numbers(
                 .source_recognizer_ids
                 .push(crate::NER_RECOGNIZER_ID.to_string());
             // Licensed by a NER street span, so it carries no more certainty than NER: a house
-            // number must never be swept to every other copy of `17` (todo 3670).
+            // number must never be swept to every other copy of `17`.
             found.push(candidate.with_evidence(crate::EvidenceKind::Learned));
         }
     }
@@ -7921,8 +7921,8 @@ mod tests {
     /// Driven directly because no integration test can tell the difference by outcome: every
     /// terminal suspect that reaches the marker is either dropped as protected or denied as
     /// unjudgeable before the survivor clause matters. The one place it would decide alone -- the
-    /// byte check after a terminal redaction -- is unreachable now that markers leave no seam
-    /// (solo todo 3739). Unfalsifiable-by-outcome is exactly when a guard needs a direct test.
+    /// byte check after a terminal redaction -- is unreachable now that markers leave no seam.
+    /// Unfalsifiable-by-outcome is exactly when a guard needs a direct test.
     ///
     /// Mutation: drop the marker skip in `survivors` and this fails with the marker span reported.
     #[test]
@@ -8470,7 +8470,7 @@ mod tests {
         assert_eq!(loser.decided_by, ConflictTier::SameClassContainment);
     }
 
-    /// Deterministic probe for the container-eviction defect (todo #3025 slice U):
+    /// Deterministic probe for the container-eviction defect:
     /// an NER organisation sub-token inside a rule-recognised credential must not
     /// split the credential. Before the containment rungs the
     /// builtin sub-span won on class priority, `remove_overlaps` dropped the whole

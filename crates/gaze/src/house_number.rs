@@ -1,4 +1,4 @@
-//! Street-corroborated house numbers (todo 3670).
+//! Street-corroborated house numbers.
 //!
 //! A house number alone is an ordinary number, so no rule may tokenize one on
 //! shape. This module only answers a narrower question: given a span the NER

@@ -429,7 +429,7 @@ SHA-256 and refuses identical builds; run them against immutable copies.
   PR #624 found 872 regressed documents behind a `redact` arm the ten-arm
   matrix did not have).
 - `policy_regex_collision_matrix.py` — the policy REGEX custom-recognizer
-  family contract (todo #3757): four regex rules (an equal-precedence tie
+  family contract: four regex rules (an equal-precedence tie
   family, a precedence family, a `mandatory_anchor` family, an `email`-class
   rule beside the bundled `email.global`) under collision {on, off} x member
   action {tokenize, redact, preserve} x default {tokenize, preserve} x

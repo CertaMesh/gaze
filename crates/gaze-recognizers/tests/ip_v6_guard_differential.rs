@@ -1,4 +1,4 @@
-//! Differential enumeration of the `ip.v6` guard change (todo 3710).
+//! Differential enumeration of the `ip.v6` guard change.
 //!
 //! A corpus pass cannot settle "the new guard loses no real address": it only says the corpus
 //! holds no counterexample. This enumerates instead. It reads the shipped `ip.v6` pattern, edits

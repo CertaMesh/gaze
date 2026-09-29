@@ -1,4 +1,4 @@
-//! Library-level proof that the `secrets` bundle is opt-in (todo #3646).
+//! Library-level proof that the `secrets` bundle is opt-in.
 //!
 //! `CorePipelineConfig::new()` is the default library adopter: it loads `core` and
 //! tokenizes every class the loaded rulepacks declare. Re-adding `password.field` or

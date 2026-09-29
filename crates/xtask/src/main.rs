@@ -16,6 +16,7 @@ mod fixture_citation;
 mod locale_cue_bundle_coherence;
 mod mcp_tier_isolation;
 mod negative_corpus;
+mod no_internal_ids;
 mod no_tenant_knowledge;
 mod publish_plan;
 mod readme_version_check;
@@ -39,6 +40,7 @@ enum Command {
     ClassMapOverrideSafety,
     RecognizerCompositionValidator,
     NoTenantKnowledge,
+    NoInternalIds,
     FixtureCitationLint,
     FamilyPolicyTableCoherence,
     CargoMetadataAuditIsolation,
@@ -66,6 +68,7 @@ fn main() -> Result<()> {
         Command::ClassMapOverrideSafety => run_class_map_override_safety_gate(),
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
         Command::NoTenantKnowledge => no_tenant_knowledge::run(),
+        Command::NoInternalIds => no_internal_ids::run(),
         Command::FixtureCitationLint => fixture_citation::run(),
         Command::FamilyPolicyTableCoherence => family_policy_coherence::run(),
         Command::CargoMetadataAuditIsolation => cargo_metadata_audit_isolation::run(),

@@ -1,4 +1,4 @@
-//! A safety net primed by the class names of the tokens it reads (todo 3879).
+//! A safety net primed by the class names of the tokens it reads.
 //!
 //! Nym reads the scan text with the tokens in it. Probed directly, it flags the
 //! `2` in `<hex:Custom:building_number_4>(2)` and nothing in `<hex:Token_4>(2)`:
@@ -10,7 +10,7 @@
 //! The stand-in below behaves the same way: its first scan flags one number,
 //! and every later scan flags the next number only while the scan text still
 //! names the `building_number` class. Hiding class names from the net fixed
-//! the cascade but cost more recall than it saved (measured, todo 3879), so the
+//! the cascade but cost more recall than it saved (measured), so the
 //! `Redact` fallback now tokenizes a residual set it can plan completely
 //! instead of deleting it.
 use gaze::*;
