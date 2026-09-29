@@ -107,38 +107,54 @@ re-protects every byte a protective candidate claimed, even inside a
 - **Only the declaring rule's candidate goes.** Any other candidate over the
   same bytes (a cued phone, an IBAN, a card) is untouched and still
   protects them.
-- **A cue always wins, on either side and on the label line.** A word
-  starting with a phone, postal or address cue stem (`tel`, `phone`,
-  `mobil`, `fax`, `call`, `contact`, `kontakt`, `ruf`, `anruf`, `handy`,
-  `cell`, `plz`, `zip`, `post`, `addr`, `adress`, `anschrift`, `street`,
-  `strasse`, `city`, `stadt`, `ort`, `wohn`, `billing`, `shipping`,
-  `delivery`, `liefer`) within 40 bytes before *or after* the candidate on
-  its line, or on the line directly above or below it, disables every
-  structure: `ORDER-90210 (ZIP)` and `ZIP:` over `ORDER-90210` stay
-  protected. Words split at non-letters and at camelCase, so JSON keys such
-  as `postal_code`, `zipCode` or `shippingAddress` count. Matching by stem
-  errs toward protection.
-- **A cue in the field name wins.** A structured value is checked against
-  its field name the same way, so `{"postal_code": "ORDER-90210"}` and
-  `{"billing_address": "ORDER-90210"}` stay protected while
-  `{"orderRef": "ORDER-90210"}` does not.
-- **Only audited bundled rules may opt in, and the permission cannot be
-  forged.** A pattern cannot prove it is uncued (a one-capture rule such as
+- **A cue in the candidate's block keeps it protected.** The check reads
+  exactly this window: the candidate's own line, the lines above it back to
+  the previous blank line (at most six lines and 400 bytes; a longer line
+  counts up to the cap, nearest bytes first), and the rest of its line plus
+  the next non-blank line below (120 bytes each). A word in that window that
+  starts with a phone, postal or address cue stem, or equals a short cue
+  word, disables every structure. Words are case- and accent-folded
+  (`Téléphone` reads `telephone`) and split at non-letters and at camelCase,
+  so `ORDER-90210 (ZIP)`, a `ZIP for delivery:` label two lines above, and
+  JSON keys such as `postal_code` or `shippingAddress` all count. The stems
+  cover English, German, French, Spanish, Italian, Dutch and Portuguese
+  (for example `tel`, `phone`, `fax`, `mobil`, `movil`, `portable`,
+  `handy`, `ruf`, `contact`, `kontakt`, `zip`, `plz`, `post`, `codigo`,
+  `codice`, `addr`, `adres`, `anschrift`, `street`, `strasse`, `indirizzo`,
+  `direccion`, `endereco`, `city`, `ort`, `billing`, `shipping`,
+  `delivery`; whole words `cap`, `cp`, `cep`, `gsm`, `rue`, `rua`). A drift
+  test requires every `[locale.phone_labels]` entry of the bundled locale
+  packs to be a cue. Matching by stem errs toward protection. A cue further
+  away (past a blank line, more than six lines or 400 bytes up, or more than
+  one line down) is not seen.
+- **A cue in the structured context keeps it protected.** For a
+  `RawDocument::Structured` value the veto also reads a `VetoContext`: every
+  key on the value's path (`shippingAddress` and `code` for
+  `shippingAddress.code`), its sibling keys, and sibling string values of
+  at most 64 bytes (`{"type": "phone", "value": "..."}`,
+  `{"label": "ZIP", "value": "..."}`). A cue anywhere in it disables every
+  structure, so `{"billing_address": "ORDER-90210"}` stays protected while
+  `{"orderRef": "ORDER-90210"}` does not. Plain text has no structured
+  context; only its block counts.
+- **Only the audited bundled rules are eligible, by exact tuple.** A
+  pattern cannot prove it is uncued (a one-capture rule such as
   `ORDER-(\d{5})\s+Beverly` is anchored by a city no stem list knows), and
   an id string can be borrowed. So a veto needs a
-  `gaze_types::benign_lookalike::BenignLookalikeGrant`, whose only
+  `gaze_types::benign_lookalike::BenignLookalikeGrant`. Its only
   constructor, `BenignLookalikeGrant::audited`, mints it when the rule's
   whole tuple (id, class, pattern, capture groups, validator and failure
   mode, locales, locale basis, structures) hashes to one of four compiled-in
-  fingerprints: `postal.de`, `postal.us`, `phone.national.de`,
-  `phone.national.us` exactly as bundled. Validator veto then checks that the
-  recognizer presenting the grant has that identity and that the vetoed span
-  is a match of the audited pattern in the input, so a rule that reuses an
-  audited id with another pattern (even through `Rulepack::parse_bundled`)
-  fails to build, and a custom `Recognizer` that borrows a real grant vetoes
-  nothing the audited rule would not. The rulepack loader also refuses the
-  key in rulepack files and for other ids with
-  `RulepackError::IneligibleBenignLookalike`. A custom pack forked from
+  fingerprints: `postal.de`, `postal.us`, `phone.national.de` and
+  `phone.national.us`, exactly as bundled. This is exact-tuple eligibility,
+  not authenticated provenance: a caller that builds an identical rule gets
+  a grant, and that rule is then exactly the audited one. Validator veto
+  also checks that the recognizer presenting the grant has that identity and
+  that the vetoed span is a match of the audited pattern in the input. So a
+  rule that reuses an audited id with another pattern (even through
+  `Rulepack::parse_bundled`) fails to build, and a custom `Recognizer` that
+  borrows a real grant vetoes nothing the audited rule would not. The
+  rulepack loader also refuses the key in rulepack files and for other ids
+  with `RulepackError::IneligibleBenignLookalike`. A custom pack forked from
   `core` must drop its `benign_lookalikes` lines.
 - **Every veto is audited.** Each vetoed candidate writes one loser row
   with its `Benign*` reason; a veto that cannot be placed on the source

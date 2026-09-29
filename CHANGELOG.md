@@ -178,9 +178,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reference identifier opened by a label word (`SKU`, `ORDER`, `INVOICE`,
   `BATCH`, `Rechnung`, ...) or sits next to a currency code or sign, and the
   national phone rules skip the tail of a reference identifier and part of a
-  digit run longer than any phone number. A phone, postal or address cue on
-  the value's line, the line above or below it, or in its structured field
-  name always keeps the value protected. Each skip writes a loser audit row
+  digit run longer than any phone number. A phone, postal or address cue
+  (seven languages, case- and accent-folded) in the value's text block (back
+  to the previous blank line, at most six lines and 400 bytes up, and one
+  line down) or in its structured context (path keys, sibling keys, short
+  sibling values) keeps the value protected. Each skip writes a loser audit row
   with `decided_by = validator_veto` and a `benign_*` reason; a skip that
   cannot be placed on the source text fails the document
   (`Error::UnauditableVeto`). Contract: docs/explanation/detection/validator-veto.md.

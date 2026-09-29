@@ -81,8 +81,10 @@ what they matched before.
 **No action required.** The bundled postcode and national phone rules now
 skip numbers that end a labelled reference identifier, sit next to a currency
 code or sign, or form part of a digit run longer than any phone number. A
-phone, postal or address word on the same line, the line above or below, or in
-the structured field name keeps the value protected. Loopback IP addresses
+phone, postal or address word in the value's text block (back to the previous
+blank line, at most six lines and 400 bytes up, and one line down) or in its
+structured context (path keys, sibling keys, short sibling values) keeps the
+value protected. Loopback IP addresses
 (`127.0.0.0/8`, `::1`) are no longer tokenized. Every skip writes a loser
 audit row with a `benign_*` or `*_loopback_range` reason, so an audit query
 can list them.
