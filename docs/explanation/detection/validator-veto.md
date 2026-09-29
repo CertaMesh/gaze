@@ -81,8 +81,8 @@ the byte-coverage safeguard retains prior arbitration.
 
 Some weak rules match a shape, not a meaning. `postal.us` matches any five
 digits, so the tail of `SKU-DEMO-73821` and the `22186` in `EUR 22186,12`
-both look like postcodes. A plain regex rule without a cue and without a
-checksum can declare the benign structures that veto it:
+both look like postcodes. An audited bundled rule can declare the benign
+structures that veto it:
 
 ```toml
 [recognizers.context]
@@ -103,23 +103,34 @@ re-protects every byte a protective candidate claimed, even inside a
 - **Only the declaring rule's candidate goes.** Any other candidate over the
   same bytes (a cued phone, an IBAN, a card) is untouched and still
   protects them.
-- **A cue always wins, on either side.** A word starting with a phone or
-  postal cue stem (`tel`, `phone`, `mobil`, `fax`, `call`, `contact`,
-  `kontakt`, `ruf`, `anruf`, `handy`, `cell`, `plz`, `zip`, `post`) on the
-  candidate's line within 40 bytes before *or after* it disables every
-  structure: `ORDER-90210 (ZIP)` stays protected. Words split at
-  non-letters and at camelCase, so JSON keys such as `postal_code` or
-  `zipCode` count. Matching by stem errs toward protection.
+- **A cue always wins, on either side and on the label line.** A word
+  starting with a phone, postal or address cue stem (`tel`, `phone`,
+  `mobil`, `fax`, `call`, `contact`, `kontakt`, `ruf`, `anruf`, `handy`,
+  `cell`, `plz`, `zip`, `post`, `addr`, `adress`, `anschrift`, `street`,
+  `strasse`, `city`, `stadt`, `ort`, `wohn`, `billing`, `shipping`,
+  `delivery`, `liefer`) within 40 bytes before *or after* the candidate on
+  its line, or on the line directly above or below it, disables every
+  structure: `ORDER-90210 (ZIP)` and `ZIP:` over `ORDER-90210` stay
+  protected. Words split at non-letters and at camelCase, so JSON keys such
+  as `postal_code`, `zipCode` or `shippingAddress` count. Matching by stem
+  errs toward protection.
 - **A cue in the field name wins.** A structured value is checked against
-  its field name the same way, so `{"postal_code": "ORDER-90210"}` stays
-  protected while `{"orderRef": "ORDER-90210"}` does not.
-- **Only an uncued, single-branch regex may opt in.** The rulepack loader
-  refuses the declaration on a non-regex matcher or a collision member with
-  a `mandatory_anchor`; `RegexDetector::with_benign_lookalikes` refuses a
-  checksum validator (`ValidatorKind::is_checksum`) and a pattern emitting
-  more than one capture group, since one of those branches may be anchored
-  by a cue or a city (the reason `postal.at_ch`, whose branches are both
-  anchored, does not opt in).
+  its field name the same way, so `{"postal_code": "ORDER-90210"}` and
+  `{"billing_address": "ORDER-90210"}` stay protected while
+  `{"orderRef": "ORDER-90210"}` does not.
+- **Only audited bundled rules may opt in.** Eligibility is a checked
+  allowlist, `gaze_types::benign_lookalike::AUDITED_RECOGNIZERS`
+  (`postal.de`, `postal.us`, `phone.national.de`, `phone.national.us`): a
+  pattern cannot prove it is uncued, since a one-capture rule such as
+  `ORDER-(\d{5})\s+Beverly` is anchored by a city no stem list knows. The
+  rulepack loader refuses the declaration outside bundled packs and for any
+  other id (`RulepackError::IneligibleBenignLookalike`), and also on a
+  non-regex matcher or a `mandatory_anchor` member;
+  `RegexDetector::with_benign_lookalikes` refuses other ids, checksum
+  validators (`ValidatorKind::is_checksum`), recorded-failure rules and
+  multi-branch patterns; validator veto ignores the declaration on any
+  other recognizer, so a custom `Recognizer` impl cannot opt in either. A
+  custom pack forked from `core` must drop its `benign_lookalikes` lines.
 - **Every veto is audited.** Each vetoed candidate writes one loser row
   with its `Benign*` reason; a veto that cannot be placed on the source
   text fails the document (`Error::UnauditableVeto`) rather than dropping
@@ -127,7 +138,8 @@ re-protects every byte a protective candidate claimed, even inside a
 
 The bundled `postal.de` and `postal.us` declare `joined_identifier` and
 `currency_amount`; `phone.national.de` and `phone.national.us` declare
-`joined_identifier` and `digit_run_fragment`. A test pins this set.
+`joined_identifier` and `digit_run_fragment`. A test pins this set;
+extending it needs a leak-direction review.
 
 Separately, the bundled IP validators reject loopback addresses
 (`127.0.0.0/8`, `::1`, and IPv4-mapped loopback): a loopback address never

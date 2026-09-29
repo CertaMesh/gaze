@@ -1566,7 +1566,13 @@ pattern = "TEST_ONLY"
 base = 0.70
 priority = 1
 "#,
-            gaze_recognizers::embedded("core-extended").expect("core-extended rulepack")
+            // A custom pack may not declare benign lookalikes; a fork of core drops them.
+            gaze_recognizers::embedded("core-extended")
+                .expect("core-extended rulepack")
+                .lines()
+                .filter(|line| !line.starts_with("benign_lookalikes"))
+                .collect::<Vec<_>>()
+                .join("\n")
         );
         let rulepack = Rulepack::parse(&raw).expect("core-extended with synthetic recognizer");
 
