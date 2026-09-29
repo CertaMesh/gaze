@@ -545,7 +545,6 @@ fn a_spoofed_bundled_rule_gets_no_grant() {
 /// matches. Validator veto re-matches the audited pattern, so the span stays protected.
 #[test]
 fn a_borrowed_grant_vetoes_nothing_the_audited_pattern_does_not_emit() {
-    use gaze::Recognizer as _;
     use gaze_recognizers::{BenignLookalike, RegexDetector};
     let real = RegexDetector::with_rulepack_fields(
         r"\b\d{5}(-\d{4})?\b",
@@ -692,7 +691,6 @@ fn a_recorded_failure_rule_cannot_declare_benign_lookalikes() {
 /// match inside a benign structure.
 #[test]
 fn a_borrowed_grant_with_another_identity_vetoes_nothing() {
-    use gaze::Recognizer as _;
     use gaze_recognizers::{BenignLookalike, RegexDetector};
     let real = RegexDetector::with_rulepack_fields(
         r"\b\d{5}(-\d{4})?\b",
