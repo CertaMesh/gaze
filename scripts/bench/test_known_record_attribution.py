@@ -16,13 +16,13 @@ def document(text: str, spans: tuple[score.Span, ...] = (), *, decoy: bool = Fal
     )
 
 
-def trace(start: int, end: int, class_name: str = "name") -> dict:
+def trace(start: int, end: int, class_name: str = "name", slot: int = 0) -> dict:
     digest = hashlib.sha256(class_name.encode()).hexdigest()
     return {
         "raw_start": start, "raw_end": end, "class": class_name,
         "action": "tokenize", "provenance": {
             "stage": "primary_pipeline", "decision": "policy",
-            "source_ids": [f"context/record-v2-{digest}-0"],
+            "source_ids": [f"context/record-v2-{digest}-{slot}"],
         },
     }
 
@@ -128,3 +128,15 @@ def test_non_record_trace_cannot_claim_record_recovery() -> None:
     )
     row = recorder.result(leaked_fall=5, false_positive_rise=0)["rows"][0]
     assert row["record_class"] == "name_single"
+
+
+def test_source_slot_disambiguates_same_class_values() -> None:
+    doc = document("MAREN", (score.Span(0, 5, "GIVENNAME"),))
+    recorder = attribution.AttributionRecorder.create(frozenset(), frozenset({"GIVENNAME"}))
+    recorder.record_baseline(doc, response())
+    recorder.record_candidate(
+        doc, response(trace(0, 5, slot=1)),
+        [("Name", "Maren"), ("Name", "MAREN")], decoy=False,
+    )
+    row = recorder.result(leaked_fall=5, false_positive_rise=0)["rows"][0]
+    assert row["match_kind"] == "exact"

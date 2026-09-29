@@ -14,7 +14,7 @@ from typing import Iterable, Mapping
 
 import gaze_bench_score as score
 
-RECORD_SOURCE = re.compile(r"^(?:context/|dictionary:)?record-v2-([0-9a-f]{64})-\d+(?:\[#\d+\])?$")
+RECORD_SOURCE = re.compile(r"^(?:context/|dictionary:)?record-v2-([0-9a-f]{64})-(\d+)(?:\[#\d+\])?$")
 FIELDS = (
     "gold_recovered_bytes",
     "eligible_recovered_bytes",
@@ -57,41 +57,32 @@ def scored_view(document: score.Document, response: Mapping[str, object]) -> lis
 
 
 def match_group_and_kind(
-    text: str, class_name: str, values: list[tuple[str, str]], common_words: frozenset[str]
+    text: str, record_class: str, raw: str, common_words: frozenset[str]
 ) -> tuple[str, str]:
-    candidates = []
-    for record_class, raw in values:
-        if record_class != class_name:
-            continue
-        canonical = " ".join(raw.split())
-        collapsed = " ".join(text.split())
-        if collapsed.casefold() != canonical.casefold():
-            continue
-        if (
-            record_class == "Name"
-            and len(canonical.split()) == 1
-            and canonical.casefold() in common_words
-        ):
-            kind = "corroborated_single"
-        elif text == raw:
-            kind = "exact"
-        elif collapsed == canonical:
-            kind = "whitespace_flexible"
-        elif text.casefold() == canonical.casefold():
-            kind = "case_folded"
-        else:
-            kind = "whitespace_case_folded"
-        group = (
-            "name_single" if len(canonical.split()) == 1 else "name_multi"
-        ) if record_class == "Name" else (
-            "address_part" if record_class == "Location" else canonical_class(record_class)
-        )
-        candidates.append((group, kind))
-    if not candidates:
-        return canonical_class(class_name), "unmatched_term"
-    if len(set(candidates)) != 1:
-        return "unattributed", "ambiguous_term"
-    return candidates[0]
+    canonical = " ".join(raw.split())
+    collapsed = " ".join(text.split())
+    if collapsed.casefold() != canonical.casefold():
+        return canonical_class(record_class), "unmatched_term"
+    if (
+        record_class == "Name"
+        and len(canonical.split()) == 1
+        and canonical.casefold() in common_words
+    ):
+        kind = "corroborated_single"
+    elif text == raw:
+        kind = "exact"
+    elif collapsed == canonical:
+        kind = "whitespace_flexible"
+    elif text.casefold() == canonical.casefold():
+        kind = "case_folded"
+    else:
+        kind = "whitespace_case_folded"
+    group = (
+        "name_single" if len(canonical.split()) == 1 else "name_multi"
+    ) if record_class == "Name" else (
+        "address_part" if record_class == "Location" else canonical_class(record_class)
+    )
+    return group, kind
 
 
 def record_source_bucket(
@@ -102,21 +93,24 @@ def record_source_bucket(
     values: list[tuple[str, str]],
     common_words: frozenset[str],
 ) -> tuple[str, str]:
-    digests = {
-        hashlib.sha256(canonical_class(class_name).encode("utf-8")).hexdigest(): class_name
-        for class_name, _ in values
-    }
-    classes = {
-        digests[match.group(1)]
+    class_slots: dict[str, list[tuple[str, str]]] = {}
+    for class_name, raw in values:
+        digest = hashlib.sha256(canonical_class(class_name).encode("utf-8")).hexdigest()
+        class_slots.setdefault(digest, []).append((class_name, raw))
+    matched = {
+        (match.group(1), int(match.group(2)))
         for source in sources
         if isinstance(source, str)
-        if (match := RECORD_SOURCE.fullmatch(source)) and match.group(1) in digests
+        if (match := RECORD_SOURCE.fullmatch(source)) and match.group(1) in class_slots
     }
-    if len(classes) != 1:
+    if len(matched) != 1:
         return "unattributed", "no_unique_record_source"
-    class_name = next(iter(classes))
+    digest, slot = next(iter(matched))
+    if slot >= len(class_slots[digest]):
+        return "unattributed", "unknown_record_slot"
+    class_name, raw = class_slots[digest][slot]
     text = document.text.encode("utf-8")[start:end].decode("utf-8")
-    return match_group_and_kind(text, class_name, values, common_words)
+    return match_group_and_kind(text, class_name, raw, common_words)
 
 
 def candidate_spans(response: Mapping[str, object]) -> list[tuple[int, int, list[str]]]:
