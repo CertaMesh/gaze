@@ -28,7 +28,7 @@ use gaze::{
     RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
-use gaze_types::ValidatorFailReason;
+use gaze_types::{LabelledValueScanReason, ValidatorFailReason};
 use std::sync::{Arc, Mutex};
 
 fn empty_context() -> Context {
@@ -594,6 +594,12 @@ fn labelled_identifier_field_boundaries_reject_lookalikes() {
         "Tax number: EUR 1234.50",
         "ID card: $1234.50",
         "ID card: 2024/09/28",
+        "Order number: AB12 CD3456",
+        "Invoice: AB12 CD3456",
+        "SKU: AB12 CD3456",
+        "Tax number: see attached",
+        "Tax number: N/A",
+        "Tax number:",
     ] {
         assert_unchanged(input);
     }
@@ -707,7 +713,7 @@ fn labelled_identifiers_never_emit_a_grouped_prefix() {
 }
 
 #[test]
-fn labelled_identifiers_refuse_overlong_or_overgrouped_values() {
+fn labelled_identifiers_tokenize_overlong_or_overgrouped_values() {
     for input in [
         "Tax number: AB12 CD3456 XYZ123456 ABCDEFGHIJK123",
         "Driver's licence: AB12 CD3456 XYZ123456 ABC123 DEF456 GHI789",
@@ -715,10 +721,142 @@ fn labelled_identifiers_refuse_overlong_or_overgrouped_values() {
         r#"{"national_id":"AB12 CD3456 XYZ12345678901234567890"}"#,
         "| Tax number | AB12 CD3456 XYZ123456 ABCDEFGHIJK123 |",
         "Tax number: AB12 CD3456 XYZ123456/ABC123",
-        "ID card: AB12 CD3456 XYZ123456 abc",
-        "Tax number: AB12 CD3456. XYZ123456",
     ] {
-        assert_unchanged(input);
+        let cleaned = clean(input);
+        for group in ["AB12", "CD3456", "XYZ123456", "ABC123", "DEF456", "GHI789"] {
+            if input.contains(group) {
+                assert!(
+                    !cleaned.contains(group),
+                    "value group leaked: {input:?} -> {cleaned:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn labelled_value_limit_is_audited_without_refusing_the_value() {
+    let input = "Tax number: AB12 CD3456 XYZ123456 ABC123 DEF456";
+    let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], input);
+    assert!(!cleaned.contains("DEF456"), "{cleaned:?}");
+    assert!(
+        entries.iter().any(|entry| {
+            !entry.conflict_loser
+                && entry.labelled_value_scan_reason == Some(LabelledValueScanReason::LimitExceeded)
+        }),
+        "missing typed limit reason: {entries:?}"
+    );
+    let (_, bounded_entries) = clean_with_entries(&[LocaleTag::Global], "Tax number: AB12 CD3456");
+    assert!(bounded_entries
+        .iter()
+        .all(|entry| entry.labelled_value_scan_reason.is_none()));
+}
+
+#[test]
+fn cue_anchored_identifier_scans_the_whole_grouped_run() {
+    let input = "Tax ID: 123 456 789 012 345";
+    let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], input);
+    assert!(!cleaned.contains("345"), "{cleaned:?}");
+    assert!(
+        entries.iter().any(|entry| {
+            entry
+                .recognizer_id
+                .as_deref()
+                .is_some_and(|id| id.contains("tax_number.cue_anchored"))
+        }),
+        "cue rule did not contribute: {entries:?}"
+    );
+}
+
+#[test]
+fn labelled_identifier_boundaries_keep_value_bytes_protected() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, groups) in [
+        ("Tax number: AB12 CD3456 (Germany)", &["AB12", "CD3456"][..]),
+        ("Tax number: AB12 CD3456 - verified", &["AB12", "CD3456"]),
+        (
+            "Tax number: AB12 CD3456 for the client",
+            &["AB12", "CD3456"],
+        ),
+        ("Tax number: AB12 CD3456 Über", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456)", &["AB12", "CD3456"]),
+        ("(Tax number: AB12 CD3456)", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456</td>", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456<br>", &["AB12", "CD3456"]),
+        ("Tax number\tAB12 CD3456\tName", &["AB12", "CD3456"]),
+        (
+            "Tax number: AB12 CD3456. Then we filed",
+            &["AB12", "CD3456"],
+        ),
+        (
+            "My tax number is AB12 CD3456 and I live in Berlin.",
+            &["AB12", "CD3456"],
+        ),
+        (
+            "Driver's licence: B123 456 789 issued in Berlin",
+            &["B123", "456", "789"],
+        ),
+        (
+            "ID card no. T22 000 129 (copy attached)",
+            &["T22", "000", "129"],
+        ),
+        (
+            "Tax number: AB12 CD3456; ID card: EF34 GH5678",
+            &["AB12", "CD3456", "EF34", "GH5678"],
+        ),
+        ("Tax number: AB12 CD3456\u{0085}", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\u{2028}", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\u{2029}", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\u{3000}", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\u{200B}", &["AB12", "CD3456"]),
+        (
+            "ID card: AB12 CD3456\u{200B}XYZ123456",
+            &["AB12", "CD3456", "XYZ123456"],
+        ),
+        ("Tax number: AB12 CD3456?", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456!", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456>", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456*", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456_", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\\", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456)", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456 ”", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456 »", &["AB12", "CD3456"]),
+        ("tax number: ab 12345 cd", &["ab", "12345", "cd"]),
+        (
+            "Tax number: AB12 CD3456. XYZ123456",
+            &["AB12", "CD3456", "XYZ123456"],
+        ),
+        (
+            "Tax ID: 123 456 789 012 345",
+            &["123", "456", "789", "012", "345"],
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        for group in groups {
+            assert!(
+                !cleaned.contains(group),
+                "value group leaked: {input:?} -> {cleaned:?}"
+            );
+        }
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&session, &cleaned)
+                .expect("restore"),
+            input
+        );
     }
 }
 

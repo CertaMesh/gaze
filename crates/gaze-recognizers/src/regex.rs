@@ -1,6 +1,6 @@
 use gaze_types::{
-    Candidate, ConflictTier, DetectContext, Detection, Detector, LocaleBasis, LocaleTag, PiiClass,
-    Recognizer, ValidatorKind, ValidatorOnFail,
+    Candidate, ConflictTier, DetectContext, Detection, Detector, LabelledValueScanReason,
+    LocaleBasis, LocaleTag, PiiClass, Recognizer, ValidatorKind, ValidatorOnFail,
 };
 use regex::Regex;
 
@@ -195,16 +195,16 @@ impl Recognizer for RegexDetector {
         ctx: &DetectContext<'_>,
     ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         Ok(self
-            .spans(input, ctx.source_spans)
+            .scanned_spans(input, ctx.source_spans)
             .into_iter()
-            .filter_map(|span| {
-                let matched = &input[span.clone()];
-                (!self.is_excluded(matched)).then_some((span, matched))
+            .filter_map(|scan| {
+                let matched = &input[scan.span.clone()];
+                (!self.is_excluded(matched)).then_some((scan, matched))
             })
-            .map(|(span, matched)| {
+            .map(|(scan, matched)| {
                 let canonical_form = self.canonical_form(matched);
-                Candidate::new(
-                    span,
+                let mut candidate = Candidate::new(
+                    scan.span,
                     self.class.clone(),
                     self.source.clone(),
                     self.base_score,
@@ -214,7 +214,9 @@ impl Recognizer for RegexDetector {
                     self.source.clone(),
                     ConflictTier::None,
                     Vec::new(),
-                )
+                );
+                candidate.labelled_value_scan_reason = scan.reason;
+                candidate
             })
             .collect())
     }
@@ -287,8 +289,8 @@ impl RegexDetector {
         Ok(self)
     }
 
-    /// Require the captured value to reach a field boundary. This closes the gap where a
-    /// bounded identifier regex can otherwise emit only its first space-separated groups.
+    /// Extend the captured value through adjacent identifier-like groups. This closes the gap
+    /// where a bounded regex can otherwise emit only a prefix of a labelled value.
     pub fn with_complete_labelled_value(mut self, enabled: bool) -> Self {
         self.complete_labelled_value = enabled;
         self
@@ -302,21 +304,33 @@ impl RegexDetector {
         input: &str,
         source_spans: Option<&[(usize, usize)]>,
     ) -> Vec<std::ops::Range<usize>> {
+        self.scanned_spans(input, source_spans)
+            .into_iter()
+            .map(|scan| scan.span)
+            .collect()
+    }
+
+    fn scanned_spans(
+        &self,
+        input: &str,
+        source_spans: Option<&[(usize, usize)]>,
+    ) -> Vec<LabelledValueScan> {
         let mut search_at = Some(0);
         let matches = std::iter::from_fn(|| {
             while let Some(at) = search_at {
                 let caps = self.regex.captures_at(input, at)?;
                 let full = caps.get(0)?;
-                let span = self.span_from_captures(&caps).and_then(|span| {
+                let captured = self.span_from_captures(&caps);
+                let span = captured.clone().map(|span| {
                     if self.complete_labelled_value {
-                        complete_labelled_value_span(input, span)
+                        scan_labelled_value(input, span)
                     } else {
-                        Some(span)
+                        LabelledValueScan { span, reason: None }
                     }
                 });
-                // A capture can end before a consuming suffix guard. Resume at the captured
-                // value so that separator can also be the next match's prefix guard.
-                let next = span.as_ref().map_or(full.end(), |span| span.end);
+                // Resume at the capture end. The regex may have consumed the separator needed
+                // by the next match, and the scanner may have passed another labelled field.
+                let next = captured.map_or(full.end(), |span| span.end);
                 search_at = if next > full.start() {
                     Some(next)
                 } else {
@@ -325,11 +339,11 @@ impl RegexDetector {
                         .next()
                         .map(|ch| full.start() + ch.len_utf8())
                 };
-                if let Some(span) = span.filter(|span| {
-                    self.boundary_accepts(input, span)
+                if let Some(span) = span.filter(|scan| {
+                    self.boundary_accepts(input, &scan.span)
                         && !self.reject_match_regex.as_ref().is_some_and(|guard| {
                             let checked = if self.complete_labelled_value {
-                                &input[full.start()..span.end]
+                                &input[full.start()..scan.span.end]
                             } else {
                                 full.as_str()
                             };
@@ -346,11 +360,14 @@ impl RegexDetector {
         }
         matches
             .flat_map(|run| {
-                let scan = gaze_types::payment_card::scan_card_run(input, run, source_spans);
+                let scan = gaze_types::payment_card::scan_card_run(input, run.span, source_spans);
                 let mut spans = scan.cards;
                 spans.extend(scan.rejected);
                 spans.sort_by_key(|span| span.start);
                 spans
+                    .into_iter()
+                    .map(|span| LabelledValueScan { span, reason: None })
+                    .collect::<Vec<_>>()
             })
             .collect()
     }
@@ -416,87 +433,92 @@ impl RegexDetector {
     }
 }
 
-/// Extend a bounded regex capture to the end of its labelled field, or refuse it. The regex
-/// engine has no lookahead, so a space after a short capture can otherwise hide another group.
-fn complete_labelled_value_span(
-    input: &str,
-    mut span: std::ops::Range<usize>,
-) -> Option<std::ops::Range<usize>> {
-    loop {
-        if !bounded_labelled_value(&input[span.clone()]) {
-            return None;
-        }
-        let rest = &input[span.end..];
-        if rest.is_empty()
-            || rest.starts_with(['\r', '\n', '"', '\'', '}', ']', '|', ',', ';', ':', '='])
-        {
-            return Some(span);
-        }
-        if let Some(after_dot) = rest.strip_prefix('.') {
-            return terminal_labelled_period(after_dot).then_some(span);
-        }
-
-        let space_len = rest.len()
-            - rest
-                .trim_start_matches([' ', '\t', '\u{00A0}', '\u{202F}'])
-                .len();
-        if space_len == 0 {
-            return None;
-        }
-        let next = &rest[space_len..];
-        if next.is_empty()
-            || next.starts_with(['\r', '\n', '"', '\'', '}', ']', '|', ',', ';', ':', '='])
-        {
-            return Some(span);
-        }
-        if let Some(after_dot) = next.strip_prefix('.') {
-            return terminal_labelled_period(after_dot).then_some(span);
-        }
-        let group_len = next.bytes().take_while(u8::is_ascii_alphanumeric).count();
-        let group = &next[..group_len];
-        if matches!(
-            group,
-            "is" | "was" | "were" | "ist" | "est" | "sind" | "verified" | "filed"
-        ) {
-            return Some(span);
-        }
-        if group.is_empty()
-            || group_len > 12
-            || !(group.bytes().any(|byte| byte.is_ascii_digit())
-                || group.bytes().all(|byte| byte.is_ascii_uppercase()))
-        {
-            return None;
-        }
-        let new_end = span.end + space_len + group_len;
-        span.end = new_end;
-    }
+/// A regex capture proves the first group. Scan the rest as a value run, stopping at the first
+/// prose token or field delimiter. Limits are audit signals, never a reason to leave PII raw.
+struct LabelledValueScan {
+    span: std::ops::Range<usize>,
+    reason: Option<LabelledValueScanReason>,
 }
 
-fn bounded_labelled_value(value: &str) -> bool {
-    value.len() <= 40
-        && value
-            .split([' ', '.', '/', '-'])
-            .filter(|part| !part.is_empty())
-            .count()
-            <= 4
-}
-
-fn terminal_labelled_period(after_dot: &str) -> bool {
-    if after_dot.is_empty() || after_dot.starts_with(['\r', '\n', '"', '\'', '}', ']', '|']) {
-        return true;
-    }
-    let tail = after_dot.trim_start_matches([' ', '\t', '\u{00A0}', '\u{202F}']);
-    if tail.len() == after_dot.len() {
-        return false;
-    }
-    if tail.is_empty() || tail.starts_with(['\r', '\n']) {
-        return true;
-    }
-    let word = tail
-        .split(|ch: char| !ch.is_alphanumeric())
+fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
+    let mut end = capture.start;
+    let initial_lowercase = input[capture.start..]
+        .chars()
         .next()
-        .unwrap_or_default();
-    !word.is_empty() && word.chars().all(char::is_lowercase)
+        .is_some_and(|ch| ch.is_ascii_lowercase());
+    loop {
+        let group_start = end;
+        end += input[end..]
+            .bytes()
+            .take_while(u8::is_ascii_alphanumeric)
+            .count();
+        if end == group_start {
+            break;
+        }
+        let separator_start = end;
+        let rest = &input[end..];
+        // Zero-width space can be inserted inside a copied identifier without a visible break.
+        let separator_len = rest
+            .char_indices()
+            .take_while(|(_, ch)| {
+                matches!(
+                    ch,
+                    ' ' | '\t' | '\u{00A0}' | '\u{202F}' | '\u{200B}' | '.' | '/' | '-'
+                )
+            })
+            .last()
+            .map_or(0, |(at, ch)| at + ch.len_utf8());
+        if separator_len == 0 {
+            break;
+        }
+        let next_start = end + separator_len;
+        let next_len = input[next_start..]
+            .bytes()
+            .take_while(u8::is_ascii_alphanumeric)
+            .count();
+        if next_len == 0 {
+            break;
+        }
+        let next = &input[next_start..next_start + next_len];
+        let value_like = next.bytes().any(|byte| byte.is_ascii_digit())
+            || next.bytes().all(|byte| byte.is_ascii_uppercase())
+            || (initial_lowercase
+                && next_len <= 2
+                && next.bytes().all(|byte| byte.is_ascii_lowercase()));
+        if !value_like {
+            break;
+        }
+        end = next_start;
+        debug_assert!(end > separator_start);
+    }
+    // The regex capture itself is always safe to emit, even if a future pattern broadens it.
+    end = end.max(capture.end);
+    // Strict restore treats an angle bracket immediately beside a token as a malformed
+    // nested token. Keep adjacent wrapper brackets in the same reversible value span.
+    let start = if capture.start > 0 && input.as_bytes()[capture.start - 1] == b'<' {
+        capture.start - 1
+    } else {
+        capture.start
+    };
+    end += input[end..]
+        .bytes()
+        .take_while(|byte| *byte == b'>')
+        .count();
+    let span = start..end;
+    LabelledValueScan {
+        reason: labelled_value_over_limit(&input[span.clone()])
+            .then_some(LabelledValueScanReason::LimitExceeded),
+        span,
+    }
+}
+
+fn labelled_value_over_limit(value: &str) -> bool {
+    value.len() > 40
+        || value
+            .split(|ch: char| !ch.is_ascii_alphanumeric())
+            .filter(|group| !group.is_empty())
+            .count()
+            > 4
 }
 
 fn iban_canonicalize(input: &str) -> String {

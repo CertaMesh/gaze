@@ -639,6 +639,15 @@ pub enum ValidatorFailReason {
     UkNhsMod11Failed,
 }
 
+/// Why a labelled identifier value exceeded the usual precision bound while still being tokenized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum LabelledValueScanReason {
+    /// The complete value run exceeded four groups or forty bytes.
+    LimitExceeded,
+}
+
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -2715,6 +2724,8 @@ pub struct RedactionEntry {
     pub session_id: Option<String>,
     /// Optional validator failure reason for a vetoed candidate.
     pub validator_fail_reason: Option<ValidatorFailReason>,
+    /// A labelled value was emitted past its usual precision bound to avoid a raw suffix.
+    pub labelled_value_scan_reason: Option<LabelledValueScanReason>,
     /// Optional ambiguity metadata for a family-level fallback.
     pub ambiguity_record: Option<AmbiguityRecord>,
     /// Collision family that influenced this decision.
@@ -2902,6 +2913,7 @@ impl RedactionEntry {
             recognizer_id: None,
             recognizer_version_id: None,
             validator_fail_reason: None,
+            labelled_value_scan_reason: None,
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,
@@ -4280,6 +4292,8 @@ pub struct Candidate {
     /// Set when validator veto kept the candidate although its validator failed
     /// ([`ValidatorOnFail::Record`]); written on the winner's audit row.
     pub validator_fail_reason: Option<ValidatorFailReason>,
+    /// A labelled value was emitted past its usual precision bound to avoid a raw suffix.
+    pub labelled_value_scan_reason: Option<LabelledValueScanReason>,
 }
 
 impl Candidate {
@@ -4313,6 +4327,7 @@ impl Candidate {
             merged_sources,
             evidence: EvidenceKind::Learned,
             validator_fail_reason: None,
+            labelled_value_scan_reason: None,
         }
     }
 
