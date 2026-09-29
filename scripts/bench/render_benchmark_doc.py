@@ -1521,12 +1521,19 @@ def chart_gaze_rows(history: Mapping[str, Any]) -> list[charts.GazeRow]:
             continue
         arm = view["arms"][shipped_default_arm(entry)]
         char = measured.get(entry["version"])
+        if char is None:
+            raise RenderError(
+                f"{entry['version']} has no character-level measurement in "
+                "release-char-level.json; run compare/release_char_level.py record "
+                "(only a third-party Gaze slot may read pending)"
+            )
         rows.append(
             charts.GazeRow(
                 entry["version"],
-                char["char_level"]["f2"] if char else None,
-                char["leaked_bytes"] if char else None,
+                char["char_level"]["f2"],
+                char["leaked_bytes"],
                 arm["false_positive_utf8_bytes"],
+                char["total_bytes"],
                 arm["failed_closed_documents"],
             )
         )
@@ -1631,19 +1638,17 @@ def render_readme_chart(
     own = panel_set[0]
     gaze = [b for b in own.bars if b.gaze]
     newest = gaze[-1]
-    if newest.f2 is None:
-        raise RenderError(f"{newest.name} has no character-level measurement; run release_char_level.py record")
     caption = (
         f"{newest.name} scores character-level F2 {newest.f2:.3f} on "
-        f"{own.dataset.split(' · ')[0]} (scored labels v3), leaking {newest.leaked:,} PII bytes; "
-        f"{charts.METRIC_DEFINITION} "
+        f"{own.dataset.split(' · ')[0]} (scored labels v3), leaking {newest.leaked:,} PII bytes. "
         "Each panel names its dataset and split; competitors run the configurations "
         "declared in [`chart-configs.json`](scripts/bench/compare/chart-configs.json). "
         "Numbers, sources and the model-card tables: "
         "[benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
         + _pending_note(panel_set)
     )
-    return "\n\n".join([_picture("", _PANEL_ALT), caption])
+    definition = charts.METRIC_DEFINITION
+    return "\n\n".join([_picture("", _PANEL_ALT), caption, definition])
 
 
 def _readme_contract_chart(history: Mapping[str, Any]) -> str:
@@ -1679,7 +1684,8 @@ def _source_lines(
         source = ident.get("repository") or ident.get("piibench", {}).get("repository", key)
         lines.append(
             f"- **{title}:** {source} ({bench['splits'][split]['documents']:,} documents, "
-            f"{split} split), scored on the labels every tool can emit; rows from "
+            f"{split} split), every gold label scored (a label a tool cannot emit counts as "
+            "missed); rows from "
             "[`their-benchmarks.json`](their-benchmarks.json)."
         )
     lines.append(
@@ -1690,8 +1696,9 @@ def _source_lines(
     )
     lines.append(f"- **Metric:** {charts.METRIC_DEFINITION}")
     lines.append(
-        "- **False positives:** bytes redacted that are not PII, per 1,000 corpus bytes; the own "
-        "corpus counts a protected repeat of a labelled value as protected (contract v3), the "
+        "- **False positives:** bytes redacted that are not PII, per 1,000 bytes of the scored "
+        "documents, from the same all-labels view as the F2 and leaked bytes; the own corpus "
+        "counts a protected repeat of a labelled value as protected (contract v3), the "
         "third-party sets do not."
     )
     lines.append(

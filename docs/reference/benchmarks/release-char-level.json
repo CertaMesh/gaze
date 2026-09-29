@@ -16,10 +16,12 @@
         "unit": "unicode_code_point"
       },
       "contract": "v3",
+      "crates_tree": "882275b9bf4e99ca6b76ef0ab3e0973efb962152",
       "documents": 2910,
       "false_positive_bytes": 168259,
       "leaked_bytes": 22144,
-      "record_sha256": "8c40b8e293727f614fbcd8f2b5478bb199f94c298b5cafa9e83545bff6906305"
+      "record_sha256": "8c40b8e293727f614fbcd8f2b5478bb199f94c298b5cafa9e83545bff6906305",
+      "total_bytes": 952347
     },
     "v0.15.0": {
       "arm": "policy-file",
@@ -35,10 +37,12 @@
         "unit": "unicode_code_point"
       },
       "contract": "v3",
+      "crates_tree": "786f1494a007156b33c83b220b31a14c0966d712",
       "documents": 2910,
       "false_positive_bytes": 30073,
       "leaked_bytes": 13319,
-      "record_sha256": "561d618d2d964217d7d17f24e829abd55e85f73c4bd2d1e51869a0fcf0f1a105"
+      "record_sha256": "561d618d2d964217d7d17f24e829abd55e85f73c4bd2d1e51869a0fcf0f1a105",
+      "total_bytes": 952364
     },
     "v0.15.1": {
       "arm": "policy-file",
@@ -54,10 +58,12 @@
         "unit": "unicode_code_point"
       },
       "contract": "v3",
+      "crates_tree": "70679f36625c2de7e3ee0f0f3ac6db26163e29fe",
       "documents": 2910,
       "false_positive_bytes": 30073,
       "leaked_bytes": 13319,
-      "record_sha256": "c2922a2c6cede4e4ad7ab261e3212234122d07f29506734cb62ed523699e5ca3"
+      "record_sha256": "c2922a2c6cede4e4ad7ab261e3212234122d07f29506734cb62ed523699e5ca3",
+      "total_bytes": 952364
     }
   },
   "schema_version": 1

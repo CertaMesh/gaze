@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -56,6 +57,15 @@ def observation_of(entry: dict) -> dict | None:
         (r["observation_record"] for r in entry.get("contract_results", ()) if r.get("observation_record")),
         None,
     )
+
+
+def _git(*args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=REPO, text=True, stderr=subprocess.PIPE).strip()
+
+
+def crates_tree(ref: str) -> str:
+    """The `crates/` tree of a commit or tag. Raises when git cannot resolve it."""
+    return _git("rev-parse", f"{ref}:crates")
 
 
 def _release_records(history: dict) -> list[dict]:
@@ -100,8 +110,10 @@ def measure_release(entry: dict, layer_c: list[score.Document], mapping: dict,
         "documents": seen,
         "leaked_bytes": result["leaked_bytes"],
         "false_positive_bytes": result["false_positive_bytes"],
+        "total_bytes": result["total_bytes"],
         "char_level": result["char_level"],
         "record_sha256": observation["sha256"],
+        "crates_tree": crates_tree(entry["version"]),
     }
 
 
@@ -109,12 +121,18 @@ def build(dataset: Path) -> dict:
     import compare
 
     history = history_doc.load_history(history_doc.DEFAULT_HISTORY)
-    layers, _ = compare.load_corpus(dataset, None)
+    layers, identity = compare.load_corpus(dataset, None)
     mapping = compare.load_mapping()["gaze"]
     typed = compare.typed_mapping_for_contract(mapping, CONTRACT)
     releases = {}
     for entry in _release_records(history):
         require_tag(entry["version"], "release char-level")
+        components = entry["dataset"]["integrity"]["component_sha256"]
+        if (
+            identity["main_dataset"]["sha256"] != components["dataiku"]
+            or identity["negative_corpus_sha256"] != components["negative_corpus"]
+        ):
+            raise ValueError(f"{entry['version']}: the loaded corpus is not the one it was measured on")
         releases[entry["version"]] = measure_release(entry, layers["C"], mapping, typed)
     return {
         "schema_version": SCHEMA_VERSION,
@@ -128,8 +146,31 @@ def build(dataset: Path) -> dict:
     }
 
 
-def check(data: dict, history: dict) -> None:
-    """Offline consistency: hashes, byte counts and tags. Needs no corpus."""
+def _close(left: float, right: float) -> bool:
+    return abs(left - right) <= 1e-9
+
+
+def check_char_level(version: str, row: dict) -> None:
+    """The stored P/R/F2 must follow from its own counts, and stay inside the byte counts."""
+    char = row["char_level"]
+    tp, fp, fn = char["tp"], char["fp"], char["fn"]
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    denominator = 4 * precision + recall
+    f2 = 5 * precision * recall / denominator if denominator else 0.0
+    for name, expected in (("precision", precision), ("recall", recall), ("f2", f2)):
+        if not _close(char[name], expected):
+            raise ValueError(f"{version}: stored {name} {char[name]} != {expected} from its tp/fp/fn")
+    if fn > row["leaked_bytes"]:
+        raise ValueError(f"{version}: {fn} missed characters exceed {row['leaked_bytes']} leaked bytes")
+    if fp > row["false_positive_bytes"]:
+        raise ValueError(f"{version}: {fp} false-positive characters exceed "
+                         f"{row['false_positive_bytes']} false-positive bytes")
+
+
+def check(data: dict, history: dict, bench_dir: Path = BENCH_DIR) -> None:
+    """Offline consistency. Needs no corpus, but does read the committed records and
+    resolve the release tag in git (CI checks out full history for this)."""
     if data["metrics_sha256"] != _sha256(METRICS):
         raise ValueError("release-char-level.json was measured with another comparison_metrics.py; rerun `record`")
     for version, row in data["releases"].items():
@@ -137,8 +178,11 @@ def check(data: dict, history: dict) -> None:
         entry = next((e for e in history["releases"] if e["version"] == version), None)
         if entry is None:
             raise ValueError(f"{version} is not a release row in the history")
-        if row["record_sha256"] != observation_of(entry)["sha256"]:
+        observation = observation_of(entry)
+        if row["record_sha256"] != observation["sha256"]:
             raise ValueError(f"{version}: record hash differs from the release history")
+        if _sha256(bench_dir / observation["file"]) != observation["sha256"]:
+            raise ValueError(f"{version}: the committed record file does not match its recorded hash")
         view = history_doc.contract_view(entry, history_doc.HEADLINE_CONTRACT)
         arm = view["arms"][history_doc.shipped_default_arm(entry)]
         if row["leaked_bytes"] != arm["surviving_pii_utf8_bytes"]:
@@ -154,6 +198,14 @@ def check(data: dict, history: dict) -> None:
                     f"{version}: false-positive bytes {row['false_positive_bytes']} differ from "
                     f"the history's {expected}"
                 )
+        check_char_level(version, row)
+        # The tag and the history's measured commit must hold the same detection code.
+        tag_tree, commit_tree = crates_tree(version), crates_tree(entry["commit"])
+        if not (row["crates_tree"] == tag_tree == commit_tree):
+            raise ValueError(
+                f"{version}: crates tree of the tag ({tag_tree[:12]}), the history commit "
+                f"({commit_tree[:12]}) and the stored row ({row['crates_tree'][:12]}) differ"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:

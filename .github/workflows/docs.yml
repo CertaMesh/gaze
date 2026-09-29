@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # release_char_level.py check resolves release tags and their commits' crates trees.
+          fetch-depth: 0
 
       # Stdlib-only, no external corpus and no model: fails if the benchmark document
       # drifts from the release scorecards it reports.

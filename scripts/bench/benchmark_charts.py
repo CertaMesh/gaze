@@ -41,7 +41,7 @@ SHORT_NAMES = {
 METRIC = "Character-level F2 (β=2, label-agnostic, micro)"
 #: One sentence, shown wherever the headline number is (README and benchmark page).
 METRIC_DEFINITION = (
-    "Character-level F2 counts Unicode code points (not grapheme clusters) inside the "
+    "F2 counts Unicode code points (not grapheme clusters) inside the "
     "merged byte spans of each document, ignores labels, pools every document (micro), "
     "weights recall four times precision, scores 0 when precision and recall are both 0 "
     "(0/0 = 0), and counts all of a skipped document's gold characters as missed."
@@ -57,9 +57,10 @@ class GazeRow:
     """One released Gaze default, reduced to the chart numbers."""
 
     version: str
-    f2: float | None  # None until the release has a character-level measurement
-    leaked_bytes: int | None
+    f2: float  # every charted release has a recorded character-level measurement
+    leaked_bytes: int
     fp_bytes: int  # gold-gap-adjusted false-positive bytes on the own corpus
+    total_bytes: int  # bytes of the documents scored (same block as f2 and leaked_bytes)
     refused: int = 0  # documents Gaze failed closed on instead of cleaning
 
     def __post_init__(self) -> None:
@@ -71,6 +72,10 @@ class GazeRow:
     @property
     def name(self) -> str:
         return "Gaze " + self.version[1:].rsplit(".", 1)[0]
+
+    @property
+    def fp_per_1k(self) -> float:
+        return 1000.0 * self.fp_bytes / self.total_bytes
 
 
 @dataclass(frozen=True)
@@ -94,6 +99,34 @@ class Panel:
     documents: int = 0
 
 
+@dataclass(frozen=True)
+class View:
+    """Every per-panel number of one tool, read from ONE metrics block.
+
+    A block's `total_bytes` counts the bytes its own view scores (the
+    common-intersection view drops other labels' bytes), so a rate must divide
+    that block's false positives by that block's total, never another view's.
+    """
+
+    f2: float
+    leaked: int
+    fp: int
+    total_bytes: int
+
+    @classmethod
+    def of(cls, block: Mapping[str, Any], fp: int | None = None) -> "View":
+        """`fp` overrides the block's false positives with a same-view adjusted count
+        (the v3 gold-gap credit lives on the layer cell, not in the block)."""
+        return cls(
+            block["char_level"]["f2"], block["leaked_bytes"],
+            block["false_positive_bytes"] if fp is None else fp, block["total_bytes"],
+        )
+
+    @property
+    def fp_per_1k(self) -> float:
+        return 1000.0 * self.fp / self.total_bytes
+
+
 def own_panel(
     gaze: Sequence[GazeRow], comparison: Mapping[str, Any],
     declared: Mapping[str, str], corpus_name: str,
@@ -101,16 +134,8 @@ def own_panel(
     layer = comparison["corpus"]["layers"]["C"]["documents"]
     splits = " + ".join(comparison["heldout_split"]["layers"]["C"])
     skipped = 0
-    totals = {
-        tool["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["full"]["total_bytes"]
-        for tool in comparison["tools"].values()
-        if "v3" in tool["contracts"]
-    }
-    if len(totals) != 1:
-        raise ChartError("layer C corpus bytes differ between tools")
-    corpus_bytes = totals.pop()
     bars = [
-        Bar(row.name, row.f2, row.leaked_bytes, 1000.0 * row.fp_bytes / corpus_bytes, gaze=True)
+        Bar(row.name, row.f2, row.leaked_bytes, row.fp_per_1k, gaze=True)
         for row in gaze
     ]
     for key, name in declared.items():
@@ -118,11 +143,8 @@ def own_panel(
         fp = cell["false_positive_bytes_after_gold_gap"]
         fp = cell["false_positive_bytes"] if fp is None else fp
         skipped += cell["skipped_documents"]
-        full = cell["metrics"]["product_coverage"]["full"]
-        bars.append(
-            Bar(SHORT_NAMES[key], full["char_level"]["f2"], cell["leaked_bytes"],
-                1000.0 * fp / corpus_bytes)
-        )
+        view = View.of(cell["metrics"]["product_coverage"]["full"], fp=fp)
+        bars.append(Bar(SHORT_NAMES[key], view.f2, view.leaked, view.fp_per_1k))
     return Panel(
         "Own corpus", f"{corpus_name} · {layer:,} docs, {splits}",
         "Scored labels v3: the labels Gaze commits to detect", tuple(bars),
@@ -145,14 +167,13 @@ def third_party_panel(
         if tool.startswith("gaze-v") and not TAG.fullmatch(tool[len("gaze-"):]):
             raise ChartError(f"row {tool!r} is not a gaze-vX.Y.Z release tag row")
     label = "Gaze " + latest_tag[1:].rsplit(".", 1)[0]
-    total = next(iter(bench["rows"].values()))["common_intersection"]["total_bytes"]
     tagged = bench["rows"].get(f"gaze-{latest_tag}")
     if tagged is not None:
-        bars = [_third_party_bar(label, tagged, total, True)]
+        bars = [_third_party_bar(label, tagged, True)]
     else:
         bars = [Bar(label, None, None, None, gaze=True)]
     for key, name in declared.items():
-        bars.append(_third_party_bar(SHORT_NAMES[key], bench["rows"][name], total, False))
+        bars.append(_third_party_bar(SHORT_NAMES[key], bench["rows"][name], False))
     split = next(iter(bench["splits"]))
     docs = bench["splits"][split]["documents"]
     return Panel(
@@ -162,12 +183,9 @@ def third_party_panel(
     )
 
 
-def _third_party_bar(name: str, row: Mapping[str, Any], total_bytes: int, gaze: bool) -> Bar:
-    block = row["product_coverage"]
-    return Bar(
-        name, block["char_level"]["f2"], block["leaked_bytes"],
-        1000.0 * block["false_positive_bytes"] / total_bytes, gaze=gaze,
-    )
+def _third_party_bar(name: str, row: Mapping[str, Any], gaze: bool) -> Bar:
+    view = View.of(row["product_coverage"])
+    return Bar(name, view.f2, view.leaked, view.fp_per_1k, gaze=gaze)
 
 
 def panels(

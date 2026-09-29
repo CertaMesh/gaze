@@ -138,32 +138,32 @@
 <line x1="22.0" x2="420.9" y1="570.0" y2="570.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="22.0" x2="420.9" y1="482.0" y2="482.0" stroke="#3d444d" stroke-width="1" stroke-dasharray="3 4"/>
 <rect x="31.5" y="559.3" width="30.9" height="98.7" rx="3" fill="#4493f8"/>
-<text x="46.9" y="553.3" font-size="12" font-weight="700" text-anchor="middle" fill="#4493f8">184.2</text>
+<text x="46.9" y="553.3" font-size="12" font-weight="700" text-anchor="middle" fill="#4493f8">164.9</text>
 <text x="46.9" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">Gaze</text>
 <text x="46.9" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">0.14</text>
 <rect x="81.3" y="646.4" width="30.9" height="11.6" rx="3" fill="#4493f8"/>
-<text x="96.8" y="640.4" font-size="12" font-weight="700" text-anchor="middle" fill="#4493f8">21.7</text>
+<text x="96.8" y="640.4" font-size="12" font-weight="700" text-anchor="middle" fill="#4493f8">19.4</text>
 <text x="96.8" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">Gaze</text>
 <text x="96.8" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">0.15</text>
 <rect x="131.2" y="632.3" width="30.9" height="25.7" rx="3" fill="#6e7681"/>
-<text x="146.7" y="626.3" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">48.0</text>
+<text x="146.7" y="626.3" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">42.9</text>
 <text x="146.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1" textLength="43.9" lengthAdjust="spacingAndGlyphs">Presidio</text>
 <rect x="181.1" y="654.3" width="30.9" height="3.7" rx="3" fill="#6e7681"/>
-<text x="196.5" y="648.3" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">6.8</text>
+<text x="196.5" y="648.3" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">6.1</text>
 <text x="196.5" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">DataFog</text>
 <text x="196.5" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">core</text>
 <rect x="230.9" y="505.0" width="30.9" height="153.0" rx="3" fill="#6e7681"/>
-<text x="246.4" y="499.0" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">285.4</text>
+<text x="246.4" y="499.0" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">255.6</text>
 <text x="246.4" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">DataFog</text>
 <text x="246.4" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">spaCy</text>
 <rect x="280.8" y="650.5" width="30.9" height="7.5" rx="3" fill="#6e7681"/>
-<text x="296.2" y="644.5" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">14.0</text>
+<text x="296.2" y="644.5" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">12.5</text>
 <text x="296.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1" textLength="43.9" lengthAdjust="spacingAndGlyphs">scrubadub</text>
 <rect x="330.7" y="625.7" width="30.9" height="32.3" rx="3" fill="#6e7681"/>
-<text x="346.1" y="619.7" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">60.3</text>
+<text x="346.1" y="619.7" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">54.0</text>
 <text x="346.1" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">GLiNER</text>
 <rect x="380.5" y="640.7" width="30.9" height="17.3" rx="3" fill="#6e7681"/>
-<text x="396.0" y="634.7" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">32.3</text>
+<text x="396.0" y="634.7" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">28.9</text>
 <text x="396.0" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">OPF</text>
 <rect x="442.9" y="374" width="366.5" height="350" rx="10" fill="#151b23"/>
 <text x="458.9" y="402" font-size="16" font-weight="700" fill="#f0f6fc">Presidio Research</text>
@@ -179,24 +179,24 @@
 <text x="477.7" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">Gaze</text>
 <text x="477.7" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">0.15</text>
 <rect x="511.8" y="556.4" width="30.7" height="101.6" rx="3" fill="#6e7681"/>
-<text x="527.2" y="550.4" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">30.0</text>
+<text x="527.2" y="550.4" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">25.4</text>
 <text x="527.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
 <rect x="561.3" y="658.0" width="30.7" height="1.0" rx="3" fill="#6e7681"/>
 <text x="576.7" y="652.0" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">0.0</text>
 <text x="576.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">DataFog</text>
 <text x="576.7" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">core</text>
 <rect x="610.8" y="532.2" width="30.7" height="125.8" rx="3" fill="#6e7681"/>
-<text x="626.2" y="526.2" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">37.2</text>
+<text x="626.2" y="526.2" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">31.5</text>
 <text x="626.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">DataFog</text>
 <text x="626.2" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">spaCy</text>
 <rect x="660.3" y="599.8" width="30.7" height="58.2" rx="3" fill="#6e7681"/>
-<text x="675.7" y="593.8" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">17.2</text>
+<text x="675.7" y="593.8" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">14.6</text>
 <text x="675.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1" textLength="43.5" lengthAdjust="spacingAndGlyphs">scrubadub</text>
 <rect x="709.8" y="505.0" width="30.7" height="153.0" rx="3" fill="#6e7681"/>
-<text x="725.2" y="499.0" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">45.2</text>
+<text x="725.2" y="499.0" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">38.3</text>
 <text x="725.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">GLiNER</text>
 <rect x="759.4" y="637.1" width="30.7" height="20.9" rx="3" fill="#6e7681"/>
-<text x="774.7" y="631.1" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">6.2</text>
+<text x="774.7" y="631.1" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">5.2</text>
 <text x="774.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">OPF</text>
 <rect x="821.5" y="374" width="366.5" height="350" rx="10" fill="#151b23"/>
 <text x="837.5" y="402" font-size="16" font-weight="700" fill="#f0f6fc">PIIBench-commercial</text>
@@ -212,23 +212,23 @@
 <text x="856.2" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">Gaze</text>
 <text x="856.2" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#f0f6fc">0.15</text>
 <rect x="890.4" y="596.1" width="30.7" height="61.9" rx="3" fill="#6e7681"/>
-<text x="905.7" y="590.1" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">41.2</text>
+<text x="905.7" y="590.1" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">38.0</text>
 <text x="905.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
 <rect x="939.9" y="654.8" width="30.7" height="3.2" rx="3" fill="#6e7681"/>
-<text x="955.2" y="648.8" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">2.1</text>
+<text x="955.2" y="648.8" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">1.9</text>
 <text x="955.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">DataFog</text>
 <text x="955.2" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">core</text>
 <rect x="989.4" y="505.0" width="30.7" height="153.0" rx="3" fill="#6e7681"/>
-<text x="1004.7" y="499.0" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">101.9</text>
+<text x="1004.7" y="499.0" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">94.1</text>
 <text x="1004.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">DataFog</text>
 <text x="1004.7" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">spaCy</text>
 <rect x="1038.9" y="542.1" width="30.7" height="115.9" rx="3" fill="#6e7681"/>
-<text x="1054.2" y="536.1" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">77.2</text>
+<text x="1054.2" y="536.1" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">71.2</text>
 <text x="1054.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1" textLength="43.5" lengthAdjust="spacingAndGlyphs">scrubadub</text>
 <rect x="1088.4" y="598.5" width="30.7" height="59.5" rx="3" fill="#6e7681"/>
-<text x="1103.7" y="592.5" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">39.6</text>
+<text x="1103.7" y="592.5" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">36.6</text>
 <text x="1103.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">GLiNER</text>
 <rect x="1137.9" y="649.5" width="30.7" height="8.5" rx="3" fill="#6e7681"/>
-<text x="1153.2" y="643.5" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">5.7</text>
+<text x="1153.2" y="643.5" font-size="12" font-weight="700" text-anchor="middle" fill="#f0f6fc">5.2</text>
 <text x="1153.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#9198a1">OPF</text>
 </svg>

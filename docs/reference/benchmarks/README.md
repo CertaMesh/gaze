@@ -423,20 +423,20 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 184.2 | 21.7 | 48.0 | **6.8** | 285.4 | 14.0 | 60.3 | 32.3 |
-| Presidio Research | not run | pending | 30.0 | **0.0** | 37.2 | 17.2 | 45.2 | 6.2 |
-| PIIBench-commercial | not run | pending | 41.2 | **2.1** | 101.9 | 77.2 | 39.6 | 5.7 |
+| Own corpus | 164.9 | 19.4 | 42.9 | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
+| Presidio Research | not run | pending | 25.4 | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
+| PIIBench-commercial | not run | pending | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
 
 A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
 
 Gaze 0.15 on Presidio Research and PIIBench-commercial: measurement pending; no untagged build is shown.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
-- **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), scored on the labels every tool can emit; rows from [`their-benchmarks.json`](their-benchmarks.json).
-- **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), scored on the labels every tool can emit; rows from [`their-benchmarks.json`](their-benchmarks.json).
+- **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
+- **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
 - **Configurations:** competitors use the rows declared in [`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen before results were reviewed; full versions and settings are in [`competitors.md`](competitors.md).
-- **Metric:** Character-level F2 counts Unicode code points (not grapheme clusters) inside the merged byte spans of each document, ignores labels, pools every document (micro), weights recall four times precision, scores 0 when precision and recall are both 0 (0/0 = 0), and counts all of a skipped document's gold characters as missed.
-- **False positives:** bytes redacted that are not PII, per 1,000 corpus bytes; the own corpus counts a protected repeat of a labelled value as protected (contract v3), the third-party sets do not.
+- **Metric:** F2 counts Unicode code points (not grapheme clusters) inside the merged byte spans of each document, ignores labels, pools every document (micro), weights recall four times precision, scores 0 when precision and recall are both 0 (0/0 = 0), and counts all of a skipped document's gold characters as missed.
+- **False positives:** bytes redacted that are not PII, per 1,000 bytes of the scored documents, from the same all-labels view as the F2 and leaked bytes; the own corpus counts a protected repeat of a labelled value as protected (contract v3), the third-party sets do not.
 - **Vendors' own metrics:** Presidio Research: F2, binary PII vs O (presidio-evaluator); PIIBench-commercial: span F1, exact span + type (PIIBench seqeval). They appear in the third-party tables below, not in the panels.
 
 <!-- END GENERATED: panels -->
