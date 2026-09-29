@@ -1568,7 +1568,7 @@ impl Pipeline {
                 field_path,
             )
             .with_dictionaries(dictionaries);
-            let mut reported = net.check(scan.text(), context)?;
+            let mut reported = net.check_with_neutral(scan.text(), scan.neutral_text(), context)?;
             for suspect in &mut reported {
                 suspect.span = scan.to_clean_range(suspect.span.clone());
                 if let LeakKind::PartialBleed { uncovered } = &mut suspect.kind {
@@ -6162,6 +6162,92 @@ mod tests {
             .register_safety_net(safety_net)
             .build()
             .expect("pipeline")
+    }
+
+    struct NeutralOnlySafetyNet {
+        calls: Arc<AtomicUsize>,
+        neutral_calls: Arc<AtomicUsize>,
+    }
+
+    impl SafetyNet for NeutralOnlySafetyNet {
+        fn id(&self) -> &str {
+            "neutral-only.fixture"
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            _clean_text: &str,
+            _context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            Ok(Vec::new())
+        }
+
+        fn check_with_neutral(
+            &self,
+            stable_text: &str,
+            neutral_text: Option<&str>,
+            context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            let neutral = neutral_text.expect("the email token has a neutral view");
+            self.neutral_calls.fetch_add(1, Ordering::Relaxed);
+            assert_eq!(stable_text.len(), neutral.len());
+            assert!(neutral.contains("[PII]"));
+            let Some(start) = stable_text.find("Dr. Schmidt") else {
+                return Ok(Vec::new());
+            };
+            let span = start..start + "Dr. Schmidt".len();
+            let kind = context
+                .manifest
+                .diff_against(&span, &PiiClass::Name)
+                .expect("name is outside the email token");
+            Ok(vec![LeakSuspect::new(
+                span,
+                PiiClass::Name,
+                self.id(),
+                Some(1.0),
+                kind,
+                "NAME>=1;view=neutral",
+                None,
+            )])
+        }
+    }
+
+    #[test]
+    fn neutral_view_runs_on_initial_and_follow_up_safety_scans() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let neutral_calls = Arc::new(AtomicUsize::new(0));
+        let pipeline = traced_email_pipeline(NeutralOnlySafetyNet {
+            calls: Arc::clone(&calls),
+            neutral_calls: Arc::clone(&neutral_calls),
+        });
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let raw = "alice@example.invalid met Dr. Schmidt";
+        let (clean, manifest, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                raw,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .expect("neutral finding resolves");
+        let CleanDocument::Text(clean) = clean else {
+            panic!("text document expected");
+        };
+        assert_eq!(manifest.len(), 2);
+        assert_eq!(trace.len(), 2);
+        assert_eq!(trace[1].stage(), "safety_net");
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+        assert!(calls.load(Ordering::Relaxed) >= 2);
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            neutral_calls.load(Ordering::Relaxed)
+        );
     }
 
     #[test]

@@ -1448,6 +1448,17 @@ pub trait SafetyNet: Send + Sync {
         clean_text: &str,
         context: SafetyNetContext<'_>,
     ) -> Result<Vec<LeakSuspect>, SafetyNetError>;
+
+    /// Checks a second, byte-aligned view when the backend supports it.
+    /// Other safety nets keep their existing single-view behavior.
+    fn check_with_neutral(
+        &self,
+        stable_text: &str,
+        _neutral_text: Option<&str>,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        self.check(stable_text, context)
+    }
 }
 
 /// Context passed to a privacy safety net.

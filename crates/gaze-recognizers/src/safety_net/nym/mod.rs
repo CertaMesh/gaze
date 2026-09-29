@@ -4,7 +4,8 @@
 //! ONNX Runtime. It flags; the pipeline decides. Only allowlisted labels with an explicit
 //! threshold can produce a suspect ([`NymOperatingPoint`], op-B by default), every suspect is a
 //! whole word or run of words, and every suspect records the label and threshold that fired
-//! (`raw_label = "LICENSE_PLATE>=0.5"`) next to its score and the stable id `nym-small-int8`.
+//! (`raw_label = "LICENSE_PLATE>=0.5;view=stable"`) next to its score and the stable id
+//! `nym-small-int8`.
 //!
 //! The bundle is SHA-256 pinned ([`NYM_SMALL_INT8_BUNDLE_SHA256`]) and verified before the model
 //! loads. Input longer than one model window is scanned in overlapping windows; a piece no
@@ -17,7 +18,7 @@ pub use gaze_types::nym::{
     nym_label_to_pii_class, nym_label_to_safety_net_class, NymConfigError, NymLabel,
     NymOperatingPoint, NYM_SAFETY_NET_ID,
 };
-use gaze_types::{LeakSuspect, LocaleTag, SafetyNet, SafetyNetContext, SafetyNetError};
+use gaze_types::{LeakKind, LeakSuspect, LocaleTag, SafetyNet, SafetyNetContext, SafetyNetError};
 
 pub mod artifacts;
 pub(crate) mod decode;
@@ -116,6 +117,109 @@ impl SafetyNet for NymSafetyNet {
         }
         Ok(suspects)
     }
+
+    fn check_with_neutral(
+        &self,
+        stable_text: &str,
+        neutral_text: Option<&str>,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        let Some(neutral_text) = neutral_text else {
+            return Ok(union_view_suspects(
+                stable_text,
+                self.check(stable_text, context)?,
+                Vec::new(),
+            ));
+        };
+        if stable_text.len() != neutral_text.len()
+            || !stable_text
+                .char_indices()
+                .map(|(index, _)| index)
+                .eq(neutral_text.char_indices().map(|(index, _)| index))
+        {
+            return Err(SafetyNetError::InvalidOutput {
+                message: "nym neutral view changed byte offsets".to_string(),
+            });
+        }
+        let stable = self.check(stable_text, context)?;
+        let neutral = self.check(neutral_text, context)?;
+        Ok(union_view_suspects(stable_text, stable, neutral))
+    }
+}
+
+fn union_view_suspects(
+    stable_text: &str,
+    mut stable: Vec<LeakSuspect>,
+    neutral: Vec<LeakSuspect>,
+) -> Vec<LeakSuspect> {
+    for suspect in stable.iter_mut() {
+        suspect.raw_label.push_str(";view=stable");
+    }
+    for mut suspect in neutral {
+        if !plausible_neutral_finding(stable_text, &suspect) {
+            continue;
+        }
+        if let Some(existing) = stable
+            .iter_mut()
+            .find(|prior| prior.span == suspect.span && prior.class == suspect.class)
+        {
+            if existing.raw_label.ends_with(";view=stable") {
+                existing.raw_label.push_str("+neutral");
+            }
+        } else {
+            suspect.raw_label.push_str(";view=neutral");
+            stable.push(suspect);
+        }
+    }
+    stable
+}
+
+fn plausible_neutral_finding(text: &str, suspect: &LeakSuspect) -> bool {
+    let actionable_span = match &suspect.kind {
+        LeakKind::PartialBleed { uncovered } => uncovered,
+        _ => &suspect.span,
+    };
+    let Some(value) = text.get(actionable_span.clone()) else {
+        // An invalid span still reaches the pipeline's fail-closed validation.
+        return true;
+    };
+    match &suspect.class {
+        // A single character cannot be a complete date, even when it touches a token.
+        gaze_types::PiiClass::Custom(class) if class == "date" => value.chars().count() != 1,
+        // A room or other subunit number is not a building's street number.
+        gaze_types::PiiClass::Custom(class) if class == "building_number" => {
+            !preceding_subunit_cue(text, actionable_span.start)
+        }
+        _ => true,
+    }
+}
+
+fn preceding_subunit_cue(text: &str, start: usize) -> bool {
+    let Some(prefix) = text.get(..start) else {
+        return false;
+    };
+    let prefix = prefix.trim_end_matches(|ch: char| ch.is_whitespace() || "#:=,;\"'".contains(ch));
+    let key = prefix
+        .rsplit(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let cue = key
+        .strip_suffix("_number")
+        .or_else(|| key.strip_suffix("number"))
+        .or_else(|| key.strip_suffix("_no"))
+        .unwrap_or(&key);
+    [
+        "room",
+        "suite",
+        "unit",
+        "apartment",
+        "apt",
+        "office",
+        "floor",
+        "desk",
+    ]
+    .contains(&cue)
 }
 
 /// Hooks for tests that replay captured model output through the production decoder.
@@ -207,6 +311,137 @@ mod tests {
             None,
             None,
         )
+    }
+
+    #[test]
+    fn view_union_keeps_stable_score_and_audits_both_views() {
+        let make = |span, class: &str, score| {
+            LeakSuspect::new(
+                span,
+                PiiClass::custom(class).unwrap(),
+                NYM_SAFETY_NET_ID,
+                Some(score),
+                LeakKind::Uncovered,
+                "USERNAME>=0.5",
+                None,
+            )
+        };
+        let stable = vec![make(4..10, "username", 0.7)];
+        let neutral = vec![
+            make(4..10, "username", 0.9),
+            make(14..20, "username", 0.8),
+            make(14..20, "username", 0.8),
+        ];
+        let combined = union_view_suspects(&"x".repeat(24), stable, neutral);
+        assert_eq!(combined.len(), 2);
+        assert_eq!(combined[0].score, Some(0.7));
+        assert_eq!(combined[0].raw_label, "USERNAME>=0.5;view=stable+neutral");
+        assert_eq!(combined[1].raw_label, "USERNAME>=0.5;view=neutral");
+        let stable_only = union_view_suspects(
+            &"x".repeat(24),
+            vec![make(4..10, "username", 0.7)],
+            Vec::new(),
+        );
+        assert_eq!(stable_only[0].raw_label, "USERNAME>=0.5;view=stable");
+    }
+
+    #[test]
+    fn neutral_only_class_guards_keep_street_numbers_and_full_dates() {
+        let text = "Room 812 | Suite #22 | house_number: 12 | date: 2001-02-03 | date: 7";
+        let suspect = |value: &str, class: &str| {
+            let start = text.find(value).unwrap();
+            LeakSuspect::new(
+                start..start + value.len(),
+                PiiClass::custom(class).unwrap(),
+                NYM_SAFETY_NET_ID,
+                Some(0.9),
+                LeakKind::Uncovered,
+                "synthetic>=0.5",
+                None,
+            )
+        };
+        assert!(!plausible_neutral_finding(
+            text,
+            &suspect("812", "building_number")
+        ));
+        assert!(!plausible_neutral_finding(
+            text,
+            &suspect("22", "building_number")
+        ));
+        let house = text.find("house_number: 12").unwrap() + "house_number: ".len();
+        let house_number = LeakSuspect::new(
+            house..house + 2,
+            PiiClass::custom("building_number").unwrap(),
+            NYM_SAFETY_NET_ID,
+            Some(0.9),
+            LeakKind::Uncovered,
+            "BUILDING_NUMBER>=0.5",
+            None,
+        );
+        assert!(plausible_neutral_finding(text, &house_number));
+        assert!(plausible_neutral_finding(
+            text,
+            &suspect("2001-02-03", "date")
+        ));
+        let last = text.rfind('7').unwrap();
+        let lone_day = LeakSuspect::new(
+            last..last + 1,
+            PiiClass::custom("date").unwrap(),
+            NYM_SAFETY_NET_ID,
+            Some(0.9),
+            LeakKind::Uncovered,
+            "DATE>=0.5",
+            None,
+        );
+        assert!(!plausible_neutral_finding(text, &lone_day));
+    }
+
+    #[test]
+    fn subunit_cue_accepts_plain_and_structured_separators() {
+        for prefix in [
+            "Room\u{a0}",
+            "suite #",
+            "unit=",
+            "room_number: ",
+            "\"roomNumber\": ",
+            "apt_no,",
+            "office;",
+        ] {
+            let text = format!("{prefix}812");
+            assert!(preceding_subunit_cue(&text, text.len() - 3), "{prefix:?}");
+        }
+        for prefix in ["house_number: ", "street number ", "building: "] {
+            let text = format!("{prefix}12");
+            assert!(!preceding_subunit_cue(&text, text.len() - 2), "{prefix:?}");
+        }
+    }
+
+    #[test]
+    fn partial_bleed_guard_checks_only_uncovered_date_bytes() {
+        let text = "<deadbeef:Email_1> X";
+        let fragment = text.len() - 1;
+        let suspect = LeakSuspect::new(
+            0..text.len(),
+            PiiClass::custom("date").unwrap(),
+            NYM_SAFETY_NET_ID,
+            Some(0.9),
+            LeakKind::PartialBleed {
+                uncovered: fragment..fragment + 1,
+            },
+            "DATE>=0.5",
+            None,
+        );
+        assert!(!plausible_neutral_finding(text, &suspect));
+    }
+
+    #[test]
+    fn neutral_view_rejects_changed_utf8_boundaries_before_loading_model() {
+        let net = NymSafetyNet::new(NymConfig::new("/missing-synthetic-bundle"));
+        let manifest = Manifest::default();
+        let error = net
+            .check_with_neutral("é", Some("ab"), context(&manifest))
+            .unwrap_err();
+        assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
     }
 
     #[test]
