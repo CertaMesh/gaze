@@ -197,7 +197,7 @@ A validator vetoes a failing candidate by default. `[recognizers.validator]`
 accepts `on_fail = "record"` only with `iban_mod97` or `luhn`: the candidate is
 kept, its audit row carries `validator_fail_reason`, and its value is never
 swept to other copies (user ruling 2026-09-27; see
-[validator veto](../explanation/detection/validator-veto.md#recorded-failures-iban-and-payment-cards)).
+[validator veto](../explanation/detection/validator-veto.md#recorded-failures)).
 Any other validator with `on_fail = "record"`, and any value other than `veto`
 or `record`, fails the rulepack load with
 `RulepackError::UnsupportedValidatorOnFail`.
