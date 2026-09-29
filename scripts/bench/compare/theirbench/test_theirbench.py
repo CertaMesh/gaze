@@ -622,6 +622,159 @@ class TaggedRowTest(unittest.TestCase):
                 theirbench.reproduction_record(first, "gaze-v0.15.1", {**release, "crates_tree": "0" * 40})
 
 
+TUNED = "presidio-tuned-presidio-research"
+
+
+class VendorTunedRowTest(unittest.TestCase):
+    """A vendor's own benchmark is charted against the vendor's published tuned setup."""
+
+    def declaration(self) -> dict:
+        return json.loads((Path(__file__).with_name("vendor-tuned.json")).read_text(encoding="utf-8"))["presidio-research"]
+
+    def entry_and_report(self):
+        data = synthetic()
+        entry = data["benchmarks"]["presidio-research"]
+        entry.update(identity={"documents": 1500}, splits={"test": {"documents": 1500}},
+                     label_maps_sha256="a" * 64, mapping_sha256="b" * 64, typed_hold=["gaze", "opf"])
+        entry["rescored_with"]["comparison_sha256"] = {"compare.py": "c" * 64}
+        entry["reproduction"]["reproduced"]["custom"] = {"f2": 0.9}
+        decl = self.declaration()
+        raw = "7" * 64
+        report = {
+            "schema_version": 1, "benchmark": "presidio-research", "preflight": None,
+            "harness_dirty": False, "harness_revision": "d" * 40, "hardware": "hw",
+            "generated_at": "2026-09-29T00:00:00+00:00",
+            "identity": entry["identity"], "splits": entry["splits"],
+            "common_intersection_labels": entry["common_intersection_labels"],
+            "label_maps_sha256": entry["label_maps_sha256"], "mapping_sha256": entry["mapping_sha256"],
+            "typed_hold": entry["typed_hold"], "comparison_sha256": {"compare.py": "c" * 64},
+            "rows": {TUNED: {"test": row(7)}},
+            "provenance": {TUNED: {"vendor_tuned": {
+                **{key: decl[key] for key in ("setup", "source", "commit", "caption")},
+                "producer": {"raw_sha256": raw, "smoke_limit": None}, "raw_sha256": raw,
+                "prediction_sha256": "8" * 64}}},
+        }
+        own = {"system": TUNED, "tuned_replay": True, "scored": {"f2": 0.9}, "evaluator_commit": "6db3769a"}
+        return data, entry, report, own
+
+    def test_the_tuned_row_replaces_the_declared_presidio_bar_only(self) -> None:
+        import benchmark_charts as charts
+        import render_theirbench as render
+
+        data, entry, report, own = self.entry_and_report()
+        self.assertEqual(render.add_tuned(data, report, own, self.declaration()), TUNED)
+        self.assertEqual(entry["chart_rows"], ["gaze-full", TUNED, "opf"])
+        self.assertIn(TUNED, entry["rows"])
+        entry["splits"] = {"test": {"documents": 1500}}
+        for block in entry["rows"].values():
+            block["product_coverage"].update(char_level={"f2": 0.5}, total_bytes=1000)
+        panel = charts.third_party_panel(entry, "Presidio Research", "F2",
+                                         {"presidio": "presidio-strong", "opf": "opf"}, "v0.15.1")
+        bars = {bar.name: bar for bar in panel.bars}
+        self.assertNotIn("Presidio", bars)  # default and strong are not on the panel
+        self.assertEqual(bars["Presidio (tuned)"].leaked, 7)
+        self.assertEqual(bars["Presidio (tuned)"].column, "Presidio")
+        self.assertIn("Presidio tuned for this dataset by its authors (their published custom setup)", panel.caption)
+        table = charts.model_card_tables([panel])
+        self.assertIn("(tuned)", table)
+        self.assertIn(panel.caption, table)
+        body = render.render(data)
+        self.assertIn(f"Row {TUNED}: Presidio tuned for this dataset by its authors", body)
+        self.assertIn("| presidio-strong |", body)  # still in the page table
+
+    def test_tuned_can_win_and_the_panel_shows_it(self) -> None:
+        import benchmark_charts as charts
+
+        data, entry, report, own = self.entry_and_report()
+        import render_theirbench as render
+
+        report["rows"][TUNED]["test"]["product_coverage"]["char_level"] = {"f2": 0.95}
+        render.add_tuned(data, report, own, self.declaration())
+        entry["rows"]["gaze-v0.15.1"]["product_coverage"]["char_level"] = {"f2": 0.7}
+        for name, block in entry["rows"].items():
+            block["product_coverage"].setdefault("char_level", {"f2": 0.5})
+            block["product_coverage"].setdefault("total_bytes", 1000)
+        panel = charts.third_party_panel(entry, "Presidio Research", "F2",
+                                         {"presidio": "presidio-strong", "opf": "opf"}, "v0.15.1")
+        f2 = {bar.name: bar.f2 for bar in panel.bars}
+        self.assertGreater(f2["Presidio (tuned)"], f2["Gaze 0.15"])
+
+    def test_each_mismatch_refuses_the_row(self) -> None:
+        import render_theirbench as render
+
+        def refused(mutate, match: str) -> None:
+            data, _entry, report, own = self.entry_and_report()
+            mutate(report, own, data)
+            with self.assertRaisesRegex(ValueError, match):
+                render.add_tuned(data, report, own, self.declaration())
+
+        tuned = lambda r: r["provenance"][TUNED]["vendor_tuned"]  # noqa: E731
+        refused(lambda r, o, d: r.update(harness_dirty=True), "clean, full")
+        refused(lambda r, o, d: r.update(identity={"documents": 1}), "identity differs")
+        refused(lambda r, o, d: r.update(comparison_sha256={"compare.py": "0"}), "different pinned")
+        refused(lambda r, o, d: r["rows"].update({"presidio-en": {"test": row(5)}}), "exactly the vendor-tuned")
+        refused(lambda r, o, d: tuned(r).update(commit="0" * 40), "does not match the declared")
+        refused(lambda r, o, d: tuned(r).update(source="https://example.invalid"), "does not match the declared")
+        refused(lambda r, o, d: tuned(r)["producer"].update(smoke_limit=10), "smoke run")
+        refused(lambda r, o, d: tuned(r)["producer"].update(raw_sha256="0" * 64), "does not describe")
+        refused(lambda r, o, d: o.update(tuned_replay=False), "notebook-5 replay")
+        refused(lambda r, o, d: o.update(system="presidio-strong"), "notebook-5 replay")
+        refused(lambda r, o, d: d["benchmarks"]["presidio-research"]["reproduction"]["reproduced"].clear(),
+                "reproduced first")
+        refused(lambda r, o, d: d["benchmarks"]["presidio-research"]["rows"].update({TUNED: row(1)}),
+                "already has")
+
+    def test_piibench_has_no_vendor_tuned_setup_and_says_so(self) -> None:
+        import benchmark_charts as charts
+
+        self.assertIsNone(json.loads(Path(__file__).with_name("vendor-tuned.json").read_text())["piibench-commercial"])
+        entry = synthetic()["benchmarks"]["presidio-research"]
+        entry["splits"] = {"test": {"documents": 5000}}
+        for block in entry["rows"].values():
+            block["product_coverage"].update(char_level={"f2": 0.5}, total_bytes=1000)
+        panel = charts.third_party_panel(entry, "PIIBench-commercial", "F1",
+                                         {"presidio": "presidio-strong", "opf": "opf"}, "v0.15.1")
+        self.assertIn("declared best configuration", panel.caption)
+        self.assertEqual({bar.name for bar in panel.bars}, {"Gaze 0.15", "Presidio", "OPF"})
+
+    def test_tuned_labels_compose_and_the_tuned_scorer_leaves_common_labels_alone(self) -> None:
+        import theirbench
+
+        mappings = theirbench.compare.load_mapping()
+        decl = self.declaration()
+        composed = theirbench.tuned_mapping(decl, mappings, "presidio-research")
+        self.assertEqual(composed["FIRST_NAME"], ("PERSON",))
+        self.assertEqual(composed["TITLE"], ("TITLE",))
+        self.assertEqual(composed["GENDER"], ())
+        self.assertEqual(composed["EMAIL_ADDRESS"], ("EMAIL_ADDRESS",))
+        # Every entity the notebook's OpenMed mapping can emit has a table entry.
+        import presidio_research_repro as repro
+
+        emitted = set(repro.OPENMED_MAPPING.values()) | {"TITLE"}
+        self.assertEqual(sorted(emitted - set(composed)), [])
+
+    def test_a_tuned_run_needs_its_findings_and_a_fresh_report(self) -> None:
+        import argparse
+        import theirbench
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "r.json"
+            ok = dict(tool=None, gaze_release_tag=None, tuned_raw=Path("raw"), tuned_meta=Path("meta"), output=out)
+            theirbench.validate_vendor_tuned_args(argparse.Namespace(**ok))
+            for bad in ({"tuned_raw": None}, {"tool": ["opf"]}, {"gaze_release_tag": "v0.15.1"}):
+                with self.assertRaisesRegex(SystemExit, "needs --tuned-raw"):
+                    theirbench.validate_vendor_tuned_args(argparse.Namespace(**{**ok, **bad}))
+            out.write_text("{}")
+            with self.assertRaisesRegex(SystemExit, "fresh report"):
+                theirbench.validate_vendor_tuned_args(argparse.Namespace(**ok))
+
+    def test_benchmark_without_a_tuned_setup_is_refused(self) -> None:
+        import theirbench
+
+        with self.assertRaisesRegex(SystemExit, "no vendor-tuned setup"):
+            theirbench.vendor_tuned_entry("piibench-commercial")
+
+
 class HarnessTagTest(unittest.TestCase):
     def test_tag_must_point_at_the_recorded_commit(self) -> None:
         import render_theirbench as render

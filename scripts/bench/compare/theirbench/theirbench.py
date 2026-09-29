@@ -44,6 +44,7 @@ import tagged_gaze  # noqa: E402
 score = loaders.score
 BENCHMARKS = ("presidio-research", "piibench-commercial")
 GAZE_ROWS = ("gaze-rules-only", "gaze-rules-ner", "gaze-full")
+VENDOR_TUNED = HERE / "vendor-tuned.json"
 
 
 TAGGED_ROW = re.compile(r"gaze-(v\d+\.\d+\.\d+)")
@@ -166,6 +167,71 @@ def reproduction_record(prior: Path, name: str, release: dict[str, object]) -> d
             "binary_sha256": before["build"]["binary_sha256"],
             "harness_revision": before["measured_with"]["harness_revision"],
             "harness_dirty": before["measured_with"]["harness_dirty"]}
+
+
+def vendor_tuned_entry(benchmark: str) -> dict[str, object]:
+    """The vendor's best published setup for its own benchmark (vendor-tuned.json), or exit."""
+    entry = json.loads(VENDOR_TUNED.read_text(encoding="utf-8")).get(benchmark)
+    if entry is None:
+        raise SystemExit(f"{benchmark} has no vendor-tuned setup; it keeps the declared best configuration")
+    return entry
+
+
+def tuned_mapping(entry: Mapping[str, object], mappings: Mapping[str, Mapping[str, Sequence[str]]],
+                  benchmark: str) -> dict[str, tuple[str, ...]]:
+    """The comparison's table for the tool's family plus the tuned setup's extra entities."""
+    family_map = {**mappings[entry["family"]], **entry["extra_labels"]}
+    return loaders.compose_mapping(entry["family"], family_map, benchmark)
+
+
+def validate_vendor_tuned_args(args: argparse.Namespace) -> None:
+    """A vendor-tuned row is scored alone, into a fresh report, from a vendor-env producer's findings."""
+    if (args.tool or args.gaze_release_tag or args.tuned_raw is None or args.tuned_meta is None):
+        raise SystemExit("--vendor-tuned needs --tuned-raw and --tuned-meta (tuned_presidio.py) "
+                         "and takes no --tool or --gaze-release-tag")
+    if args.output.exists():
+        raise SystemExit(f"{args.output} exists; a vendor-tuned row is measured into a fresh report")
+
+
+def measure_vendor_tuned(
+    entry: Mapping[str, object], args: argparse.Namespace, splits: Mapping[str, Sequence[score.Document]],
+    mapping: Mapping[str, Sequence[str]], common: frozenset[str], predictions_dir: Path,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Score the tuned analyzer's findings like every other Presidio row.
+
+    Overlaps resolve with the comparison's own pinned resolver (`resolved_presidio_spans`),
+    then the spans go through the same ComparisonMetrics and label validation.
+    """
+    from presidio_analyzer import RecognizerResult
+    from presidio_anonymizer import AnonymizerEngine
+
+    meta = json.loads(args.tuned_meta.read_text(encoding="utf-8"))
+    if meta.get("smoke_limit") or meta["raw_sha256"] != sha256_file(args.tuned_raw):
+        raise SystemExit("the tuned metadata is a smoke run or does not describe --tuned-raw")
+    if meta["presidio_research_commit"] != entry["commit"]:
+        raise SystemExit("the tuned findings were produced at a different presidio-research commit")
+    rows = [json.loads(line) for line in args.tuned_raw.read_text(encoding="utf-8").splitlines()]
+    (documents,) = splits.values()
+    if [row["index"] for row in rows] != list(range(len(documents))):
+        raise SystemExit("the tuned findings do not cover every document in order")
+    anonymizer, cells = AnonymizerEngine(), Cells(mapping, common)
+    name = entry["row"]
+    with (predictions_dir / f"{name}.test.jsonl").open("w", encoding="utf-8") as sink:
+        for index, (document, row) in enumerate(zip(documents, rows)):
+            found = [RecognizerResult(entity, start, end, score_) for start, end, entity, score_ in row["results"]]
+            predictions = compare.resolved_presidio_spans(anonymizer, document.text, found)
+            compare.validate_labels(predictions, mapping)
+            cells.add(document, predictions)
+            sink.write(json.dumps({"index": index, "spans": char_spans(document, predictions)}) + "\n")
+    provenance = {
+        "vendor_tuned": {
+            key: entry[key] for key in ("setup", "source", "commit", "caption")
+        } | {"producer": meta, "raw_sha256": meta["raw_sha256"],
+             "prediction_sha256": sha256_file(predictions_dir / f"{name}.test.jsonl"),
+             "resolver": {"anonymizer_version": compare.package_version("presidio-anonymizer"),
+                          "strategy": "MERGE_SIMILAR_OR_CONTAINED"}},
+    }
+    return {"test": {**cells.result(), "latency": latency([])}}, provenance
 
 
 def tool_family(name: str) -> str:
@@ -335,6 +401,10 @@ def main() -> int:
     parser.add_argument("--presidio-research-checkout", type=Path)
     parser.add_argument("--piibench-data", type=Path, help="piibench_commercial.py --output-dir")
     parser.add_argument("--tool", action="append", choices=[*compare.TOOLS, *GAZE_ROWS])
+    parser.add_argument("--vendor-tuned", action="store_true",
+                        help="score the vendor's own tuned setup for this benchmark (vendor-tuned.json) as its row")
+    parser.add_argument("--tuned-raw", type=Path, help="tuned_presidio.py --output")
+    parser.add_argument("--tuned-meta", type=Path, help="tuned_presidio.py --meta")
     parser.add_argument("--gaze-release-tag", help="measure this release tag as row gaze-<tag> (only)")
     parser.add_argument("--gaze-release-root", type=Path, help="clean checkout of that tag; the binary is built from it")
     parser.add_argument("--gaze-build-dir", type=Path,
@@ -368,16 +438,10 @@ def main() -> int:
         args.gaze_binary, build = build_tagged_binary(args.gaze_release_tag, args.gaze_release_root, build_dir)
         release["build"] = build
         selected = [f"gaze-{args.gaze_release_tag}"]
-    else:
-        selected = args.tool or [*GAZE_ROWS, *compare.TOOLS]
-    mappings = compare.load_mapping()
-    release = None
-    if args.gaze_release_tag:
-        if args.tool or args.gaze_release_root is None or args.gaze_binary is None or args.gaze_policy is None:
-            raise SystemExit("--gaze-release-tag needs --gaze-release-root, --gaze-binary, --gaze-policy and no --tool")
-        release = verify_release_checkout(args.gaze_release_tag, args.gaze_release_root,
-                                          args.gaze_binary, args.gaze_policy)
-        selected = [f"gaze-{args.gaze_release_tag}"]
+    elif args.vendor_tuned:
+        validate_vendor_tuned_args(args)
+        tuned = vendor_tuned_entry(args.benchmark)
+        selected = [tuned["row"]]
     else:
         selected = args.tool or [*GAZE_ROWS, *compare.TOOLS]
     # The whole roster, not just --tool: the common intersection must not depend
@@ -434,7 +498,14 @@ def main() -> int:
             if name in report["rows"]:
                 continue
             mapping = composed[tool_family(name)]
-            if name in GAZE_ROWS or tagged_row_version(name):
+            if args.vendor_tuned:
+                mapping = tuned_mapping(tuned, mappings, args.benchmark)
+                (args.predictions_dir / f"labels.{name}.json").write_text(
+                    json.dumps({label: list(labels) for label, labels in mapping.items()}, indent=2) + "\n",
+                    encoding="utf-8")
+                report["rows"][name], report["provenance"][name] = measure_vendor_tuned(
+                    tuned, args, splits, mapping, common, args.predictions_dir)
+            elif name in GAZE_ROWS or tagged_row_version(name):
                 policy = {"gaze-rules-only": args.gaze_policy_rules,
                           "gaze-rules-ner": args.gaze_policy_rules_ner,
                           "gaze-full": args.gaze_policy}.get(name, args.gaze_policy)

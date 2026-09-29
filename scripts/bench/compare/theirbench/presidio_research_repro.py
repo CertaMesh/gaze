@@ -122,14 +122,16 @@ def custom_analyzer(model_path: str):
     return engine, engine.default_score_threshold
 
 
-def precomputed_model(dataset, predictions: Path, labels: dict[str, list[str]]):
+def precomputed_model(dataset, predictions: Path, labels: dict[str, list[str]] | None):
     """A presidio-evaluator model that replays another system's spans.
 
     Tags come from PresidioAnalyzerWrapper's own span-to-tag conversion, so
     the only difference from a Presidio run is where the spans came from.
     Each tool label becomes the first Presidio gold label it covers; a label
     that covers none becomes the generic ID node, so its redactions still
-    count at the binary PII-vs-O level.
+    count at the binary PII-vs-O level. With `labels=None` the spans already carry
+    the tool's own entity names (the tuned Presidio setup) and pass through unmapped,
+    so the evaluator's CanonicalMapper sees exactly what a live run would produce.
     """
     from presidio_analyzer import RecognizerResult
     from presidio_evaluator.models import BaseModel, PresidioAnalyzerWrapper
@@ -146,7 +148,8 @@ def precomputed_model(dataset, predictions: Path, labels: dict[str, list[str]]):
         def batch_predict(self, samples, **kwargs):
             tags = []
             for sample, row in zip(samples, rows, strict=True):
-                results = [RecognizerResult((labels[label] or ["ID"])[0], start, end, 1.0)
+                results = [RecognizerResult(label if labels is None else (labels[label] or ["ID"])[0],
+                                            start, end, 1.0)
                            for start, end, label in row["spans"]]
                 tags.append(to_tags(results, sample))
             return tags
@@ -156,7 +159,7 @@ def precomputed_model(dataset, predictions: Path, labels: dict[str, list[str]]):
 
 def evaluate(config: str, dataset_path: Path, model_path: str | None, limit: int | None,
              predictions: Path | None = None, labels: dict[str, list[str]] | None = None,
-             resolution_rule: str = "pinned") -> dict:
+             resolution_rule: str = "pinned", notebook5_rules: bool = False) -> dict:
     from presidio_evaluator import InputSample
     from presidio_evaluator.entity_mapping import CanonicalMapper
     from presidio_evaluator.evaluation import SpanEvaluator
@@ -177,7 +180,7 @@ def evaluate(config: str, dataset_path: Path, model_path: str | None, limit: int
     results = wrapped.predict_dataset(dataset)
     seconds = time.perf_counter() - started
     mapper = CanonicalMapper()
-    if config != "custom":
+    if config != "custom" and not notebook5_rules:
         mapper.analyze(results)
     else:
         # Notebook 5: suppress prediction-only labels, then apply the
@@ -219,6 +222,9 @@ def main() -> int:
                         help="theirbench.py predictions for one system; scored like notebook 4")
     parser.add_argument("--labels", type=Path, help="theirbench.py composed label map for that system")
     parser.add_argument("--system", help="name recorded for --predictions")
+    parser.add_argument("--tuned", action="store_true",
+                        help="--predictions are the tuned setup's own entities (tuned_presidio.py via theirbench.py); "
+                             "scored with notebook 5's mapper rules, no label map")
     parser.add_argument("--reproduction", action="store_true",
                         help="checkout is at REPRODUCTION_COMMITS[config] (one --config), notebook-5 rule as of f2285ca")
     parser.add_argument("--output", type=Path, required=True)
@@ -257,10 +263,12 @@ def main() -> int:
         "reproduced": {},
     }
     if args.predictions is not None:
-        labels = json.loads(args.labels.read_text(encoding="utf-8"))
+        labels = None if args.tuned else json.loads(args.labels.read_text(encoding="utf-8"))
         report["published"] = {}
         report["system"] = args.system
-        report["scored"] = evaluate("precomputed", dataset_path, None, args.limit, args.predictions, labels)
+        report["scored"] = evaluate("precomputed", dataset_path, None, args.limit, args.predictions, labels,
+                                    notebook5_rules=args.tuned)
+        report["tuned_replay"] = args.tuned
         print(f"{args.system}: {report['scored']}", file=sys.stderr, flush=True)
     for config in configs if args.predictions is None else ():
         report["reproduced"][config] = evaluate(config, dataset_path, args.openmed_model, args.limit,

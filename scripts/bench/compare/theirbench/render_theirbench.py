@@ -21,6 +21,7 @@ REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO / "scripts/bench"))
 from markdown_table import table_header  # noqa: E402
 from tagged_gaze import RELEASE_PINS, TAG, check_public, tag_commit  # noqa: E402
+VENDOR_TUNED = Path(__file__).with_name("vendor-tuned.json")
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
 DOC = REPO / "docs/reference/benchmarks/README.md"
 BLOCK = "their-benchmarks"
@@ -205,6 +206,55 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
     return row
 
 
+def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any],
+              declaration: Mapping[str, Any]) -> str:
+    """Merge a vendor's own tuned setup (theirbench.py --vendor-tuned) into the aggregate.
+
+    The benchmark's `vendor_tuned` entry then replaces that family's declared bar on the panel:
+    a vendor's own benchmark is charted against the vendor's best published setup. The row joins
+    only if the report measured the same identity, labels, splits, label maps and pinned code as
+    the committed entry, from a clean harness, and the provenance names the declared setup, its
+    source and commit; the own-scorer result must be the notebook-5 replay of the same spans.
+    """
+    if report.get("preflight") or report.get("harness_dirty") or report.get("schema_version") != 1:
+        raise ValueError("only a clean, full, schema-1 report can add a vendor-tuned row")
+    name = report["benchmark"]
+    entry = data["benchmarks"][name]
+    for key in ("identity", "common_intersection_labels", "splits", "label_maps_sha256",
+                "mapping_sha256", "typed_hold"):
+        if report[key] != entry[key]:
+            raise ValueError(f"{name}: the report's {key} differs from the committed entry")
+    if report["comparison_sha256"] != entry["rescored_with"]["comparison_sha256"]:
+        raise ValueError(f"{name}: the report used different pinned comparison code")
+    row = declaration["row"]
+    if list(report["rows"]) != [row]:
+        raise ValueError(f"the report must hold exactly the vendor-tuned row {row} and nothing else")
+    tuned = report["provenance"][row].get("vendor_tuned")
+    if not tuned or any(tuned.get(key) != declaration[key] for key in ("setup", "source", "commit", "caption")):
+        raise ValueError(f"{row}: provenance does not match the declared vendor setup")
+    if tuned["producer"].get("smoke_limit") or tuned["producer"]["raw_sha256"] != tuned["raw_sha256"]:
+        raise ValueError(f"{row}: the producer record is a smoke run or does not describe the findings")
+    if row in entry["rows"] or "vendor_tuned" in entry:
+        raise ValueError(f"{name} already has a vendor-tuned row")
+    if own["system"] != row or not own.get("tuned_replay") or own.get("smoke_limit"):
+        raise ValueError(f"the own-scorer result must be the full notebook-5 replay of {row}")
+    if not entry["reproduction"].get("reproduced", {}).get("custom"):
+        raise ValueError(f"{name}: the vendor's tuned number must be reproduced first")
+    entry["rows"][row] = report["rows"][row]["test"]
+    entry["own_metric"][row] = own["scored"]
+    entry["provenance"][row] = report["provenance"][row]
+    entry["vendor_tuned"] = {declaration["family"]: {key: declaration[key] for key in (
+        "row", "bar_name", "caption", "setup", "source", "commit")}}
+    entry["chart_rows"] = [row if chosen == f"{declaration['family']}-strong" else chosen
+                           for chosen in entry["chart_rows"]]
+    if row not in entry["chart_rows"]:
+        raise ValueError(f"{name}: no declared {declaration['family']} chart row to replace")
+    entry["tuned_measurement"] = {
+        "harness_revision": report["harness_revision"], "hardware": report["hardware"],
+        "generated_at": report["generated_at"], "own_evaluator_commit": own["evaluator_commit"]}
+    return row
+
+
 def _check_release(row: str, release: Mapping[str, Any], resolve: Callable[[str], tuple[str, str]]) -> None:
     """The release provenance must tie the numbers to the tag, one build, the pins and a reproduction."""
     tag = release["tag"]
@@ -342,6 +392,11 @@ def render(data: Mapping[str, Any]) -> str:
             lines += ["", f"Row {tool}: a clean checkout of tag `{release['tag']}` (crates tree "
                           f"`{release['crates_tree'][:8]}`, benchmark binary `{release['build']['binary_sha256'][:8]}`, reproduced by a second run) "
                           f"scored with harness `{measured['harness_revision'][:8]}`; no timing is published."]
+        for family_name, choice in entry.get("vendor_tuned", {}).items():
+            lines += ["", f"Row {choice['row']}: {choice['caption']}. Setup: {choice['setup']} "
+                          f"([source]({choice['source']}), commit `{choice['commit'][:8]}`). "
+                          f"It replaces the declared {family_name} configuration on the chart panel; "
+                          "the other Presidio rows stay in this table."]
         if not any(is_tagged_gaze_row(tool) for tool in rows):
             latest = json.loads(RELEASE_HISTORY.read_text(encoding="utf-8"))["releases"][-1]["version"]
             lines += ["", f"Gaze {latest}: not yet measured on this set, so no Gaze row is shown."]
@@ -380,6 +435,10 @@ def main(argv: list[str] | None = None) -> int:
     tagged_cmd.add_argument("--report", type=Path, required=True)
     tagged_cmd.add_argument("--own", type=Path, required=True, help="the row's own-scorer result")
     tagged_cmd.add_argument("--data", type=Path, default=DATA)
+    tuned_cmd = sub.add_parser("add-tuned", help="merge a vendor's own tuned setup into their-benchmarks.json")
+    tuned_cmd.add_argument("--report", type=Path, required=True)
+    tuned_cmd.add_argument("--own", type=Path, required=True, help="presidio_research_repro.py --tuned result")
+    tuned_cmd.add_argument("--data", type=Path, default=DATA)
     show = sub.add_parser("render")
     show.add_argument("--check", action="store_true")
     show.add_argument("--data", type=Path, default=DATA)
@@ -394,6 +453,14 @@ def main(argv: list[str] | None = None) -> int:
         data = json.loads(args.data.read_text(encoding="utf-8"))
         row = add_tagged(data, json.loads(args.report.read_text(encoding="utf-8")),
                          json.loads(args.own.read_text(encoding="utf-8")))
+        args.data.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"added {row}")
+        return 0
+    if args.command == "add-tuned":
+        data = json.loads(args.data.read_text(encoding="utf-8"))
+        report = json.loads(args.report.read_text(encoding="utf-8"))
+        declaration = json.loads(VENDOR_TUNED.read_text(encoding="utf-8"))[report["benchmark"]]
+        row = add_tuned(data, report, json.loads(args.own.read_text(encoding="utf-8")), declaration)
         args.data.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(f"added {row}")
         return 0

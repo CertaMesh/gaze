@@ -1,0 +1,24 @@
+{
+  "_comment": "A vendor's own benchmark is charted against that vendor's best PUBLISHED setup for it (user ruling 2026-09-29). Each entry names the setup, its source and pinned commit, the chart row it becomes and the panel caption. Kept out of ../chart-configs.json, whose bytes are pinned by comparison.json and backends.PINNED_SHA256. The tuned tool's own entity names map to canonical labels through `extra_labels` on top of the comparison's `presidio` table; they drive only the typed metrics, never leaked or false-positive bytes.",
+  "presidio-research": {
+    "family": "presidio",
+    "row": "presidio-tuned-presidio-research",
+    "bar_name": "Presidio (tuned)",
+    "caption": "Presidio tuned for this dataset by its authors (their published custom setup)",
+    "setup": "notebook 5, custom analyzer: OpenMed NER recognizer, title/year/age pattern recognizers, lemma context enhancement, 14 predefined recognizers removed, score threshold 0.3",
+    "source": "https://github.com/microsoft/presidio-research/blob/6db3769a3388b4075b93ab2229c5e0b9c30137f7/notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb",
+    "commit": "6db3769a3388b4075b93ab2229c5e0b9c30137f7",
+    "extra_labels": {
+      "FIRST_NAME": ["FIRSTNAME"], "LAST_NAME": ["SURNAME"], "AGE": ["AGE"], "TITLE": ["TITLE"],
+      "DATE_OF_BIRTH": ["DATEOFBIRTH"], "ACCOUNT_NUMBER": ["ACCOUNTNUM"], "PASSWORD": ["PASSWORD"],
+      "COUNTY": ["REGION"], "CITY": ["CITY"], "COUNTRY": ["COUNTRY"], "STATE": ["STATE"],
+      "STREET_ADDRESS": ["STREET", "BUILDINGNUM"], "ZIP_CODE": ["ZIP"], "COMPANY": ["COMPANYNAME"],
+      "LICENSE_PLATE": ["LICENSEPLATENUM"],
+      "GENDER": [], "BLOOD_TYPE": [], "OCCUPATION": [], "EDUCATION_LEVEL": [], "EMPLOYMENT_STATUS": [],
+      "LANGUAGE": [], "ETHNICITY": [], "SEXUALITY": [], "POLITICAL_VIEW": [], "RELIGIOUS_BELIEF": [],
+      "BIOMETRIC_IDENTIFIER": [], "ID": [], "SWIFT_CODE": [], "PROFESSIONAL_LICENSE": [], "CVV": [],
+      "USER_NAME": [], "COORDINATE": []
+    }
+  },
+  "piibench-commercial": null
+}
