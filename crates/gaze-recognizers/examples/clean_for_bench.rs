@@ -138,7 +138,47 @@ struct FinalProtectionTraceItem {
 struct FinalProtectionTraceProvenance {
     stage: String,
     decision: String,
+    /// Lineage: includes defeated candidates and derived dependencies.
     source_ids: Vec<String>,
+    settlement: &'static str,
+    /// Typed roles; only `winner`, `same_span_merge` and `co_member` found
+    /// bytes themselves (component ledger, record schema v2).
+    contributions: Vec<FinalProtectionTraceContribution>,
+}
+
+#[derive(Debug, Serialize)]
+struct FinalProtectionTraceContribution {
+    /// Pool index joining this entry to its `candidate_events` row; `None` for
+    /// a safety-net suspect or a derived dependency.
+    original: Option<usize>,
+    recognizer_id: String,
+    role: &'static str,
+    raw_start: Option<usize>,
+    raw_end: Option<usize>,
+    /// Defeated only: the rung of the one event that took it out
+    /// (`ConflictTier::as_str`), that event's kind and the winning recognizer.
+    tier: Option<&'static str>,
+    defeat_kind: Option<&'static str>,
+    defeated_by: Option<String>,
+}
+
+/// One primary-pool or vetoed candidate and what happened to it. Metadata only.
+#[derive(Debug, Serialize)]
+struct CandidateEventRow {
+    original: Option<usize>,
+    recognizer_id: String,
+    class: String,
+    raw_start: usize,
+    raw_end: usize,
+    outcome: &'static str,
+    selection_start: Option<usize>,
+    selection_end: Option<usize>,
+    settlement: Option<&'static str>,
+    role: Option<&'static str>,
+    tier: Option<&'static str>,
+    defeat_kind: Option<&'static str>,
+    winner: Option<usize>,
+    veto_reason: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -328,15 +368,17 @@ fn handle_request_with_policy(
         Session::new_with_session_hex_for_tests(Scope::Ephemeral, session_hex)?
     };
     let clean_start = Instant::now();
-    let clean_result = full.clean_text_with_safety_net_policy_detect_context_and_protection_trace(
-        &session,
-        &raw_text,
-        locale_chain,
-        dictionaries,
-        safety_net_policy(config),
-    );
+    let clean_result = full
+        .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+            &session,
+            &raw_text,
+            locale_chain,
+            dictionaries,
+            safety_net_policy(config),
+        );
     let clean_ms = clean_start.elapsed().as_secs_f64() * 1000.0;
-    let (clean_doc, manifest, report, final_protection_trace) = match clean_result {
+    let (clean_doc, manifest, report, final_protection_trace, candidate_events) = match clean_result
+    {
         Ok(result) => result,
         Err(error) => {
             emit_invalid_output_diagnostic("clean", &error);
@@ -407,6 +449,7 @@ fn handle_request_with_policy(
     };
     let manifest_spans = serialize_manifest(manifest);
     let final_protection_trace = serialize_final_protection_trace(final_protection_trace);
+    let candidate_events = serialize_candidate_events(candidate_events)?;
     let initial_safety_net_stats = SafetyNetStats::from(&report.stats);
     let strict_would_reject = report.stats.uncovered_count + report.stats.partial_bleed_count > 0;
     let leak_suspects = report
@@ -447,6 +490,7 @@ fn handle_request_with_policy(
             post_policy_scan_ms,
         },
         final_protection_trace,
+        candidate_events,
         audit_rows: None,
         candidate_pool,
     }))
@@ -473,6 +517,7 @@ struct Response {
     manifest_integrity: ManifestIntegrity,
     timing: Timing,
     final_protection_trace: Vec<FinalProtectionTraceItem>,
+    candidate_events: Vec<CandidateEventRow>,
     #[serde(skip_serializing_if = "Option::is_none")]
     audit_rows: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1077,6 +1122,65 @@ fn manifest_signature(
         .collect()
 }
 
+fn serialize_candidate_events(
+    events: Vec<gaze::CandidateEvent>,
+) -> Result<Vec<CandidateEventRow>, Box<dyn std::error::Error>> {
+    events
+        .into_iter()
+        .map(|event| {
+            let mut row = CandidateEventRow {
+                original: event.original,
+                recognizer_id: event.recognizer_id,
+                class: event.class.to_canonical_str(),
+                raw_start: event.raw_span.start,
+                raw_end: event.raw_span.end,
+                outcome: "unlinked",
+                selection_start: None,
+                selection_end: None,
+                settlement: None,
+                role: None,
+                tier: None,
+                defeat_kind: None,
+                winner: None,
+                veto_reason: None,
+            };
+            match event.outcome {
+                gaze::CandidateOutcome::Selected {
+                    selection,
+                    settlement,
+                    role,
+                } => {
+                    row.outcome = "selected";
+                    row.selection_start = Some(selection.start);
+                    row.selection_end = Some(selection.end);
+                    row.settlement = Some(settlement.as_str());
+                    row.role = Some(role.as_str());
+                }
+                gaze::CandidateOutcome::Defeated {
+                    selection,
+                    settlement,
+                    defeat,
+                } => {
+                    row.outcome = "defeated";
+                    row.selection_start = Some(selection.start);
+                    row.selection_end = Some(selection.end);
+                    row.settlement = Some(settlement.as_str());
+                    row.tier = Some(defeat.tier.as_str());
+                    row.defeat_kind = Some(defeat.kind.as_str());
+                    row.winner = Some(defeat.winner);
+                }
+                gaze::CandidateOutcome::Vetoed { reason } => {
+                    row.outcome = "vetoed";
+                    row.veto_reason = Some(serde_json::to_value(reason)?);
+                }
+                gaze::CandidateOutcome::Unlinked => {}
+                _ => return Err("unknown candidate outcome".into()),
+            }
+            Ok(row)
+        })
+        .collect()
+}
+
 fn serialize_final_protection_trace(
     trace: Vec<GazeLocalProtectionTraceItem>,
 ) -> Vec<FinalProtectionTraceItem> {
@@ -1091,6 +1195,26 @@ fn serialize_final_protection_trace(
                 stage: item.stage().to_string(),
                 decision: item.decision().to_string(),
                 source_ids: item.source_ids().to_vec(),
+                settlement: item.settlement().as_str(),
+                contributions: item
+                    .contributions()
+                    .iter()
+                    .map(|contribution| {
+                        let span = contribution.raw_span();
+                        FinalProtectionTraceContribution {
+                            original: contribution.original(),
+                            recognizer_id: contribution.recognizer_id().to_string(),
+                            role: contribution.role().as_str(),
+                            raw_start: span.as_ref().map(|span| span.start),
+                            raw_end: span.map(|span| span.end),
+                            tier: contribution.defeat().map(|defeat| defeat.tier.as_str()),
+                            defeat_kind: contribution.defeat().map(|defeat| defeat.kind.as_str()),
+                            defeated_by: contribution
+                                .defeat()
+                                .map(|defeat| defeat.winner_recognizer.clone()),
+                        }
+                    })
+                    .collect(),
             },
         })
         .collect()
@@ -1440,8 +1564,14 @@ mod tests {
             let provenance = object["provenance"]
                 .as_object()
                 .expect("trace provenance should be an object");
-            assert_eq!(provenance.len(), 3);
-            for field in ["stage", "decision", "source_ids"] {
+            assert_eq!(provenance.len(), 5);
+            for field in [
+                "stage",
+                "decision",
+                "source_ids",
+                "settlement",
+                "contributions",
+            ] {
                 assert!(
                     provenance.contains_key(field),
                     "missing provenance field {field}"
@@ -1894,5 +2024,92 @@ mod tests {
             .split_once(&format!("{PRODUCER_DETERMINISM_END}\n"))
             .expect("producer child output must include end sentinel");
         canonical.as_bytes().to_vec()
+    }
+    #[test]
+    fn trace_lineage_vocabulary_matches_the_enums() {
+        // scripts/bench/scorecard_record.py validates v2 records against this
+        // file; it must list exactly what the producer can emit.
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../scripts/bench/trace-lineage-vocabulary.json");
+        let vocabulary: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).expect("vocabulary file"))
+                .expect("vocabulary JSON");
+        let listed = |key: &str| -> Vec<String> {
+            vocabulary[key]
+                .as_array()
+                .expect("vocabulary list")
+                .iter()
+                .map(|value| value.as_str().expect("string").to_string())
+                .collect()
+        };
+        let tiers = gaze::ConflictTier::ALL
+            .iter()
+            .map(|tier| tier.as_str().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(listed("conflict_tiers"), tiers);
+        let reasons = gaze_types::ValidatorFailReason::ALL
+            .iter()
+            .map(|reason| {
+                serde_json::to_value(reason)
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(listed("validator_fail_reasons"), reasons);
+        use gaze::{ContributionRole as R, DefeatKind as D, TraceSettlement as S};
+        let roles = [
+            R::Winner,
+            R::SameSpanMerge,
+            R::CoMember,
+            R::Defeated,
+            R::DerivedDependency,
+        ];
+        for role in roles {
+            // Exhaustive: a new role fails to compile here until it is listed.
+            match role {
+                R::Winner | R::SameSpanMerge | R::CoMember | R::Defeated | R::DerivedDependency => {
+                }
+            }
+        }
+        assert_eq!(
+            listed("roles"),
+            roles.map(|role| role.as_str().to_string()).to_vec()
+        );
+        let settlements = [
+            S::Resolve,
+            S::Recovery,
+            S::Sweep,
+            S::CollisionTie,
+            S::AnchorFallback,
+            S::Residual,
+            S::SafetyNet,
+        ];
+        for settlement in settlements {
+            match settlement {
+                S::Resolve
+                | S::Recovery
+                | S::Sweep
+                | S::CollisionTie
+                | S::AnchorFallback
+                | S::Residual
+                | S::SafetyNet => {}
+            }
+        }
+        assert_eq!(
+            listed("settlements"),
+            settlements.map(|s| s.as_str().to_string()).to_vec()
+        );
+        let kinds = [D::Pair, D::Collateral];
+        for kind in kinds {
+            match kind {
+                D::Pair | D::Collateral => {}
+            }
+        }
+        assert_eq!(
+            listed("defeat_kinds"),
+            kinds.map(|k| k.as_str().to_string()).to_vec()
+        );
     }
 }

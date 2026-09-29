@@ -1,0 +1,76 @@
+{
+  "comment": "Closed vocabulary of trace lineage and candidate events (observation record schema v2). The clean_for_bench test `trace_lineage_vocabulary_matches_the_enums` fails when this drifts from the Rust enums.",
+  "roles": [
+    "winner",
+    "same_span_merge",
+    "co_member",
+    "defeated",
+    "derived_dependency"
+  ],
+  "detecting_roles": [
+    "winner",
+    "same_span_merge",
+    "co_member"
+  ],
+  "settlements": [
+    "resolve",
+    "recovery",
+    "sweep",
+    "collision_tie",
+    "anchor_fallback",
+    "residual",
+    "safety_net"
+  ],
+  "defeat_kinds": [
+    "pair",
+    "collateral"
+  ],
+  "outcomes": [
+    "selected",
+    "defeated",
+    "vetoed",
+    "unlinked"
+  ],
+  "conflict_tiers": [
+    "none",
+    "class_priority",
+    "rule_priority",
+    "score",
+    "span_length",
+    "validator",
+    "same_class_containment",
+    "validator_veto",
+    "collision_policy",
+    "anchored_context",
+    "structured_containment",
+    "containment_precedence",
+    "protection_override",
+    "recognizer_id",
+    "merged",
+    "redact",
+    "resolve",
+    "fallback",
+    "manifest_sweep"
+  ],
+  "validator_fail_reasons": [
+    "luhn_failed",
+    "iban_mod97_failed",
+    "email_rfc_rejected",
+    "phone_e164_rejected",
+    "phone_national_region_mismatch",
+    "ipv4_parse_failed",
+    "ipv6_parse_failed",
+    "ipv4_documentation_range",
+    "ipv6_documentation_range",
+    "eth_eip55_checksum_failed",
+    "aadhaar_verhoeff_failed",
+    "fr_nir_mod97_failed",
+    "de_steuer_id_mod1110_failed",
+    "bsn_mod11_failed",
+    "cpf_mod11_failed",
+    "cnpj_mod11_failed",
+    "uk_nhs_mod11_failed",
+    "ipv4_loopback_range",
+    "ipv6_loopback_range"
+  ]
+}

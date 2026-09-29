@@ -228,6 +228,193 @@ class RecordReplayTests(unittest.TestCase):
         writer.write(path, card, add_reference=False)
         return card
 
+    def with_lineage(self, events=None, **provenance):
+        response = copy.deepcopy(self.response)
+        item = response["final_protection_trace"][0]
+        start, end = item["raw_start"], item["raw_end"]
+        item["provenance"].update({
+            "settlement": "resolve",
+            "contributions": [
+                {"original": 0, "recognizer_id": "synthetic:email", "role": "winner",
+                 "raw_start": start, "raw_end": end,
+                 "tier": None, "defeat_kind": None, "defeated_by": None},
+                {"original": 1, "recognizer_id": "synthetic:name", "role": "defeated",
+                 "raw_start": start, "raw_end": start + 5,
+                 "tier": "class_priority", "defeat_kind": "pair",
+                 "defeated_by": "synthetic:email"},
+            ],
+        })
+        item["provenance"].update(provenance)
+        base = {key: None for key in record.EVENT_FIELDS}
+        response["candidate_events"] = events if events is not None else [
+            {**base, "original": 0, "recognizer_id": "synthetic:email", "class": "email",
+             "raw_start": start, "raw_end": end, "outcome": "selected",
+             "selection_start": start, "selection_end": end, "settlement": "resolve",
+             "role": "winner"},
+            {**base, "original": 1, "recognizer_id": "synthetic:name", "class": "name",
+             "raw_start": start, "raw_end": start + 5, "outcome": "defeated",
+             "selection_start": start, "selection_end": end, "settlement": "resolve",
+             "tier": "class_priority", "defeat_kind": "pair", "winner": 0},
+            {**base, "recognizer_id": "synthetic:card", "class": "custom:credit_card",
+             "raw_start": 44, "raw_end": 50, "outcome": "vetoed",
+             "veto_reason": "luhn_failed"},
+        ]
+        return response
+
+    def test_lineage_writes_schema_v2_and_scores_identically(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plain = Path(temporary) / "plain.jsonl.gz"
+            self.make_record(plain)
+            self.response = self.with_lineage()
+            typed = Path(temporary) / "typed.jsonl.gz"
+            card = self.make_record(typed)
+            header, rows = record._read(typed)
+            self.assertEqual(header["schema_version"], 2)
+            self.assertEqual(record._read(plain)[0]["schema_version"], 1)
+            response = rows[0]["response"]
+            self.assertEqual(
+                response["final_protection_trace"][0]["provenance"]["contributions"][1]["role"],
+                "defeated",
+            )
+            self.assertEqual(len(response["candidate_events"]), 3)
+            # Lineage is metadata: every contract scores the two records alike.
+            self.assertEqual(record.rescore(typed, score.SCORED_LABEL_CONTRACT_V1), card)
+            for contract in (
+                score.SCORED_LABEL_CONTRACT_V1,
+                score.load_scored_label_contract(ROOT / "docs/reference/benchmarks/scored-labels-v3.json"),
+            ):
+                self.assertEqual(
+                    record.rescore(typed, contract)["runs"][0]["metrics"],
+                    record.rescore(plain, contract)["runs"][0]["metrics"],
+                )
+            # A v2 header over a trace without lineage, or the reverse, is refused.
+            for source, version in ((plain, 2), (typed, 1)):
+                with gzip.open(source, "rt", encoding="utf-8") as stream:
+                    lines = [json.loads(line) for line in stream]
+                lines[0]["schema_version"] = version
+                forged = Path(temporary) / f"forged-{version}.jsonl.gz"
+                with gzip.open(forged, "wt", encoding="utf-8") as stream:
+                    stream.writelines(json.dumps(line) + "\n" for line in lines)
+                with self.assertRaisesRegex(record.RecordError, "disagrees with its trace lineage"):
+                    record._read(forged)
+
+    def test_safety_net_and_residual_items_are_exempt_from_the_selection_join(self):
+        response = self.with_lineage()
+        base = {key: None for key in record.EVENT_FIELDS}
+        response["candidate_events"].append(
+            {**base, "original": 2, "recognizer_id": "synthetic:part", "class": "name",
+             "raw_start": 0, "raw_end": 5, "outcome": "unlinked"})
+        plain = {"tier": None, "defeat_kind": None, "defeated_by": None}
+        response["final_protection_trace"] = [
+            {"raw_start": 0, "raw_end": 5, "class": "name", "action": "tokenize",
+             "provenance": {"stage": "primary_pipeline", "decision": "policy",
+                            "source_ids": ["synthetic:part"], "settlement": "residual",
+                            "contributions": [{"original": 2, "recognizer_id": "synthetic:part",
+                                               "role": "winner", "raw_start": 0, "raw_end": 5,
+                                               **plain}]}},
+            *response["final_protection_trace"],
+            {"raw_start": 44, "raw_end": 50, "class": "name", "action": "redact",
+             "provenance": {"stage": "safety_net", "decision": "redact",
+                            "source_ids": ["nym"], "settlement": "safety_net",
+                            "contributions": [{"original": None, "recognizer_id": "nym",
+                                               "role": "winner", "raw_start": 44, "raw_end": 50,
+                                               **plain}]}},
+        ]
+        record.validate_response_lineage(response, 50, "exempt")
+        # A residual parent still needs its candidate event.
+        broken = copy.deepcopy(response)
+        broken["final_protection_trace"][0]["provenance"]["contributions"][0]["original"] = 9
+        with self.assertRaisesRegex(record.RecordError, "without a candidate event"):
+            record.validate_response_lineage(broken, 50, "exempt")
+
+    def test_malformed_lineage_is_refused(self):
+        typed = self.with_lineage()
+        winner, defeated = typed["final_protection_trace"][0]["provenance"]["contributions"]
+        selected, lost, vetoed = typed["candidate_events"]
+        trace_cases = {
+            "unknown settlement": {"settlement": "guess"},
+            "disagrees with stage": {"settlement": "safety_net"},
+            "without contributions": {"contributions": []},
+            "unknown contribution role": {"contributions": [{**winner, "role": "helper"}]},
+            "fields differ": {"contributions": [{**winner, "score": 1}]},
+            "without its own span": {"contributions": [{**winner, "raw_end": None}]},
+            "co_member contribution without its own span": {"contributions": [
+                winner, {**winner, "role": "co_member", "raw_start": None, "raw_end": None}]},
+            "own span in the document": {"contributions": [{**winner, "raw_end": 10_000}]},
+            "does not overlap its trace item": {"contributions": [
+                {**winner, "raw_start": 44, "raw_end": 50}]},
+            "detected no span": {"contributions": [
+                winner, {**winner, "original": None, "recognizer_id": "ner",
+                         "role": "derived_dependency"}]},
+            "unknown conflict tier": {"contributions": [winner, {**defeated, "tier": "InventedTier"}]},
+            "unknown defeat kind": {"contributions": [winner, {**defeated, "defeat_kind": "vibes"}]},
+            "names no winner": {"contributions": [winner, {**defeated, "defeated_by": None}]},
+            "exactly the defeated role": {"contributions": [{**winner, "tier": "score"}]},
+            "without a detecting contribution": {"contributions": [defeated]},
+        }
+        event_cases = {
+            "event fields differ": [{**selected, "value": "x"}],
+            "unknown candidate outcome": [{**selected, "outcome": "maybe"}],
+            "candidate span outside": [{**selected, "raw_end": 10_000}],
+            "exactly a vetoed candidate has no pool index": [{**vetoed, "original": 2}],
+            "pool index malformed": [{**selected, "original": -1}],
+            "placed twice in one selection": [selected, {**lost, "original": 0, "winner": 0}, vetoed],
+            "selected twice": [selected, {**selected, "selection_start": 44, "selection_end": 50}],
+            "unlinked candidate has a placement": [selected, {
+                **{key: None for key in record.EVENT_FIELDS}, "original": 0,
+                "recognizer_id": "synthetic:email", "class": "email",
+                "raw_start": 0, "raw_end": 5, "outcome": "unlinked"}],
+            "one per candidate": [{**selected, "original": 3}],
+            "role does not belong": [{**lost, "original": 0, "role": "winner"}],
+            "tier does not belong": [{**selected, "tier": "score"}],
+            "has a detecting role": [{**selected, "role": "defeated"}],
+            "unknown selection settlement": [{**selected, "settlement": "residual"}],
+            "unknown conflict tier": [selected, {**lost, "tier": "InventedTier"}],
+            "unknown defeat kind": [selected, {**lost, "defeat_kind": "vibes"}],
+            "not a placed candidate": [selected, {**lost, "winner": 1}],
+            "unknown veto reason": [{**vetoed, "veto_reason": "felt_wrong"}],
+        }
+        dependency = {**winner, "original": None, "recognizer_id": "ner", "role": "derived_dependency",
+                      "raw_start": None, "raw_end": None}
+        join_cases = {
+            # An empty events list cannot back a traced selection.
+            "contribution without a candidate event": ({}, []),
+            "contribution disagrees with its candidate's ID or span": (
+                {"contributions": [{**winner, "recognizer_id": "synthetic:other"}, defeated]}, None),
+            "not placed in its trace item's selection": (
+                {}, [{**selected, "selection_end": selected["selection_end"] - 1}, lost, vetoed]),
+            "settlement disagrees": ({}, [{**selected, "settlement": "recovery"}, lost, vetoed]),
+            "role disagrees with its candidate event": (
+                {"contributions": [{**winner, "role": "same_span_merge"}, defeated]}, None),
+            "defeated contribution disagrees": (
+                {"contributions": [winner, {**defeated, "tier": "score"}]}, None),
+            "defeated contribution disagrees with its candidate event": (
+                {"contributions": [winner, {**defeated, "defeated_by": "synthetic:name"}]}, None),
+            "event missing from its trace item": ({"contributions": [winner]}, None),
+            "has no pool candidate": ({"contributions": [winner, defeated, {**dependency, "original": 1}]}, None),
+        }
+        cases = [(message, self.with_lineage(**change)) for message, change in trace_cases.items()]
+        cases += [(message, self.with_lineage(events=events, **change))
+                  for message, (change, events) in join_cases.items()]
+        cases += [(message, self.with_lineage(events=events)) for message, events in event_cases.items()]
+        for message, response in cases:
+            with self.subTest(message):
+                writer = record.RecordWriter(
+                    [self.document], self.measurements, corpus_sha256="0" * 64
+                )
+                with self.assertRaisesRegex(record.RecordError, message):
+                    writer.add("C", "policy-file", self.document, response, self.measurements)
+        half = copy.deepcopy(self.response)
+        half["final_protection_trace"][0]["provenance"]["settlement"] = "resolve"
+        writer = record.RecordWriter([self.document], self.measurements, corpus_sha256="0" * 64)
+        with self.assertRaisesRegex(record.RecordError, "half a lineage"):
+            writer.add("C", "policy-file", self.document, half, self.measurements)
+        no_events = self.with_lineage()
+        del no_events["candidate_events"]
+        writer = record.RecordWriter([self.document], self.measurements, corpus_sha256="0" * 64)
+        with self.assertRaisesRegex(record.RecordError, "some trace items carry lineage"):
+            writer.add("C", "policy-file", self.document, no_events, self.measurements)
+
     def test_v1_is_exact_v2_changes_gold_and_v3_credits_repeat(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "observations.jsonl.gz"

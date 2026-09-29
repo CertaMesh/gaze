@@ -1,8 +1,13 @@
+mod lineage;
 mod occurrence;
 mod protection;
 use occurrence::{Batch, Ledger, Occurrence, Origin, Relation};
 mod recovery;
 mod residual;
+pub use lineage::{
+    CandidateEvent, CandidateOutcome, ContributionRole, Defeat, DefeatKind, TraceContribution,
+    TraceSettlement,
+};
 pub use protection::{BoundaryRefusal, ProtectionContext, ProtectionError};
 
 use std::collections::BTreeMap;
@@ -402,6 +407,8 @@ pub struct GazeLocalProtectionTraceItem {
     class: PiiClass,
     kind: GazeLocalProtectionTraceKind,
     source_ids: Vec<String>,
+    settlement: TraceSettlement,
+    contributions: Vec<TraceContribution>,
 }
 
 impl GazeLocalProtectionTraceItem {
@@ -449,6 +456,18 @@ impl GazeLocalProtectionTraceItem {
 
     pub fn source_ids(&self) -> &[String] {
         &self.source_ids
+    }
+
+    /// Which pipeline step produced this item.
+    pub fn settlement(&self) -> TraceSettlement {
+        self.settlement
+    }
+
+    /// Every recognizer behind this item with its typed role. Unlike
+    /// [`Self::source_ids`], which is lineage, only `winner`,
+    /// `same_span_merge` and `co_member` entries detected bytes themselves.
+    pub fn contributions(&self) -> &[TraceContribution] {
+        &self.contributions
     }
 }
 
@@ -817,6 +836,36 @@ impl Pipeline {
         LeakReport,
         Vec<GazeLocalProtectionTraceItem>,
     )> {
+        let (clean, manifest, report, trace, _) = self
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                session,
+                text,
+                locale_chain,
+                dictionaries,
+                policy,
+            )?;
+        Ok((clean, manifest, report, trace))
+    }
+
+    /// [`Self::clean_text_with_safety_net_policy_detect_context_and_protection_trace`]
+    /// plus one metadata-only [`CandidateEvent`] per primary-pool or vetoed
+    /// candidate: which selection it joined or lost inside, and how.
+    #[doc(hidden)]
+    #[allow(clippy::type_complexity)]
+    pub fn clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+        &self,
+        session: &Session,
+        text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        policy: SafetyNetPolicy,
+    ) -> Result<(
+        CleanDocument,
+        Vec<EmittedTokenSpan>,
+        LeakReport,
+        Vec<GazeLocalProtectionTraceItem>,
+        Vec<CandidateEvent>,
+    )> {
         let decision = policy.decision();
         let mut target = ProtectionTarget::Live(session);
         let mut protection_trace = ProtectionTraceCollector::new(text);
@@ -848,12 +897,14 @@ impl Pipeline {
             decision,
             Some(&mut protection_trace),
         )?;
+        let events = std::mem::take(&mut protection_trace.events);
         let trace = protection_trace.finish(&clean.manifest.projection().spans)?;
         Ok((
             CleanDocument::Text(clean.text),
             clean.manifest.into_spans()?,
             report,
             trace,
+            events,
         ))
     }
 
@@ -1106,10 +1157,40 @@ impl Pipeline {
             })
             .collect::<BTreeMap<_, _>>();
         let mut ledger = Ledger::new(evidence);
+        // Typed lineage is metadata for the protection trace only; building it
+        // reads the decision graph and never changes a decision.
         let vetoed = vetoed
             .into_iter()
             .filter_map(|vetoed| translate_vetoed_candidate(vetoed, spans))
             .collect::<Vec<_>>();
+        let lineages = match protection_trace.as_deref_mut() {
+            Some(trace) => {
+                let graph = lineage::DecisionGraph::new(ledger.segment());
+                let (lineages, events): (Vec<_>, Vec<_>) = ledger
+                    .segment()
+                    .selections
+                    .iter()
+                    .map(|selection| {
+                        graph
+                            .selection(selection)
+                            .map(|found| (found.lineage, found.events))
+                            .map_err(protection_trace_error)
+                    })
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .unzip();
+                trace.events.extend(
+                    graph
+                        .candidate_events(events)
+                        .map_err(protection_trace_error)?,
+                );
+                trace
+                    .events
+                    .extend(vetoed.iter().map(lineage::vetoed_event));
+                lineages
+            }
+            None => Vec::new(),
+        };
         let losers = merged_losers(&resolved, &self.registry);
         let mut detections = resolved
             .into_iter()
@@ -1189,6 +1270,7 @@ impl Pipeline {
             };
 
             let span = detection.detection.span;
+            let selection = selection_ids[&(span.start, span.end, index >= primary_count)];
             if action == Action::Tokenize {
                 if let Some(trace) = protection_trace.as_deref_mut() {
                     trace.record(
@@ -1196,10 +1278,10 @@ impl Pipeline {
                         detection.detection.class.clone(),
                         GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
                         detection.trace_source_ids.clone(),
+                        lineages[selection].clone(),
                     )?;
                 }
             }
-            let selection = selection_ids[&(span.start, span.end, index >= primary_count)];
             ledger.set_selection_action(selection, action);
             let owned = matches!(action, Action::Tokenize | Action::FormatPreserve)
                 && replacement
@@ -1357,11 +1439,18 @@ impl Pipeline {
                     let Origin::Residual { segment, residual } = origin else {
                         unreachable!()
                     };
+                    let cell = &residual_plan
+                        .as_ref()
+                        .expect("a residual origin has a residual plan")
+                        .cells[residual];
+                    let lineage =
+                        lineage::residual(ledger.segment(), &cell.parents, cell.representative);
                     trace.record(
                         span.clone(),
                         class,
                         GazeLocalProtectionTraceKind::ResidualPolicyTokenize { segment, residual },
                         sources,
+                        lineage,
                     )?;
                 }
             }
@@ -2393,11 +2482,15 @@ impl Pipeline {
             )),
         )?;
         if let Some(trace) = protection_trace {
+            let ids = vec![suspect.safety_net_id.clone()];
+            let lineage =
+                lineage::safety_net(&[(suspect.safety_net_id.clone(), plan.raw_span.clone())]);
             trace.record(
                 plan.raw_span,
                 suspect.class.clone(),
                 GazeLocalProtectionTraceKind::SafetyNetResolveTokenize,
-                vec![suspect.safety_net_id.clone()],
+                ids,
+                lineage,
             )?;
         }
         Ok(())
@@ -2619,6 +2712,7 @@ impl Pipeline {
             let raw_span = map_clean_span_to_raw(clean, &span)?;
             plans.push(PlannedSafetyNetRedaction {
                 suspects: vec![suspect],
+                suspect_raw_spans: vec![raw_span.clone()],
                 clean_span: span,
                 raw_span,
             });
@@ -2706,7 +2800,15 @@ impl Pipeline {
                     .suspects
                     .iter()
                     .map(|suspect| suspect.safety_net_id.clone())
-                    .collect();
+                    .collect::<Vec<_>>();
+                let lineage = lineage::safety_net(
+                    &plan
+                        .suspects
+                        .iter()
+                        .zip(&plan.suspect_raw_spans)
+                        .map(|(suspect, span)| (suspect.safety_net_id.clone(), span.clone()))
+                        .collect::<Vec<_>>(),
+                );
                 trace.record(
                     plan.raw_span,
                     region_class,
@@ -2716,6 +2818,7 @@ impl Pipeline {
                         GazeLocalProtectionTraceKind::SafetyNetRedact
                     },
                     source_ids,
+                    lineage,
                 )?;
             }
         }
@@ -2995,6 +3098,9 @@ struct CleanText {
 /// the region.
 struct PlannedSafetyNetRedaction<'a> {
     suspects: Vec<&'a LeakSuspect>,
+    /// Per suspect, in `suspects` order: the raw bytes its own action covered
+    /// before regions merged, so trace lineage keeps each backend's bytes.
+    suspect_raw_spans: Vec<Range<usize>>,
     clean_span: Range<usize>,
     raw_span: Range<usize>,
 }
@@ -3002,6 +3108,8 @@ struct PlannedSafetyNetRedaction<'a> {
 struct ProtectionTraceCollector<'a> {
     raw_text: &'a str,
     items: Vec<GazeLocalProtectionTraceItem>,
+    /// One event per primary-pool or vetoed candidate (component ledger S1).
+    events: Vec<CandidateEvent>,
 }
 
 impl<'a> ProtectionTraceCollector<'a> {
@@ -3009,6 +3117,7 @@ impl<'a> ProtectionTraceCollector<'a> {
         Self {
             raw_text,
             items: Vec::new(),
+            events: Vec::new(),
         }
     }
 
@@ -3018,6 +3127,7 @@ impl<'a> ProtectionTraceCollector<'a> {
         class: PiiClass,
         kind: GazeLocalProtectionTraceKind,
         mut source_ids: Vec<String>,
+        lineage: lineage::Lineage,
     ) -> Result<()> {
         if raw_span.start >= raw_span.end
             || raw_span.end > self.raw_text.len()
@@ -3037,6 +3147,9 @@ impl<'a> ProtectionTraceCollector<'a> {
         if source_ids.is_empty() {
             return Err(protection_trace_error("missing protection source id"));
         }
+        if lineage.contributions.is_empty() {
+            return Err(protection_trace_error("missing protection lineage"));
+        }
 
         self.items
             .retain(|existing| !ranges_overlap(&existing.raw_span, &raw_span));
@@ -3045,6 +3158,8 @@ impl<'a> ProtectionTraceCollector<'a> {
             class,
             kind,
             source_ids,
+            settlement: lineage.settlement,
+            contributions: lineage.contributions,
         });
         Ok(())
     }
@@ -4510,6 +4625,7 @@ fn merge_overlapping_redaction_plans(
                 region.raw_span.start = region.raw_span.start.min(plan.raw_span.start);
                 region.raw_span.end = region.raw_span.end.max(plan.raw_span.end);
                 region.suspects.extend(plan.suspects);
+                region.suspect_raw_spans.extend(plan.suspect_raw_spans);
             }
             _ => merged.push(plan),
         }
@@ -5878,6 +5994,47 @@ mod tests {
             .all(|byte| byte.is_ascii_hexdigit()));
     }
 
+    /// One suspect per marker found in the clean text.
+    struct MarkersSafetyNet {
+        id: &'static str,
+        markers: &'static [&'static str],
+    }
+
+    impl SafetyNet for MarkersSafetyNet {
+        fn id(&self) -> &str {
+            self.id
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            clean_text: &str,
+            context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            Ok(self
+                .markers
+                .iter()
+                .filter_map(|marker| {
+                    let start = clean_text.find(marker)?;
+                    let span = start..start + marker.len();
+                    let kind = context.manifest.diff_against(&span, &PiiClass::Name)?;
+                    Some(LeakSuspect::new(
+                        span,
+                        PiiClass::Name,
+                        self.id,
+                        Some(1.0),
+                        kind,
+                        "person",
+                        None,
+                    ))
+                })
+                .collect())
+        }
+    }
+
     impl SafetyNet for MarkerSafetyNet {
         fn id(&self) -> &str {
             self.id
@@ -6314,6 +6471,21 @@ mod tests {
         assert_eq!(trace[0].decision(), "policy");
         assert_eq!(trace[0].action(), "tokenize");
         assert_eq!(trace[0].source_ids(), &["email.fixture".to_string()]);
+        assert_eq!(trace[0].settlement(), TraceSettlement::Resolve);
+        assert_eq!(
+            trace_roles(&trace[0]),
+            vec![("email.fixture", ContributionRole::Winner, Some(0..21), None)]
+        );
+        assert_eq!(trace[1].settlement(), TraceSettlement::SafetyNet);
+        assert_eq!(
+            trace_roles(&trace[1]),
+            vec![(
+                "name-safety.fixture",
+                ContributionRole::Winner,
+                Some(name_start..text.len()),
+                None
+            )]
+        );
         assert_eq!(trace[1].raw_start(), name_start);
         assert_eq!(trace[1].raw_end(), text.len());
         assert_eq!(trace[1].class(), &PiiClass::Name);
@@ -6335,6 +6507,15 @@ mod tests {
                 PiiClass::Name,
                 GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
                 vec!["synthetic+support".to_string()],
+                lineage::Lineage {
+                    settlement: TraceSettlement::Resolve,
+                    contributions: vec![TraceContribution::new(
+                        "synthetic+support",
+                        ContributionRole::Winner,
+                        Some(0..11),
+                        None,
+                    )],
+                },
             )
             .expect("valid literal-plus source ID");
         assert_eq!(
@@ -6371,6 +6552,86 @@ mod tests {
             trace[0].source_ids(),
             &["email.fixture".to_string(), "synthetic+support".to_string()]
         );
+        let roles = trace_roles(&trace[0]);
+        assert_eq!(roles.len(), 2);
+        assert!(roles
+            .iter()
+            .all(|(_, _, span, tier)| { *span == Some(0..text.len()) && tier.is_none() }));
+        let mut kinds = roles.iter().map(|(_, role, ..)| *role).collect::<Vec<_>>();
+        kinds.sort();
+        assert_eq!(
+            kinds,
+            vec![ContributionRole::Winner, ContributionRole::SameSpanMerge]
+        );
+    }
+
+    type TraceRole<'a> = (
+        &'a str,
+        ContributionRole,
+        Option<Range<usize>>,
+        Option<ConflictTier>,
+    );
+
+    fn trace_roles(item: &GazeLocalProtectionTraceItem) -> Vec<TraceRole<'_>> {
+        item.contributions()
+            .iter()
+            .map(|c| {
+                (
+                    c.recognizer_id(),
+                    c.role(),
+                    c.raw_span(),
+                    c.defeat().map(|d| d.tier),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn protection_trace_types_a_defeated_candidate_that_source_ids_only_lists() {
+        // `source_ids` carries the loser as lineage; the typed roles say it
+        // lost and on which rung, so a ledger cannot credit it with the bytes.
+        let text = "alice@example.invalid";
+        let pipeline = Pipeline::builder()
+            .detector(FixedDetector {
+                detections: vec![
+                    Detection::new(0..text.len(), PiiClass::Email, "email.fixture"),
+                    Detection::new(0..5, PiiClass::Name, "name.fixture"),
+                ],
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (_, _, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .expect("traced clean");
+        assert_eq!(trace.len(), 1);
+        assert_eq!(
+            trace[0].source_ids(),
+            &["email.fixture".to_string(), "name.fixture".to_string()]
+        );
+        let roles = trace_roles(&trace[0]);
+        assert_eq!(roles.len(), 2);
+        assert_eq!(
+            roles[0],
+            (
+                "email.fixture",
+                ContributionRole::Winner,
+                Some(0..text.len()),
+                None
+            )
+        );
+        assert_eq!(roles[1].0, "name.fixture");
+        assert_eq!(roles[1].1, ContributionRole::Defeated);
+        assert_eq!(roles[1].2, Some(0..5));
+        assert!(roles[1].3.is_some(), "a defeat names its rung");
     }
 
     #[test]
@@ -7016,6 +7277,120 @@ mod tests {
         );
     }
 
+    #[test]
+    fn merged_safety_net_redaction_keeps_each_suspects_own_bytes() {
+        // One net flags two overlapping spans; redact mode merges them into one
+        // region. Each suspect must keep the raw bytes its own action covered,
+        // and two suspects of one backend stay two entries.
+        let text = "alice@example.invalid met Dr. Schmidt";
+        let met = text.find("met Dr.").expect("synthetic cue");
+        let dr = text.find("Dr. Schmidt").expect("synthetic name");
+        let pipeline = Pipeline::builder()
+            .detector(detector_with_detections(
+                "email.fixture",
+                vec![Detection::new(0..21, PiiClass::Email, "email.fixture")],
+            ))
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(MarkersSafetyNet {
+                id: "name-pair.fixture",
+                markers: &["met Dr.", "Dr. Schmidt"],
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (_, _, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Redact, SafetyNetFallback::Redact),
+            )
+            .expect("redact trace");
+        assert_eq!(trace.len(), 2);
+        assert_eq!(trace[1].raw_start(), met);
+        assert_eq!(trace[1].raw_end(), text.len());
+        assert_eq!(trace[1].settlement(), TraceSettlement::SafetyNet);
+        assert_eq!(
+            trace_roles(&trace[1]),
+            vec![
+                (
+                    "name-pair.fixture",
+                    ContributionRole::CoMember,
+                    Some(met..met + "met Dr.".len()),
+                    None
+                ),
+                (
+                    "name-pair.fixture",
+                    ContributionRole::CoMember,
+                    Some(dr..text.len()),
+                    None
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn protection_evidence_reports_every_candidate_with_its_outcome() {
+        let text = "alice@example.invalid";
+        let pipeline = Pipeline::builder()
+            .detector(FixedDetector {
+                detections: vec![
+                    Detection::new(0..text.len(), PiiClass::Email, "email.fixture"),
+                    Detection::new(0..5, PiiClass::Name, "name.fixture"),
+                ],
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (_, _, _, trace, events) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                &session,
+                text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .expect("traced clean");
+        assert_eq!(trace.len(), 1);
+        assert_eq!(events.len(), 2);
+        let by_id = |id: &str| {
+            events
+                .iter()
+                .find(|event| event.recognizer_id == id)
+                .expect("event")
+        };
+        assert!(matches!(
+            &by_id("email.fixture").outcome,
+            CandidateOutcome::Selected { role: ContributionRole::Winner, selection, .. }
+                if *selection == (0..text.len())
+        ));
+        let name = by_id("name.fixture");
+        assert_eq!(name.raw_span, 0..5);
+        match &name.outcome {
+            CandidateOutcome::Defeated {
+                defeat, selection, ..
+            } => {
+                assert_eq!(*selection, 0..text.len());
+                assert_eq!(defeat.kind, DefeatKind::Pair);
+                assert_eq!(defeat.winner_recognizer, "email.fixture");
+            }
+            other => panic!("expected a defeat, got {other:?}"),
+        }
+        // Every trace contribution names the pool candidate whose event places it here.
+        for contribution in trace[0].contributions() {
+            let original = contribution.original().expect("pool candidate");
+            assert!(events.iter().any(|event| {
+                event.original == Some(original)
+                    && event.recognizer_id == contribution.recognizer_id()
+                    && Some(event.raw_span.clone()) == contribution.raw_span()
+            }));
+        }
+    }
+
     /// `validate_clean_manifest` is defense in depth: `redact_text_with_manifest` emits an entry
     /// for every replacing action, so a pipeline-produced manifest is gap-preserving and this
     /// cannot fire from the public surface. Probe it directly so the check is not unfalsifiable.
@@ -7634,6 +8009,7 @@ mod tests {
     ) -> PlannedSafetyNetRedaction<'a> {
         PlannedSafetyNetRedaction {
             suspects: vec![suspect],
+            suspect_raw_spans: vec![raw_span.clone()],
             clean_span,
             raw_span,
         }

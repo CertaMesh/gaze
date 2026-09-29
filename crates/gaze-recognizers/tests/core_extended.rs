@@ -802,8 +802,8 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         "ip.v4 must reject out-of-range octets"
     );
     assert_eq!(
-        detect_recognizer(&rulepack, "ip.v6", "Loopback ::1.", LocaleTag::EnUs),
-        vec!["::1".to_string()]
+        detect_recognizer(&rulepack, "ip.v6", "Host ::2.", LocaleTag::EnUs),
+        vec!["::2".to_string()]
     );
     assert_eq!(
         detect_recognizer(&rulepack, "ip.v6", "Host 2001:db9::1.", LocaleTag::EnUs),
@@ -1777,7 +1777,7 @@ fn every_phase1_recognizer_round_trips_through_restore() {
         // https://nationalnanpa.com/number_resource_info/555_numbers.html
         ("Call +1 555 0100", LocaleTag::EnUs),
         ("Host 192.168.1.1", LocaleTag::EnUs),
-        ("Loopback ::1", LocaleTag::EnUs),
+        ("Host ::2", LocaleTag::EnUs),
         ("Host 2001:db9::1", LocaleTag::EnUs),
         (
             "Wallet 0x52908400098527886E0F7030069857D2E4169EE7",

@@ -201,6 +201,13 @@ pub enum RulepackError {
     },
     #[error("failed to parse rulepack TOML: {0}")]
     Toml(#[source] toml::de::Error),
+    /// A recognizer still declares a rulepack key that Gaze no longer supports.
+    #[error("recognizer {id} declares removed rulepack key `{key}`: {reason}")]
+    RemovedKey {
+        id: String,
+        key: &'static str,
+        reason: &'static str,
+    },
     #[error("unsupported rulepack schema_version {found}; supported {supported}")]
     SchemaVersion { found: String, supported: String },
     #[error("unknown pii class: {0}")]
@@ -479,6 +486,10 @@ struct RawContextSpec {
     exclusions: Vec<String>,
     #[serde(default)]
     reject_match_regex: Option<String>,
+    /// Removed before release; kept only so a pack that still declares it gets a typed error
+    /// instead of silently losing the key.
+    #[serde(default)]
+    benign_lookalikes: Option<toml::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -706,6 +717,18 @@ fn parse_recognizer(
             value: err.value().to_string(),
         })?
         .unwrap_or_default();
+
+    if raw
+        .context
+        .as_ref()
+        .is_some_and(|context| context.benign_lookalikes.is_some())
+    {
+        return Err(RulepackError::RemovedKey {
+            id: raw.id,
+            key: "benign_lookalikes",
+            reason: "benign-lookalike vetoes were removed; delete the key (see UPGRADE.md)",
+        });
+    }
 
     Ok(RecognizerSpec {
         id: raw.id,

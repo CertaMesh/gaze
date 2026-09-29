@@ -17,11 +17,245 @@ import gaze_bench_score as score
 import agentic_layers as agentic
 
 
-SCHEMA_VERSION = 1
+# v2: every trace item's provenance also carries typed lineage (`settlement`
+# plus `contributions`) and each observation carries `candidate_events`, one
+# per detected candidate (component ledger S1). v1 records stay readable.
+SCHEMA_VERSION = 2
+READABLE_SCHEMA_VERSIONS = frozenset({1, SCHEMA_VERSION})
+# Closed vocabulary; a clean_for_bench test pins it to the Rust enums.
+VOCABULARY = json.loads(
+    (Path(__file__).resolve().parent / "trace-lineage-vocabulary.json").read_text(encoding="utf-8")
+)
+CONTRIBUTION_ROLES = frozenset(VOCABULARY["roles"])
+# Roles whose recognizer found the item's bytes itself; the rest are lineage.
+DETECTING_ROLES = frozenset(VOCABULARY["detecting_roles"])
+SETTLEMENTS = frozenset(VOCABULARY["settlements"])
+DEFEAT_KINDS = frozenset(VOCABULARY["defeat_kinds"])
+OUTCOMES = frozenset(VOCABULARY["outcomes"])
+CONFLICT_TIERS = frozenset(VOCABULARY["conflict_tiers"])
+VALIDATOR_FAIL_REASONS = frozenset(VOCABULARY["validator_fail_reasons"])
+CONTRIBUTION_FIELDS = frozenset({
+    "original", "recognizer_id", "role", "raw_start", "raw_end", "tier", "defeat_kind", "defeated_by",
+})
+EVENT_FIELDS = frozenset({
+    "original", "recognizer_id", "class", "raw_start", "raw_end", "outcome",
+    "selection_start", "selection_end", "settlement", "role", "tier", "defeat_kind",
+    "winner", "veto_reason",
+})
+DEFEAT_FIELDS = ("tier", "defeat_kind", "defeated_by")
 
 
 class RecordError(ValueError):
     pass
+
+
+def has_lineage(item: Mapping[str, object]) -> bool:
+    provenance = item["provenance"]
+    present = {"settlement", "contributions"} & set(provenance)
+    if present and present != {"settlement", "contributions"}:
+        raise RecordError("trace provenance carries half a lineage")
+    return bool(present)
+
+
+def response_lineage(response: Mapping[str, object]) -> bool | None:
+    """Whether a response carries v2 lineage; `None` for a pipeline error."""
+    if response.get("refused") or "pipeline_error_code" in response:
+        return None
+    events = "candidate_events" in response
+    for item in response.get("final_protection_trace") or ():
+        if has_lineage(item) != events:
+            raise RecordError(
+                f"{response.get('fixture_id')}: some trace items carry lineage and some do not"
+            )
+    return events
+
+
+def _span(start: object, end: object, utf8_bytes: int) -> bool:
+    return type(start) is int and type(end) is int and 0 <= start < end <= utf8_bytes
+
+
+def validate_lineage(item: Mapping[str, object], utf8_bytes: int, where: str) -> None:
+    """One trace item's typed lineage is well formed. Metadata only: no values."""
+    provenance = item["provenance"]
+    settlement = provenance["settlement"]
+    if settlement not in SETTLEMENTS:
+        raise RecordError(f"{where}: unknown settlement {settlement!r}")
+    if (settlement == "safety_net") != (provenance["stage"] == "safety_net"):
+        raise RecordError(f"{where}: settlement {settlement!r} disagrees with stage")
+    contributions = provenance["contributions"]
+    if not isinstance(contributions, list) or not contributions:
+        raise RecordError(f"{where}: trace item without contributions")
+    for entry in contributions:
+        if set(entry) != CONTRIBUTION_FIELDS:
+            raise RecordError(f"{where}: contribution fields differ from the schema")
+        role = entry["role"]
+        if role not in CONTRIBUTION_ROLES:
+            raise RecordError(f"{where}: unknown contribution role {role!r}")
+        if not isinstance(entry["recognizer_id"], str) or not entry["recognizer_id"]:
+            raise RecordError(f"{where}: contribution without a recognizer ID")
+        start, end = entry["raw_start"], entry["raw_end"]
+        if role == "derived_dependency":
+            if start is not None or end is not None:
+                raise RecordError(f"{where}: a derived dependency detected no span")
+        elif not _span(start, end, utf8_bytes):
+            raise RecordError(f"{where}: {role} contribution without its own span in the document")
+        if role in DETECTING_ROLES and not (start < item["raw_end"] and item["raw_start"] < end):
+            raise RecordError(f"{where}: {role} contribution does not overlap its trace item")
+        defeat = [entry[key] for key in DEFEAT_FIELDS]
+        if role == "defeated":
+            if entry["tier"] not in CONFLICT_TIERS:
+                raise RecordError(f"{where}: unknown conflict tier {entry['tier']!r}")
+            if entry["defeat_kind"] not in DEFEAT_KINDS:
+                raise RecordError(f"{where}: unknown defeat kind {entry['defeat_kind']!r}")
+            if not isinstance(entry["defeated_by"], str) or not entry["defeated_by"]:
+                raise RecordError(f"{where}: a defeat names no winner")
+        elif any(value is not None for value in defeat):
+            raise RecordError(f"{where}: defeat fields belong to exactly the defeated role")
+    if not any(entry["role"] in DETECTING_ROLES for entry in contributions):
+        raise RecordError(f"{where}: trace item without a detecting contribution")
+
+
+def validate_candidate_events(events: object, utf8_bytes: int, where: str) -> None:
+    """One document's candidate events are well formed and self-consistent.
+
+    A pool candidate appears once per selection tree that reached it (it can
+    lose in one and be recovered in another), is selected at most once, and is
+    `unlinked` only when no tree reached it.
+    """
+    if not isinstance(events, list):
+        raise RecordError(f"{where}: candidate events must be a list")
+    originals: dict[int, list[Mapping[str, object]]] = {}
+    for event in events:
+        if set(event) != EVENT_FIELDS:
+            raise RecordError(f"{where}: candidate event fields differ from the schema")
+        outcome = event["outcome"]
+        if outcome not in OUTCOMES:
+            raise RecordError(f"{where}: unknown candidate outcome {outcome!r}")
+        if not isinstance(event["recognizer_id"], str) or not event["recognizer_id"]:
+            raise RecordError(f"{where}: candidate event without a recognizer ID")
+        if not isinstance(event["class"], str) or not event["class"]:
+            raise RecordError(f"{where}: candidate event without a class")
+        if not _span(event["raw_start"], event["raw_end"], utf8_bytes):
+            raise RecordError(f"{where}: candidate span outside the document")
+        original = event["original"]
+        if (original is None) != (outcome == "vetoed"):
+            raise RecordError(f"{where}: exactly a vetoed candidate has no pool index")
+        if original is not None:
+            if type(original) is not int or original < 0:
+                raise RecordError(f"{where}: candidate pool index malformed")
+            originals.setdefault(original, []).append(event)
+        placed = outcome in {"selected", "defeated"}
+        expected = {
+            "selection_start": placed, "selection_end": placed, "settlement": placed,
+            "role": outcome == "selected", "tier": outcome == "defeated",
+            "defeat_kind": outcome == "defeated", "winner": outcome == "defeated",
+            "veto_reason": outcome == "vetoed",
+        }
+        for key, present in expected.items():
+            if (event[key] is not None) != present:
+                raise RecordError(f"{where}: {key} does not belong to a {outcome} candidate")
+        if placed:
+            if not _span(event["selection_start"], event["selection_end"], utf8_bytes):
+                raise RecordError(f"{where}: selection span outside the document")
+            if event["settlement"] not in SETTLEMENTS - {"residual", "safety_net"}:
+                raise RecordError(f"{where}: unknown selection settlement {event['settlement']!r}")
+        if outcome == "selected" and event["role"] not in DETECTING_ROLES:
+            raise RecordError(f"{where}: a selected candidate has a detecting role")
+        if outcome == "defeated":
+            if event["tier"] not in CONFLICT_TIERS:
+                raise RecordError(f"{where}: unknown conflict tier {event['tier']!r}")
+            if event["defeat_kind"] not in DEFEAT_KINDS:
+                raise RecordError(f"{where}: unknown defeat kind {event['defeat_kind']!r}")
+        if outcome == "vetoed" and event["veto_reason"] not in VALIDATOR_FAIL_REASONS:
+            raise RecordError(f"{where}: unknown veto reason {event['veto_reason']!r}")
+    if sorted(originals) != list(range(len(originals))):
+        raise RecordError(f"{where}: candidate pool indexes are not one per candidate")
+    for placements in originals.values():
+        outcomes = [event["outcome"] for event in placements]
+        if "unlinked" in outcomes and len(outcomes) > 1:
+            raise RecordError(f"{where}: an unlinked candidate has a placement")
+        if outcomes.count("selected") > 1:
+            raise RecordError(f"{where}: candidate selected twice")
+        selections = [(event["selection_start"], event["selection_end"]) for event in placements]
+        if len(set(selections)) != len(selections):
+            raise RecordError(f"{where}: candidate placed twice in one selection")
+    for event in events:
+        if event["outcome"] == "defeated":
+            winner = originals.get(event["winner"], ())
+            if (event["winner"] == event["original"]
+                    or not any(other["outcome"] in {"selected", "defeated"} for other in winner)):
+                raise RecordError(f"{where}: a defeat's winner is not a placed candidate")
+
+
+# Items settled from a resolver selection; their contributions join candidate
+# events one to one. Exempt: `safety_net` (suspects have no pool candidate) and
+# `residual` (a residual cell is not a selection; its parents only need events).
+SELECTION_SETTLEMENTS = SETTLEMENTS - {"residual", "safety_net"}
+
+
+def validate_response_lineage(response: Mapping[str, object], utf8_bytes: int, where: str) -> None:
+    """Trace lineage and candidate events are each well formed, and they agree.
+
+    Every selection item's contribution names its pool candidate, whose event
+    places it in exactly that selection with the same role (or the same defeat),
+    span and settlement. Every event placed in a traced selection appears in
+    that item. Nothing here reads a value.
+    """
+    events = response["candidate_events"]
+    validate_candidate_events(events, utf8_bytes, where)
+    by_original: dict[int, list[Mapping[str, object]]] = {}
+    placed: dict[tuple[int, int, int], Mapping[str, object]] = {}
+    for event in events:
+        if event["original"] is None:
+            continue
+        by_original.setdefault(event["original"], []).append(event)
+        if event["outcome"] in {"selected", "defeated"}:
+            placed[(event["original"], event["selection_start"], event["selection_end"])] = event
+    traced: set[tuple[int, int]] = set()
+    joined: set[tuple[int, int, int]] = set()
+    for item in response.get("final_protection_trace") or ():
+        validate_lineage(item, utf8_bytes, where)
+        settlement = item["provenance"]["settlement"]
+        span = (item["raw_start"], item["raw_end"])
+        if settlement in SELECTION_SETTLEMENTS:
+            traced.add(span)
+        for entry in item["provenance"]["contributions"]:
+            original = entry["original"]
+            if entry["role"] == "derived_dependency" or settlement == "safety_net":
+                if original is not None:
+                    raise RecordError(f"{where}: a {entry['role']} {settlement} entry has no pool candidate")
+                continue
+            candidates = by_original.get(original) if type(original) is int else None
+            if not candidates:
+                raise RecordError(f"{where}: contribution without a candidate event")
+            if any(
+                event["recognizer_id"] != entry["recognizer_id"]
+                or (event["raw_start"], event["raw_end"]) != (entry["raw_start"], entry["raw_end"])
+                for event in candidates
+            ):
+                raise RecordError(f"{where}: contribution disagrees with its candidate's ID or span")
+            if settlement == "residual":
+                continue
+            key = (original, *span)
+            event = placed.get(key)
+            if event is None:
+                raise RecordError(f"{where}: contribution not placed in its trace item's selection")
+            if event["settlement"] != settlement:
+                raise RecordError(f"{where}: candidate event settlement disagrees with its trace item")
+            if entry["role"] == "defeated":
+                winner = by_original.get(event["winner"], ())
+                if (event["outcome"] != "defeated"
+                        or (event["tier"], event["defeat_kind"]) != (entry["tier"], entry["defeat_kind"])
+                        or not winner or winner[0]["recognizer_id"] != entry["defeated_by"]):
+                    raise RecordError(f"{where}: defeated contribution disagrees with its candidate event")
+            elif event["outcome"] != "selected" or event["role"] != entry["role"]:
+                raise RecordError(f"{where}: contribution role disagrees with its candidate event")
+            if key in joined:
+                raise RecordError(f"{where}: candidate joined twice in one trace item")
+            joined.add(key)
+    for key in placed:
+        if key[1:] in traced and key not in joined:
+            raise RecordError(f"{where}: candidate event missing from its trace item")
 
 
 def _write_rows(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
@@ -153,6 +387,8 @@ def _compact_response(response: Mapping[str, object]) -> dict[str, object]:
             {key: item[key] for key in ("raw_start", "raw_end", "class", "action", "provenance")}
             for item in response["final_protection_trace"]
         ],
+        **({"candidate_events": response["candidate_events"]}
+           if "candidate_events" in response else {}),
         "restore": response["restore"],
         "manifest_integrity": response["manifest_integrity"],
         "initial_safety_net_stats": response["initial_safety_net_stats"],
@@ -183,6 +419,13 @@ class RecordWriter:
         self.layer_contract = layer_contract
         self.layer_measurements: dict[str, Mapping[str, object]] = {}
         self.rows: list[dict[str, object]] = []
+        # None until the first trace item: whether the producer emits lineage.
+        self.lineage: bool | None = None
+
+    @property
+    def schema_version(self) -> int:
+        # A producer without typed lineage (an older tag) still writes a v1 record.
+        return SCHEMA_VERSION if self.lineage else 1
 
     def add(
         self,
@@ -205,6 +448,13 @@ class RecordWriter:
             if previous != validator:
                 raise RecordError(f"{document.uid}: validator evidence changed")
         compact = _compact_response(response)
+        lineage = response_lineage(compact)
+        if lineage is not None:
+            if self.lineage is not None and lineage != self.lineage:
+                raise RecordError(f"{document.uid}: some responses carry lineage and some do not")
+            self.lineage = lineage
+            if lineage:
+                validate_response_lineage(compact, len(original.text.encode("utf-8")), document.uid)
         if "pipeline_error_code" not in response:
             compact["gold_gap_evidence"] = _gap_evidence(
                 original, score.final_trace_predictions(original, dict(response))
@@ -231,7 +481,7 @@ class RecordWriter:
         ]
         header = {
             "kind": "header",
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
             "scorecard": scorecard,
             "add_reference": add_reference,
@@ -250,7 +500,7 @@ class RecordWriter:
             "file": path.name,
             "sha256": digest,
             "format": "gzip-jsonl",
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
             "observations": len(self.rows),
             "bytes": path.stat().st_size,
@@ -332,14 +582,33 @@ def _evidence(
     return result
 
 
+def _check_lineage(header: Mapping[str, object], observations: Sequence[Mapping[str, object]]) -> None:
+    """A v2 record carries lineage on every trace item; a v1 record on none."""
+    sizes = {row["id"]: row["utf8_bytes"] for row in header.get("documents") or ()}
+    want = header["schema_version"] >= 2
+    for row in observations:
+        lineage = response_lineage(row["response"])
+        if lineage is None:
+            continue
+        if lineage != want:
+            raise RecordError(
+                f"{row['document_id']}: record schema v{header['schema_version']} "
+                "disagrees with its trace lineage"
+            )
+        if want:
+            validate_response_lineage(row["response"], sizes[row["document_id"]], row["document_id"])
+
+
 def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
     with gzip.open(path, "rt", encoding="utf-8") as stream:
         rows = [json.loads(line) for line in stream]
-    if not rows or rows[0].get("kind") != "header" or rows[0].get("schema_version") != SCHEMA_VERSION:
+    if (not rows or rows[0].get("kind") != "header"
+            or rows[0].get("schema_version") not in READABLE_SCHEMA_VERSIONS):
         raise RecordError("unknown or missing record header")
     header, observations = rows[0], rows[1:]
     if any(row.get("kind") != "observation" for row in observations):
         raise RecordError("unknown record row")
+    _check_lineage(header, observations)
     card = header["scorecard"]
     recorded_corpus = (
         card["dataset"]["integrity"]["sha256"]
@@ -529,7 +798,7 @@ def rescore(
     if header["add_reference"]:
         result["observation_record"] = {
             "file": path.name, "sha256": score.sha256_file(path),
-            "format": "gzip-jsonl", "schema_version": SCHEMA_VERSION,
+            "format": "gzip-jsonl", "schema_version": header["schema_version"],
             "corpus_sha256": header["corpus_sha256"],
             "observations": len(observations), "bytes": path.stat().st_size,
         }
