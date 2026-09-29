@@ -187,6 +187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   call-scoped context JSON. These defaults reduce unmeasured false-positive
   exposure but can leave caller-known values to ordinary detectors until the
   separate oracle measures those variants.
+- **README and benchmark charts are static SVG panels** (solo todo #3932). One panel per benchmark with the value printed on every bar, light and dark variants, released Gaze versions and declared competitor configurations only; the mermaid `xychart-beta` charts (no labels on GitHub) and the README results table are gone. See `docs/reference/benchmarks/README.md#benchmark-panels`. The headline row is character-level F2 (β=2, label-agnostic, micro) with leaked bytes under each bar; tagged Gaze releases are scored by `release_char_level.py` from their committed observation records.
 
 - **The benchmark headline is scored-label contract v3** (solo todo #3696,
   after the gold-gap audit passed). Leaked bytes are unchanged from v2; false

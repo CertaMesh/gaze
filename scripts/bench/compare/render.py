@@ -13,8 +13,11 @@ BENCH = REPO / "scripts/bench"
 import compare  # noqa: E402
 from layer_display import layer_display_name  # noqa: E402
 from markdown_table import table_header  # noqa: E402
+from tagged_gaze import check_public  # noqa: E402
 
-ORDER = ("gaze", *compare.TOOLS)
+#: Gaze is not listed: the comparison run measured an unreleased build, and public
+#: pages show tagged releases only (tagged_gaze.py).
+ORDER = tuple(compare.TOOLS)
 
 LOSS_METRICS = (
     ("Leaked B", ("leaked_bytes",), "lower"),
@@ -49,55 +52,6 @@ def _display_metric(value: int | float, name: str) -> str:
     return f"{value:,}"
 
 
-def enumerate_gaze_losses(report: dict[str, object], versions: tuple[str, ...],
-                          layers: list[str]) -> tuple[dict[str, int], list[str]]:
-    """List every scored metric on which a measured competitor beats Gaze."""
-    counts: dict[str, int] = {}
-    entries = []
-    for version in versions:
-        for layer in layers:
-            gaze = report["gaze"][version]["layers"][layer]
-            for name in ORDER[1:]:
-                if name not in report["tools"]:
-                    continue
-                tool = report["tools"][name]["contracts"][version][layer]
-                differences = []
-                for metric in ("Leaked B", "FP B"):
-                    key = "leaked_bytes" if metric == "Leaked B" else "false_positive_bytes"
-                    left, right = tool[key], gaze[key]
-                    if metric == "FP B" and version == "v3":
-                        left = tool.get("false_positive_bytes_after_gold_gap")
-                        right = gaze.get("false_positive_bytes_after_gold_gap")
-                        if left is None:
-                            left = tool[key]
-                        if right is None:
-                            right = gaze[key]
-                    if left < right:
-                        counts[f"full aggregate {metric}"] = counts.get(f"full aggregate {metric}", 0) + 1
-                        differences.append(f"{metric} {_display_metric(left, metric)} vs {_display_metric(right, metric)}")
-                if differences:
-                    entries.append(f"{version} {layer_display_name(layer)} full aggregate {name}: "
-                                   + "; ".join(differences))
-                for view in ("product_coverage", "common_intersection"):
-                    for split in ("full", "validation", "test"):
-                        a = tool["metrics"][view][split]
-                        b = gaze["metrics"][view][split]
-                        differences = []
-                        for metric, path, better in LOSS_METRICS:
-                            left, right = _metric_value(a, path), _metric_value(b, path)
-                            if (left < right if better == "lower" else left > right):
-                                counts[metric] = counts.get(metric, 0) + 1
-                                differences.append(
-                                    f"{metric} {_display_metric(left, metric)} vs {_display_metric(right, metric)}"
-                                )
-                        if differences:
-                            entries.append(
-                                f"{version} {layer_display_name(layer)} {view} {split} {name}: "
-                                + "; ".join(differences)
-                            )
-    return counts, entries
-
-
 def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -118,12 +72,14 @@ def validate_current(report: dict[str, object]) -> None:
             corpus["negative_corpus_sha256"],
             digest_file(REPO / "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl"),
         ),
+        # A comparison measured on an older generator stays valid while the
+        # current generator still rebuilds that corpus byte for byte and its
+        # contract is committed; the page then names the older corpus.
         "agentic layers": (
-            corpus["agentic"]["corpus_sha256"],
-            compare.agentic.prepare(REPO).manifest["corpus_sha256"],
+            corpus["agentic"]["corpus_sha256"], agentic_identity(report)[0],
         ),
         "agentic scored labels": (
-            report["contracts"]["agentic"], compare.agentic.load_contract(REPO).sha256,
+            report["contracts"]["agentic"], agentic_identity(report)[1],
         ),
     }
     if report.get("schema_version", 1) >= 2:
@@ -162,6 +118,30 @@ def validate_current(report: dict[str, object]) -> None:
     recorded_packs = {item["path"]: item["sha256"] for item in corpus["packs"]}
     if recorded_packs != current_packs:
         raise ValueError("variant packs changed; rerun every competitor, including sealed partitions")
+
+
+def agentic_identity(report: dict[str, object]) -> tuple[str, str]:
+    """(corpus, contract) SHA-256 of the generator version the report measured."""
+    version = report["corpus"]["agentic"]["generator_version"]
+    return compare.agentic.corpus_identity(REPO, version)
+
+
+def agentic_corpus_note(report: dict[str, object]) -> str:
+    """A plain statement when the agentic numbers predate the current generator.
+
+    Display only: `validate_current` requires the agentic identity and fails
+    closed without it.
+    """
+    agentic = report["corpus"].get("agentic")
+    if agentic is None or agentic["generator_version"] == compare.agentic.GENERATOR_VERSION:
+        return ""
+    version = agentic["generator_version"]
+    return (
+        f" The agentic-layer rows were measured on generator v{version} "
+        f"(test corpus `{report['corpus']['agentic']['corpus_sha256'][:12]}…`, "
+        f"{report['corpus']['agentic']['documents']:,} documents). The current generator is "
+        f"v{compare.agentic.GENERATOR_VERSION}; its added documents are not measured here."
+    )
 
 
 def render(report: dict[str, object], source: str) -> str:
@@ -228,18 +208,10 @@ def render(report: dict[str, object], source: str) -> str:
     latency_publishable = report.get("latency_validity", {}).get("publishable", report.get("schema_version", 1) < 2)
     if report.get("schema_version", 1) >= 2 and "latency_validity" not in report:
         raise ValueError("comparison report lacks latency validity evidence")
-    latency_pairs = [
-        (gaze[version]["layers"][layer]["latency"]["p50_ms"],
-         tools["presidio-all"]["contracts"][version][layer]["latency"]["p50_ms"])
-        for version in versions for layer in layer_ids
-    ]
-    latency_pairs = [(g, p) for g, p in latency_pairs if g is not None and p is not None]
-    slower_rows = sum(g > p for g, p in latency_pairs)
     latency_note = (
-        f"Gaze p50 exceeds Presidio all in {slower_rows}/{len(latency_pairs)} "
-        "comparable layer-contract rows on this host. "
-        if latency_pairs else "No comparable Gaze and Presidio all latency rows. "
-    ) if latency_publishable else "Latency was not measured under a quiet machine; timing comparisons are withheld. "
+        "" if latency_publishable
+        else "Latency was not measured under a quiet machine; timing comparisons are withheld. "
+    )
     skipped_example = tools["presidio-en"]["contracts"]["v3"].get("A")
     skipped_example_note = (
         f"For example, Presidio English-only v3 {layer_display_name('A')} leaks "
@@ -268,15 +240,17 @@ def render(report: dict[str, object], source: str) -> str:
         "Presidio all runs English, German, Dutch, French, and Portuguese spaCy models "
         "with the documented German recognizers. Presidio English default is a secondary row. "
         + ("Latency includes processed documents only. " if latency_publishable else "") + latency_note +
-        "This measures detection; competitor restore and manifest behavior is not scored.",
+        "This measures detection; competitor restore and manifest behavior is not scored."
+        + agentic_corpus_note(report),
         "",
         "Leaked and false-positive byte counts are class-agnostic. A skipped document's "
         "scored gold counts in full as leaked. Subtract Skipped gold B from Leaked B to "
         "get leakage on processed documents. " + skipped_example_note +
         "The reviewed label map controls v3's repeated-gold credit and the exact typed-span metrics below.",
         "",
-        f"Gaze measured at `{gaze['v3']['gaze_revision']}` "
-        f"(release `{report['latest_release_at_measurement']['version']}`). "
+        "Gaze is not listed: the comparison run measured an unreleased build, and this page "
+        "shows tagged Gaze releases only. Released Gaze numbers are in the "
+        "[release history](README.md#release-history) and the benchmark panels. "
         f"Home-normalized setup policy SHA-256: `{report['policy_sha256_home_normalized']}`."
         + (" The measured call scopes differ by tool, so latency is descriptive."
            if latency_publishable else ""),
@@ -293,18 +267,12 @@ def render(report: dict[str, object], source: str) -> str:
         "",
         *table_header(summary_columns),
     ]
-    lower_leak = []
-    lower_fp_at_equal_leak = []
     for version in versions:
         for layer in layer_ids:
-            gaze_row = gaze[version]["layers"][layer]
             for name in ORDER:
-                if name == "gaze":
-                    row = gaze_row
-                elif name in tools:
-                    row = tools[name]["contracts"][version][layer]
-                else:
+                if name not in tools:
                     continue
+                row = tools[name]["contracts"][version][layer]
                 fp = row["false_positive_bytes"]
                 if version == "v3" and row["false_positive_bytes_after_gold_gap"] is not None:
                     fp = row["false_positive_bytes_after_gold_gap"]
@@ -321,26 +289,6 @@ def render(report: dict[str, object], source: str) -> str:
                     f"{row.get('skipped_documents', 0):,} | {row.get('skipped_gold_bytes', 0):,} | "
                     + timing
                 )
-                if name != "gaze" and version == "v3":
-                    gaze_fp = gaze_row["false_positive_bytes_after_gold_gap"]
-                    if gaze_fp is None:
-                        gaze_fp = gaze_row["false_positive_bytes"]
-                    if row["leaked_bytes"] < gaze_row["leaked_bytes"]:
-                        lower_leak.append(
-                            f"{layer_display_name(layer)}: {name} leaks {row['leaked_bytes']:,} B versus Gaze "
-                            f"{gaze_row['leaked_bytes']:,} B"
-                        )
-                    elif row["leaked_bytes"] == gaze_row["leaked_bytes"] and fp < gaze_fp:
-                        lower_fp_at_equal_leak.append(
-                            f"{layer_display_name(layer)}: {name} has {fp:,} FP B versus Gaze {gaze_fp:,} FP B"
-                        )
-    if report.get("schema_version", 1) < 2:
-        lines.extend([
-            "", "**Where Gaze leaks more under v3:** "
-            + ("; ".join(lower_leak) if lower_leak else "none in these measured rows") + ".",
-            "", "**Where a competitor has fewer false positives at equal v3 leakage:** "
-            + ("; ".join(lower_fp_at_equal_leak) if lower_fp_at_equal_leak else "none in these measured rows") + ".",
-        ])
     if report.get("schema_version", 1) >= 2:
         lines.extend([
             "", "## Heldout safety and entity metrics", "",
@@ -363,12 +311,9 @@ def render(report: dict[str, object], source: str) -> str:
             for layer in layer_ids:
                 for view in ("product_coverage", "common_intersection"):
                     for name in ORDER:
-                        if name == "gaze":
-                            row = gaze[version]["layers"][layer]
-                        elif name in tools:
-                            row = tools[name]["contracts"][version][layer]
-                        else:
+                        if name not in tools:
                             continue
+                        row = tools[name]["contracts"][version][layer]
                         metric = row["metrics"][view]["test"]
                         entity = metric["typed_entities"]
                         lines.append(
@@ -381,62 +326,13 @@ def render(report: dict[str, object], source: str) -> str:
                             f"{entity['fn']:,} | {entity['precision']:.3f} | {entity['recall']:.3f} | "
                             f"{entity['f1']:.3f} | {entity['f2']:.3f} |"
                         )
-        loss_counts, losses = enumerate_gaze_losses(report, versions, layer_ids)
-        summary = "; ".join(f"{name}: {count}" for name, count in loss_counts.items())
-        gaze_c = gaze["v3"]["layers"]["C"]["metrics"]["common_intersection"]["test"]
-        c_candidates = (
-            (name, tool["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"])
-            for name, tool in tools.items()
-        )
-        best_c_name, best_c = min(c_candidates, key=lambda pair: pair[1]["leaked_bytes"])
-        highlighted = (
-            f"On the v3 {layer_display_name('C')} common-intersection test half, "
-            f"Gaze leaks {gaze_c['leaked_bytes']:,} B "
-            f"across {gaze_c['leaking_documents']:,}/{gaze_c['pii_documents']:,} PII documents; "
-            f"{best_c_name} leaks {best_c['leaked_bytes']:,} B across "
-            f"{best_c['leaking_documents']:,}/{best_c['pii_documents']:,}."
-        )
-        if best_c["leaked_bytes"] < gaze_c["leaked_bytes"]:
-            highlighted += " This is a measured Gaze loss."
-        lines.extend([
-            "", "## Where Gaze trails", "",
-            highlighted,
-            "",
-            "Competitors have a lower leak, false-positive, or redaction-load value, or a "
-            "better typed-entity value, in the following measured cells. Lower redaction load "
-            "alone can reflect missed PII. Each pair reads competitor vs Gaze. Full aggregate "
-            "rows span both halves and use v3's audited gold-gap FP credit; detailed rows use "
-            "raw FP and also show validation and test separately. Counts below are metric cells; "
-            "overlapping views and splits must not be summed as independent cases.",
-            "", f"Loss counts by metric: {summary or 'none'}.",
-            "", "<details>", f"<summary>All {len(losses):,} losing rows</summary>", "",
-            *(f"- {loss}" for loss in losses), "", "</details>",
-        ])
-        lines.extend(["", "## Gaze ablations", "",
-                      "Rules only, rules plus NER, and full setup use the same test documents and scorer.", "",
-                      *table_header([
-                          ("Contract", False), ("Layer", False), ("Gaze configuration", False),
-                          ("Leaked B", True), ("FP B", True), ("PII docs", True),
-                          ("Leaking docs", True), ("Entity F1", True), ("Entity F2", True),
-                      ])])
-        for version in versions:
-            for layer in layer_ids:
-                for name in ("rules-only", "rules-ner", "full"):
-                    row = (gaze[version]["layers"][layer] if name == "full"
-                           else report["gaze_ablations"][name][version][layer])
-                    metric = row["metrics"]["product_coverage"]["test"]
-                    typed = metric["typed_entities"]
-                    lines.append(f"| {version} | {layer_display_name(layer)} | {name} | "
-                                 f"{metric['leaked_bytes']:,} | "
-                                 f"{metric['false_positive_bytes']:,} | {metric['pii_documents']:,} | "
-                                 f"{metric['leaking_documents']:,} | {typed['f1']:.3f} | {typed['f2']:.3f} |")
         lines.extend(["", "Threshold choice uses validation only: " + "; ".join(
             f"{group} → {selected}" for group, selected in report.get("selected_threshold_rows", {}).items()) + "."])
     skipped = report.get("skipped", {})
     if skipped:
         lines.extend(["", "**Skipped:** " + "; ".join(f"{name}: {reason}" for name, reason in skipped.items()) + "."])
     lines.append("")
-    return "\n".join(lines)
+    return check_public("\n".join(lines), "competitors.md")
 
 
 def main() -> None:
