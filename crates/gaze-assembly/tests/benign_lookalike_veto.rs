@@ -1059,4 +1059,3 @@ fn a_run_short_enough_to_be_a_phone_keeps_the_phone() {
     assert_protected("en-US", "ref 212-555-0187-44 end", "555-0187");
     assert_protected("en-US", "ref 212-555-0187-4444-9 end", "555-0187");
 }
-
