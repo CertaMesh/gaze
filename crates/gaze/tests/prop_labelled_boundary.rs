@@ -51,8 +51,36 @@ fn unicode_fragment() -> impl Strategy<Value = String> {
     .prop_map(str::to_owned)
 }
 
+fn plain_fragment() -> impl Strategy<Value = String> {
+    prop_oneof![
+        Just("é"),
+        Just("e\u{0301}"),
+        Just("\u{0301}"),
+        Just("中文"),
+        Just("😀"),
+        Just("\u{200B}"),
+        Just("\u{2060}"),
+        Just("\u{FEFF}"),
+        Just("\u{00A0}"),
+        Just("\u{202F}"),
+        Just("AB12"),
+        Just(" "),
+        Just("."),
+        Just("/"),
+        Just("_"),
+        Just(":"),
+        Just("-"),
+        Just("ß"),
+        Just("CD"),
+        Just("7"),
+        Just("DRIVER LICENSE: "),
+        Just("SSN "),
+    ]
+    .prop_map(str::to_owned)
+}
+
 fn document_case() -> impl Strategy<Value = String> {
-    (
+    let angle_case = (
         prop_oneof![Just("X9Y8Z7"), Just("alice@example.invalid")],
         prop::collection::vec(unicode_fragment(), 0..4),
         prop_oneof![Just(":"), Just("="), Just("|"), Just("\t"), Just("-")],
@@ -65,7 +93,21 @@ fn document_case() -> impl Strategy<Value = String> {
                 before.join(" "),
                 after.join(" ")
             )
-        })
+        });
+    let adjacent_case = (
+        prop_oneof![Just("X9Y8Z7"), Just("alice@example.invalid")],
+        prop::collection::vec(plain_fragment(), 1..4),
+        prop_oneof![Just(":"), Just("="), Just("|"), Just("\t"), Just("-")],
+        prop::collection::vec(plain_fragment(), 1..4),
+    )
+        .prop_map(|(marker, before, connector, after)| {
+            format!(
+                "{marker}{} Tax number{connector} AB123456{}",
+                before.concat(),
+                after.concat()
+            )
+        });
+    prop_oneof![angle_case, adjacent_case]
 }
 
 proptest! {
