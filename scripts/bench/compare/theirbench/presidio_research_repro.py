@@ -207,6 +207,9 @@ def evaluate(config: str, dataset_path: Path, model_path: str | None, limit: int
         "precision": round(binary.pii_precision, 3),
         "recall": round(binary.pii_recall, 3),
         "f2": round(binary.pii_f, 3),
+        # The counts the evaluator's own precision/recall/F2 derive from (recomputed at merge).
+        "counts": {"true_positives": binary.pii_true_positives, "predicted": binary.pii_predicted,
+                   "annotated": binary.pii_annotated},
         "predict_seconds": round(seconds, 1),
     }
 
@@ -272,7 +275,8 @@ def main() -> int:
         # The receipt the merge compares with the measured row: what was scored, on what.
         report["input"] = {"prediction_sha256": sha256(args.predictions),
                            "dataset_sha256": report["benchmark"]["dataset_sha256"],
-                           "documents": report["scored"]["documents"]}
+                           "documents": report["scored"]["documents"], "beta": 2, "digits": 3,
+                           "counts": report["scored"].pop("counts")}
         print(f"{args.system}: {report['scored']}", file=sys.stderr, flush=True)
     for config in configs if args.predictions is None else ():
         report["reproduced"][config] = evaluate(config, dataset_path, args.openmed_model, args.limit,

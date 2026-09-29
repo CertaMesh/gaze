@@ -121,3 +121,34 @@ def check_own_input(own: dict, prediction_sha256: str, dataset_sha256: str, wher
     if receipt.get("dataset_sha256") != dataset_sha256:
         raise ValueError(f"{where}: the own scorer used dataset {receipt.get('dataset_sha256')}, "
                          f"the pinned one is {dataset_sha256}")
+
+
+def check_own_score(own: dict, documents: int, where: str) -> None:
+    """Recompute a vendor evaluator's precision, recall and F-beta from the counts in its receipt.
+
+    The receipt (`own["input"]`) carries the evaluator's raw counts (true positives, predicted,
+    annotated), the beta and the rounding it applies; the published fields must be exactly
+    what those counts give, and the document count must be the measured split's. A score
+    edited after the fact, or one whose counts do not yield it, is refused.
+    """
+    receipt, scored = own["input"], own.get("scored") or own.get("overall")
+    counts = receipt.get("counts")
+    if not counts or not scored:
+        raise ValueError(f"{where}: the own-scorer result carries no counts to recompute its score from")
+    if receipt.get("documents") != documents:
+        raise ValueError(f"{where}: the own scorer scored {receipt.get('documents')} documents, the split has {documents}")
+    for key in ("documents", "records"):
+        if key in scored and scored[key] != documents:
+            raise ValueError(f"{where}: the published {key} count {scored[key]} is not the split's {documents}")
+    tp, predicted, annotated = counts["true_positives"], counts["predicted"], counts["annotated"]
+    if not (0 <= tp <= min(predicted, annotated)):
+        raise ValueError(f"{where}: counts are inconsistent (tp {tp}, predicted {predicted}, annotated {annotated})")
+    beta, digits = receipt["beta"], receipt["digits"]
+    precision = tp / predicted if predicted else 0.0
+    recall = tp / annotated if annotated else 0.0
+    denominator = beta * beta * precision + recall
+    f_beta = (1 + beta * beta) * precision * recall / denominator if denominator else 0.0
+    headline = "f2" if "f2" in scored else "f1"
+    for key, value in (("precision", precision), ("recall", recall), (headline, f_beta)):
+        if abs(scored[key] - round(value, digits)) > 1e-9:
+            raise ValueError(f"{where}: published {key} {scored[key]} is not what its counts give ({round(value, digits)})")

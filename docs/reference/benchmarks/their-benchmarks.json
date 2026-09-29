@@ -3217,7 +3217,14 @@
             "valid": true
           },
           "own_scorer_input": {
+            "beta": 1,
+            "counts": {
+              "annotated": 16979,
+              "predicted": 15212,
+              "true_positives": 4421
+            },
             "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+            "digits": 4,
             "documents": 5000,
             "prediction_sha256": "626efa0ca3286d03ca653a4db238499a8d4a216d9c574bf22da7b114d7c0f4fb"
           },
@@ -13911,7 +13918,7 @@
           "documents": 1500,
           "f2": 0.702,
           "precision": 0.764,
-          "predict_seconds": 0.2,
+          "predict_seconds": 0.1,
           "recall": 0.688
         },
         "gliner": {
@@ -13974,7 +13981,7 @@
           "documents": 1500,
           "f2": 0.857,
           "precision": 0.874,
-          "predict_seconds": 0.2,
+          "predict_seconds": 0.1,
           "recall": 0.852
         },
         "scrubadub-base": {
@@ -14474,7 +14481,14 @@
             "valid": true
           },
           "own_scorer_input": {
+            "beta": 2,
+            "counts": {
+              "annotated": 1850,
+              "predicted": 1666,
+              "true_positives": 1273
+            },
             "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+            "digits": 3,
             "documents": 1500,
             "prediction_sha256": "463fc3da7fd8ac7fd26e1063a581b0dc26b5112fadcc56e1ed1e8ae8aae63f1a"
           },
@@ -15945,7 +15959,14 @@
         },
         "presidio-tuned-presidio-research": {
           "own_scorer_input": {
+            "beta": 2,
+            "counts": {
+              "annotated": 1850,
+              "predicted": 1804,
+              "true_positives": 1577
+            },
             "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+            "digits": 3,
             "documents": 1500,
             "prediction_sha256": "c62883684d19d9ba93bc242b4f6043d2547220026a3edfbee0f63e92f5688a14"
           },

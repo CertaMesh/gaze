@@ -21,7 +21,7 @@ REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO / "scripts/bench"))
 from markdown_table import table_header  # noqa: E402
 from tagged_gaze import (  # noqa: E402
-    RELEASE_PINS, TAG, check_model_receipt, check_own_input, check_public, tag_commit)
+    RELEASE_PINS, TAG, check_model_receipt, check_own_input, check_own_score, check_public, tag_commit)
 VENDOR_TUNED = Path(__file__).with_name("vendor-tuned.json")
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
 DOC = REPO / "docs/reference/benchmarks/README.md"
@@ -188,7 +188,7 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         raise ValueError(f"{row} is already in {name}")
     if own["system"] != row:
         raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
-    check_own_input(own, release["prediction_sha256"], dataset_sha256(name, entry), row)
+    check_own_result(name, entry, row, own, release["prediction_sha256"])
     _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
     scored = own.get("scored") or own["overall"]
     entry["rows"][row] = report["rows"][row]["test"]
@@ -253,7 +253,7 @@ def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str,
         raise ValueError(f"{name} already has a vendor-tuned row")
     if own["system"] != row or not own.get("tuned_replay") or own.get("smoke_limit"):
         raise ValueError(f"the own-scorer result must be the full notebook-5 replay of {row}")
-    check_own_input(own, tuned["prediction_sha256"], dataset_sha256(name, entry), row)
+    check_own_result(name, entry, row, own, tuned["prediction_sha256"])
     if not entry["reproduction"].get("reproduced", {}).get("custom"):
         raise ValueError(f"{name}: the vendor's tuned number must be reproduced first")
     entry["rows"][row] = report["rows"][row]["test"]
@@ -290,6 +290,14 @@ def _check_release(row: str, release: Mapping[str, Any], resolve: Callable[[str]
     if (not reproduced or reproduced["prediction_sha256"] != release.get("prediction_sha256")
             or reproduced.get("harness_dirty") is not False):
         raise ValueError(f"{row}: no clean earlier run reproduces these predictions")
+
+
+def check_own_result(name: str, entry: Mapping[str, Any], row: str, own: Mapping[str, Any],
+                     prediction_sha256: str) -> None:
+    """The one check both merge paths run on a vendor evaluator's result: it read this row's
+    predictions on the pinned dataset, and its published score is what its counts give."""
+    check_own_input(own, prediction_sha256, dataset_sha256(name, entry), row)
+    check_own_score(own, entry["splits"]["test"]["documents"], row)
 
 
 def dataset_sha256(name: str, entry: Mapping[str, Any]) -> str:

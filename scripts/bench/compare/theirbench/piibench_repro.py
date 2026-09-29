@@ -57,6 +57,19 @@ def summarize(metrics: dict) -> dict:
     return {key: round(float(value), 4) for key, value in found.items()}
 
 
+def entity_counts(true: list[list[str]], predicted: list[list[str]]) -> dict[str, int]:
+    """Micro counts seqeval's exact-match precision, recall and F1 derive from: entities are
+    (document, type, start, end); a true positive is one present in both."""
+    from seqeval.metrics.sequence_labeling import get_entities
+
+    def entities(tags: list[list[str]]) -> set[tuple[int, str, int, int]]:
+        return {(doc, kind, start, end) for doc, sentence in enumerate(tags)
+                for kind, start, end in get_entities(sentence)}
+
+    truth, found = entities(true), entities(predicted)
+    return {"true_positives": len(truth & found), "predicted": len(found), "annotated": len(truth)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--checkout", type=Path, required=True)
@@ -111,8 +124,14 @@ def main() -> int:
         "hardware": platform.platform(), "predict_seconds": seconds and round(seconds, 1),
     }
     if args.predictions is not None:
+        counts = entity_counts(true, predicted)
+        overall = report["overall"]
+        if (overall["precision"], overall["recall"]) != (round(counts["true_positives"] / counts["predicted"], 4),
+                                                         round(counts["true_positives"] / counts["annotated"], 4)):
+            raise SystemExit("seqeval's precision and recall are not what its entity counts give; refusing")
         report["input"] = {"prediction_sha256": build.sha256(args.predictions),
-                           "dataset_sha256": manifest["files"]["test_5k.jsonl"], "documents": len(records)}
+                           "dataset_sha256": manifest["files"]["test_5k.jsonl"], "documents": len(records),
+                           "beta": 1, "digits": 4, "counts": counts}
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report["overall"]))
     return 0

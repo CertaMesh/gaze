@@ -123,6 +123,15 @@ def release_provenance() -> dict:
     }
 
 
+def own_result(system: str, **extra) -> dict:
+    """A vendor-evaluator result whose published score follows from its counts:
+    60 of 80 predicted, 100 annotated -> precision 0.75, recall 0.6, F2 0.625 (rounded to 3)."""
+    return {"system": system, **extra,
+            "scored": {"documents": 1500, "precision": 0.75, "recall": 0.6, "f2": 0.625},
+            "input": {"prediction_sha256": "", "dataset_sha256": "d" * 64, "documents": 1500, "beta": 2,
+                      "digits": 3, "counts": {"true_positives": 60, "predicted": 80, "annotated": 100}}}
+
+
 def synthetic() -> dict:
     rows = {"gaze-full": row(10), "gaze-rules-only": row(40), "gaze-v0.15.1": row(12), "presidio-en": row(5),
             "presidio-strong": row(30), "opf": row(20)}
@@ -406,8 +415,8 @@ class TaggedRowTest(unittest.TestCase):
             "rows": {"gaze-v0.15.1": {"test": row(12)}},
             "provenance": {"gaze-v0.15.1": {"release": release_provenance()}},
         }
-        own = {"system": "gaze-v0.15.1", "scored": {"f2": 0.7},
-               "input": {"prediction_sha256": "9" * 64, "dataset_sha256": "d" * 64}}
+        own = own_result("gaze-v0.15.1")
+        own["input"]["prediction_sha256"] = "9" * 64
         return data, entry, report, own
 
     def test_a_valid_report_adds_one_row_the_page_shows_first(self) -> None:
@@ -415,7 +424,7 @@ class TaggedRowTest(unittest.TestCase):
 
         data, entry, report, own = self.entry_and_report()
         self.assertEqual(render.add_tagged(data, report, own, RESOLVE), "gaze-v0.15.1")
-        self.assertEqual(entry["own_metric"]["gaze-v0.15.1"], {"f2": 0.7})
+        self.assertEqual(entry["own_metric"]["gaze-v0.15.1"], own["scored"])
         self.assertEqual(entry["tagged_measurements"]["gaze-v0.15.1"]["harness_revision"], "d" * 40)
         body = render.render(data)
         self.assertLess(body.index("| gaze-v0.15.1 |"), body.index("| opf |"))
@@ -457,6 +466,15 @@ class TaggedRowTest(unittest.TestCase):
         refused(lambda r, o: o["input"].update(prediction_sha256="0" * 64), "own scorer read predictions")
         refused(lambda r, o: o["input"].update(dataset_sha256="0" * 64), "own scorer used dataset")
         refused(lambda r, o: o.pop("input"), "no input receipt")
+        # The published score must be what the receipt's counts give (recomputed at merge).
+        refused(lambda r, o: o["scored"].update(f2=0.01), "published f2 0.01 is not what its counts give")
+        refused(lambda r, o: o["scored"].update(precision=0.99), "published precision")
+        refused(lambda r, o: o["scored"].update(recall=0.1), "published recall")
+        refused(lambda r, o: o["input"]["counts"].update(true_positives=61), "published precision")
+        refused(lambda r, o: o["input"]["counts"].update(true_positives=90, predicted=80), "counts are inconsistent")
+        refused(lambda r, o: o["input"].pop("counts"), "no counts")
+        refused(lambda r, o: o["input"].update(documents=1499), "scored 1499 documents")
+        refused(lambda r, o: o["scored"].update(documents=1499), "published documents count")
         refused(lambda r, o: (r["rows"].update({"gaze-main": r["rows"].pop("gaze-v0.15.1")}),
                               r["provenance"].update({"gaze-main": {}})), "exactly one")
 
@@ -660,8 +678,8 @@ class VendorTunedRowTest(unittest.TestCase):
                              "dataset_sha256": "d" * 64}, "raw_sha256": raw,
                 "prediction_sha256": "8" * 64}}},
         }
-        own = {"system": TUNED, "tuned_replay": True, "scored": {"f2": 0.9}, "evaluator_commit": "6db3769a",
-               "input": {"prediction_sha256": "8" * 64, "dataset_sha256": "d" * 64}}
+        own = own_result(TUNED, tuned_replay=True, evaluator_commit="6db3769a")
+        own["input"]["prediction_sha256"] = "8" * 64
         return data, entry, report, own
 
     def test_the_tuned_row_replaces_the_declared_presidio_bar_only(self) -> None:
@@ -747,6 +765,14 @@ class VendorTunedRowTest(unittest.TestCase):
         refused(lambda r, o, d: o["input"].update(prediction_sha256="0" * 64), "own scorer read predictions")
         refused(lambda r, o, d: o["input"].update(dataset_sha256="0" * 64), "own scorer used dataset")
         refused(lambda r, o, d: o.pop("input"), "no input receipt")
+        # The published score must be what the receipt's counts give (recomputed at merge).
+        refused(lambda r, o, d: o["scored"].update(f2=0.01), "published f2 0.01 is not what its counts give")
+        refused(lambda r, o, d: o["scored"].update(precision=0.99), "published precision")
+        refused(lambda r, o, d: o["scored"].update(recall=0.1), "published recall")
+        refused(lambda r, o, d: o["input"]["counts"].update(annotated=101), "published recall")
+        refused(lambda r, o, d: o["input"]["counts"].update(true_positives=90, predicted=80), "counts are inconsistent")
+        refused(lambda r, o, d: o["input"].pop("counts"), "no counts")
+        refused(lambda r, o, d: o["input"].update(documents=1499), "scored 1499 documents")
         refused(lambda r, o, d: o.update(tuned_replay=False), "notebook-5 replay")
         refused(lambda r, o, d: o.update(system="presidio-strong"), "notebook-5 replay")
         refused(lambda r, o, d: d["benchmarks"]["presidio-research"]["reproduction"]["reproduced"].clear(),
@@ -797,6 +823,28 @@ class VendorTunedRowTest(unittest.TestCase):
             out.write_text("{}")
             with self.assertRaisesRegex(SystemExit, "fresh report"):
                 theirbench.validate_vendor_tuned_args(argparse.Namespace(**ok))
+
+    def test_the_recomputation_accepts_the_committed_own_scores_and_the_piibench_shape(self) -> None:
+        """One rule for both merge paths, exercised on every committed own-metric shape."""
+        import tagged_gaze
+
+        tagged_gaze.check_own_score(own_result("x"), 1500, "fixture")
+        # PIIBench: seqeval span F1, four digits, `overall` instead of `scored`.
+        tp, predicted, annotated = 1300, 4472, 4993
+        precision, recall = tp / predicted, tp / annotated
+        f1 = 2 * precision * recall / (precision + recall)
+        own = {"overall": {"precision": round(precision, 4), "recall": round(recall, 4), "f1": round(f1, 4)},
+               "input": {"documents": 5000, "beta": 1, "digits": 4,
+                         "counts": {"true_positives": tp, "predicted": predicted, "annotated": annotated}}}
+        tagged_gaze.check_own_score(own, 5000, "piibench")
+        own["overall"]["f1"] = 0.01
+        with self.assertRaisesRegex(ValueError, "published f1 0.01"):
+            tagged_gaze.check_own_score(own, 5000, "piibench")
+        # Zero predictions score 0, never a division error.
+        zero = own_result("z")
+        zero["input"]["counts"] = {"true_positives": 0, "predicted": 0, "annotated": 100}
+        zero["scored"].update(precision=0.0, recall=0.0, f2=0.0)
+        tagged_gaze.check_own_score(zero, 1500, "zero")
 
     def test_the_pin_is_in_the_declaration_and_the_shared_checks_refuse_a_mismatch(self) -> None:
         import tagged_gaze
