@@ -205,8 +205,10 @@ mapping paths without a leaf, arrays, nulls and duplicate JSON keys fail closed.
 Record errors name the field path, never its value.
 
 Values are trimmed and whitespace runs, including nonbreaking spaces, collapse
-to one space. Text matching accepts any whitespace run between value tokens,
-while the manifest restores the exact source bytes. Values with fewer than
+to one space. The record recognizer accepts a run of up to 32 whitespace
+characters between value tokens; Gaze's separate repeat-value sweep can still
+protect later copies under its own rules. The manifest restores the exact
+source bytes. Values with fewer than
 three letters or digit-only values shorter than four digits are rejected.
 Single-token names in the [version 1 common-word dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
 such as `Will`, `Grace`, `May` and `Mark`, are accepted but require

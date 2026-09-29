@@ -26,7 +26,7 @@ matching value raw in that column. Audit source IDs describe a class and slot,
 never the supplied value.
 
 This mode trims record values and collapses whitespace runs, then matches
-whitespace-flexible full values in text. Names also match full Unicode case
+full values across text whitespace runs of up to 32 characters. Names also match full Unicode case
 folds; the original source bytes are kept in the manifest for exact restore.
 Single-token names in the [version 1 common-word dictionary](../../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
 including `Will`, require person-model evidence, an adjacent record name, or

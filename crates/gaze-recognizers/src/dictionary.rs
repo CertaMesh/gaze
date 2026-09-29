@@ -10,6 +10,8 @@ use gaze_types::{
 };
 use unicode_casefold::UnicodeCaseFold;
 
+const MAX_RECORD_MATCH_WHITESPACE_RUN: usize = 32;
+
 /// Lookup-based [`Recognizer`] for tenant-specific PII.
 ///
 /// Matches exact strings from a runtime-supplied dictionary: order IDs, song
@@ -325,18 +327,18 @@ fn fold_with_original_offsets(
     let mut folded = String::with_capacity(input.len());
     let mut starts = HashMap::new();
     let mut ends = HashMap::new();
-    let mut whitespace_start = None;
+    let mut whitespace_count = 0;
     for (start, ch) in input.char_indices() {
         if collapse_whitespace && ch.is_whitespace() {
-            if whitespace_start.is_none() {
-                whitespace_start = Some(start);
+            whitespace_count += 1;
+            if whitespace_count == 1 || whitespace_count == MAX_RECORD_MATCH_WHITESPACE_RUN + 1 {
                 starts.insert(folded.len(), start);
                 folded.push(' ');
             }
             ends.insert(folded.len(), start + ch.len_utf8());
             continue;
         }
-        whitespace_start = None;
+        whitespace_count = 0;
         starts.insert(folded.len(), start);
         if case_fold {
             for mapped in ch.case_fold() {

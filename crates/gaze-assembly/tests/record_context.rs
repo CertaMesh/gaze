@@ -157,6 +157,40 @@ fn record_whitespace_variants_restore_original_bytes() {
 }
 
 #[test]
+fn record_whitespace_flex_has_a_bounded_gap() {
+    let context = Context::from_json_str(r#"{"record":{"full_name":"Maren Okafor"}}"#).unwrap();
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let pipeline =
+        build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+    let within = format!("Maren{}Okafor", "\u{a0}".repeat(32));
+    let beyond = format!("Maren{}Okafor", "\u{a0}".repeat(33));
+    let bundle = gaze::dictionary_bundle_from_context(&context);
+    for (raw, protected) in [(within, true), (beyond, false)] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(raw.clone()),
+                locales.as_slice(),
+                &bundle,
+            )
+            .unwrap()
+        else {
+            panic!("expected text")
+        };
+        assert_eq!(!clean.contains(&raw), protected);
+        assert_eq!(
+            pipeline
+                .restore_with_telemetry(&session, &clean)
+                .unwrap()
+                .0
+                .text,
+            raw
+        );
+    }
+}
+
+#[test]
 fn single_token_record_names_need_corroboration() {
     let context = Context::from_json_str(
         r#"{"record":{"first_name":"Will","last_name":"Smith","full_name":"Will Smith"}}"#,
