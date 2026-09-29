@@ -196,12 +196,14 @@ available.
 <!-- redaction-classes-gate:validators:end -->
 
 A validator vetoes a failing candidate by default. `[recognizers.validator]`
-accepts `on_fail = "record"` only with `iban_mod97` or `luhn`: the candidate is
-kept, its audit row carries `validator_fail_reason`, and its value is never
-swept to other copies (user ruling 2026-09-27; see
+accepts `on_fail = "record"` only with `iban_mod97`, `luhn`,
+`de_steuer_id_mod1110`, `bsn_mod11`, `cpf_mod11`, `e164_phone`, or
+`e164_phone_national_us`. The phone kinds require `phone-parser` when the
+recognizer is built. A kept candidate's audit row carries
+`validator_fail_reason`, and its value is never swept to other copies (see
 [validator veto](../explanation/detection/validator-veto.md#recorded-failures)).
 Any other validator with `on_fail = "record"`, and any value other than `veto`
-or `record`, fails the rulepack load with
+or `record`, fails rulepack loading with
 `RulepackError::UnsupportedValidatorOnFail`.
 
 ### `NormalizerKind`
