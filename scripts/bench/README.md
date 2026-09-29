@@ -369,7 +369,10 @@ drifts. Only tagged Gaze releases are drawn: the comparison report's main-branch
 run and the third-party files' `gaze-full` row are never read, `GazeRow`
 refuses a version that is not `vX.Y.Z`, and a tagged third-party run enters
 through `gaze_releases` in `their-benchmarks.json` (until then its slot reads
-"pending").
+"pending"). The panels' headline is character-level F2; `compare/release_char_level.py
+record` scores each tagged release from its committed observation record (needs the
+corpus) into `release-char-level.json`, and `check` (in `docs.yml`) verifies it against
+the release history and the metrics implementation without a corpus.
 
 ## Policy-matrix enumerations (base binary vs head binary)
 
