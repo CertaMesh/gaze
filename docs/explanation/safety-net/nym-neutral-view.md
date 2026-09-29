@@ -15,11 +15,14 @@ left out of the neutral view because replacing them with ASCII would change
 character boundaries.
 
 Nym checks both views on the initial safety-net pass and every follow-up pass.
-Findings with the same span and class are combined; the stable finding keeps
-its score. A finding's audit label records `view=stable`, `view=neutral`, or
-`view=stable+neutral`. The existing manifest correlation and placeholder
-clipping then remove token-contained findings before any policy action. The
-observable clean text, manifest, and restore path never use the neutral view.
+The stable findings keep their spans and scores. A neutral finding is mapped
+to the exposed gaps in the observable text; bytes inside manifest tokens or
+already covered by a stable finding are omitted. Its remaining gaps become
+separate findings. This avoids handing the resolver two overlapping actions
+when the views disagree about a finding's edges or class. An exact same-class
+action records `view=stable+neutral`; otherwise audit labels record
+`view=stable` or `view=neutral`. The observable clean text, manifest, and
+restore path never use the neutral view.
 
 Neutral-only findings also keep the class's meaning: a room, suite, unit,
 apartment, office, floor, or desk number is not a building's street number,

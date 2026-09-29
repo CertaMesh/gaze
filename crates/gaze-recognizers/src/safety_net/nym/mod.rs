@@ -12,13 +12,18 @@
 //! window scored, or a character the tokenizer did not cover, is a typed error, never a silent
 //! skip.
 
-use std::sync::{Arc, OnceLock};
+use std::{
+    ops::Range,
+    sync::{Arc, OnceLock},
+};
 
 pub use gaze_types::nym::{
     nym_label_to_pii_class, nym_label_to_safety_net_class, NymConfigError, NymLabel,
     NymOperatingPoint, NYM_SAFETY_NET_ID,
 };
-use gaze_types::{LeakKind, LeakSuspect, LocaleTag, SafetyNet, SafetyNetContext, SafetyNetError};
+use gaze_types::{
+    LeakKind, LeakSuspect, LocaleTag, Manifest, SafetyNet, SafetyNetContext, SafetyNetError,
+};
 
 pub mod artifacts;
 pub(crate) mod decode;
@@ -127,6 +132,7 @@ impl SafetyNet for NymSafetyNet {
         let Some(neutral_text) = neutral_text else {
             return Ok(union_view_suspects(
                 stable_text,
+                context.manifest,
                 self.check(stable_text, context)?,
                 Vec::new(),
             ));
@@ -143,35 +149,87 @@ impl SafetyNet for NymSafetyNet {
         }
         let stable = self.check(stable_text, context)?;
         let neutral = self.check(neutral_text, context)?;
-        Ok(union_view_suspects(stable_text, stable, neutral))
+        Ok(union_view_suspects(
+            stable_text,
+            context.manifest,
+            stable,
+            neutral,
+        ))
     }
 }
 
 fn union_view_suspects(
     stable_text: &str,
+    manifest: &Manifest,
     mut stable: Vec<LeakSuspect>,
     neutral: Vec<LeakSuspect>,
 ) -> Vec<LeakSuspect> {
     for suspect in stable.iter_mut() {
         suspect.raw_label.push_str(";view=stable");
     }
-    for mut suspect in neutral {
-        if !plausible_neutral_finding(stable_text, &suspect) {
-            continue;
-        }
-        if let Some(existing) = stable
-            .iter_mut()
-            .find(|prior| prior.span == suspect.span && prior.class == suspect.class)
-        {
+    let tokens = manifest
+        .spans
+        .iter()
+        .map(|emitted| emitted.clean_span.clone())
+        .collect::<Vec<_>>();
+    // The stable scan owns every byte it already flagged. A different parent span from the
+    // neutral scan may name the very same exposed gap; passing both makes Resolve reject the
+    // batch as an overlap and use the one-way fallback.
+    let mut covered = tokens.clone();
+    for suspect in &stable {
+        covered.extend(exposed_gaps(suspect.span.clone(), &tokens));
+    }
+    for suspect in neutral {
+        if let Some(existing) = stable.iter_mut().find(|prior| {
+            prior.class == suspect.class && actionable_span(prior) == actionable_span(&suspect)
+        }) {
             if existing.raw_label.ends_with(";view=stable") {
                 existing.raw_label.push_str("+neutral");
             }
-        } else {
-            suspect.raw_label.push_str(";view=neutral");
-            stable.push(suspect);
+        }
+        for gap in exposed_gaps(suspect.span.clone(), &covered) {
+            let mut projected = suspect.clone();
+            projected.span = gap.clone();
+            projected.kind = LeakKind::Uncovered;
+            if !plausible_neutral_finding(stable_text, &projected) {
+                continue;
+            }
+            projected.raw_label.push_str(";view=neutral");
+            covered.push(gap);
+            stable.push(projected);
         }
     }
     stable
+}
+
+fn actionable_span(suspect: &LeakSuspect) -> Range<usize> {
+    match &suspect.kind {
+        LeakKind::PartialBleed { uncovered } => uncovered.clone(),
+        _ => suspect.span.clone(),
+    }
+}
+
+fn exposed_gaps(span: Range<usize>, covered: &[Range<usize>]) -> Vec<Range<usize>> {
+    let mut gaps = vec![span];
+    for block in covered {
+        gaps = gaps
+            .into_iter()
+            .flat_map(|gap| {
+                if gap.end <= block.start || block.end <= gap.start {
+                    return vec![gap];
+                }
+                let mut remainder = Vec::with_capacity(2);
+                if gap.start < block.start {
+                    remainder.push(gap.start..block.start);
+                }
+                if block.end < gap.end {
+                    remainder.push(block.end..gap.end);
+                }
+                remainder
+            })
+            .collect();
+    }
+    gaps
 }
 
 fn plausible_neutral_finding(text: &str, suspect: &LeakSuspect) -> bool {
@@ -183,6 +241,9 @@ fn plausible_neutral_finding(text: &str, suspect: &LeakSuspect) -> bool {
         // An invalid span still reaches the pipeline's fail-closed validation.
         return true;
     };
+    if value.trim().is_empty() {
+        return false;
+    }
     match &suspect.class {
         // A single character cannot be a complete date, even when it touches a token.
         gaze_types::PiiClass::Custom(class) if class == "date" => value.chars().count() != 1,
@@ -299,6 +360,10 @@ fn raw_label(label: NymLabel, threshold: f32) -> String {
 
 #[cfg(test)]
 mod tests {
+    use gaze::{
+        Action, ClassRule, CleanDocument, DefaultRule, Detection, Detector, Pipeline, RawDocument,
+        SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, Session,
+    };
     use gaze_types::{DocumentKind, LeakKind, Manifest, PiiClass};
 
     use super::*;
@@ -332,17 +397,300 @@ mod tests {
             make(14..20, "username", 0.8),
             make(14..20, "username", 0.8),
         ];
-        let combined = union_view_suspects(&"x".repeat(24), stable, neutral);
+        let combined = union_view_suspects(&"x".repeat(24), &Manifest::default(), stable, neutral);
         assert_eq!(combined.len(), 2);
         assert_eq!(combined[0].score, Some(0.7));
         assert_eq!(combined[0].raw_label, "USERNAME>=0.5;view=stable+neutral");
         assert_eq!(combined[1].raw_label, "USERNAME>=0.5;view=neutral");
         let stable_only = union_view_suspects(
             &"x".repeat(24),
+            &Manifest::default(),
             vec![make(4..10, "username", 0.7)],
             Vec::new(),
         );
         assert_eq!(stable_only[0].raw_label, "USERNAME>=0.5;view=stable");
+    }
+
+    #[test]
+    fn neutral_overlap_yields_only_novel_exposed_bytes() {
+        let make = |span, class: &str, kind| {
+            LeakSuspect::new(
+                span,
+                PiiClass::custom(class).unwrap(),
+                NYM_SAFETY_NET_ID,
+                Some(0.9),
+                kind,
+                "synthetic>=0.5",
+                None,
+            )
+        };
+        let stable = vec![make(4..12, "license_plate", LeakKind::Uncovered)];
+        let neutral = vec![
+            make(2..10, "license_plate", LeakKind::Uncovered),
+            make(4..12, "username", LeakKind::Uncovered),
+        ];
+        let combined =
+            union_view_suspects("abcdefghijklmnop", &Manifest::default(), stable, neutral);
+        assert_eq!(combined.len(), 2);
+        assert_eq!(combined[0].span, 4..12);
+        assert_eq!(combined[1].span, 2..4);
+        assert_eq!(combined[1].raw_label, "synthetic>=0.5;view=neutral");
+    }
+
+    #[test]
+    fn neutral_partial_parent_does_not_duplicate_a_stable_gap() {
+        let token = 8..18;
+        let manifest = Manifest::from_spans(vec![gaze_types::EmittedTokenSpan::new(
+            token.clone(),
+            0..10,
+            PiiClass::custom("postal_code").unwrap(),
+        )]);
+        let make = |span, uncovered| {
+            LeakSuspect::new(
+                span,
+                PiiClass::custom("license_plate").unwrap(),
+                NYM_SAFETY_NET_ID,
+                Some(0.9),
+                LeakKind::PartialBleed { uncovered },
+                "LICENSE_PLATE>=0.5",
+                None,
+            )
+        };
+        let combined = union_view_suspects(
+            "abcdefghijklmnopqrstuvwx",
+            &manifest,
+            vec![make(4..12, 4..8)],
+            vec![make(4..10, 4..8)],
+        );
+        assert_eq!(combined.len(), 1);
+        assert_eq!(combined[0].span, 4..12);
+        assert_eq!(
+            combined[0].raw_label,
+            "LICENSE_PLATE>=0.5;view=stable+neutral"
+        );
+    }
+
+    #[test]
+    fn neutral_token_overlap_projects_only_exposed_gaps() {
+        let manifest = Manifest::from_spans(vec![gaze_types::EmittedTokenSpan::new(
+            4..12,
+            0..8,
+            PiiClass::Name,
+        )]);
+        let neutral = vec![LeakSuspect::new(
+            2..15,
+            PiiClass::custom("username").unwrap(),
+            NYM_SAFETY_NET_ID,
+            Some(0.9),
+            LeakKind::PartialBleed { uncovered: 2..4 },
+            "USERNAME>=0.5",
+            None,
+        )];
+        let combined = union_view_suspects("abcdefghijklmnop", &manifest, Vec::new(), neutral);
+        assert_eq!(
+            combined.iter().map(|s| s.span.clone()).collect::<Vec<_>>(),
+            vec![2..4, 12..15]
+        );
+        assert!(combined
+            .iter()
+            .all(|s| matches!(s.kind, LeakKind::Uncovered)));
+    }
+
+    #[test]
+    fn exposed_gap_partition_preserves_exact_byte_coverage() {
+        for start in 0..8 {
+            for end in start + 1..=8 {
+                for left in 0..8 {
+                    for right in left + 1..=8 {
+                        let blocks = [left..right, 3..5];
+                        let gaps = exposed_gaps(start..end, &blocks);
+                        assert!(gaps.windows(2).all(|pair| pair[0].end <= pair[1].start));
+                        for byte in 0..8 {
+                            let expected = (start..end).contains(&byte)
+                                && !blocks.iter().any(|block| block.contains(&byte));
+                            let actual = gaps.iter().any(|gap| gap.contains(&byte));
+                            assert_eq!(actual, expected, "{start}..{end}, {blocks:?}, {byte}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn neutral_projection_adds_coverage_without_action_overlap() {
+        let make = |span| {
+            LeakSuspect::new(
+                span,
+                PiiClass::custom("username").unwrap(),
+                NYM_SAFETY_NET_ID,
+                Some(0.9),
+                LeakKind::Uncovered,
+                "USERNAME>=0.5",
+                None,
+            )
+        };
+        for stable_start in 0..8 {
+            for stable_end in stable_start + 1..=8 {
+                for neutral_start in 0..8 {
+                    for neutral_end in neutral_start + 1..=8 {
+                        let stable_span = stable_start..stable_end;
+                        let neutral_span = neutral_start..neutral_end;
+                        let combined = union_view_suspects(
+                            "abcdefgh",
+                            &Manifest::default(),
+                            vec![make(stable_span.clone())],
+                            vec![make(neutral_span.clone())],
+                        );
+                        assert_eq!(combined[0].span, stable_span);
+                        for added in &combined[1..] {
+                            assert!(
+                                added.span.end <= stable_start || stable_end <= added.span.start
+                            );
+                        }
+                        for byte in 0..8 {
+                            let expected =
+                                stable_span.contains(&byte) || neutral_span.contains(&byte);
+                            let actual = combined.iter().any(|s| s.span.contains(&byte));
+                            assert_eq!(actual, expected);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn neutral_projection_does_not_tokenize_a_separator() {
+        let make = |span| {
+            LeakSuspect::new(
+                span,
+                PiiClass::custom("username").unwrap(),
+                NYM_SAFETY_NET_ID,
+                Some(0.9),
+                LeakKind::Uncovered,
+                "USERNAME>=0.5",
+                None,
+            )
+        };
+        let combined = union_view_suspects(
+            "alpha beta",
+            &Manifest::default(),
+            vec![make(0..5), make(6..10)],
+            vec![make(0..10)],
+        );
+        assert_eq!(combined.len(), 2);
+    }
+
+    struct SyntheticEmailDetector;
+
+    impl Detector for SyntheticEmailDetector {
+        fn detect(&self, _input: &str) -> Vec<Detection> {
+            vec![Detection::new(
+                0.."alice@example.invalid".len(),
+                PiiClass::Email,
+                "fixture",
+            )]
+        }
+    }
+
+    struct SyntheticOverlappingViews {
+        project_neutral: bool,
+    }
+
+    impl SafetyNet for SyntheticOverlappingViews {
+        fn id(&self) -> &str {
+            "synthetic-overlap"
+        }
+
+        fn supported_locales(&self) -> &[LocaleTag] {
+            &[LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            clean_text: &str,
+            context: SafetyNetContext<'_>,
+        ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+            let Some(start) = clean_text.find("Dr. Schmidt") else {
+                return Ok(Vec::new());
+            };
+            let whole = start..start + "Dr. Schmidt".len();
+            let surname = start + "Dr. ".len()..whole.end;
+            let make = |span: Range<usize>, class: PiiClass| {
+                let kind = context.manifest.diff_against(&span, &class).unwrap();
+                LeakSuspect::new(
+                    span,
+                    class,
+                    self.id(),
+                    Some(0.9),
+                    kind,
+                    "synthetic>=0.5",
+                    None,
+                )
+            };
+            Ok(vec![
+                make(whole.clone(), PiiClass::Name),
+                make(surname, PiiClass::Name),
+                make(whole, PiiClass::Organization),
+            ])
+        }
+
+        fn check_with_neutral(
+            &self,
+            stable_text: &str,
+            neutral_text: Option<&str>,
+            context: SafetyNetContext<'_>,
+        ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+            let mut findings = self.check(stable_text, context)?;
+            if !self.project_neutral || neutral_text.is_none() || findings.is_empty() {
+                return Ok(findings);
+            }
+            let stable = vec![findings.remove(0)];
+            Ok(union_view_suspects(
+                stable_text,
+                context.manifest,
+                stable,
+                findings,
+            ))
+        }
+    }
+
+    #[test]
+    fn synthetic_unmerged_overlap_falls_back_but_projected_views_restore() {
+        let raw = "alice@example.invalid met Dr. Schmidt";
+        for projected in [false, true] {
+            let pipeline = Pipeline::builder()
+                .detector(SyntheticEmailDetector)
+                .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+                .rule(DefaultRule::new(Action::Preserve))
+                .register_safety_net(SyntheticOverlappingViews {
+                    project_neutral: projected,
+                })
+                .build()
+                .unwrap();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let (clean, manifest, _) = pipeline
+                .clean_with_safety_net_policy_detect_context(
+                    &session,
+                    RawDocument::Text(raw.to_string()),
+                    &[LocaleTag::Global],
+                    &gaze::DictionaryBundle::default(),
+                    SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+                )
+                .unwrap();
+            let CleanDocument::Text(clean) = clean else {
+                panic!("text expected");
+            };
+            if projected {
+                assert_eq!(manifest.len(), 2);
+                assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+                assert!(!clean.contains("[REDACTED:"));
+            } else {
+                assert!(clean.contains("[REDACTED:name]"));
+                assert_ne!(session.restore_strict_text(&clean).unwrap(), raw);
+            }
+        }
     }
 
     #[test]
