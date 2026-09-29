@@ -34,6 +34,8 @@ a full record name elsewhere in the document with a name-position cue.
 Unlisted names such as `Maren` match everywhere. Short letter and digit values still fail closed. It does
 not infer name order, email case changes, abbreviations, fragments or typos.
 Homonyms with corroborating context remain a false-positive risk.
+The current default Nym operating point has no person label; model
+corroboration currently uses NER person spans.
 The app must keep its context file private and avoid logging it.
 
 The [policy reference](../../reference/policy.md#caller-known-record-context-prototype)

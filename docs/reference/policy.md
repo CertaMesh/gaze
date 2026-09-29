@@ -214,7 +214,8 @@ corroboration at each occurrence: a person span from NER, another record name
 in the same phrase, or a full record name elsewhere in the document plus a
 name-position cue. Other single-token names match wherever they occur. The
 dictionary is matched with Unicode folding and Aho–Corasick; no common name is
-silently discarded.
+silently discarded. The current default Nym operating point has no person
+label, so model corroboration currently comes from the NER candidate layer.
 
 Gaze matches each full value. `Name` values also match full Unicode
 case folds, including `ß`/`SS`, while preserving the original matched bytes for restore. The prototype
