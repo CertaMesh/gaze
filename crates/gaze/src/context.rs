@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
@@ -272,6 +272,7 @@ impl Context {
                 }
             }
             let mut class_slots = HashMap::<PiiClass, usize>::new();
+            let mut present_match_groups = HashSet::new();
             for (path, value) in leaves {
                 let mapped = raw.field_map.get(&path);
                 if mapped.is_some_and(|name| name == "ignore") {
@@ -286,6 +287,7 @@ impl Context {
                 })?;
                 let canonical = canonical_record_value(value);
                 validate_record_value(&canonical, &path)?;
+                present_match_groups.insert(record_match_group(&class, &canonical));
                 let slot = class_slots.entry(class.clone()).or_default();
                 let name = record_dictionary_name(&class, *slot);
                 *slot += 1;
@@ -298,6 +300,15 @@ impl Context {
                     },
                 );
                 class_map.insert(name, class);
+            }
+            if !raw
+                .record_match_kinds
+                .keys()
+                .all(|group| present_match_groups.contains(group))
+            {
+                return Err(ContextError::InvalidRecordMapping {
+                    path: "/record_match_kinds".into(),
+                });
             }
         }
 
@@ -681,6 +692,12 @@ mod tests {
         assert!(matches!(
             Context::from_json_str(
                 r#"{"record":{"email":"alice@example.invalid"},"record_match_kinds":{"email":["case_folded"]}}"#
+            ),
+            Err(ContextError::InvalidRecordMapping { .. })
+        ));
+        assert!(matches!(
+            Context::from_json_str(
+                r#"{"record":{"name":"Maren"},"record_match_kinds":{"name_multi":["exact"]}}"#
             ),
             Err(ContextError::InvalidRecordMapping { .. })
         ));
