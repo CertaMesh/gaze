@@ -644,6 +644,54 @@ pub enum ValidatorFailReason {
     Ipv6LoopbackRange,
 }
 
+impl ValidatorFailReason {
+    /// Every variant, for closed-vocabulary checks (component ledger records).
+    #[doc(hidden)]
+    pub const ALL: &'static [Self] = &[
+        Self::LuhnFailed,
+        Self::IbanMod97Failed,
+        Self::EmailRfcRejected,
+        Self::PhoneE164Rejected,
+        Self::PhoneNationalRegionMismatch,
+        Self::Ipv4ParseFailed,
+        Self::Ipv6ParseFailed,
+        Self::Ipv4DocumentationRange,
+        Self::Ipv6DocumentationRange,
+        Self::EthEip55ChecksumFailed,
+        Self::AadhaarVerhoeffFailed,
+        Self::FrNirMod97Failed,
+        Self::DeSteuerIdMod1110Failed,
+        Self::BsnMod11Failed,
+        Self::CpfMod11Failed,
+        Self::CnpjMod11Failed,
+        Self::UkNhsMod11Failed,
+    ];
+
+    /// Fails to compile when a variant is added without extending [`Self::ALL`].
+    #[allow(dead_code)]
+    const fn all_is_exhaustive(value: Self) {
+        match value {
+            Self::LuhnFailed
+            | Self::IbanMod97Failed
+            | Self::EmailRfcRejected
+            | Self::PhoneE164Rejected
+            | Self::PhoneNationalRegionMismatch
+            | Self::Ipv4ParseFailed
+            | Self::Ipv6ParseFailed
+            | Self::Ipv4DocumentationRange
+            | Self::Ipv6DocumentationRange
+            | Self::EthEip55ChecksumFailed
+            | Self::AadhaarVerhoeffFailed
+            | Self::FrNirMod97Failed
+            | Self::DeSteuerIdMod1110Failed
+            | Self::BsnMod11Failed
+            | Self::CpfMod11Failed
+            | Self::CnpjMod11Failed
+            | Self::UkNhsMod11Failed => {}
+        }
+    }
+}
+
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -2611,6 +2659,56 @@ pub enum ConflictTier {
 }
 
 impl ConflictTier {
+    /// Every variant, for closed-vocabulary checks (component ledger records).
+    #[doc(hidden)]
+    pub const ALL: &'static [Self] = &[
+        Self::None,
+        Self::ClassPriority,
+        Self::RulePriority,
+        Self::Score,
+        Self::SpanLength,
+        Self::Validator,
+        Self::SameClassContainment,
+        Self::ValidatorVeto,
+        Self::CollisionPolicy,
+        Self::AnchoredContext,
+        Self::StructuredContainment,
+        Self::ContainmentPrecedence,
+        Self::ProtectionOverride,
+        Self::RecognizerId,
+        Self::Merged,
+        Self::Redact,
+        Self::Resolve,
+        Self::Fallback,
+        Self::ManifestSweep,
+    ];
+
+    /// Fails to compile when a variant is added without extending [`Self::ALL`].
+    #[allow(dead_code)]
+    const fn all_is_exhaustive(value: Self) {
+        match value {
+            Self::None
+            | Self::ClassPriority
+            | Self::RulePriority
+            | Self::Score
+            | Self::SpanLength
+            | Self::Validator
+            | Self::SameClassContainment
+            | Self::ValidatorVeto
+            | Self::CollisionPolicy
+            | Self::AnchoredContext
+            | Self::StructuredContainment
+            | Self::ContainmentPrecedence
+            | Self::ProtectionOverride
+            | Self::RecognizerId
+            | Self::Merged
+            | Self::Redact
+            | Self::Resolve
+            | Self::Fallback
+            | Self::ManifestSweep => {}
+        }
+    }
+
     /// Returns the canonical audit-row spelling.
     pub fn as_str(&self) -> &'static str {
         match self {
