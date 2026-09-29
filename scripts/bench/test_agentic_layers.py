@@ -809,6 +809,18 @@ class ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(agentic.LayerError, "PASSPORTNUM"):
                 agentic.apply_contract(self.documents(), contract)
 
+    def test_an_older_generator_loads_its_own_committed_contract(self) -> None:
+        # A record measured on v4 or v5 is rescored under the contract that
+        # ruled on exactly the labels that generator emitted.
+        for version in (4, 5):
+            contract = agentic.load_contract(REPO_ROOT, version=version)
+            self.assertNotIn("STREET", contract.scored_labels)
+        self.assertIn("STREET", agentic.load_contract(REPO_ROOT).scored_labels)
+        with self.assertRaisesRegex(agentic.LayerError, "no committed scored-label contract"):
+            agentic.load_contract(REPO_ROOT, version=3)
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 6"):
+            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=5)
+
     def test_generator_version_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = self.write_contract(

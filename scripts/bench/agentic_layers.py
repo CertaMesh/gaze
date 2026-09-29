@@ -2439,8 +2439,17 @@ def manifest(partition: str, records: Sequence[Record]) -> dict[str, object]:
 # Scored-label contract for the generated corpus.
 
 
-def load_contract(repo_root: Path, path: Path | None = None) -> score.ScoredLabelContract:
-    relative = path or SCORED_LABELS_PATH
+def load_contract(
+    repo_root: Path, path: Path | None = None, version: int = GENERATOR_VERSION
+) -> score.ScoredLabelContract:
+    """The contract that rules on generator `version` (default: the current one).
+
+    A record measured on an older generator is rescored under the contract
+    committed for that version, which rules on exactly the labels it emits.
+    """
+    if path is None and version != GENERATOR_VERSION and version not in HISTORICAL_CONTRACTS:
+        raise LayerError(f"no committed scored-label contract for generator version {version}")
+    relative = path or (SCORED_LABELS_PATH if version == GENERATOR_VERSION else HISTORICAL_CONTRACTS[version])
     resolved = relative if relative.is_absolute() else repo_root / relative
     try:
         display = resolved.resolve().relative_to(repo_root.resolve()).as_posix()
@@ -2452,10 +2461,10 @@ def load_contract(repo_root: Path, path: Path | None = None) -> score.ScoredLabe
     except (score.ScoredLabelContractError, OSError, json.JSONDecodeError) as error:
         raise LayerError(str(error)) from error
     corpus = raw.get("corpus")
-    if not isinstance(corpus, dict) or corpus.get("generator_version") != GENERATOR_VERSION:
+    if not isinstance(corpus, dict) or corpus.get("generator_version") != version:
         raise LayerError(
             f"{display} rules on generator_version {corpus.get('generator_version') if isinstance(corpus, dict) else None!r}, "
-            f"but the generator is version {GENERATOR_VERSION}"
+            f"but the generator is version {version}"
         )
     return contract
 
