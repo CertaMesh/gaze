@@ -135,3 +135,40 @@ def test_preflight_rejects_an_unmapped_native_label(stub: pii_tracer.PiiTracer) 
     mapping = {label: labels for label, labels in pii_tracer.load_label_map().items() if label != "private_person"}
     with pytest.raises(ValueError, match="unmapped labels"):
         pii_tracer.preflight(stub, {"C": [doc("X1 X2")]}, 1, mapping)
+
+
+def committed_with_empty_main_layer() -> dict:
+    import copy
+
+    committed = copy.deepcopy(json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text(encoding="utf-8")))
+    committed["corpus"]["layers"]["C"] = {"documents": 0, "ids_sha256": score.document_ids_digest([])}
+    return committed
+
+
+def test_older_generator_view_rebuilds_the_committed_layers_and_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    committed = committed_with_empty_main_layer()
+    if committed["corpus"]["agentic"]["generator_version"] == compare.agentic.GENERATOR_VERSION:
+        pytest.skip("the committed comparison is already on the current generator")
+    monkeypatch.setattr(compare.agentic, "load_contract", compare.agentic.load_contract)
+    layers, corpus = pii_tracer.as_of_committed_generator(
+        committed, {"C": [], "A": [], "D": [], "R": []}, {})
+    assert corpus == committed["corpus"]
+    assert {k: len(v) for k, v in layers.items()} == {
+        k: v["documents"] for k, v in committed["corpus"]["layers"].items()}
+    assert compare.agentic.load_contract(compare.REPO).sha256 == committed["contracts"]["agentic"]
+
+
+@pytest.mark.parametrize("tamper", ["layer", "contract", "corpus"])
+def test_older_generator_view_refuses_any_mismatch(tamper: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    committed = committed_with_empty_main_layer()
+    if committed["corpus"]["agentic"]["generator_version"] == compare.agentic.GENERATOR_VERSION:
+        pytest.skip("the committed comparison is already on the current generator")
+    monkeypatch.setattr(compare.agentic, "load_contract", compare.agentic.load_contract)
+    if tamper == "layer":
+        committed["corpus"]["layers"]["A"]["ids_sha256"] = "0" * 64
+    elif tamper == "contract":
+        committed["contracts"]["agentic"] = "0" * 64
+    else:
+        committed["corpus"]["agentic"]["corpus_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="differs|no longer rebuilds"):
+        pii_tracer.as_of_committed_generator(committed, {"C": [], "A": [], "D": [], "R": []}, {})
