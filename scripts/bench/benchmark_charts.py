@@ -9,18 +9,17 @@ switches on `prefers-color-scheme`.
 Only released, tagged Gaze versions are ever drawn. The comparison report's
 "Gaze main" run and the third-party files' `gaze-full` row measure an untagged
 tree, so this module never reads them. A `GazeRow` whose version is not `vX.Y.Z`
-raises `ChartError`, and a third-party Gaze row is read only from the optional
-`gaze_releases` map, keyed by such a version.
+raises `ChartError`, and a third-party Gaze row is read only from a `gaze-vX.Y.Z`
+row of the benchmark (the shared rule lives in `tagged_gaze.py`).
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 from xml.sax.saxutils import escape
 
-TAG = re.compile(r"v\d+\.\d+\.\d+")
+from tagged_gaze import TAG, UntaggedGazeError, require_tag
 
 #: Third-party sets score only labels every tool can emit, so a tool is never
 #: penalised for a label it has no output for.
@@ -49,10 +48,13 @@ class GazeRow:
     version: str
     protected: float  # percent of gold PII bytes that did not leak
     fp_bytes: int  # gold-gap-adjusted false-positive bytes on the own corpus
+    refused: int = 0  # documents Gaze failed closed on instead of cleaning
 
     def __post_init__(self) -> None:
-        if not TAG.fullmatch(self.version):
-            raise ChartError(f"Gaze bars must be tagged releases, got {self.version!r}")
+        try:
+            require_tag(self.version, "Gaze bar")
+        except UntaggedGazeError as error:
+            raise ChartError(str(error)) from error
 
     @property
     def name(self) -> str:
@@ -70,8 +72,12 @@ class Bar:
 @dataclass(frozen=True)
 class Panel:
     title: str
-    dataset: str  # short "docs, split" line shown under the title
+    dataset: str  # dataset and split line under the metric
+    labels: str  # which gold labels are scored
     bars: tuple[Bar, ...]
+    skipped: int = 0  # documents a declared competitor skipped (their gold counts as leaked)
+    refused: tuple[tuple[str, int], ...] = ()  # (Gaze bar name, refused documents)
+    documents: int = 0
 
 
 def _protected(leaked: float, gold: float) -> float:
@@ -80,9 +86,11 @@ def _protected(leaked: float, gold: float) -> float:
 
 def own_panel(
     gaze: Sequence[GazeRow], comparison: Mapping[str, Any],
-    declared: Mapping[str, str], gold_bytes: int,
+    declared: Mapping[str, str], gold_bytes: int, corpus_name: str,
 ) -> Panel:
     layer = comparison["corpus"]["layers"]["C"]["documents"]
+    splits = " + ".join(comparison["heldout_split"]["layers"]["C"])
+    skipped = 0
     totals = {
         tool["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["full"]["total_bytes"]
         for tool in comparison["tools"].values()
@@ -96,30 +104,35 @@ def own_panel(
         cell = comparison["tools"][name]["contracts"]["v3"]["C"]
         fp = cell["false_positive_bytes_after_gold_gap"]
         fp = cell["false_positive_bytes"] if fp is None else fp
+        skipped += cell["skipped_documents"]
         bars.append(
             Bar(SHORT_NAMES[key], _protected(cell["leaked_bytes"], gold_bytes),
                 1000.0 * fp / corpus_bytes)
         )
-    return Panel("Own corpus", f"{layer:,} docs", tuple(bars))
+    return Panel(
+        "Own corpus", f"{corpus_name} · {layer:,} docs, {splits}",
+        "Scored labels v3: the labels Gaze commits to detect", tuple(bars),
+        skipped, tuple((row.name, row.refused) for row in gaze), layer,
+    )
 
 
 def third_party_panel(
     bench: Mapping[str, Any], title: str, declared: Mapping[str, str],
     latest_tag: str,
 ) -> Panel:
-    """Competitors from their declared rows; Gaze only from tagged rows.
+    """Competitors from their declared rows; Gaze only from a tagged row.
 
-    `gaze_releases` (optional) maps a tag to a `common_intersection` block. Until
-    the tag is measured on the set, its slot reads "pending" rather than borrowing
-    the untagged `gaze-full` run.
+    A `gaze-vX.Y.Z` row of the benchmark is a tagged run. Until the latest tag is
+    measured on the set, its slot reads "pending" rather than borrowing the
+    untagged `gaze-full` run.
     """
-    tagged = bench.get("gaze_releases", {})
-    for tag in tagged:
-        if not TAG.fullmatch(tag):
-            raise ChartError(f"gaze_releases key {tag!r} is not a release tag")
+    for tool in bench["rows"]:
+        if tool.startswith("gaze-v") and not TAG.fullmatch(tool[len("gaze-"):]):
+            raise ChartError(f"row {tool!r} is not a gaze-vX.Y.Z release tag row")
     label = "Gaze " + latest_tag[1:].rsplit(".", 1)[0]
-    if latest_tag in tagged:
-        bars = [_third_party_bar(label, tagged[latest_tag]["common_intersection"], True)]
+    tagged = bench["rows"].get(f"gaze-{latest_tag}")
+    if tagged is not None:
+        bars = [_third_party_bar(label, tagged["common_intersection"], True)]
     else:
         bars = [Bar(label, None, None, gaze=True)]
     for key, name in declared.items():
@@ -127,7 +140,11 @@ def third_party_panel(
             SHORT_NAMES[key], bench["rows"][name]["common_intersection"], False))
     split = next(iter(bench["splits"]))
     docs = bench["splits"][split]["documents"]
-    return Panel(title, f"{docs:,} docs, {split} split", tuple(bars))
+    return Panel(
+        title, f"{docs:,} docs, {split} split",
+        "Labels every tool can emit (common intersection)", tuple(bars),
+        documents=docs,
+    )
 
 
 def _third_party_bar(name: str, block: Mapping[str, Any], gaze: bool) -> Bar:
@@ -141,11 +158,12 @@ def _third_party_bar(name: str, block: Mapping[str, Any], gaze: bool) -> Bar:
 def panels(
     gaze: Sequence[GazeRow], comparison: Mapping[str, Any],
     their: Mapping[str, Any], declared: Mapping[str, str], gold_bytes: int,
+    corpus_name: str,
 ) -> list[Panel]:
     if not gaze:
         raise ChartError("no tagged Gaze release row to chart")
     latest = gaze[-1].version
-    return [own_panel(gaze, comparison, declared, gold_bytes)] + [
+    return [own_panel(gaze, comparison, declared, gold_bytes, corpus_name)] + [
         third_party_panel(their[key], title, declared, latest) for key, title in THIRD_PARTY
     ]
 
@@ -161,31 +179,35 @@ THEMES = {
                  grey="#6e7681", panel="#151b23"),
 }
 FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
-WIDTH, GAP, PAD, PANEL_H, NAME_PX = 1200, 12, 12, 300, 10
-#: Conservative glyph advance (em) used to prove neighbouring names do not touch.
-GLYPH_EM = 0.55
+WIDTH, GAP, PAD, PANEL_H, NAME_PX = 1200, 12, 10, 330, 10
+#: Conservative glyph advance (em), wide enough for DejaVu Sans, the usual Linux
+#: fallback of the font stack.
+GLYPH_EM = 0.6
+#: Clear space kept between neighbouring bar names.
+NAME_MARGIN = 6
 
 
 def name_lines(name: str) -> list[str]:
     return name.split(" ", 1) if " " in name else [name]
 
 
-def slot_width(bar_count: int) -> float:
-    panel_w = (WIDTH - GAP * 4) / 3
+def panel_widths(panel_set: Sequence[Panel]) -> list[float]:
+    """Panel widths proportional to bar count, so every bar slot is about as wide."""
+    total = WIDTH - GAP * (len(panel_set) + 1)
+    bars = sum(len(p.bars) for p in panel_set)
+    return [total * len(p.bars) / bars for p in panel_set]
+
+
+def slot_width(panel_w: float, bar_count: int) -> float:
     return (panel_w - 2 * PAD) / bar_count
 
 
-def label_overlap(names: Sequence[str], bar_count: int) -> str | None:
-    """A neighbouring pair whose estimated names would touch, or None."""
-    slot = slot_width(bar_count)
-
-    def half(name: str) -> float:
-        return max(len(line) for line in name_lines(name)) * NAME_PX * GLYPH_EM / 2
-
-    for left, right in zip(names, names[1:]):
-        if half(left) + half(right) > slot:
-            return f"{left!r} and {right!r}"
-    return None
+def name_fit(name: str, slot: float) -> tuple[float, float | None]:
+    """(drawn width, forced width). A name wider than its slot minus the margin is
+    squeezed to that width with `textLength`, so no font can make neighbours touch."""
+    natural = max(len(line) for line in name_lines(name)) * NAME_PX * GLYPH_EM
+    cap = slot - NAME_MARGIN
+    return (cap, cap) if natural > cap else (natural, None)
 
 
 def _bar_svg(t: Mapping[str, str], bar: Bar, value: float | None, fmt: str,
@@ -215,9 +237,11 @@ def _panel_svg(t: Mapping[str, str], x: float, y: float, w: float, panel: Panel,
         f'<rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="{PANEL_H}" rx="10" fill="{t["panel"]}"/>',
         f'<text x="{x + 16:.1f}" y="{y + 28}" font-size="16" font-weight="700" fill="{t["text"]}">{escape(panel.title)}</text>',
         f'<text x="{x + w - 16:.1f}" y="{y + 28}" font-size="11" text-anchor="end" fill="{t["sub"]}">{better}</text>',
-        f'<text x="{x + 16:.1f}" y="{y + 48}" font-size="12" fill="{t["sub"]}">{escape(metric)} · {escape(panel.dataset)}</text>',
+        f'<text x="{x + 16:.1f}" y="{y + 48}" font-size="12" fill="{t["text"]}">{escape(metric)}</text>',
+        f'<text x="{x + 16:.1f}" y="{y + 64}" font-size="11" fill="{t["sub"]}">{escape(panel.dataset)}</text>',
+        f'<text x="{x + 16:.1f}" y="{y + 79}" font-size="11" fill="{t["sub"]}">{escape(panel.labels)}</text>',
     ]
-    top, bot = y + 82, y + PANEL_H - 46
+    top, bot = y + 108, y + PANEL_H - 46
     ph = bot - top
     slot = (w - 2 * PAD) / len(panel.bars)
     bw = min(slot * 0.62, 38)
@@ -231,16 +255,20 @@ def _panel_svg(t: Mapping[str, str], x: float, y: float, w: float, panel: Panel,
         o += _bar_svg(t, bar, pick(bar), fmt, cx, bw, bot, ph, vmax)
         weight = "600" if bar.gaze else "400"
         colour = t["text"] if bar.gaze else t["sub"]
+        _, forced = name_fit(bar.name, slot)
+        squeeze = f' textLength="{forced:.1f}" lengthAdjust="spacingAndGlyphs"' if forced else ""
         for j, line in enumerate(name_lines(bar.name)):
+            longest = line == max(name_lines(bar.name), key=len)
             o.append(f'<text x="{cx:.1f}" y="{bot + 16 + 12 * j}" font-size="{NAME_PX}" '
-                     f'font-weight="{weight}" text-anchor="middle" fill="{colour}">{escape(line)}</text>')
+                     f'font-weight="{weight}" text-anchor="middle" fill="{colour}"'
+                     f'{squeeze if longest else ""}>{escape(line)}</text>')
     return o
 
 
 def figure_svg(theme: str, panel_set: Sequence[Panel], alt: str) -> str:
     """Row 1: PII protected (higher is better). Row 2: false positives (lower is better)."""
     t = THEMES[theme]
-    pw = (WIDTH - GAP * 4) / 3
+    widths = panel_widths(panel_set)
     height = GAP + 2 * (PANEL_H + GAP)
     o = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {WIDTH} {height}" '
@@ -249,23 +277,22 @@ def figure_svg(theme: str, panel_set: Sequence[Panel], alt: str) -> str:
     ]
     for row, (metric, better, fmt, pick) in enumerate((
         ("PII protected", "higher is better", "{:.1f}%", lambda b: b.protected),
-        ("False-positive bytes per 1,000", "lower is better", "{:.1f}", lambda b: b.fp_per_1k),
+        ("False-positive bytes per 1,000 (own scale)", "lower is better", "{:.1f}",
+         lambda b: b.fp_per_1k),
     )):
-        for col, panel in enumerate(panel_set):
+        x = float(GAP)
+        for panel, width in zip(panel_set, widths):
             values = [pick(b) for b in panel.bars if pick(b) is not None]
             vmax = 100.0 if row == 0 else max(values) * 1.15
-            o += _panel_svg(t, GAP + col * (pw + GAP), GAP + row * (PANEL_H + GAP), pw,
+            o += _panel_svg(t, x, GAP + row * (PANEL_H + GAP), width,
                             panel, metric, better, fmt, pick, vmax)
+            x += width + GAP
     o.append("</svg>")
     return "\n".join(o) + "\n"
 
 
 def figure_files(panel_set: Sequence[Panel]) -> dict[str, str]:
     """File name (under the assets directory) -> SVG text."""
-    for panel in panel_set:
-        clash = label_overlap([b.name for b in panel.bars], len(panel.bars))
-        if clash:
-            raise ChartError(f"{panel.title}: bar names {clash} would overlap")
     alt = (
         "Benchmark panels for own corpus, Presidio Research and PIIBench-commercial: "
         "PII protected percent (higher is better) and false-positive bytes per 1,000 "
@@ -313,8 +340,16 @@ def _table(panel_set: Sequence[Panel], pick: Any, fmt: str, best: Any) -> list[s
 def model_card_tables(panel_set: Sequence[Panel]) -> str:
     protected = _table(panel_set, lambda b: b.protected, "{:.1f}%", max)
     false_pos = _table(panel_set, lambda b: b.fp_per_1k, "{:.1f}", min)
+    own = panel_set[0]
+    refused = ", ".join(f"{name} {count:,}" for name, count in own.refused) or "none measured"
+    notes = (
+        "A document a tool skips counts all its gold bytes as leaked. The declared competitor "
+        f"configurations skipped {own.skipped:,} of the own corpus's {own.documents:,} documents "
+        "and no documents on the third-party sets. Refused documents are ones Gaze failed closed "
+        f"on instead of cleaning: {refused}."
+    )
     return "\n".join([
         "**PII protected** (higher is better; best per row in bold):", "", *protected, "",
         "**False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):",
-        "", *false_pos,
+        "", *false_pos, "", notes,
     ])

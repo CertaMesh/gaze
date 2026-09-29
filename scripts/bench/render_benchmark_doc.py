@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import benchmark_charts as charts
+from tagged_gaze import check_public
 from layer_display import layer_display_name
 from markdown_table import table_header
 
@@ -1519,6 +1520,7 @@ def chart_gaze_rows(history: Mapping[str, Any]) -> list[charts.GazeRow]:
                 entry["version"],
                 100.0 * (1.0 - arm["surviving_pii_utf8_bytes"] / arm["gold_pii_utf8_bytes"]),
                 arm["false_positive_utf8_bytes"],
+                arm["failed_closed_documents"],
             )
         )
     return rows
@@ -1560,7 +1562,8 @@ def chart_panels(
     gold = view["arms"][shipped_default_arm(latest)]["gold_pii_utf8_bytes"]
     try:
         return charts.panels(
-            chart_gaze_rows(history), comparison, their, declared, gold
+            chart_gaze_rows(history), comparison, their, declared, gold,
+            layer_display_name("C"),
         )
     except (charts.ChartError, KeyError) as error:
         raise RenderError(f"benchmark panels: {error}") from error
@@ -2082,9 +2085,9 @@ def apply_blocks(
         if name == "latency":
             body = render_latency(history, latency)
         elif name == "readme-chart":
-            body = render_readme_chart(history, comparison, their)
+            body = check_public(render_readme_chart(history, comparison, their), "README chart")
         elif name == "panels":
-            body = render_panels(history, comparison, their)
+            body = check_public(render_panels(history, comparison, their), "benchmark panels")
         else:
             body = RENDERERS[name](history)
         document = (

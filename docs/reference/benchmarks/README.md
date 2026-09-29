@@ -419,6 +419,8 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 | Presidio Research | not run | pending | 2.3 | **0.0** | 20.0 | 0.1 | 5.7 | 4.9 |
 | PIIBench-commercial | not run | pending | 5.0 | 1.8 | 30.1 | **0.6** | 3.1 | 3.9 |
 
+A document a tool skips counts all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
+
 Gaze 0.15 on Presidio Research and PIIBench-commercial: measurement pending; no untagged build is shown.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
@@ -643,31 +645,7 @@ guard version.
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v3 headline counts false-positive bytes after gold-gap credit.
 
-| Mechanism | Measured at | Contract | Leaked bytes, without → with | FP bytes, without → with | Gate |
-| --- | --- | --- | ---: | ---: | --- |
-| GLiNER date-of-birth judge | `35c4fc79377d` (unreleased) | v3 | 11,909 → 11,824 (-85) | 13,768 → 13,768 (0) | not gated: re-scored from the v2 records |
-| GLiNER date-of-birth judge | `35c4fc79377d` (unreleased) | v2 | 11,909 → 11,824 (-85) | 25,480 → 25,480 (0) | pass |
-| GLiNER date-of-birth judge | `35c4fc79377d` (unreleased) | v1 | 18,155 → 18,070 (-85) | 25,480 → 25,480 (0) | pass |
-| Nym safety net | `491df871dd57` (unreleased) | v3 | 14,902 → 11,804 (-3,098) | 13,770 → 13,832 (+62) | not gated: re-scored from the v2 records |
-| Nym safety net | `491df871dd57` (unreleased) | v2 | 14,902 → 11,804 (-3,098) | 25,212 → 25,554 (+342) | fail |
-| Nym safety net | `491df871dd57` (unreleased) | v1 | 21,425 → 17,991 (-3,434) | 25,212 → 25,554 (+342) | fail |
-| Nym safety net | `7762d2a5e072` (unreleased) | v3 | 12,354 → 9,256 (-3,098) | 15,498 → 15,560 (+62) | not gated: re-scored from the v2 records |
-| Nym safety net | `7762d2a5e072` (unreleased) | v2 | 12,354 → 9,256 (-3,098) | 26,940 → 27,282 (+342) | pass |
-| Nym safety net | `7762d2a5e072` (unreleased) | v1 | 18,877 → 15,443 (-3,434) | 26,940 → 27,282 (+342) | pass |
-| Nym safety net | `31feb2e1e574` (unreleased) | v3 | 12,120 → 9,052 (-3,068) | 15,522 → 15,584 (+62) | not gated: re-scored from the v2 records |
-| Nym safety net | `31feb2e1e574` (unreleased) | v2 | 12,120 → 9,052 (-3,068) | 26,976 → 27,316 (+340) | pass |
-| Nym safety net | `31feb2e1e574` (unreleased) | v1 | 18,643 → 15,239 (-3,404) | 26,976 → 27,316 (+340) | pass |
-| Davlan NER | `491df871dd57` (unreleased) | v3 | 79,889 → 11,804 (-68,085) | 2,191 → 13,832 (+11,641) | not gated: re-scored from the v2 records |
-| Davlan NER | `491df871dd57` (unreleased) | v2 | 79,889 → 11,804 (-68,085) | 2,775 → 25,554 (+22,779) | pass |
-| Davlan NER | `491df871dd57` (unreleased) | v1 | 86,119 → 17,991 (-68,128) | 2,775 → 25,554 (+22,779) | pass |
-
-What moved, per label (contract v2; v1 adds only the credential labels):
-
-- **GLiNER date-of-birth judge** ships opt-in (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk (todo 3905), then default-on. Cost on a quiet host (median of 3 rounds, 200 documents): warm p50 +0.4 ms, p95 +22.5 ms, cold first document +1.6 s, peak RSS +664 MiB ([evidence](mechanisms/gliner-dob-judge-latency.json)). Leaked bytes by gold label: DATEOFBIRTH -85. FP bytes by predicted class: none. Agentic layers: A leaked -20, FP 0; D leaked 0, FP 0; R leaked 0, FP 0. Policy delta [`gliner-dob-judge.toml`](../../../scripts/bench/mechanisms/gliner-dob-judge.toml); evidence [base](mechanisms/gliner-dob-judge-35c4fc79377d-base.jsonl.gz) and [candidate](mechanisms/gliner-dob-judge-35c4fc79377d-candidate.jsonl.gz) observation records. Attested, not re-derivable: `crates/` tree `d23a92523325`, binary `0ecb1cddab03`, MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
-- **Nym safety net** ships default-on (gaze setup). Cost: not measured. Leaked bytes by gold label: BUILDINGNUM -241, CREDITCARDNUMBER -4, DATEOFBIRTH -174, DRIVERLICENSENUM -37, FIRSTNAME -17, IDCARDNUM -6, LICENSEPLATENUM -1,484, NATIONALID -8, STATE -8, SURNAME -6, URL -226, USERNAME -846, ZIP -48. FP bytes by predicted class: `custom:building_number` +229, `custom:date` +18, `custom:license_plate` +67, `custom:username` +28. Agentic layers: A leaked -197, FP +178; D leaked 0, FP +1,077; R leaked 0, FP +260. Policy delta [`nym-safety-net.toml`](../../../scripts/bench/mechanisms/nym-safety-net.toml); evidence [base](mechanisms/nym-safety-net-491df871dd57-base.jsonl.gz) and [candidate](mechanisms/nym-safety-net-491df871dd57-candidate.jsonl.gz) observation records. Attested, not re-derivable: `crates/` tree `50b66d0db472`, binary `0b8add6454c4`, MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
-- **Nym safety net** ships default-on (gaze setup). Cost: not measured. Leaked bytes by gold label: BUILDINGNUM -241, CREDITCARDNUMBER -4, DATEOFBIRTH -174, DRIVERLICENSENUM -37, FIRSTNAME -17, IDCARDNUM -6, LICENSEPLATENUM -1,484, NATIONALID -8, STATE -8, SURNAME -6, URL -226, USERNAME -846, ZIP -48. FP bytes by predicted class: `custom:building_number` +229, `custom:date` +18, `custom:license_plate` +67, `custom:username` +28. Agentic layers: A leaked -180, FP +158; D leaked 0, FP +1,073; R leaked 0, FP +260. Policy delta [`nym-safety-net.toml`](../../../scripts/bench/mechanisms/nym-safety-net.toml); evidence [base](mechanisms/nym-safety-net-7762d2a5e072-base.jsonl.gz) and [candidate](mechanisms/nym-safety-net-7762d2a5e072-candidate.jsonl.gz) observation records. Attested, not re-derivable: `crates/` tree `298cd36aa3e3`, binary `c5a73f4cb816`, MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
-- **Nym safety net** ships default-on (gaze setup). Cost: not measured. Leaked bytes by gold label: BUILDINGNUM -240, CREDITCARDNUMBER -4, DATEOFBIRTH -148, DRIVERLICENSENUM -37, FIRSTNAME -17, IDCARDNUM -6, LICENSEPLATENUM -1,484, NATIONALID -8, STATE -8, SURNAME -6, URL -226, USERNAME -846, ZIP -44. FP bytes by predicted class: `custom:building_number` +227, `custom:date` +18, `custom:license_plate` +67, `custom:username` +28. Agentic layers: A leaked -180, FP +140; D leaked 0, FP +1,073; R leaked 0, FP +260. Policy delta [`nym-safety-net.toml`](../../../scripts/bench/mechanisms/nym-safety-net.toml); evidence [base](mechanisms/nym-safety-net-31feb2e1e574-base.jsonl.gz) and [candidate](mechanisms/nym-safety-net-31feb2e1e574-candidate.jsonl.gz) observation records. Attested, not re-derivable: `crates/` tree `7724e36f0556`, binary `131dad6c7f2d`, MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
-- **Davlan NER** ships default-on (gaze setup). Cost: not measured. Leaked bytes by gold label: AGE +2, BUILDINGNUM -1,331, CITY -11,595, COMPANYNAME -5,580, COUNTRY -3,252, DATEOFBIRTH +11, FIRSTNAME -9,904, IDCARDNUM -3, LICENSEPLATENUM +11, ORGANIZATION -69, REGION -10, STATE -7,004, STREET -18,637, SURNAME -10,664, URL -43, USERNAME -7, ZIP -40. FP bytes by predicted class: `custom:building_number` -40, `custom:license_plate` +1, `custom:postal_code` -4, `custom:username` -2, `location` +10,016, `name` +8,360, `organization` +4,448. Agentic layers: A leaked -792, FP +651; D leaked 0, FP +75; R leaked -134, FP +34. Policy delta [`davlan-ner.toml`](../../../scripts/bench/mechanisms/davlan-ner.toml); evidence [base](mechanisms/davlan-ner-491df871dd57-base.jsonl.gz) and [candidate](mechanisms/davlan-ner-491df871dd57-candidate.jsonl.gz) observation records. Attested, not re-derivable: `crates/` tree `50b66d0db472`, binary `0b8add6454c4`, MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71).
+5 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
@@ -705,7 +683,7 @@ or NER candidate; Nym may still have protected part of the span in the final tra
 The first matching cause wins, in the order d, b (validator), g, c, b (dropped
 before resolution), b (locale-gated), e, f, a. One ordered table in the script
 drives the classification, the row schema that `check` enforces, and the table
-below.
+the script renders (`leak_ledger.py render` prints it; the page does not publish it).
 
 [`scripts/bench/leak_ledger.py`](../../../scripts/bench/leak_ledger.py)
 `probe` joins a clean-tree runner record with the candidate pool that the
@@ -720,82 +698,11 @@ equal the scorecard's `per_label_recall` leaked bytes under every
 scored-label contract and the agentic layer contract. Every row must carry
 exactly its cause's detail fields, so relabelling a cause without its evidence
 fails `check` for every label, including the credential labels that only
-contract v1 scores; those are rendered in their own table below.
+contract v1 scores; those have their own table in the rendered output.
 
 <!-- BEGIN GENERATED: leak-ledger -->
 
-Main `1809f6a3fbd2` (record measured on `74701b227385` with a byte-identical release producer `0239a5f66ea0`), `gaze setup` policy `f909a23aecac`, scored-label contract v3. Leaked bytes per gold span, summed per label (the scorecard's `per_label_recall`); overlapping gold counts once per span, so the label sum (9,283 B) can exceed the headline leaked bytes (9,256 B).
-
-Layer C by label and cause (bytes):
-
-| Label | a no candidate | b vetoed | c lost in resolution | d partial span | e repeat not swept | f junk-shaped gold | g other | Total |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| TAXNUM | 1,590 | 142 | · | 106 | · | 12 | · | 1,850 |
-| PHONENUMBER | 97 | 862 | · | 21 | · | · | · | 980 |
-| DATEOFBIRTH | 782 | · | · | 28 | · | · | · | 810 |
-| DRIVERLICENSENUM | 752 | · | · | 14 | · | 34 | · | 800 |
-| NATIONALID | 464 | 80 | · | · | · | 38 | · | 582 |
-| URL | 251 | · | · | 235 | · | · | · | 486 |
-| SSN | 402 | 16 | · | · | 4 | 51 | · | 473 |
-| IDCARDNUM | 408 | 30 | · | 14 | · | · | · | 452 |
-| ZIP | 444 | · | · | 4 | 4 | · | · | 452 |
-| AGE | 414 | · | · | · | 2 | · | · | 416 |
-| BUILDINGNUM | 224 | 1 | · | 11 | 39 | · | · | 275 |
-| STREET | 145 | · | · | 112 | 9 | · | · | 266 |
-| CREDITCARDNUMBER | · | 152 | · | · | · | 100 | · | 252 |
-| IBAN | 174 | 24 | · | 4 | · | 12 | · | 214 |
-| FIRSTNAME | 123 | · | · | · | 4 | · | · | 127 |
-| LICENSEPLATENUM | 25 | · | · | 75 | · | 22 | · | 122 |
-| PASSPORTID | 107 | · | · | · | · | 11 | · | 118 |
-| STATE | 107 | · | · | 7 | 2 | · | · | 116 |
-| SURNAME | 110 | · | · | · | · | · | · | 110 |
-| COMPANYNAME | 73 | · | · | 36 | · | · | · | 109 |
-| COUNTRY | 79 | · | · | 2 | 14 | · | · | 95 |
-| CITY | 34 | · | · | 17 | 22 | · | · | 73 |
-| USERNAME | 48 | · | · | 23 | · | · | · | 71 |
-| EMAIL | · | · | · | 19 | · | · | · | 19 |
-| TITLE | 15 | · | · | · | · | · | · | 15 |
-| **all** | **6,868** | **1,307** | **·** | **728** | **100** | **280** | **·** | **9,283** |
-
-Agentic layers by cause (bytes, agentic layer contract):
-
-| Layer | a | b | c | d | e | f | g | Total |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| A | 1,608 | 4,053 | · | 77 | · | · | · | 5,738 |
-| D | · | · | · | · | · | · | · | 0 |
-| R | 228 | · | · | · | 6 | · | · | 234 |
-
-Partial spans (d) by what a fuller candidate met (bytes):
-
-| Layer | lost_resolution | vetoed | resolved_not_emitted | no_full_candidate | Total |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| C | · | 21 | · | 707 | 728 |
-| A | · | 48 | · | 29 | 77 |
-| R | · | · | · | · | 0 |
-
-Layer C labels outside contract v3 (scored by v1 only):
-
-| Label | a | b | c | d | e | f | g | Total |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| PASSWORD | 1,990 | · | · | 24 | · | · | · | 2,014 |
-| SECURITYTOKEN | 4,106 | · | · | 70 | · | · | · | 4,176 |
-
-Top 10 layer C clusters (label, cause, mechanism):
-
-| Label | Cause | Mechanism | Spans | Bytes |
-| --- | --- | --- | ---: | ---: |
-| TAXNUM | a no candidate | nothing near | 124 | 1,443 |
-| PHONENUMBER | b vetoed | validator `phone.national.us` | 53 | 715 |
-| DRIVERLICENSENUM | a no candidate | nothing near | 63 | 661 |
-| DATEOFBIRTH | a no candidate | nothing near | 39 | 445 |
-| NATIONALID | a no candidate | nothing near | 36 | 411 |
-| IDCARDNUM | a no candidate | nothing near | 31 | 313 |
-| SSN | a no candidate | nothing near | 26 | 302 |
-| ZIP | a no candidate | closest `location` (compatible) | 71 | 274 |
-| AGE | a no candidate | closest `name` | 120 | 240 |
-| BUILDINGNUM | a no candidate | closest `location` (compatible) | 83 | 201 |
-
-Junk-shaped gold in layer C: 48 spans, 284 leaked bytes (280 B with no candidate, cause f). They stay in the target until an audited contract change.
+The leak ledger classifies every leaked gold byte of an unreleased build by root cause. Public pages show tagged releases only, so its table is not shown here. The classified rows ([`leak-ledger.json`](leak-ledger.json) and [its row file](leak-ledger/ledger-74701b227385.jsonl.gz)) stay committed, and `python3 scripts/bench/leak_ledger.py check` re-derives their totals from the observation record under every scored-label contract.
 
 <!-- END GENERATED: leak-ledger -->
 
@@ -847,7 +754,7 @@ in [`scripts/bench/compare/theirbench/`](../../../scripts/bench/compare/theirben
 
 <!-- BEGIN GENERATED: their-benchmarks -->
 
-Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. Chart bars are configurations declared before measuring; the table lists every measured row. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Both sets are English only, so Presidio's three language configurations give identical rows.
+Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Both sets are English only, so Presidio's three language configurations give identical rows.
 
 #### PIIBench-commercial (four permissively licensed PIIBench sources, test_5k)
 
@@ -855,21 +762,10 @@ Report-only: these sets are never used to design or tune Gaze rules. Every gold 
 - Only these sources run: gretelai/synthetic_pii_finance_multilingual, nvidia/Nemotron-PII, DFKI-SLT/few-nerd, nlpaueb/finer-139. Excluded for their licences: Babelscape/multinerd: CC-BY-NC-SA-4.0; Isotonic/pii-masking-200k: CC-BY-NC-4.0 on its dataset card (the paper lists Apache-2.0); ai4privacy/pii-masking-300k: custom licence; commercial use requires a licence from ai4privacy; ai4privacy/pii-masking-400k: custom licence; commercial use requires a licence from ai4privacy; conll2003: Reuters corpus, non-commercial research agreement; wikiann: dataset card licence is unknown.
 - PIIBench's current code keeps 71 label types where its paper reports 48: its normaliser maps only ai4privacy-style names. `MISC` and `FINANCIAL_ENTITY` are gold.
 
-```mermaid
-xychart-beta horizontal
-    title "Leaked PII bytes, piibench-commercial - lower is better"
-    x-axis ["gaze-full (40.3%)", "datafog-core (84.8%)", "datafog-spacy (43.7%)", "gliner (48.5%)", "opf (64.8%)", "presidio-strong (33.4%)", "scrubadub-spacy (55.2%)"]
-    y-axis "Leaked PII bytes" 0 --> 244966
-    bar [105859, 222697, 114880, 127361, 170336, 87853, 145119]
-```
-
 Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_DEBIT_CARD, DATE, DATE_OF_BIRTH, DATE_TIME, EMAIL, FAX_NUMBER, LOC, PHONE_NUMBER, POSTCODE, STREET_ADDRESS.
 
 | Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (span F1, exact span + type, PIIBench seqeval) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| gaze-full | 105,859 | 48,477 | 79.5% | held (typed-metric review) | held (typed-metric review) | 32,495 | held (typed-metric review) |
-| gaze-rules-ner | 113,938 | 46,131 | 79.6% | held (typed-metric review) | held (typed-metric review) | 37,167 | held (typed-metric review) |
-| gaze-rules-only | 211,924 | 11,715 | 99.9% | held (typed-metric review) | held (typed-metric review) | 60,319 | held (typed-metric review) |
 | datafog-core | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
 | datafog-gliner | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
 | datafog-regex | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
@@ -885,37 +781,21 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
 | scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
 
-Where Gaze full is not best:
-
-- Leaked B: presidio-strong-high-recall 84,965 (FP B 92,491); presidio-strong 87,853 (FP B 88,715); presidio-all / presidio-en / presidio-en-de 87,936 (FP B 235,332); Gaze full 105,859 (FP B 48,477).
-- FP B: datafog-core 4,529 (Leaked B 222,697); datafog-regex 4,926 (Leaked B 223,137); scrubadub-base 9,971 (Leaked B 223,156); opf 12,174 (Leaked B 170,336); Gaze full 48,477 (Leaked B 105,859).
-- Doc leak rate: presidio-strong-high-recall 70.1% (FP B 92,491); presidio-strong 70.2% (FP B 88,715); datafog-gliner 75.6% (FP B 71,574); gliner-high-recall 77.5% (FP B 118,822); Gaze full 79.5% (FP B 48,477).
-- Leaked B, common: datafog-gliner 25,463 (FP B 71,574); datafog-spacy 29,383 (FP B 219,413); Gaze full 32,495 (FP B 48,477).
+Gaze v0.15.1: not yet measured on this set, so no Gaze row is shown.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
-Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. Gaze ran on crates tree `97e45cfe`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-dab4a195`.
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-dab4a195`.
 
 #### Presidio Research synthetic set (synth_dataset_v2, 1,500 documents)
 
 - Presidio custom (notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb): published F2 0.91; reproduced 0.91 with the evaluator at `e2140e12`, the version that produced the published number; 0.848 with the pinned evaluator, which scores every row below.
 - Presidio vanilla (notebooks/4_Evaluate_Presidio_Analyzer.ipynb): published F2 0.661; reproduced 0.664 with the evaluator at `ac490f9b`, the version that produced the published number; 0.593 with the pinned evaluator, which scores every row below.
 
-```mermaid
-xychart-beta horizontal
-    title "Leaked PII bytes, presidio-research - lower is better"
-    x-axis ["gaze-full (24.1%)", "datafog-core (88.1%)", "datafog-spacy (39.9%)", "gliner (33.7%)", "opf (38.7%)", "presidio-strong (31.3%)", "scrubadub-spacy (51.2%)"]
-    y-axis "Leaked PII bytes" 0 --> 38291
-    bar [9519, 34810, 15769, 13326, 15305, 12383, 20226]
-```
-
 Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAIL_ADDRESS, PHONE_NUMBER, STREET_ADDRESS, ZIP_CODE.
 
 | Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (F2, binary PII vs O, presidio-evaluator) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| gaze-full | 9,519 | 1,363 | 48.4% | held (typed-metric review) | held (typed-metric review) | 8,080 | 0.709 |
-| gaze-rules-ner | 10,322 | 1,361 | 48.7% | held (typed-metric review) | held (typed-metric review) | 8,746 | 0.682 |
-| gaze-rules-only | 32,001 | 4 | 83.6% | held (typed-metric review) | held (typed-metric review) | 14,409 | 0.187 |
 | datafog-core | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
 | datafog-gliner | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
 | datafog-regex | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
@@ -931,16 +811,11 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
 | scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
 
-Where Gaze full is not best:
-
-- Leaked B: gliner-high-recall 8,158 (FP B 7,031); Gaze full 9,519 (FP B 1,363).
-- FP B: datafog-core 0 (Leaked B 34,810); datafog-regex 0 (Leaked B 35,039); scrubadub-base 6 (Leaked B 35,019); opf 667 (Leaked B 15,305); Gaze full 1,363 (Leaked B 9,519).
-- Doc leak rate: datafog-gliner 34.4% (FP B 5,525); gliner-high-recall 34.8% (FP B 7,031); presidio-all / presidio-en / presidio-en-de 43.7% (FP B 4,467); gliner 44.7% (FP B 4,884); Gaze full 48.4% (FP B 1,363).
-- Leaked B, common: gliner-high-recall 4,482 (FP B 7,031); datafog-gliner 5,807 (FP B 5,525); opf 5,905 (FP B 667); Gaze full 8,080 (FP B 1,363).
+Gaze v0.15.1: not yet measured on this set, so no Gaze row is shown.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
-Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. Gaze ran on crates tree `97e45cfe`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-dab4a195`.
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-dab4a195`.
 
 Not run:
 

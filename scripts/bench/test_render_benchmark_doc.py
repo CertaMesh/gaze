@@ -20,6 +20,7 @@ import unittest
 from pathlib import Path
 
 import benchmark_charts as charts
+from tagged_gaze import check_public
 import render_benchmark_doc as render
 
 #: A real harness scorecard, trimmed to the fields the renderer reads.
@@ -923,8 +924,7 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         self.assertIn("<picture>", section)
         self.assertIn("benchmark-panels-dark.svg", section)
         self.assertNotIn("mermaid", section)
-        for text in (section, render.DEFAULT_DOC.read_text(encoding="utf-8")):
-            self.assertNotIn("Gaze main", text)
+        check_public(section, "README")
 
     def test_check_fails_when_the_readme_chart_drifts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -986,7 +986,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             with self.assertRaises(charts.ChartError, msg=version):
                 charts.GazeRow(version, 90.0, 1)
         tampered = copy.deepcopy(self.their)
-        tampered["presidio-research"]["gaze_releases"] = {"main": {}}
+        tampered["presidio-research"]["rows"]["gaze-v0.15.1-rc.1"] = {}
         with self.assertRaisesRegex(render.RenderError, "release tag"):
             self.panels(their=tampered)
         # The untagged `gaze-full` row and the comparison's main run are never read.
@@ -1007,7 +1007,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
     def test_a_tagged_third_party_run_replaces_the_pending_slot(self):
         their = copy.deepcopy(self.their)
         block = copy.deepcopy(their["presidio-research"]["rows"]["gaze-full"]["common_intersection"])
-        their["presidio-research"]["gaze_releases"] = {"v0.15.1": {"common_intersection": block}}
+        their["presidio-research"]["rows"]["gaze-v0.15.1"] = {"common_intersection": block}
         panel = self.panels(their=their)[1]
         bar = next(b for b in panel.bars if b.gaze)
         gold = block["leaked_bytes"] + block["true_positive_bytes"]
@@ -1020,11 +1020,36 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         report["tools"]["gliner-best"]["contracts"]["v3"]["C"]["leaked_bytes"] = 19000
         self.assertEqual(self.panels(report), self.panels())
 
-    def test_bar_names_do_not_touch_at_any_panel_width(self):
-        for panel in self.panels():
-            names = [bar.name for bar in panel.bars]
-            self.assertIsNone(charts.label_overlap(names, len(names)), panel.title)
-        self.assertIsNotNone(charts.label_overlap(["scrubadubscrubadub", "GLiNERGLiNER"], 8))
+    def test_bar_names_keep_clear_space_at_every_panel_width(self):
+        """Every name is drawn at most slot - margin wide, whatever font renders it."""
+        panels = self.panels()
+        for panel, width in zip(panels, charts.panel_widths(panels)):
+            slot = charts.slot_width(width, len(panel.bars))
+            for bar in panel.bars:
+                drawn, forced = charts.name_fit(bar.name, slot)
+                self.assertLessEqual(drawn, slot - charts.NAME_MARGIN + 1e-9, bar.name)
+                natural = max(len(l) for l in charts.name_lines(bar.name)) \
+                    * charts.NAME_PX * charts.GLYPH_EM
+                if forced:  # a squeeze stays legible: at most 25 % narrower than a wide font
+                    self.assertGreaterEqual(forced / natural, 0.75, bar.name)
+        svg = charts.figure_svg("light", panels, "alt")
+        self.assertIn('textLength="', svg)  # scrubadub is squeezed, not overlapped
+
+    def test_panels_name_dataset_split_labels_and_notes(self):
+        own, presidio, piibench = self.panels()
+        self.assertIn("Kiji EN/DE holdout and A4 negatives", own.dataset)
+        self.assertIn("test + validation", own.dataset)
+        self.assertIn("2,910 docs", own.dataset)
+        self.assertIn("labels Gaze commits to detect", own.labels)
+        self.assertIn("common intersection", presidio.labels)
+        self.assertIn("1,500 docs, test split", presidio.dataset)
+        self.assertIn("5,000 docs, test split", piibench.dataset)
+        svg = charts.figure_svg("dark", [own, presidio, piibench], "alt")
+        self.assertIn("(own scale)", svg)
+        tables = charts.model_card_tables([own, presidio, piibench])
+        self.assertIn("skipped 0 of the own corpus's 2,910 documents", tables)
+        self.assertIn("Refused documents", tables)
+        self.assertIn("Gaze 0.15 0", tables)
 
     def test_model_card_bolds_the_best_value_per_row(self):
         tables = charts.model_card_tables(self.panels())
