@@ -596,11 +596,13 @@ pub enum AmbiguityReason {
     PrecedenceTie,
 }
 
-/// Closed validator failure reasons recorded by audit metadata.
+/// Closed pre-resolution refusal reasons recorded by audit metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 #[serde(rename_all = "snake_case")]
 pub enum ValidatorFailReason {
+    /// A rulepack rejection guard refused the original regex capture.
+    RegexGuardRejected,
     /// Luhn checksum validation failed.
     LuhnFailed,
     /// IBAN MOD-97 validation failed.
@@ -639,13 +641,19 @@ pub enum ValidatorFailReason {
     UkNhsMod11Failed,
 }
 
-/// Why a labelled identifier value exceeded the usual precision bound while still being tokenized.
+/// Why a labelled identifier scan stopped or exceeded its usual precision bound.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 #[serde(rename_all = "snake_case")]
 pub enum LabelledValueScanReason {
     /// The complete value run exceeded four groups or forty bytes.
     LimitExceeded,
+    /// A date starts the next field after the captured identifier.
+    DateBoundary,
+    /// A labelled field starts after the captured identifier.
+    LabelBoundary,
+    /// A different recognizer claims the following value.
+    OtherClassBoundary,
 }
 
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
@@ -2722,9 +2730,9 @@ pub struct RedactionEntry {
     pub created_at: i64,
     /// Optional session identifier.
     pub session_id: Option<String>,
-    /// Optional validator failure reason for a vetoed candidate.
+    /// Optional validator or regex-guard refusal reason for a vetoed candidate.
     pub validator_fail_reason: Option<ValidatorFailReason>,
-    /// A labelled value was emitted past its usual precision bound to avoid a raw suffix.
+    /// Closed reason for a labelled value boundary or length limit.
     pub labelled_value_scan_reason: Option<LabelledValueScanReason>,
     /// Optional ambiguity metadata for a family-level fallback.
     pub ambiguity_record: Option<AmbiguityRecord>,
@@ -4189,6 +4197,15 @@ pub trait Recognizer: Send + Sync {
         input: &str,
         ctx: &DetectContext<'_>,
     ) -> std::result::Result<Vec<Candidate>, DetectError>;
+    /// Registry-only detection view that may include marked guard vetoes for audit.
+    /// Direct callers of [`Self::detect`] receive accepted candidates only.
+    fn detect_for_registry(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Candidate>, DetectError> {
+        self.detect(input, ctx)
+    }
     /// Token family used for candidate token emission.
     fn token_family(&self) -> &str;
     /// Optional validator kind used by pre-resolver validator-veto.
@@ -4292,8 +4309,12 @@ pub struct Candidate {
     /// Set when validator veto kept the candidate although its validator failed
     /// ([`ValidatorOnFail::Record`]); written on the winner's audit row.
     pub validator_fail_reason: Option<ValidatorFailReason>,
-    /// A labelled value was emitted past its usual precision bound to avoid a raw suffix.
+    /// Closed reason for a labelled value boundary or length limit.
     pub labelled_value_scan_reason: Option<LabelledValueScanReason>,
+    /// End of the original labelled-value capture before extension, for cross-class trimming.
+    pub labelled_value_capture_end: Option<usize>,
+    /// The recognizer's match guard vetoed the original capture.
+    pub regex_guard_rejected: bool,
 }
 
 impl Candidate {
@@ -4328,6 +4349,8 @@ impl Candidate {
             evidence: EvidenceKind::Learned,
             validator_fail_reason: None,
             labelled_value_scan_reason: None,
+            labelled_value_capture_end: None,
+            regex_guard_rejected: false,
         }
     }
 

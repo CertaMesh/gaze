@@ -92,7 +92,9 @@ use std::sync::Arc;
 use crate::anchor_resolver::AnchorResolver;
 use crate::house_number::{StreetLexicon, StreetNumberOrder};
 pub use gaze_types::{Candidate, DetectContext, DetectError, EvidenceKind, Recognizer};
-use gaze_types::{CollisionMembership, LocaleBasis, LocaleChain, LocaleTag, PiiClass};
+use gaze_types::{
+    CollisionMembership, LabelledValueScanReason, LocaleBasis, LocaleChain, LocaleTag, PiiClass,
+};
 
 pub trait Validator: Send + Sync {
     fn id(&self) -> &str;
@@ -997,7 +999,7 @@ fn detect_declared(
 ) -> Result<Vec<Candidate>, DetectError> {
     let evidence = recognizer.evidence();
     Ok(recognizer
-        .detect(input, ctx)?
+        .detect_for_registry(input, ctx)?
         .into_iter()
         .map(|candidate| candidate.with_evidence(evidence))
         .collect())
@@ -1175,6 +1177,7 @@ impl RecognizerRegistry {
             // This cannot reduce covered bytes for the pair. Spans are claimed before validator
             // veto, so partial overlaps retain the existing locale fallback behavior.
             let mut claimed = ClaimedSpans::default();
+            let mut guard_audit_seen = BTreeSet::new();
             // Locale-invariant recognizers detect at their first eligible step; later steps
             // reuse that output, so NER infers once per document instead of once per step.
             let mut reused: HashMap<usize, Vec<Candidate>> = HashMap::new();
@@ -1210,24 +1213,113 @@ impl RecognizerRegistry {
                         detected
                             .iter()
                             .filter(|candidate| candidate.score >= min_score(&class))
-                            .filter(|candidate| !claimed.blocks(&candidate.span))
+                            .filter(|candidate| {
+                                if candidate.regex_guard_rejected {
+                                    guard_audit_seen.insert((
+                                        candidate.recognizer_id.clone(),
+                                        candidate.span.start,
+                                        candidate.span.end,
+                                    ))
+                                } else {
+                                    !claimed.blocks(&candidate.span)
+                                }
+                            })
                             .cloned(),
                     );
                 }
-                claimed.extend(class_candidates.iter().map(|candidate| &candidate.span));
+                claimed.extend(
+                    class_candidates
+                        .iter()
+                        .filter(|candidate| !candidate.regex_guard_rejected)
+                        .map(|candidate| &candidate.span),
+                );
                 candidates.extend(class_candidates);
             }
         }
 
-        let post_candidates = self.detect_post_candidates(input, ctx, &candidates)?;
+        let active_candidates = candidates
+            .iter()
+            .filter(|candidate| !candidate.regex_guard_rejected)
+            .cloned()
+            .collect::<Vec<_>>();
+        let post_candidates = self.detect_post_candidates(input, ctx, &active_candidates)?;
         candidates.extend(
             post_candidates
                 .into_iter()
                 .filter(|candidate| candidate.score >= min_score(&candidate.class)),
         );
 
-        let (candidates, vetoed) =
+        let (mut candidates, vetoed) =
             crate::validator_veto::apply(candidates, self, input, ctx.source_spans);
+
+        // A labelled capture may extend through grouped value bytes, but an independently
+        // validated value of another class starts a new field. A vetoed lookalike must never
+        // shorten the value and leave its suffix raw.
+        let boundaries = candidates
+            .iter()
+            .filter(|candidate| !candidate.regex_guard_rejected)
+            .map(|candidate| {
+                (
+                    candidate.span.start,
+                    candidate.class.clone(),
+                    candidate.checksum_validated(),
+                )
+            })
+            .collect::<Vec<_>>();
+        for candidate in &mut candidates {
+            let Some(capture_end) = candidate.labelled_value_capture_end else {
+                continue;
+            };
+            let prefix_start = candidate.span.start
+                + input[candidate.span.start..]
+                    .bytes()
+                    .take_while(|byte| *byte == b'<')
+                    .count();
+            let first_group_end = prefix_start
+                + input[prefix_start..]
+                    .bytes()
+                    .take_while(u8::is_ascii_alphanumeric)
+                    .count();
+            let first_group_end = if first_group_end == prefix_start {
+                capture_end
+            } else {
+                first_group_end
+            };
+            let first_group = &input[prefix_start..first_group_end];
+            // A long all-digit ID can contain card-like windows. They are not evidence that a
+            // new field starts inside that ID; trimming there would expose its tail.
+            if !first_group.bytes().any(|byte| byte.is_ascii_alphabetic())
+                || !first_group.bytes().any(|byte| byte.is_ascii_digit())
+            {
+                continue;
+            }
+            let next = boundaries
+                .iter()
+                .filter(|(start, class, validated)| {
+                    *start
+                        >= if *validated {
+                            first_group_end
+                        } else {
+                            capture_end
+                        }
+                        && *start < candidate.span.end
+                        && class != &candidate.class
+                })
+                .map(|(start, _, _)| *start)
+                .min();
+            if let Some(start) = next {
+                let end = input[..start]
+                    .trim_end_matches(|ch: char| {
+                        ch.is_whitespace() || matches!(ch, '-' | '/' | '.' | ':')
+                    })
+                    .len()
+                    .max(first_group_end);
+                candidate.span.end = end;
+                candidate.labelled_value_scan_reason =
+                    Some(LabelledValueScanReason::OtherClassBoundary);
+            }
+        }
+
         Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }
 

@@ -21,6 +21,13 @@ pub fn apply(
     let mut vetoed = Vec::new();
 
     for mut candidate in candidates {
+        if candidate.regex_guard_rejected {
+            vetoed.push(VetoedCandidate {
+                candidate,
+                reason: ValidatorFailReason::RegexGuardRejected,
+            });
+            continue;
+        }
         let Some(recognizer) = registry.recognizer(&candidate.recognizer_id) else {
             kept.push(candidate);
             continue;

@@ -195,30 +195,18 @@ impl Recognizer for RegexDetector {
         ctx: &DetectContext<'_>,
     ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         Ok(self
-            .scanned_spans(input, ctx.source_spans)
+            .candidates(input, ctx.source_spans)
             .into_iter()
-            .filter_map(|scan| {
-                let matched = &input[scan.span.clone()];
-                (!self.is_excluded(matched)).then_some((scan, matched))
-            })
-            .map(|(scan, matched)| {
-                let canonical_form = self.canonical_form(matched);
-                let mut candidate = Candidate::new(
-                    scan.span,
-                    self.class.clone(),
-                    self.source.clone(),
-                    self.base_score,
-                    self.priority,
-                    canonical_form,
-                    self.token_family(),
-                    self.source.clone(),
-                    ConflictTier::None,
-                    Vec::new(),
-                );
-                candidate.labelled_value_scan_reason = scan.reason;
-                candidate
-            })
+            .filter(|candidate| !candidate.regex_guard_rejected)
             .collect())
+    }
+
+    fn detect_for_registry(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+        Ok(self.candidates(input, ctx.source_spans))
     }
 
     fn token_family(&self) -> &str {
@@ -244,6 +232,38 @@ impl Recognizer for RegexDetector {
     // `detect` ignores its context: the pattern and its filters are fixed at build time.
     fn detect_is_locale_invariant(&self) -> bool {
         true
+    }
+}
+
+impl RegexDetector {
+    fn candidates(&self, input: &str, source_spans: Option<&[(usize, usize)]>) -> Vec<Candidate> {
+        self.scanned_spans(input, source_spans)
+            .into_iter()
+            .filter_map(|scan| {
+                let matched = &input[scan.span.clone()];
+                (!self.is_excluded(matched)).then_some((scan, matched))
+            })
+            .map(|(scan, matched)| {
+                let canonical_form = self.canonical_form(matched);
+                let mut candidate = Candidate::new(
+                    scan.span,
+                    self.class.clone(),
+                    self.source.clone(),
+                    self.base_score,
+                    self.priority,
+                    canonical_form,
+                    self.token_family(),
+                    self.source.clone(),
+                    ConflictTier::None,
+                    Vec::new(),
+                );
+                candidate.labelled_value_scan_reason = scan.reason;
+                candidate.labelled_value_capture_end =
+                    self.complete_labelled_value.then_some(scan.extension.start);
+                candidate.regex_guard_rejected = scan.rejected;
+                candidate
+            })
+            .collect()
     }
 }
 
@@ -306,6 +326,7 @@ impl RegexDetector {
     ) -> Vec<std::ops::Range<usize>> {
         self.scanned_spans(input, source_spans)
             .into_iter()
+            .filter(|scan| !scan.rejected)
             .map(|scan| scan.span)
             .collect()
     }
@@ -325,12 +346,18 @@ impl RegexDetector {
                     if self.complete_labelled_value {
                         scan_labelled_value(input, span)
                     } else {
-                        LabelledValueScan { span, reason: None }
+                        LabelledValueScan {
+                            capture: span.clone(),
+                            extension: span.clone(),
+                            span,
+                            reason: None,
+                            rejected: false,
+                        }
                     }
                 });
                 // Resume at the capture end. The regex may have consumed the separator needed
                 // by the next match, and the scanner may have passed another labelled field.
-                let next = captured.map_or(full.end(), |span| span.end);
+                let next = span.as_ref().map_or(full.end(), |scan| scan.span.end);
                 search_at = if next > full.start() {
                     Some(next)
                 } else {
@@ -339,17 +366,18 @@ impl RegexDetector {
                         .next()
                         .map(|ch| full.start() + ch.len_utf8())
                 };
-                if let Some(span) = span.filter(|scan| {
-                    self.boundary_accepts(input, &scan.span)
-                        && !self.reject_match_regex.as_ref().is_some_and(|guard| {
-                            let checked = if self.complete_labelled_value {
-                                &input[full.start()..scan.span.end]
-                            } else {
-                                full.as_str()
-                            };
-                            guard.is_match(checked)
-                        })
-                }) {
+                if let Some(mut span) = span.filter(|scan| self.boundary_accepts(input, &scan.span))
+                {
+                    // The guard judges only the regex evidence, never groups found later by the
+                    // scanner. A rejected capture still reaches the audit veto path.
+                    span.rejected = self.reject_match_regex.as_ref().is_some_and(|guard| {
+                        let checked = if self.complete_labelled_value {
+                            &input[full.start()..span.capture.end]
+                        } else {
+                            full.as_str()
+                        };
+                        guard.is_match(checked)
+                    });
                     return Some(span);
                 }
             }
@@ -366,7 +394,13 @@ impl RegexDetector {
                 spans.sort_by_key(|span| span.start);
                 spans
                     .into_iter()
-                    .map(|span| LabelledValueScan { span, reason: None })
+                    .map(|span| LabelledValueScan {
+                        capture: span.clone(),
+                        extension: span.clone(),
+                        span,
+                        reason: None,
+                        rejected: false,
+                    })
                     .collect::<Vec<_>>()
             })
             .collect()
@@ -436,12 +470,16 @@ impl RegexDetector {
 /// A regex capture proves the first group. Scan the rest as a value run, stopping at the first
 /// prose token or field delimiter. Limits are audit signals, never a reason to leave PII raw.
 struct LabelledValueScan {
+    capture: std::ops::Range<usize>,
+    extension: std::ops::Range<usize>,
     span: std::ops::Range<usize>,
     reason: Option<LabelledValueScanReason>,
+    rejected: bool,
 }
 
 fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> LabelledValueScan {
     let mut end = capture.start;
+    let mut stop_reason = None;
     let initial_lowercase = input[capture.start..]
         .chars()
         .next()
@@ -463,8 +501,19 @@ fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> Labelled
             .take_while(|(_, ch)| {
                 matches!(
                     ch,
-                    ' ' | '\t' | '\u{00A0}' | '\u{202F}' | '\u{200B}' | '.' | '/' | '-'
-                )
+                    ' ' | '\t'
+                        | '\u{00A0}'
+                        | '\u{202F}'
+                        | '\u{200B}'
+                        | '\u{2060}'
+                        | '\u{FEFF}'
+                        | '\u{200F}'
+                        | '.'
+                        | '/'
+                        | '-'
+                        | '_'
+                        | ':'
+                ) || ('\u{0300}'..='\u{036F}').contains(&ch)
             })
             .last()
             .map_or(0, |(at, ch)| at + ch.len_utf8());
@@ -480,6 +529,14 @@ fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> Labelled
             break;
         }
         let next = &input[next_start..next_start + next_len];
+        if starts_with_date(&input[next_start..]) {
+            stop_reason = Some(LabelledValueScanReason::DateBoundary);
+            break;
+        }
+        if is_field_boundary(next) {
+            stop_reason = Some(LabelledValueScanReason::LabelBoundary);
+            break;
+        }
         let value_like = next.bytes().any(|byte| byte.is_ascii_digit())
             || next.bytes().all(|byte| byte.is_ascii_uppercase())
             || (initial_lowercase
@@ -491,8 +548,12 @@ fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> Labelled
         end = next_start;
         debug_assert!(end > separator_start);
     }
-    // The regex capture itself is always safe to emit, even if a future pattern broadens it.
-    end = end.max(capture.end);
+    // A field boundary can occur inside the regex capture when its bounded grammar accepts
+    // another uppercase value group. In that case the original capture is not all one value.
+    if stop_reason.is_none() {
+        end = end.max(capture.end);
+    }
+    let capture = capture.start..capture.end.min(end);
     // Strict restore treats an angle bracket immediately beside a token as a malformed
     // nested token. Keep adjacent wrapper brackets in the same reversible value span.
     let start = if capture.start > 0 && input.as_bytes()[capture.start - 1] == b'<' {
@@ -504,12 +565,33 @@ fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> Labelled
         .bytes()
         .take_while(|byte| *byte == b'>')
         .count();
+    let extension = capture.end..end;
     let span = start..end;
     LabelledValueScan {
         reason: labelled_value_over_limit(&input[span.clone()])
-            .then_some(LabelledValueScanReason::LimitExceeded),
+            .then_some(LabelledValueScanReason::LimitExceeded)
+            .or(stop_reason),
+        capture,
+        extension,
         span,
+        rejected: false,
     }
+}
+
+fn starts_with_date(rest: &str) -> bool {
+    static DATE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    DATE.get_or_init(|| {
+        Regex::new(r"\A(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})(?:\b|$)").expect("static date pattern")
+    }).is_match(rest)
+}
+
+fn is_field_boundary(group: &str) -> bool {
+    // These short field cues occur in the core rulepack's locale cue vocabulary.
+    // US/UK alone do not prove another recognizer will protect the following digits.
+    matches!(
+        group.to_ascii_uppercase().as_str(),
+        "SSN" | "TIN" | "DOB" | "ID" | "TAX" | "UTR" | "TFN" | "EXP" | "VALID"
+    )
 }
 
 fn labelled_value_over_limit(value: &str) -> bool {
@@ -536,6 +618,63 @@ fn is_ascii_email_continuation(ch: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejection_guard_checks_capture_instead_of_scanner_extension() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r"Tax number: ([A-Z0-9]+ [A-Z0-9]+)",
+            PiiClass::custom("tax_number").unwrap(),
+            "synthetic.labelled",
+            vec![LocaleTag::Global],
+            0.84,
+            84,
+            "counter",
+            Some(vec![1]),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap()
+        .with_complete_labelled_value(true)
+        .with_rejection_pattern(Some("XYZ123456"))
+        .unwrap();
+        let input = "Tax number: AB12 CD3456 XYZ123456";
+        let scans = detector.scanned_spans(input, None);
+        assert_eq!(scans.len(), 1);
+        assert_eq!(&input[scans[0].capture.clone()], "AB12 CD3456");
+        assert_eq!(&input[scans[0].span.clone()], "AB12 CD3456 XYZ123456");
+        assert!(!scans[0].rejected, "guard must not inspect the extension");
+    }
+
+    #[test]
+    fn direct_detection_hides_guard_vetoes_but_registry_can_audit_them() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r"Tax number: ([A-Z0-9]+)",
+            PiiClass::custom("tax_number").unwrap(),
+            "synthetic.labelled",
+            vec![LocaleTag::Global],
+            0.84,
+            84,
+            "counter",
+            Some(vec![1]),
+            Vec::new(),
+            None,
+            None,
+        )
+        .unwrap()
+        .with_rejection_pattern(Some("AB123456"))
+        .unwrap();
+        let dictionaries = gaze_types::DictionaryBundle::default();
+        let locales = [LocaleTag::Global];
+        let ctx = DetectContext::new(&locales, &dictionaries);
+        assert!(Recognizer::detect(&detector, "Tax number: AB123456", &ctx)
+            .unwrap()
+            .is_empty());
+        let audit =
+            Recognizer::detect_for_registry(&detector, "Tax number: AB123456", &ctx).unwrap();
+        assert_eq!(audit.len(), 1);
+        assert!(audit[0].regex_guard_rejected);
+    }
 
     #[test]
     fn captured_values_reuse_a_consumed_separator_for_the_next_match() {
