@@ -685,3 +685,97 @@ fn a_recorded_failure_rule_cannot_declare_benign_lookalikes() {
         Err(gaze_recognizers::RecognizerError::UnsupportedBenignLookalike { .. })
     ));
 }
+
+/// Review 10815 rev 3: a recognizer that borrows the real `postal.us` grant but gates
+/// differently (global locales, so it runs on an en-GB document where the audited rule is
+/// off) is not the audited rule; its candidate is never vetoed, even on an audited-pattern
+/// match inside a benign structure.
+#[test]
+fn a_borrowed_grant_with_another_identity_vetoes_nothing() {
+    use gaze::Recognizer as _;
+    use gaze_recognizers::{BenignLookalike, RegexDetector};
+    let real = RegexDetector::with_rulepack_fields(
+        r"\b\d{5}(-\d{4})?\b",
+        gaze::PiiClass::custom("postal_code").expect("class"),
+        "postal.us",
+        vec![gaze::LocaleTag::EnUs],
+        0.70,
+        70,
+        "counter",
+        None,
+        Vec::new(),
+        None,
+        None,
+    )
+    .expect("detector")
+    .with_benign_lookalikes(vec![
+        BenignLookalike::JoinedIdentifier,
+        BenignLookalike::CurrencyAmount,
+    ])
+    .expect("the exact bundled postal.us rule is granted");
+    struct Everywhere(RegexDetector);
+    impl gaze::Recognizer for Everywhere {
+        fn id(&self) -> &str {
+            self.0.id()
+        }
+        fn supported_class(&self) -> &gaze::PiiClass {
+            self.0.supported_class()
+        }
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+        fn locales(&self) -> &[gaze::LocaleTag] {
+            &[gaze::LocaleTag::Global]
+        }
+        fn detect(
+            &self,
+            input: &str,
+            _: &gaze::DetectContext<'_>,
+        ) -> Result<Vec<gaze::Candidate>, gaze::DetectError> {
+            Ok(input
+                .find("90210")
+                .map(|start| {
+                    gaze::Candidate::new(
+                        start..start + 5,
+                        self.0.supported_class().clone(),
+                        "postal.us",
+                        0.9,
+                        90,
+                        None,
+                        "counter",
+                        "postal.us",
+                        ConflictTier::None,
+                        Vec::new(),
+                    )
+                })
+                .into_iter()
+                .collect())
+        }
+        fn benign_lookalike_grant(&self) -> Option<&gaze_recognizers::BenignLookalikeGrant> {
+            self.0.benign_lookalike_grant()
+        }
+    }
+    let policy = policy("en-GB");
+    let context = Context::from_json_str(r#"{"dictionaries":{},"class_map":{},"fields":{}}"#)
+        .expect("context");
+    let active = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = build_pipeline_builder(&policy, &context, rulepacks(), &active, None)
+        .expect("builder")
+        .recognizer(Everywhere(real))
+        .build()
+        .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            RawDocument::Text("Lagerartikel SKU-DEMO-90210 fertig".to_string()),
+            active.as_slice(),
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        )
+        .expect("clean");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+    assert!(!text.contains("90210"), "{text}");
+}

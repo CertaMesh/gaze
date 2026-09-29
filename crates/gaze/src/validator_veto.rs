@@ -20,7 +20,8 @@ pub fn apply(
 ) -> (Vec<Candidate>, Vec<VetoedCandidate>) {
     let mut kept = Vec::with_capacity(candidates.len());
     let mut vetoed = Vec::new();
-    let mut patterns = std::collections::HashMap::new();
+    let mut patterns: std::collections::HashMap<String, Option<regex::Regex>> =
+        std::collections::HashMap::new();
 
     for mut candidate in candidates {
         let Some(recognizer) = registry.recognizer(&candidate.recognizer_id) else {
