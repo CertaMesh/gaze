@@ -66,12 +66,54 @@ const REFERENCE_LABELS: &[&str] = &[
     "voucher",
     "vorgang",
 ];
+/// The only recognizers that may be vetoed by a benign lookalike: bundled, uncued,
+/// single-branch shape rules that passed a leak-direction review. Custom and adopter rules can
+/// never opt in; the rulepack loader, the regex builder and validator veto all check this list.
+pub const AUDITED_RECOGNIZERS: &[&str] = &[
+    "phone.national.de",
+    "phone.national.us",
+    "postal.de",
+    "postal.us",
+];
+
+/// Whether `recognizer_id` is on [`AUDITED_RECOGNIZERS`].
+pub fn is_audited(recognizer_id: &str) -> bool {
+    AUDITED_RECOGNIZERS.contains(&recognizer_id)
+}
+
 /// Stems of cue words for the classes that opt in (phone, postal code). A word starting with
 /// one of these on the candidate's line, or in its field name, means the writer may have
 /// labelled the value as PII, so no structure fires. Matching by stem errs toward protection.
+/// Address words count too: a postcode or phone in an address field is the address's own.
 const CUE_STEMS: &[&str] = &[
-    "anruf", "call", "cell", "contact", "fax", "handy", "kontakt", "mobil", "phone", "plz", "post",
-    "ruf", "tel", "zip",
+    "addr",
+    "adress",
+    "anruf",
+    "anschrift",
+    "billing",
+    "call",
+    "cell",
+    "city",
+    "contact",
+    "delivery",
+    "fax",
+    "handy",
+    "kontakt",
+    "liefer",
+    "mobil",
+    "ort",
+    "phone",
+    "plz",
+    "post",
+    "ruf",
+    "shipping",
+    "stadt",
+    "strasse",
+    "straße",
+    "street",
+    "tel",
+    "wohn",
+    "zip",
 ];
 /// How far before or after the candidate a cue word still counts, in bytes.
 const CUE_WINDOW: usize = 40;
@@ -139,22 +181,47 @@ fn has_cue(text: &str) -> bool {
         .any(|word| CUE_STEMS.iter().any(|stem| word.starts_with(stem)))
 }
 
-/// Whether a cue word stands on the candidate's line within [`CUE_WINDOW`] bytes before or
-/// after it, or inside the candidate's own token.
+/// Whether a cue word stands within [`CUE_WINDOW`] bytes before or after the candidate on its
+/// own line, or on the line directly above or below it (a label line such as `ZIP:` over the
+/// value), or inside the candidate's own token.
 fn cued(text: &str, span: Range<usize>) -> bool {
-    let mut from = span.start.saturating_sub(CUE_WINDOW);
+    let is_break = |c: char| c == '\n' || c == '\r';
+    // Current line up to the candidate, then the line above it.
+    let head = &text[..span.start];
+    let line_start = head.rfind(is_break).map_or(0, |index| index + 1);
+    let above = head[..line_start].trim_end_matches(is_break);
+    let above = &above[above.rfind(is_break).map_or(0, |index| index + 1)..];
+    // Current line after the candidate, then the line below it.
+    let tail = &text[span.end..];
+    let line_end = tail.find(is_break).unwrap_or(tail.len());
+    let below = tail[line_end..].trim_start_matches(is_break);
+    let below = &below[..below.find(is_break).unwrap_or(below.len())];
+    [
+        last_bytes(&head[line_start..]),
+        last_bytes(above),
+        first_bytes(&tail[..line_end]),
+        first_bytes(below),
+    ]
+    .into_iter()
+    .any(has_cue)
+}
+
+/// The last [`CUE_WINDOW`] bytes of `text`, widened to a character boundary.
+fn last_bytes(text: &str) -> &str {
+    let mut from = text.len().saturating_sub(CUE_WINDOW);
     while !text.is_char_boundary(from) {
-        from += 1;
+        from -= 1;
     }
-    let mut to = (span.end + CUE_WINDOW).min(text.len());
+    &text[from..]
+}
+
+/// The first [`CUE_WINDOW`] bytes of `text`, widened to a character boundary.
+fn first_bytes(text: &str) -> &str {
+    let mut to = CUE_WINDOW.min(text.len());
     while !text.is_char_boundary(to) {
-        to -= 1;
+        to += 1;
     }
-    let before = &text[from..span.start];
-    let before = before.rsplit(['\n', '\r']).next().unwrap_or(before);
-    let after = &text[span.end..to];
-    let after = after.split(['\n', '\r']).next().unwrap_or(after);
-    has_cue(before) || has_cue(after)
+    &text[..to]
 }
 
 fn is_word(byte: u8) -> bool {
@@ -326,9 +393,16 @@ mod tests {
             "Postleitzahl ORDER-80331",
             "80331"
         ));
-        // A cue on another line, or a word merely containing a cue, does not count.
-        assert!(fires(CurrencyAmount, "Tel\nEUR 22186,12", "22186"));
-        assert!(fires(CurrencyAmount, "EUR 22186,12\nTel", "22186"));
+        // A label line directly above or below counts, CRLF too; two lines away does not.
+        assert!(!fires(JoinedIdentifier, "ZIP:\nORDER-90210", "90210"));
+        assert!(!fires(
+            JoinedIdentifier,
+            "Telefon:\r\nORDER-0301234567",
+            "0301234567"
+        ));
+        assert!(!fires(CurrencyAmount, "EUR 22186,12\n(phone)", "22186"));
+        assert!(fires(CurrencyAmount, "Tel\nnote\nEUR 22186,12", "22186"));
+        // A word merely containing a cue does not count.
         assert!(fires(CurrencyAmount, "Hotel EUR 22186,12", "22186"));
     }
 
@@ -343,10 +417,19 @@ mod tests {
             "phone",
             "customer.telefon",
             "contact",
+            "address",
+            "shippingAddress",
+            "billing_address",
+            "delivery-address",
+            "Anschrift",
+            "adresse",
+            "street",
+            "city",
+            "Wohnort",
         ] {
             assert!(!J.matches(text, at(text, "90210"), Some(field)), "{field}");
         }
-        for field in ["order", "reference", "itemCode"] {
+        for field in ["order", "reference", "itemCode", "orderRef", "sku"] {
             assert!(J.matches(text, at(text, "90210"), Some(field)), "{field}");
         }
     }
@@ -377,5 +460,13 @@ mod tests {
         assert!(!fires(D, "x 0593-9506-3395-7573 y", "0593-9506-3395-7573"));
         // Mixed separators are two values, not one run.
         assert!(!fires(D, "0593-9506.3395-7573.1111", "0593-9506"));
+    }
+
+    #[test]
+    fn only_audited_bundled_recognizers_are_eligible() {
+        assert!(is_audited("postal.us"));
+        assert!(is_audited("phone.national.de"));
+        assert!(!is_audited("postal.at_ch"));
+        assert!(!is_audited("custom.order_zip"));
     }
 }

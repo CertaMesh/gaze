@@ -235,6 +235,35 @@ fn a_trailing_cue_a_field_name_or_a_city_anchor_keeps_the_value_protected() {
             ValidatorFailReason::BenignJoinedIdentifier
         )]
     );
+    // Review 10815 rev 2: a label line directly above the value.
+    assert_protected("en-US", "ZIP:\nORDER-90210", "90210");
+    assert_protected("de-DE", "Telefon:\nORDER-0301234567", "0301234567");
+    // Review 10815 rev 2: address-labelled fields, in every spelling.
+    for field in [
+        "shippingAddress",
+        "billing_address",
+        "delivery-address",
+        "address",
+        "Anschrift",
+        "adresse",
+        "street",
+        "city",
+    ] {
+        let mut map = std::collections::BTreeMap::new();
+        map.insert(
+            field.to_string(),
+            gaze::Value::String("ORDER-90210".to_string()),
+        );
+        let (clean, vetoes) = clean_document("en-US", RawDocument::Structured(map));
+        let CleanDocument::Structured(map) = clean else {
+            panic!("expected structured");
+        };
+        let gaze::Value::String(value) = &map[field] else {
+            panic!("expected string");
+        };
+        assert!(!value.contains("90210"), "{field}: {value}");
+        assert!(vetoes.is_empty(), "{field}: {vetoes:?}");
+    }
     // A non-loopback IPv4-mapped address stays protected.
     assert_protected("en-US", "peer ::ffff:84.12.3.4 up", "84.12.3.4");
 }
@@ -405,29 +434,150 @@ fn load_pack(recognizer: &str) -> Result<Rulepack, gaze::RulepackError> {
     pack
 }
 
+fn bundled_pack(recognizer: &str) -> Result<Rulepack, gaze::RulepackError> {
+    Rulepack::parse_bundled(&format!(
+        "schema_version = \"0.1.0\"\nrulepack_id = \"probe\"\nrulepack_version = \"0.1.0\"\n\
+         default_locales = [\"global\"]\n\n[[recognizers]]\n{recognizer}"
+    ))
+}
+
+fn refused(pack: Result<Rulepack, gaze::RulepackError>) -> bool {
+    matches!(
+        pack,
+        Err(gaze::RulepackError::IneligibleBenignLookalike { .. })
+    )
+}
+
 #[test]
-fn the_loader_refuses_benign_lookalikes_on_cued_or_non_regex_rules() {
-    let regex = "id = \"probe.shape\"\nclass = \"custom:postal_code\"\nlocales = [\"global\"]\n\
-                 [recognizers.match]\nkind = \"regex\"\npattern = '''\\b\\d{5}\\b'''\n";
-    let with = |extra: &str| {
-        format!("{regex}{extra}[recognizers.context]\nbenign_lookalikes = [\"currency_amount\"]\n")
+fn the_loader_refuses_benign_lookalikes_outside_the_audited_bundled_rules() {
+    let rule = |id: &str, pattern: &str, extra: &str| {
+        format!(
+            "id = \"{id}\"\nclass = \"custom:postal_code\"\nlocales = [\"global\"]\n\
+             locale_basis = \"document\"\n[recognizers.match]\nkind = \"regex\"\n\
+             pattern = '''{pattern}'''\n{extra}\
+             [recognizers.context]\nbenign_lookalikes = [\"joined_identifier\"]\n"
+        )
     };
-    assert!(load_pack(&with("")).is_ok(), "an uncued regex may opt in");
+    let plain = rule("postal.us", r"\b\d{5}\b", "");
+    assert!(
+        bundled_pack(&plain).is_ok(),
+        "the audited bundled rule may opt in"
+    );
+    // Review 10815 rev 2: a one-capture, city-anchored custom rule. Refused from a file and
+    // even when handed to the bundled parser.
+    let beverly = rule(
+        "custom.order_zip",
+        r"ORDER-(\d{5})\s+Beverly",
+        "capture_groups = [1]\n",
+    );
+    assert!(refused(load_pack(&beverly)));
+    assert!(refused(bundled_pack(&beverly)));
+    // An adopter file may not borrow an audited id either.
+    assert!(refused(load_pack(&plain)));
+    // Defence in depth on an audited id: a mandatory anchor or a non-regex matcher.
+    assert!(refused(bundled_pack(&rule(
+        "postal.us",
+        r"\b\d{5}\b",
+        "[recognizers.collision]\nfamily = \"probe-family\"\nvariant = \"a\"\nprecedence = 10\n\
+         mandatory_anchor = \"iban\"\n"
+    ))));
+    assert!(refused(bundled_pack(
+        "id = \"postal.us\"\nclass = \"custom:postal_code\"\nlocales = [\"global\"]\n\
+         locale_basis = \"document\"\n[recognizers.match]\nkind = \"dictionary\"\n\
+         terms = [\"90210\"]\n[recognizers.context]\nbenign_lookalikes = [\"currency_amount\"]\n"
+    )));
+}
+
+#[test]
+fn the_regex_builder_refuses_ids_outside_the_allowlist() {
+    let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
+        r"ORDER-(\d{5})\s+Beverly",
+        gaze::PiiClass::custom("postal_code").expect("class"),
+        "custom.order_zip",
+        vec![gaze::LocaleTag::Global],
+        0.7,
+        0,
+        "counter",
+        Some(vec![1]),
+        Vec::new(),
+        None,
+        None,
+    )
+    .expect("detector");
     assert!(matches!(
-        load_pack(&with(
-            "[recognizers.collision]\nfamily = \"probe-family\"\nvariant = \"a\"\nprecedence = 10\n\
-             mandatory_anchor = \"iban\"\n"
-        )),
-        Err(gaze::RulepackError::IneligibleBenignLookalike { .. })
+        detector.with_benign_lookalikes(vec![gaze_recognizers::BenignLookalike::JoinedIdentifier]),
+        Err(gaze_recognizers::RecognizerError::UnsupportedBenignLookalike { .. })
     ));
-    let dictionary =
-        "id = \"probe.dict\"\nclass = \"custom:postal_code\"\nlocales = [\"global\"]\n\
-                      [recognizers.match]\nkind = \"dictionary\"\nterms = [\"90210\"]\n\
-                      [recognizers.context]\nbenign_lookalikes = [\"currency_amount\"]\n";
-    assert!(matches!(
-        load_pack(dictionary),
-        Err(gaze::RulepackError::IneligibleBenignLookalike { .. })
-    ));
+}
+
+/// A custom `Recognizer` impl that claims a benign lookalike is still never vetoed: validator
+/// veto checks the allowlist itself.
+#[test]
+fn a_custom_recognizer_cannot_opt_in_at_runtime() {
+    struct OrderZip(gaze::PiiClass);
+    impl gaze::Recognizer for OrderZip {
+        fn id(&self) -> &str {
+            "custom.order_zip"
+        }
+        fn supported_class(&self) -> &gaze::PiiClass {
+            &self.0
+        }
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+        fn detect(
+            &self,
+            input: &str,
+            _: &gaze::DetectContext<'_>,
+        ) -> Result<Vec<gaze::Candidate>, gaze::DetectError> {
+            Ok(input
+                .find("90210")
+                .map(|start| {
+                    gaze::Candidate::new(
+                        start..start + 5,
+                        self.0.clone(),
+                        "custom.order_zip",
+                        0.9,
+                        90,
+                        None,
+                        "counter",
+                        "custom.order_zip",
+                        ConflictTier::None,
+                        Vec::new(),
+                    )
+                })
+                .into_iter()
+                .collect())
+        }
+        fn benign_lookalikes(&self) -> &[gaze_recognizers::BenignLookalike] {
+            &[gaze_recognizers::BenignLookalike::JoinedIdentifier]
+        }
+    }
+    let policy = policy("en-GB");
+    let context = Context::from_json_str(r#"{"dictionaries":{},"class_map":{},"fields":{}}"#)
+        .expect("context");
+    let active = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = build_pipeline_builder(&policy, &context, rulepacks(), &active, None)
+        .expect("builder")
+        .recognizer(OrderZip(
+            gaze::PiiClass::custom("postal_code").expect("class"),
+        ))
+        .build()
+        .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            RawDocument::Text("ORDER-90210 Beverly".to_string()),
+            active.as_slice(),
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        )
+        .expect("clean");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+    assert!(!text.contains("90210"), "{text}");
 }
 
 #[test]
@@ -435,7 +585,7 @@ fn a_multi_branch_pattern_cannot_declare_benign_lookalikes() {
     let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
         r"(?:plz (\d{4})|(\d{4}) [A-Z][a-z]+)",
         gaze::PiiClass::custom("postal_code").expect("class"),
-        "postal.probe",
+        "postal.us",
         vec![gaze::LocaleTag::Global],
         0.7,
         0,
@@ -457,7 +607,7 @@ fn a_recorded_failure_rule_cannot_declare_benign_lookalikes() {
     let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
         r"\b\d{10}\b",
         gaze::PiiClass::custom("phone").expect("class"),
-        "phone.cued.probe",
+        "phone.national.us",
         vec![gaze::LocaleTag::Global],
         0.7,
         0,

@@ -29,9 +29,11 @@ pub fn apply(
         // A weak, cue-less shape rule that opted in is vetoed when its match sits inside a
         // benign structure (an order number's tail, an amount, a room). Only this recognizer's
         // candidate goes; another candidate over the same bytes still protects them.
+        // The allowlist is checked here too, so a custom `Recognizer` impl cannot opt in.
         if let Some(structure) = recognizer
             .benign_lookalikes()
             .iter()
+            .filter(|_| gaze_types::benign_lookalike::is_audited(&candidate.recognizer_id))
             .find(|structure| structure.matches(input, candidate.span.clone(), field_name))
         {
             vetoed.push(VetoedCandidate {

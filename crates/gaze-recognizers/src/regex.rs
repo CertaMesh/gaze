@@ -302,6 +302,11 @@ impl RegexDetector {
                 "a checksum-backed recognizer cannot be vetoed by context",
             ));
         }
+        if !structures.is_empty() && !gaze_types::benign_lookalike::is_audited(&self.source) {
+            return Err(refuse(
+                "only the audited bundled recognizers may declare benign lookalikes",
+            ));
+        }
         // `on_fail = "record"` marks a cued rule that keeps even a failed value: never weak.
         if !structures.is_empty() && self.validator_on_fail == ValidatorOnFail::Record {
             return Err(refuse("a recorded-failure rule is cued"));

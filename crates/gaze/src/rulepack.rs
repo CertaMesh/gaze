@@ -569,7 +569,13 @@ impl TryFrom<RawRulepackWithLint> for Rulepack {
         let mut recognizers = raw
             .recognizers
             .into_iter()
-            .map(|recognizer| parse_recognizer(recognizer, &default_locales))
+            .map(|recognizer| {
+                parse_recognizer(
+                    recognizer,
+                    &default_locales,
+                    raw_with_lint.require_explicit_locale_basis,
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
         validate_collision_memberships(&recognizers)?;
         apply_collision_family_cooperation(&mut recognizers);
@@ -676,9 +682,11 @@ fn parse_validator_spec(
     })
 }
 
+/// `bundled` is true only for a pack loaded through [`Rulepack::parse_bundled`].
 fn parse_recognizer(
     raw: RawRecognizerSpec,
     default_locales: &[LocaleTag],
+    bundled: bool,
 ) -> Result<RecognizerSpec, RulepackError> {
     reject_unshipped_fields(&raw)?;
     validate_matcher(&raw)?;
@@ -722,6 +730,13 @@ fn parse_recognizer(
             id: raw.id.clone(),
             reason,
         };
+        // A checked allowlist, not a heuristic: a one-capture regex can still be anchored by a
+        // city or cue the stem list does not know (`ORDER-(\d{5})\s+Beverly`).
+        if !bundled || !gaze_types::benign_lookalike::is_audited(&raw.id) {
+            return Err(refuse(
+                "only the audited bundled recognizers may declare benign lookalikes",
+            ));
+        }
         if !matches!(raw.matcher, RawMatch::Regex { .. }) {
             return Err(refuse(
                 "only a regex recognizer can be vetoed by a benign lookalike",

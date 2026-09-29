@@ -732,7 +732,7 @@ fn a_checksum_backed_recognizer_cannot_declare_benign_lookalikes() {
     let card = RegexDetector::with_rulepack_fields(
         r"\b\d{16}\b",
         PiiClass::custom("credit_card").expect("class"),
-        "card.probe",
+        "postal.us",
         vec![gaze::LocaleTag::Global],
         0.7,
         0,
