@@ -16,7 +16,7 @@ import known_record_cells as cells
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A generator change must bump GENERATOR_VERSION and this hash together.
-PINNED_CORPUS_SHA256 = "16984c5264cb5e667a5931963a45fe212fa9f6a1c23fafb751d895103d5a6b6e"
+PINNED_CORPUS_SHA256 = "16b778ba98598090bd138d27b90fbfae4aa58b90a4be857ca8225604e8c9019c"
 PAIRS = 84
 
 
@@ -204,7 +204,7 @@ class KnownRecordCellTests(unittest.TestCase):
             cells._check_cell(refused)
 
     def test_records_are_unique_synthetic_and_valid(self) -> None:
-        validators = {"custom:steuer_id": agentic.steuer_id_valid, "custom:credit_card": agentic.luhn_valid}
+        validators = {"custom:credit_card": agentic.luhn_valid}
         for cell in self.all_cells:
             values = [(f.class_name, " ".join(f.raw.split()).casefold()) for f in cell.record]
             self.assertEqual(len(values), len(set(values)), cell.uid)
@@ -220,6 +220,55 @@ class KnownRecordCellTests(unittest.TestCase):
                     self.assertTrue(validators[field.class_name](compact), field.raw)
                 if field.class_name == "custom:national_id":
                     self.assertTrue(agentic.bsn_valid(compact) or agentic.nhs_valid(compact), field.raw)
+                if field.class_name == "custom:steuer_id":
+                    self.assertEqual(agentic.steuer_id_check_digit(compact[:10]), compact[10], field.raw)
+
+    def test_identifiers_come_from_documented_test_sets(self) -> None:
+        seen: dict[str, set[str]] = {}
+        for cell in self.all_cells:
+            for field in cell.record:
+                compact = field.raw.replace(" ", "")
+                cls = field.class_name
+                if cls == "custom:credit_card":
+                    self.assertIn(compact, cells.TEST_CARD_PANS)
+                elif cls == "custom:iban":
+                    self.assertIn(compact, cells.EXAMPLE_IBANS)
+                elif cls == "custom:steuer_id":
+                    # Test IdNr: leading 0 never occurs in production, so the
+                    # issued-form validator rejects it.
+                    self.assertTrue(compact.startswith(cells.STEUER_TEST_PREFIX), field.raw)
+                    self.assertFalse(agentic.steuer_id_valid(compact), field.raw)
+                    counts = sorted(compact[:10].count(d) for d in set(compact[:10]))
+                    self.assertEqual(counts[-1], 2, field.raw)
+                elif cls == "custom:national_id" and len(compact) == 9:
+                    self.assertIn(compact, cells.TEST_BSNS)
+                elif cls == "custom:national_id":
+                    self.assertTrue(compact.startswith(cells.NHS_TEST_PREFIX), field.raw)
+                elif cls == "custom:phone":
+                    self.assertTrue(field.raw.startswith("+49 1555 01"), field.raw)
+                seen.setdefault(cls, set()).add(compact)
+        for cls in ("custom:credit_card", "custom:iban", "custom:steuer_id", "custom:national_id", "custom:phone"):
+            self.assertIn(cls, seen)
+
+    def test_every_identifier_lure_fails_its_checksum(self) -> None:
+        checks = {
+            "custom:credit_card": agentic.luhn_valid,
+            "custom:iban": agentic.iban_valid,
+            "custom:steuer_id": lambda v: agentic.steuer_id_check_digit(v[:10]) == v[10],
+            "custom:national_id": lambda v: agentic.bsn_valid(v) if len(v) == 9 else agentic.nhs_valid(v),
+        }
+        lures = 0
+        for pair in self.pairs:
+            twin = pair.counterweight
+            (field,) = twin.record[:1]
+            check = checks.get(field.class_name)
+            if check is None:
+                continue
+            lure = "".join(ch for ch in target_text(twin, twin.targets[0]) if not ch.isspace())
+            self.assertTrue(check(field.raw.replace(" ", "")), twin.uid)
+            self.assertFalse(check(lure), twin.uid)
+            lures += 1
+        self.assertGreater(lures, 20)
 
     def test_nhs_numbers_stay_in_the_reserved_test_range(self) -> None:
         nhs = [cell for cell in self.all_cells if cell.variant.startswith("nhs")]

@@ -36,7 +36,7 @@ from unittest.mock import patch
 import agentic_layers as agentic
 import gaze_bench_score as score
 
-GENERATOR_VERSION = 3
+GENERATOR_VERSION = 4
 SEED = 2026092901
 LAYER = "K"
 SOURCE_POSITIVE = "known-record-kind-cells"
@@ -336,8 +336,25 @@ def _groups(value: str, size: int = 4) -> list[str]:
     return [value[i : i + size] for i in range(0, len(value), size)]
 
 
+# Every identifier comes from a documented test or example set, or from a range
+# that is never issued; a one-digit-off lure always fails its checksum.
+# Stripe test cards, "Cards by brand": https://docs.stripe.com/testing
+TEST_CARD_PANS = ("4242424242424242", "5555555555554444", "4000056655665556", "5200828282828210")
+# IBAN Registry examples (ISO 13616, SWIFT as registration authority):
+# https://www.swift.com/standards/data-standards/iban-international-bank-account-number
+# NL also on https://www.ecbs.org/iban/netherlands-bank-account-number.html
+EXAMPLE_IBANS = ("NL91ABNA0417164300", "GB29NWBK60161331926819")
+# RvIG "Test burgerservicenummers en A-nummers" (column "Waarde Test-BSN"):
+# https://www.rvig.nl/test-bsn-a-nummers-omnummertabel
+TEST_BSNS = ("999990019", "999990032", "999990044", "999990056")
+# BZSt: an IdNr starting with 0 must not occur in production and marks test
+# data (Returncode 99, KiStA Kommunikationshandbuch Teil 2):
+# https://www.bzst.de/SharedDocs/Downloads/DE/KiStA/KISTA_KommHandB_Teil_2_ab_20190412.pdf?__blob=publicationFile&v=4
+# agentic_layers.steuer_id_valid rejects that prefix by design, so these
+# values are test IdNrs with a correct check digit, not issued-form ones.
+STEUER_TEST_PREFIX = "0"
 # The NHS reserves numbers starting with 9 for testing; none is issued to a
-# patient (service-manual.nhs.uk, "Ask for NHS numbers").
+# patient: https://service-manual.nhs.uk/design-system/patterns/ask-for-nhs-numbers
 NHS_TEST_PREFIX = "9"
 
 
@@ -349,26 +366,34 @@ def _nhs_test_number(rng: agentic.Rng) -> str:
             return payload + check
 
 
+def _steuer_test_id(rng: agentic.Rng) -> str:
+    """Leading 0, then the IdNr digit structure: one digit twice in the first ten."""
+    digits = rng.shuffled("123456789")[:8]
+    first_ten = STEUER_TEST_PREFIX + "".join(rng.shuffled([*digits, digits[rng.below(8)]]))
+    return first_ten + agentic.steuer_id_check_digit(first_ten)
+
+
+def _pick(rng: agentic.Rng, values: Sequence[str]) -> str:
+    return values[rng.below(len(values))]
+
+
 def _identifier(variant: str, rng: agentic.Rng) -> tuple[str, list[str], str]:
     """(record class, display groups, gold label)."""
     if variant.startswith("iban"):
-        # Record values need at least three letters when they have any, so a
-        # DE IBAN (two letters) is refused as a record; NL and GB carry a bank code.
-        make = agentic._iban_nl if rng.below(2) == 0 else agentic._iban_gb
-        return "custom:iban", _groups(make(rng)), "IBAN"
+        return "custom:iban", _groups(_pick(rng, EXAMPLE_IBANS)), "IBAN"
     if variant.startswith("phone"):
         return "custom:phone", ["+49", "1555", "01" + rng.digits(5)], "PHONENUMBER"
     # National identifiers in their official printed grouping.
     if variant.startswith("steuer_id"):
-        value = agentic._steuer_id(rng)
+        value = _steuer_test_id(rng)
         return "custom:steuer_id", [value[:2], value[2:5], value[5:8], value[8:]], "TAXNUM"
     if variant.startswith("bsn"):
-        value = agentic._bsn(rng)
+        value = _pick(rng, TEST_BSNS)
         return "custom:national_id", [value[:4], value[4:6], value[6:]], "NATIONALID"
     if variant.startswith("nhs"):
         value = _nhs_test_number(rng)
         return "custom:national_id", [value[:3], value[3:6], value[6:]], "NATIONALID"
-    return "custom:credit_card", _groups(agentic._card(rng)), "CREDITCARDNUMBER"
+    return "custom:credit_card", _groups(_pick(rng, TEST_CARD_PANS)), "CREDITCARDNUMBER"
 
 
 IDENTIFIER_SENTENCES = {
