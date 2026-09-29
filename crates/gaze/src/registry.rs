@@ -295,6 +295,7 @@ fn uppercase_field_label_before(
     value_start: usize,
     span_start: usize,
 ) -> Option<usize> {
+    debug_assert!(value_start > span_start);
     if value_start <= span_start || value_start > input.len() {
         return None;
     }
@@ -367,10 +368,13 @@ mod tests {
     }
 
     #[test]
-    fn uppercase_field_label_requires_a_boundary_inside_the_capture() {
-        assert_eq!(uppercase_field_label_before("ABC: 123", 0, 5), None);
-        assert_eq!(uppercase_field_label_before("ABC: 123", 4, 5), None);
+    fn uppercase_field_label_rejects_an_out_of_range_boundary() {
         assert_eq!(uppercase_field_label_before("ABC: 123", 9, 0), None);
+    }
+
+    #[test]
+    fn labelled_field_connectors_stay_ascii() {
+        assert!(LABELLED_FIELD_CONNECTORS.iter().all(char::is_ascii));
     }
 
     struct StubRecognizer {

@@ -1180,6 +1180,37 @@ fn uppercase_next_field_labels_remain_visible_with_correct_ownership() {
 }
 
 #[test]
+fn earlier_class_at_byte_zero_cannot_break_a_later_labelled_identifier() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, identifier) in [
+        ("X9Y8Z7  Ausweisnummer: A12345678901", "A12345678901"),
+        ("alice@example.invalid Tax number: AB123456", "AB123456"),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        assert!(
+            !without_gaze_tokens(&cleaned).contains(identifier),
+            "labelled identifier remained raw: {cleaned:?}"
+        );
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
 fn labelled_next_field_connector_matrix_protects_values_and_restores() {
     // This fixed assertion makes removal of tab from the shared list fail the matrix test.
     assert_eq!(
