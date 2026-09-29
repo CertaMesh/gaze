@@ -355,8 +355,6 @@ def test_validate_current_flags_competitor_input_but_not_gaze_drift(monkeypatch:
         "requirements_sha256": render.digest_file(compare.MAP_PATH.with_name("requirements.lock")),
         "comparison_metrics_sha256": render.digest_file(compare.MAP_PATH.with_name("comparison_metrics.py")),
     })
-    monkeypatch.setattr(compare.agentic, "prepare", lambda _repo: SimpleNamespace(manifest=report["corpus"]["agentic"]))
-    monkeypatch.setattr(compare.agentic, "load_contract", lambda _repo: SimpleNamespace(sha256=report["contracts"]["agentic"]))
     report["runner_sha256"] = "changed Gaze runner"
     report["gaze_crates_tree"] = "changed Gaze crates"
     report["latest_release_at_measurement"] = {"version": "older release", "scorecard_sha256": "changed"}
@@ -372,6 +370,30 @@ def test_validate_current_flags_competitor_input_but_not_gaze_drift(monkeypatch:
     report["model_pins_sha256"] = "changed model pins"
     with pytest.raises(ValueError, match="model pins changed"):
         render.validate_current(report)
+
+
+def test_older_generator_comparison_binds_to_its_rebuilt_corpus_and_committed_contract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
+    agentic = report["corpus"]["agentic"]
+    assert agentic["generator_version"] < compare.agentic.GENERATOR_VERSION
+    corpus, contract = render.agentic_identity(report)
+    assert (corpus, contract) == (agentic["corpus_sha256"], report["contracts"]["agentic"])
+    note = render.agentic_corpus_note(report)
+    assert f"generator v{agentic['generator_version']}" in note and "not measured here" in note
+    # A current-generator report gets no note and must match the current corpus.
+    current = {**report, "corpus": {**report["corpus"], "agentic": {
+        **agentic, "generator_version": compare.agentic.GENERATOR_VERSION}}}
+    assert render.agentic_corpus_note(current) == ""
+    assert render.agentic_identity(current)[0] != agentic["corpus_sha256"]
+    # A changed committed historical contract breaks the binding.
+    historical = tmp_path / "contract.json"
+    historical.write_bytes(
+        (compare.REPO / compare.agentic.HISTORICAL_CONTRACTS[4]).read_bytes() + b"\n"
+    )
+    monkeypatch.setitem(compare.agentic.HISTORICAL_CONTRACTS, 4, historical)
+    assert render.agentic_identity(report)[1] != report["contracts"]["agentic"]
 
 
 def test_public_page_rejects_partial_competitor_run() -> None:
