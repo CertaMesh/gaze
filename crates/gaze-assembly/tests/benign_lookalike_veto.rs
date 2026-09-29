@@ -451,3 +451,30 @@ fn a_multi_branch_pattern_cannot_declare_benign_lookalikes() {
         Err(gaze_recognizers::RecognizerError::UnsupportedBenignLookalike { .. })
     ));
 }
+
+#[test]
+fn a_recorded_failure_rule_cannot_declare_benign_lookalikes() {
+    let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
+        r"\b\d{10}\b",
+        gaze::PiiClass::custom("phone").expect("class"),
+        "phone.cued.probe",
+        vec![gaze::LocaleTag::Global],
+        0.7,
+        0,
+        "counter",
+        None,
+        Vec::new(),
+        // Not a checksum, so only the recorded-failure refusal can reject it.
+        Some(
+            gaze_recognizers::ValidatorKind::parse("e164_phone_national_us").expect("phone-parser"),
+        ),
+        None,
+    )
+    .expect("detector")
+    .with_validator_on_fail(gaze_recognizers::ValidatorOnFail::Record)
+    .expect("a US national phone may record");
+    assert!(matches!(
+        detector.with_benign_lookalikes(vec![gaze_recognizers::BenignLookalike::CurrencyAmount]),
+        Err(gaze_recognizers::RecognizerError::UnsupportedBenignLookalike { .. })
+    ));
+}

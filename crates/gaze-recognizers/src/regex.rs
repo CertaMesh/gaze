@@ -286,8 +286,9 @@ impl RegexDetector {
     /// Benign structures that veto this recognizer's candidates. Refused on a recognizer whose
     /// validator is a checksum (a value a checksum vouches for, or a financial number kept
     /// despite its checksum, is never waved through by its surroundings) and on a pattern that
-    /// emits more than one capture group. The rulepack loader also refuses non-regex matchers
-    /// and mandatory-anchor members.
+    /// emits more than one capture group, and on a rule that records validator failures
+    /// (`on_fail = "record"`, a cued rule). The rulepack loader also refuses non-regex matchers
+    /// and mandatory-anchor members. Call after [`Self::with_validator_on_fail`].
     pub fn with_benign_lookalikes(
         mut self,
         structures: Vec<gaze_types::benign_lookalike::BenignLookalike>,
@@ -300,6 +301,10 @@ impl RegexDetector {
             return Err(refuse(
                 "a checksum-backed recognizer cannot be vetoed by context",
             ));
+        }
+        // `on_fail = "record"` marks a cued rule that keeps even a failed value: never weak.
+        if !structures.is_empty() && self.validator_on_fail == ValidatorOnFail::Record {
+            return Err(refuse("a recorded-failure rule is cued"));
         }
         // Several emitted groups mean several alternatives, typically one anchored by a cue or
         // a city; a candidate does not record which one matched, so none may be vetoed.
