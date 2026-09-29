@@ -744,7 +744,7 @@ fn a_checksum_backed_recognizer_cannot_declare_benign_lookalikes() {
     )
     .expect("detector");
     assert!(matches!(
-        card.with_benign_lookalikes(vec![BenignLookalike::CurrencyAmount]),
+        card.with_benign_lookalikes(vec![BenignLookalike::DigitRunFragment]),
         Err(RecognizerError::UnsupportedBenignLookalike { .. })
     ));
 }
