@@ -489,7 +489,7 @@ mod tests {
 
     #[test]
     fn validate_restore_shapes_treats_angle_neighbours_as_text() {
-        // todo 4009: `<alice@example.invalid>` cleans to `<{token}>`, so literal angle
+        // `<alice@example.invalid>` cleans to `<{token}>`, so literal angle
         // brackets beside a well-formed token are text. Ownership is checked later.
         assert!(validate_restore_shapes("<<deadbeef:Email_1>>").is_ok());
         assert!(validate_restore_shapes("path/<<deadbeef:Name_1>>/file.pdf").is_ok());

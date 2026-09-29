@@ -232,7 +232,7 @@ fn strict_session_malformed_and_atomic_failure_contracts_remain() {
     let token = session
         .tokenize(&PiiClass::Email, "alice@example.invalid")
         .unwrap();
-    // todo 4009: literal angle brackets beside an owned token are ordinary text.
+    // Literal angle brackets beside an owned token are ordinary text.
     assert_eq!(
         session.restore_strict_text(&format!("<{token}>>")).unwrap(),
         "<alice@example.invalid>>"

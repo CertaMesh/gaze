@@ -1,5 +1,5 @@
 #![cfg(feature = "bundled-recognizers")]
-//! Literal `<` / `>` beside a token is ordinary text for strict restore (todo 4009).
+//! Literal `<` / `>` beside a token is ordinary text for strict restore.
 //!
 //! Strict restore used to reject a token whose neighbouring byte was `<` or `>` as a
 //! "nested wrapper", so `<alice@example.invalid>` cleaned to `<{token}>` and then failed

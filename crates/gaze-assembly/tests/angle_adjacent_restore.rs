@@ -1,4 +1,4 @@
-//! Literal `<` / `>` beside a token must round-trip through strict restore (todo 4009).
+//! Literal `<` / `>` beside a token must round-trip through strict restore.
 //!
 //! Strict restore used to reject any token whose neighbouring byte was `<` or `>` as a
 //! "nested wrapper", so ordinary text such as `<alice@example.invalid>` or
@@ -74,7 +74,7 @@ fn round_trip(pipeline: &Pipeline, active: &LocaleChain, input: &str) -> Result<
 fn angle_brackets_beside_tokens_restore_exactly() {
     let (pipeline, active) = core_pipeline();
     for input in [
-        // The todo 4009 reviewer example: `>` after one token, `<`/`>` around another.
+        // A review example: `>` after one token, `<`/`>` around another.
         "Driver license - 4111111111111111><AB12CD34>",
         "Contact: Alice <alice@example.invalid>",
         "<alice@example.invalid>",

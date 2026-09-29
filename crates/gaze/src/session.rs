@@ -1505,7 +1505,7 @@ fn restore_classified_strict_text_from_state(
     state: &SessionState,
     text: &str,
 ) -> Result<RestoredTextWithProvenance> {
-    // Keep malformed/nested input rejection before any owner-side substitution.
+    // Keep malformed input rejection before any owner-side substitution.
     strict_restore_tokens(text)?;
     let assessment = assess_restore_text_from_state(state, text)?;
     if let Some(unknown) = assessment.unknown_tokens.first() {
@@ -2056,7 +2056,7 @@ pub(crate) fn strict_restore_tokens(text: &str) -> Result<Vec<StrictRestoreToken
     let mut tokens = Vec::new();
     // Tokens are matched by their exact grammar, so a literal `<` or `>` beside one is
     // ordinary text (`<alice@example.invalid>` cleans to `<{token}>`). Rejecting such
-    // neighbours as "nested" broke round-trip for HTML, generics and mail headers (todo 4009).
+    // neighbours as "nested" broke round-trip for HTML, generics and mail headers.
     for matched in crate::token_shape::pattern().find_iter(text) {
         tokens.push(StrictRestoreToken {
             start: matched.start(),
@@ -3948,7 +3948,7 @@ mod tests {
         assert!(session
             .restore_strict_text_with_provenance("prefix <deadbeef:Email_1 suffix")
             .is_err());
-        // todo 4009: literal angle brackets beside a token are text outside its range.
+        // Literal angle brackets beside a token are text outside its range.
         let bracketed = session
             .restore_strict_text_with_provenance(&format!("prefix <{name}> suffix"))
             .expect("angle neighbours restore");
@@ -3998,7 +3998,7 @@ mod tests {
                 transaction.session_hex()
             ))
             .is_err());
-        // todo 4009: literal angle brackets beside a known token are ordinary text.
+        // Literal angle brackets beside a known token are ordinary text.
         transaction
             .validate_token_shapes(&format!("<{ordinary}> <<{format_preserving}>>"))
             .expect("angle neighbours of known tokens");

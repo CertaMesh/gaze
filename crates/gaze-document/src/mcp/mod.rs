@@ -252,7 +252,7 @@ fn redact_document_text(text: &str, ctx: &ToolCtx<'_>) -> Result<String, ToolErr
 /// for non-PII paths.
 fn restore_path(session: &gaze::Session, protected_path: &str) -> Result<String, ToolError> {
     // Gate 1: reject malformed spellings before any substitution or filesystem
-    // access. Literal angle brackets beside a token are path text (todo 4009).
+    // access. Literal angle brackets beside a token are path text.
     gaze::token_shape::validate_restore_shapes(protected_path)
         .map_err(|_| ToolError::InvalidArgs("path restoration failed".into()))?;
 
@@ -873,7 +873,7 @@ mod tests {
         let harness = Harness::new();
         // Angle brackets around an unowned token are path text; the unowned
         // token itself must still fail the restore gate before any filesystem
-        // access (todo 4009).
+        // access.
         for unowned in [
             "directory/<<deadbeef:Email_1>>/input.png",
             "path/<<Email_1>>/file.pdf",
