@@ -3,6 +3,9 @@ rulepack_id = "gaze-locale-nl"
 rulepack_version = "0.5.1"
 default_locales = ["nl-NL"]
 
+[locale.phone_labels]
+names = ["telefoon", "mobiel", "gsm", "tel"]
+
 [locale.cues.bsn]
 names = ["BSN", "Burgerservicenummer"]
 window_chars = 64

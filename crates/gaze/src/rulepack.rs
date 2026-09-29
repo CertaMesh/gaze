@@ -222,7 +222,7 @@ pub enum RulepackError {
     UnsupportedValidator { kind: String },
     #[error(
         "recognizer '{recognizer_id}': validator '{kind}' does not support on_fail = '{on_fail}'; \
-         only luhn and iban_mod97 may record a failure, every other validator vetoes"
+         only the explicit recorded-failure allowlist may keep a failed candidate"
     )]
     UnsupportedValidatorOnFail {
         recognizer_id: String,
@@ -653,10 +653,19 @@ fn parse_validator_spec(
         None => gaze_types::ValidatorOnFail::Veto,
         Some(value) => gaze_types::ValidatorOnFail::parse(value).ok_or_else(|| refuse(value))?,
     };
-    if on_fail == gaze_types::ValidatorOnFail::Record
-        && !gaze_types::ValidatorKind::parse(&raw.kind)
-            .is_ok_and(gaze_types::ValidatorKind::allows_recorded_failure)
-    {
+    // Rulepack parsing must not depend on whether the phone-parser feature is compiled.
+    // Runtime detector construction still resolves each validator for its feature graph.
+    let recordable = matches!(
+        raw.kind.as_str(),
+        "luhn"
+            | "iban_mod97"
+            | "de_steuer_id_mod1110"
+            | "bsn_mod11"
+            | "cpf_mod11"
+            | "e164_phone"
+            | "e164_phone_national_us"
+    );
+    if on_fail == gaze_types::ValidatorOnFail::Record && !recordable {
         return Err(refuse("record"));
     }
     Ok(ValidatorSpec {
@@ -1405,6 +1414,13 @@ window_chars = 48
         assert_eq!(bundle.window_chars, Some(64));
     }
 
+    #[cfg(not(feature = "bundled-recognizers"))]
+    #[test]
+    fn embedded_core_loads_without_phone_parser() {
+        let core = include_str!("../../gaze-recognizers/embedded/core.toml");
+        Rulepack::load(RulepackSource::Embedded(core)).expect("embedded core must load");
+    }
+
     #[cfg(feature = "bundled-recognizers")]
     #[test]
     fn embedded_core_activated_classes_match_rulepack_classes() {
@@ -2049,6 +2065,8 @@ kind = "{kind}"
             "de_steuer_id_mod1110",
             "bsn_mod11",
             "cpf_mod11",
+            "e164_phone",
+            "e164_phone_national_us",
         ] {
             let pack = Rulepack::parse(&validator_rulepack(kind, "on_fail = \"record\""))
                 .unwrap_or_else(|error| panic!("{kind} may record: {error}"));
@@ -2058,6 +2076,7 @@ kind = "{kind}"
         for kind in [
             "uk_nhs_mod11",
             "cnpj_mod11",
+            "e164_phone_national_de",
             "fr_nir_mod97",
             "aadhaar_verhoeff",
             "email_rfc",

@@ -26,15 +26,33 @@ fn core_extended() -> Rulepack {
 fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
     let RawMatch::Regex {
         pattern,
-        pattern_template: None,
+        pattern_template,
         capture_groups,
     } = &spec.matcher
     else {
-        panic!("expected plain regex recognizer {}", spec.id);
+        panic!("expected regex recognizer {}", spec.id);
     };
 
+    let lowered = pattern_template.as_ref().map(|template| {
+        let core = Rulepack::load(RulepackSource::Embedded(
+            embedded("core").expect("core rulepack"),
+        ))
+        .expect("core loads");
+        let labels = &core.locale.expect("core locale").buckets["phone_labels"].names;
+        let alternation = labels
+            .iter()
+            .map(|label| regex::escape(label))
+            .collect::<Vec<_>>()
+            .join("|");
+        template.replace("{locale.phone_labels}", &format!("(?:{alternation})"))
+    });
+    let pattern = pattern
+        .as_deref()
+        .or(lowered.as_deref())
+        .expect("regex pattern");
+
     RegexDetector::with_rulepack_fields(
-        pattern.as_deref().expect("regex pattern"),
+        pattern,
         spec.class.clone(),
         &spec.id,
         spec.locales.clone(),
@@ -61,6 +79,12 @@ fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
             .map_or(ValidatorOnFail::Veto, |validator| validator.on_fail),
     )
     .expect("validator on_fail")
+    .with_rejection_pattern(
+        spec.context
+            .as_ref()
+            .and_then(|context| context.reject_match_regex.as_deref()),
+    )
+    .expect("rejection pattern")
 }
 
 fn detect_recognizer(
@@ -634,6 +658,28 @@ fn cued_parser_failed_us_phone_keeps_reason_without_sweeping_a_lookalike() {
         !entry.conflict_loser
             && entry.recognizer_id.as_deref() == Some("phone.national.us.cued")
             && entry.validator_fail_reason == Some(ValidatorFailReason::PhoneNationalRegionMismatch)
+    }));
+}
+
+#[test]
+fn cued_e164_rejection_is_tokenized_with_audit_reason_and_restores() {
+    let rulepack = core_extended();
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_from_rulepack(&rulepack).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    // Reserved Ofcom digits with punctuation that the regional parser rejects.
+    let input = "Phone: +44 7/7/0/0/9/0/0/1/2/3";
+
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnGb);
+    assert!(!clean.contains("+44 7/7/0/0/9/0/0/1/2/3"), "{clean}");
+    assert_eq!(restore_tokens(&session, &clean), input);
+    let entries = entries.lock().unwrap();
+    assert!(entries.iter().any(|entry| {
+        !entry.conflict_loser
+            && entry.recognizer_id.as_deref() == Some("phone.e164.spaced.cued")
+            && entry.validator_fail_reason == Some(ValidatorFailReason::PhoneE164Rejected)
     }));
 }
 

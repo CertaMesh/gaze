@@ -155,6 +155,27 @@ fn failed_cued_steuer_id_is_tokenized_with_audit_reason() {
     assert_eq!(cleaned.matches("48 954 371 208").count(), 1);
 }
 
+#[test]
+fn all_zero_ids_and_vehicle_identification_cue_stay_raw() {
+    for text in [
+        "Steuer-ID 00000000000",
+        "Steuer-ID 00 000 000 000",
+        "BSN 000000000",
+        "Fahrzeug-Identifikationsnummer 86095742718",
+        "Fahrzeugidentifikationsnummer 86095742718",
+    ] {
+        let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], text);
+        assert_eq!(cleaned, text, "{text:?}");
+        assert!(
+            entries.iter().all(|entry| entry.conflict_loser),
+            "{entries:?}"
+        );
+    }
+    let (cleaned, _) =
+        clean_with_entries(&[LocaleTag::Global], "Identifikationsnummer 86095742718");
+    assert!(!cleaned.contains("86095742718"));
+}
+
 fn clean_under(chain: &[LocaleTag], text: &str) -> String {
     let pipeline = pipeline_for(chain);
     let session = Session::new(Scope::Ephemeral).expect("session");
