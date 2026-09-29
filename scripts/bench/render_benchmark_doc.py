@@ -434,7 +434,7 @@ def _validate_observation_record(
         return
     if not isinstance(record, Mapping):
         raise RenderError(f"{where}: observation record must be an object")
-    if record.get("format") != "gzip-jsonl" or record.get("schema_version") != 1:
+    if record.get("format") != "gzip-jsonl" or record.get("schema_version") not in {1, 2}:
         raise RenderError(f"{where}: unknown observation record format")
     name = record.get("file")
     if not isinstance(name, str) or Path(name).name != name:

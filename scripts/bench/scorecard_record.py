@@ -17,11 +17,66 @@ import gaze_bench_score as score
 import agentic_layers as agentic
 
 
-SCHEMA_VERSION = 1
+# v2: every trace item's provenance also carries typed lineage (`settlement`
+# plus `contributions`, component ledger S1). v1 records stay readable.
+SCHEMA_VERSION = 2
+READABLE_SCHEMA_VERSIONS = frozenset({1, SCHEMA_VERSION})
+CONTRIBUTION_ROLES = frozenset({
+    "winner", "same_span_merge", "co_member", "defeated", "derived_dependency",
+})
+# Roles whose recognizer found the item's bytes itself; the rest are lineage.
+DETECTING_ROLES = frozenset({"winner", "same_span_merge", "co_member"})
+SETTLEMENTS = frozenset({
+    "resolve", "recovery", "sweep", "collision_tie", "anchor_fallback", "residual", "safety_net",
+})
 
 
 class RecordError(ValueError):
     pass
+
+
+def has_lineage(item: Mapping[str, object]) -> bool:
+    provenance = item["provenance"]
+    present = {"settlement", "contributions"} & set(provenance)
+    if present and present != {"settlement", "contributions"}:
+        raise RecordError("trace provenance carries half a lineage")
+    return bool(present)
+
+
+def validate_lineage(item: Mapping[str, object], utf8_bytes: int, where: str) -> None:
+    """One trace item's typed lineage is well formed. Metadata only: no values."""
+    provenance = item["provenance"]
+    settlement = provenance["settlement"]
+    if settlement not in SETTLEMENTS:
+        raise RecordError(f"{where}: unknown settlement {settlement!r}")
+    if (settlement == "safety_net") != (provenance["stage"] == "safety_net"):
+        raise RecordError(f"{where}: settlement {settlement!r} disagrees with stage")
+    contributions = provenance["contributions"]
+    if not isinstance(contributions, list) or not contributions:
+        raise RecordError(f"{where}: trace item without contributions")
+    for entry in contributions:
+        if set(entry) != {"recognizer_id", "role", "raw_start", "raw_end", "tier"}:
+            raise RecordError(f"{where}: contribution fields differ from the schema")
+        role = entry["role"]
+        if role not in CONTRIBUTION_ROLES:
+            raise RecordError(f"{where}: unknown contribution role {role!r}")
+        if not isinstance(entry["recognizer_id"], str) or not entry["recognizer_id"]:
+            raise RecordError(f"{where}: contribution without a recognizer ID")
+        start, end = entry["raw_start"], entry["raw_end"]
+        if (start is None) != (end is None):
+            raise RecordError(f"{where}: contribution with half a span")
+        if start is not None and not (
+            type(start) is int and type(end) is int and 0 <= start < end <= utf8_bytes
+        ):
+            raise RecordError(f"{where}: contribution span outside the document")
+        if role in {"winner", "same_span_merge", "defeated"} and start is None:
+            raise RecordError(f"{where}: {role} contribution without its own span")
+        if role == "derived_dependency" and start is not None:
+            raise RecordError(f"{where}: a derived dependency detected no span")
+        if (role == "defeated") != (entry["tier"] is not None):
+            raise RecordError(f"{where}: a tier belongs to exactly the defeated role")
+    if not any(entry["role"] in DETECTING_ROLES for entry in contributions):
+        raise RecordError(f"{where}: trace item without a detecting contribution")
 
 
 def _write_rows(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
@@ -183,6 +238,13 @@ class RecordWriter:
         self.layer_contract = layer_contract
         self.layer_measurements: dict[str, Mapping[str, object]] = {}
         self.rows: list[dict[str, object]] = []
+        # None until the first trace item: whether the producer emits lineage.
+        self.lineage: bool | None = None
+
+    @property
+    def schema_version(self) -> int:
+        # A producer without typed lineage (an older tag) still writes a v1 record.
+        return SCHEMA_VERSION if self.lineage else 1
 
     def add(
         self,
@@ -205,6 +267,13 @@ class RecordWriter:
             if previous != validator:
                 raise RecordError(f"{document.uid}: validator evidence changed")
         compact = _compact_response(response)
+        for item in compact.get("final_protection_trace", ()):
+            lineage = has_lineage(item)
+            if self.lineage is not None and lineage != self.lineage:
+                raise RecordError(f"{document.uid}: some trace items carry lineage and some do not")
+            self.lineage = lineage
+            if lineage:
+                validate_lineage(item, len(original.text.encode("utf-8")), document.uid)
         if "pipeline_error_code" not in response:
             compact["gold_gap_evidence"] = _gap_evidence(
                 original, score.final_trace_predictions(original, dict(response))
@@ -231,7 +300,7 @@ class RecordWriter:
         ]
         header = {
             "kind": "header",
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
             "scorecard": scorecard,
             "add_reference": add_reference,
@@ -250,7 +319,7 @@ class RecordWriter:
             "file": path.name,
             "sha256": digest,
             "format": "gzip-jsonl",
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
             "observations": len(self.rows),
             "bytes": path.stat().st_size,
@@ -332,14 +401,31 @@ def _evidence(
     return result
 
 
+def _check_lineage(header: Mapping[str, object], observations: Sequence[Mapping[str, object]]) -> None:
+    """A v2 record carries lineage on every trace item; a v1 record on none."""
+    sizes = {row["id"]: row["utf8_bytes"] for row in header.get("documents") or ()}
+    want = header["schema_version"] >= 2
+    for row in observations:
+        for item in row["response"].get("final_protection_trace") or ():
+            if has_lineage(item) != want:
+                raise RecordError(
+                    f"{row['document_id']}: record schema v{header['schema_version']} "
+                    "disagrees with its trace lineage"
+                )
+            if want:
+                validate_lineage(item, sizes[row["document_id"]], row["document_id"])
+
+
 def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
     with gzip.open(path, "rt", encoding="utf-8") as stream:
         rows = [json.loads(line) for line in stream]
-    if not rows or rows[0].get("kind") != "header" or rows[0].get("schema_version") != SCHEMA_VERSION:
+    if (not rows or rows[0].get("kind") != "header"
+            or rows[0].get("schema_version") not in READABLE_SCHEMA_VERSIONS):
         raise RecordError("unknown or missing record header")
     header, observations = rows[0], rows[1:]
     if any(row.get("kind") != "observation" for row in observations):
         raise RecordError("unknown record row")
+    _check_lineage(header, observations)
     card = header["scorecard"]
     recorded_corpus = (
         card["dataset"]["integrity"]["sha256"]
@@ -529,7 +615,7 @@ def rescore(
     if header["add_reference"]:
         result["observation_record"] = {
             "file": path.name, "sha256": score.sha256_file(path),
-            "format": "gzip-jsonl", "schema_version": SCHEMA_VERSION,
+            "format": "gzip-jsonl", "schema_version": header["schema_version"],
             "corpus_sha256": header["corpus_sha256"],
             "observations": len(observations), "bytes": path.stat().st_size,
         }

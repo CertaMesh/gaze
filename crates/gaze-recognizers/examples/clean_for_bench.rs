@@ -138,7 +138,21 @@ struct FinalProtectionTraceItem {
 struct FinalProtectionTraceProvenance {
     stage: String,
     decision: String,
+    /// Lineage: includes defeated candidates and derived dependencies.
     source_ids: Vec<String>,
+    settlement: &'static str,
+    /// Typed roles; only `winner`, `same_span_merge` and `co_member` found
+    /// bytes themselves (component ledger, record schema v2).
+    contributions: Vec<FinalProtectionTraceContribution>,
+}
+
+#[derive(Debug, Serialize)]
+struct FinalProtectionTraceContribution {
+    recognizer_id: String,
+    role: &'static str,
+    raw_start: Option<usize>,
+    raw_end: Option<usize>,
+    tier: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1091,6 +1105,21 @@ fn serialize_final_protection_trace(
                 stage: item.stage().to_string(),
                 decision: item.decision().to_string(),
                 source_ids: item.source_ids().to_vec(),
+                settlement: item.settlement().as_str(),
+                contributions: item
+                    .contributions()
+                    .iter()
+                    .map(|contribution| {
+                        let span = contribution.raw_span();
+                        FinalProtectionTraceContribution {
+                            recognizer_id: contribution.recognizer_id().to_string(),
+                            role: contribution.role().as_str(),
+                            raw_start: span.as_ref().map(|span| span.start),
+                            raw_end: span.map(|span| span.end),
+                            tier: contribution.tier().map(|tier| format!("{tier:?}")),
+                        }
+                    })
+                    .collect(),
             },
         })
         .collect()
@@ -1440,8 +1469,14 @@ mod tests {
             let provenance = object["provenance"]
                 .as_object()
                 .expect("trace provenance should be an object");
-            assert_eq!(provenance.len(), 3);
-            for field in ["stage", "decision", "source_ids"] {
+            assert_eq!(provenance.len(), 5);
+            for field in [
+                "stage",
+                "decision",
+                "source_ids",
+                "settlement",
+                "contributions",
+            ] {
                 assert!(
                     provenance.contains_key(field),
                     "missing provenance field {field}"
