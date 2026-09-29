@@ -976,15 +976,23 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         )
         for panel in third:
             self.assertEqual([b.name for b in panel.bars if b.gaze], ["Gaze 0.15"])
-            self.assertIsNone(next(b for b in panel.bars if b.gaze).protected)
+            self.assertIsNone(next(b for b in panel.bars if b.gaze).f2)
         gliner = next(b for b in own.bars if b.name == "GLiNER")
-        leaked = self.comparison["tools"]["gliner"]["contracts"]["v3"]["C"]["leaked_bytes"]
-        self.assertAlmostEqual(gliner.protected, 100 * (1 - leaked / 123621), places=6)
+        cell = self.comparison["tools"]["gliner"]["contracts"]["v3"]["C"]
+        self.assertEqual(gliner.leaked, cell["leaked_bytes"])
+        self.assertEqual(
+            gliner.f2, cell["metrics"]["product_coverage"]["full"]["char_level"]["f2"]
+        )
+        # Gaze's F2 is the released row's own recorded measurement, not the main run's.
+        release = json.loads(render.RELEASE_CHAR_LEVEL.read_text(encoding="utf-8"))["releases"]
+        for bar, version in zip((b for b in own.bars if b.gaze), ("v0.14.0", "v0.15.1")):
+            self.assertEqual(bar.f2, release[version]["char_level"]["f2"])
+            self.assertEqual(bar.leaked, release[version]["leaked_bytes"])
 
     def test_untagged_gaze_measurements_never_reach_a_chart(self):
         for version in ("main", "a2f6fefd", "v0.15.1-rc.1", "v0.15", "unreleased"):
             with self.assertRaises(charts.ChartError, msg=version):
-                charts.GazeRow(version, 90.0, 1)
+                charts.GazeRow(version, 0.9, 1, 1)
         tampered = copy.deepcopy(self.their)
         tampered["presidio-research"]["rows"]["gaze-v0.15.1-rc.1"] = {}
         with self.assertRaisesRegex(render.RenderError, "release tag"):
@@ -992,9 +1000,11 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         # The untagged `gaze-full` row and the comparison's main run are never read.
         moved = copy.deepcopy(self.their)
         for bench in moved.values():
-            bench["rows"]["gaze-full"]["common_intersection"]["leaked_bytes"] = 1
+            bench["rows"]["gaze-full"]["product_coverage"]["leaked_bytes"] = 1
+            bench["rows"]["gaze-full"]["product_coverage"]["char_level"]["f2"] = 0.99
         changed = copy.deepcopy(self.comparison)
         changed["gaze"]["v3"]["layers"]["C"]["leaked_bytes"] = 1
+        changed["gaze"]["v3"]["layers"]["C"]["metrics"]["product_coverage"]["full"]["char_level"]["f2"] = 0.99
         self.assertEqual(self.panels(changed, moved), self.panels())
 
     def test_a_provisional_release_row_is_not_charted(self):
@@ -1006,12 +1016,12 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
 
     def test_a_tagged_third_party_run_replaces_the_pending_slot(self):
         their = copy.deepcopy(self.their)
-        block = copy.deepcopy(their["presidio-research"]["rows"]["gaze-full"]["common_intersection"])
-        their["presidio-research"]["rows"]["gaze-v0.15.1"] = {"common_intersection": block}
+        row = copy.deepcopy(their["presidio-research"]["rows"]["gaze-full"])
+        their["presidio-research"]["rows"]["gaze-v0.15.1"] = row
         panel = self.panels(their=their)[1]
         bar = next(b for b in panel.bars if b.gaze)
-        gold = block["leaked_bytes"] + block["true_positive_bytes"]
-        self.assertAlmostEqual(bar.protected, 100 * (1 - block["leaked_bytes"] / gold))
+        self.assertEqual(bar.f2, row["product_coverage"]["char_level"]["f2"])
+        self.assertEqual(bar.leaked, row["product_coverage"]["leaked_bytes"])
         self.assertNotIn("pending", charts.model_card_tables([panel]))
 
     def test_lower_leak_swept_row_is_not_selected(self):
@@ -1041,23 +1051,44 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         self.assertIn("test + validation", own.dataset)
         self.assertIn("2,910 docs", own.dataset)
         self.assertIn("labels Gaze commits to detect", own.labels)
-        self.assertIn("common intersection", presidio.labels)
+        self.assertIn("All gold labels", presidio.labels)
+        self.assertIn("F2", presidio.vendor_metric)
+        self.assertIn("F1", piibench.vendor_metric)
         self.assertIn("1,500 docs, test split", presidio.dataset)
         self.assertIn("5,000 docs, test split", piibench.dataset)
         svg = charts.figure_svg("dark", [own, presidio, piibench], "alt")
         self.assertIn("(own scale)", svg)
+        self.assertIn(charts.METRIC, svg)
+        self.assertIn("leaked PII bytes", svg)
         tables = charts.model_card_tables([own, presidio, piibench])
         self.assertIn("skipped 0 of the own corpus's 2,910 documents", tables)
         self.assertIn("Refused documents", tables)
         self.assertIn("Gaze 0.15 0", tables)
 
+    def test_metric_definition_is_stated_in_both_readmes(self):
+        for path in (render.DEFAULT_README, render.DEFAULT_DOC):
+            text = path.read_text(encoding="utf-8")
+            for phrase in ("Unicode code points (not grapheme clusters)", "ignores labels",
+                           "micro", "0/0 = 0", "skipped document's gold characters as missed"):
+                self.assertIn(phrase, text, (path.name, phrase))
+
+    def test_a_gaze_release_without_a_char_level_measurement_reads_pending(self):
+        history = copy.deepcopy(self.history)
+        new = copy.deepcopy(history["releases"][-1])
+        new["version"] = "v0.15.2"
+        history["releases"].append(new)
+        rows = render.chart_gaze_rows(history)
+        self.assertEqual(rows[-1].version, "v0.15.2")
+        self.assertIsNone(rows[-1].f2)
+
     def test_model_card_bolds_the_best_value_per_row(self):
         tables = charts.model_card_tables(self.panels())
         rows = [line for line in tables.splitlines() if line.startswith("| Own corpus")]
-        self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[0].count("**"), 2)  # PII protected: one best, highest
-        self.assertIn("**89.2%**", rows[0])
-        self.assertIn("**6.8**", rows[1])  # false positives: lowest wins
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0].count("**"), 2)  # F2: one best, the highest
+        self.assertIn("**0.868**", rows[0])
+        self.assertIn("**13,319**", rows[1])  # leaked bytes: lowest wins
+        self.assertIn("**6.8**", rows[2])  # false positives: lowest wins
 
     def test_comparison_mutation_fails_check(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1079,7 +1110,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             report.write_text(json.dumps(self.comparison), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 0)
             # A hand-edited value on an SVG bar is drift too.
-            svgs[0].write_text(svgs[0].read_text(encoding="utf-8").replace("89.2%", "99.2%"),
+            svgs[0].write_text(svgs[0].read_text(encoding="utf-8").replace("0.868", "0.968"),
                                encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 1)
             svgs[0].unlink()

@@ -1,0 +1,64 @@
+{
+  "metrics_sha256": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
+  "note": "Character-level (Unicode code point), label-agnostic, micro P/R/F of each tagged release's shipped default on layer C under the v3 contract, scored by the same ComparisonMetrics as the competitors.",
+  "releases": {
+    "v0.14.0": {
+      "arm": "full-stack-kiji-resolve",
+      "char_level": {
+        "f1": 0.5180137978025722,
+        "f2": 0.6646466252061435,
+        "f5": 0.7841706315824589,
+        "fn": 22141,
+        "fp": 164606,
+        "precision": 0.37874916496514555,
+        "recall": 0.8192482897121491,
+        "tp": 100353,
+        "unit": "unicode_code_point"
+      },
+      "contract": "v3",
+      "documents": 2910,
+      "false_positive_bytes": 168259,
+      "leaked_bytes": 22144,
+      "record_sha256": "8c40b8e293727f614fbcd8f2b5478bb199f94c298b5cafa9e83545bff6906305"
+    },
+    "v0.15.0": {
+      "arm": "policy-file",
+      "char_level": {
+        "f1": 0.8354010061016429,
+        "f2": 0.8681130314349,
+        "f5": 0.886811165974908,
+        "fn": 13305,
+        "fp": 29722,
+        "precision": 0.7860356631224309,
+        "recall": 0.8913824350580437,
+        "tp": 109189,
+        "unit": "unicode_code_point"
+      },
+      "contract": "v3",
+      "documents": 2910,
+      "false_positive_bytes": 30073,
+      "leaked_bytes": 13319,
+      "record_sha256": "561d618d2d964217d7d17f24e829abd55e85f73c4bd2d1e51869a0fcf0f1a105"
+    },
+    "v0.15.1": {
+      "arm": "policy-file",
+      "char_level": {
+        "f1": 0.8354010061016429,
+        "f2": 0.8681130314349,
+        "f5": 0.886811165974908,
+        "fn": 13305,
+        "fp": 29722,
+        "precision": 0.7860356631224309,
+        "recall": 0.8913824350580437,
+        "tp": 109189,
+        "unit": "unicode_code_point"
+      },
+      "contract": "v3",
+      "documents": 2910,
+      "false_positive_bytes": 30073,
+      "leaked_bytes": 13319,
+      "record_sha256": "c2922a2c6cede4e4ad7ab261e3212234122d07f29506734cb62ed523699e5ca3"
+    }
+  },
+  "schema_version": 1
+}

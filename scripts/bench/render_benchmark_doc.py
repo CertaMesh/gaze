@@ -44,6 +44,7 @@ DEFAULT_HISTORY = BENCH_DIR / "release-history.json"
 DEFAULT_COMPARISON = BENCH_DIR / "comparison.json"
 DEFAULT_README = REPO_ROOT / "README.md"
 CHART_ASSETS = Path("docs") / "assets" / "benchmarks"
+RELEASE_CHAR_LEVEL = BENCH_DIR / "release-char-level.json"
 CHART_CONFIGS = REPO_ROOT / "scripts" / "bench" / "compare" / "chart-configs.json"
 
 HISTORY_SCHEMA_VERSION = 1
@@ -1506,6 +1507,10 @@ def chart_gaze_rows(history: Mapping[str, Any]) -> list[charts.GazeRow]:
     if not releases:
         return []
     dataset_sha = releases[-1]["dataset"]["integrity"]["sha256"]
+    measured = (
+        json.loads(RELEASE_CHAR_LEVEL.read_text(encoding="utf-8"))["releases"]
+        if RELEASE_CHAR_LEVEL.exists() else {}
+    )
     rows: list[charts.GazeRow] = []
     for group in release_groups(releases)[-2:]:
         entry = group[-1]
@@ -1515,10 +1520,12 @@ def chart_gaze_rows(history: Mapping[str, Any]) -> list[charts.GazeRow]:
         if view is None:
             continue
         arm = view["arms"][shipped_default_arm(entry)]
+        char = measured.get(entry["version"])
         rows.append(
             charts.GazeRow(
                 entry["version"],
-                100.0 * (1.0 - arm["surviving_pii_utf8_bytes"] / arm["gold_pii_utf8_bytes"]),
+                char["char_level"]["f2"] if char else None,
+                char["leaked_bytes"] if char else None,
                 arm["false_positive_utf8_bytes"],
                 arm["failed_closed_documents"],
             )
@@ -1556,13 +1563,9 @@ def chart_panels(
     for name in declared.values():
         if name not in comparison["tools"]:
             raise RenderError(f"declared README chart configuration is missing: {name}")
-    view = contract_view(latest, HEADLINE_CONTRACT)
-    if view is None:
-        raise RenderError("the latest release has no scored-labels v3 result for the panels")
-    gold = view["arms"][shipped_default_arm(latest)]["gold_pii_utf8_bytes"]
     try:
         return charts.panels(
-            chart_gaze_rows(history), comparison, their, declared, gold,
+            chart_gaze_rows(history), comparison, their, declared,
             layer_display_name("C"),
         )
     except (charts.ChartError, KeyError) as error:
@@ -1591,13 +1594,13 @@ def _picture(prefix: str, alt: str) -> str:
 
 
 _PANEL_ALT = (
-    "Bar panels of PII protected and false-positive bytes per 1,000 bytes for Gaze "
+    "Bar panels of character-level F2 and false-positive bytes per 1,000 bytes for Gaze "
     "releases and competitors on three benchmarks; the values are printed on the bars."
 )
 
 
 def _pending_note(panel_set: Sequence[charts.Panel]) -> str:
-    pending = [p.title for p in panel_set for b in p.bars if b.gaze and b.protected is None]
+    pending = [p.title for p in panel_set for b in p.bars if b.gaze and b.f2 is None]
     if not pending:
         return ""
     latest = [b.name for b in panel_set[0].bars if b.gaze][-1]
@@ -1628,10 +1631,12 @@ def render_readme_chart(
     own = panel_set[0]
     gaze = [b for b in own.bars if b.gaze]
     newest = gaze[-1]
+    if newest.f2 is None:
+        raise RenderError(f"{newest.name} has no character-level measurement; run release_char_level.py record")
     caption = (
-        f"{newest.name} protected {newest.protected:.1f}% of the PII bytes in "
-        f"{own.dataset.split(' docs')[0]} synthetic documents "
-        f"(scored labels v3), leaking {100 - newest.protected:.1f}%. "
+        f"{newest.name} scores character-level F2 {newest.f2:.3f} on "
+        f"{own.dataset.split(' · ')[0]} (scored labels v3), leaking {newest.leaked:,} PII bytes; "
+        f"{charts.METRIC_DEFINITION} "
         "Each panel names its dataset and split; competitors run the configurations "
         "declared in [`chart-configs.json`](scripts/bench/compare/chart-configs.json). "
         "Numbers, sources and the model-card tables: "
@@ -1667,7 +1672,7 @@ def _source_lines(
         "(the shipped default of each tagged release); competitors from "
         "[`comparison.json`](comparison.json)."
     ]
-    for key, title in charts.THIRD_PARTY:
+    for key, title, _vendor in charts.THIRD_PARTY:
         bench = their[key]
         ident = bench["identity"]
         split = next(iter(bench["splits"]))
@@ -1683,11 +1688,16 @@ def _source_lines(
         "before results were reviewed; full versions and settings are in "
         "[`competitors.md`](competitors.md)."
     )
+    lines.append(f"- **Metric:** {charts.METRIC_DEFINITION}")
     lines.append(
-        "- **Metrics:** PII protected = 1 - leaked gold bytes / gold bytes. "
-        "False positives are bytes redacted that are not PII, per 1,000 corpus bytes; "
-        "the own corpus counts a protected repeat of a labelled value as protected "
-        "(contract v3), the third-party sets do not."
+        "- **False positives:** bytes redacted that are not PII, per 1,000 corpus bytes; the own "
+        "corpus counts a protected repeat of a labelled value as protected (contract v3), the "
+        "third-party sets do not."
+    )
+    lines.append(
+        "- **Vendors' own metrics:** "
+        + "; ".join(f"{title}: {vendor}" for _, title, vendor in charts.THIRD_PARTY)
+        + ". They appear in the third-party tables below, not in the panels."
     )
     return lines
 
