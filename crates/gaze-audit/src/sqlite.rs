@@ -211,6 +211,7 @@ const REDACTION_LOG_COLUMNS: &[ColumnSpec] = &[
     ColumnSpec { name: "snapshot_alg", sql_type: "TEXT", constraint: ColumnConstraint::Default(DEFAULT_SNAPSHOT_ALG), migrate: true, backfill: None },
     ColumnSpec { name: "snapshot_key_version", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
     ColumnSpec { name: "validator_fail_reason", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "labelled_value_scan_reason", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
     ColumnSpec { name: "ambiguity_record", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
     ColumnSpec { name: "collision_family", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
     ColumnSpec { name: "collision_variant", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
@@ -327,6 +328,8 @@ impl SqliteLogger {
 
     pub fn log(&self, entry: &RedactionEntry) -> Result<()> {
         let validator_fail_reason = serialize_json_column(entry.validator_fail_reason.as_ref())?;
+        let labelled_value_scan_reason =
+            serialize_json_column(entry.labelled_value_scan_reason.as_ref())?;
         let ambiguity_record = serialize_json_column(entry.ambiguity_record.as_ref())?;
         let fallback_triggered = entry.fallback_triggered.map(fallback_reason_to_db);
         let provenance_confidence = entry
@@ -340,7 +343,7 @@ impl SqliteLogger {
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35)",
+            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count, labelled_value_scan_reason) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36)",
             params![
                 entry.source,
                 entry.recognizer_id,
@@ -377,6 +380,7 @@ impl SqliteLogger {
                 entry.restore_fresh_pii_count.map(|value| value as i64),
                 entry.restore_phase_mask.map(i64::from),
                 entry.restore_trap_shape_count.map(|value| value as i64),
+                labelled_value_scan_reason,
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -390,7 +394,7 @@ impl SqliteLogger {
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count FROM redaction_log",
+                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count, labelled_value_scan_reason FROM redaction_log",
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
@@ -412,6 +416,7 @@ impl SqliteLogger {
                 {
                     entry = entry.with_validator_fail_reason(reason);
                 }
+                entry.labelled_value_scan_reason = deserialize_json_column(row.get(24)?, 24)?;
                 if let Some(record) = deserialize_json_column::<AmbiguityRecord>(row.get(12)?, 12)?
                 {
                     entry = entry.with_ambiguity_record(record);
@@ -501,6 +506,7 @@ impl SqliteLogger {
                     restore_fresh_pii_count: row.get(34)?,
                     restore_phase_mask: row.get(35)?,
                     restore_trap_shape_count: row.get(36)?,
+                    labelled_value_scan_reason: row.get(37)?,
                 })
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
