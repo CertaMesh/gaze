@@ -1,48 +1,57 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 696" width="1200" height="696" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-label="Benchmark panels for own corpus, Presidio Research and PIIBench-commercial: PII protected percent (higher is better) and false-positive bytes per 1,000 bytes (lower is better), Gaze release against declared competitor configurations.">
-<title>Benchmark panels for own corpus, Presidio Research and PIIBench-commercial: PII protected percent (higher is better) and false-positive bytes per 1,000 bytes (lower is better), Gaze release against declared competitor configurations.</title>
-<rect x="12.0" y="12" width="418.9" height="330" rx="10" fill="#f6f8fa"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 736" width="1200" height="736" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-label="Benchmark panels for own corpus, Presidio Research and PIIBench-commercial: character-level F2 (higher is better) with leaked PII bytes under each bar, and false-positive bytes per 1,000 bytes (lower is better), Gaze release against declared competitor configurations.">
+<title>Benchmark panels for own corpus, Presidio Research and PIIBench-commercial: character-level F2 (higher is better) with leaked PII bytes under each bar, and false-positive bytes per 1,000 bytes (lower is better), Gaze release against declared competitor configurations.</title>
+<rect x="12.0" y="12" width="418.9" height="350" rx="10" fill="#f6f8fa"/>
 <text x="28.0" y="40" font-size="16" font-weight="700" fill="#1f2328">Own corpus</text>
 <text x="414.9" y="40" font-size="11" text-anchor="end" fill="#59636e">higher is better</text>
-<text x="28.0" y="60" font-size="12" fill="#1f2328">PII protected</text>
+<text x="28.0" y="60" font-size="12" fill="#1f2328">Character-level F2 (β=2, label-agnostic, micro)</text>
 <text x="28.0" y="76" font-size="11" fill="#59636e">Kiji EN/DE holdout and A4 negatives · 2,910 docs, test + validation</text>
 <text x="28.0" y="91" font-size="11" fill="#59636e">Scored labels v3: the labels Gaze commits to detect</text>
 <line x1="22.0" x2="420.9" y1="296.0" y2="296.0" stroke="#d1d9e0" stroke-width="1"/>
 <line x1="22.0" x2="420.9" y1="208.0" y2="208.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="22.0" x2="420.9" y1="120.0" y2="120.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="31.5" y="151.5" width="30.9" height="144.5" rx="3" fill="#0969da"/>
-<text x="46.9" y="145.5" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">82.1%</text>
+<rect x="31.5" y="179.0" width="30.9" height="117.0" rx="3" fill="#0969da"/>
+<text x="46.9" y="173.0" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">0.665</text>
 <text x="46.9" y="312" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
 <text x="46.9" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.14</text>
-<rect x="81.3" y="139.0" width="30.9" height="157.0" rx="3" fill="#0969da"/>
-<text x="96.8" y="133.0" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">89.2%</text>
+<text x="46.9" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">22,144</text>
+<rect x="81.3" y="143.2" width="30.9" height="152.8" rx="3" fill="#0969da"/>
+<text x="96.8" y="137.2" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">0.868</text>
 <text x="96.8" y="312" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
 <text x="96.8" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
-<rect x="131.2" y="156.0" width="30.9" height="140.0" rx="3" fill="#a8b1bb"/>
-<text x="146.7" y="150.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">79.5%</text>
+<text x="96.8" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">13,319</text>
+<rect x="131.2" y="161.4" width="30.9" height="134.6" rx="3" fill="#a8b1bb"/>
+<text x="146.7" y="155.4" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.765</text>
 <text x="146.7" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.9" lengthAdjust="spacingAndGlyphs">Presidio</text>
-<rect x="181.1" y="267.5" width="30.9" height="28.5" rx="3" fill="#a8b1bb"/>
-<text x="196.5" y="261.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">16.2%</text>
+<text x="146.7" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">25,314</text>
+<rect x="181.1" y="261.9" width="30.9" height="34.1" rx="3" fill="#a8b1bb"/>
+<text x="196.5" y="255.9" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.194</text>
 <text x="196.5" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
 <text x="196.5" y="324" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">core</text>
-<rect x="230.9" y="161.5" width="30.9" height="134.5" rx="3" fill="#a8b1bb"/>
-<text x="246.4" y="155.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">76.4%</text>
+<text x="196.5" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">103,617</text>
+<rect x="230.9" y="196.5" width="30.9" height="99.5" rx="3" fill="#a8b1bb"/>
+<text x="246.4" y="190.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.565</text>
 <text x="246.4" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
 <text x="246.4" y="324" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">spaCy</text>
-<rect x="280.8" y="240.2" width="30.9" height="55.8" rx="3" fill="#a8b1bb"/>
-<text x="296.2" y="234.2" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">31.7%</text>
+<text x="246.4" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">29,142</text>
+<rect x="280.8" y="232.6" width="30.9" height="63.4" rx="3" fill="#a8b1bb"/>
+<text x="296.2" y="226.6" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.360</text>
 <text x="296.2" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.9" lengthAdjust="spacingAndGlyphs">scrubadub</text>
-<rect x="330.7" y="148.7" width="30.9" height="147.3" rx="3" fill="#a8b1bb"/>
-<text x="346.1" y="142.7" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">83.7%</text>
+<text x="296.2" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">84,397</text>
+<rect x="330.7" y="156.2" width="30.9" height="139.8" rx="3" fill="#a8b1bb"/>
+<text x="346.1" y="150.2" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.794</text>
 <text x="346.1" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">GLiNER</text>
-<rect x="380.5" y="154.3" width="30.9" height="141.7" rx="3" fill="#a8b1bb"/>
-<text x="396.0" y="148.3" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">80.5%</text>
+<text x="346.1" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">20,152</text>
+<rect x="380.5" y="155.8" width="30.9" height="140.2" rx="3" fill="#a8b1bb"/>
+<text x="396.0" y="149.8" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.797</text>
 <text x="396.0" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">OPF</text>
-<rect x="442.9" y="12" width="366.5" height="330" rx="10" fill="#f6f8fa"/>
+<text x="396.0" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">24,080</text>
+<text x="28.0" y="354" font-size="9" fill="#59636e">Grey figure under each bar: leaked PII bytes</text>
+<rect x="442.9" y="12" width="366.5" height="350" rx="10" fill="#f6f8fa"/>
 <text x="458.9" y="40" font-size="16" font-weight="700" fill="#1f2328">Presidio Research</text>
 <text x="793.5" y="40" font-size="11" text-anchor="end" fill="#59636e">higher is better</text>
-<text x="458.9" y="60" font-size="12" fill="#1f2328">PII protected</text>
+<text x="458.9" y="60" font-size="12" fill="#1f2328">Character-level F2 (β=2, label-agnostic, micro)</text>
 <text x="458.9" y="76" font-size="11" fill="#59636e">1,500 docs, test split</text>
-<text x="458.9" y="91" font-size="11" fill="#59636e">Labels every tool can emit (common intersection)</text>
+<text x="458.9" y="91" font-size="11" fill="#59636e">All gold labels; labels a tool cannot emit count as missed</text>
 <line x1="452.9" x2="799.5" y1="296.0" y2="296.0" stroke="#d1d9e0" stroke-width="1"/>
 <line x1="452.9" x2="799.5" y1="208.0" y2="208.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="452.9" x2="799.5" y1="120.0" y2="120.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
@@ -50,32 +59,40 @@
 <text x="477.7" y="284.0" font-size="11" font-weight="700" text-anchor="middle" fill="#0969da">pending</text>
 <text x="477.7" y="312" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
 <text x="477.7" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
-<rect x="511.8" y="228.2" width="30.7" height="67.8" rx="3" fill="#a8b1bb"/>
-<text x="527.2" y="222.2" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">38.5%</text>
+
+<rect x="511.8" y="169.2" width="30.7" height="126.8" rx="3" fill="#a8b1bb"/>
+<text x="527.2" y="163.2" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.721</text>
 <text x="527.2" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
-<rect x="561.3" y="257.9" width="30.7" height="38.1" rx="3" fill="#a8b1bb"/>
-<text x="576.7" y="251.9" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">21.7%</text>
+<text x="527.2" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">12,383</text>
+<rect x="561.3" y="270.1" width="30.7" height="25.9" rx="3" fill="#a8b1bb"/>
+<text x="576.7" y="264.1" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.147</text>
 <text x="576.7" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
 <text x="576.7" y="324" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">core</text>
-<rect x="610.8" y="236.9" width="30.7" height="59.1" rx="3" fill="#a8b1bb"/>
-<text x="626.2" y="230.9" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">33.6%</text>
+<text x="576.7" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">34,810</text>
+<rect x="610.8" y="183.5" width="30.7" height="112.5" rx="3" fill="#a8b1bb"/>
+<text x="626.2" y="177.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.639</text>
 <text x="626.2" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
 <text x="626.2" y="324" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">spaCy</text>
-<rect x="660.3" y="270.0" width="30.7" height="26.0" rx="3" fill="#a8b1bb"/>
-<text x="675.7" y="264.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">14.7%</text>
+<text x="626.2" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">15,769</text>
+<rect x="660.3" y="201.4" width="30.7" height="94.6" rx="3" fill="#a8b1bb"/>
+<text x="675.7" y="195.4" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.538</text>
 <text x="675.7" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">scrubadub</text>
-<rect x="709.8" y="191.9" width="30.7" height="104.1" rx="3" fill="#a8b1bb"/>
-<text x="725.2" y="185.9" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">59.2%</text>
+<text x="675.7" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">20,226</text>
+<rect x="709.8" y="174.2" width="30.7" height="121.8" rx="3" fill="#a8b1bb"/>
+<text x="725.2" y="168.2" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.692</text>
 <text x="725.2" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">GLiNER</text>
-<rect x="759.4" y="171.9" width="30.7" height="124.1" rx="3" fill="#a8b1bb"/>
-<text x="774.7" y="165.9" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">70.5%</text>
+<text x="725.2" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">13,326</text>
+<rect x="759.4" y="179.3" width="30.7" height="116.7" rx="3" fill="#a8b1bb"/>
+<text x="774.7" y="173.3" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.663</text>
 <text x="774.7" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">OPF</text>
-<rect x="821.5" y="12" width="366.5" height="330" rx="10" fill="#f6f8fa"/>
+<text x="774.7" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">15,305</text>
+<text x="458.9" y="354" font-size="9" fill="#59636e">Grey figure under each bar: leaked PII bytes</text>
+<rect x="821.5" y="12" width="366.5" height="350" rx="10" fill="#f6f8fa"/>
 <text x="837.5" y="40" font-size="16" font-weight="700" fill="#1f2328">PIIBench-commercial</text>
 <text x="1172.0" y="40" font-size="11" text-anchor="end" fill="#59636e">higher is better</text>
-<text x="837.5" y="60" font-size="12" fill="#1f2328">PII protected</text>
+<text x="837.5" y="60" font-size="12" fill="#1f2328">Character-level F2 (β=2, label-agnostic, micro)</text>
 <text x="837.5" y="76" font-size="11" fill="#59636e">5,000 docs, test split</text>
-<text x="837.5" y="91" font-size="11" fill="#59636e">Labels every tool can emit (common intersection)</text>
+<text x="837.5" y="91" font-size="11" fill="#59636e">All gold labels; labels a tool cannot emit count as missed</text>
 <line x1="831.5" x2="1178.0" y1="296.0" y2="296.0" stroke="#d1d9e0" stroke-width="1"/>
 <line x1="831.5" x2="1178.0" y1="208.0" y2="208.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
 <line x1="831.5" x2="1178.0" y1="120.0" y2="120.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
@@ -83,127 +100,135 @@
 <text x="856.2" y="284.0" font-size="11" font-weight="700" text-anchor="middle" fill="#0969da">pending</text>
 <text x="856.2" y="312" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
 <text x="856.2" y="324" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
-<rect x="890.4" y="189.1" width="30.7" height="106.9" rx="3" fill="#a8b1bb"/>
-<text x="905.7" y="183.1" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">60.7%</text>
+
+<rect x="890.4" y="178.9" width="30.7" height="117.1" rx="3" fill="#a8b1bb"/>
+<text x="905.7" y="172.9" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.665</text>
 <text x="905.7" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
-<rect x="939.9" y="230.0" width="30.7" height="66.0" rx="3" fill="#a8b1bb"/>
-<text x="955.2" y="224.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">37.5%</text>
+<text x="905.7" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">87,853</text>
+<rect x="939.9" y="263.8" width="30.7" height="32.2" rx="3" fill="#a8b1bb"/>
+<text x="955.2" y="257.8" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.183</text>
 <text x="955.2" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
 <text x="955.2" y="324" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">core</text>
-<rect x="989.4" y="181.9" width="30.7" height="114.1" rx="3" fill="#a8b1bb"/>
-<text x="1004.7" y="175.9" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">64.9%</text>
+<text x="955.2" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">222,697</text>
+<rect x="989.4" y="204.2" width="30.7" height="91.8" rx="3" fill="#a8b1bb"/>
+<text x="1004.7" y="198.2" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.522</text>
 <text x="1004.7" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
 <text x="1004.7" y="324" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">spaCy</text>
-<rect x="1038.9" y="262.0" width="30.7" height="34.0" rx="3" fill="#a8b1bb"/>
-<text x="1054.2" y="256.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">19.3%</text>
+<text x="1004.7" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">114,880</text>
+<rect x="1038.9" y="218.4" width="30.7" height="77.6" rx="3" fill="#a8b1bb"/>
+<text x="1054.2" y="212.4" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.441</text>
 <text x="1054.2" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">scrubadub</text>
-<rect x="1088.4" y="221.9" width="30.7" height="74.1" rx="3" fill="#a8b1bb"/>
-<text x="1103.7" y="215.9" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">42.1%</text>
+<text x="1054.2" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">145,119</text>
+<rect x="1088.4" y="202.4" width="30.7" height="93.6" rx="3" fill="#a8b1bb"/>
+<text x="1103.7" y="196.4" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.532</text>
 <text x="1103.7" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">GLiNER</text>
-<rect x="1137.9" y="212.8" width="30.7" height="83.2" rx="3" fill="#a8b1bb"/>
-<text x="1153.2" y="206.8" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">47.3%</text>
+<text x="1103.7" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">127,361</text>
+<rect x="1137.9" y="225.6" width="30.7" height="70.4" rx="3" fill="#a8b1bb"/>
+<text x="1153.2" y="219.6" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.400</text>
 <text x="1153.2" y="312" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">OPF</text>
-<rect x="12.0" y="354" width="418.9" height="330" rx="10" fill="#f6f8fa"/>
-<text x="28.0" y="382" font-size="16" font-weight="700" fill="#1f2328">Own corpus</text>
-<text x="414.9" y="382" font-size="11" text-anchor="end" fill="#59636e">lower is better</text>
-<text x="28.0" y="402" font-size="12" fill="#1f2328">False-positive bytes per 1,000 (own scale)</text>
-<text x="28.0" y="418" font-size="11" fill="#59636e">Kiji EN/DE holdout and A4 negatives · 2,910 docs, test + validation</text>
-<text x="28.0" y="433" font-size="11" fill="#59636e">Scored labels v3: the labels Gaze commits to detect</text>
-<line x1="22.0" x2="420.9" y1="638.0" y2="638.0" stroke="#d1d9e0" stroke-width="1"/>
-<line x1="22.0" x2="420.9" y1="550.0" y2="550.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
-<line x1="22.0" x2="420.9" y1="462.0" y2="462.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="31.5" y="539.3" width="30.9" height="98.7" rx="3" fill="#0969da"/>
-<text x="46.9" y="533.3" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">184.2</text>
-<text x="46.9" y="654" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
-<text x="46.9" y="666" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.14</text>
-<rect x="81.3" y="626.4" width="30.9" height="11.6" rx="3" fill="#0969da"/>
-<text x="96.8" y="620.4" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">21.7</text>
-<text x="96.8" y="654" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
-<text x="96.8" y="666" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
-<rect x="131.2" y="612.3" width="30.9" height="25.7" rx="3" fill="#a8b1bb"/>
-<text x="146.7" y="606.3" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">48.0</text>
-<text x="146.7" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.9" lengthAdjust="spacingAndGlyphs">Presidio</text>
-<rect x="181.1" y="634.3" width="30.9" height="3.7" rx="3" fill="#a8b1bb"/>
-<text x="196.5" y="628.3" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">6.8</text>
-<text x="196.5" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
-<text x="196.5" y="666" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">core</text>
-<rect x="230.9" y="485.0" width="30.9" height="153.0" rx="3" fill="#a8b1bb"/>
-<text x="246.4" y="479.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">285.4</text>
-<text x="246.4" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
-<text x="246.4" y="666" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">spaCy</text>
-<rect x="280.8" y="630.5" width="30.9" height="7.5" rx="3" fill="#a8b1bb"/>
-<text x="296.2" y="624.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">14.0</text>
-<text x="296.2" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.9" lengthAdjust="spacingAndGlyphs">scrubadub</text>
-<rect x="330.7" y="605.7" width="30.9" height="32.3" rx="3" fill="#a8b1bb"/>
-<text x="346.1" y="599.7" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">60.3</text>
-<text x="346.1" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">GLiNER</text>
-<rect x="380.5" y="620.7" width="30.9" height="17.3" rx="3" fill="#a8b1bb"/>
-<text x="396.0" y="614.7" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">32.3</text>
-<text x="396.0" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">OPF</text>
-<rect x="442.9" y="354" width="366.5" height="330" rx="10" fill="#f6f8fa"/>
-<text x="458.9" y="382" font-size="16" font-weight="700" fill="#1f2328">Presidio Research</text>
-<text x="793.5" y="382" font-size="11" text-anchor="end" fill="#59636e">lower is better</text>
-<text x="458.9" y="402" font-size="12" fill="#1f2328">False-positive bytes per 1,000 (own scale)</text>
-<text x="458.9" y="418" font-size="11" fill="#59636e">1,500 docs, test split</text>
-<text x="458.9" y="433" font-size="11" fill="#59636e">Labels every tool can emit (common intersection)</text>
-<line x1="452.9" x2="799.5" y1="638.0" y2="638.0" stroke="#d1d9e0" stroke-width="1"/>
-<line x1="452.9" x2="799.5" y1="550.0" y2="550.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
-<line x1="452.9" x2="799.5" y1="462.0" y2="462.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="462.3" y="632.0" width="30.7" height="6" rx="2" fill="none" stroke="#0969da" stroke-width="1.5" stroke-dasharray="3 2"/>
-<text x="477.7" y="626.0" font-size="11" font-weight="700" text-anchor="middle" fill="#0969da">pending</text>
-<text x="477.7" y="654" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
-<text x="477.7" y="666" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
-<rect x="511.8" y="620.3" width="30.7" height="17.7" rx="3" fill="#a8b1bb"/>
-<text x="527.2" y="614.3" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">2.3</text>
-<text x="527.2" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
-<rect x="561.3" y="638.0" width="30.7" height="1.0" rx="3" fill="#a8b1bb"/>
-<text x="576.7" y="632.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.0</text>
-<text x="576.7" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
-<text x="576.7" y="666" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">core</text>
-<rect x="610.8" y="485.0" width="30.7" height="153.0" rx="3" fill="#a8b1bb"/>
-<text x="626.2" y="479.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">20.0</text>
-<text x="626.2" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
-<text x="626.2" y="666" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">spaCy</text>
-<rect x="660.3" y="637.6" width="30.7" height="1.0" rx="3" fill="#a8b1bb"/>
-<text x="675.7" y="631.6" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.1</text>
-<text x="675.7" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">scrubadub</text>
-<rect x="709.8" y="594.7" width="30.7" height="43.3" rx="3" fill="#a8b1bb"/>
-<text x="725.2" y="588.7" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">5.7</text>
-<text x="725.2" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">GLiNER</text>
-<rect x="759.4" y="600.2" width="30.7" height="37.8" rx="3" fill="#a8b1bb"/>
-<text x="774.7" y="594.2" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">4.9</text>
-<text x="774.7" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">OPF</text>
-<rect x="821.5" y="354" width="366.5" height="330" rx="10" fill="#f6f8fa"/>
-<text x="837.5" y="382" font-size="16" font-weight="700" fill="#1f2328">PIIBench-commercial</text>
-<text x="1172.0" y="382" font-size="11" text-anchor="end" fill="#59636e">lower is better</text>
-<text x="837.5" y="402" font-size="12" fill="#1f2328">False-positive bytes per 1,000 (own scale)</text>
-<text x="837.5" y="418" font-size="11" fill="#59636e">5,000 docs, test split</text>
-<text x="837.5" y="433" font-size="11" fill="#59636e">Labels every tool can emit (common intersection)</text>
-<line x1="831.5" x2="1178.0" y1="638.0" y2="638.0" stroke="#d1d9e0" stroke-width="1"/>
-<line x1="831.5" x2="1178.0" y1="550.0" y2="550.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
-<line x1="831.5" x2="1178.0" y1="462.0" y2="462.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
-<rect x="840.9" y="632.0" width="30.7" height="6" rx="2" fill="none" stroke="#0969da" stroke-width="1.5" stroke-dasharray="3 2"/>
-<text x="856.2" y="626.0" font-size="11" font-weight="700" text-anchor="middle" fill="#0969da">pending</text>
-<text x="856.2" y="654" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
-<text x="856.2" y="666" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
-<rect x="890.4" y="612.3" width="30.7" height="25.7" rx="3" fill="#a8b1bb"/>
-<text x="905.7" y="606.3" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">5.0</text>
-<text x="905.7" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
-<rect x="939.9" y="629.1" width="30.7" height="8.9" rx="3" fill="#a8b1bb"/>
-<text x="955.2" y="623.1" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">1.8</text>
-<text x="955.2" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
-<text x="955.2" y="666" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">core</text>
-<rect x="989.4" y="485.0" width="30.7" height="153.0" rx="3" fill="#a8b1bb"/>
-<text x="1004.7" y="479.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">30.1</text>
-<text x="1004.7" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
-<text x="1004.7" y="666" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">spaCy</text>
-<rect x="1038.9" y="635.0" width="30.7" height="3.0" rx="3" fill="#a8b1bb"/>
-<text x="1054.2" y="629.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.6</text>
-<text x="1054.2" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">scrubadub</text>
-<rect x="1088.4" y="622.4" width="30.7" height="15.6" rx="3" fill="#a8b1bb"/>
-<text x="1103.7" y="616.4" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">3.1</text>
-<text x="1103.7" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">GLiNER</text>
-<rect x="1137.9" y="618.3" width="30.7" height="19.7" rx="3" fill="#a8b1bb"/>
-<text x="1153.2" y="612.3" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">3.9</text>
-<text x="1153.2" y="654" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">OPF</text>
+<text x="1153.2" y="340.0" font-size="9" text-anchor="middle" fill="#59636e">170,336</text>
+<text x="837.5" y="354" font-size="9" fill="#59636e">Grey figure under each bar: leaked PII bytes</text>
+<rect x="12.0" y="374" width="418.9" height="350" rx="10" fill="#f6f8fa"/>
+<text x="28.0" y="402" font-size="16" font-weight="700" fill="#1f2328">Own corpus</text>
+<text x="414.9" y="402" font-size="11" text-anchor="end" fill="#59636e">lower is better</text>
+<text x="28.0" y="422" font-size="12" fill="#1f2328">False-positive bytes per 1,000 (own scale)</text>
+<text x="28.0" y="438" font-size="11" fill="#59636e">Kiji EN/DE holdout and A4 negatives · 2,910 docs, test + validation</text>
+<text x="28.0" y="453" font-size="11" fill="#59636e">Scored labels v3: the labels Gaze commits to detect</text>
+<line x1="22.0" x2="420.9" y1="658.0" y2="658.0" stroke="#d1d9e0" stroke-width="1"/>
+<line x1="22.0" x2="420.9" y1="570.0" y2="570.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
+<line x1="22.0" x2="420.9" y1="482.0" y2="482.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
+<rect x="31.5" y="559.3" width="30.9" height="98.7" rx="3" fill="#0969da"/>
+<text x="46.9" y="553.3" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">164.9</text>
+<text x="46.9" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
+<text x="46.9" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.14</text>
+<rect x="81.3" y="646.4" width="30.9" height="11.6" rx="3" fill="#0969da"/>
+<text x="96.8" y="640.4" font-size="12" font-weight="700" text-anchor="middle" fill="#0969da">19.4</text>
+<text x="96.8" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
+<text x="96.8" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
+<rect x="131.2" y="632.3" width="30.9" height="25.7" rx="3" fill="#a8b1bb"/>
+<text x="146.7" y="626.3" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">42.9</text>
+<text x="146.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.9" lengthAdjust="spacingAndGlyphs">Presidio</text>
+<rect x="181.1" y="654.3" width="30.9" height="3.7" rx="3" fill="#a8b1bb"/>
+<text x="196.5" y="648.3" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">6.1</text>
+<text x="196.5" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
+<text x="196.5" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">core</text>
+<rect x="230.9" y="505.0" width="30.9" height="153.0" rx="3" fill="#a8b1bb"/>
+<text x="246.4" y="499.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">255.6</text>
+<text x="246.4" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
+<text x="246.4" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">spaCy</text>
+<rect x="280.8" y="650.5" width="30.9" height="7.5" rx="3" fill="#a8b1bb"/>
+<text x="296.2" y="644.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">12.5</text>
+<text x="296.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.9" lengthAdjust="spacingAndGlyphs">scrubadub</text>
+<rect x="330.7" y="625.7" width="30.9" height="32.3" rx="3" fill="#a8b1bb"/>
+<text x="346.1" y="619.7" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">54.0</text>
+<text x="346.1" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">GLiNER</text>
+<rect x="380.5" y="640.7" width="30.9" height="17.3" rx="3" fill="#a8b1bb"/>
+<text x="396.0" y="634.7" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">28.9</text>
+<text x="396.0" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">OPF</text>
+<rect x="442.9" y="374" width="366.5" height="350" rx="10" fill="#f6f8fa"/>
+<text x="458.9" y="402" font-size="16" font-weight="700" fill="#1f2328">Presidio Research</text>
+<text x="793.5" y="402" font-size="11" text-anchor="end" fill="#59636e">lower is better</text>
+<text x="458.9" y="422" font-size="12" fill="#1f2328">False-positive bytes per 1,000 (own scale)</text>
+<text x="458.9" y="438" font-size="11" fill="#59636e">1,500 docs, test split</text>
+<text x="458.9" y="453" font-size="11" fill="#59636e">All gold labels; labels a tool cannot emit count as missed</text>
+<line x1="452.9" x2="799.5" y1="658.0" y2="658.0" stroke="#d1d9e0" stroke-width="1"/>
+<line x1="452.9" x2="799.5" y1="570.0" y2="570.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
+<line x1="452.9" x2="799.5" y1="482.0" y2="482.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
+<rect x="462.3" y="652.0" width="30.7" height="6" rx="2" fill="none" stroke="#0969da" stroke-width="1.5" stroke-dasharray="3 2"/>
+<text x="477.7" y="646.0" font-size="11" font-weight="700" text-anchor="middle" fill="#0969da">pending</text>
+<text x="477.7" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
+<text x="477.7" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
+<rect x="511.8" y="556.4" width="30.7" height="101.6" rx="3" fill="#a8b1bb"/>
+<text x="527.2" y="550.4" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">25.4</text>
+<text x="527.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
+<rect x="561.3" y="658.0" width="30.7" height="1.0" rx="3" fill="#a8b1bb"/>
+<text x="576.7" y="652.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">0.0</text>
+<text x="576.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
+<text x="576.7" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">core</text>
+<rect x="610.8" y="532.2" width="30.7" height="125.8" rx="3" fill="#a8b1bb"/>
+<text x="626.2" y="526.2" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">31.5</text>
+<text x="626.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
+<text x="626.2" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">spaCy</text>
+<rect x="660.3" y="599.8" width="30.7" height="58.2" rx="3" fill="#a8b1bb"/>
+<text x="675.7" y="593.8" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">14.6</text>
+<text x="675.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">scrubadub</text>
+<rect x="709.8" y="505.0" width="30.7" height="153.0" rx="3" fill="#a8b1bb"/>
+<text x="725.2" y="499.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">38.3</text>
+<text x="725.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">GLiNER</text>
+<rect x="759.4" y="637.1" width="30.7" height="20.9" rx="3" fill="#a8b1bb"/>
+<text x="774.7" y="631.1" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">5.2</text>
+<text x="774.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">OPF</text>
+<rect x="821.5" y="374" width="366.5" height="350" rx="10" fill="#f6f8fa"/>
+<text x="837.5" y="402" font-size="16" font-weight="700" fill="#1f2328">PIIBench-commercial</text>
+<text x="1172.0" y="402" font-size="11" text-anchor="end" fill="#59636e">lower is better</text>
+<text x="837.5" y="422" font-size="12" fill="#1f2328">False-positive bytes per 1,000 (own scale)</text>
+<text x="837.5" y="438" font-size="11" fill="#59636e">5,000 docs, test split</text>
+<text x="837.5" y="453" font-size="11" fill="#59636e">All gold labels; labels a tool cannot emit count as missed</text>
+<line x1="831.5" x2="1178.0" y1="658.0" y2="658.0" stroke="#d1d9e0" stroke-width="1"/>
+<line x1="831.5" x2="1178.0" y1="570.0" y2="570.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
+<line x1="831.5" x2="1178.0" y1="482.0" y2="482.0" stroke="#d1d9e0" stroke-width="1" stroke-dasharray="3 4"/>
+<rect x="840.9" y="652.0" width="30.7" height="6" rx="2" fill="none" stroke="#0969da" stroke-width="1.5" stroke-dasharray="3 2"/>
+<text x="856.2" y="646.0" font-size="11" font-weight="700" text-anchor="middle" fill="#0969da">pending</text>
+<text x="856.2" y="674" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">Gaze</text>
+<text x="856.2" y="686" font-size="10" font-weight="600" text-anchor="middle" fill="#1f2328">0.15</text>
+<rect x="890.4" y="596.1" width="30.7" height="61.9" rx="3" fill="#a8b1bb"/>
+<text x="905.7" y="590.1" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">38.0</text>
+<text x="905.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">Presidio</text>
+<rect x="939.9" y="654.8" width="30.7" height="3.2" rx="3" fill="#a8b1bb"/>
+<text x="955.2" y="648.8" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">1.9</text>
+<text x="955.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
+<text x="955.2" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">core</text>
+<rect x="989.4" y="505.0" width="30.7" height="153.0" rx="3" fill="#a8b1bb"/>
+<text x="1004.7" y="499.0" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">94.1</text>
+<text x="1004.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">DataFog</text>
+<text x="1004.7" y="686" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">spaCy</text>
+<rect x="1038.9" y="542.1" width="30.7" height="115.9" rx="3" fill="#a8b1bb"/>
+<text x="1054.2" y="536.1" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">71.2</text>
+<text x="1054.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e" textLength="43.5" lengthAdjust="spacingAndGlyphs">scrubadub</text>
+<rect x="1088.4" y="598.5" width="30.7" height="59.5" rx="3" fill="#a8b1bb"/>
+<text x="1103.7" y="592.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">36.6</text>
+<text x="1103.7" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">GLiNER</text>
+<rect x="1137.9" y="649.5" width="30.7" height="8.5" rx="3" fill="#a8b1bb"/>
+<text x="1153.2" y="643.5" font-size="12" font-weight="700" text-anchor="middle" fill="#1f2328">5.2</text>
+<text x="1153.2" y="674" font-size="10" font-weight="400" text-anchor="middle" fill="#59636e">OPF</text>
 </svg>

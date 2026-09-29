@@ -2,6 +2,7 @@
 """Model-free tests for the agentic benchmark layers A and D."""
 
 import copy
+import dataclasses
 import hashlib
 import ipaddress
 import json
@@ -25,6 +26,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
+    "dev": "b9a17a2d1b57c3adaba687f5f1051ac0e1769c4814e59cd971d098bc1f34cb6c",
+    "test": "9a648a1c5cbb261ba9e3503ddfa5b65cbeb0d0d489cbc3d42464851bd88d8545",
+}
+# v4: everything before the labelled benign-lookalike cells.
+V4_CORPUS_SHA256 = {
     "dev": "6df97e1ea7fbe49a0362335de0c0436913cf77689948156a1fd7e3701a40e9ad",
     "test": "387a35ac155153e9b58a26ec7946b3d459b0d094fffdd5f05de39558eb640604",
 }
@@ -108,7 +114,11 @@ class GeneratorTests(unittest.TestCase):
 
     def test_previous_partition_documents_are_byte_identical(self) -> None:
         for partition, records in self.corpora.items():
-            previous = [r for r in records if not r.surface.startswith("adjacent_")]
+            v4 = agentic.records_as_of(4, records)
+            self.assertEqual(
+                hashlib.sha256(agentic.corpus_bytes(v4)).hexdigest(), V4_CORPUS_SHA256[partition]
+            )
+            previous = agentic.records_as_of(3, records)
             self.assertEqual(
                 hashlib.sha256(agentic.corpus_bytes(previous)).hexdigest(),
                 PREVIOUS_CORPUS_SHA256[partition],
@@ -407,6 +417,168 @@ class RepeatSliceTests(unittest.TestCase):
         for record in agentic.generate("test"):
             if record.layer != agentic.LAYER_REPEATS:
                 self.assertNotIn("decoys", record.to_json())
+
+
+class LabelledLookalikeCellTests(unittest.TestCase):
+    """Todo 3995: labelled PII inside benign structures is gold; each cell's
+    layer D twin has the same shape, structure and position and no cue."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.cells = {
+            partition: [r for r in agentic.generate(partition) if r.surface.startswith("lookalike_")]
+            for partition in agentic.PARTITIONS
+        }
+
+    def generate_with(self, cells) -> None:
+        with mock.patch.object(agentic, "LOOKALIKE_GOLD_CELLS", cells):
+            agentic.generate("test")
+
+    def test_every_cell_is_generated_in_both_partitions(self) -> None:
+        for partition, records in self.cells.items():
+            for layer, cells in (("A", agentic.LOOKALIKE_GOLD_CELLS), ("D", agentic.LOOKALIKE_TWINS)):
+                for cell in cells:
+                    matching = [r for r in records if r.layer == layer and r.family == cell.family]
+                    self.assertEqual(len(matching), agentic.DOCS_PER_LOOKALIKE_CELL[layer], (partition, cell.family))
+            self.assertEqual(
+                {r.surface for r in records if r.layer == "A"}, set(agentic.LOOKALIKE_CELL_SURFACES)
+            )
+            self.assertEqual(
+                {cell.label for cell in agentic.LOOKALIKE_GOLD_CELLS}, set(agentic.LabelRelation)
+            )
+
+    def test_growth_stays_within_ten_percent_per_layer(self) -> None:
+        records = agentic.generate("test")
+        for layer in ("A", "D"):
+            new = sum(1 for r in self.cells["test"] if r.layer == layer)
+            old = sum(1 for r in records if r.layer == layer) - new
+            self.assertLessEqual(new * 10, old, layer)
+
+    def test_gold_cells_carry_one_labelled_value_inside_a_benign_structure(self) -> None:
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "A"):
+                cell = next(c for c in agentic.LOOKALIKE_GOLD_CELLS if c.family == record.family)
+                self.assertEqual(len(record.gold), 1, record.uid)
+                gold = record.gold[0]
+                self.assertEqual(gold.label, agentic.LOOKALIKE_VALUE_KINDS[cell.twin.kind][0], record.uid)
+                self.assertEqual(record.text.encode()[gold.start : gold.end].decode(), gold.value)
+                value, start, end = agentic.lookalike_value(record)
+                self.assertEqual(
+                    agentic.value_structure(record.text, start, end), cell.twin.structure, record.uid
+                )
+                self.assertEqual(record.validity, agentic.UNCHECKED)
+
+    def test_gold_cells_are_labelled_and_counterweights_carry_no_cue(self) -> None:
+        for records in self.cells.values():
+            for record in records:
+                labelled = agentic.has_lookalike_cue(record.text) or agentic.has_non_latin_letter(record.text)
+                if record.layer == "A":
+                    self.assertTrue(labelled, record.uid)
+                else:
+                    self.assertFalse(labelled, record.uid)
+                    self.assertEqual(record.gold, (), record.uid)
+                    self.assertEqual(record.validity, agentic.BENIGN)
+
+    def test_a_cued_counterweight_fails_generation(self) -> None:
+        twin = agentic.ORDER_REF_ZIP
+        cued = dataclasses.replace(twin, templates={**twin.templates, "test": "ZIP:\nORDER-{V}"})
+        with mock.patch.object(agentic, "LOOKALIKE_TWINS", (cued, *agentic.LOOKALIKE_TWINS[1:])):
+            with self.assertRaisesRegex(agentic.LayerError, "carries a cue"):
+                agentic.generate("test")
+
+    def test_cue_vocabulary_is_the_checked_single_source(self) -> None:
+        vocabulary = json.loads(agentic.CUE_VOCABULARY_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(set(vocabulary["stems"]), {"postal", "phone", "address"})
+        self.assertEqual(set(vocabulary["whole_words"]), {"postal", "phone", "address"})
+        stems = [stem for family in vocabulary["stems"].values() for stem in family]
+        self.assertEqual(tuple(stems), agentic.LOOKALIKE_CUE_STEMS)
+        self.assertEqual(len(stems), len(set(stems)))
+        for text in ("Téléphone:", "zipCode", "shippingAddress", "PLZ", "Straße", "CEP 1", "Kontakt"):
+            self.assertTrue(agentic.has_lookalike_cue(text), text)
+        for text in ("Order reference:", "Bestellnummer", "ticketRef", "capital", "record_no"):
+            self.assertFalse(agentic.has_lookalike_cue(text), text)
+        self.assertTrue(agentic.has_non_latin_letter("Телефон"))
+        self.assertTrue(agentic.has_non_latin_letter("電話番号"))
+        self.assertFalse(agentic.has_non_latin_letter("Número de telemóvel, Straße"))
+
+    def test_counterweights_are_derived_from_the_cells(self) -> None:
+        self.assertEqual(
+            agentic.LOOKALIKE_COUNTERWEIGHTS,
+            {cell.family: cell.twin.family for cell in agentic.LOOKALIKE_GOLD_CELLS},
+        )
+        unpaired = {t.family for t in agentic.LOOKALIKE_TWINS} - set(agentic.LOOKALIKE_COUNTERWEIGHTS.values())
+        self.assertEqual(unpaired, set(agentic.UNPAIRED_TWINS))
+
+    def test_each_cell_and_its_twin_share_shape_structure_and_position(self) -> None:
+        for records in self.cells.values():
+            for cell in agentic.LOOKALIKE_GOLD_CELLS:
+                gold = next(r for r in records if r.layer == "A" and r.family == cell.family)
+                benign = next(r for r in records if r.layer == "D" and r.family == cell.twin.family)
+                (gold_value, *gold_span), (value, *span) = (
+                    agentic.lookalike_value(gold), agentic.lookalike_value(benign)
+                )
+                self.assertEqual(agentic.display_shape(gold_value), agentic.display_shape(value), cell.family)
+                self.assertEqual(
+                    agentic.value_position(gold.text, *gold_span, gold.surface),
+                    agentic.value_position(benign.text, *span, benign.surface),
+                    cell.family,
+                )
+
+    def test_swapping_two_json_twins_fails_generation(self) -> None:
+        # Same surface, value shape and structure; only the JSON topology differs.
+        cells = list(agentic.LOOKALIKE_GOLD_CELLS)
+        nested = next(i for i, c in enumerate(cells) if c.family == "zip_json_nested_path")
+        entries = next(i for i, c in enumerate(cells) if c.family == "zip_json_entries_array")
+        cells[nested], cells[entries] = (
+            dataclasses.replace(cells[nested], twin=cells[entries].twin),
+            dataclasses.replace(cells[entries], twin=cells[nested].twin),
+        )
+        with self.assertRaisesRegex(agentic.LayerError, "differ in shape or position"):
+            self.generate_with(tuple(cells))
+
+    def test_phone_values_use_reserved_ranges(self) -> None:
+        checked = 0
+        for records in self.cells.values():
+            for record in records:
+                value, _, _ = agentic.lookalike_value(record)
+                twin = next(
+                    (c.twin for c in agentic.LOOKALIKE_GOLD_CELLS if c.family == record.family)
+                    if record.layer == "A"
+                    else (t for t in agentic.LOOKALIKE_TWINS if t.family == record.family)
+                )
+                pattern = {
+                    "phone_us": r"^\d{3}-555-01\d{2}$",
+                    "phone_de": r"^01555\d{7}$",
+                    "phone_de_run": r"^0155-5\d{3}(?:-\d{4}){2}$",
+                }.get(twin.kind)
+                if pattern:
+                    checked += 1
+                    self.assertRegex(value, pattern, record.uid)
+        self.assertEqual(checked, 2 * sum(
+            agentic.DOCS_PER_LOOKALIKE_CELL[layer]
+            for layer, kinds in (("A", [c.twin.kind for c in agentic.LOOKALIKE_GOLD_CELLS]),
+                                 ("D", [t.kind for t in agentic.LOOKALIKE_TWINS]))
+            for kind in kinds if kind.startswith("phone")
+        ))
+
+    def test_structured_cells_are_valid_json(self) -> None:
+        for records in self.cells.values():
+            for record in (r for r in records if r.surface == "lookalike_tool_json"):
+                json.loads(record.text)
+
+    def test_digit_runs_fail_luhn_so_no_card_rule_can_cover_them(self) -> None:
+        for records in self.cells.values():
+            for record in records:
+                for run in re.findall(r"\d{4}-\d{4}-\d{4}-\d{4}", record.text):
+                    self.assertFalse(agentic.luhn_valid(run), record.uid)
+                    self.assertEqual(record.layer, "D", record.uid)
+
+    def test_padding_pools_carry_no_cue_and_split_by_partition(self) -> None:
+        for pool in (agentic.LOOKALIKE_FILLER, agentic.LOOKALIKE_LOG_LINE,
+                     agentic.LOOKALIKE_CSV_ROW, agentic.LOOKALIKE_JSON_MEMBERS):
+            self.assertFalse(agentic.has_lookalike_cue(json.dumps(pool, ensure_ascii=False)))
+            dev, test = (pool[p] if isinstance(pool[p], tuple) else (pool[p],) for p in ("dev", "test"))
+            self.assertFalse(set(dev) & set(test))
 
 
 class PartitionTests(unittest.TestCase):
