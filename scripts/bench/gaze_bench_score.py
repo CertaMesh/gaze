@@ -752,6 +752,12 @@ FINAL_PROTECTION_TRACE_FIELDS = frozenset(
     {"raw_start", "raw_end", "class", "action", "provenance"}
 )
 TRACE_PROVENANCE_FIELDS = frozenset({"stage", "decision", "source_ids"})
+# Typed trace lineage (component ledger S1): a producer carries it on every
+# item (`settlement` + `contributions` in provenance, `candidate_events` on the
+# response) or on none, like every committed release record. Its shape and
+# cross-checks belong to scorecard_record.validate_response_lineage.
+TRACE_LINEAGE_FIELDS = frozenset({"settlement", "contributions"})
+RESPONSE_LINEAGE_FIELD = "candidate_events"
 VALID_TRACE_COMBINATIONS = frozenset(
     {
         ("primary_pipeline", "policy", "tokenize"),
@@ -1069,8 +1075,12 @@ def _validate_final_protection_trace(
         raw_end = _expect_int(item["raw_end"], f"{context}.raw_end")
         pii_class = _expect_string(item["class"], f"{context}.class")
         action = _expect_string(item["action"], f"{context}.action")
+        provenance_value = _expect_object(item["provenance"], f"{context}.provenance")
+        lineage_fields = (
+            TRACE_LINEAGE_FIELDS if TRACE_LINEAGE_FIELDS & provenance_value.keys() else frozenset()
+        )
         provenance = _expect_exact_keys(
-            item["provenance"], TRACE_PROVENANCE_FIELDS, f"{context}.provenance"
+            provenance_value, TRACE_PROVENANCE_FIELDS | lineage_fields, f"{context}.provenance"
         )
         stage = _expect_string(provenance["stage"], f"{context}.provenance.stage")
         decision = _expect_string(
@@ -1196,9 +1206,26 @@ def validate_response(
         )
         _expect_number(timing["total_ms"], "pipeline error timing.total_ms")
     else:
+        response_value = _expect_object(response, f"{document.uid}: success response")
+        has_lineage = RESPONSE_LINEAGE_FIELD in response_value
         response = _expect_exact_keys(
-            response, SUCCESS_RESPONSE_FIELDS, f"{document.uid}: success response"
+            response_value,
+            SUCCESS_RESPONSE_FIELDS | ({RESPONSE_LINEAGE_FIELD} if has_lineage else frozenset()),
+            f"{document.uid}: success response",
         )
+        if has_lineage:
+            _expect_list(response[RESPONSE_LINEAGE_FIELD], RESPONSE_LINEAGE_FIELD)
+        for index, trace_item in enumerate(
+            _expect_list(response["final_protection_trace"], "final_protection_trace")
+        ):
+            provenance_keys = _expect_object(
+                _expect_object(trace_item, f"final_protection_trace[{index}]").get("provenance"),
+                f"final_protection_trace[{index}].provenance",
+            ).keys()
+            if bool(TRACE_LINEAGE_FIELDS & provenance_keys) != has_lineage:
+                raise ResponseValidationError(
+                    f"{document.uid}: trace lineage and {RESPONSE_LINEAGE_FIELD} must appear together"
+                )
         fixture_id = _expect_string(response["fixture_id"], "fixture_id")
         _expect_string(response["clean_text"], "clean_text")
         manifest = _expect_list(response["manifest_spans"], "manifest_spans")
