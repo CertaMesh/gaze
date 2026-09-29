@@ -94,3 +94,37 @@ def test_neutral_prediction_outside_gold_adds_no_scored_false_positive() -> None
     recorder.record_candidate(doc, response(trace(0, 5)), [("Name", "Maren")], decoy=False)
     result = recorder.result(leaked_fall=0, false_positive_rise=0)
     assert result["rows"] == []
+
+
+def test_selected_candidate_event_shape_from_component_ledger_is_used() -> None:
+    doc = document("Maren", (score.Span(0, 5, "GIVENNAME"),))
+    digest = hashlib.sha256(b"name").hexdigest()
+    candidate = response(trace(0, 5, "name"))
+    candidate["final_protection_trace"][0]["provenance"]["source_ids"] = []
+    candidate["candidate_events"] = [{
+        "original": 0, "recognizer_id": f"context/record-v2-{digest}-0",
+        "class": "name", "raw_start": 0, "raw_end": 5,
+        "outcome": "selected", "selection_start": 0, "selection_end": 5,
+        "settlement": "resolve", "role": "winner", "tier": None,
+        "defeat_kind": None, "winner": None, "veto_reason": None,
+    }]
+    recorder = attribution.AttributionRecorder.create(frozenset(), frozenset({"GIVENNAME"}))
+    recorder.record_baseline(doc, response())
+    recorder.record_candidate(doc, candidate, [("Name", "Maren")], decoy=False)
+    row = recorder.result(leaked_fall=5, false_positive_rise=0)["rows"][0]
+    assert (row["record_class"], row["match_kind"], row["gold_recovered_bytes"]) == (
+        "name_single", "exact", 5,
+    )
+
+
+def test_non_record_trace_cannot_claim_record_recovery() -> None:
+    doc = document("Maren", (score.Span(0, 5, "GIVENNAME"),))
+    other = trace(0, 5)
+    other["provenance"]["source_ids"] = ["ner/synthetic"]
+    recorder = attribution.AttributionRecorder.create(frozenset(), frozenset({"GIVENNAME"}))
+    recorder.record_baseline(doc, response())
+    recorder.record_candidate(
+        doc, response(other, trace(0, 5)), [("Name", "Maren")], decoy=False
+    )
+    row = recorder.result(leaked_fall=5, false_positive_rise=0)["rows"][0]
+    assert row["record_class"] == "name_single"

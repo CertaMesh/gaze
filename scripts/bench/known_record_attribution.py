@@ -94,9 +94,11 @@ def match_group_and_kind(
     return candidates[0]
 
 
-def trace_bucket(
+def record_source_bucket(
     document: score.Document,
-    item: Mapping[str, object],
+    start: int,
+    end: int,
+    sources: Iterable[str],
     values: list[tuple[str, str]],
     common_words: frozenset[str],
 ) -> tuple[str, str]:
@@ -104,8 +106,6 @@ def trace_bucket(
         hashlib.sha256(canonical_class(class_name).encode("utf-8")).hexdigest(): class_name
         for class_name, _ in values
     }
-    provenance = item.get("provenance")
-    sources = provenance.get("source_ids", []) if isinstance(provenance, dict) else []
     classes = {
         digests[match.group(1)]
         for source in sources
@@ -115,8 +115,34 @@ def trace_bucket(
     if len(classes) != 1:
         return "unattributed", "no_unique_record_source"
     class_name = next(iter(classes))
-    text = document.text.encode("utf-8")[item["raw_start"] : item["raw_end"]].decode("utf-8")
+    text = document.text.encode("utf-8")[start:end].decode("utf-8")
     return match_group_and_kind(text, class_name, values, common_words)
+
+
+def candidate_spans(response: Mapping[str, object]) -> list[tuple[int, int, list[str]]]:
+    """Use #717's selected CandidateEvent rows when that schema is present."""
+    events = response.get("candidate_events")
+    if events is None:
+        trace = response["final_protection_trace"]
+        if not isinstance(trace, list):
+            raise ValueError("record attribution requires a final protection trace")
+        spans = []
+        for item in trace:
+            if not isinstance(item, dict):
+                raise ValueError("invalid record attribution trace item")
+            provenance = item.get("provenance")
+            sources = provenance.get("source_ids", []) if isinstance(provenance, dict) else []
+            spans.append((item["raw_start"], item["raw_end"], sources))
+        return spans
+    if not isinstance(events, list):
+        raise ValueError("invalid candidate_events shape")
+    spans = []
+    for event in events:
+        if not isinstance(event, dict):
+            raise ValueError("invalid candidate event")
+        if event.get("outcome") == "selected":
+            spans.append((event["raw_start"], event["raw_end"], [event["recognizer_id"]]))
+    return spans
 
 
 def add_bytes(
@@ -168,19 +194,18 @@ def attribute_document(
     population = "decoy" if decoy else "non_decoy"
     totals: Counter[tuple[str, str, str, str]] = Counter()
     assigned: list[tuple[int, int]] = []
-    trace = response["final_protection_trace"]
-    if not isinstance(trace, list):
-        raise ValueError("record attribution requires a final protection trace")
-    for item in trace:
-        if not isinstance(item, dict):
-            raise ValueError("invalid record attribution trace item")
+    for start, end, sources in candidate_spans(response):
+        if not any(isinstance(source, str) and RECORD_SOURCE.fullmatch(source) for source in sources):
+            continue
         segments = intersect_intervals(
-            [(item["raw_start"], item["raw_end"])], new
+            [(start, end)], new
         )
         segments = score.subtract_intervals(segments, score.merge_intervals(assigned))
         if not segments:
             continue
-        group, kind = trace_bucket(document, item, values, common_words)
+        group, kind = record_source_bucket(
+            document, start, end, sources, values, common_words
+        )
         add_bytes(totals, (group, kind, population), segments, gold, eligible, added=True)
         assigned.extend(segments)
     leftovers = score.subtract_intervals(new, score.merge_intervals(assigned))
