@@ -417,14 +417,14 @@ mod tests {
         }
     }
 
-    fn roles(
-        lineage: &Lineage,
-    ) -> Vec<(
-        &str,
+    type Role<'a> = (
+        &'a str,
         ContributionRole,
         Option<Range<usize>>,
         Option<ConflictTier>,
-    )> {
+    );
+
+    fn roles(lineage: &Lineage) -> Vec<Role<'_>> {
         lineage
             .contributions
             .iter()
