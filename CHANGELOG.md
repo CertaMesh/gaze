@@ -51,6 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Labelled tax, driver-licence, and identity-card values now close whole-field
+  leaks.** Three safe-default `core` recognizers cover class-specific fields
+  across English, German, French, Dutch, and Portuguese. A shared scanner
+  extends bounded regex captures through grouped values, stops at dates and
+  later fields, and records a typed reason when it crosses a size limit or
+  boundary. Tokens restore exactly. Nym also scans a byte-aligned neutral
+  token view to find PII hidden by nearby manifest tokens. Against main
+  `3956a611`, the fresh v2/v1 gates remove 1,127/1,366 leaked bytes in layer C
+  for 129 added false-positive bytes; A, D, and R are unchanged, with zero
+  refusals, fallback redactions, restore failures, or invalid manifests.
+
 - **Cued phone and government-ID values remain protected when validation fails.**
   The new `phone.e164.spaced.cued` and `phone.national.us.cued` recognizers keep
   labelled phone-shaped values that a regional parser rejects, using English

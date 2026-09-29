@@ -438,6 +438,7 @@ fn assembled(
             pattern: Some(pattern.to_string()),
             pattern_template: None,
             capture_groups: None,
+            complete_labelled_value: false,
         };
         spec.scoring.priority = *priority;
         pack.recognizers.push(spec);

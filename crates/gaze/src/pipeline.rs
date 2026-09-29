@@ -21,9 +21,9 @@ use gaze_recognizers::{
 use gaze_types::redaction_marker::redaction_marker;
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
-    LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
-    RedactionLogger, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet, SafetyNetContext,
-    SafetyNetError, ValidatorFailReason,
+    LabelledValueScanReason, LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest,
+    RedactionLogError, RedactionLogger, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet,
+    SafetyNetContext, SafetyNetError, ValidatorFailReason,
 };
 use thiserror::Error;
 
@@ -1679,7 +1679,7 @@ impl Pipeline {
             )
             .with_dictionaries(dictionaries);
             let (mut reported, mut net_telemetry) =
-                net.check_with_telemetry(scan.text(), context)?;
+                net.check_with_neutral_and_telemetry(scan.text(), scan.neutral_text(), context)?;
             for event in &mut net_telemetry {
                 if let LeakReportTelemetry::ModelSpanRefused {
                     span,
@@ -2954,6 +2954,7 @@ impl Pipeline {
         if let Some(reason) = detection.validator_fail_reason {
             entry = entry.with_validator_fail_reason(reason);
         }
+        entry.labelled_value_scan_reason = detection.labelled_value_scan_reason;
         if detection.collision_family.is_some() || detection.collision_variant.is_some() {
             entry = entry.with_collision_metadata(
                 detection.collision_family.clone(),
@@ -3102,6 +3103,7 @@ struct IndexedDetection {
     sweep_link: Option<SweepLink>,
     /// Set when the value was kept although its checksum failed (`ValidatorOnFail::Record`).
     validator_fail_reason: Option<ValidatorFailReason>,
+    labelled_value_scan_reason: Option<LabelledValueScanReason>,
 }
 
 struct CleanText {
@@ -5573,6 +5575,7 @@ fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<I
                     evidence: ManifestEvidence::Learned,
                     sweep_link: None,
                     validator_fail_reason: None,
+                    labelled_value_scan_reason: None,
                 }
             })
         })
@@ -5622,6 +5625,7 @@ fn indexed_detection_from_candidate(
         evidence,
         sweep_link: None,
         validator_fail_reason: candidate.validator_fail_reason,
+        labelled_value_scan_reason: candidate.labelled_value_scan_reason,
     }
 }
 
@@ -6457,6 +6461,103 @@ mod tests {
             .register_safety_net(safety_net)
             .build()
             .expect("pipeline")
+    }
+
+    struct NeutralOnlySafetyNet {
+        calls: Arc<AtomicUsize>,
+        neutral_calls: Arc<AtomicUsize>,
+    }
+
+    impl SafetyNet for NeutralOnlySafetyNet {
+        fn id(&self) -> &str {
+            "neutral-only.fixture"
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            _clean_text: &str,
+            _context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            Ok(Vec::new())
+        }
+
+        fn check_with_neutral(
+            &self,
+            stable_text: &str,
+            neutral_text: Option<&str>,
+            context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            let neutral = neutral_text.expect("the email token has a neutral view");
+            self.neutral_calls.fetch_add(1, Ordering::Relaxed);
+            assert_eq!(stable_text.len(), neutral.len());
+            assert!(neutral.contains("[PII]"));
+            let Some(start) = stable_text.find("Dr. Schmidt") else {
+                return Ok(Vec::new());
+            };
+            let span = start..start + "Dr. Schmidt".len();
+            let kind = context
+                .manifest
+                .diff_against(&span, &PiiClass::Name)
+                .expect("name is outside the email token");
+            Ok(vec![LeakSuspect::new(
+                span,
+                PiiClass::Name,
+                self.id(),
+                Some(1.0),
+                kind,
+                "NAME>=1;view=neutral",
+                None,
+            )])
+        }
+
+        fn check_with_neutral_and_telemetry(
+            &self,
+            stable_text: &str,
+            neutral_text: Option<&str>,
+            context: SafetyNetContext<'_>,
+        ) -> std::result::Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError>
+        {
+            self.check_with_neutral(stable_text, neutral_text, context)
+                .map(|suspects| (suspects, Vec::new()))
+        }
+    }
+
+    #[test]
+    fn neutral_view_runs_on_initial_and_follow_up_safety_scans() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let neutral_calls = Arc::new(AtomicUsize::new(0));
+        let pipeline = traced_email_pipeline(NeutralOnlySafetyNet {
+            calls: Arc::clone(&calls),
+            neutral_calls: Arc::clone(&neutral_calls),
+        });
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let raw = "alice@example.invalid met Dr. Schmidt";
+        let (clean, manifest, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                raw,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .expect("neutral finding resolves");
+        let CleanDocument::Text(clean) = clean else {
+            panic!("text document expected");
+        };
+        assert_eq!(manifest.len(), 2);
+        assert_eq!(trace.len(), 2);
+        assert_eq!(trace[1].stage(), "safety_net");
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+        assert!(calls.load(Ordering::Relaxed) >= 2);
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            neutral_calls.load(Ordering::Relaxed)
+        );
     }
 
     #[test]

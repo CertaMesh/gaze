@@ -39,7 +39,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 
 
-GENERATOR_VERSION = 5
+GENERATOR_VERSION = 6
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -1792,9 +1792,424 @@ def check_lookalike_pairs(records: Sequence[Record]) -> None:
             raise LayerError(f"{cell.family} and its twin {cell.twin.family} differ in shape or position")
 
 
+# --------------------------------------------------------------------------
+# Address blocks (generator v6). An address is personal data as a
+# unit: a street, its house number, a secondary unit (`Suite 312`, `Apt. 771`,
+# `Wohnung 4`, `3. Etage`), a PO box or Postfach, a US military line
+# (`PSC 5512, Box 7730, APO AP ...`), the city, the state and the postcode.
+# Layer A writes whole addresses in prose, in multi-line blocks, in a log
+# field, split across CSV columns and in tool JSON, and every part is gold
+# under the Kiji address labels; the separators between parts are not gold.
+# Some cells also put a benign designator (`test Suite 4`, a team's
+# `Postfach`) after the address, recorded as a decoy: an address rule that
+# swallows it pays in false-positive bytes. Layer D writes the same designator
+# words with no address anywhere. Every value is synthetic: invented street
+# and city names, US ZIPs in the unassigned `000xx` range, German PLZ in the
+# unassigned `00xxx` range and GB postcodes in the unused `ZZ` area. Every
+# number range, like every name pool, is split between the partitions.
+
+ADDRESS_SURFACES = ("address_prose", "address_block", "address_log_kv", "address_csv", "address_tool_json")
+DOCS_PER_ADDRESS_CELL = {LAYER_IDENTIFIERS: 6, LAYER_LOOKALIKES: 4}
+ADDRESS_LABELS = frozenset({"BUILDINGNUM", "CITY", "STATE", "STREET", "ZIPCODE"})
+
+
+class Designator(str, Enum):
+    """The secondary-unit or box word a cell exercises."""
+    SUITE = "suite"
+    APARTMENT = "apartment"
+    UNIT = "unit"
+    FLAT = "flat"
+    FLOOR = "floor"
+    PO_BOX = "po_box"
+    MILITARY = "military"
+    WOHNUNG = "wohnung"
+    ETAGE = "etage"
+    POSTFACH = "postfach"
+
+
+# How each designator is written; {n} is the unit or box number.
+DESIGNATOR_FORMS: dict[Designator, tuple[str, ...]] = {
+    Designator.SUITE: ("Suite {n}", "Ste. {n}", "STE {n}"),
+    Designator.APARTMENT: ("Apt. {n}", "Apt {n}", "Apartment {n}"),
+    Designator.UNIT: ("Unit {n}", "Unit #{n}"),
+    Designator.FLAT: ("Flat {n}",),
+    Designator.FLOOR: ("Floor {n}", "Fl. {n}"),
+    Designator.PO_BOX: ("PO Box {n}", "P.O. Box {n}"),
+    Designator.MILITARY: ("PSC {n}", "Unit {n}", "CMR {n}"),
+    Designator.WOHNUNG: ("Wohnung {n}", "Whg. {n}"),
+    Designator.ETAGE: ("{n}. Etage", "{n}. Stock", "{n}. OG"),
+    Designator.POSTFACH: ("Postfach {n}",),
+}
+# The word that makes a value this designator's; checked on every A unit
+# value and every D decoy, so a cell cannot drift away from its twin.
+DESIGNATOR_WORDS: dict[Designator, str] = {
+    Designator.SUITE: r"\b(?:Suite|Ste\.?|STE)\b",
+    Designator.APARTMENT: r"\b(?:Apt\.?|Apartment)\b",
+    Designator.UNIT: r"\bUnit\b",
+    Designator.FLAT: r"\bFlat\b",
+    Designator.FLOOR: r"\b(?:Floor|Fl\.)",
+    Designator.PO_BOX: r"\b(?:PO|P\.O\.) Box\b",
+    Designator.MILITARY: r"\b(?:PSC|Unit|CMR|Box)\b",
+    Designator.WOHNUNG: r"\b(?:Wohnung|Whg\.)",
+    Designator.ETAGE: r"\. (?:Etage|Stock|OG)\b",
+    Designator.POSTFACH: r"\bPostfach\b",
+}
+# A unit's spelling: the value with its number replaced by `{n}`. Coverage
+# is checked per spelling, because a rule can match `Ste.` and not `Suite`.
+_SPELLING_NUMBER = r"\d+[A-C]?"
+
+
+def designator_spelling(value: str) -> str:
+    import re
+
+    return re.sub(_SPELLING_NUMBER, "{n}", value)
+
+
+# Plausible number ranges per partition, disjoint so no gold value repeats
+# across partitions; every other designator takes the default.
+DESIGNATOR_NUMBERS: dict[Designator | None, dict[str, tuple[int, int]]] = {
+    None: {"dev": (2, 489), "test": (490, 980)},
+    Designator.FLOOR: {"dev": (1, 30), "test": (31, 60)},
+    Designator.FLAT: {"dev": (1, 60), "test": (61, 120)},
+    Designator.ETAGE: {"dev": (1, 4), "test": (5, 9)},
+}
+HOUSE_NUMBERS = {
+    "dev": {"DE": (1, 99), "GB": (1, 99), "US": (1000, 4999)},
+    "test": {"DE": (100, 199), "GB": (200, 299), "US": (5000, 9899)},
+}
+MILITARY_BOX_NUMBERS = {"dev": (100, 4999), "test": (5000, 9899)}
+
+ADDRESS_STREET_STEMS = {
+    "dev": ("Kalvik", "Morrowind", "Tesselby", "Brandlow", "Quenmoor", "Ostravel"),
+    "test": ("Varnholt", "Elsmeré", "Corvath", "Pellinor", "Drusk", "Havelmoor"),
+}
+ADDRESS_STREET_SUFFIXES = {
+    "US": ("Road", "Street", "Avenue", "Lane", "Drive"),
+    "GB": ("Road", "Close", "Crescent", "Mews"),
+    "DE": ("straße", "weg", "gasse", "allee"),
+}
+ADDRESS_CITIES = {
+    "dev": {"US": ("Trelling", "Ashvale Point", "Norhaven"), "GB": ("Upper Brackwell", "Fennick"),
+            "DE": ("Halbruck", "Oberkessel", "Lindmar")},
+    "test": {"US": ("Brinmoor", "Calder Rise", "Westmere Falls"), "GB": ("Lower Tavistead", "Quellby"),
+             "DE": ("Kornhelm", "Wiesenthal-Nord", "Tervelau")},
+}
+US_STATES = {"dev": ("OR", "WA", "CO", "MN"), "test": ("IL", "NV", "VT", "NM")}
+MILITARY_POST_OFFICES = {"dev": ("FPO",), "test": ("APO", "DPO")}
+MILITARY_STATES = {"dev": ("AA",), "test": ("AE", "AP")}
+
+
+def _address_zip(rng: Rng, partition: str, region: str) -> str:
+    if region == "GB":
+        district = {"dev": 1, "test": 2}[partition]
+        return f"ZZ{district}{rng.below(10)} {rng.between(1, 9)}ZZ"
+    low, high = {
+        ("US", "dev"): (10, 49), ("US", "test"): (50, 99),
+        ("DE", "dev"): (100, 499), ("DE", "test"): (500, 999),
+    }[(region, partition)]
+    return f"{rng.between(low, high):05d}"
+
+
+def _designator(rng: Rng, partition: str, designator: Designator, forms: Sequence[str], index: int) -> str:
+    """The `index`-th document's unit: spellings rotate, so every spelling of
+    a cell is generated whenever the cell has as many documents."""
+    number = str(rng.between(*DESIGNATOR_NUMBERS.get(designator, DESIGNATOR_NUMBERS[None])[partition]))
+    if designator in (Designator.APARTMENT, Designator.FLAT) and rng.below(3) == 0:
+        number += rng.choice(("A", "B", "C"))
+    return forms[index % len(forms)].format(n=number)
+
+
+@dataclass(frozen=True)
+class AddressCell:
+    """One layer A cell: an address, every part gold, in one surface.
+
+    {HN} house number, {ST} street, {UN} the designator's unit, {CI} city,
+    {SA} state, {ZP} postcode; a military cell writes {UN} {BX}, {MC} {MS}
+    {ZP}. {X} is an optional benign designator recorded as a decoy.
+    """
+    family: str
+    designator: Designator | None
+    region: str
+    surface: str
+    templates: Mapping[str, str]
+    decoy: Designator | None = None
+
+
+@dataclass(frozen=True)
+class DesignatorTwin:
+    """One layer D cell: a designator word and number with no address."""
+    family: str
+    designator: Designator
+    surface: str
+    region: str
+    templates: Mapping[str, str]
+    # Spellings in place of the designator's own (the military `Box N`).
+    forms: tuple[str, ...] | None = None
+
+    @property
+    def spellings(self) -> tuple[str, ...]:
+        return self.forms or DESIGNATOR_FORMS[self.designator]
+
+
+def _address(family: str, designator: Designator | None, region: str, surface: str, dev: str, test: str,
+             decoy: Designator | None = None) -> AddressCell:
+    return AddressCell(family, designator, region, f"address_{surface}", {"dev": dev, "test": test}, decoy)
+
+
+def _designator_twin(family: str, designator: Designator, surface: str, region: str, dev: str, test: str,
+                     forms: tuple[str, ...] | None = None) -> DesignatorTwin:
+    return DesignatorTwin(family, designator, f"address_{surface}", region, {"dev": dev, "test": test}, forms)
+
+
+D_ = Designator
+ADDRESS_CELLS = (
+    _address("address_us_suite_prose", D_.SUITE, "US", "prose",
+             "Please ship the replacement to {HN} {ST} {UN}, {CI}, {SA} {ZP} by Friday.",
+             "Deliver the parcel to {HN} {ST} {UN}, {CI}, {SA} {ZP} before noon."),
+    _address("address_us_apartment_prose", D_.APARTMENT, "US", "prose",
+             "Her new address is {HN} {ST} {UN}, {CI}, {SA} {ZP}.",
+             "He moved to {HN} {ST}, {UN}, {CI}, {SA} {ZP} last month."),
+    _address("address_us_unit_block", D_.UNIT, "US", "block",
+             "Mailing address:\n{HN} {ST}, {UN}\n{CI}, {SA} {ZP}",
+             "Send the signed form to\n{HN} {ST} {UN}\n{CI}, {SA} {ZP}\nThanks."),
+    _address("address_us_po_box_prose", D_.PO_BOX, "US", "prose",
+             "Mail the cheque to {UN}, {CI}, {SA} {ZP}.",
+             "Our remittance address is {UN}, {CI}, {SA} {ZP}, not the office."),
+    _address("address_us_floor_log", D_.FLOOR, "US", "log_kv",
+             'level=info event=shipment.create address="{HN} {ST}, {UN}, {CI}, {SA} {ZP}" status=queued',
+             'svc=orders op=ship to="{HN} {ST} {UN}, {CI}, {SA} {ZP}" result=ok'),
+    _address("address_us_suite_csv", D_.SUITE, "US", "csv",
+             "ref,street,unit,city,state,zip\n7,{HN} {ST},{UN},{CI},{SA},{ZP}\n",
+             "record_no,address_line1,address_line2,city,state,postal\n9,{HN} {ST},{UN},{CI},{SA},{ZP}\n"),
+    _address("address_us_apartment_json_fields", D_.APARTMENT, "US", "tool_json",
+             '{"customer":{"shipping":{"line1":"{HN} {ST}","line2":"{UN}","city":"{CI}","state":"{SA}","zip":"{ZP}"}}}',
+             '{"order":{"recipient":{"street":"{HN} {ST}","unit":"{UN}","city":"{CI}","region":"{SA}","postalCode":"{ZP}"}}}'),
+    _address("address_us_suite_json_line", D_.SUITE, "US", "tool_json",
+             '{"ticket":{"note":"Customer moved.","address":"{HN} {ST} {UN}, {CI}, {SA} {ZP}"}}',
+             '{"order":{"deliverTo":"{HN} {ST} {UN}, {CI}, {SA} {ZP}","priority":"normal"}}'),
+    _address("address_us_state_block", None, "US", "block",
+             "Billing address\n{HN} {ST}\n{CI}, {SA} {ZP}",
+             "Return label:\n{HN} {ST}\n{CI} {SA} {ZP}\n"),
+    _address("address_military_prose", D_.MILITARY, "US", "prose",
+             "Forward it to {UN}, {BX}, {MC} {MS} {ZP}.",
+             "Send the care package to {UN} {BX}, {MC} {MS} {ZP} this week."),
+    _address("address_military_block", D_.MILITARY, "US", "block",
+             "Mail goes to:\n{UN}, {BX}\n{MC} {MS} {ZP}",
+             "Ship to:\n{UN}, {BX}\n{MC} {MS} {ZP}\n"),
+    _address("address_us_decoy_after", None, "US", "prose",
+             "Ship to {HN} {ST}, {CI}, {SA} {ZP}. Then rerun test {X} before the release.",
+             "Deliver to {HN} {ST}, {CI}, {SA} {ZP}.\nThe regression {X} is still red.",
+             decoy=D_.SUITE),
+    _address("address_gb_flat_prose", D_.FLAT, "GB", "prose",
+             "Post the keys to {UN}, {HN} {ST}, {CI} {ZP}.",
+             "Please send it to {UN}, {HN} {ST}, {CI} {ZP} by Monday."),
+    _address("address_de_house_number_prose", None, "DE", "prose",
+             "Bitte an {ST} {HN}, {ZP} {CI} liefern.",
+             "Die neue Anschrift lautet {ST} {HN}, {ZP} {CI}."),
+    _address("address_de_wohnung_block", D_.WOHNUNG, "DE", "block",
+             "Anschrift:\n{ST} {HN}, {UN}\n{ZP} {CI}",
+             "Lieferadresse\n{ST} {HN}\n{UN}\n{ZP} {CI}"),
+    _address("address_de_etage_prose", D_.ETAGE, "DE", "prose",
+             "Wir sitzen in der {ST} {HN}, {UN}, {ZP} {CI}.",
+             "Das Büro ist in der {ST} {HN}, {UN}, {ZP} {CI}."),
+    _address("address_de_wohnung_csv", D_.WOHNUNG, "DE", "csv",
+             "kunde_nr,strasse,zusatz,plz,ort\n4,{ST} {HN},{UN},{ZP},{CI}\n",
+             "nr,anschrift,zusatz,plz,ort\n8,{ST} {HN},{UN},{ZP},{CI}\n"),
+    _address("address_de_postfach_json", D_.POSTFACH, "DE", "tool_json",
+             '{"kunde":{"anschrift":"{UN}, {ZP} {CI}"}}',
+             '{"empfaenger":{"zustellung":"{UN}","plz":"{ZP}","ort":"{CI}"}}'),
+    _address("address_de_decoy_after", None, "DE", "prose",
+             "Lieferung an {ST} {HN}, {ZP} {CI}. Die Rückmeldung liegt in {X} des Teams.",
+             "Zustellung: {ST} {HN}, {ZP} {CI}\nDie Antwort liegt in {X} der Buchhaltung.",
+             decoy=D_.POSTFACH),
+)
+
+# Layer D. {X} is the benign designator; no street, city or postcode anywhere.
+ADDRESS_TWINS = (
+    _designator_twin("designator_suite_prose", D_.SUITE, "prose", "US",
+                     "Run test {X} before merging.", "The regression {X} took four minutes."),
+    _designator_twin("designator_suite_log", D_.SUITE, "log_kv", "US",
+                     'level=info event=ci.run target="{X}" result=passed',
+                     'svc=ci op=run suite="{X}" result=green'),
+    _designator_twin("designator_apartment_prose", D_.APARTMENT, "prose", "US",
+                     "The rental board lists {X} as vacant.", "In the floor plan, {X} has two windows."),
+    _designator_twin("designator_unit_prose", D_.UNIT, "prose", "US",
+                     "Read {X} of the course before Monday.", "{X} of the workbook covers fractions."),
+    _designator_twin("designator_flat_csv", D_.FLAT, "csv", "GB",
+                     "plan,fee\nbasic,{X}\n", "tier,charge\nstarter,{X}\n"),
+    _designator_twin("designator_floor_prose", D_.FLOOR, "prose", "US",
+                     "The printer on {X} is jammed again.", "Coffee is on {X} today."),
+    _designator_twin("designator_po_box_json", D_.PO_BOX, "tool_json", "US",
+                     '{"form":{"field":"{X}","required":false}}',
+                     '{"template":{"placeholder":"{X}","visible":true}}'),
+    _designator_twin("designator_military_prose", D_.MILITARY, "prose", "US",
+                     "The {X} steering group meets at ten.", "Minutes from {X} are attached."),
+    _designator_twin("designator_box_prose", D_.MILITARY, "prose", "US",
+                     "Put the spare cables in {X} on the top shelf.", "The returns are packed in {X} by the door.",
+                     forms=("Box {n}",)),
+    _designator_twin("designator_wohnung_prose", D_.WOHNUNG, "prose", "DE",
+                     "Im Exposé ist {X} bereits reserviert.", "Im Grundriss hat {X} einen Balkon."),
+    _designator_twin("designator_etage_prose", D_.ETAGE, "prose", "DE",
+                     "Der Aufzug hält im {X} nicht.", "Der Drucker im {X} ist leer."),
+    _designator_twin("designator_postfach_log", D_.POSTFACH, "log_kv", "DE",
+                     'level=warn event=mailbox.full target="{X}"',
+                     'svc=mail op=sync folder="{X}" result=ok'),
+)
+del D_
+
+
+def _address_fields(cell: AddressCell, rng: Rng, partition: str, index: int) -> dict[str, tuple[str, str | None]]:
+    region = cell.region
+    stem = rng.choice(ADDRESS_STREET_STEMS[partition])
+    suffix = rng.choice(ADDRESS_STREET_SUFFIXES[region])
+    street = f"{stem}{suffix}" if region == "DE" else f"{stem} {suffix}"
+    house = str(rng.between(*HOUSE_NUMBERS[partition][region]))
+    if region == "DE" and rng.below(4) == 0:
+        house += rng.choice(("a", "b"))
+    fields: dict[str, tuple[str, str | None]] = {
+        "HN": (house, "BUILDINGNUM"),
+        "ST": (street, "STREET"),
+        "CI": (rng.choice(ADDRESS_CITIES[partition][region]), "CITY"),
+        "SA": (rng.choice(US_STATES[partition]), "STATE"),
+        "ZP": (_address_zip(rng, partition, region), "ZIPCODE"),
+    }
+    if cell.designator is Designator.MILITARY:
+        fields |= {
+            "UN": (_designator(rng, partition, Designator.MILITARY, DESIGNATOR_FORMS[Designator.MILITARY], index),
+                   "STREET"),
+            "BX": (f"Box {rng.between(*MILITARY_BOX_NUMBERS[partition])}", "BUILDINGNUM"),
+            "MC": (rng.choice(MILITARY_POST_OFFICES[partition]), "CITY"),
+            "MS": (rng.choice(MILITARY_STATES[partition]), "STATE"),
+        }
+    elif cell.designator is not None:
+        fields["UN"] = (_designator(rng, partition, cell.designator, DESIGNATOR_FORMS[cell.designator], index),
+                        "BUILDINGNUM")
+    if cell.decoy is not None:
+        fields["X"] = (_designator(rng, partition, cell.decoy, DESIGNATOR_FORMS[cell.decoy], index),
+                       DECOY_PREFIX + "benign")
+    return fields
+
+
+ADDRESS_LANGUAGE = {"US": "en", "GB": "en", "DE": "de"}
+
+
+def _address_records(cells: Sequence[AddressCell | DesignatorTwin], partition: str, layer: str) -> list[Record]:
+    seed = PARTITION_SEEDS[partition]
+    records: list[Record] = []
+    for cell in cells:
+        rng = Rng(seed, f"{layer}/address/{cell.family}")
+        for index in range(DOCS_PER_ADDRESS_CELL[layer]):
+            if isinstance(cell, AddressCell):
+                fields = _address_fields(cell, rng, partition, index)
+            else:
+                fields = {"X": (_designator(rng, partition, cell.designator, cell.spellings, index),
+                                DECOY_PREFIX + "benign")}
+            text, gold, decoys = _fill_with_decoys(cell.templates[partition], fields)
+            records.append(Record(
+                uid=f"agentic-{partition}-{layer}-{cell.family}-{index:03d}-{cell.surface}",
+                partition=partition, layer=layer, family=cell.family, surface=cell.surface,
+                validity=UNCHECKED if layer == LAYER_IDENTIFIERS else BENIGN,
+                group=f"{partition}-{layer}-{cell.family}-{index:03d}",
+                template=f"address/{cell.family}/{partition}",
+                language=ADDRESS_LANGUAGE[cell.region], region=cell.region,
+                text=text, gold=gold, decoys=decoys,
+            ))
+    return records
+
+
+# The label each address placeholder is scored under; `UN` is a street line
+# in a military address and a building number everywhere else.
+ADDRESS_PART_LABELS = {
+    "HN": "BUILDINGNUM", "ST": "STREET", "CI": "CITY", "SA": "STATE", "ZP": "ZIPCODE",
+    "BX": "BUILDINGNUM", "MC": "CITY", "MS": "STATE",
+}
+_ADDRESS_PLACEHOLDER = r"\{(HN|ST|UN|CI|SA|ZP|BX|MC|MS)\}"
+
+
+def required_address_parts(cell: AddressCell) -> set[str]:
+    """The placeholders a cell's shape must write, each exactly once."""
+    if cell.designator is Designator.MILITARY:
+        return {"UN", "BX", "MC", "MS", "ZP"}
+    parts = {"CI", "ZP"} | ({"SA"} if cell.region == "US" else set())
+    if cell.designator in (Designator.PO_BOX, Designator.POSTFACH):
+        return parts | {"UN"}
+    return parts | {"HN", "ST"} | ({"UN"} if cell.designator is not None else set())
+
+
+def address_part_values(record: Record, cell: AddressCell) -> list[tuple[str, Gold]]:
+    """Each gold span with the placeholder that wrote it, in text order.
+
+    Fails closed unless every placeholder of the template is gold under its
+    own label, so a house number and a unit (both BUILDINGNUM) are told apart.
+    """
+    import re
+
+    parts = re.findall(_ADDRESS_PLACEHOLDER, cell.templates[record.partition])
+    gold = sorted(record.gold, key=lambda span: span.start)
+    if len(parts) != len(gold):
+        raise LayerError(f"{record.uid}: {len(gold)} gold parts for placeholders {parts}")
+    labels = {**ADDRESS_PART_LABELS, "UN": "STREET" if cell.designator is Designator.MILITARY else "BUILDINGNUM"}
+    for part, span in zip(parts, gold):
+        if span.label != labels[part]:
+            raise LayerError(f"{record.uid}: placeholder {part} is gold {span.label}, not {labels[part]}")
+    return list(zip(parts, gold))
+
+
+def check_address_cells(records: Sequence[Record]) -> None:
+    """Fail closed unless every A address is whole, part by part, and every
+    unit spelling it scores has a layer D twin spelled the same way."""
+    import re
+
+    cells = {cell.family: cell for cell in ADDRESS_CELLS}
+    twins = {twin.family: twin for twin in ADDRESS_TWINS}
+    for cell in ADDRESS_CELLS:
+        for partition, template in cell.templates.items():
+            parts = re.findall(_ADDRESS_PLACEHOLDER, template)
+            if sorted(parts) != sorted(required_address_parts(cell)):
+                raise LayerError(
+                    f"{cell.family}/{partition}: placeholders {sorted(parts)} are not the shape's "
+                    f"{sorted(required_address_parts(cell))}"
+                )
+    used = {c.designator for c in ADDRESS_CELLS} | {c.decoy for c in ADDRESS_CELLS}
+    unused = sorted(t.family for t in ADDRESS_TWINS if t.designator not in used)
+    if unused:
+        raise LayerError(f"layer D designator twins no layer A cell uses: {unused}")
+    positive: dict[str, str] = {}
+    benign: set[str] = set()
+    for record in records:
+        if not record.surface.startswith("address_"):
+            continue
+        if record.layer == LAYER_IDENTIFIERS:
+            cell = cells[record.family]
+            units = [span for part, span in address_part_values(record, cell) if part in ("UN", "BX")]
+            if cell.designator is not None and not any(
+                re.search(DESIGNATOR_WORDS[cell.designator], span.value) for span in units
+            ):
+                raise LayerError(f"{record.uid}: no gold part carries the {cell.designator.value} designator")
+            for span in units:
+                positive.setdefault(designator_spelling(span.value), record.uid)
+            decoy = cell.decoy
+        else:
+            if record.gold:
+                raise LayerError(f"{record.uid}: a layer D designator twin carries gold")
+            decoy = twins[record.family].designator
+            benign.update(designator_spelling(d.value) for d in record.decoys)
+        if decoy is None:
+            if record.decoys:
+                raise LayerError(f"{record.uid}: an undeclared decoy")
+            continue
+        if len(record.decoys) != 1 or not re.search(DESIGNATOR_WORDS[decoy], record.decoys[0].value):
+            raise LayerError(f"{record.uid}: expected one {decoy.value} decoy")
+        if record.layer == LAYER_LOOKALIKES and re.search(r"\d{5}|ZZ\d", record.text):
+            raise LayerError(f"{record.uid}: a designator twin carries a postcode shape")
+    uncovered = sorted(set(positive) - benign)
+    if uncovered:
+        raise LayerError(f"unit spellings with no layer D counterweight: {uncovered} (first in {positive[uncovered[0]]})")
+
+
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one.
-GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_"}
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_"}
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
@@ -1806,7 +2221,10 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 
 # The committed contract each older generator version was scored under.
-HISTORICAL_CONTRACTS = {4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json")}
+HISTORICAL_CONTRACTS = {
+    4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json"),
+    5: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v5.json"),
+}
 
 
 def corpus_identity(repo_root: Path, version: int) -> tuple[str, str]:
@@ -2040,8 +2458,11 @@ def generate(partition: str) -> list[Record]:
         + _adjacency_records(partition, LAYER_LOOKALIKES)
         + _labelled_lookalike_records(LOOKALIKE_GOLD_CELLS, partition, LAYER_IDENTIFIERS)
         + _labelled_lookalike_records(LOOKALIKE_TWINS, partition, LAYER_LOOKALIKES)
+        + _address_records(ADDRESS_CELLS, partition, LAYER_IDENTIFIERS)
+        + _address_records(ADDRESS_TWINS, partition, LAYER_LOOKALIKES)
     )
     check_lookalike_pairs(records)
+    check_address_cells(records)
     for record in records:
         encoded = record.text.encode("utf-8")
         for gold in record.gold:
@@ -2081,8 +2502,17 @@ def manifest(partition: str, records: Sequence[Record]) -> dict[str, object]:
 # Scored-label contract for the generated corpus.
 
 
-def load_contract(repo_root: Path, path: Path | None = None) -> score.ScoredLabelContract:
-    relative = path or SCORED_LABELS_PATH
+def load_contract(
+    repo_root: Path, path: Path | None = None, version: int = GENERATOR_VERSION
+) -> score.ScoredLabelContract:
+    """The contract that rules on generator `version` (default: the current one).
+
+    A record measured on an older generator is rescored under the contract
+    committed for that version, which rules on exactly the labels it emits.
+    """
+    if path is None and version != GENERATOR_VERSION and version not in HISTORICAL_CONTRACTS:
+        raise LayerError(f"no committed scored-label contract for generator version {version}")
+    relative = path or (SCORED_LABELS_PATH if version == GENERATOR_VERSION else HISTORICAL_CONTRACTS[version])
     resolved = relative if relative.is_absolute() else repo_root / relative
     try:
         display = resolved.resolve().relative_to(repo_root.resolve()).as_posix()
@@ -2094,10 +2524,10 @@ def load_contract(repo_root: Path, path: Path | None = None) -> score.ScoredLabe
     except (score.ScoredLabelContractError, OSError, json.JSONDecodeError) as error:
         raise LayerError(str(error)) from error
     corpus = raw.get("corpus")
-    if not isinstance(corpus, dict) or corpus.get("generator_version") != GENERATOR_VERSION:
+    if not isinstance(corpus, dict) or corpus.get("generator_version") != version:
         raise LayerError(
             f"{display} rules on generator_version {corpus.get('generator_version') if isinstance(corpus, dict) else None!r}, "
-            f"but the generator is version {GENERATOR_VERSION}"
+            f"but the generator is version {version}"
         )
     return contract
 

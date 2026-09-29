@@ -20,7 +20,9 @@ from typing import Any, Callable, Mapping
 REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO / "scripts/bench"))
 from markdown_table import table_header  # noqa: E402
-from tagged_gaze import TAG, check_public  # noqa: E402
+from tagged_gaze import (  # noqa: E402
+    RELEASE_PINS, TAG, check_model_receipt, check_own_input, check_own_score, check_public, tag_commit)
+VENDOR_TUNED = Path(__file__).with_name("vendor-tuned.json")
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
 DOC = REPO / "docs/reference/benchmarks/README.md"
 BLOCK = "their-benchmarks"
@@ -149,6 +151,160 @@ def public_rows(rows: Mapping[str, Any]) -> list[str]:
     return [*tagged, *other]
 
 
+def _crates_tree(commit: str) -> str:
+    return subprocess.check_output(["git", "rev-parse", f"{commit}:crates"], cwd=REPO, text=True).strip()
+
+
+def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any],
+               resolve: Callable[[str], tuple[str, str]] | None = None) -> str:
+    """Merge one tagged Gaze row (theirbench.py --gaze-release-tag) into the aggregate.
+
+    The row joins only if the report measured the same benchmark identity, roster labels,
+    splits, label maps and pinned comparison code as the committed entry; came from a clean
+    harness and a clean checkout of the tag, with a binary built from it, the release's pinned
+    policy and model digests, and a second run that reproduced its predictions byte for byte.
+    `resolve(tag)` returns (commit, crates tree) of the tag; tests inject it.
+    """
+    if report.get("preflight") or report.get("harness_dirty") or report.get("schema_version") != 1:
+        raise ValueError("only a clean, full, schema-1 report can add a tagged row")
+    name = report["benchmark"]
+    entry = data["benchmarks"][name]
+    for key in ("identity", "common_intersection_labels", "splits", "label_maps_sha256",
+                "mapping_sha256", "typed_hold"):
+        if report[key] != entry[key]:
+            raise ValueError(f"{name}: the report's {key} differs from the committed entry")
+    # The committed rows were rescored with today's pinned metric code; the new row was
+    # measured with it, so it must equal the rescore's pins, not the original measurement's.
+    if report["comparison_sha256"] != entry["rescored_with"]["comparison_sha256"]:
+        raise ValueError(f"{name}: the report used different pinned comparison code")
+    rows = [tool for tool in report["rows"] if is_tagged_gaze_row(tool)]
+    if len(rows) != 1 or len(report["rows"]) != 1:
+        raise ValueError("the report must hold exactly one gaze-vX.Y.Z row and nothing else")
+    row = rows[0]
+    release = report["provenance"][row].get("release")
+    if not release or f"gaze-{release['tag']}" != row:
+        raise ValueError(f"{row}: provenance does not name the release checkout it was measured from")
+    if row in entry["rows"]:
+        raise ValueError(f"{row} is already in {name}")
+    if own["system"] != row:
+        raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
+    check_own_result(name, entry, row, own, release["prediction_sha256"])
+    _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
+    scored = own.get("scored") or own["overall"]
+    entry["rows"][row] = report["rows"][row]["test"]
+    entry["own_metric"][row] = scored
+    entry["provenance"][row] = {**report["provenance"][row], "own_scorer_input": own["input"]}
+    reproduced = release["reproduces"]
+    entry.setdefault("tagged_measurements", {})[row] = {
+        "harness_revision": report["harness_revision"], "harness_dirty": False,
+        "hardware": report["hardware"], "generated_at": report["generated_at"],
+        "runs": [
+            {"prediction_sha256": reproduced["prediction_sha256"], "binary_sha256": reproduced["binary_sha256"],
+             "harness_revision": reproduced["harness_revision"]},
+            {"prediction_sha256": release["prediction_sha256"], "binary_sha256": release["build"]["binary_sha256"],
+             "harness_revision": release["measured_with"]["harness_revision"]},
+        ],
+    }
+    return row
+
+
+def source_text(url: str) -> str:
+    """`https://github.com/<org>/<repo>/blob/<sha>/<path>` as `<org>/<repo> <path>`.
+
+    The page states the source as text: a published-docs scrub tokenizes a bare deep link,
+    and the repository, path and commit identify it without one.
+    """
+    head, _, rest = url.removeprefix("https://github.com/").partition("/blob/")
+    return f"`{head}` `{rest.partition('/')[2]}`"
+
+
+def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any],
+              declaration: Mapping[str, Any]) -> str:
+    """Merge a vendor's own tuned setup (theirbench.py --vendor-tuned) into the aggregate.
+
+    The benchmark's `vendor_tuned` entry then replaces that family's declared bar on the panel:
+    a vendor's own benchmark is charted against the vendor's best published setup. The row joins
+    only if the report measured the same identity, labels, splits, label maps and pinned code as
+    the committed entry, from a clean harness, and the provenance names the declared setup, its
+    source and commit; the own-scorer result must be the notebook-5 replay of the same spans.
+    """
+    if report.get("preflight") or report.get("harness_dirty") or report.get("schema_version") != 1:
+        raise ValueError("only a clean, full, schema-1 report can add a vendor-tuned row")
+    name = report["benchmark"]
+    entry = data["benchmarks"][name]
+    for key in ("identity", "common_intersection_labels", "splits", "label_maps_sha256",
+                "mapping_sha256", "typed_hold"):
+        if report[key] != entry[key]:
+            raise ValueError(f"{name}: the report's {key} differs from the committed entry")
+    if report["comparison_sha256"] != entry["rescored_with"]["comparison_sha256"]:
+        raise ValueError(f"{name}: the report used different pinned comparison code")
+    row = declaration["row"]
+    if list(report["rows"]) != [row]:
+        raise ValueError(f"the report must hold exactly the vendor-tuned row {row} and nothing else")
+    tuned = report["provenance"][row].get("vendor_tuned")
+    if not tuned or any(tuned.get(key) != declaration[key] for key in ("setup", "source", "commit", "caption")):
+        raise ValueError(f"{row}: provenance does not match the declared vendor setup")
+    if tuned["producer"].get("smoke_limit") or tuned["producer"]["raw_sha256"] != tuned["raw_sha256"]:
+        raise ValueError(f"{row}: the producer record is a smoke run or does not describe the findings")
+    check_model_receipt(tuned["producer"].get("openmed", {}), declaration["model"], row)
+    if tuned["producer"].get("dataset_sha256") != dataset_sha256(name, entry):
+        raise ValueError(f"{row}: the producer ran on a different dataset than the pinned one")
+    if row in entry["rows"] or "vendor_tuned" in entry:
+        raise ValueError(f"{name} already has a vendor-tuned row")
+    if own["system"] != row or not own.get("tuned_replay") or own.get("smoke_limit"):
+        raise ValueError(f"the own-scorer result must be the full notebook-5 replay of {row}")
+    check_own_result(name, entry, row, own, tuned["prediction_sha256"])
+    if not entry["reproduction"].get("reproduced", {}).get("custom"):
+        raise ValueError(f"{name}: the vendor's tuned number must be reproduced first")
+    entry["rows"][row] = report["rows"][row]["test"]
+    entry["own_metric"][row] = own["scored"]
+    entry["provenance"][row] = {**report["provenance"][row], "own_scorer_input": own["input"]}
+    entry["vendor_tuned"] = {declaration["family"]: {key: declaration[key] for key in (
+        "row", "bar_name", "caption", "setup", "source", "commit")}}
+    entry["chart_rows"] = [row if chosen == f"{declaration['family']}-strong" else chosen
+                           for chosen in entry["chart_rows"]]
+    if row not in entry["chart_rows"]:
+        raise ValueError(f"{name}: no declared {declaration['family']} chart row to replace")
+    entry["tuned_measurement"] = {
+        "harness_revision": report["harness_revision"], "hardware": report["hardware"],
+        "generated_at": report["generated_at"], "own_evaluator_commit": own["evaluator_commit"]}
+    return row
+
+
+def _check_release(row: str, release: Mapping[str, Any], resolve: Callable[[str], tuple[str, str]]) -> None:
+    """The release provenance must tie the numbers to the tag, one build, the pins and a reproduction."""
+    tag = release["tag"]
+    commit, tree = resolve(tag)
+    if release["commit"] != commit or release["crates_tree"] != tree:
+        raise ValueError(f"{row}: provenance names {release['commit'][:12]}/{release['crates_tree'][:12]}, "
+                         f"the tag is {commit[:12]}/{tree[:12]}")
+    pins = RELEASE_PINS.get(tag)
+    if pins is None or any(release.get(key) != value for key, value in pins.items()):
+        raise ValueError(f"{row}: policy or model digests differ from the pinned ones for {tag}")
+    build = release.get("build")
+    if not build or not build.get("binary_sha256") or "safety-net-nym" not in build.get("command", ""):
+        raise ValueError(f"{row}: no build record: the binary must be built from the tag by the harness")
+    if release.get("measured_with", {}).get("harness_dirty") is not False:
+        raise ValueError(f"{row}: measured with a dirty or unrecorded harness")
+    reproduced = release.get("reproduces")
+    if (not reproduced or reproduced["prediction_sha256"] != release.get("prediction_sha256")
+            or reproduced.get("harness_dirty") is not False):
+        raise ValueError(f"{row}: no clean earlier run reproduces these predictions")
+
+
+def check_own_result(name: str, entry: Mapping[str, Any], row: str, own: Mapping[str, Any],
+                     prediction_sha256: str) -> None:
+    """The one check both merge paths run on a vendor evaluator's result: it read this row's
+    predictions on the pinned dataset, and its published score is what its counts give."""
+    check_own_input(own, prediction_sha256, dataset_sha256(name, entry), row)
+    check_own_score(own, entry["splits"]["test"]["documents"], row)
+
+
+def dataset_sha256(name: str, entry: Mapping[str, Any]) -> str:
+    """The dataset digest the committed identity pins (Presidio Research file, PIIBench test_5k)."""
+    return entry["identity"]["sha256"] if name == "presidio-research" else entry["identity"]["test_5k_sha256"]
+
+
 def pct(value: float) -> str:
     return f"{value * 100:.1f}%"
 
@@ -259,6 +415,17 @@ def render(data: Mapping[str, Any]) -> str:
             lines.append(f"| {tool} | " + " | ".join(cell(metric, name, entry, tool)
                                                     for metric in metrics(name)) + " |")
         rescored = entry["rescored_with"]
+        for tool in (t for t in public_rows(rows) if is_tagged_gaze_row(t)):
+            measured = entry["tagged_measurements"][tool]
+            release = entry["provenance"][tool]["release"]
+            lines += ["", f"Row {tool}: a clean checkout of tag `{release['tag']}` (crates tree "
+                          f"`{release['crates_tree'][:8]}`, benchmark binary `{release['build']['binary_sha256'][:8]}`, reproduced by a second run) "
+                          f"scored with harness `{measured['harness_revision'][:8]}`; no timing is published."]
+        for family_name, choice in entry.get("vendor_tuned", {}).items():
+            lines += ["", f"Row {choice['row']}: {choice['caption']}. Setup: {choice['setup']} "
+                          f"(source {source_text(choice['source'])}, commit `{choice['commit'][:8]}`). "
+                          f"It replaces the declared {family_name} configuration on the chart panel; "
+                          "the other Presidio rows stay in this table."]
         if not any(is_tagged_gaze_row(tool) for tool in rows):
             latest = json.loads(RELEASE_HISTORY.read_text(encoding="utf-8"))["releases"][-1]["version"]
             lines += ["", f"Gaze {latest}: not yet measured on this set, so no Gaze row is shown."]
@@ -293,6 +460,14 @@ def main(argv: list[str] | None = None) -> int:
                        help="measured=<tag> or rescored=<tag>; must resolve to the recorded harness commit")
     build.add_argument("--historical", type=Path, action="append", default=[],
                        help="presidio_research_repro.py --reproduction result")
+    tagged_cmd = sub.add_parser("add-tagged", help="merge one tagged Gaze row into their-benchmarks.json")
+    tagged_cmd.add_argument("--report", type=Path, required=True)
+    tagged_cmd.add_argument("--own", type=Path, required=True, help="the row's own-scorer result")
+    tagged_cmd.add_argument("--data", type=Path, default=DATA)
+    tuned_cmd = sub.add_parser("add-tuned", help="merge a vendor's own tuned setup into their-benchmarks.json")
+    tuned_cmd.add_argument("--report", type=Path, required=True)
+    tuned_cmd.add_argument("--own", type=Path, required=True, help="presidio_research_repro.py --tuned result")
+    tuned_cmd.add_argument("--data", type=Path, default=DATA)
     show = sub.add_parser("render")
     show.add_argument("--check", action="store_true")
     show.add_argument("--data", type=Path, default=DATA)
@@ -302,6 +477,21 @@ def main(argv: list[str] | None = None) -> int:
         DATA.write_text(json.dumps(assemble(args.report, args.own, args.reproduction, args.historical,
                                        dict(item.split("=", 1) for item in args.harness_tag)), indent=2,
                                    sort_keys=True) + "\n", encoding="utf-8")
+        return 0
+    if args.command == "add-tagged":
+        data = json.loads(args.data.read_text(encoding="utf-8"))
+        row = add_tagged(data, json.loads(args.report.read_text(encoding="utf-8")),
+                         json.loads(args.own.read_text(encoding="utf-8")))
+        args.data.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"added {row}")
+        return 0
+    if args.command == "add-tuned":
+        data = json.loads(args.data.read_text(encoding="utf-8"))
+        report = json.loads(args.report.read_text(encoding="utf-8"))
+        declaration = json.loads(VENDOR_TUNED.read_text(encoding="utf-8"))[report["benchmark"]]
+        row = add_tuned(data, report, json.loads(args.own.read_text(encoding="utf-8")), declaration)
+        args.data.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"added {row}")
         return 0
     data = json.loads(args.data.read_text(encoding="utf-8"))
     current = args.doc.read_text(encoding="utf-8")
