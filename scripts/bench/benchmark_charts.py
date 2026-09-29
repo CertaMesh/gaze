@@ -19,6 +19,7 @@ row of the benchmark (the shared rule lives in `tagged_gaze.py`).
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 from xml.sax.saxutils import escape
@@ -30,6 +31,10 @@ THIRD_PARTY = (
     ("presidio-research", "Presidio Research", "F2, binary PII vs O (presidio-evaluator)"),
     ("piibench-commercial", "PIIBench-commercial", "span F1, exact span + type (PIIBench seqeval)"),
 )
+#: A vendor-tuned setup exists only where the vendor published one for the set.
+NO_VENDOR_TUNED = {
+    "PIIBench-commercial": "PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration",
+}
 SHORT_NAMES = {
     "presidio": "Presidio",
     "datafog-core": "DataFog core",
@@ -105,6 +110,11 @@ class Bar:
     leaked: int | None  # leaked PII bytes, printed under the bar
     fp_per_1k: float | None
     gaze: bool = False
+    column: str = ""  # the model-card table column this bar belongs to (default: its name)
+
+    @property
+    def table_column(self) -> str:
+        return self.column or self.name
 
 
 @dataclass(frozen=True)
@@ -117,6 +127,8 @@ class Panel:
     skipped: int = 0  # documents a declared competitor skipped (their gold counts as missed)
     refused: tuple[tuple[str, int], ...] = ()  # (Gaze bar name, refused documents)
     documents: int = 0
+    note: str = ""  # short line under the labels (drawn in the panel)
+    caption: str = ""  # the full sentence a vendor-tuned bar needs, printed under the chart
 
 
 @dataclass(frozen=True)
@@ -192,14 +204,27 @@ def third_party_panel(
         bars = [_third_party_bar(label, tagged, True)]
     else:
         bars = [Bar(label, None, None, None, gaze=True)]
+    tuned = bench.get("vendor_tuned", {})
+    notes, captions = [], []
     for key, name in declared.items():
-        bars.append(_third_party_bar(SHORT_NAMES[key], bench["rows"][name], False))
+        choice = tuned.get(key)
+        if choice is None:
+            bars.append(_third_party_bar(SHORT_NAMES[key], bench["rows"][name], False))
+            continue
+        # A vendor's own benchmark shows that vendor's best published setup, nothing else.
+        bar = _third_party_bar(choice["bar_name"], bench["rows"][choice["row"]], False)
+        bars.append(dataclasses.replace(bar, column=SHORT_NAMES[key]))
+        notes.append(f"{SHORT_NAMES[key]}: tuned for this dataset by its authors")
+        captions.append(f"{title}: {choice['caption']}")
+    if not tuned and title in NO_VENDOR_TUNED:
+        captions.append(f"{title}: {NO_VENDOR_TUNED[title]}")
     split = next(iter(bench["splits"]))
     docs = bench["splits"][split]["documents"]
     return Panel(
         title, f"{docs:,} docs, {split} split",
         "All gold labels; labels a tool cannot emit count as missed", tuple(bars),
         vendor_metric=vendor_metric, documents=docs,
+        note="; ".join(notes), caption="; ".join(captions),
     )
 
 
@@ -309,6 +334,10 @@ def _panel_svg(t: Mapping[str, str], x: float, y: float, w: float, panel: Panel,
         f'<text x="{x + 16:.1f}" y="{y + 64}" font-size="11" fill="{t["sub"]}">{escape(panel.dataset)}</text>',
         f'<text x="{x + 16:.1f}" y="{y + 79}" font-size="11" fill="{t["sub"]}">{escape(panel.labels)}</text>',
     ]
+    if panel.note:
+        o.append(f'<text x="{x + 16:.1f}" y="{y + 94}" font-size="11" font-weight="600" fill="{t["text"]}"'
+                 f' textLength="{min(len(panel.note) * 6.2, w - 32):.1f}" lengthAdjust="spacingAndGlyphs">'
+                 f'{escape(panel.note)}</text>')
     top, bot = y + 108, y + PANEL_H - 66
     ph = bot - top
     slot = (w - 2 * PAD) / len(panel.bars)
@@ -384,8 +413,8 @@ def _column_names(panel_set: Sequence[Panel]) -> list[str]:
     seen: list[str] = []
     for panel in panel_set:
         for bar in panel.bars:
-            if bar.name not in seen:
-                seen.append(bar.name)
+            if bar.table_column not in seen:
+                seen.append(bar.table_column)
     return seen
 
 
@@ -397,7 +426,7 @@ def _table(panel_set: Sequence[Panel], pick: Any, fmt: str, best: Any) -> list[s
         measured = [pick(b) for b in panel.bars if pick(b) is not None]
         top = best(measured)
         cells = []
-        by_name = {b.name: b for b in panel.bars}
+        by_name = {b.table_column: b for b in panel.bars}
         for name in columns:
             bar = by_name.get(name)
             if bar is None:
@@ -405,7 +434,7 @@ def _table(panel_set: Sequence[Panel], pick: Any, fmt: str, best: Any) -> list[s
             elif pick(bar) is None:
                 cells.append("pending")
             else:
-                text = fmt.format(pick(bar))
+                text = fmt.format(pick(bar)) + (" (tuned)" if bar.column else "")
                 cells.append(f"**{text}**" if pick(bar) == top else text)
         lines.append(f"| {panel.title} | " + " | ".join(cells) + " |")
     return lines
@@ -424,9 +453,11 @@ def model_card_tables(panel_set: Sequence[Panel]) -> str:
         "sets. Refused documents are ones Gaze failed closed on instead of cleaning: "
         f"{refused}."
     )
+    captions = [f"{panel.caption}." for panel in panel_set if panel.caption]
     return "\n".join([
         f"**{METRIC}** (higher is better; best per row in bold):", "", *f2, "",
         "**Leaked PII bytes** (lower is better; best per row in bold):", "", *leaked, "",
         "**False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):",
         "", *false_pos, "", notes,
+        *(["", *captions] if captions else []),
     ])

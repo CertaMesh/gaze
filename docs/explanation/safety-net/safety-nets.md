@@ -21,6 +21,9 @@ The observable clean text, manifest, and restore input keep the original token
 bytes. Auditing keeps its existing schema and records the resulting safety-net
 decisions. Unowned token-shaped text is untouched.
 
+Nym also scans a byte-aligned neutral view of verified tokens and joins the
+findings from both views. See [Nym's neutral token view](nym-neutral-view.md).
+
 Validator-backed self-validation is handled earlier by the deterministic
 [`validator-veto`](../detection/validator-veto.md) stage. Safety nets do not veto candidates
 and do not participate in conflict resolution.

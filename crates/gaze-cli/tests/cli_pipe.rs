@@ -1449,7 +1449,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.starts_with(
-        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\trestore_policy\trestore_decision\trestore_unknown_token_count\trestore_manifest_bypass_count\trestore_fresh_pii_count\trestore_phase_mask\trestore_trap_shape_count\n"
+        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\trestore_policy\trestore_decision\trestore_unknown_token_count\trestore_manifest_bypass_count\trestore_fresh_pii_count\trestore_phase_mask\trestore_trap_shape_count\tlabelled_value_scan_reason\n"
     ));
     assert!(
         stdout.lines().any(|line| line
@@ -2045,6 +2045,31 @@ fn s4_audit_export_jsonl_keys_match_restricted_columns() {
         String::from_utf8_lossy(&clean.stderr)
     );
 
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["audit", "query", "--audit-db", audit_path.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    let tsv = String::from_utf8(query.stdout).unwrap();
+    let mut tsv_lines = tsv.lines();
+    let header = tsv_lines.next().expect("TSV header");
+    let values = tsv_lines.next().expect("TSV row");
+    assert_eq!(
+        header.split('\t').collect::<Vec<_>>(),
+        AUDIT_RESTRICTED_COLUMNS,
+        "TSV header must match the restricted column order"
+    );
+    assert_eq!(
+        values.split('\t').count(),
+        AUDIT_RESTRICTED_COLUMNS.len(),
+        "TSV row must have one value per restricted column"
+    );
+
     let export = Command::cargo_bin("gaze")
         .unwrap()
         .args([
@@ -2091,6 +2116,7 @@ fn s4_audit_export_jsonl_keys_match_restricted_columns() {
         "audit export jsonl keys must match AUDIT_RESTRICTED_COLUMNS"
     );
     for column in [
+        "labelled_value_scan_reason",
         "restore_policy",
         "restore_decision",
         "restore_unknown_token_count",
