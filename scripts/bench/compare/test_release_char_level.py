@@ -35,6 +35,8 @@ def test_committed_file_matches_history_and_metrics() -> None:
     (lambda d: d["releases"]["v0.15.1"]["char_level"].update(recall=0.5), "stored recall"),
     (lambda d: d["releases"]["v0.15.1"]["char_level"].update(fn=10**9), "stored"),
     (lambda d: d["releases"]["v0.15.1"].update(crates_tree="0" * 40), "crates tree"),
+    (lambda d: d["releases"]["v0.15.1"].update(total_bytes=10**9), "total_bytes"),
+    (lambda d: d["releases"]["v0.15.1"].update(total_bytes=1), "total_bytes"),
 ])
 def test_check_refuses_tampered_rows(mutation, match) -> None:
     data = copy.deepcopy(DATA)
@@ -53,6 +55,7 @@ def test_a_corrupted_record_file_is_refused(tmp_path) -> None:
     """`check` hashes the committed record itself, not just the hash the history states."""
     import shutil
 
+    shutil.copy(rcl.BENCH_DIR / "comparison.json", tmp_path / "comparison.json")
     for entry in HISTORY["releases"]:
         observation = rcl.observation_of(entry)
         if observation:
@@ -93,3 +96,34 @@ def test_character_counts_cannot_exceed_the_byte_counts() -> None:
         rcl.check_char_level("v9.9.9", row)
     row["leaked_bytes"] = 10
     rcl.check_char_level("v9.9.9", row)
+
+
+def test_check_needs_only_the_tags_not_the_history_commits(monkeypatch) -> None:
+    """History commits may live only on a local branch; the check never resolves them."""
+    real = rcl.crates_tree
+    commits = {entry["commit"] for entry in HISTORY["releases"]}
+
+    def tags_only(ref: str) -> str:
+        if ref in commits:
+            raise rcl.GitError(f"cannot resolve {ref!r}: not on this remote")
+        return real(ref)
+
+    monkeypatch.setattr(rcl, "crates_tree", tags_only)
+    rcl.check(DATA, HISTORY)
+
+
+def test_a_missing_tag_is_a_readable_error_not_a_traceback(monkeypatch) -> None:
+    def missing(ref: str) -> str:
+        return real(ref if not ref.startswith("v9") else "no-such-tag")
+
+    real = rcl.crates_tree
+    with pytest.raises(rcl.GitError, match="cannot resolve 'no-such-tag'.*fetch-depth: 0"):
+        missing("v9.9.9")
+    data = copy.deepcopy(DATA)
+    data["releases"]["v9.9.9"] = copy.deepcopy(data["releases"]["v0.15.1"])
+    history = copy.deepcopy(HISTORY)
+    row = copy.deepcopy(history["releases"][-1])
+    row["version"] = "v9.9.9"
+    history["releases"].append(row)
+    with pytest.raises(rcl.GitError, match="cannot resolve 'v9.9.9'"):
+        rcl.check(data, history)

@@ -59,13 +59,22 @@ def observation_of(entry: dict) -> dict | None:
     )
 
 
-def _git(*args: str) -> str:
-    return subprocess.check_output(["git", *args], cwd=REPO, text=True, stderr=subprocess.PIPE).strip()
+class GitError(ValueError):
+    """A git object the check needs is missing (for example, tags were not fetched)."""
 
 
 def crates_tree(ref: str) -> str:
-    """The `crates/` tree of a commit or tag. Raises when git cannot resolve it."""
-    return _git("rev-parse", f"{ref}:crates")
+    """The `crates/` tree of a tag or commit, or a readable `GitError`."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", f"{ref}:crates"], cwd=REPO, text=True, stderr=subprocess.PIPE
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+        detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) else str(error)
+        raise GitError(
+            f"cannot resolve {ref!r} in git ({detail}); the docs job must fetch tags "
+            "(actions/checkout fetch-depth: 0)"
+        ) from error
 
 
 def _release_records(history: dict) -> list[dict]:
@@ -133,7 +142,11 @@ def build(dataset: Path) -> dict:
             or identity["negative_corpus_sha256"] != components["negative_corpus"]
         ):
             raise ValueError(f"{entry['version']}: the loaded corpus is not the one it was measured on")
-        releases[entry["version"]] = measure_release(entry, layers["C"], mapping, typed)
+        row = measure_release(entry, layers["C"], mapping, typed)
+        # Recording happens where the measured commit exists; the offline check reads the tag only.
+        if crates_tree(entry["commit"]) != row["crates_tree"]:
+            raise ValueError(f"{entry['version']}: the tag and the measured commit hold different crates trees")
+        releases[entry["version"]] = row
     return {
         "schema_version": SCHEMA_VERSION,
         "note": (
@@ -168,9 +181,31 @@ def check_char_level(version: str, row: dict) -> None:
                          f"{row['false_positive_bytes']} false-positive bytes")
 
 
+def check_totals(version: str, row: dict, comparison: dict) -> None:
+    """`total_bytes` divides the false-positive rate, so it must be plausible.
+
+    It is the scored documents' bytes minus contract-ignored bytes. The contract's own
+    ignored labels fix an upper bound that comparison.json's tools reach (its largest
+    layer C block total); a release's own repeat credit can only lower it. It can never
+    be smaller than what was scored as gold.
+    """
+    char = row["char_level"]
+    ceiling = max(
+        tool["contracts"]["v3"]["C"]["metrics"]["product_coverage"]["full"]["total_bytes"]
+        for tool in comparison["tools"].values()
+        if "v3" in tool["contracts"]
+    )
+    floor = char["tp"] + char["fn"]
+    if not floor <= row["total_bytes"] <= ceiling:
+        raise ValueError(f"{version}: total_bytes {row['total_bytes']} is outside [{floor}, {ceiling}]")
+    if row["false_positive_bytes"] > row["total_bytes"]:
+        raise ValueError(f"{version}: false-positive bytes exceed total_bytes")
+
+
 def check(data: dict, history: dict, bench_dir: Path = BENCH_DIR) -> None:
     """Offline consistency. Needs no corpus, but does read the committed records and
-    resolve the release tag in git (CI checks out full history for this)."""
+    resolve the release tags in git (CI fetches tags; the measured commits need not be on origin)."""
+    comparison = json.loads((bench_dir / "comparison.json").read_text(encoding="utf-8"))
     if data["metrics_sha256"] != _sha256(METRICS):
         raise ValueError("release-char-level.json was measured with another comparison_metrics.py; rerun `record`")
     for version, row in data["releases"].items():
@@ -199,12 +234,13 @@ def check(data: dict, history: dict, bench_dir: Path = BENCH_DIR) -> None:
                     f"the history's {expected}"
                 )
         check_char_level(version, row)
-        # The tag and the history's measured commit must hold the same detection code.
-        tag_tree, commit_tree = crates_tree(version), crates_tree(entry["commit"])
-        if not (row["crates_tree"] == tag_tree == commit_tree):
+        check_totals(version, row, comparison)
+        # The release tag (on origin) must still hold the detection code that was measured.
+        tag_tree = crates_tree(version)
+        if row["crates_tree"] != tag_tree:
             raise ValueError(
-                f"{version}: crates tree of the tag ({tag_tree[:12]}), the history commit "
-                f"({commit_tree[:12]}) and the stored row ({row['crates_tree'][:12]}) differ"
+                f"{version}: the tag's crates tree {tag_tree[:12]} differs from the stored "
+                f"row's {row['crates_tree'][:12]}"
             )
 
 
