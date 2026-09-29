@@ -53,6 +53,10 @@ pub struct Policy {
     pub ner: Option<NerPolicy>,
     /// Optional local date-of-birth judge. Absent means disabled.
     pub dob_judge: Option<DobJudgePolicy>,
+    /// `[address_blocks] enabled = true`: grow protection from an address
+    /// winner over the unit, box, state and post-office words beside it
+    /// (todo 4013). Absent means disabled; `gaze setup` enables it.
+    pub address_blocks: bool,
     pub rulepacks: RulepackPolicy,
     pub locale: Option<Vec<LocaleTag>>,
     /// Safety-net selection and settings from `[safety_net]`.
@@ -76,6 +80,7 @@ impl Default for Policy {
             rules: Vec::new(),
             ner: None,
             dob_judge: None,
+            address_blocks: false,
             rulepacks: RulepackPolicy::default(),
             locale: None,
             safety_net: SafetyNetBackendsPolicy::default(),
@@ -355,6 +360,8 @@ struct RawPolicy {
     #[serde(default)]
     dob_judge: Option<RawDobJudgePolicy>,
     #[serde(default)]
+    address_blocks: Option<RawAddressBlocksPolicy>,
+    #[serde(default)]
     locale: Option<RawLocalePolicy>,
     #[serde(default)]
     policy: Option<RawPolicyTables>,
@@ -421,6 +428,12 @@ struct RawNerPolicy {
     locale: Option<String>,
     #[serde(default)]
     threshold: Option<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawAddressBlocksPolicy {
+    enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -496,6 +509,7 @@ impl TryFrom<RawPolicy> for Policy {
 
         let ner = raw.ner.map(parse_ner).transpose()?;
         let dob_judge = raw.dob_judge.map(parse_dob_judge).transpose()?.flatten();
+        let address_blocks = raw.address_blocks.is_some_and(|section| section.enabled);
         let mut detectors = Vec::with_capacity(custom_recognizers.len());
         let mut dictionaries = Vec::new();
         for detector in custom_recognizers {
@@ -571,6 +585,7 @@ impl TryFrom<RawPolicy> for Policy {
             rules,
             ner,
             dob_judge,
+            address_blocks,
             rulepacks,
             locale,
             safety_net,
@@ -1137,6 +1152,23 @@ action = "tokenize"
         let raw: RawPolicy = toml::from_str(&format!("{NYM_POLICY_BASE}\n{table}"))
             .map_err(PolicyError::TomlParse)?;
         Policy::try_from(raw)
+    }
+
+    #[test]
+    fn address_blocks_are_opt_in_and_closed() {
+        assert!(!nym_policy("").unwrap().address_blocks);
+        assert!(
+            !nym_policy("[address_blocks]\nenabled = false\n")
+                .unwrap()
+                .address_blocks
+        );
+        assert!(
+            nym_policy("[address_blocks]\nenabled = true\n")
+                .unwrap()
+                .address_blocks
+        );
+        assert!(nym_policy("[address_blocks]\n").is_err());
+        assert!(nym_policy("[address_blocks]\nenabled = true\nwords = []\n").is_err());
     }
 
     #[test]

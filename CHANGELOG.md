@@ -19,7 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   boundary, and a designator with no protected address beside it stays raw.
   Words come from new `locale-en` / `locale-de` buckets; each piece's
   recognizer id (`address.block.*`, `gaze::AddressGrowth`) records why it
-  joined. See the policy reference, "Address blocks".
+  joined. It runs under the new `[address_blocks] enabled = true` policy
+  section, which `gaze setup` writes; a policy without it grows nothing. See
+  the policy reference, "Address blocks".
 
 ### Breaking
 

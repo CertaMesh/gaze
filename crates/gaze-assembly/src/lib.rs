@@ -229,7 +229,9 @@ pub fn build_pipeline_builder(
     )?;
     register_anchor_cue_bundles(&mut builder, rulepacks, active_locales);
     register_street_lexicons(&mut builder, rulepacks, active_locales);
-    register_address_vocabularies(&mut builder, rulepacks, active_locales);
+    if policy.address_blocks {
+        register_address_vocabularies(&mut builder, rulepacks, active_locales);
+    }
     ner::register_ner(&mut builder, policy, ner_threshold)?;
     ner::register_dob_judge(&mut builder, policy)?;
 

@@ -90,6 +90,10 @@ fn setup_cli_clean_tokenizes_every_bundled_class() {
     assert!(!policy.contains("[safety_net]"));
     assert!(!policy.contains("[dob_judge]"));
     let generated = gaze::Policy::load_for_cli(&policy_path).unwrap();
+    assert!(
+        generated.address_blocks,
+        "gaze setup enables address blocks"
+    );
     let declared = generated
         .rulepacks
         .bundled

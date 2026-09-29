@@ -881,6 +881,19 @@ keyword filter bypassed, the judge emitted 7/13 birth-date spans (EN 5/7, DE
 second person in a list often remain raw unless another recognizer catches
 them.
 
+### `[address_blocks]` (optional)
+
+```toml
+[address_blocks]
+enabled = true
+```
+
+Grows protection from an address winner over the unit designators, boxes,
+state codes and military post offices written beside it; see
+[Address blocks](#address-blocks-todo-4013). `gaze setup` writes this block.
+A policy without it, or with `enabled = false`, grows nothing. `enabled` is
+required and no other key is accepted.
+
 ### `[safety_net]` and `[safety_net.nym]`
 
 `backend = "nym"` activates the opt-in Nym-small safety net for CLI commands
@@ -1355,9 +1368,10 @@ recognizer id is the closed reason the piece joined, one of
 sources add the anchor's recognizer id. Pieces are `Learned` evidence, so the
 repeat-value sweep never copies `Suite 312` to a second, unanchored
 occurrence. A designator with no protected address beside it is never
-tokenized (`test Suite 4`). Adopters building a pipeline by hand register the
-words with `PipelineBuilder::register_address_vocabulary`; without them nothing
-grows.
+tokenized (`test Suite 4`). Policy pipelines grow only under
+`[address_blocks] enabled = true`, which `gaze setup` writes. Adopters building a
+pipeline by hand register the words with
+`PipelineBuilder::register_address_vocabulary`; without them nothing grows.
 
 ## Known spec drift
 

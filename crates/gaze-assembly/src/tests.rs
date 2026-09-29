@@ -3290,3 +3290,68 @@ fn collision_family_members_agree_between_registry_and_assembly() {
         "the bundled anchored family is in the comparison: {from_registry:?}"
     );
 }
+
+/// Todo 4013: the bundled locale packs supply the address words, and only
+/// `[address_blocks] enabled = true` lets a postcode winner grow over them.
+#[test]
+fn address_blocks_grow_from_a_bundled_postcode_only_when_the_policy_enables_them() {
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-en")];
+    let mut policy = policy();
+    policy.locale = Some(vec![LocaleTag::EnUs]);
+    policy.rules = vec![RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    let input = "Mail it to Brinmoor, IL 00068 or PO Box 417, 00071.";
+    let clean = |policy: &gaze::Policy| {
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+        let pipeline = build_pipeline(policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(
+            pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(input.to_string()),
+                    active_locales.as_slice(),
+                    &gaze::DictionaryBundle::default(),
+                )
+                .expect("clean"),
+        );
+        assert_eq!(session.restore_strict_text(&clean).expect("restore"), input);
+        clean
+    };
+
+    let off = clean(&policy);
+    assert!(!off.contains("00068"), "the postcode rule fires: {off}");
+    assert!(off.contains(", IL ") && off.contains("PO Box 417"), "{off}");
+
+    policy.address_blocks = true;
+    let on = clean(&policy);
+    assert!(!on.contains(" IL ") && !on.contains("PO Box 417"), "{on}");
+    assert!(
+        on.contains("Brinmoor"),
+        "a city with no NER stays as it was: {on}"
+    );
+    // Without NER an untagged city between a unit and its postcode ends the
+    // chain: growth crosses only known address pieces.
+    let untagged = "PO Box 417, Brinmoor, IL 00068";
+    assert!(!clean_untagged(&policy, &rulepacks, untagged).contains(" IL "));
+    assert!(clean_untagged(&policy, &rulepacks, untagged).contains("PO Box 417"));
+}
+
+fn clean_untagged(policy: &gaze::Policy, rulepacks: &[Rulepack], input: &str) -> String {
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = build_pipeline(policy, &empty_context(), rulepacks, &active_locales, None)
+        .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    clean_text(
+        pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                active_locales.as_slice(),
+                &gaze::DictionaryBundle::default(),
+            )
+            .expect("clean"),
+    )
+}
