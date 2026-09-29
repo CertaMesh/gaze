@@ -1,6 +1,22 @@
-use super::{configured_command, MatrixCommand};
+use super::{
+    configured_command, MatrixCommand, CORE_NO_PHONE_PARSER_LOAD_GUARD, FEATURE_MATRIX,
+    REQUIRED_EMBEDDED_CORE_LOAD_RESULT,
+};
 use std::fs;
 use std::process::Command;
+
+#[test]
+fn matrix_roster_requires_the_no_phone_parser_core_load() {
+    assert!(FEATURE_MATRIX.contains(&CORE_NO_PHONE_PARSER_LOAD_GUARD));
+    assert_eq!(
+        CORE_NO_PHONE_PARSER_LOAD_GUARD.args,
+        ["test", "-p", "gaze-pii", "--no-default-features", "--lib"]
+    );
+    assert_eq!(
+        REQUIRED_EMBEDDED_CORE_LOAD_RESULT,
+        "embedded_core_loads_without_phone_parser ... ok"
+    );
+}
 
 #[test]
 fn matrix_build_environment_survives_nested_cargo() {

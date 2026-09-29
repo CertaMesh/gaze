@@ -18,53 +18,20 @@ The same boundary applies to tool-call arguments in agent frameworks: the JSON t
 
 ## How good is it
 
-The [v0.15.1 release benchmark](docs/reference/benchmarks/README.md#current-release) ran the exact policy `gaze setup` writes over 2,910 synthetic documents holding 123,621 bytes of the PII Gaze commits to detect (130,282 bytes across every annotated label). "Leaked" counts PII bytes that would still reach the model; the goal is zero.
-
-| Setup | Refused | Leaked, all processed docs (v2) | Leaked, common set (v2) | False-positive bytes (v2) | Leaked, all processed docs (v1) | Leaked, common set (v1) | False-positive bytes (v1) | Exact restores |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| **v0.15.0 – v0.15.1 default: `gaze setup` policy (rules + NER + Nym net)** | 0 | **13,319 (10.8%)** | 13,319 (10.8%) | 30,073 | 19,556 (15.0%) | 19,556 (15.0%) | 30,073 | 100.0% |
-| v0.14.0 default: rules + NER + the since-removed Kiji net | 0 | 22,144 (17.9%) | 22,144 (17.9%) | 168,259 | 25,179 (19.3%) | 25,179 (19.3%) | 168,276 | 78.4% |
-| v0.14.0 rules + NER | 0 | 23,428 (19.0%) | 23,428 (19.0%) | 28,013 | 27,000 (20.7%) | 27,000 (20.7%) | 28,030 | 100.0% |
-| v0.14.0 rules only | 0 | 90,253 (73.0%) | 90,253 (73.0%) | 5,406 | 93,850 (72.0%) | 93,850 (72.0%) | 5,423 | 100.0% |
+How much PII does each tool keep from reaching the model? The [v0.15.1 benchmark](docs/reference/benchmarks/README.md#current-release) runs the exact policy `gaze setup` writes, next to Presidio, DataFog, scrubadub, GLiNER and OPF on their declared configurations. "Leaked" means PII bytes that would still reach the model; the goal is zero.
 
 <!-- BEGIN GENERATED: readme-chart -->
 
-Leaked PII bytes per setup, scored labels v3, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 documents from Kiji EN/DE holdout and A4 negatives and the same scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmarks/benchmark-panels-dark.svg">
+  <img alt="Bar panels of character-level F2 and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="docs/assets/benchmarks/benchmark-panels-light.svg">
+</picture>
 
-```mermaid
-%%{init: {'xyChart': {'width': 1200, 'height': 500}}}%%
-xychart-beta horizontal
-    title "Leaked PII bytes, scored labels v3 - lower is better"
-    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)", "Gaze main a2f6fefd, unreleased (7.5%)", "Presidio 2.2.364, 5 languages, English transformer + spaCy lg, all applicable recognizers (20.5%)", "DataFog Core 0.3.0, built-in recognizers (83.8%)", "DataFog Python 4.8.1, spacy engine (23.6%)", "scrubadub 2.0.0 + spaCy en_core_web_lg (68.3%)", "GLiNER 0.2.29, urchade/gliner_multi_pii-v1, threshold 0.5 (16.3%)", "OPF 0.1.0, default viterbi, typed output, cpu (19.5%)"]
-    y-axis "Leaked PII bytes" 0 --> 120000
-    bar [13319, 22144, 23428, 90253, 9256, 25314, 103617, 29142, 84397, 20152, 24080]
-```
+Gaze 0.15 scores character-level F2 0.868 on Kiji EN/DE holdout and A4 negatives (scored labels v3), leaking 13,319 PII bytes. Each panel names its dataset and split; competitors run the configurations declared in [`chart-configs.json`](scripts/bench/compare/chart-configs.json). Numbers, sources and the model-card tables: [benchmarks](docs/reference/benchmarks/README.md#benchmark-panels). Gaze 0.15 on Presidio Research and PIIBench-commercial: measurement pending; no untagged build is shown.
 
-Leaked PII bytes per setup, scored labels v2, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 123,621 gold PII bytes. The comparison bars use the same 2,910 documents from Kiji EN/DE holdout and A4 negatives and the same scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
-
-```mermaid
-%%{init: {'xyChart': {'width': 1200, 'height': 500}}}%%
-xychart-beta horizontal
-    title "Leaked PII bytes, scored labels v2 - lower is better"
-    x-axis ["v0.15.0 – v0.15.1 default (10.8%)", "v0.14.0 default (17.9%)", "v0.14.0 rules + NER (19.0%)", "v0.14.0 rules only (73.0%)", "Gaze main a2f6fefd, unreleased (7.5%)", "Presidio 2.2.364, 5 languages, English transformer + spaCy lg, all applicable recognizers (20.5%)", "DataFog Core 0.3.0, built-in recognizers (83.8%)", "DataFog Python 4.8.1, spacy engine (23.6%)", "scrubadub 2.0.0 + spaCy en_core_web_lg (68.3%)", "GLiNER 0.2.29, urchade/gliner_multi_pii-v1, threshold 0.5 (16.3%)", "OPF 0.1.0, default viterbi, typed output, cpu (19.5%)"]
-    y-axis "Leaked PII bytes" 0 --> 120000
-    bar [13319, 22144, 23428, 90253, 9256, 25314, 103617, 29142, 84397, 20152, 24080]
-```
-
-Leaked PII bytes per setup, scored labels v1, lower is better (generated from [`release-history.json`](docs/reference/benchmarks/release-history.json) and [`comparison.json`](docs/reference/benchmarks/comparison.json)). The percentage in each label is the leak rate: leaked bytes out of 130,282 gold PII bytes. The comparison bars use the same 2,910 documents from Kiji EN/DE holdout and A4 negatives and the same scorer. The Gaze main bar is the run measured with the competitors. Competitor bars use the declared configurations in [`chart-configs.json`](scripts/bench/compare/chart-configs.json), selected before results were reviewed. Skipped documents count their gold bytes as leaked. Configurations and false-positive bytes are in [`competitors.md`](docs/reference/benchmarks/competitors.md).
-
-```mermaid
-%%{init: {'xyChart': {'width': 1200, 'height': 500}}}%%
-xychart-beta horizontal
-    title "Leaked PII bytes, scored labels v1 - lower is better"
-    x-axis ["v0.15.0 – v0.15.1 default (15.0%)", "v0.14.0 default (19.3%)", "v0.14.0 rules + NER (20.7%)", "v0.14.0 rules only (72.0%)", "Gaze main a2f6fefd, unreleased (11.9%)", "Presidio 2.2.364, 5 languages, English transformer + spaCy lg, all applicable recognizers (23.8%)", "DataFog Core 0.3.0, built-in recognizers (84.6%)", "DataFog Python 4.8.1, spacy engine (25.5%)", "scrubadub 2.0.0 + spaCy en_core_web_lg (68.7%)", "GLiNER 0.2.29, urchade/gliner_multi_pii-v1, threshold 0.5 (20.4%)", "OPF 0.1.0, default viterbi, typed output, cpu (19.6%)"]
-    y-axis "Leaked PII bytes" 0 --> 130000
-    bar [19556, 25179, 27000, 93850, 15443, 31055, 110273, 33270, 89546, 26515, 25485]
-```
+F2 counts Unicode code points (not grapheme clusters) inside the merged byte spans of each document, ignores labels, pools every document (micro), weights recall four times precision, scores 0 when precision and recall are both 0 (0/0 = 0), and counts all of a skipped document's gold characters as missed. F2 counts every false-positive character for every tool; the false-positive row (bytes redacted that are not PII, per 1,000 bytes of the scored documents) also credits a protected repeat of a labelled value on the own corpus (contract v3). Every tool is treated identically within each row, and the third-party sets have no such credit.
 
 <!-- END GENERATED: readme-chart -->
-
-No setup refused a document, so all 2,910 processed documents are also the common set. The v0.15 default restores every document exactly; v0.14.0's Kiji net did not (78.4%). v0.15.1 scores the same as v0.15.0 here, so they share one row: its card fix covers cards that pass the Luhn check, and most of this corpus's card numbers do not. Against v0.14.0's default, the `gaze setup` default leaks 40% fewer PII bytes under v3 and v2 (22% under v1) with 88% fewer false-positive bytes under v3 (82% under v2); the [benchmark history](docs/reference/benchmarks/README.md#release-history) has every measured arm. The headline is scored-label contract v3: the labels Gaze commits to detect (PASSWORD and SECURITYTOKEN are out of contract, gold 123,621 B), with a protected, unlabelled repeat of a labelled value credited instead of counted as a false positive ([audited](docs/reference/benchmarks/README.md#gold-gap-protection-contract-v3)); its leaked bytes are v2's. v2 (same labels, no credit) and v1 (every original corpus label, gold 130,282 B) stay beside it. v0.14.0's and v0.15.0's v3 numbers come from observation records of their own benchmark binaries, captured with today's harness; each record reproduces that release's committed v1 and v2 numbers.
 
 **Known gaps:** house numbers and tenant-specific IDs such as order numbers pass through unless your policy adds a recognizer, and a CSV header does not yet mark the column under it (`name,bsn\nJan,111222333` leaves the BSN raw). Names and other values a recognizer found once are not carried to their other occurrences, so without NER a name repeated in prose can pass raw, and UK national-format phone numbers are not yet detected.
 

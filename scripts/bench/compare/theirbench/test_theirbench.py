@@ -107,7 +107,7 @@ def row(leaked: int) -> dict:
 
 
 def synthetic() -> dict:
-    rows = {"gaze-full": row(10), "gaze-rules-only": row(40), "presidio-en": row(5),
+    rows = {"gaze-full": row(10), "gaze-rules-only": row(40), "gaze-v0.15.1": row(12), "presidio-en": row(5),
             "presidio-strong": row(30), "opf": row(20)}
     quiet = {"cpu": {"contended": False, "valid": True}}
     return {"not_run": {"x": "licence"}, "benchmarks": {"presidio-research": {
@@ -123,15 +123,42 @@ def synthetic() -> dict:
 
 
 class RenderTest(unittest.TestCase):
-    def test_chart_uses_declared_rows_not_lowest_leak(self) -> None:
+    def test_declared_rows_are_validated_and_no_chart_is_drawn(self) -> None:
         import render_theirbench as render
 
         entry = synthetic()["benchmarks"]["presidio-research"]
-        # presidio-en leaks least but is not declared; it must not be charted.
+        # presidio-en leaks least but is not declared; declared order is kept.
         self.assertEqual(render.chart_rows(entry), ["gaze-full", "presidio-strong", "opf"])
+        self.assertNotIn("mermaid", render.render(synthetic()))
+
+    def test_untagged_gaze_rows_are_never_published(self) -> None:
+        import render_theirbench as render
+        from tagged_gaze import UntaggedGazeError, check_public
+
         body = render.render(synthetic())
-        chart = body[body.index("x-axis"):body.index("bar [")]
-        self.assertNotIn("presidio-en", chart)
+        self.assertNotIn("gaze-full", body)
+        self.assertNotIn("gaze-rules-only", body)
+        self.assertNotIn("crates tree", body)
+        self.assertIn("| gaze-v0.15.1 |", body)
+        self.assertLess(body.index("| gaze-v0.15.1 |"), body.index("| opf |"))
+        # Changing the untagged rows cannot change the published block.
+        moved = synthetic()
+        moved["benchmarks"]["presidio-research"]["rows"]["gaze-full"] = row(1)
+        self.assertEqual(render.render(moved), body)
+        # A Gaze row that is neither main-tree evidence nor a release tag is refused.
+        odd = synthetic()
+        odd["benchmarks"]["presidio-research"]["rows"]["gaze-candidate"] = row(3)
+        with self.assertRaisesRegex(ValueError, "gaze-vX.Y.Z"):
+            render.render(odd)
+        with self.assertRaises(UntaggedGazeError):
+            check_public("| gaze-full | 10 |", "block")
+
+    def test_without_a_tagged_row_the_page_says_not_yet_measured(self) -> None:
+        import render_theirbench as render
+
+        data = synthetic()
+        del data["benchmarks"]["presidio-research"]["rows"]["gaze-v0.15.1"]
+        self.assertRegex(render.render(data), r"Gaze v\d+\.\d+\.\d+: not yet measured on this set")
 
     def test_declared_row_must_be_measured(self) -> None:
         import render_theirbench as render
@@ -230,7 +257,7 @@ class HoldAndRescoreTest(unittest.TestCase):
 
         body = render.render(synthetic())
         opf = next(line for line in body.splitlines() if line.startswith("| opf |"))
-        gaze = next(line for line in body.splitlines() if line.startswith("| gaze-full |"))
+        gaze = next(line for line in body.splitlines() if line.startswith("| gaze-v0.15.1 |"))
         self.assertEqual(opf.count(render.HELD), 2)
         self.assertNotIn(render.HELD, gaze)
         self.assertIn("0.500", opf)  # Presidio Research F2 is type-agnostic, never held
@@ -268,6 +295,33 @@ class HoldAndRescoreTest(unittest.TestCase):
                     theirbench.rescore(report, {"test": [document]}, {"fam": mapping}, frozenset({"EMAIL"}), pred)
             finally:
                 theirbench.tool_family = original
+
+    def test_rescore_adds_char_level_to_a_report_measured_without_it(self) -> None:
+        import theirbench
+        from loaders import score
+
+        # "Müller" is 7 bytes / 6 chars; stored predictions are in character offsets.
+        document = score.Document("d0", "Hi Müller", "en", "", "t", (score.Span(3, 10, "PERSON"),))
+        mapping = {"name": ("PERSON",)}
+        with tempfile.TemporaryDirectory() as root:
+            pred = Path(root)
+            (pred / "x.test.jsonl").write_text(json.dumps({"index": 0, "spans": [[3, 9, "name"]]}) + "\n",
+                                               encoding="utf-8")
+            cells = theirbench.Cells(mapping, frozenset({"PERSON"}))
+            cells.add(document, [score.Span(3, 10, "name")])
+            result = cells.result()
+            for view in result.values():
+                del view["char_level"]
+            report = {"rows": {"x": {"test": result}}}
+            original = theirbench.tool_family
+            theirbench.tool_family = lambda name: "fam"
+            try:
+                theirbench.rescore(report, {"test": [document]}, {"fam": mapping}, frozenset({"PERSON"}), pred)
+            finally:
+                theirbench.tool_family = original
+            char = report["rows"]["x"]["test"]["product_coverage"]["char_level"]
+            self.assertEqual((char["tp"], char["fp"], char["fn"]), (6, 0, 0))
+            self.assertEqual(char["f2"], 1.0)
 
     def test_measured_backend_code_is_unchanged(self) -> None:
         import backends
@@ -307,37 +361,6 @@ class GuardTest(unittest.TestCase):
                 report.write_text(json.dumps({**base, **extra}), encoding="utf-8")
                 with self.assertRaisesRegex(ValueError, "rescore"):
                     render.assemble([report], [], [])
-
-
-class NotBestTest(unittest.TestCase):
-    def test_every_column_is_compared_including_doc_leak_rate(self) -> None:
-        import render_theirbench as render
-
-        entry = synthetic()["benchmarks"]["presidio-research"]
-        entry["rows"]["gaze-full"]["product_coverage"]["document_leak_rate"] = 0.484
-        entry["rows"]["presidio-strong"]["product_coverage"]["document_leak_rate"] = 0.344
-        lines = render.not_best("presidio-research", entry)
-        self.assertIn("- Doc leak rate: presidio-strong 34.4% (FP B 10); Gaze full 48.4% (FP B 10).", lines)
-        self.assertTrue(any(line.startswith("- Leaked B: presidio-en 5 (FP B 10)") for line in lines))
-
-    def test_held_cells_are_never_compared(self) -> None:
-        import render_theirbench as render
-
-        entry = synthetic()["benchmarks"]["presidio-research"]
-        entry["rows"]["opf"]["product_coverage"]["typed_entities"]["f1"] = 0.99  # opf is held
-        self.assertFalse(any(line.startswith("- Typed F1") for line in render.not_best("presidio-research", entry)))
-
-    def test_fallback_does_not_claim_held_columns(self) -> None:
-        import render_theirbench as render
-
-        entry = synthetic()["benchmarks"]["presidio-research"]
-        entry["rows"] = {tool: result for tool, result in entry["rows"].items()
-                         if tool in ("gaze-full", "presidio-strong")}
-        entry["rows"]["presidio-strong"]["product_coverage"]["false_positive_bytes"] = 99
-        entry["rows"]["presidio-strong"]["product_coverage"]["typed_entities"] = {"f1": 0.1, "f2": 0.1}
-        entry["own_metric"]["presidio-strong"] = {"f2": 0.1}
-        self.assertEqual(render.not_best("presidio-research", entry),
-                         ["- Gaze full is best on every column that is not held."])
 
 
 class HarnessTagTest(unittest.TestCase):

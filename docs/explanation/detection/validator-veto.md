@@ -21,15 +21,16 @@ For each candidate:
    call `ValidatorKind::validate`.
 5. `ValidatorOutcome::Pass { canonical_form }` keeps the candidate and fills
    `candidate.canonical_form` only when it was absent.
-6. `ValidatorOutcome::Fail { reason }` removes the candidate before conflict
+6. By default, `ValidatorOutcome::Fail { reason }` removes the candidate before conflict
    resolution and returns `VetoedCandidate { candidate, reason }` for audit
    emission.
-7. The exception: when the recognizer declares `on_fail = "record"`
-   (`Recognizer::validator_on_fail`) and the validator is `iban_mod97` or
-   `luhn`, a `Fail` keeps the candidate. It carries
+7. An explicit `on_fail = "record"` (`Recognizer::validator_on_fail`) keeps
+   failures only for `iban_mod97`, `luhn`, `de_steuer_id_mod1110`, `bsn_mod11`,
+   `cpf_mod11`, `e164_phone`, or `e164_phone_national_us`. The last two require
+   the `phone-parser` feature. A kept candidate carries
    `validator_fail_reason = Some(reason)` and `EvidenceKind::Learned`.
 
-## Recorded failures: IBAN and payment cards
+## Recorded failures
 
 A mistyped or masked IBAN or card number is still someone's financial data,
 so Gaze tokenizes an IBAN- or card-shaped span even when mod-97 or Luhn fails
@@ -42,18 +43,27 @@ precision; shape and context take its place:
 | `iban.cued` | A real ISO 3166-1 country code (or `UK`) outside the IBAN registry, two digits and a BBAN (up to four letters then 6 to 26 digits compact, or three to eight digit-bearing groups) within 32 characters after the word `IBAN` on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it). Registry countries stay with `iban.structural`, which knows their exact length, so a registry IBAN with a dropped digit is not covered |
 | `card.cued` | A card layout within 32 characters after a card cue (`card` family, German card compounds, a bare `Karte` only with `Nummer`/`Nr`, card brands) on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it): 4-4-4-4-3 (whole), 4-4-4-4, 4-6-5, 4-6-4, compact 16 to 19 digits starting 2-6, or compact 14 to 15 digits starting 3. Compact phone numbers and epoch-millisecond timestamps do not qualify. A span that holds a card stays whole, so a cued 4-4-4-4-3 number is one token even when its first 16 digits pass Luhn (without a cue `card.structural` still keeps a valid card's CVV outside, todo 3843). A Luhn-failing 13- or 15-digit compact card not starting with 3 stays raw (phone and timestamp tradeoff) |
 
+Steuer-ID, BSN, and CPF rules already require a class-specific label. Their
+checksum failures now stay as tokens with typed failure reasons; all-zero
+Steuer-ID and BSN placeholders are excluded. The `Fahrzeug-Identifikationsnummer`
+vehicle label cannot trigger the Steuer-ID or national-ID rule. The two cued
+phone rules require a same-line phone label and capture only the number. They
+keep regional parser failures under English and loaded locale phone-label
+buckets. A German national number without `+49` still uses
+`phone.national.de` and keeps its parser veto. There is no separate cued
+relaxation for that rule.
+
 `card.structural` keeps vetoing a Luhn failure. It offers every digit run in
 the text, and without a cue a 16-digit run is as likely an order, voucher or
 tracking number. `RegexDetector::with_validator_on_fail` refuses
-`on_fail = "record"` on such a card-run recognizer, and the rulepack loader
-refuses it for every validator other than `iban_mod97` and `luhn`
-(`RulepackError::UnsupportedValidatorOnFail`), so a tax, national-ID or other
-checksum cannot be relaxed by accident.
+`on_fail = "record"` on such a card-run recognizer. The rulepack loader uses
+the explicit validator allowlist above (`RulepackError::UnsupportedValidatorOnFail`).
+The bundled uncued phone and other checksum-backed rules keep their vetoes.
 
 A kept failure stays traceable and contained:
 
-- The winner's audit row carries `validator_fail_reason`
-  (`IbanMod97Failed`, `LuhnFailed`) with `conflict_loser: false`.
+- The winner's audit row carries its typed `validator_fail_reason` with
+  `conflict_loser: false`.
 - Its evidence is `Learned`, so the repeat-value sweep never copies the value
   to an uncued occurrence. The resolver and the sweep treat a candidate as
   validated only when it has a canonical form and no recorded failure; the
@@ -80,8 +90,9 @@ RedactionEntry {
 }
 ```
 
-No token is emitted, no manifest entry is created, and restore round-trip
-semantics do not change. The row is metadata-only: source, class, action,
+For a vetoed candidate, no token or manifest entry is created. A recorded
+failure instead emits a token and a manifest entry that restores exactly; its
+winner audit row carries the typed reason. Audit rows are metadata-only: source, class, action,
 document kind, conflict tier, session id, and typed failure reason. Raw matched
 bytes never enter the audit entry.
 
@@ -117,19 +128,19 @@ Phone reasons are always present in the type. They are emitted only when the
 
 ## North-star fit
 
-- **Axis 1, reliability:** invalid validator-backed candidates still fail
-  closed before token emission.
-- **Axis 2, reversibility:** vetoed candidates never touch the manifest or
-  token session, so restore behavior is unchanged.
-- **Axis 4, auditability:** previously silent drops now produce typed
-  loser-only audit rows.
+- **Axis 1, reliability:** the cued rules protect failed values while uncued
+  scanners retain their vetoes.
+- **Axis 2, reversibility:** kept failures restore exactly from the manifest;
+  vetoed candidates never enter it.
+- **Axis 4, auditability:** vetoes have typed loser rows and kept failures have
+  typed winner rows.
 
 ## Audit volume
 
-This stage intentionally increases audit volume. Any invalid validator-backed
-shape that was previously dropped inside `RegexDetector` now emits one
-`validator_veto` row. Adopters with high invalid-candidate rates should expect
-redaction logs to grow in proportion to those rejects.
+This stage intentionally increases audit volume. A failed validator-backed
+shape emits a typed loser row when vetoed or a typed winner row when an opted-in
+rule keeps it. Adopters with high invalid-candidate rates should expect
+redaction logs to grow in proportion to those decisions.
 
 ## Non-goals
 

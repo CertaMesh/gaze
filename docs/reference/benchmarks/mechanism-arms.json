@@ -328,6 +328,356 @@
             "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
             "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
           }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/nym-safety-net-7762d2a5e072-base.jsonl.gz",
+              "sha256": "886053ac3075acf1554f7aa4898ac1d534439e7f7bba53ecfbbf38a961116051"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/nym-safety-net-7762d2a5e072-candidate.jsonl.gz",
+              "sha256": "5699e04409cbd77038e5d1df235c40104168fb4aa24f73c3b1e4a6dcc6ad5e86"
+            }
+          },
+          "revision": "7762d2a5e07228f709e7709fdeb4f50d1a3fd3a4",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "a07d691e8f76ba339fbe6af599fb19ed12c54bd64718fbf82e9ccca563115a07",
+          "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+          "contracts": {
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 12354,
+                "false_positive": 15498,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 9256,
+                "false_positive": 15560,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -241,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -174,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -48
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 12354,
+                "false_positive": 26940,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 9256,
+                "false_positive": 27282,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -241,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -174,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -48
+              },
+              "false_positive_by_class_delta": {
+                "custom:building_number": 229,
+                "custom:date": 18,
+                "custom:license_plate": 67,
+                "custom:username": 28
+              }
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 18877,
+                "false_positive": 26940,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 15443,
+                "false_positive": 27282,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -241,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -174,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "PASSWORD": -268,
+                "SECURITYTOKEN": -68,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -48
+              },
+              "false_positive_by_class_delta": {
+                "custom:building_number": 229,
+                "custom:date": 18,
+                "custom:license_plate": 67,
+                "custom:username": 28
+              }
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 5526,
+                "false_positive": 724,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 5346,
+                "false_positive": 882,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 2467,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 3540,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 234,
+                "false_positive": 159,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 234,
+                "false_positive": 419,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 3278, FP bytes changed by +1833"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 3614, FP bytes changed by +1833"
+            }
+          },
+          "attested": {
+            "binary_sha256": "c5a73f4cb816ccfa7e297f1bea9fd5f5b8c9476424ea4ad0ae256a7d826bbef8",
+            "crates_tree": "298cd36aa3e3077fdabc3922bacd37d4bc5053e2",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
+        },
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/nym-safety-net-31feb2e1e574-base.jsonl.gz",
+              "sha256": "960fd3c6b27cffc41fd75dd1a48a2b04944442106e3fb33d1c0495083706474a"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/nym-safety-net-31feb2e1e574-candidate.jsonl.gz",
+              "sha256": "1ef81e3e03ae84d8a1f73cba8951cd1529c3faa2e3a6adcd4b1b9b41a437edda"
+            }
+          },
+          "revision": "31feb2e1e57490eb2b996ab8e9ba27a9c8ec4b91",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "a07d691e8f76ba339fbe6af599fb19ed12c54bd64718fbf82e9ccca563115a07",
+          "candidate_policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+          "contracts": {
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 12120,
+                "false_positive": 15522,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 9052,
+                "false_positive": 15584,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -240,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -148,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -44
+              }
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 12120,
+                "false_positive": 26976,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 9052,
+                "false_positive": 27316,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -240,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -148,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -44
+              },
+              "false_positive_by_class_delta": {
+                "custom:building_number": 227,
+                "custom:date": 18,
+                "custom:license_plate": 67,
+                "custom:username": 28
+              }
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 18643,
+                "false_positive": 26976,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 15239,
+                "false_positive": 27316,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {
+                "BUILDINGNUM": -240,
+                "CREDITCARDNUMBER": -4,
+                "DATEOFBIRTH": -148,
+                "DRIVERLICENSENUM": -37,
+                "FIRSTNAME": -17,
+                "IDCARDNUM": -6,
+                "LICENSEPLATENUM": -1484,
+                "NATIONALID": -8,
+                "PASSWORD": -268,
+                "SECURITYTOKEN": -68,
+                "STATE": -8,
+                "SURNAME": -6,
+                "URL": -226,
+                "USERNAME": -846,
+                "ZIP": -44
+              },
+              "false_positive_by_class_delta": {
+                "custom:building_number": 227,
+                "custom:date": 18,
+                "custom:license_plate": 67,
+                "custom:username": 28
+              }
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 5526,
+                "false_positive": 724,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 5346,
+                "false_positive": 864,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 2467,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 3540,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 234,
+                "false_positive": 159,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 234,
+                "false_positive": 419,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 3248, FP bytes changed by +1813"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 3584, FP bytes changed by +1813"
+            }
+          },
+          "attested": {
+            "binary_sha256": "131dad6c7f2db32c01296d969c925c275e71c39a1896de9789fc2e40ec4a9f6a",
+            "crates_tree": "7724e36f05560979ec0142b1e094eedadfda21d5",
+            "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+            "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
+          }
         }
       ],
       "shipped": "default-on (gaze setup)"

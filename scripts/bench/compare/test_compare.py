@@ -79,23 +79,16 @@ def test_gaze_byte_equality_fails_on_each_mismatch() -> None:
             compare.assert_gaze_byte_equality(measured, expected, "v3", "C")
 
 
-def test_loss_enumerator_includes_mutated_heldout_cell() -> None:
+def test_public_page_lists_no_gaze_row_and_names_why() -> None:
     report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
-    gaze = report["gaze"]["v3"]["layers"]["C"]["metrics"]["common_intersection"]["test"]
-    report["tools"]["opf"]["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"] = copy.deepcopy(gaze)
-    report["tools"]["opf"]["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"]["leaked_bytes"] -= 1
     page = render.render(report, "comparison.json")
-    assert (f"v3 {layer_display_name('C')} common_intersection test opf: Leaked B "
-            f"{gaze['leaked_bytes'] - 1:,} vs {gaze['leaked_bytes']:,}") in page
-
-
-def test_highlighted_loss_sentence_requires_a_leaked_byte_loss() -> None:
-    report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
-    gaze = report["gaze"]["v3"]["layers"]["C"]["metrics"]["common_intersection"]["test"]
-    for tool in report["tools"].values():
-        tool["contracts"]["v3"]["C"]["metrics"]["common_intersection"]["test"]["leaked_bytes"] = gaze["leaked_bytes"]
-    page = render.render(report, "comparison.json")
-    assert "This is a measured Gaze loss." not in page
+    assert "| gaze |" not in page
+    assert "Where Gaze trails" not in page and "Gaze ablations" not in page
+    assert "Gaze is not listed" in page
+    assert "presidio-strong" in page
+    # Mutating the untagged Gaze run cannot change the public page.
+    report["gaze"]["v3"]["layers"]["C"]["leaked_bytes"] += 999
+    assert render.render(report, "comparison.json") == page
 
 
 def _assert_table_columns_match(markdown: str) -> int:
@@ -134,20 +127,23 @@ def test_every_generated_table_has_matching_header_and_delimiter() -> None:
 
 
 def test_corpus_display_names_drive_both_public_renderers(monkeypatch: pytest.MonkeyPatch) -> None:
-    from render_benchmark_doc import render_readme_chart
+    from render_benchmark_doc import chart_files, load_history
 
     assert set(layer_display.LAYER_DISPLAY_NAMES) == {"C", "A", "D", "R"}
     report = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text())
-    history = json.loads((compare.REPO / "docs/reference/benchmarks/release-history.json").read_text())
+    history = load_history(compare.REPO / "docs/reference/benchmarks/release-history.json")
+    their = json.loads(
+        (compare.REPO / "docs/reference/benchmarks/their-benchmarks.json").read_text()
+    )["benchmarks"]
     current_page = render.render(report, "comparison.json")
-    current_chart = render_readme_chart(history, report)
+    current_chart = "".join(chart_files(history, report, their).values())
     assert layer_display_name("C") in current_page
     assert layer_display_name("C") in current_chart
     monkeypatch.setitem(layer_display.LAYER_DISPLAY_NAMES, "C", "Mutated corpus name")
     assert "Mutated corpus name" in render.render(report, "comparison.json")
-    assert "Mutated corpus name" in render_readme_chart(history, report)
+    assert "Mutated corpus name" in "".join(chart_files(history, report, their).values())
     assert current_page != render.render(report, "comparison.json")
-    assert current_chart != render_readme_chart(history, report)
+    assert current_chart != "".join(chart_files(history, report, their).values())
 
 
 def test_local_prediction_replay_matches_live_metrics_without_text(tmp_path: Path) -> None:
@@ -207,12 +203,9 @@ def test_v3_layer_without_gold_gap_uses_raw_false_positives() -> None:
         "skipped": {"opf": "synthetic test"},
     }
     page = render.render(report, "comparison.json")
-    assert f"| v3 | {layer_display_name('A')} | gaze | 1 | 2 | 1 | 0 | 0 | 3.0 | 4.0 |" in page
-    assert "Gaze p50 exceeds Presidio all in 0/3" in page
-    faster_presidio = copy.deepcopy(report)
-    for version in ("v1", "v2", "v3"):
-        faster_presidio["tools"]["presidio-all"]["contracts"][version]["A"]["latency"]["p50_ms"] = 2
-    assert "Gaze p50 exceeds Presidio all in 3/3" in render.render(faster_presidio, "comparison.json")
+    assert "| gaze |" not in page
+    assert f"| v3 | {layer_display_name('A')} | presidio-all | 1 | 2 | 1 | 0 | 0 | 3.0 | 4.0 |" in page
+    assert "Gaze p50 exceeds" not in page
     for field, value in (("documents", 2), ("processed_documents", 2)):
         broken = copy.deepcopy(report)
         broken["tools"]["presidio-all"]["contracts"]["v3"]["A"][field] = value

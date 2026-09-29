@@ -1657,7 +1657,22 @@ impl Pipeline {
                 field_path,
             )
             .with_dictionaries(dictionaries);
-            let mut reported = net.check(scan.text(), context)?;
+            let (mut reported, mut net_telemetry) =
+                net.check_with_telemetry(scan.text(), context)?;
+            for event in &mut net_telemetry {
+                if let LeakReportTelemetry::ModelSpanRefused {
+                    span,
+                    field_path: event_path,
+                    ..
+                } = event
+                {
+                    *span = scan.to_clean_range(span.clone());
+                    if event_path.is_none() {
+                        *event_path = field_path.map(str::to_string);
+                    }
+                }
+            }
+            telemetry.extend(net_telemetry);
             for suspect in &mut reported {
                 suspect.span = scan.to_clean_range(suspect.span.clone());
                 if let LeakKind::PartialBleed { uncovered } = &mut suspect.kind {
@@ -1884,7 +1899,7 @@ impl Pipeline {
                             field_path,
                             decision,
                         )?;
-                        merge_subword_telemetry(report, &follow_up);
+                        merge_safety_net_telemetry(report, &follow_up);
                         let mut reason = self.post_resolution_fallback_reason(
                             target,
                             clean,
@@ -1939,7 +1954,7 @@ impl Pipeline {
                                     field_path,
                                     decision,
                                 )?;
-                                merge_subword_telemetry(report, &follow_up);
+                                merge_safety_net_telemetry(report, &follow_up);
                                 reason = self.post_resolution_fallback_reason(
                                     target,
                                     clean,
@@ -2130,7 +2145,7 @@ impl Pipeline {
             field_path,
             decision,
         )?;
-        merge_subword_telemetry(report, &scanned);
+        merge_safety_net_telemetry(report, &scanned);
         if !scanned.suspects.is_empty() {
             validate_terminal_manifest(target, clean, &provenance)?;
         }
@@ -2264,7 +2279,7 @@ impl Pipeline {
             field_path,
             decision,
         )?;
-        merge_subword_telemetry(report, &settled);
+        merge_safety_net_telemetry(report, &settled);
         let layout = CleanLayout::of(clean)?;
         let survivors = promise.survivors(clean, &layout);
         for suspect in &settled.suspects {
@@ -3280,13 +3295,18 @@ fn without_unactionable_subwords(clean_text: &str, report: &LeakReport) -> LeakR
     )
 }
 
-/// Carries a re-run's `UnactionableSubword` rows into the report the caller receives. A re-run
-/// usually re-reports the same sub-word at the same offsets; that is one finding, not two.
-fn merge_subword_telemetry(report: &mut LeakReport, rerun: &LeakReport) {
+/// Carries action skips and model refusals through re-runs without duplicating the same finding.
+fn merge_safety_net_telemetry(report: &mut LeakReport, rerun: &LeakReport) {
     let fresh = rerun
         .telemetry
         .iter()
-        .filter(|event| matches!(event, LeakReportTelemetry::UnactionableSubword { .. }))
+        .filter(|event| {
+            matches!(
+                event,
+                LeakReportTelemetry::UnactionableSubword { .. }
+                    | LeakReportTelemetry::ModelSpanRefused { .. }
+            )
+        })
         .filter(|event| !report.telemetry.contains(event))
         .cloned()
         .collect::<Vec<_>>();
