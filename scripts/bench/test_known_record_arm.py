@@ -99,8 +99,7 @@ def test_gold_value_becomes_explicit_record_field() -> None:
     )
     parsed = json.loads(raw)
     assert parsed == {
-        "record": {"v00": "alice@example.invalid"},
-        "field_map": {"/v00": "Email"},
+        "record": {"v00": {"email": "alice@example.invalid"}},
     }
     assert eligible == {"EMAIL": len("alice@example.invalid")}
 
@@ -135,14 +134,10 @@ def test_unsafe_record_value_is_excluded_from_oracle() -> None:
 
 
 def test_oracle_filters_values_that_record_parser_rejects() -> None:
-    for value, class_name in [
-        (" Alice Smith ", "Name"),
-        ("Alice  Smith", "Name"),
-        ("Alice\u00a0Smith", "Name"),
-        ("Will", "Name"),
-        ("A12", "custom:tag"),
-    ]:
+    for value, class_name in [("A12", "custom:tag"), ("12", "custom:phone")]:
         assert not arm.safe_record_value(value, class_name)
+    for value in [" Alice Smith ", "Alice  Smith", "Alice\u00a0Smith", "Will"]:
+        assert arm.safe_record_value(value, "Name")
     assert arm.safe_record_value("Jörg Straße", "Name")
 
 

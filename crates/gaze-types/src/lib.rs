@@ -3533,6 +3533,13 @@ impl DictionaryBundle {
         self.entries.get(name)
     }
 
+    /// Borrows all entries for record-name corroboration within one request.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &DictionaryEntry)> {
+        self.entries
+            .iter()
+            .map(|(name, entry)| (name.as_str(), entry))
+    }
+
     /// Returns sorted dictionary stats.
     pub fn stats(&self) -> Vec<DictionaryStats> {
         let mut stats = self

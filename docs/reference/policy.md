@@ -177,37 +177,53 @@ Output: "Reference <{session_hex}:Custom:order_id_1> is shipped."
 
 #### Caller-known record context (prototype)
 
-`gaze clean --context-json context.json` also accepts a caller-known record and
-an explicit JSON path-to-class map:
+`gaze clean --context-json context.json` also accepts a caller-known record.
+Version 1 of the key alias table infers classes for common field names:
 
 ```json
 {
-  "record": {"customer": {"name": "[customer name]", "email": "[customer email]"}},
-  "field_map": {"/customer/name": "Name", "/customer/email": "Email"}
+  "record": {"customer": {"full_name": "[customer name]", "e_mail": "[customer email]"}}
 }
 ```
 
 Replace the bracketed values with the trusted app's actual record values before
 calling Gaze; do not send this raw context to the agent.
 
-Every nonempty string leaf in `record` needs one mapping, and every mapping
-must point to a leaf and name a built-in or `custom:<name>` Gaze class. Arrays,
-nulls, duplicate JSON keys, unknown classes, unknown fields and ambiguous
-values reject the call. Strings must have canonical spacing: no leading or
-trailing whitespace, repeated spaces, tabs, newlines or nonbreaking spaces.
-Single-letter values, values with fewer than three letters or digits, and
-digit-only values shorter than four digits are rejected. A small English/German
-common-word list also rejects single-token names such as `Will`; these checks
-reduce false positives, but a longer common word can still collide with prose.
+The version 1 alias table normalizes ASCII case and snake, camel and kebab
+separators. It recognizes EN/DE/FR/NL/PT keys: `email`, `e_mail`, `mail`,
+`courriel`, `emailadres`, `correioEletronico`; `phone`, `tel`, `telefon`,
+`mobile`, `handy`, `telephone`, `telefono`, `telefoon`, `telemovel`, `celular`;
+`name`, `full_name`, `first_name`, `firstname`, `vorname`, `last_name`,
+`surname`, `nachname`, `nom`, `prenom`, `achternaam`, `voornaam`, `nome`,
+`sobrenome`; `iban`; `dob`, `date_of_birth`, `birthdate`, `geburtsdatum`,
+`date_de_naissance`, `geboortedatum`, `data_de_nascimento`; and `address`,
+`street`, `strasse`, `city`, `stadt`, `zip`, `postcode`, `plz`, `adresse`, `rue`,
+`ville`, `code_postal`, `adres`, `straat`, `plaats`, `endereco`, `rua`, `cidade`,
+`cep`. `field_map` overrides any inference, maps unknown keys to a built-in or
+`custom:<name>` class, or sets a leaf to `"ignore"`. Unknown unmapped keys,
+mapping paths without a leaf, arrays, nulls and duplicate JSON keys fail closed.
+Record errors name the field path, never its value.
 
-Gaze matches each full value literally. `Name` values also match full Unicode
+Values are trimmed and whitespace runs, including nonbreaking spaces, collapse
+to one space. Text matching accepts any whitespace run between value tokens,
+while the manifest restores the exact source bytes. Values with fewer than
+three letters or digit-only values shorter than four digits are rejected.
+Single-token names in the [version 1 common-word dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
+such as `Will`, `Grace`, `May` and `Mark`, are accepted but require
+corroboration at each occurrence: a person span from NER, another record name
+in the same phrase, or a full record name elsewhere in the document plus a
+name-position cue. Other single-token names match wherever they occur. The
+dictionary is matched with Unicode folding and Aho–Corasick; no common name is
+silently discarded.
+
+Gaze matches each full value. `Name` values also match full Unicode
 case folds, including `ß`/`SS`, while preserving the original matched bytes for restore. The prototype
 does not match reversed name order, email case changes, fragments or fuzzy
 spellings. Each record dictionary uses the existing class action and manifest
 path; its class must resolve to `tokenize` or `format_preserve`. A nonreversible
 column action in the policy rejects record context, even if a default action is
 reversible. Record values and field names stay out of errors and audit source
-IDs; failures report a generic typed error. Do not put the context JSON in a
+IDs; failures report a typed error with the field path only. Do not put the context JSON in a
 command argument or log it in your app.
 
 The context JSON is limited to 4 MiB; the encoded record to 64 KiB; nesting to

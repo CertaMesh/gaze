@@ -449,7 +449,7 @@ pub(crate) fn register_context_dictionaries(
             "counter",
         );
         builder.recognizer(if name.starts_with(RECORD_DICTIONARY_PREFIX) {
-            let recognizer = recognizer.with_cache_capacity(1);
+            let recognizer = recognizer.with_cache_capacity(1).with_record_matching();
             if class == PiiClass::Name {
                 recognizer.with_unicode_case_insensitive()
             } else {

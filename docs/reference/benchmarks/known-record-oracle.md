@@ -34,11 +34,11 @@ eligible leaked bytes combined, but generated identifiers protected only
 **89.38%** and missed the prediction's lower bound; 342 residual bytes were
 `TAXNUM`. That run included name-order and email-case variants. Its exact-only
 and variant stages scored identically in aggregate, so those variants were
-removed after review. The final parser also refuses noncanonical spacing,
-weak values and common-word single-token names. These guards reduced the
-eligible baseline from 8,772 to 8,147 leaked bytes; the improved percentage
-therefore applies to a smaller declared set. Main-corpus headline leaked bytes
-with a record rose from 4,026 in the pilot to 4,258 after these guards.
+removed after review. The round-1 parser refused noncanonical spacing, weak
+values and common-word single-token names. Those guards reduced the eligible
+baseline from 8,772 to 8,147 leaked bytes; its improved percentage applied to
+a smaller declared set. Round 2 canonicalizes spacing and accepts common-word
+single-token names with corroboration. Its separately measured result follows.
 
 The full arm uses the primary document corpus, generated identifiers,
 lookalikes and repeated-value documents. It pairs record values with negative

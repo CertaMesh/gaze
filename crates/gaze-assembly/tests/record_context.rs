@@ -121,6 +121,111 @@ fn record_full_unicode_fold_preserves_original_byte_span() {
 }
 
 #[test]
+fn record_whitespace_variants_restore_original_bytes() {
+    let context =
+        Context::from_json_str(r#"{"record":{"customer":{"full_name":" Maren\u00a0Okafor "}}}"#)
+            .unwrap();
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let pipeline =
+        build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "Maren  Okafor met Maren Okafor and Maren\u{202f}Okafor.";
+    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let CleanDocument::Text(clean) = pipeline
+        .pseudonymize_with_detect_context(
+            &session,
+            RawDocument::Text(raw.into()),
+            locales.as_slice(),
+            &bundle,
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert!(
+        !clean.contains("Maren"),
+        "all spacing variants must be protected"
+    );
+    assert_eq!(
+        pipeline
+            .restore_with_telemetry(&session, &clean)
+            .unwrap()
+            .0
+            .text,
+        raw
+    );
+}
+
+#[test]
+fn single_token_record_names_need_corroboration() {
+    let context = Context::from_json_str(
+        r#"{"record":{"first_name":"Will","last_name":"Smith","full_name":"Will Smith"}}"#,
+    )
+    .unwrap();
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let pipeline =
+        build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "Will you send it? Will Smith called. Hi Will,";
+    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let CleanDocument::Text(clean) = pipeline
+        .pseudonymize_with_detect_context(
+            &session,
+            RawDocument::Text(raw.into()),
+            locales.as_slice(),
+            &bundle,
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert!(clean.contains("Will you send it?"));
+    assert!(!clean.contains("Will Smith"));
+    assert!(!clean.contains("Hi Will,"));
+    assert_eq!(
+        pipeline
+            .restore_with_telemetry(&session, &clean)
+            .unwrap()
+            .0
+            .text,
+        raw
+    );
+}
+
+#[test]
+fn common_may_stays_raw_and_unlisted_maren_tokenizes() {
+    let context =
+        Context::from_json_str(r#"{"record":{"first_name":"Maren","last_name":"May"}}"#).unwrap();
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let pipeline =
+        build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "May 2026. Maren called.";
+    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let CleanDocument::Text(clean) = pipeline
+        .pseudonymize_with_detect_context(
+            &session,
+            RawDocument::Text(raw.into()),
+            locales.as_slice(),
+            &bundle,
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert!(clean.contains("May 2026"));
+    assert!(!clean.contains("Maren"));
+    assert_eq!(
+        pipeline
+            .restore_with_telemetry(&session, &clean)
+            .unwrap()
+            .0
+            .text,
+        raw
+    );
+}
+
+#[test]
 fn record_mapping_requires_reversible_policy_action() {
     let context = context();
     let locales = LocaleChain::merge_policy_and_cli(None, None);

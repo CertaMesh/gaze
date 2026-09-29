@@ -104,14 +104,14 @@ pub enum ContextError {
     UnicodeInsensitiveDictionaryUnsupported { name: String },
     #[error("context JSON exceeds the size limit")]
     TooLarge,
-    #[error("record and field_map must be supplied together")]
+    #[error("record field at /field_map requires /record")]
     IncompleteRecord,
-    #[error("record field mapping is incomplete or invalid")]
-    InvalidRecordMapping,
-    #[error("record exceeds depth, field, or value limits")]
-    RecordLimit,
-    #[error("record value is too short or ambiguous to match safely")]
-    UnsafeRecordValue,
+    #[error("record field at {path} has no known class or valid mapping")]
+    InvalidRecordMapping { path: String },
+    #[error("record field at {path} exceeds a depth, field, or value limit")]
+    RecordLimit { path: String },
+    #[error("record value at {path} is too short to match safely")]
+    UnsafeRecordValue { path: String },
 }
 
 impl Context {
@@ -133,11 +133,13 @@ impl Context {
         if let Value::Object(top) = &strict.0 {
             let has_record = top.contains_key("record");
             let has_field_map = top.contains_key("field_map");
-            if has_record != has_field_map {
+            if has_field_map && !has_record {
                 return Err(ContextError::IncompleteRecord);
             }
             if top.get("record").is_some_and(Value::is_null) {
-                return Err(ContextError::InvalidRecordMapping);
+                return Err(ContextError::InvalidRecordMapping {
+                    path: "/record".into(),
+                });
             }
         }
         let raw = serde_json::from_value::<RawContext>(strict.0).map_err(safe_json_error)?;
@@ -155,7 +157,7 @@ impl Context {
             .chain(raw.class_map.keys())
             .any(|name| name.starts_with(RECORD_DICTIONARY_PREFIX))
         {
-            return Err(ContextError::InvalidRecordMapping);
+            return Err(ContextError::InvalidRecordMapping { path: "/".into() });
         }
         let mut class_map = HashMap::with_capacity(raw.class_map.len());
         for (name, class) in raw.class_map {
@@ -185,34 +187,51 @@ impl Context {
             );
         }
 
-        match (raw.record.as_ref(), raw.field_map.is_empty()) {
-            (None, false) | (Some(_), true) => return Err(ContextError::IncompleteRecord),
-            _ => {}
+        if raw.record.is_none() && !raw.field_map.is_empty() {
+            return Err(ContextError::IncompleteRecord);
         }
         if let Some(record) = raw.record.as_ref() {
             if serde_json::to_vec(record).map_err(safe_json_error)?.len() > MAX_RECORD_BYTES {
-                return Err(ContextError::RecordLimit);
+                return Err(ContextError::RecordLimit {
+                    path: "/record".into(),
+                });
             }
             let mut leaves = Vec::new();
             collect_record_leaves(record, "", 0, &mut leaves)?;
-            if leaves.is_empty() || leaves.len() != raw.field_map.len() {
-                return Err(ContextError::InvalidRecordMapping);
+            if leaves.is_empty() {
+                return Err(ContextError::InvalidRecordMapping {
+                    path: "/record".into(),
+                });
+            }
+            for path in raw.field_map.keys() {
+                if !leaves.iter().any(|(leaf, _)| leaf == path) {
+                    return Err(ContextError::InvalidRecordMapping {
+                        path: safe_record_path(path),
+                    });
+                }
             }
             let mut class_slots = HashMap::<PiiClass, usize>::new();
             for (path, value) in leaves {
-                let class = raw
-                    .field_map
-                    .get(&path)
-                    .and_then(|name| PiiClass::from_policy_name(name))
-                    .ok_or(ContextError::InvalidRecordMapping)?;
-                validate_record_value(value, &class)?;
+                let mapped = raw.field_map.get(&path);
+                if mapped.is_some_and(|name| name == "ignore") {
+                    continue;
+                }
+                let class = match mapped {
+                    Some(name) => PiiClass::from_policy_name(name),
+                    None => path.rsplit('/').next().and_then(inferred_record_class),
+                }
+                .ok_or_else(|| ContextError::InvalidRecordMapping {
+                    path: safe_record_path(&path),
+                })?;
+                let canonical = canonical_record_value(value);
+                validate_record_value(&canonical, &path)?;
                 let slot = class_slots.entry(class.clone()).or_default();
                 let name = record_dictionary_name(&class, *slot);
                 *slot += 1;
                 dictionaries.insert(
                     name.clone(),
                     ContextDictionary {
-                        terms: vec![value.to_string()],
+                        terms: vec![canonical],
                         // The record-name recognizer handles Unicode case matching.
                         case_sensitive: true,
                     },
@@ -314,7 +333,9 @@ fn collect_record_leaves<'a>(
     leaves: &mut Vec<(String, &'a str)>,
 ) -> Result<(), ContextError> {
     if depth > MAX_RECORD_DEPTH || leaves.len() > MAX_RECORD_FIELDS {
-        return Err(ContextError::RecordLimit);
+        return Err(ContextError::RecordLimit {
+            path: safe_record_path(path),
+        });
     }
     match value {
         Value::Object(fields) if !fields.is_empty() => {
@@ -324,51 +345,85 @@ fn collect_record_leaves<'a>(
                         .bytes()
                         .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
                 {
-                    return Err(ContextError::InvalidRecordMapping);
+                    return Err(ContextError::InvalidRecordMapping {
+                        path: safe_record_path(path),
+                    });
                 }
                 collect_record_leaves(child, &format!("{path}/{key}"), depth + 1, leaves)?;
             }
         }
         Value::String(text) if !path.is_empty() && !text.trim().is_empty() => {
             if text.len() > MAX_VALUE_BYTES || leaves.len() >= MAX_RECORD_FIELDS {
-                return Err(ContextError::RecordLimit);
-            }
-            if text.trim() != text
-                || text.contains("  ")
-                || text.chars().any(|ch| ch.is_whitespace() && ch != ' ')
-            {
-                return Err(ContextError::InvalidRecordMapping);
+                return Err(ContextError::RecordLimit {
+                    path: safe_record_path(path),
+                });
             }
             leaves.push((path.to_string(), text));
         }
-        _ => return Err(ContextError::InvalidRecordMapping),
+        _ => {
+            return Err(ContextError::InvalidRecordMapping {
+                path: safe_record_path(path),
+            })
+        }
     }
     Ok(())
 }
 
-fn validate_record_value(value: &str, class: &PiiClass) -> Result<(), ContextError> {
+fn validate_record_value(value: &str, path: &str) -> Result<(), ContextError> {
     let letters = value.chars().filter(|ch| ch.is_alphabetic()).count();
     let digits = value.chars().filter(|ch| ch.is_numeric()).count();
-    if letters + digits < 3
-        || (letters == 0 && digits < 4)
-        || (letters > 0 && letters < 3 && digits < 4)
-    {
-        return Err(ContextError::UnsafeRecordValue);
-    }
-    if class == &PiiClass::Name && !value.contains(' ') {
-        // Small EN/DE stop-list for names that routinely occur as prose words.
-        const COMMON_NAME_WORDS: &[&str] = &[
-            "will", "may", "can", "bill", "mark", "rose", "die", "der", "den", "sie", "und", "war",
-            "ist",
-        ];
-        if COMMON_NAME_WORDS
-            .iter()
-            .any(|word| value.to_lowercase() == *word)
-        {
-            return Err(ContextError::UnsafeRecordValue);
-        }
+    if (letters == 0 && digits < 4) || (letters > 0 && letters < 3) {
+        return Err(ContextError::UnsafeRecordValue {
+            path: safe_record_path(path),
+        });
     }
     Ok(())
+}
+
+fn canonical_record_value(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn safe_record_path(path: &str) -> String {
+    if !path.is_empty()
+        && path.len() <= 256
+        && path
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'_' | b'-'))
+    {
+        path.to_owned()
+    } else {
+        "<invalid path>".into()
+    }
+}
+
+/// Version 1 of the conservative EN/DE/FR/NL/PT key alias table. Unknown keys
+/// require an explicit mapping; the table never infers from a record value.
+fn inferred_record_class(key: &str) -> Option<PiiClass> {
+    let normalized = key
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .map(|ch| ch.to_ascii_lowercase())
+        .collect::<String>();
+    let class = match normalized.as_str() {
+        "email" | "emailaddress" | "mail" | "courriel" | "emailadres" | "correioeletronico" => {
+            "Email"
+        }
+        "phone" | "phonenumber" | "tel" | "telephone" | "telefon" | "mobile" | "handy"
+        | "telefono" | "telefoon" | "telemovel" | "celular" => "custom:phone",
+        "name" | "fullname" | "firstname" | "givenname" | "vorname" | "lastname" | "surname"
+        | "nachname" | "nom" | "prenom" | "achternaam" | "voornaam" | "nome" | "sobrenome" => {
+            "Name"
+        }
+        "iban" => "custom:iban",
+        "dob" | "dateofbirth" | "birthdate" | "geburtsdatum" | "datedenaissance"
+        | "geboortedatum" | "datadenascimento" => "custom:date",
+        "address" | "street" | "strasse" | "city" | "stadt" | "zip" | "postcode" | "plz"
+        | "adresse" | "rue" | "ville" | "codepostal" | "adres" | "straat" | "plaats"
+        | "endereco" | "rua" | "cidade" | "cep" => "Location",
+        _ => return None,
+    };
+    PiiClass::from_policy_name(class)
 }
 
 #[cfg(test)]
@@ -524,28 +579,25 @@ mod tests {
     }
 
     #[test]
-    fn record_rejects_noncanonical_spacing_without_echo() {
+    fn record_canonicalizes_spacing_without_echo() {
         for value in [" Alice Smith ", "Alice  Smith", "Alice\u{a0}Smith"] {
             let raw = serde_json::json!({"record":{"name":value},"field_map":{"/name":"Name"}});
-            let err = Context::from_json_str(&raw.to_string()).unwrap_err();
-            assert!(matches!(err, ContextError::InvalidRecordMapping));
-            assert!(!err.to_string().contains(value));
+            let context = Context::from_json_str(&raw.to_string()).unwrap();
+            let name = context.dictionaries.values().next().unwrap();
+            assert_eq!(name.terms, ["Alice Smith"]);
         }
     }
 
     #[test]
-    fn record_rejects_short_and_common_word_values() {
-        for (value, class) in [
-            ("A", "Name"),
-            ("Will", "Name"),
-            ("12", "custom:phone"),
-            ("A12", "custom:tag"),
-        ] {
+    fn record_rejects_only_short_values_with_path() {
+        for (value, class) in [("A", "Name"), ("12", "custom:phone"), ("A12", "custom:tag")] {
             let raw = serde_json::json!({"record":{"value":value},"field_map":{"/value":class}});
             let err = Context::from_json_str(&raw.to_string()).unwrap_err();
-            assert!(matches!(err, ContextError::UnsafeRecordValue));
+            assert!(matches!(err, ContextError::UnsafeRecordValue { .. }));
+            assert!(err.to_string().contains("/value"));
             assert!(!err.to_string().contains(value));
         }
+        Context::from_json_str(r#"{"record":{"name":"Will"}}"#).unwrap();
     }
 
     #[test]
@@ -553,9 +605,49 @@ mod tests {
         for raw in [
             r#"{"record":null,"field_map":{}}"#,
             r#"{"field_map":{}}"#,
-            r#"{"record":{"name":"Alice Smith"}}"#,
+            r#"{"record":{"unknown":"Alice Smith"}}"#,
         ] {
             assert!(Context::from_json_str(raw).is_err());
+        }
+    }
+
+    #[test]
+    fn inferred_aliases_and_override_or_ignore() {
+        let context = Context::from_json_str(r#"{"record":{"customer":{"firstName":"Maren Okafor","e_mail":"alice@example.invalid","secret":"private marker"}},"field_map":{"/customer/secret":"ignore"}}"#).unwrap();
+        assert_eq!(context.dictionaries.len(), 2);
+        assert!(context
+            .class_map
+            .values()
+            .any(|class| *class == PiiClass::Name));
+        assert!(context
+            .class_map
+            .values()
+            .any(|class| *class == PiiClass::Email));
+        let override_context = Context::from_json_str(r#"{"record":{"customer":{"unknown":"alice@example.invalid"}},"field_map":{"/customer/unknown":"Email"}}"#).unwrap();
+        assert_eq!(
+            override_context.class_map.values().next(),
+            Some(&PiiClass::Email)
+        );
+        let error =
+            Context::from_json_str(r#"{"record":{"customer":{"unknown":"private marker"}}}"#)
+                .unwrap_err();
+        assert!(error.to_string().contains("/customer/unknown"));
+        assert!(!error.to_string().contains("private marker"));
+    }
+
+    #[test]
+    fn alias_table_v1_normalizes_case_camel_snake_and_kebab_across_locales() {
+        for (key, class) in [
+            ("E_MAIL", PiiClass::Email),
+            ("firstName", PiiClass::Name),
+            ("NachName", PiiClass::Name),
+            ("date-de-naissance", PiiClass::Custom("date".into())),
+            ("geboorte_datum", PiiClass::Custom("date".into())),
+            ("correioEletronico", PiiClass::Email),
+            ("Strasse", PiiClass::Location),
+            ("plz", PiiClass::Location),
+        ] {
+            assert_eq!(inferred_record_class(key), Some(class), "{key}");
         }
     }
 }

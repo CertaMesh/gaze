@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tomllib
 from collections import Counter
@@ -45,7 +46,27 @@ LABEL_CLASS = {
 }
 MAX_FIELDS = 32
 MAX_VALUE_BYTES = 256
-COMMON_NAME_WORDS = frozenset({"will", "may", "can", "bill", "mark", "rose", "die", "der", "den", "sie", "und", "war", "ist"})
+INFERRED_KEYS = {"Email": "email", "Name": "name", "Location": "address", "custom:phone": "phone", "custom:iban": "iban"}
+
+
+def common_name_words(repo: Path) -> frozenset[str]:
+    source = repo / "crates/gaze-recognizers/assets/record-common-names-v1.txt"
+    return frozenset(line.casefold() for line in source.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#"))
+
+
+def common_name_counts(documents: list[score.Document], contexts: dict[str, str | None], words: frozenset[str]) -> tuple[int, int]:
+    values = 0
+    hits = 0
+    for document in documents:
+        context = contexts.get(document.uid)
+        if context is None:
+            continue
+        names = {value.casefold() for cls, value in record_values(context) if cls == "Name" and value.casefold() in words}
+        values += len(names)
+        folded_text = document.text.casefold()
+        for name in names:
+            hits += len(re.findall(r"(?<!\w)" + re.escape(name) + r"(?!\w)", folded_text))
+    return values, hits
 
 
 def run_with_record_context(
@@ -75,23 +96,17 @@ def class_action(policy: dict, class_name: str) -> str | None:
     return None
 
 
-def safe_record_value(value: str, class_name: str) -> bool:
+def safe_record_value(value: str, _class_name: str) -> bool:
     letters = sum(ch.isalpha() for ch in value)
     digits = sum(ch.isnumeric() for ch in value)
     return (
-        value == value.strip()
-        and "  " not in value
-        and not any(ch.isspace() and ch != " " for ch in value)
-        and letters + digits >= 3
-        and (letters > 0 or digits >= 4)
-        and (letters == 0 or letters >= 3 or digits >= 4)
-        and not (class_name == "Name" and " " not in value and value.lower() in COMMON_NAME_WORDS)
+        (digits >= 4 if letters == 0 else letters >= 3)
     )
 
 
 def record_for_document(document: score.Document, policy: dict) -> tuple[str | None, Counter[str]]:
     encoded = document.text.encode("utf-8")
-    fields: dict[str, str] = {}
+    fields: dict[str, dict[str, str]] = {}
     mapping: dict[str, str] = {}
     eligible: Counter[str] = Counter()
     for span in document.spans:
@@ -105,13 +120,31 @@ def record_for_document(document: score.Document, policy: dict) -> tuple[str | N
             continue
         if len(fields) >= MAX_FIELDS:
             break
-        key = f"v{len(fields):02d}"
-        fields[key] = value
-        mapping[f"/{key}"] = class_name
+        slot = f"v{len(fields):02d}"
+        key = INFERRED_KEYS.get(class_name, "value")
+        fields[slot] = {key: value}
+        if class_name not in INFERRED_KEYS:
+            mapping[f"/{slot}/{key}"] = class_name
         eligible[span.label] += span.end - span.start
     if not fields:
         return None, eligible
-    return json.dumps({"record": fields, "field_map": mapping}, ensure_ascii=False), eligible
+    context = {"record": fields}
+    if mapping:
+        context["field_map"] = mapping
+    return json.dumps(context, ensure_ascii=False), eligible
+
+
+def record_values(context: str) -> list[tuple[str, str]]:
+    parsed = json.loads(context)
+    values = []
+    for slot, fields in parsed["record"].items():
+        for key, value in fields.items():
+            path = f"/{slot}/{key}"
+            class_name = parsed.get("field_map", {}).get(path)
+            if class_name is None:
+                class_name = next(cls for cls, alias in INFERRED_KEYS.items() if alias == key)
+            values.append((class_name, value))
+    return values
 
 
 def paired_records(
@@ -170,9 +203,7 @@ def explicit_counterweights(
             counts[kind] += 1
 
         for context in pool:
-            parsed = json.loads(context)
-            for key, value in parsed["record"].items():
-                class_name = parsed["field_map"][f"/{key}"]
+            for class_name, value in record_values(context):
                 if class_name == "Name":
                     add("homonym", f"The fictional product is called {value}.", context)
                     parts = value.split()
@@ -207,7 +238,7 @@ def eligible_leak_counter(contexts: dict[str, str | None]) -> tuple[Counter[str]
         context = contexts[document.uid]
         if context is None:
             return
-        values = set(json.loads(context)["record"].values())
+        values = {value for _, value in record_values(context)}
         predictions = score.final_trace_predictions(document, response)
         protected = score.merge_intervals((span.start, span.end) for span in predictions)
         encoded = document.text.encode("utf-8")
@@ -262,6 +293,7 @@ def main() -> None:
         ["git", "rev-parse", "HEAD"], cwd=repo, text=True
     ).strip()
     known_pool: dict[str, list[str]] = {}
+    common_words = common_name_words(repo)
     for document in [*layers["C"], *layers["A"]]:
         context, _ = record_for_document(document, policy)
         if context is not None:
@@ -290,6 +322,7 @@ def main() -> None:
         )
         selected_ids = {document.uid for document in documents}
         contexts.update({uid: context for uid, context in counterweight_contexts.items() if uid in selected_ids})
+        common_values, common_hits = common_name_counts(documents, contexts, common_words)
         if not any(contexts.values()):
             output["layers"][layer] = {"skipped": "no eligible record contexts"}
             continue
@@ -322,6 +355,8 @@ def main() -> None:
         output["layers"][layer] = {
             "documents": len(documents),
             "record_documents": sum(value is not None for value in contexts.values()),
+            "common_word_record_values": common_values,
+            "common_word_text_hits": common_hits,
             "explicit_counterweight_documents": sum(
                 document.uid in counterweight_contexts and document.negative_category is not None
                 for document in documents
