@@ -1116,16 +1116,15 @@ model:
   four-digit room numbers, due dates, word-attached double-colon paths, RFC 3849
   documentation IPs, loopback IPs and link-local IPs. They carry no gold.
   The v3 documents remain byte identical within each partition.
-- **Labelled lookalikes (generator v5):** layer A adds a real US or German
-  postcode or phone inside a structure that looks benign: the tail of an
-  `ORDER-` style reference, a value after `EUR` or `USD`, or a phone run on to
-  a 16-digit group run. A label names the value somewhere in the same
-  document: lines above or below it, past a blank line, in English, German,
-  French, Spanish, Italian, Dutch and Portuguese, in Cyrillic or Japanese, in
-  a log field, a CSV header, or a JSON key, sibling or nested `meta` field
-  (including a descriptive `type` string longer than 64 bytes). Every such
-  value is gold and gated. Layer D adds the same structures and value shapes
-  with no cue word and no non-Latin letter anywhere in the document. See
+- **Labelled lookalikes (generator v5):** layer A adds a US or German
+  postcode or a reserved-range phone (NANPA `555-01xx`, German `01555`) as
+  the tail of an `ORDER-` style reference or after `EUR` / `USD`. A label
+  names the value somewhere in the same document: lines above or below it,
+  past a blank line, on the same line, in English, German, French, Spanish,
+  Italian, Dutch and Portuguese, in Cyrillic or Japanese, in a log field, a
+  CSV header, or a JSON ancestor key, sibling, nested `meta` field or a
+  `type` string longer than 64 bytes. Every such value is gold and gated.
+  Layer D adds each cell's twin with no cue anywhere. See
   [Labelled lookalikes](#labelled-lookalikes) below. The v4 documents remain
   byte identical within each partition; the generator and both partition
   hashes are pinned at v5.
@@ -1196,24 +1195,42 @@ structure (see [validator veto](../../explanation/detection/validator-veto.md)).
 A veto that ignores a label elsewhere in the document leaves a real value raw,
 and a veto that never fires leaves reference numbers tokenized. Layer A prices
 the first mistake as leaked bytes, and layer D prices the second as
-false-positive bytes, on the same structures and value shapes:
+false-positive bytes.
 
-| Layer A cells (gold, gated) | Layer D counterweight (no cue anywhere) |
+Each layer A cell (`LabelledCell` in `agentic_layers.py`) names one layer D
+twin (`LookalikeTwin`) and a label relation. The twin fixes the surface, the
+value kind and the benign structure, so the cell cannot differ from it there.
+The generator then checks every pair and fails closed unless both render:
+
+- the same value display shape and locale;
+- the same benign structure: a reference word joined by `-`, a currency code,
+  or a 16-digit run;
+- the same position: for tool JSON, the value's path from the root with each
+  step's container kind, index and sibling count; otherwise whether its line
+  is the first and the last non-blank line, and whether text precedes the
+  structure or follows the value on that line;
+- a cue word or a non-Latin letter in every A document, and neither anywhere in
+  a D document.
+
+| Layer A cells (gold, gated) | Layer D twin (no cue anywhere) |
 | --- | --- |
-| Postcode joined to a reference word, label 1 to 10 lines above, past a blank line or below; German `PLZ` / `Postleitzahl` | `ORDER-99999` style references in prose, English and German |
-| Postcode after `EUR` / `USD`, label above | Invoice totals `EUR 99999` |
-| Phone joined to a reference word, labelled in 7 Latin-script languages, Cyrillic and Japanese | `TICKET-999-999-9999`, `VORGANG-0999…` references |
-| German phone run on to a Luhn-invalid 16-digit group run | Article numbers of the same shape |
-| Log field, CSV header, and nested, array, sibling, `meta` and long-`type` JSON labels | Order, invoice and ticket log lines, CSV rows and nested JSON records |
+| Postcode joined to a reference word, label 1 to 10 lines above, past a blank line, or below; German `PLZ` / `Postleitzahl` | `ORDER-99999` style references at the same line position, English and German |
+| Postcode after `EUR` / `USD`, label above | Totals `EUR 99999` |
+| Phone joined to a reference word, labelled above in English, German, Spanish, Italian, Dutch and Portuguese, or on the same line in French, Cyrillic and Japanese | `TICKET-999-555-0199` style references, block and inline |
+| Log field, CSV header, and nested object, entries array, sibling-after, nested `meta` and long-`type` JSON labels | Order, invoice and ticket log lines, CSV rows and JSON records of the same topology |
 
-`LOOKALIKE_COUNTERWEIGHTS` in `agentic_layers.py` maps each A cell to its D
-cell. A test fails when a counterweight differs from its gold cell in surface,
-locale, value display shape or structure. Another fails when an A cell has no
-cue word or non-Latin letter, or a D cell has either; the harness mirrors the
-veto's cue stems for this check. The new gold is unchecked (no checksum), so
-the credit tables are unchanged: it is always gated. Each cell has 6
-documents per partition: 28 A cells (+168 documents, +7.3 %) and 14 D cells
-(+84 documents, +10.0 %).
+`LOOKALIKE_COUNTERWEIGHTS` is derived from the cells. One twin has no A cell:
+the Luhn-invalid 16-digit run of a `01555` phone shape. No phone number has 16
+digits, so a labelled 16-digit run is not one phone value. The new gold is
+unchecked (no checksum), so the credit tables are unchanged: it is always
+gated. Each A cell has 6 documents per partition and each twin 4: 27 A cells
+(+162 documents, +7.0 %) and 19 D twins (+76 documents, +9.0 %).
+
+The cue vocabulary is one checked file,
+[`lookalike_cue_vocabulary.json`](../../../scripts/bench/lookalike_cue_vocabulary.json),
+with stems and whole words per family and the Latin letter ranges. The
+generator classifies with it, and the veto's Rust test asserts its own lists
+equal it.
 
 The generated route is text (`text.clean_for_bench`), so JSON cells exercise
 the text veto on pretty-printed tool JSON. A structured-input

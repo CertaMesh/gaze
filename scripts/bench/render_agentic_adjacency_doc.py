@@ -9,18 +9,17 @@ import json
 import re
 from pathlib import Path
 
+import agentic_layers
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
 HISTORY = ROOT / "docs/reference/benchmarks/agentic-adjacency-v4-history.json"
 # The ledger is the generator v4 measurement. Later generators keep every v4
-# document byte identical (`test_agentic_layers.py` pins that), but these
-# scorecards scored the v4 corpus under the v4 contract, so the identity is
-# pinned here rather than read from the current generator.
+# document byte identical, so its identity is rebuilt from the current
+# generator and the committed v4 contract rather than read as the current one.
 GENERATOR_VERSION = 4
-CORPUS_SHA256 = "387a35ac155153e9b58a26ec7946b3d459b0d094fffdd5f05de39558eb640604"
-CONTRACT_SHA256 = "d30ee303effc9a0de004531d12e85deb530d5eb74a1298e5d4432da4cfd6fce0"
+CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
 POLICY_SHA256 = "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
 EXPECTED_ROWS = (
     ("v0.15.1", "policy-file"),

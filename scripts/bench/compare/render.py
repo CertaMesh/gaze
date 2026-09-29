@@ -72,12 +72,14 @@ def validate_current(report: dict[str, object]) -> None:
             corpus["negative_corpus_sha256"],
             digest_file(REPO / "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl"),
         ),
+        # A comparison measured on an older generator stays valid while the
+        # current generator still rebuilds that corpus byte for byte and its
+        # contract is committed; the page then names the older corpus.
         "agentic layers": (
-            corpus["agentic"]["corpus_sha256"],
-            compare.agentic.prepare(REPO).manifest["corpus_sha256"],
+            corpus["agentic"]["corpus_sha256"], agentic_identity(report)[0],
         ),
         "agentic scored labels": (
-            report["contracts"]["agentic"], compare.agentic.load_contract(REPO).sha256,
+            report["contracts"]["agentic"], agentic_identity(report)[1],
         ),
     }
     if report.get("schema_version", 1) >= 2:
@@ -116,6 +118,30 @@ def validate_current(report: dict[str, object]) -> None:
     recorded_packs = {item["path"]: item["sha256"] for item in corpus["packs"]}
     if recorded_packs != current_packs:
         raise ValueError("variant packs changed; rerun every competitor, including sealed partitions")
+
+
+def agentic_identity(report: dict[str, object]) -> tuple[str, str]:
+    """(corpus, contract) SHA-256 of the generator version the report measured."""
+    version = report["corpus"]["agentic"]["generator_version"]
+    return compare.agentic.corpus_identity(REPO, version)
+
+
+def agentic_corpus_note(report: dict[str, object]) -> str:
+    """A plain statement when the agentic numbers predate the current generator.
+
+    Display only: `validate_current` requires the agentic identity and fails
+    closed without it.
+    """
+    agentic = report["corpus"].get("agentic")
+    if agentic is None or agentic["generator_version"] == compare.agentic.GENERATOR_VERSION:
+        return ""
+    version = agentic["generator_version"]
+    return (
+        f" The agentic-layer rows were measured on generator v{version} "
+        f"(test corpus `{report['corpus']['agentic']['corpus_sha256'][:12]}…`, "
+        f"{report['corpus']['agentic']['documents']:,} documents). The current generator is "
+        f"v{compare.agentic.GENERATOR_VERSION}; its added documents are not measured here."
+    )
 
 
 def render(report: dict[str, object], source: str) -> str:
@@ -214,7 +240,8 @@ def render(report: dict[str, object], source: str) -> str:
         "Presidio all runs English, German, Dutch, French, and Portuguese spaCy models "
         "with the documented German recognizers. Presidio English default is a secondary row. "
         + ("Latency includes processed documents only. " if latency_publishable else "") + latency_note +
-        "This measures detection; competitor restore and manifest behavior is not scored.",
+        "This measures detection; competitor restore and manifest behavior is not scored."
+        + agentic_corpus_note(report),
         "",
         "Leaked and false-positive byte counts are class-agnostic. A skipped document's "
         "scored gold counts in full as leaked. Subtract Skipped gold B from Leaked B to "
