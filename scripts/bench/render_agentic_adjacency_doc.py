@@ -9,18 +9,18 @@ import json
 import re
 from pathlib import Path
 
-import agentic_layers
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
 HISTORY = ROOT / "docs/reference/benchmarks/agentic-adjacency-v4-history.json"
-CONTRACT = ROOT / "docs/reference/benchmarks/scored-labels-agentic.json"
-GENERATOR_VERSION = agentic_layers.GENERATOR_VERSION
-CORPUS_SHA256 = agentic_layers.manifest(
-    agentic_layers.PUBLISHED_PARTITION,
-    agentic_layers.generate(agentic_layers.PUBLISHED_PARTITION),
-)["corpus_sha256"]
+# The ledger is the generator v4 measurement. Later generators keep every v4
+# document byte identical (`test_agentic_layers.py` pins that), but these
+# scorecards scored the v4 corpus under the v4 contract, so the identity is
+# pinned here rather than read from the current generator.
+GENERATOR_VERSION = 4
+CORPUS_SHA256 = "387a35ac155153e9b58a26ec7946b3d459b0d094fffdd5f05de39558eb640604"
+CONTRACT_SHA256 = "d30ee303effc9a0de004531d12e85deb530d5eb74a1298e5d4432da4cfd6fce0"
 POLICY_SHA256 = "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
 EXPECTED_ROWS = (
     ("v0.15.1", "policy-file"),
@@ -62,7 +62,7 @@ def rows_from_scorecard(path: Path) -> list[dict]:
     if generator.get("generator_version") != GENERATOR_VERSION or generator.get("corpus_sha256") != CORPUS_SHA256:
         raise HistoryError("scorecard did not measure the pinned v4 test corpus")
     contract = scorecard["layers"].get("scored_label_contract", {})
-    if contract.get("file_sha256") != sha256(CONTRACT):
+    if contract.get("file_sha256") != CONTRACT_SHA256:
         raise HistoryError("scorecard agentic contract differs from the committed contract")
     parameters = scorecard.get("parameters", {})
     if parameters.get("policy_sha256") != POLICY_SHA256:
@@ -107,7 +107,7 @@ def load_history(path: Path) -> dict:
         raise HistoryError("adjacency history schema or generator version differs")
     if value.get("corpus_sha256") != CORPUS_SHA256 or value.get("policy_sha256") != POLICY_SHA256:
         raise HistoryError("adjacency history corpus or policy differs")
-    if value.get("contract_sha256") != sha256(CONTRACT):
+    if value.get("contract_sha256") != CONTRACT_SHA256:
         raise HistoryError("adjacency history contract differs")
     rows = value.get("rows")
     if not isinstance(rows, list) or len(rows) != len(EXPECTED_ROWS) or {(row.get("version"), row.get("arm")) for row in rows} != set(EXPECTED_ROWS):
@@ -167,7 +167,7 @@ def main() -> int:
                 raise HistoryError("--record and --check are mutually exclusive")
             history = {
                 "schema_version": 1, "generator_version": GENERATOR_VERSION,
-                "corpus_sha256": CORPUS_SHA256, "contract_sha256": sha256(CONTRACT),
+                "corpus_sha256": CORPUS_SHA256, "contract_sha256": CONTRACT_SHA256,
                 "policy_sha256": POLICY_SHA256, "rows": [],
             }
             for path in args.record:

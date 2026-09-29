@@ -1115,8 +1115,20 @@ model:
 - **Layer D adjacency counterweights:** adjacent versions, hex hashes, times,
   four-digit room numbers, due dates, word-attached double-colon paths, RFC 3849
   documentation IPs, loopback IPs and link-local IPs. They carry no gold.
-  The v3 documents remain byte identical within each partition; the
-  generator and both partition hashes are pinned at v4.
+  The v3 documents remain byte identical within each partition.
+- **Labelled lookalikes (generator v5):** layer A adds a real US or German
+  postcode or phone inside a structure that looks benign: the tail of an
+  `ORDER-` style reference, a value after `EUR` or `USD`, or a phone run on to
+  a 16-digit group run. A label names the value somewhere in the same
+  document: lines above or below it, past a blank line, in English, German,
+  French, Spanish, Italian, Dutch and Portuguese, in Cyrillic or Japanese, in
+  a log field, a CSV header, or a JSON key, sibling or nested `meta` field
+  (including a descriptive `type` string longer than 64 bytes). Every such
+  value is gold and gated. Layer D adds the same structures and value shapes
+  with no cue word and no non-Latin letter anywhere in the document. See
+  [Labelled lookalikes](#labelled-lookalikes) below. The v4 documents remain
+  byte identical within each partition; the generator and both partition
+  hashes are pinned at v5.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1176,6 +1188,37 @@ gold's display shapes. A shape maps digits to `9` and letters to `A`, and keeps
 every other character exactly, because a rule for `9999 9999` never sees
 `9999-9999`. IBAN twins are exempt: an IBAN shape that fails mod-97 has no
 common benign use.
+
+#### Labelled lookalikes
+
+A weak postcode or phone rule may be vetoed when its match sits in a benign
+structure (see [validator veto](../../explanation/detection/validator-veto.md)).
+A veto that ignores a label elsewhere in the document leaves a real value raw,
+and a veto that never fires leaves reference numbers tokenized. Layer A prices
+the first mistake as leaked bytes, and layer D prices the second as
+false-positive bytes, on the same structures and value shapes:
+
+| Layer A cells (gold, gated) | Layer D counterweight (no cue anywhere) |
+| --- | --- |
+| Postcode joined to a reference word, label 1 to 10 lines above, past a blank line or below; German `PLZ` / `Postleitzahl` | `ORDER-99999` style references in prose, English and German |
+| Postcode after `EUR` / `USD`, label above | Invoice totals `EUR 99999` |
+| Phone joined to a reference word, labelled in 7 Latin-script languages, Cyrillic and Japanese | `TICKET-999-999-9999`, `VORGANG-0999…` references |
+| German phone run on to a Luhn-invalid 16-digit group run | Article numbers of the same shape |
+| Log field, CSV header, and nested, array, sibling, `meta` and long-`type` JSON labels | Order, invoice and ticket log lines, CSV rows and nested JSON records |
+
+`LOOKALIKE_COUNTERWEIGHTS` in `agentic_layers.py` maps each A cell to its D
+cell. A test fails when a counterweight differs from its gold cell in surface,
+locale, value display shape or structure. Another fails when an A cell has no
+cue word or non-Latin letter, or a D cell has either; the harness mirrors the
+veto's cue stems for this check. The new gold is unchecked (no checksum), so
+the credit tables are unchanged: it is always gated. Each cell has 6
+documents per partition: 28 A cells (+168 documents, +7.3 %) and 14 D cells
+(+84 documents, +10.0 %).
+
+The generated route is text (`text.clean_for_bench`), so JSON cells exercise
+the text veto on pretty-printed tool JSON. A structured-input
+(`RawDocument::Structured`) veto path is not measured here and needs its own
+end-to-end tests.
 
 Two deliberately over-broad rules check the counterweights end to end.
 [`mutant-bare-nine-digits.toml`](../../../scripts/bench/fixtures/agentic/mutant-bare-nine-digits.toml)

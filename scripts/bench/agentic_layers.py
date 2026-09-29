@@ -6,7 +6,10 @@ a cue, NBSP and NARROW NBSP spacing, log `key=value`, CSV, proxy-shaped
 tool-call JSON). Every checksum family also gets a checksum-invalid twin in the
 same shape; the twin stays scored gold, and the validator gold census reports
 the split. Layer D renders benign lookalikes (amounts, SKUs, colours, versions,
-order and tracking IDs, dates) that must stay untouched.
+order and tracking IDs, dates) that must stay untouched. Both layers also
+carry labelled postcodes and phones inside benign-looking structures (A) and
+the same structures with no cue anywhere (D), which price a benign-lookalike
+veto in both directions.
 
 Held-out protocol: every template, cue, key, name and seed is assigned to the
 `dev` or `test` partition before anything is generated, and each perturbation
@@ -36,7 +39,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 
 
-GENERATOR_VERSION = 4
+GENERATOR_VERSION = 5
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -1304,6 +1307,340 @@ def _adjacency_records(partition: str, layer: str) -> list[Record]:
 
 
 # --------------------------------------------------------------------------
+# Labelled PII inside benign lookalike structures (todo 3995). A weak postcode
+# or phone rule may be vetoed when its match sits in a benign structure: the
+# tail of an `ORDER-` style reference, after a currency code, or inside a
+# 16-digit run. Layer A puts real postcodes and phones in exactly those
+# structures with a label that names them somewhere in the document: blocks
+# above or below, past blank lines, in seven Latin-script languages and two
+# other scripts, and in nested tool JSON, log and CSV records. Every value is
+# gold and gated. Layer D carries the same structures with no cue anywhere in
+# the document, so vetoing them stays measured as a false-positive fall.
+
+LOOKALIKE_CELL_SURFACES = ("lookalike_prose", "lookalike_log_kv", "lookalike_csv", "lookalike_tool_json")
+DOCS_PER_LOOKALIKE_CELL = 6
+
+# Cue-free, Latin-only padding. {F<n>} expands to n prose lines, {L<n>} to n
+# log lines, {R<n>} to n empty CSV rows, {J<n>:<indent>} to n JSON members.
+LOOKALIKE_FILLER = {
+    "dev": ("Checked by the night shift.", "Nothing else changed in this batch.",
+            "Keep the record as it is.", "Status stays open for now.",
+            "The sync ran without errors.", "Ignore the older draft.",
+            "Queue length was normal.", "No action needed from the team.",
+            "Reviewed again this morning.", "Batch closed at noon."),
+    "test": ("Handled by the early rota.", "Nothing new since Monday.",
+             "Leave the entry unchanged.", "Marked as pending review.",
+             "The import finished cleanly.", "Skip the earlier version.",
+             "Load was within limits.", "No follow-up is required.",
+             "Looked at once more today.", "Closed out before lunch."),
+}
+LOOKALIKE_LOG_LINE = {
+    "dev": 'level=debug svc=queue msg="heartbeat" seq={i}',
+    "test": 'svc=worker msg="idle" n={i}',
+}
+LOOKALIKE_CSV_ROW = {"dev": "{i},,pending", "test": "{i},,queued"}
+LOOKALIKE_JSON_MEMBERS = {
+    "dev": (("status", "open"), ("source", "import"), ("priority", "normal"),
+            ("createdBy", "system"), ("revision", "3"), ("flags", "none"),
+            ("batch", "b7"), ("channel", "web"), ("owner", "ops")),
+    "test": (("state", "queued"), ("origin", "sync"), ("rank", "low"),
+             ("author", "robot"), ("version", "5"), ("labels", "none"),
+             ("group", "g2"), ("medium", "api"), ("team", "core")),
+}
+
+# Mirrors the cue stems of the benign-lookalike veto (#721) so the harness can
+# check its own documents: every layer A cell carries a cue or a non-Latin
+# letter, and no layer D counterweight carries either.
+LOOKALIKE_CUE_STEMS = (
+    "tel", "phone", "fon", "fax", "mobil", "mobiel", "movil", "cell", "celular", "handy",
+    "portable", "ruf", "anruf", "call", "contact", "contatto", "contacto", "kontakt",
+    "zip", "plz", "post", "codigo", "codice", "npa", "addr", "adres", "adress", "anschrift",
+    "billing", "shipping", "delivery", "liefer", "street", "strasse", "straat", "calle",
+    "indirizzo", "direccion", "endereco", "city", "stadt", "ort", "wohn", "ville", "citta",
+    "ciudad", "cidade", "woonplaats",
+)
+LOOKALIKE_CUE_WORDS = ("cap", "cp", "cep", "gsm", "rue", "rua")
+
+
+def _cue_words(text: str) -> list[str]:
+    """Words split at non-letters and lower-to-upper changes, case and accent folded."""
+    import unicodedata
+
+    words: list[str] = []
+    word = ""
+    previous_lower = False
+    for character in text:
+        if (not character.isalpha() or (character.isupper() and previous_lower)) and word:
+            words.append(word)
+            word = ""
+        if character.isalpha():
+            folded = unicodedata.normalize("NFKD", character.lower().replace("ß", "ss"))
+            word += "".join(c for c in folded if not unicodedata.combining(c))
+        previous_lower = character.islower()
+    return [*words, word] if word else words
+
+
+def has_lookalike_cue(text: str) -> bool:
+    return any(
+        word in LOOKALIKE_CUE_WORDS or word.startswith(LOOKALIKE_CUE_STEMS)
+        for word in _cue_words(text)
+    )
+
+
+def has_non_latin_letter(text: str) -> bool:
+    import unicodedata
+
+    return any(c.isalpha() and not unicodedata.name(c, "").startswith("LATIN") for c in text)
+
+
+def _zip5(rng: Rng, partition: str) -> str:
+    low, high = {"dev": (30000, 59999), "test": (60000, 99999)}[partition]
+    return str(rng.between(low, high))
+
+
+def _phone_us_national(rng: Rng, partition: str) -> str:
+    return "-".join(_phone_us(rng, partition).groups[1:])
+
+
+def _phone_de_national(rng: Rng, partition: str) -> str:
+    return "0" + "".join(_phone_de(rng, partition).groups[1:])
+
+
+def _phone_de_run(rng: Rng, partition: str) -> str:
+    """A German mobile number run on to 16 digits in groups of four.
+
+    Luhn-invalid, as `_sku`: a card rule would otherwise cover the run and hide
+    what the phone rule does with it.
+    """
+    while True:
+        digits = "0" + rng.choice(DE_MOBILE_PREFIXES[partition]) + rng.digits(12)
+        if not luhn_valid(digits):
+            return "-".join(_by_four(digits))
+
+
+# kind: (gold label, language, region, value maker)
+LOOKALIKE_VALUE_KINDS: dict[str, tuple[str, str, str, Callable[[Rng, str], str]]] = {
+    "zip_us": ("ZIPCODE", "en", "US", _zip5),
+    "zip_de": ("ZIPCODE", "de", "DE", _zip5),
+    "phone_us": ("TELEPHONENUM", "en", "US", _phone_us_national),
+    "phone_de": ("TELEPHONENUM", "de", "DE", _phone_de_national),
+    "phone_de_run": ("TELEPHONENUM", "de", "DE", _phone_de_run),
+}
+
+
+@dataclass(frozen=True)
+class LookalikeCell:
+    family: str
+    surface: str
+    kind: str
+    templates: Mapping[str, str]
+
+
+def _cell(family: str, surface: str, kind: str, dev: str, test: str) -> LookalikeCell:
+    return LookalikeCell(family, f"lookalike_{surface}", kind, {"dev": dev, "test": test})
+
+
+# Layer A: {V} is the gold value. Comments name the structure the value sits in
+# and where its label stands.
+LOOKALIKE_GOLD_CELLS = (
+    # Postcodes, joined to a reference label word.
+    _cell("zip_label_above", "prose", "zip_us",
+          "ZIP for delivery:\n{F1}\nORDER-{V}", "ZIP code of the recipient:\n{F2}\nORD-{V}"),
+    _cell("zip_label_seven_above", "prose", "zip_us",
+          "ZIP for delivery:\n{F7}\nORDER-{V}", "Recipient ZIP:\n{F8}\nREF-{V}"),
+    _cell("zip_label_past_blank", "prose", "zip_us",
+          "ZIP for delivery:\n\nORDER-{V}", "ZIP of the customer:\n\n{F2}\nTICKET-{V}"),
+    _cell("zip_label_ten_above_past_blank", "prose", "zip_us",
+          "ZIP for delivery:\n\n{F9}\nORDER-{V}", "Shipping ZIP:\n{F4}\n\n{F5}\nINVOICE-{V}"),
+    _cell("zip_label_below_past_blank", "prose", "zip_us",
+          "ORDER-{V}\n\n{F2}\nThe value above is the ZIP for delivery.",
+          "SKU-{V}\n\nThat reference is the customer ZIP."),
+    _cell("zip_de_label_above", "prose", "zip_de",
+          "Postleitzahl für die Lieferung:\n{F7}\nBESTELLUNG-{V}", "PLZ des Empfängers:\n\nAUFTRAG-{V}"),
+    # Postcode after a currency code.
+    _cell("zip_label_currency", "prose", "zip_us",
+          "ZIP for shipping:\n{F1}\nEUR {V}", "ZIP to use:\n\n{F3}\nUSD {V}"),
+    # Phones, joined to a reference label word, labelled in each language.
+    _cell("phone_en_label_above", "prose", "phone_us",
+          "Phone number of the customer:\n{F7}\nORDER-{V}", "Customer phone:\n\n{F3}\nREF-{V}"),
+    _cell("phone_de_label_above", "prose", "phone_de",
+          "Telefonnummer des Kunden:\nBitte den Wert unten verwenden.\nORDER-{V}",
+          "Telefon des Empfängers:\n\n{F6}\nBESTELLUNG-{V}"),
+    _cell("phone_fr_label_same_line", "prose", "phone_us",
+          "Téléphone: ORDER-{V}", "Numéro de téléphone du client : TICKET-{V}"),
+    _cell("phone_es_label_above", "prose", "phone_us",
+          "Teléfono del cliente:\n\nORDER-{V}", "Teléfono de contacto:\n{F7}\nREF-{V}"),
+    _cell("phone_it_label_above", "prose", "phone_us",
+          "Telefono del cliente:\n{F9}\nORDER-{V}", "Numero di telefono:\n\n{F2}\nINVOICE-{V}"),
+    _cell("phone_nl_label_above", "prose", "phone_us",
+          "Telefoonnummer van de klant:\n\n{F4}\nORDER-{V}", "Mobiel nummer:\n{F8}\nTICKET-{V}"),
+    _cell("phone_pt_label_above", "prose", "phone_us",
+          "Telefone do cliente:\n{F7}\nORDER-{V}", "Número de telemóvel:\n\nREF-{V}"),
+    _cell("phone_cyrillic_label", "prose", "phone_us",
+          "Телефон: ORDER-{V}", "Телефон клиента: REF-{V}"),
+    _cell("phone_japanese_label", "prose", "phone_us",
+          "電話番号: ORDER-{V}", "お客様の電話番号: TICKET-{V}"),
+    # A phone run on to a 16-digit group run.
+    _cell("phone_de_digit_run", "prose", "phone_de_run",
+          "Telefon des Kunden:\n{F1}\n{V}", "Telefonnummer:\n\n{F2}\n{V}"),
+    # Machine records: the label is a key or header far from the value.
+    _cell("zip_log_field_above", "log_kv", "zip_us",
+          "level=info event=address.update field=zipCode\n{L7}\nlevel=info event=address.update value=ORDER-{V}",
+          "svc=profile op=set key=recipientZip\n{L8}\nsvc=profile op=set value=REF-{V}"),
+    _cell("phone_log_field_above", "log_kv", "phone_us",
+          "level=info event=contact.update kind=phone\n{L7}\nlevel=info event=contact.update value=ORDER-{V}",
+          "svc=profile op=set key=mobile\n{L8}\nsvc=profile op=set value=TICKET-{V}"),
+    _cell("zip_csv_header", "csv", "zip_us",
+          "row,zipCode,status\n{R7}\n8,ORDER-{V},pending\n",
+          "record_no,recipientZip,state\n{R8}\n9,REF-{V},queued\n"),
+    _cell("phone_csv_header", "csv", "phone_us",
+          "row,phone,status\n{R7}\n8,ORDER-{V},pending\n",
+          "record_no,customerMobile,state\n{R8}\n9,TICKET-{V},queued\n"),
+    _cell("zip_json_nested_path", "tool_json", "zip_us",
+          '{\n  "customer": {\n    "shippingAddress": {\n{J7:6}\n      "code": "ORDER-{V}"\n    }\n  }\n}',
+          '{\n  "order": {\n    "deliveryAddress": {\n{J8:6}\n      "code": "REF-{V}"\n    }\n  }\n}'),
+    _cell("zip_json_entries_array", "tool_json", "zip_us",
+          '{\n  "customer": {\n    "profile": {\n      "shippingAddress": {\n        "entries": [\n'
+          '          {\n{J7:12}\n            "code": "ORDER-{V}"\n          }\n        ]\n      }\n    }\n  }\n}',
+          '{\n  "account": {\n    "profile": {\n      "billingAddress": {\n        "entries": [\n'
+          '          {\n{J8:12}\n            "code": "INVOICE-{V}"\n          }\n        ]\n      }\n    }\n  }\n}'),
+    _cell("zip_json_label_sibling_after", "tool_json", "zip_us",
+          '{\n  "value": "ORDER-{V}",\n{J3:2}\n  "label": "ZIP"\n}',
+          '{\n  "value": "TICKET-{V}",\n{J4:2}\n  "label": "ZIP code"\n}'),
+    _cell("phone_json_type_sibling_after", "tool_json", "phone_us",
+          '{\n  "value": "ORDER-{V}",\n{J3:2}\n  "type": "phone"\n}',
+          '{\n  "value": "REF-{V}",\n{J4:2}\n  "type": "mobile"\n}'),
+    _cell("phone_json_meta_type_after", "tool_json", "phone_us",
+          '{\n  "entry": {\n    "value": "ORDER-{V}",\n{J3:4}\n    "meta": {\n      "type": "phone"\n    }\n  }\n}',
+          '{\n  "entry": {\n    "value": "TICKET-{V}",\n{J4:4}\n    "meta": {\n      "type": "telephone"\n    }\n  }\n}'),
+    _cell("phone_json_long_type", "tool_json", "phone_us",
+          '{\n  "entry": {\n    "type": "phone number for customer contact and delivery coordination, '
+          'stored in the order record",\n{J7:4}\n    "value": "ORDER-{V}"\n  }\n}',
+          '{\n  "entry": {\n    "type": "mobile number of the account holder, used for two-step sign-in '
+          'and parcel notices",\n{J8:4}\n    "value": "REF-{V}"\n  }\n}'),
+    _cell("phone_json_contact_value", "tool_json", "phone_us",
+          '{\n  "contact": {\n{J7:4}\n    "value": "ORDER-{V}"\n  }\n}',
+          '{\n  "kontakt": {\n{J8:4}\n    "value": "INVOICE-{V}"\n  }\n}'),
+)
+
+# Layer D: the same structures and value shapes with no cue anywhere and only
+# Latin letters. {V} is benign here.
+LOOKALIKE_BENIGN_CELLS = (
+    _cell("order_ref_zip_shape", "prose", "zip_us",
+          "Order reference:\n{F1}\nORDER-{V}", "Reference for the parcel:\n{F7}\nREF-{V}"),
+    _cell("order_ref_zip_shape_past_blank", "prose", "zip_us",
+          "Order reference:\n\n{F9}\nORDER-{V}", "Invoice:\n\n{F3}\nINVOICE-{V}"),
+    _cell("amount_zip_shape", "prose", "zip_us",
+          "Invoice total:\n{F1}\nEUR {V}", "Amount due:\n\n{F2}\nUSD {V}"),
+    _cell("order_ref_zip_shape_de", "prose", "zip_de",
+          "Bestellnummer:\n{F7}\nBESTELLUNG-{V}", "Auftrag:\n\nAUFTRAG-{V}"),
+    _cell("order_ref_phone_shape", "prose", "phone_us",
+          "Ticket reference:\n{F2}\nTICKET-{V}", "Order:\n\n{F7}\nORDER-{V}"),
+    _cell("order_ref_phone_shape_de", "prose", "phone_de",
+          "Bestellung:\nBitte den Wert unten verwenden.\nORDER-{V}", "Vorgang:\n\n{F4}\nVORGANG-{V}"),
+    _cell("sku_digit_run_de", "prose", "phone_de_run",
+          "Artikelnummer:\n{F1}\n{V}", "Artikel:\n\n{F2}\n{V}"),
+    _cell("order_log_record", "log_kv", "zip_us",
+          "level=info event=order.update field=orderRef\n{L7}\nlevel=info event=order.update value=ORDER-{V}",
+          "svc=orders op=set key=invoiceRef\n{L8}\nsvc=orders op=set value=INVOICE-{V}"),
+    _cell("order_log_record_phone_shape", "log_kv", "phone_us",
+          "level=info event=ticket.update field=ticketRef\n{L7}\nlevel=info event=ticket.update value=TICKET-{V}",
+          "svc=orders op=set key=orderRef\n{L8}\nsvc=orders op=set value=ORDER-{V}"),
+    _cell("order_csv_record_zip_shape", "csv", "zip_us",
+          "row,invoiceRef,status\n{R7}\n8,INVOICE-{V},pending\n",
+          "record_no,orderRef,state\n{R8}\n9,ORDER-{V},queued\n"),
+    _cell("order_csv_record", "csv", "phone_us",
+          "row,orderRef,status\n{R7}\n8,ORDER-{V},pending\n",
+          "record_no,ticketRef,state\n{R8}\n9,TICKET-{V},queued\n"),
+    _cell("order_json_nested", "tool_json", "zip_us",
+          '{\n  "order": {\n    "items": {\n{J7:6}\n      "ref": "ORDER-{V}"\n    }\n  }\n}',
+          '{\n  "invoice": {\n    "lines": {\n{J8:6}\n      "ref": "INVOICE-{V}"\n    }\n  }\n}'),
+    _cell("order_json_entries_array", "tool_json", "zip_us",
+          '{\n  "account": {\n    "profile": {\n      "orders": {\n        "entries": [\n'
+          '          {\n{J7:12}\n            "code": "ORDER-{V}"\n          }\n        ]\n      }\n    }\n  }\n}',
+          '{\n  "account": {\n    "history": {\n      "tickets": {\n        "entries": [\n'
+          '          {\n{J8:12}\n            "code": "TICKET-{V}"\n          }\n        ]\n      }\n    }\n  }\n}'),
+    _cell("order_json_type_sibling", "tool_json", "phone_us",
+          '{\n  "value": "ORDER-{V}",\n{J3:2}\n  "type": "order"\n}',
+          '{\n  "value": "REF-{V}",\n{J4:2}\n  "type": "ticket"\n}'),
+)
+
+# Each layer A cell and the layer D cell that prices a rule (or a veto) on the
+# same structure: vetoing the D value is a false-positive fall, vetoing the A
+# value is a leak rise.
+LOOKALIKE_COUNTERWEIGHTS: dict[str, str] = {
+    "zip_label_above": "order_ref_zip_shape",
+    "zip_label_seven_above": "order_ref_zip_shape",
+    "zip_label_past_blank": "order_ref_zip_shape_past_blank",
+    "zip_label_ten_above_past_blank": "order_ref_zip_shape_past_blank",
+    "zip_label_below_past_blank": "order_ref_zip_shape_past_blank",
+    "zip_de_label_above": "order_ref_zip_shape_de",
+    "zip_label_currency": "amount_zip_shape",
+    "phone_en_label_above": "order_ref_phone_shape",
+    "phone_de_label_above": "order_ref_phone_shape_de",
+    "phone_fr_label_same_line": "order_ref_phone_shape",
+    "phone_es_label_above": "order_ref_phone_shape",
+    "phone_it_label_above": "order_ref_phone_shape",
+    "phone_nl_label_above": "order_ref_phone_shape",
+    "phone_pt_label_above": "order_ref_phone_shape",
+    "phone_cyrillic_label": "order_ref_phone_shape",
+    "phone_japanese_label": "order_ref_phone_shape",
+    "phone_de_digit_run": "sku_digit_run_de",
+    "zip_log_field_above": "order_log_record",
+    "phone_log_field_above": "order_log_record_phone_shape",
+    "zip_csv_header": "order_csv_record_zip_shape",
+    "phone_csv_header": "order_csv_record",
+    "zip_json_nested_path": "order_json_nested",
+    "zip_json_entries_array": "order_json_entries_array",
+    "zip_json_label_sibling_after": "order_json_nested",
+    "phone_json_type_sibling_after": "order_json_type_sibling",
+    "phone_json_meta_type_after": "order_json_type_sibling",
+    "phone_json_long_type": "order_json_type_sibling",
+    "phone_json_contact_value": "order_json_type_sibling",
+}
+
+
+def _expand_padding(template: str, partition: str) -> str:
+    import re
+
+    def pad(match: "re.Match[str]") -> str:
+        kind, count = match.group(1), int(match.group(2))
+        if kind == "F":
+            return "\n".join(LOOKALIKE_FILLER[partition][:count])
+        if kind == "L":
+            return "\n".join(LOOKALIKE_LOG_LINE[partition].format(i=i) for i in range(1, count + 1))
+        if kind == "R":
+            return "\n".join(LOOKALIKE_CSV_ROW[partition].format(i=i) for i in range(1, count + 1))
+        indent = " " * int(match.group(3))
+        return "\n".join(
+            f'{indent}"{key}": "{value}",' for key, value in LOOKALIKE_JSON_MEMBERS[partition][:count]
+        )
+
+    return re.sub(r"\{([FLRJ])(\d+)(?::(\d+))?\}", pad, template)
+
+
+def _lookalike_cell_records(partition: str, layer: str) -> list[Record]:
+    seed = PARTITION_SEEDS[partition]
+    gold = layer == LAYER_IDENTIFIERS
+    records: list[Record] = []
+    for cell in LOOKALIKE_GOLD_CELLS if gold else LOOKALIKE_BENIGN_CELLS:
+        label, language, region, make = LOOKALIKE_VALUE_KINDS[cell.kind]
+        rng = Rng(seed, f"{layer}/lookalike/{cell.family}")
+        template = _expand_padding(cell.templates[partition], partition)
+        for index in range(DOCS_PER_LOOKALIKE_CELL):
+            text, spans = _fill(template, {"V": (make(rng, partition), label if gold else None)})
+            records.append(Record(
+                uid=f"agentic-{partition}-{layer}-{cell.family}-{index:03d}-{cell.surface}",
+                partition=partition, layer=layer, family=cell.family, surface=cell.surface,
+                validity=UNCHECKED if gold else BENIGN,
+                group=f"{partition}-{layer}-{cell.family}-{index:03d}",
+                template=f"lookalike/{cell.family}/{partition}",
+                language=language, region=region, text=text, gold=spans,
+            ))
+    return records
+
+
+# --------------------------------------------------------------------------
 # Layer R: the repeat-value slice. One document repeats a value 2-4 times in
 # different positions and shapes (every occurrence is gold) next to decoys:
 # ordinary words spelled like a name part, words containing a name part, and
@@ -1519,6 +1856,8 @@ def generate(partition: str) -> list[Record]:
         + _repeat_records(partition, seed)
         + _adjacency_records(partition, LAYER_IDENTIFIERS)
         + _adjacency_records(partition, LAYER_LOOKALIKES)
+        + _lookalike_cell_records(partition, LAYER_IDENTIFIERS)
+        + _lookalike_cell_records(partition, LAYER_LOOKALIKES)
     )
     for record in records:
         encoded = record.text.encode("utf-8")
