@@ -56,10 +56,17 @@ def test_exact_and_common_word_corrobation_have_separate_kinds() -> None:
 
 
 def test_whitespace_and_casefold_kinds_keep_utf8_byte_counts() -> None:
-    whitespace = row_for("Alice\u00a0Smith", "Alice Smith")
-    assert whitespace["record_class"] == "name_multi"
-    assert whitespace["match_kind"] == "whitespace_flexible"
-    assert whitespace["gold_recovered_bytes"] == len("Alice\u00a0Smith".encode())
+    for text, value, kind in (
+        ("Alice\u00a0Smith", "Alice Smith", "exact"),
+        ("Alice\u202fSmith", "Alice Smith", "exact"),
+        ("Alice Smith", "Alice  Smith", "exact"),
+        ("Alice\u202fSmith", "Alice  Smith", "exact"),
+        ("Alice  Smith", "Alice Smith", "whitespace_flexible"),
+        ("Alice\u00a0 Smith", "Alice Smith", "whitespace_flexible"),
+    ):
+        row = row_for(text, value)
+        assert (row["record_class"], row["match_kind"]) == ("name_multi", kind)
+        assert row["gold_recovered_bytes"] == len(text.encode())
     folded = row_for("ALICE SMITH", "Alice Smith")
     assert folded["match_kind"] == "case_folded"
     exact_nonbreaking = row_for("Alice\u00a0Smith", "Alice\u00a0Smith")

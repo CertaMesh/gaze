@@ -192,6 +192,55 @@ fn record_whitespace_variants_restore_original_bytes() {
 }
 
 #[test]
+fn record_kind_after_normalization_matches_attribution_fixtures() {
+    for (value, raw, expected_kind) in [
+        ("Maren Okafor", "Maren\u{a0}Okafor", "exact"),
+        ("Maren Okafor", "Maren\u{202f}Okafor", "exact"),
+        ("Maren  Okafor", "Maren Okafor", "exact"),
+        ("Maren  Okafor", "Maren\u{202f}Okafor", "exact"),
+        ("Maren Okafor", "Maren  Okafor", "whitespace_flexible"),
+        ("Maren Okafor", "Maren\u{a0} Okafor", "whitespace_flexible"),
+    ] {
+        for kind in ["exact", "whitespace_flexible"] {
+            let input = serde_json::json!({
+                "record": {"full_name": value},
+                "record_match_kinds": {"name_multi": [kind]},
+            });
+            let context = Context::from_json_str(&input.to_string()).unwrap();
+            let locales = LocaleChain::merge_policy_and_cli(None, None);
+            let pipeline =
+                build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let bundle = gaze::dictionary_bundle_from_context(&context);
+            let CleanDocument::Text(clean) = pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(raw.into()),
+                    locales.as_slice(),
+                    &bundle,
+                )
+                .unwrap()
+            else {
+                panic!("expected text")
+            };
+            assert_eq!(
+                !clean.contains(raw),
+                kind == expected_kind,
+                "record kind parity: {value:?}, {raw:?}, {kind}"
+            );
+            assert_eq!(
+                pipeline
+                    .restore_with_telemetry(&session, &clean)
+                    .unwrap()
+                    .0
+                    .text,
+                raw
+            );
+        }
+    }
+}
+
+#[test]
 fn record_whitespace_flex_has_a_bounded_gap() {
     let context = Context::from_json_str(r#"{"record":{"full_name":"Maren Okafor"},"record_match_kinds":{"name_multi":["whitespace_flexible"]}}"#).unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);

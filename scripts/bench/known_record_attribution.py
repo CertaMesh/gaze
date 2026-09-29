@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable, Mapping
@@ -56,11 +57,30 @@ def scored_view(document: score.Document, response: Mapping[str, object]) -> lis
     )
 
 
+def normalized_match_text(text: str) -> str:
+    """Mirror gaze::normalize before the Rust record matcher sees the text."""
+    folded = []
+    for ch in text:
+        codepoint = ord(ch)
+        if codepoint in (0x200C, 0x200D):
+            continue
+        if (
+            codepoint in (0x00A0, 0x1680, 0x202F, 0x205F, 0x3000)
+            or 0x2000 <= codepoint <= 0x200A
+        ):
+            ch = " "
+        elif 0xFF01 <= codepoint <= 0xFF5E:
+            ch = chr(codepoint - 0xFEE0)
+        folded.append(unicodedata.normalize("NFC", ch))
+    return "".join(folded)
+
+
 def match_group_and_kind(
     text: str, record_class: str, raw: str, common_words: frozenset[str]
 ) -> tuple[str, str]:
     canonical = " ".join(raw.split())
-    collapsed = " ".join(text.split())
+    matched = normalized_match_text(text)
+    collapsed = " ".join(matched.split())
     if collapsed.casefold() != canonical.casefold():
         return canonical_class(record_class), "unmatched_term"
     if (
@@ -69,11 +89,11 @@ def match_group_and_kind(
         and canonical.casefold() in common_words
     ):
         kind = "corroborated_single"
-    elif text == raw:
+    elif matched == canonical:
         kind = "exact"
     elif collapsed == canonical:
         kind = "whitespace_flexible"
-    elif text.casefold() == canonical.casefold():
+    elif matched.casefold() == canonical.casefold():
         kind = "case_folded"
     else:
         kind = "whitespace_case_folded"
