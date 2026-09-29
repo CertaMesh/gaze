@@ -897,7 +897,18 @@ class ShippedDefaultChartsTest(unittest.TestCase):
             (render.DEFAULT_DOC, 6),  # comparison + leaked trend, per contract
         ):
             contract, labelled = None, []
+            # Only the blocks this renderer owns; other generated blocks (for
+            # example the competitors'-own-benchmarks charts) carry no contract.
+            owned, inside = [], None
             for line in path.read_text(encoding="utf-8").splitlines():
+                names = (*render.BLOCK_NAMES, *render.README_BLOCK_NAMES)
+                if any(line.strip() == render.begin_marker(name) for name in names):
+                    inside = True
+                elif any(line.strip() == render.end_marker(name) for name in names):
+                    inside = None
+                elif inside:
+                    owned.append(line)
+            for line in owned:
                 stripped = line.strip()
                 if stripped.startswith("title "):
                     contract = int(title_re.search(stripped).group(1))
@@ -969,43 +980,56 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         self.history = render.load_history(render.DEFAULT_HISTORY)
         self.comparison = json.loads(render.DEFAULT_COMPARISON.read_text(encoding="utf-8"))
 
-    def test_every_contract_uses_the_measured_gaze_and_best_competitor_rows(self):
+    def test_every_contract_uses_measured_gaze_and_declared_competitor_rows(self):
         chart = render.render_readme_chart(self.history, self.comparison)
+        declared = json.loads(render.CHART_CONFIGS.read_text(encoding="utf-8"))
+        measured = [name for name in declared.values() if name in self.comparison["tools"]]
         for version in (3, 2, 1):
             view = render.contract_history(self.history, version)
             bars = render.readme_comparison_bars(view, self.comparison, version)
-            self.assertEqual(len(bars), 4)
+            self.assertEqual(len(bars), 1 + len(measured))
             revision = self.comparison["gaze_main_revision"][:8]
             self.assertIn(f"Gaze main {revision}, unreleased", bars[0][0])
-            self.assertIn("5 languages, spaCy lg", bars[-1][0])
+            gliner_index = measured.index("gliner") + 1
+            self.assertIn("GLiNER", bars[gliner_index][0])
             self.assertEqual(
                 bars[0][1],
                 self.comparison["gaze"][f"v{version}"]["layers"]["C"]["leaked_bytes"],
             )
             self.assertEqual(
-                bars[-1][1],
-                self.comparison["tools"]["presidio-all"]["contracts"][f"v{version}"]["C"]["leaked_bytes"],
+                bars[gliner_index][1],
+                self.comparison["tools"]["gliner"]["contracts"][f"v{version}"]["C"]["leaked_bytes"],
             )
         self.assertIn("comparison.json", chart)
         self.assertEqual(chart.count("'width': 1200"), 3)
 
-    def test_best_row_and_skipped_label_follow_comparison_data(self):
+    def test_lower_leak_swept_row_is_not_selected(self):
         report = copy.deepcopy(self.comparison)
         report["tools"]["gliner-best"] = copy.deepcopy(report["tools"]["gliner"])
         report["tools"]["gliner-best"]["provenance"]["configuration"] = (
             "best-of-sweep, threshold 0.7"
         )
         report["tools"]["gliner-best"]["contracts"]["v3"]["C"]["leaked_bytes"] = 19000
-        report["tools"]["presidio-en"]["contracts"]["v3"]["C"]["leaked_bytes"] = 30000
-        report["tools"]["presidio-en"]["contracts"]["v3"]["C"]["skipped_gold_bytes"] = 28000
         bars = render.readme_comparison_bars(
             render.contract_history(self.history, 3), report, 3
         )
-        self.assertIn("best-of-sweep, threshold 0.7", bars[1][0])
-        self.assertEqual(bars[1][1], 19000)
-        self.assertIn("1 language", bars[-1][0])
-        self.assertIn("1365 skipped", bars[-1][0])
-        self.assertEqual(bars[-1][1], 30000)
+        self.assertNotIn("best-of-sweep, threshold 0.7", str(bars))
+        declared = json.loads(render.CHART_CONFIGS.read_text(encoding="utf-8"))
+        gliner_index = [name for name in declared.values() if name in report["tools"]].index("gliner") + 1
+        self.assertEqual(
+            bars[gliner_index][1], report["tools"]["gliner"]["contracts"]["v3"]["C"]["leaked_bytes"]
+        )
+
+    def test_selected_bars_name_the_measured_configuration(self):
+        bars = render.readme_comparison_bars(
+            render.contract_history(self.history, 3), self.comparison, 3
+        )
+        labels = " ".join(label for label, _ in bars)
+        for configuration in (
+            "English transformer + spaCy lg", "DataFog Core 0.3.0, built-in",
+            "DataFog Python 4.8.1, spacy engine", "scrubadub 2.0.0 + spaCy",
+        ):
+            self.assertIn(configuration, labels)
 
     def test_comparison_mutation_fails_check(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1015,6 +1039,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             readme.write_text(render.DEFAULT_README.read_text(encoding="utf-8"), encoding="utf-8")
             report.write_text(json.dumps(self.comparison), encoding="utf-8")
             args = ["--doc", str(doc), "--readme", str(readme), "--comparison", str(report)]
+            self.assertEqual(render.main(args), 0)
             self.assertEqual(render.main(args + ["--check"]), 0)
             changed = copy.deepcopy(self.comparison)
             changed["gaze_main_revision"] = "a" * 40

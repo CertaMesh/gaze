@@ -1,77 +1,122 @@
-# Competitor comparison
+# Competitor comparison on Gaze's corpus
 
-Run `compare.py` whenever the benchmark corpus, scorer, contract, adapter, or
-variant pack changes. It loads the same main documents and agentic generator as
-Gaze, then scores UTF-8 byte spans with `gaze_bench_score.MetricAccumulator`.
-`--pack-dir` adds every `*.jsonl` variant pack, including its sealed half. Pack
-rows have `id`, `partition`, `text`, `language`, `region`, `layer`, and `gold`
-(`start`, `end`, `label` in UTF-8 bytes). Invalid bounds, duplicate IDs,
-unknown partitions, and unsupported labels fail closed.
+`compare.py` loads canonical C/A/D/R documents and scores every row through
+`gaze_bench_score.MetricAccumulator` and `comparison_metrics.ComparisonMetrics`.
+Only aggregate JSON is published. Raw text stays in memory.
+`GAZE_COMPARE_PREDICTIONS_DIR` stores native spans and labels, without document
+text, outside the repository for exact offline `--rescore-predictions` runs.
+Product coverage scores unsupported gold as leaked. Common
+intersection scores only canonical labels claimed by every configuration; the
+intersection and each native-to-canonical mapping are in the report. The full
+product score has the existing v1/v2/v3 byte semantics, including v3 gold-gap
+credit. Additional metrics are document leak rate (PII-bearing documents with
+at least one leaked byte), leaked-entity rate (gold entities with at least one
+uncovered byte), redaction load (predicted bytes / scored document bytes), and
+exact typed-span precision/recall/F1/F2 with raw TP/FP/FN.
+The byte scorer keeps the reviewed native mapping. Exact typed scoring gives
+ambiguous `custom:family:*` labels no typed credit; Gaze password/token and
+OPF secret labels can match PASSWORD/SECURITYTOKEN only under v1. The public
+page lists every metric cell where a competitor scores better than Gaze, with
+overlapping views and splits identified as such.
 
-Each competitor uses one inference pass for v3, v2, and v1. The output is
-aggregate JSON only; no document text or per-document result is written. Run
-competitors sequentially on a quiet CPU host. `presidio-all` is the headline
-Presidio row: English, German, Dutch, French, and Portuguese spaCy models plus
-Presidio's documented German recognizers. `presidio-en` is the English-only
-default secondary row; `presidio-en-de` shows the intermediate configuration.
-GLiNER uses model-card labels and the library threshold 0.5. OpenAI Privacy
-Filter (OPF) runs only when its local runtime and checkpoint are configured.
+The SHA-256 first byte of each stable document ID defines a fixed validation
+half (`<128`) and disjoint test half. Candidate thresholds are declared in
+`compare.py`: Presidio strong 0.3 vs high-recall 0.0; GLiNER default 0.5 vs
+high-recall 0.3. The chosen row minimizes validation v3 leaked bytes, then
+validation false-positive bytes, summed over C/A/D/R. The report records both
+candidate results and the choice. Comparative claims use **test** metrics and
+name the corpus, contract, configuration, mapping, and split. No Gaze setting
+is selected or changed using these results. Full-corpus byte rows remain for
+continuity with the benchmark headline.
 
-Use Python 3.12. Install the hash-pinned `requirements.lock` into a session-local
-virtual environment with `uv pip sync`. Install spaCy wheel models separately
-at pinned versions: `en_core_web_lg` 3.7.1, `de_core_news_lg` 3.7.0,
-`nl_core_news_lg` 3.7.0, `fr_core_news_lg` 3.7.0, and `pt_core_news_lg` 3.7.0.
-`model-wheels.json` pins each wheel URL and SHA-256. The report records each
-installed model's content SHA-256, wheel SHA-256, and version; review those
-against the wheel used for the run. OPF 0.1.0 uses
-its own Python environment. Its public provenance records the Python version,
-source revision, source cleanliness, and checkpoint hash, never a local path.
+The root README chart uses exactly the configurations declared in
+`chart-configs.json`. Its bars show full-corpus layer C under the same scored
+label contract. Swept thresholds never enter that chart; their validation
+choice and disjoint test results stay in `competitors.md`.
 
-Example:
+## Configurations
+
+- Presidio 2.2.364: original English, English/German, and five-language defaults;
+  strong runs English transformer NER (`dslim/bert-base-NER`) with Presidio's
+  default context enhancement and all applicable predefined recognizers. The
+  other four languages retain their pinned spaCy large models; German includes
+  the nine documented recognizers. The raw-coordinate resolver is pinned to
+  `presidio-anonymizer==2.2.364` because public anonymization can shift offsets.
+- DataFog Core 0.3.0: built-in text detectors only. DataFog Python 4.8.1:
+  separate regex, spaCy `en_core_web_lg`, and GLiNER
+  `urchade/gliner_multi_pii-v1` engines. German regex locales are enabled for
+  German documents. DataFog's spaCy model is English-only.
+- scrubadub 2.0.0: autoloaded built-ins; a second row adds
+  `scrubadub-spacy==2.0.0` with pinned `en_core_web_lg` for English documents.
+  The plugin's own locale defaults and detector selection apply.
+- Standalone GLiNER: model-card labels, default 0.5 and high-recall 0.3.
+  OpenAI Privacy Filter 0.1.0: vendor default calibrated Viterbi decoder; no
+  public threshold is tuned. Its source revision and checkpoint digest are
+  recorded, and it is explicitly skipped only if no local runtime is supplied.
+- Gaze: rules only, rules plus NER, and full setup. The policy variants are
+  derived mechanically with `prepare_policies.py`. The full row is re-inferred
+  once, scored through the same metric path, and its v1/v2/v3 C/A/D/R byte
+  counts must exactly match the committed report when the crates tree is the
+  same. `gaze_main_revision` records the matching main commit.
+
+## Reproduce
+
+Use Python 3.12. `requirements.lock` and `requirements-scrubadub.lock` pin
+package hashes in separate environments because their Transformers constraints
+conflict. Install each with `uv pip sync --require-hashes`. The spaCy model
+wheel URLs and SHA-256 hashes are in `model-wheels.json`; install those wheels
+in the relevant environment. The report records the model content tree hash,
+wheel hash, and version. Set `HF_HUB_OFFLINE=1` after prefetched model snapshots
+are present. The GLiNER checkpoint and its separate mDeBERTa tokenizer snapshot
+must both be pinned by revision and tree SHA-256. The Presidio transformer
+snapshot is pinned the same way. OPF is installed from a clean, recorded source
+revision and uses its locally pinned checkpoint.
 
 ```sh
-python scripts/bench/compare/compare.py \
-  --dataset target/bench-data/dataiku-en-de/test.parquet \
-  --en-model /path/to/en_core_web_lg \
-  --de-model /path/to/de_core_news_lg \
-  --nl-model /path/to/nl_core_news_lg \
-  --fr-model /path/to/fr_core_news_lg \
-  --pt-model /path/to/pt_core_news_lg \
-  --gliner-model /path/to/gliner_multi_pii-v1 \
-  --opf-python /path/to/opf-venv/bin/python \
-  --opf-checkpoint /path/to/privacy_filter \
-  --gaze-policy target/gate/policy.toml \
-  --gaze-scorecard-v1 target/bench-data/gaze-v1/scorecard-v4.json \
-  --gaze-scorecard-v2 target/bench-data/gaze-v2/scorecard-v4.json \
-  --gaze-scorecard-v3 target/bench-data/gaze-v3/scorecard-v4.json \
-  --output target/bench-data/comparison.json
+cargo run -p gaze-cli -- setup --non-interactive --force \
+  --policy-out target/bench-data/compare-3909/policy.toml
+python3.12 scripts/bench/compare/prepare_policies.py \
+  target/bench-data/compare-3909/policy.toml
+cargo build -q -p gaze-recognizers --example clean_for_bench \
+  --features safety-net-nym --release
 ```
 
-Copy only the aggregate JSON into `docs/reference/benchmarks/`, then render and
-check `competitors.md` with `scripts/bench/compare/render.py`. The renderer
-requires all contracts and configured competitors, model hashes, matching
-per-layer document counts, clean source trees, and current competitor inputs.
-Each release refreshes the Gaze rows on the same documents. If a variant pack
-is present, each Gaze scorecard must carry the identical pack layer and ID
-digest. The comparison stores the hash of a home-normalized policy after
-checking its raw hash against every Gaze scorecard.
+Set the paths consumed by `run-full.sh`:
 
-For repeat runs, set `GAZE_COMPARE_EN_MODEL`, `GAZE_COMPARE_DE_MODEL`,
-`GAZE_COMPARE_NL_MODEL`, `GAZE_COMPARE_FR_MODEL`,
-`GAZE_COMPARE_PT_MODEL`, `GAZE_COMPARE_GLINER_MODEL`, and
-`GAZE_COMPARE_PYTHON` (the Python 3.12 comparison environment), then run
-`scripts/bench/compare/run-full.sh`. Its `--dry-run` mode checks CLI arguments
-without loading documents or models. The wrapper passes the prepared Gaze
-scorecards and policy, including `--gaze-policy`, to the comparator.
+```text
+GAZE_COMPARE_PYTHON, GAZE_COMPARE_SCRUB_PYTHON, GAZE_COMPARE_DATASET,
+GAZE_COMPARE_EN_MODEL, GAZE_COMPARE_DE_MODEL, GAZE_COMPARE_NL_MODEL,
+GAZE_COMPARE_FR_MODEL, GAZE_COMPARE_PT_MODEL, GAZE_COMPARE_GLINER_MODEL,
+GAZE_COMPARE_GLINER_TOKENIZER, GAZE_COMPARE_TRANSFORMER_MODEL,
+GAZE_COMPARE_BINARY, GAZE_COMPARE_MODEL_DIR, GAZE_COMPARE_POLICY,
+GAZE_COMPARE_POLICY_RULES, GAZE_COMPARE_POLICY_RULES_NER,
+GAZE_COMPARE_OPF_PYTHON, GAZE_COMPARE_OPF_CHECKPOINT, GAZE_COMPARE_OUTPUT,
+GAZE_COMPARE_PREDICTIONS_DIR (absolute path outside this repository)
+```
 
-Presidio 2.2.364's pinned raw-span resolver supplies coordinates before
-anonymization. Its public `keep` operator can rewrite text when spans partly
-overlap, shifting offsets. Skipped languages score as leaked gold, and only processed
-documents enter latency. All predictions count byte-for-byte regardless of
-class. `label-map.json` controls v3 repeated-gold credit and must be reviewed
-when an adapter adds a label.
+Then run `scripts/bench/compare/run-full.sh` on a quiet CPU host. It runs each
+configuration sequentially and resumes the same aggregate report across the
+two Python environments. `finalize_report.py` checks the complete roster,
+hashes the declared chart selection, and marks timing unverified because this
+comparison is not a dedicated quiet-machine timing run. The comparator samples
+CPU outside its process tree every five seconds and records the busy-process
+count and load1 before/after. A sample above one core marks that configuration
+contended. The public page withholds p50/p95 and timing comparisons; a separate
+quiet-machine timing run can use the sampler to publish speed claims.
+`--dry-run` checks arguments without loading data.
+To re-derive metrics after a scorer-only fix, run `compare.py --dataset
+target/bench-data/dataiku-en-de/test.parquet --output
+target/bench-data/compare-3909/comparison.json --rescore-predictions
+/absolute/local/predictions`. Replay verifies document order and every byte
+aggregate before replacing typed metrics; it never calls a model.
+Copy the report to `docs/reference/benchmarks/comparison.json`, render
+`competitors.md`, and run `render.py --check`. The renderer verifies input
+hashes, model pins, tool roster, and document counts. The report records split
+ID digests for every layer and both halves.
 
-Sources and licenses: Presidio (MIT), spaCy model wheels (MIT), GLiNER and its
-PII model (Apache-2.0), and OpenAI Privacy Filter (Apache-2.0). Upstream
-configuration sources are Presidio's `default_recognizers.yaml` and language
-documentation, the GLiNER-PII model card, and each model wheel's metadata.
+Presidio: https://github.com/data-privacy-stack/presidio/tree/main/docs/analyzer/nlp_engines
+DataFog Core: https://github.com/DataFog/datafog-core
+DataFog Python: https://github.com/DataFog/datafog-python
+scrubadub: https://github.com/LeapBeyond/scrubadub/blob/master/docs/usage.rst
+GLiNER PII model: https://huggingface.co/urchade/gliner_multi_pii-v1
+OPF: https://github.com/openai/privacy-filter

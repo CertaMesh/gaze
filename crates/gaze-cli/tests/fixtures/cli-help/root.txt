@@ -4,6 +4,7 @@ Usage: gaze <COMMAND>
 
 Commands:
   clean     Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON to stdout
+  eval      Score Gaze against owner-side annotated JSONL without printing document text
   daemon    Run a long-lived JSON-lines stdio cleaning daemon
   restore   Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout
   audit     Query, export, or maintain redaction-log metadata without reading raw PII payloads

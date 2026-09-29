@@ -40,6 +40,186 @@ use gaze::{
 use gaze_recognizers::{embedded, RegexDetector, ValidatorKind, ValidatorOnFail};
 use gaze_types::{ValidatorFailReason, ValidatorOutcome};
 
+fn financial_events(text: &str) -> Vec<gaze::RestoreEvent> {
+    Session::new(Scope::Ephemeral)
+        .expect("session")
+        .restore_boundary_events(text)
+        .into_iter()
+        .filter(|event| event.class == custom("iban") || event.class == custom("credit_card"))
+        .collect()
+}
+
+#[test]
+fn restore_boundary_reports_checksum_failed_financial_values() {
+    for (text, value, class) in [
+        (
+            "IBAN DE89 3704 0044 0532 0130 01",
+            "DE89 3704 0044 0532 0130 01",
+            "iban",
+        ),
+        (
+            "IBAN US12 3456 7890 1234 5678",
+            "US12 3456 7890 1234 5678",
+            "iban",
+        ),
+        (
+            "card number 4532 7812 3456 7890",
+            "4532 7812 3456 7890",
+            "credit_card",
+        ),
+        (
+            "Card 0000 0000 0000 0000",
+            "0000 0000 0000 0000",
+            "credit_card",
+        ),
+        (
+            "credit card number 4532 7812 3456 7890 123",
+            "4532 7812 3456 7890 123",
+            "credit_card",
+        ),
+    ] {
+        let kind = if class == "iban" {
+            ValidatorKind::IbanMod97
+        } else {
+            ValidatorKind::Luhn
+        };
+        fails(kind, value);
+        assert_tokenized(&text[..text.find(value).unwrap()], value, "", class);
+        let events = financial_events(text);
+        assert_eq!(events.len(), 1, "{}: {events:?}", shape(text));
+        assert_eq!(events[0].kind, gaze::RestoreEventKind::FreshPiiDetected);
+        assert_eq!(events[0].class, custom(class));
+        let start = text.find(value).unwrap();
+        assert_eq!(events[0].location, start..start + value.len());
+    }
+}
+
+#[test]
+fn restore_boundary_cue_windows_match_forward_recognizers() {
+    for (prefix, value, trailer, class) in [
+        (
+            "{\"card\": {\"number\": \"",
+            "4111111111111112",
+            "\"}}",
+            "credit_card",
+        ),
+        ("Card number is: ", "4111 1111 1111 1112", "", "credit_card"),
+        ("Amex ", "3782 822463 10006", " expired", "credit_card"),
+        (
+            "{\"bank\": {\"iban\": {\"value\": \"",
+            "US12345678901234567",
+            "\"}}}",
+            "iban",
+        ),
+        ("IBAN is: ", "US12 3456 7890 1234 5678", "", "iban"),
+    ] {
+        assert_tokenized(prefix, value, trailer, class);
+        let text = format!("{prefix}{value}{trailer}");
+        let events = financial_events(&text);
+        assert_eq!(events.len(), 1, "{}: {events:?}", shape(&text));
+        assert_eq!(events[0].class, custom(class));
+        assert_eq!(events[0].location, prefix.len()..prefix.len() + value.len());
+    }
+}
+
+#[test]
+fn restore_boundary_classifies_checksum_failed_manifest_bypasses() {
+    for (text, value, class) in [
+        (
+            "IBAN DE89 3704 0044 0532 0130 01",
+            "DE89 3704 0044 0532 0130 01",
+            "iban",
+        ),
+        (
+            "card number 4532 7812 3456 7890",
+            "4532 7812 3456 7890",
+            "credit_card",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        session.tokenize(&custom(class), value).expect("token");
+        let events = session.restore_boundary_events(text);
+        let financial: Vec<_> = events
+            .iter()
+            .filter(|event| event.class == custom(class))
+            .collect();
+        assert_eq!(financial.len(), 1, "{}: {events:?}", shape(text));
+        assert_eq!(financial[0].kind, gaze::RestoreEventKind::ManifestBypass);
+    }
+}
+
+#[test]
+fn restore_with_events_reports_raw_checksum_failures() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = "IBAN DE89 3704 0044 0532 0130 01; card number 4532 7812 3456 7890";
+    let (restored, events) = session
+        .restore_strict_text_with_events(text)
+        .expect("audit-only restore");
+    assert_eq!(restored, text);
+    let financial: Vec<_> = events
+        .iter()
+        .filter(|event| event.class == custom("iban") || event.class == custom("credit_card"))
+        .collect();
+    assert_eq!(financial.len(), 2, "{financial:?}");
+    assert!(financial
+        .iter()
+        .all(|event| event.kind == gaze::RestoreEventKind::FreshPiiDetected));
+}
+
+#[test]
+fn restore_boundary_obeys_financial_shape_and_cue_negatives() {
+    for text in [
+        "Order 4532 7812 3456 7890 shipped.",
+        "Voucher code 4532 7812 3456 7890.",
+        "Tracking: 4532781234567890",
+        "card reference 4532 7812 3456 7890 5555 5",
+        "credit card number 8818 1900 5934 6058 1769",
+        "Card created at 1695827361000 ms.",
+        "Card game id (optional): 4000 1234 5678 9011",
+        "Your Visa interview reference is: 4000 1234 5678 9011",
+        "IBAN DE00 TEST",
+        "Ticket US29 1234 5678 9012 3456 7890 12 was closed.",
+        "IBAN pending. Order US29 1234 5678 9012 3456 7890 12 shipped.",
+        "IBAN US29CITI12345678901234_x9",
+    ] {
+        assert!(financial_events(text).is_empty(), "{}", shape(text));
+        let cleaned = clean(text);
+        assert!(!cleaned.contains(":Custom:iban_"), "{}", shape(text));
+        assert!(!cleaned.contains(":Custom:credit_card_"), "{}", shape(text));
+    }
+}
+
+#[test]
+fn restore_boundary_financial_scan_matches_a4_forward_rule_scope() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../xtask/fixtures/negative_corpus/en_de_negative.jsonl");
+    let corpus = std::fs::read_to_string(path).expect("committed A4 corpus");
+    let mut documents = 0;
+    let mut flagged = 0;
+    for line in corpus.lines() {
+        let row: serde_json::Value = serde_json::from_str(line).expect("A4 row");
+        let text = row["text"].as_str().expect("A4 text");
+        let events = financial_events(text);
+        for event in &events {
+            // The German A4 invalid-account placeholder has a registry country and exact DE
+            // length. The forward rule records its failed checksum under the user's ruling.
+            assert_eq!(row["category"], "invalid_identifiers", "A4 {}", row["id"]);
+            assert_eq!(row["language"], "de", "A4 {}", row["id"]);
+            assert_eq!(event.class, custom("iban"), "A4 {}", row["id"]);
+            assert_eq!(
+                &text[event.location.clone()],
+                "DE00 TEST 0000 0000 0000 00",
+                "A4 {}",
+                row["id"]
+            );
+        }
+        flagged += events.len();
+        documents += 1;
+    }
+    assert_eq!(documents, 1024);
+    assert_eq!(flagged, 64);
+}
+
 fn custom(class: &str) -> PiiClass {
     PiiClass::custom(class).expect("valid custom class")
 }
@@ -174,6 +354,7 @@ fn assert_raw(text: &str) {
 fn registry_shaped_iban_failing_mod97_is_tokenized_with_or_without_a_cue() {
     for (prefix, value, trailer) in [
         ("Bitte überweisen an ", "DE89 3704 0044 0532 0130 01", "."),
+        ("Konto ", "DE00 TEST 0000 0000 0000 00", "."),
         ("IBAN: ", "AT61 1904 3002 3457 3202", " BIC: BKAUATWW"),
         ("account ", "NL91ABNA0417164301", " for rent"),
         ("{\"iban\": \"", "GB82WEST12345698765433", "\"}"),

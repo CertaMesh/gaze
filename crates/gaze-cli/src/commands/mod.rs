@@ -3,6 +3,7 @@ mod clean;
 mod daemon;
 #[cfg(feature = "document")]
 mod document;
+mod eval;
 #[cfg(feature = "index")]
 mod index;
 #[cfg(feature = "mcp")]
@@ -44,6 +45,11 @@ enum Cmd {
     Clean {
         #[command(flatten)]
         args: clean::Args,
+    },
+    /// Score Gaze against owner-side annotated JSONL without printing document text.
+    Eval {
+        #[command(flatten)]
+        args: eval::Args,
     },
     /// Run a long-lived JSON-lines stdio cleaning daemon.
     Daemon {
@@ -580,6 +586,7 @@ pub(crate) enum SafetyNetFallback {
 pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
     match cli.cmd {
         Cmd::Clean { args } => clean::run(args),
+        Cmd::Eval { args } => eval::run(args),
         Cmd::Restore {
             format,
             restore_mode,
@@ -1075,7 +1082,7 @@ mod tests {
             unreachable!("expected clean command");
         };
 
-        assert_eq!(args.openai_filter_device, OpenAiFilterDevice::Auto);
+        assert_eq!(args.pipeline.openai_filter_device, OpenAiFilterDevice::Auto);
     }
 
     /// Clap keys an argument on its Rust field name, not on its `--long` name,

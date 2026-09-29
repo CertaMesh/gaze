@@ -1420,6 +1420,7 @@ window_chars = 48
                 PiiClass::Email,
                 PiiClass::Name,
                 PiiClass::custom("birth_date").expect("valid custom class"),
+                PiiClass::custom("age").expect("valid custom class"),
                 PiiClass::custom("phone").expect("valid custom class"),
                 PiiClass::custom("iban").expect("valid custom class"),
                 PiiClass::Custom("family:payment-card-or-iban".to_string()),

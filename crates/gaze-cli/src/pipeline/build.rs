@@ -223,9 +223,8 @@ fn class_rules_for_rulepacks(
 ) -> std::result::Result<Vec<RuleSpec>, CliError> {
     let mut classes = std::collections::BTreeSet::new();
     for bundle in bundled {
-        let contents = gaze_recognizers::embedded(bundle).ok_or_else(|| {
-            CliError::PolicyConfigDetail(format!("unknown bundled rulepack: {bundle}"))
-        })?;
+        let contents = gaze_recognizers::embedded(bundle)
+            .ok_or_else(|| CliError::PolicyConfigDetail("unknown bundled rulepack".into()))?;
         let rulepack = Rulepack::load(RulepackSource::Embedded(contents)).map_err(|err| {
             CliError::PolicyConfigDetail(format!("embedded rulepack '{bundle}': {err}"))
         })?;
@@ -267,13 +266,50 @@ pub(crate) fn map_policy_error(err: PolicyError) -> CliError {
         err @ PolicyError::ReadPermissionDenied { .. } => {
             CliError::PolicyOpenDetail(err.to_string())
         }
+        PolicyError::TomlParse(err) => {
+            CliError::PolicyConfigDetail(format!("policy TOML parse error{}", toml_location(&err)))
+        }
         PolicyError::UnsupportedRuleKind(_) => {
             CliError::PolicyConfigDetail("column rules not supported in CLI mode".to_string())
         }
-        PolicyError::PolicySchemaUnsupported { found, supported } => {
-            CliError::PolicySchemaUnsupported { found, supported }
+        PolicyError::NerThresholdOutOfRange { .. } => {
+            CliError::PolicyConfigDetail("ner.threshold must be between 0.0 and 1.0".into())
         }
-        other => CliError::PolicyConfigDetail(other.to_string()),
+        PolicyError::BundledRulepackUnknown { .. } => {
+            CliError::PolicyConfigDetail("unknown bundled rulepack".into())
+        }
+        PolicyError::SafetyNetBackendUnknown { .. } => CliError::PolicyConfigDetail(
+            "safety_net.backend is command-line only for this backend".into(),
+        ),
+        PolicyError::SafetyNetNym(_) => {
+            CliError::PolicyConfigDetail("invalid [safety_net.nym] label or threshold".into())
+        }
+        PolicyError::PolicySchemaUnsupported { supported, .. } => {
+            CliError::PolicySchemaUnsupported {
+                found: "<redacted>".into(),
+                supported,
+            }
+        }
+        _ => CliError::PolicyConfigDetail("invalid policy configuration".into()),
+    }
+}
+
+/// TOML's display includes the source line. Extract only its numeric location.
+fn toml_location(err: &impl std::fmt::Display) -> String {
+    let rendered = err.to_string();
+    let Some(first) = rendered.lines().next() else {
+        return String::new();
+    };
+    let Some(rest) = first.strip_prefix("TOML parse error at line ") else {
+        return String::new();
+    };
+    let Some((line, column)) = rest.split_once(", column ") else {
+        return String::new();
+    };
+    if line.parse::<usize>().is_ok() && column.parse::<usize>().is_ok() {
+        format!(" at line {line}, column {column}")
+    } else {
+        String::new()
     }
 }
 
@@ -285,8 +321,11 @@ pub(crate) fn map_pipeline_error(err: gaze::Error) -> CliError {
         gaze::Error::Rulepack(err @ gaze::RulepackError::ReadPermissionDenied { .. }) => {
             CliError::PolicyOpenDetail(err.to_string())
         }
-        gaze::Error::Rulepack(rulepack_err) => {
-            CliError::PolicyConfigDetail(format!("rulepack error: {rulepack_err}"))
+        gaze::Error::Rulepack(gaze::RulepackError::Toml(err)) => CliError::PolicyConfigDetail(
+            format!("rulepack TOML parse error{}", toml_location(&err)),
+        ),
+        gaze::Error::Rulepack(_) => {
+            CliError::PolicyConfigDetail("invalid rulepack configuration".into())
         }
         _ => CliError::Pipeline,
     }
@@ -326,11 +365,11 @@ fn map_build_error(err: gaze_assembly::BuildError) -> CliError {
         gaze_assembly::BuildError::UnknownLocaleBucket { bucket, .. } => {
             map_policy_error(PolicyError::UnknownLocaleBucket { name: bucket })
         }
-        gaze_assembly::BuildError::Recognizer(err) => {
-            CliError::PolicyConfigDetail(format!("recognizer error: {err}"))
+        gaze_assembly::BuildError::Recognizer(_) => {
+            CliError::PolicyConfigDetail("invalid recognizer configuration".into())
         }
-        gaze_assembly::BuildError::DobJudgeLoad(err) => {
-            CliError::PolicyConfigDetail(format!("GLiNER DOB judge: {err}"))
+        gaze_assembly::BuildError::DobJudgeLoad(_) => {
+            CliError::PolicyConfigDetail("GLiNER DOB judge load error".into())
         }
         err @ (gaze_assembly::BuildError::NymFeatureDisabled
         | gaze_assembly::BuildError::NymModelDirMissing

@@ -29,6 +29,7 @@ import sys
 import tomllib
 from collections import defaultdict
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Callable, Iterable, Mapping, Sequence
 
@@ -67,11 +68,31 @@ VALID = "valid"
 INVALID = "invalid"
 UNCHECKED = "unchecked"
 BENIGN = "benign"
-# Labels whose checksum-invalid gold the gate credits like valid gold. User
-# ruling 2026-09-27: IBAN and payment card numbers are tokenized even when
-# mod-97 or Luhn fails, so a leaked invalid one is a real leak. Every other
-# label's checksum-invalid gold stays reported, not gated (ruling 2026-09-26).
-CREDITABLE_INVALID_LABELS = frozenset({"IBAN", "CREDITCARDNUMBER"})
+# Gate credit contract v2 (user rulings 2026-09-27 and 2026-09-28).
+GATE_CREDIT_VERSION = 2
+
+
+class CreditScope(str, Enum):
+    ALL = "all"
+    CUED = "cued"
+
+
+CREDIT_SCOPE_BY_LABEL: dict[str, CreditScope] = {
+    "IBAN": CreditScope.ALL,
+    "CREDITCARDNUMBER": CreditScope.ALL,
+    "PHONENUMBER": CreditScope.CUED,
+    "TAXNUM": CreditScope.CUED,
+    "CPF": CreditScope.CUED,
+    "BSN": CreditScope.CUED,
+    "NHSNUMBER": CreditScope.CUED,
+}
+CUED_SURFACES = frozenset(SURFACES) - {"prose_nocue"}
+
+
+def invalid_twin_credited(label: str | None, surface: str) -> bool:
+    """Layer A credit requires a cued surface except for IBAN and card."""
+    scope = CREDIT_SCOPE_BY_LABEL.get(label or "")
+    return scope == CreditScope.ALL or (scope == CreditScope.CUED and surface in CUED_SURFACES)
 
 
 class LayerError(ValueError):
@@ -714,11 +735,10 @@ COUNTERWEIGHT_EXEMPT: dict[tuple[str, str, str], str] = {
 
 
 # The counterweight families that price a checksum-less rule for each label in
-# CREDITABLE_INVALID_LABELS. Crediting invalid gold must never pay for false
+# CREDIT_SCOPE_BY_LABEL. Crediting invalid gold must never pay for false
 # positives on its benign twin shape, so `decide` fails any rise there with no
-# net-bytes offset. Derived from COUNTERWEIGHTS: card -> ref_number_16; IBAN has
-# none by design (its COUNTERWEIGHT_EXEMPT reason: a mod-97-failing IBAN shape
-# has no common benign use).
+# net-bytes offset. Derived from COUNTERWEIGHTS; IBAN and phone have no layer D
+# counterweight (IBAN is exempt; phone has no layer A family).
 CREDIT_GUARD_FAMILIES: dict[str, tuple[str, ...]] = {
     label: tuple(sorted({
         counterweight
@@ -726,7 +746,7 @@ CREDIT_GUARD_FAMILIES: dict[str, tuple[str, ...]] = {
         if validity == INVALID
         and next(f.label for f in IDENTIFIER_FAMILIES if f.name == family) == label
     }))
-    for label in sorted(CREDITABLE_INVALID_LABELS)
+    for label in sorted(CREDIT_SCOPE_BY_LABEL)
 }
 
 
@@ -1882,8 +1902,9 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
     and never gated (user decision 2026-09-26). Layer A excludes its
     checksum-invalid twins; layer C excludes Kiji gold its validator fails,
     per label from the validator split. Layers D and R have no such gold.
-    The labels in `CREDITABLE_INVALID_LABELS` are the exception: their
-    invalid gold is gated like valid gold (user ruling 2026-09-27).
+    Layer A credits IBAN/card invalid twins on every surface and the 2026-09-28
+    classes only on cued surfaces. Layer C lacks cue metadata and credits all
+    validator-failed gold for those labels; see the gate documentation.
     Each row also carries `guard_false_positive`: layer D false-positive bytes
     per CREDIT_GUARD_FAMILIES family (empty for other layers).
     """
@@ -1918,7 +1939,8 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
                 block["utf8_bytes"]["leaked"]
                 for cell, block in run["per_cell"].items()
                 if cell.split("|")[3] == INVALID
-                and family_labels.get(cell.split("|")[1]) not in CREDITABLE_INVALID_LABELS
+                and not invalid_twin_credited(family_labels.get(cell.split("|")[1]),
+                                               cell.split("|")[2])
             )
         elif layer == "C":
             by_label = run.get("validator_recall_by_label")
@@ -1931,7 +1953,7 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
                 block["production_recall_by_gold_validity"]["validator_failed_gold"]["leaked_utf8_bytes"]
                 for label, block in by_label.items()
                 if block.get("production_recall_by_gold_validity")
-                and label not in CREDITABLE_INVALID_LABELS
+                and label not in CREDIT_SCOPE_BY_LABEL
             )
         guard_false_positive: dict[str, int] = {}
         if layer == LAYER_LOOKALIKES:
@@ -2084,6 +2106,7 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         for families in CREDIT_GUARD_FAMILIES.values() for family in families
     }
     return {"verdict": verdict, "reason": reason, "summary": summary, "layers": rows,
+            "gate_credit_version": GATE_CREDIT_VERSION,
             "credit_guard": credit_guard}
 
 
@@ -2250,8 +2273,10 @@ def gate_markdown(result: Mapping[str, object]) -> str:
                       "checksum-invalid gold; any rise fails): " + ", ".join(
                           f"{family} {counts['base']} -> {counts['candidate']}"
                           for family, counts in guard.items())]
-        lines += ["", "Gated leak excludes gold that fails its checksum (layer A twins, layer C "
-                  "validator-failed Kiji gold), except IBAN and card numbers, which are gated; "
+        lines += ["", f"Gate credit contract v{GATE_CREDIT_VERSION}: gated leak excludes gold that fails its checksum "
+                  "(layer A twins, layer C validator-failed Kiji gold), except IBAN and card "
+                  "on all surfaces and TAXNUM, CPF, BSN, and NHS twins only on cued layer A surfaces. "
+                  "Phone has no layer A family; layer C credits all five newer labels without a cue split; "
                   "the excluded bytes are reported in the twin columns. "
                   "The gate is necessary, not sufficient: review still judges precision."]
     return "\n".join(lines) + "\n"

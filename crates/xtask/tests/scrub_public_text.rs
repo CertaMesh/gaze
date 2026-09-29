@@ -96,6 +96,46 @@ fn scrub_public_text_passes_allowlisted_public_urls() {
 }
 
 #[test]
+fn scrub_public_text_passes_cited_comparison_source() {
+    let output = run_gate(&workspace_root(), "comparison_source_allowed.md");
+    assert!(
+        output.status.success(),
+        "a pinned comparison source must pass; {}",
+        output_text(&output)
+    );
+}
+
+#[test]
+fn scrub_public_text_refuses_uncited_comparison_path() {
+    let output = run_gate(&workspace_root(), "comparison_source_unlisted.md");
+    let text = output_text(&output);
+    assert!(
+        !output.status.success(),
+        "an unlisted path must fail; {text}"
+    );
+    assert!(text.contains("gaze clean emitted"), "{text}");
+}
+
+#[test]
+fn scrub_public_text_refuses_query_on_cited_comparison_source() {
+    let output = run_gate(&workspace_root(), "comparison_source_query.md");
+    let text = output_text(&output);
+    assert!(!output.status.success(), "PII in a query must fail; {text}");
+    assert!(text.contains("gaze clean emitted"), "{text}");
+}
+
+#[test]
+fn scrub_public_text_refuses_fragment_on_cited_comparison_source() {
+    let output = run_gate(&workspace_root(), "comparison_source_fragment.md");
+    let text = output_text(&output);
+    assert!(
+        !output.status.success(),
+        "PII in a fragment must fail; {text}"
+    );
+    assert!(text.contains("gaze clean emitted"), "{text}");
+}
+
+#[test]
 fn scrub_public_text_fails_lookalike_repo_url() {
     let output = run_gate(&workspace_root(), "lookalike_url.md");
     let text = output_text(&output);

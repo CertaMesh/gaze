@@ -19,6 +19,9 @@ jobs:
       - name: competitor comparison matches current benchmark inputs
         run: python3 scripts/bench/compare/render.py docs/reference/benchmarks/comparison.json --page docs/reference/benchmarks/competitors.md --check
 
+      - name: competitors' own benchmarks block matches its committed aggregate
+        run: python3 scripts/bench/compare/theirbench/render_theirbench.py render --check
+
       - name: adjacency layer table matches its committed measurements
         run: python3 scripts/bench/render_agentic_adjacency_doc.py --check
 

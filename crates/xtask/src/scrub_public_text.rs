@@ -241,6 +241,54 @@ const PUBLIC_URL_ALLOWLIST: &[(&str, &str)] = &[
     ),
 ];
 
+// Exact pinned citations on the public feature comparison must pass without masking other URLs.
+const PUBLIC_COMPARISON_SOURCE_URLS: &[&str] = &[
+    "https://github.com/DataFog/datafog-core/blob/v0.3.0/LICENSE",
+    "https://github.com/DataFog/datafog-core/blob/v0.3.0/README.md",
+    "https://github.com/DataFog/datafog-core/blob/v0.3.0/crates/core/examples/scan_benchmark.rs",
+    "https://github.com/DataFog/datafog-core/blob/v0.3.0/docs/guides/tokenization-and-restoration.mdx",
+    "https://github.com/DataFog/datafog-core/blob/v0.3.0/docs/privacy-capability-matrix.md",
+    "https://github.com/DataFog/datafog-python/blob/v4.8.1/LICENSE",
+    "https://github.com/DataFog/datafog-python/blob/v4.8.1/README.md",
+    "https://github.com/DataFog/datafog-python/blob/v4.8.1/benchmarks/README.md",
+    "https://github.com/DataFog/datafog-python/blob/v4.8.1/datafog/agent.py",
+    "https://github.com/DataFog/datafog-python/blob/v4.8.1/datafog/engine.py",
+    "https://github.com/DataFog/datafog-python/blob/v4.8.1/docs/roadmap.rst",
+    "https://github.com/DataFog/datafog-python/blob/v4.8.1/docs/v5-cut-line.rst",
+    "https://github.com/LeapBeyond/scrubadub/blob/v2.0.0/LICENSE",
+    "https://github.com/LeapBeyond/scrubadub/blob/v2.0.0/README.rst",
+    "https://github.com/LeapBeyond/scrubadub/blob/v2.0.0/docs/usage.rst",
+    "https://github.com/LeapBeyond/scrubadub/blob/v2.0.0/tests/benchmark_accuracy.py",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/LICENSE",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/analyzer/index.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/anonymizer/index.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/evaluation/index.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/image-redactor/index.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/recipes/german-language-support/README.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/samples/docker/litellm.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/samples/index.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/samples/python/pseudonymization.ipynb",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/structured/index.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/supported_entities.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/presidio-cli/README.md",
+    "https://github.com/data-privacy-stack/presidio/blob/2.2.364/presidio/README.md",
+    "https://github.com/openai/privacy-filter/blob/f7f00ca7fb869683eb732c010299d901457f19c3/EVAL_AND_OUTPUT_MODES.md",
+    "https://github.com/openai/privacy-filter/blob/f7f00ca7fb869683eb732c010299d901457f19c3/LICENSE",
+    "https://github.com/openai/privacy-filter/blob/f7f00ca7fb869683eb732c010299d901457f19c3/OUTPUT_SCHEMAS.md",
+    "https://github.com/openai/privacy-filter/blob/f7f00ca7fb869683eb732c010299d901457f19c3/README.md",
+    "https://github.com/protectai/llm-guard",
+    "https://github.com/protectai/llm-guard/blob/v0.3.16/LICENSE",
+    "https://github.com/protectai/llm-guard/blob/v0.3.16/README.md",
+    "https://github.com/protectai/llm-guard/blob/v0.3.16/benchmarks/run.py",
+    "https://github.com/protectai/llm-guard/blob/v0.3.16/docs/input_scanners/anonymize.md",
+    "https://github.com/protectai/llm-guard/blob/v0.3.16/docs/output_scanners/deanonymize.md",
+    "https://github.com/urchade/GLiNER/blob/v0.2.29/LICENSE",
+    "https://github.com/urchade/GLiNER/blob/v0.2.29/README.md",
+    "https://github.com/urchade/GLiNER/blob/v0.2.29/docs/usage.md",
+    "https://github.com/urchade/GLiNER/blob/v0.2.29/eval.py",
+    "https://huggingface.co/urchade/gliner_multi_pii-v1/tree/1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+];
+
 const PUBLIC_CRATE_SLUGS: &[&str] = &[
     "gaze-pii",
     "gaze-types",
@@ -350,6 +398,9 @@ fn is_allowlisted_public_url(url: &str) -> bool {
     let (host, path) = rest.split_at(authority_end);
     if loopback_http && host != "127.0.0.1:8787" {
         return false;
+    }
+    if PUBLIC_COMPARISON_SOURCE_URLS.contains(&url) {
+        return true;
     }
     if host == "github.com" && PUBLIC_GITHUB_BLOBS.contains(&path) {
         return true;

@@ -304,8 +304,14 @@ class RecordReplayTests(unittest.TestCase):
         layer_docs = [
             score.Document("layer-a", "alice@example.invalid", "en", "US", "synthetic",
                            (score.Span(0, 21, "EMAIL"),), cell="A|email|prose_cue|valid"),
-            # A ref_number_16 cell: the gate's credit guard reads that layer D family.
-            score.Document("layer-d", "voucher 1234 5678 9012 3457", "en", "US", "synthetic", (),
+            # Every credited class's benign counterweight must survive replay.
+            score.Document("layer-d9", "voucher 123456789", "en", "US", "synthetic", (),
+                           cell="D|ref_number_9|prose|benign"),
+            score.Document("layer-d10", "voucher 1234567890", "en", "US", "synthetic", (),
+                           cell="D|ref_number_10|prose|benign"),
+            score.Document("layer-d11", "voucher 12345678901", "en", "US", "synthetic", (),
+                           cell="D|ref_number_11|prose|benign"),
+            score.Document("layer-d16", "voucher 1234 5678 9012 3457", "en", "US", "synthetic", (),
                            cell="D|ref_number_16|prose|benign"),
             score.Document("layer-r", "alice@example.invalid", "en", "US", "synthetic",
                            (score.Span(0, 21, "EMAIL"),), cell="R|email|repeat|valid"),
@@ -330,7 +336,7 @@ class RecordReplayTests(unittest.TestCase):
             card["parameters"]["policy_sha256"] = "1" * 64
             card["layers"] = {
                 "generator": {"corpus_sha256": "2" * 64, "generator_version": 3,
-                              "documents": 3, "documents_by_layer": {"A": 1, "D": 1, "R": 1}},
+                              "documents": 6, "documents_by_layer": {"A": 1, "D": 4, "R": 1}},
                 "scored_label_contract": score.scored_label_contract_report(
                     layer_contract, layer_docs
                 ),
@@ -344,29 +350,33 @@ class RecordReplayTests(unittest.TestCase):
             )
             writer.add("C", "policy-file", self.document, self.response, self.measurements)
             layer_responses = {}
-            for layer, document in zip(("A", "D", "R"), layer_docs, strict=True):
+            for document in layer_docs:
                 response = copy.deepcopy(self.response)
                 response["fixture_id"] = document.uid
                 response["final_protection_trace"] = []
                 response["manifest_integrity"]["spans"] = 0
-                layer_responses[layer] = response
+                layer_responses[document.uid] = response
+            for layer in ("A", "D", "R"):
+                documents = [document for document in layer_docs if document.cell.startswith(f"{layer}|")]
                 measurements = None if layer == "D" else layer_measurements
                 run = score.run_config(
-                    Path("."), Path("."), "policy-file", [document], Path("."),
+                    Path("."), Path("."), "policy-file", documents, Path("."),
                     None, None, None, 0.3, Path("."),
                     validator_measurements=measurements,
-                    replay_responses={document.uid: response},
+                    replay_responses={document.uid: layer_responses[document.uid]
+                                      for document in documents},
                 )
                 card["layers"][layer] = {
-                    "population": score.population_summary([document]),
+                    "population": score.population_summary(documents),
                     "runs": [run],
                 }
                 if measurements is not None:
                     card["layers"][layer]["validator_gold_census"] = (
-                        score.validator_gold_census([document], measurements)
+                        score.validator_gold_census(documents, measurements)
                     )
                     writer.layer_measurements[layer] = measurements
-                writer.add(layer, "policy-file", document, response, measurements)
+                for document in documents:
+                    writer.add(layer, "policy-file", document, layer_responses[document.uid], measurements)
             writer.write(path, card, add_reference=False)
             with gzip.open(path, "rt", encoding="utf-8") as stream:
                 stored = [json.loads(line) for line in stream]
@@ -440,9 +450,10 @@ class RecordReplayTests(unittest.TestCase):
                 [], layer_measurements, corpus_sha256="2" * 64,
                 extra_documents=layer_docs, layer_contract=layer_contract,
             )
-            for layer, document in zip(("A", "D", "R"), layer_docs, strict=True):
+            for document in layer_docs:
+                layer = document.cell.split("|")[0]
                 layer_writer.add(
-                    layer, "policy-file", document, layer_responses[layer],
+                    layer, "policy-file", document, layer_responses[document.uid],
                     None if layer == "D" else layer_measurements,
                 )
             layer_path = Path(temporary) / "layer-only.gz"
