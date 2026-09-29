@@ -114,9 +114,6 @@ pub struct ContextSpec {
     pub boost: Option<f32>,
     pub exclusions: Vec<String>,
     pub reject_match_regex: Option<String>,
-    /// Benign structures (`gaze_types::benign_lookalike`) that veto this recognizer's
-    /// candidates, by rulepack spelling.
-    pub benign_lookalikes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -202,10 +199,13 @@ pub enum RulepackError {
     },
     #[error("failed to parse rulepack TOML: {0}")]
     Toml(#[source] toml::de::Error),
-    /// `benign_lookalikes` on a recognizer that is not a plain uncued regex. Only a weak,
-    /// cue-less shape may be vetoed by its surroundings.
-    #[error("recognizer {id} cannot declare benign lookalikes: {reason}")]
-    IneligibleBenignLookalike { id: String, reason: &'static str },
+    /// A recognizer still declares a rulepack key that Gaze no longer supports.
+    #[error("recognizer {id} declares removed rulepack key `{key}`: {reason}")]
+    RemovedKey {
+        id: String,
+        key: &'static str,
+        reason: &'static str,
+    },
     #[error("unsupported rulepack schema_version {found}; supported {supported}")]
     SchemaVersion { found: String, supported: String },
     #[error("unknown pii class: {0}")]
@@ -484,8 +484,10 @@ struct RawContextSpec {
     exclusions: Vec<String>,
     #[serde(default)]
     reject_match_regex: Option<String>,
+    /// Removed before release; kept only so a pack that still declares it gets a typed error
+    /// instead of silently losing the key.
     #[serde(default)]
-    benign_lookalikes: Vec<String>,
+    benign_lookalikes: Option<toml::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -569,13 +571,7 @@ impl TryFrom<RawRulepackWithLint> for Rulepack {
         let mut recognizers = raw
             .recognizers
             .into_iter()
-            .map(|recognizer| {
-                parse_recognizer(
-                    recognizer,
-                    &default_locales,
-                    raw_with_lint.require_explicit_locale_basis,
-                )
-            })
+            .map(|recognizer| parse_recognizer(recognizer, &default_locales))
             .collect::<Result<Vec<_>, _>>()?;
         validate_collision_memberships(&recognizers)?;
         apply_collision_family_cooperation(&mut recognizers);
@@ -682,11 +678,9 @@ fn parse_validator_spec(
     })
 }
 
-/// `bundled` is true only for a pack loaded through [`Rulepack::parse_bundled`].
 fn parse_recognizer(
     raw: RawRecognizerSpec,
     default_locales: &[LocaleTag],
-    bundled: bool,
 ) -> Result<RecognizerSpec, RulepackError> {
     reject_unshipped_fields(&raw)?;
     validate_matcher(&raw)?;
@@ -721,33 +715,17 @@ fn parse_recognizer(
             value: err.value().to_string(),
         })?
         .unwrap_or_default();
+
     if raw
         .context
         .as_ref()
-        .is_some_and(|context| !context.benign_lookalikes.is_empty())
+        .is_some_and(|context| context.benign_lookalikes.is_some())
     {
-        let refuse = |reason| RulepackError::IneligibleBenignLookalike {
-            id: raw.id.clone(),
-            reason,
-        };
-        // A checked allowlist, not a heuristic: a one-capture regex can still be anchored by a
-        // city or cue the stem list does not know (`ORDER-(\d{5})\s+Beverly`).
-        if !bundled || !gaze_types::benign_lookalike::is_audited(&raw.id) {
-            return Err(refuse(
-                "only the audited bundled recognizers may declare benign lookalikes",
-            ));
-        }
-        if !matches!(raw.matcher, RawMatch::Regex { .. }) {
-            return Err(refuse(
-                "only a regex recognizer can be vetoed by a benign lookalike",
-            ));
-        }
-        if collision
-            .as_ref()
-            .is_some_and(|collision| collision.mandatory_anchor.is_some())
-        {
-            return Err(refuse("a recognizer with a mandatory anchor is cued"));
-        }
+        return Err(RulepackError::RemovedKey {
+            id: raw.id,
+            key: "benign_lookalikes",
+            reason: "benign-lookalike vetoes were removed; delete the key (see UPGRADE.md)",
+        });
     }
 
     Ok(RecognizerSpec {
@@ -766,7 +744,6 @@ fn parse_recognizer(
             boost: context.boost,
             exclusions: context.exclusions,
             reject_match_regex: context.reject_match_regex,
-            benign_lookalikes: context.benign_lookalikes,
         }),
         validator,
         normalizer: raw.normalizer.map(|normalizer| NormalizerSpec {
@@ -1566,13 +1543,7 @@ pattern = "TEST_ONLY"
 base = 0.70
 priority = 1
 "#,
-            // A custom pack may not declare benign lookalikes; a fork of core drops them.
-            gaze_recognizers::embedded("core-extended")
-                .expect("core-extended rulepack")
-                .lines()
-                .filter(|line| !line.starts_with("benign_lookalikes"))
-                .collect::<Vec<_>>()
-                .join("\n")
+            gaze_recognizers::embedded("core-extended").expect("core-extended rulepack")
         );
         let rulepack = Rulepack::parse(&raw).expect("core-extended with synthetic recognizer");
 

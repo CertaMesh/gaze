@@ -291,10 +291,6 @@ capture_groups = [1]
 [recognizers.validator]
 kind = "e164_phone_national_de"
 
-[recognizers.context]
-# A strict part of a digit run longer than any E.164 number is not a phone (docs/explanation/detection/validator-veto.md).
-benign_lookalikes = ["digit_run_fragment"]
-
 [recognizers.scoring]
 base = 0.82
 priority = 85
@@ -324,10 +320,6 @@ capture_groups = [1]
 
 [recognizers.validator]
 kind = "e164_phone_national_us"
-
-[recognizers.context]
-# A strict part of a digit run longer than any E.164 number is not a phone (docs/explanation/detection/validator-veto.md).
-benign_lookalikes = ["digit_run_fragment"]
 
 [recognizers.scoring]
 base = 0.82

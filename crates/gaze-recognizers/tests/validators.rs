@@ -725,26 +725,3 @@ fn digits_to_string(digits: &[u8]) -> String {
         .map(|digit| char::from(b'0' + *digit))
         .collect()
 }
-
-#[test]
-fn a_checksum_backed_recognizer_cannot_declare_benign_lookalikes() {
-    use gaze_recognizers::{BenignLookalike, RecognizerError};
-    let card = RegexDetector::with_rulepack_fields(
-        r"\b\d{16}\b",
-        PiiClass::custom("credit_card").expect("class"),
-        "postal.us",
-        vec![gaze::LocaleTag::Global],
-        0.7,
-        0,
-        "counter",
-        None,
-        Vec::new(),
-        Some(ValidatorKind::Luhn),
-        None,
-    )
-    .expect("detector");
-    assert!(matches!(
-        card.with_benign_lookalikes(vec![BenignLookalike::DigitRunFragment]),
-        Err(RecognizerError::UnsupportedBenignLookalike { .. })
-    ));
-}

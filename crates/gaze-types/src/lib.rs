@@ -1,6 +1,5 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-pub mod benign_lookalike;
 pub mod inspection;
 pub mod nym;
 pub mod payment_card;
@@ -640,10 +639,9 @@ pub enum ValidatorFailReason {
     UkNhsMod11Failed,
     /// Built-in IPv4 rule excluded a loopback address (127.0.0.0/8).
     Ipv4LoopbackRange,
-    /// Built-in IPv6 rule excluded a loopback address (`::1` or an embedded 127.0.0.0/8).
+    /// Built-in IPv6 rule excluded a loopback address (`::1`, or an IPv4-mapped or IPv4-compatible
+    /// 127.0.0.0/8 address).
     Ipv6LoopbackRange,
-    /// The candidate is part of a digit-group run longer than any phone number.
-    BenignDigitRunFragment,
 }
 
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
@@ -768,24 +766,6 @@ impl ValidatorKind {
                 false
             }
         }
-    }
-
-    /// Whether this validator is a checksum: a passing value is vouched for by its own digits,
-    /// so no surrounding text may veto it (`benign_lookalike`).
-    pub fn is_checksum(self) -> bool {
-        matches!(
-            self,
-            Self::Luhn
-                | Self::IbanMod97
-                | Self::EthEip55
-                | Self::AadhaarVerhoeff
-                | Self::FrNirMod97
-                | Self::DeSteuerIdMod1110
-                | Self::BsnMod11
-                | Self::CpfMod11
-                | Self::CnpjMod11
-                | Self::UkNhsMod11
-        )
     }
 
     /// Parses a policy validator kind.
@@ -1205,7 +1185,7 @@ fn ipv6_is_documentation(address: std::net::Ipv6Addr) -> bool {
         || address.to_ipv4().is_some_and(ipv4_is_documentation)
 }
 
-/// `::1`, or an IPv4-mapped or -compatible loopback (`::ffff:127.0.0.1`). A loopback
+/// `::1`, or an IPv4-mapped (`::ffff:127.0.0.1`) or IPv4-compatible (`::127.0.0.1`) loopback. A loopback
 /// address never leaves the host, so it identifies no person or device.
 fn ipv6_is_loopback(address: std::net::Ipv6Addr) -> bool {
     address.is_loopback() || address.to_ipv4().is_some_and(|v4| v4.is_loopback())
@@ -4264,13 +4244,6 @@ pub trait Recognizer: Send + Sync {
     fn validator_on_fail(&self) -> ValidatorOnFail {
         ValidatorOnFail::Veto
     }
-    /// The grant that lets benign lookalikes veto this recognizer's candidates before conflict
-    /// resolution (`benign_lookalike`). `None` by default; only an audited bundled rule can
-    /// hold one, since [`benign_lookalike::BenignLookalikeGrant::audited`] is its only
-    /// constructor.
-    fn benign_lookalike_grant(&self) -> Option<&benign_lookalike::BenignLookalikeGrant> {
-        None
-    }
     /// Locales where this recognizer is active.
     fn locales(&self) -> &[LocaleTag] {
         &[LocaleTag::Global]
@@ -4444,10 +4417,6 @@ pub struct DetectContext<'a> {
     /// Raw candidates found by ordinary recognizers, available only to a recognizer that
     /// requests the post-floor pass. They have not passed validator veto or conflict resolution.
     pub prior_candidates: Option<&'a [Candidate]>,
-    /// Cue evidence of the whole structured record the input came from, if any. Validator veto
-    /// merges it with a scan of the input itself, so a cue anywhere in the record (any key, any
-    /// string value) keeps a benign lookalike veto off.
-    pub record_cues: Option<benign_lookalike::CueEvidence>,
 }
 
 impl<'a> DetectContext<'a> {
@@ -4460,15 +4429,7 @@ impl<'a> DetectContext<'a> {
             degraded: Cell::new(false),
             source_spans: None,
             prior_candidates: None,
-            record_cues: None,
         }
-    }
-
-    /// Records the cue evidence of the structured record the input came from; see
-    /// [`DetectContext::record_cues`].
-    pub fn with_record_cues(mut self, record_cues: Option<benign_lookalike::CueEvidence>) -> Self {
-        self.record_cues = record_cues;
-        self
     }
 
     /// Records the source span of every input byte; see [`DetectContext::source_spans`].

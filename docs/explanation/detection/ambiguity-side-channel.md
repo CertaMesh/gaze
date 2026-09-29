@@ -42,8 +42,7 @@ Current ambiguity reasons:
 - `PrecedenceTie`: family policy precedence tied without a discriminator.
 
 Validator failure reasons are also closed. `ValidatorFailReason` has one
-variant per validator failure, plus the `Benign*` reasons of the
-benign-lookalike veto and the loopback IP exclusions; the full list is in
+variant per validator; the full list is in
 [validator veto](validator-veto.md#type-ownership). Two older spellings,
 `email_rfc_failed` and `e164_phone_failed`, still deserialize as
 `EmailRfcRejected` and `PhoneE164Rejected`, so older audit rows stay readable.

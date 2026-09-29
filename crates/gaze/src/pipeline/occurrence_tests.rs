@@ -14,7 +14,6 @@ fn primary_occurrences_retain_distinct_original_evidence_and_ownership() {
             // fixture-cited(crates/gaze/src/pipeline/occurrence_tests.rs:pipeline::occurrence_tests::primary_occurrences_retain_distinct_original_evidence_and_ownership)
             "alice@example.invalid alice@example.invalid",
             None,
-            None,
             DocumentKind::Text,
             &[crate::LocaleTag::Global],
             &DictionaryBundle::default(),

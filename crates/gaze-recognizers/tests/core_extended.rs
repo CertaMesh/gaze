@@ -1911,8 +1911,7 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         ]
     );
 
-    let one_side_removed =
-        without_benign_lookalikes(raw).replace("cooperates_with = [\"ip.v4\"]\n", "");
+    let one_side_removed = raw.replace("cooperates_with = [\"ip.v4\"]\n", "");
     Rulepack::parse(&one_side_removed).expect("one-sided cooperation remains valid");
 
     let both_sides_removed = one_side_removed.replace("cooperates_with = [\"ip.v6\"]\n", "");
@@ -1947,7 +1946,7 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         "postal.de cooperation site must be unique for the mutation to bite"
     );
 
-    let one_postal_side_removed = without_benign_lookalikes(raw).replace(ca_list, "");
+    let one_postal_side_removed = raw.replace(ca_list, "");
     Rulepack::parse(&one_postal_side_removed).expect("one-sided postal cooperation remains valid");
 
     let both_postal_sides_removed = one_postal_side_removed.replace(de_list, "");
@@ -1960,13 +1959,4 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
             ..
         } if name == "postal_code"
     ));
-}
-
-/// A copy of a bundled pack parsed as a custom pack: custom packs may not declare benign
-/// lookalikes (only the audited bundled rules may), so a fork drops those lines.
-fn without_benign_lookalikes(raw: &str) -> String {
-    raw.lines()
-        .filter(|line| !line.starts_with("benign_lookalikes"))
-        .map(|line| format!("{line}\n"))
-        .collect()
 }

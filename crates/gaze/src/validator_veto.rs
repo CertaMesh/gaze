@@ -16,45 +16,15 @@ pub fn apply(
     registry: &RecognizerRegistry,
     input: &str,
     source_spans: Option<&[(usize, usize)]>,
-    record_cues: Option<gaze_types::benign_lookalike::CueEvidence>,
 ) -> (Vec<Candidate>, Vec<VetoedCandidate>) {
-    // A cue anywhere in the document (and, for a structured leaf, anywhere in its record) or any
-    // non-Latin letter keeps every benign lookalike veto of that family off.
-    let cues = gaze_types::benign_lookalike::CueEvidence::scan(input)
-        .merge(record_cues.unwrap_or_default());
     let mut kept = Vec::with_capacity(candidates.len());
     let mut vetoed = Vec::new();
-    let mut patterns: std::collections::HashMap<String, Option<regex::Regex>> =
-        std::collections::HashMap::new();
 
     for mut candidate in candidates {
         let Some(recognizer) = registry.recognizer(&candidate.recognizer_id) else {
             kept.push(candidate);
             continue;
         };
-        // A weak, cue-less shape rule is vetoed when its match sits inside a benign structure
-        // (an order number's tail, an amount, a long SKU). It needs an audited grant presented
-        // by a recognizer with the audited identity, and the span must be a match of the
-        // audited pattern, so neither a spoofed id nor a borrowed grant vetoes anything else.
-        // Only this candidate goes; another candidate over the same bytes still protects them.
-        if let Some(grant) = recognizer.benign_lookalike_grant().filter(|grant| {
-            grant.binds(&**recognizer)
-                && candidate.recognizer_id == grant.id()
-                && !cues.blocks(recognizer.supported_class())
-        }) {
-            if let Some(structure) = grant
-                .structures()
-                .iter()
-                .find(|structure| structure.matches(input, candidate.span.clone()))
-                .filter(|_| audited_match(&mut patterns, grant, input, candidate.span.clone()))
-            {
-                vetoed.push(VetoedCandidate {
-                    candidate,
-                    reason: structure.reason(),
-                });
-                continue;
-            }
-        }
         let Some(kind) = recognizer.validator_kind() else {
             kept.push(candidate);
             continue;
@@ -115,33 +85,6 @@ pub fn apply(
     }
 
     (kept, vetoed)
-}
-
-/// Whether `span` is one of the spans the grant's audited pattern emits in `input`: a capture
-/// group it names, or the whole match. Fails closed: a pattern that does not compile vetoes
-/// nothing.
-fn audited_match(
-    patterns: &mut std::collections::HashMap<String, Option<regex::Regex>>,
-    grant: &gaze_types::benign_lookalike::BenignLookalikeGrant,
-    input: &str,
-    span: std::ops::Range<usize>,
-) -> bool {
-    let Some(regex) = patterns
-        .entry(grant.pattern().to_string())
-        .or_insert_with(|| regex::Regex::new(grant.pattern()).ok())
-    else {
-        return false;
-    };
-    regex
-        .captures_iter(input)
-        .any(|captures| match grant.capture_groups() {
-            None => captures.get(0).is_some_and(|m| m.range() == span),
-            Some(groups) => groups.iter().any(|&group| {
-                captures
-                    .get(group as usize)
-                    .is_some_and(|m| m.range() == span)
-            }),
-        })
 }
 
 #[cfg(test)]
@@ -206,7 +149,7 @@ mod tests {
             Vec::new(),
         )
         .with_evidence(EvidenceKind::Rule);
-        apply(vec![candidate], &registry, text, None, None)
+        apply(vec![candidate], &registry, text, None)
     }
 
     #[test]

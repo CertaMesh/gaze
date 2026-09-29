@@ -24,20 +24,6 @@ pub enum RecognizerError {
         /// Why the combination is refused.
         reason: &'static str,
     },
-    /// `benign_lookalikes` names a structure this build does not know.
-    #[error("unknown benign lookalike structure: {value}")]
-    UnknownBenignLookalike {
-        /// The rulepack spelling.
-        value: String,
-    },
-    /// `benign_lookalikes` on a recognizer that must never be vetoed by context.
-    #[error("recognizer {recognizer_id} cannot declare benign lookalikes: {reason}")]
-    UnsupportedBenignLookalike {
-        /// Recognizer identifier.
-        recognizer_id: String,
-        /// Why the declaration is refused.
-        reason: &'static str,
-    },
     /// Normalizer kind is unsupported by this recognizer build.
     #[error("unsupported normalizer: {kind}")]
     UnsupportedNormalizer {

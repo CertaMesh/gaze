@@ -150,8 +150,7 @@ in Rust and additive variants can ship in any minor release.
 | `cnpj_mod11_failed` | Brazilian CNPJ MOD-11 checksum failed. | v0.7 |
 | `uk_nhs_mod11_failed` | UK NHS number MOD-11 checksum failed. | v0.7 |
 | `ipv4_loopback_range` | Bundled IPv4 rule excluded a loopback address (127.0.0.0/8). | unreleased |
-| `ipv6_loopback_range` | Bundled IPv6 rule excluded `::1` or an embedded IPv4 loopback address. | unreleased |
-| `benign_digit_run_fragment` | The candidate is part of a digit run longer than any phone number. | unreleased |
+| `ipv6_loopback_range` | Bundled IPv6 rule excluded `::1` or an IPv4-mapped or IPv4-compatible loopback address. | unreleased |
 
 **`fallback_triggered` (`FallbackReason`)** — serialization at
 `gaze-types/src/lib.rs:1735-1746`:

@@ -66,8 +66,6 @@ pub struct RegexDetector {
     /// (`gaze_types::payment_card::scan_card_run`). Set for a `luhn` recognizer whose pattern is
     /// `gaze_types::payment_card::CARD_RUN_PATTERN`, as `card.structural` is.
     card_runs: bool,
-    /// The audited-rule grant that lets benign structures veto this recognizer's candidates.
-    benign_grant: Option<gaze_types::benign_lookalike::BenignLookalikeGrant>,
 }
 
 impl RegexDetector {
@@ -133,7 +131,6 @@ impl RegexDetector {
             ascii_email_boundary,
             identifier_run_boundary,
             card_runs,
-            benign_grant: None,
         })
     }
 
@@ -232,12 +229,6 @@ impl Recognizer for RegexDetector {
         self.validator_on_fail
     }
 
-    fn benign_lookalike_grant(
-        &self,
-    ) -> Option<&gaze_types::benign_lookalike::BenignLookalikeGrant> {
-        self.benign_grant.as_ref()
-    }
-
     fn locales(&self) -> &[LocaleTag] {
         &self.locales
     }
@@ -282,43 +273,6 @@ impl RegexDetector {
             }
         }
         self.validator_on_fail = on_fail;
-        Ok(self)
-    }
-
-    /// Benign structures that veto this recognizer's candidates. Granted only when the rule is
-    /// exactly an audited bundled rule (`BenignLookalikeGrant::audited`); any other rule,
-    /// including a copy with a changed pattern, validator, locale or id, is refused. Call last,
-    /// after [`Self::with_locale_basis`] and [`Self::with_validator_on_fail`].
-    pub fn with_benign_lookalikes(
-        mut self,
-        structures: Vec<gaze_types::benign_lookalike::BenignLookalike>,
-    ) -> Result<Self> {
-        if structures.is_empty() {
-            self.benign_grant = None;
-            return Ok(self);
-        }
-        // Only a rule that is byte-for-byte an audited bundled rule gets a grant: id, class,
-        // pattern, capture groups, validator and failure mode, locales and basis, structures.
-        let grant = gaze_types::benign_lookalike::BenignLookalikeGrant::audited(
-            &gaze_types::benign_lookalike::GrantRequest {
-                id: &self.source,
-                class: &self.class,
-                pattern: self.regex.as_str(),
-                capture_groups: self.capture_groups.as_deref(),
-                validator: self.validator_kind,
-                on_fail: self.validator_on_fail,
-                locales: &self.locales,
-                locale_basis: self.locale_basis,
-                structures: &structures,
-            },
-        );
-        let Some(grant) = grant else {
-            return Err(RecognizerError::UnsupportedBenignLookalike {
-                recognizer_id: self.source.clone(),
-                reason: "only an audited bundled rule, unchanged, may declare benign lookalikes",
-            });
-        };
-        self.benign_grant = Some(grant);
         Ok(self)
     }
 

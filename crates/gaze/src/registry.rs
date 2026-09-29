@@ -1226,13 +1226,8 @@ impl RecognizerRegistry {
                 .filter(|candidate| candidate.score >= min_score(&candidate.class)),
         );
 
-        let (candidates, vetoed) = crate::validator_veto::apply(
-            candidates,
-            self,
-            input,
-            ctx.source_spans,
-            ctx.record_cues,
-        );
+        let (candidates, vetoed) =
+            crate::validator_veto::apply(candidates, self, input, ctx.source_spans);
         Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }
 

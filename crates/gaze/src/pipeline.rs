@@ -101,10 +101,6 @@ pub enum Error {
     UnsupportedActionVariant,
     #[error("manifest sweep failed closed: {0}")]
     ManifestSweep(#[from] crate::sweep::ManifestSweepError),
-    /// A vetoed candidate has no source span to put on its audit row. Every veto must be
-    /// audited, so the document fails closed instead of dropping the row.
-    #[error("validator veto failed closed: a vetoed candidate has no source span to audit")]
-    UnauditableVeto,
 }
 
 /// Primary safety-net action. See [`SafetyNetPolicy`] for how it composes with
@@ -630,7 +626,6 @@ impl Pipeline {
                 target,
                 &text,
                 None,
-                None,
                 DocumentKind::Text,
                 locale_chain,
                 dictionaries,
@@ -781,7 +776,6 @@ impl Pipeline {
             target,
             text,
             None,
-            None,
             DocumentKind::Text,
             locale_chain,
             dictionaries,
@@ -829,7 +823,6 @@ impl Pipeline {
         let mut clean = self.redact_text_with_manifest_uncached(
             &mut target,
             text,
-            None,
             None,
             DocumentKind::Text,
             locale_chain,
@@ -978,13 +971,11 @@ impl Pipeline {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::too_many_arguments)]
     fn pseudonymize_text(
         &self,
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
-        record_cues: Option<gaze_types::benign_lookalike::CueEvidence>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
@@ -994,7 +985,6 @@ impl Pipeline {
                 target,
                 text,
                 field_name,
-                record_cues,
                 document_kind,
                 locale_chain,
                 dictionaries,
@@ -1008,7 +998,6 @@ impl Pipeline {
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
-        record_cues: Option<gaze_types::benign_lookalike::CueEvidence>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
@@ -1019,7 +1008,6 @@ impl Pipeline {
             target,
             text,
             field_name,
-            record_cues,
             document_kind,
             locale_chain,
             dictionaries,
@@ -1033,7 +1021,6 @@ impl Pipeline {
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
-        record_cues: Option<gaze_types::benign_lookalike::CueEvidence>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
@@ -1041,9 +1028,7 @@ impl Pipeline {
     ) -> Result<CleanText> {
         let normalized = normalize(text);
         let spans = &normalized.spans;
-        let ctx = DetectContext::new(locale_chain, dictionaries)
-            .with_source_spans(spans)
-            .with_record_cues(record_cues);
+        let ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
@@ -1121,7 +1106,10 @@ impl Pipeline {
             })
             .collect::<BTreeMap<_, _>>();
         let mut ledger = Ledger::new(evidence);
-        let vetoed = translate_vetoed_candidates(vetoed, spans)?;
+        let vetoed = vetoed
+            .into_iter()
+            .filter_map(|vetoed| translate_vetoed_candidate(vetoed, spans))
+            .collect::<Vec<_>>();
         let losers = merged_losers(&resolved, &self.registry);
         let mut detections = resolved
             .into_iter()
@@ -5076,9 +5064,6 @@ fn walk_structured(
     op: LeafOp,
 ) -> Result<BTreeMap<String, Value>> {
     let mut clean = BTreeMap::new();
-    // Every key and string value of the whole record, scanned once: a cue anywhere in it keeps
-    // every benign lookalike veto of that family off in every leaf.
-    let record = record_cue_evidence(fields);
     for (key, value) in fields {
         let path = op.root_path(key);
         // A field error aborts the whole document rather than yielding a partially protected
@@ -5089,7 +5074,6 @@ fn walk_structured(
             value,
             key,
             &path,
-            record,
             locale_chain,
             dictionaries,
             report,
@@ -5099,36 +5083,6 @@ fn walk_structured(
         }
     }
     Ok(clean)
-}
-
-/// Cue evidence of a whole structured record: every key and every string value, at every
-/// depth, including array elements. No length cap and no path scoping: a label anywhere in the
-/// record may be the one that names a value.
-fn record_cue_evidence(
-    fields: &BTreeMap<String, Value>,
-) -> gaze_types::benign_lookalike::CueEvidence {
-    fn visit(value: &Value, evidence: &mut gaze_types::benign_lookalike::CueEvidence) {
-        match value {
-            Value::String(text) => {
-                *evidence = evidence.merge(gaze_types::benign_lookalike::CueEvidence::scan(text));
-            }
-            Value::Array(values) => values.iter().for_each(|value| visit(value, evidence)),
-            Value::Object(fields) => {
-                for (key, value) in fields {
-                    *evidence =
-                        evidence.merge(gaze_types::benign_lookalike::CueEvidence::scan(key));
-                    visit(value, evidence);
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut evidence = gaze_types::benign_lookalike::CueEvidence::default();
-    for (key, value) in fields {
-        evidence = evidence.merge(gaze_types::benign_lookalike::CueEvidence::scan(key));
-        visit(value, &mut evidence);
-    }
-    evidence
 }
 
 /// Walks one structured value under `op`.
@@ -5142,7 +5096,6 @@ fn walk_structured_value(
     value: &Value,
     field_name: &str,
     field_path: &str,
-    record: gaze_types::benign_lookalike::CueEvidence,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
     report: &mut LeakReport,
@@ -5154,7 +5107,6 @@ fn walk_structured_value(
                 target,
                 text,
                 Some(field_name),
-                Some(record),
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
@@ -5167,7 +5119,6 @@ fn walk_structured_value(
                     target,
                     text,
                     Some(field_name),
-                    Some(record),
                     DocumentKind::Structured,
                     locale_chain,
                     dictionaries,
@@ -5216,7 +5167,6 @@ fn walk_structured_value(
                     child,
                     field_name,
                     &format!("{field_path}[{idx}]"),
-                    record,
                     locale_chain,
                     dictionaries,
                     report,
@@ -5236,7 +5186,6 @@ fn walk_structured_value(
                     child,
                     key,
                     &format!("{field_path}.{key}"),
-                    record,
                     locale_chain,
                     dictionaries,
                     report,
@@ -5274,18 +5223,6 @@ fn walk_structured_value(
 
 fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {
     crate::normalize::raw_range(candidate.span.clone(), spans).map(|span| candidate.with_span(span))
-}
-
-/// Every veto writes one audit row, so a vetoed candidate that cannot be placed on the source
-/// text fails the document instead of vanishing from the log.
-fn translate_vetoed_candidates(
-    vetoed: Vec<crate::validator_veto::VetoedCandidate>,
-    spans: &[(usize, usize)],
-) -> Result<Vec<crate::validator_veto::VetoedCandidate>> {
-    vetoed
-        .into_iter()
-        .map(|vetoed| translate_vetoed_candidate(vetoed, spans).ok_or(Error::UnauditableVeto))
-        .collect()
 }
 
 fn translate_vetoed_candidate(
@@ -8979,40 +8916,3 @@ mod occurrence_tests;
 
 #[cfg(test)]
 mod residual_tests;
-
-#[cfg(test)]
-mod veto_audit_tests {
-    use super::*;
-    use crate::validator_veto::VetoedCandidate;
-    use gaze_types::ValidatorFailReason;
-
-    fn vetoed(span: std::ops::Range<usize>) -> VetoedCandidate {
-        VetoedCandidate {
-            candidate: Candidate::new(
-                span,
-                PiiClass::custom("postal_code").expect("class"),
-                "postal.us",
-                0.7,
-                70,
-                None,
-                "counter",
-                "postal.us",
-                ConflictTier::None,
-                Vec::new(),
-            ),
-            reason: ValidatorFailReason::BenignDigitRunFragment,
-        }
-    }
-
-    #[test]
-    fn every_veto_is_placed_or_the_document_fails_closed() {
-        let spans = [(0, 1), (1, 2), (2, 3)];
-        let placed = translate_vetoed_candidates(vec![vetoed(0..2), vetoed(1..3)], &spans)
-            .expect("both vetoes map to source bytes");
-        assert_eq!(placed.len(), 2);
-        assert!(matches!(
-            translate_vetoed_candidates(vec![vetoed(0..2), vetoed(2..9)], &spans),
-            Err(Error::UnauditableVeto)
-        ));
-    }
-}

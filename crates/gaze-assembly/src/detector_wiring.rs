@@ -157,20 +157,6 @@ pub(crate) fn register_rulepack_recognizers(
                             .map_err(gaze_recognizers::RecognizerError::from)
                     })
                     .transpose()?;
-                let benign_lookalikes = recognizer
-                    .context
-                    .as_ref()
-                    .map(|context| context.benign_lookalikes.as_slice())
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|value| {
-                        gaze_recognizers::BenignLookalike::parse(value).ok_or_else(|| {
-                            gaze_recognizers::RecognizerError::UnknownBenignLookalike {
-                                value: value.clone(),
-                            }
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
                 let normalizer_kind = recognizer
                     .normalizer
                     .as_ref()
@@ -202,8 +188,7 @@ pub(crate) fn register_rulepack_recognizers(
                             .validator
                             .as_ref()
                             .map_or(ValidatorOnFail::Veto, |validator| validator.on_fail),
-                    )?
-                    .with_benign_lookalikes(benign_lookalikes)?,
+                    )?,
                 );
             }
             RawMatch::Dictionary {
