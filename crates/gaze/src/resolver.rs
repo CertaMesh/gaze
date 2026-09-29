@@ -793,6 +793,9 @@ fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
     existing.validator_fail_reason = existing
         .validator_fail_reason
         .or(candidate.validator_fail_reason);
+    existing.labelled_value_scan_reason = existing
+        .labelled_value_scan_reason
+        .or(candidate.labelled_value_scan_reason);
     existing.decided_by = ConflictTier::Merged;
     existing.merged_sources.push(candidate.source);
 }

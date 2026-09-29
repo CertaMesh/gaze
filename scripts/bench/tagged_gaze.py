@@ -80,3 +80,75 @@ def require_release_tag(version: str, where: str) -> str:
     require_tag(version, where)
     tag_commit(version)
     return version
+
+
+#: What a tagged release is measured with, pinned by digest and reviewed like any other pin:
+#: the `gaze setup` policy the release writes (home paths normalised) and the two model bundles
+#: it names (`compare.digest_tree`). A different policy or bundle is a different measurement.
+RELEASE_PINS = {
+    "v0.15.1": {
+        "policy_home_normalized_sha256": "481f5df7a9b0b562bf2c2db7274cfbf2ea701231c52f1287b27de00554453ff1",
+        "ner_model_tree_sha256": "1196662dfcf78d3ef4a9fbbd474d5dd4ce9e656d5fdc38ec38eff3d3249ba1fe",
+        "nym_model_tree_sha256": "1878b4af812a531f5710692287e529106951d78e0e270820b05fa8e6ae082a2d",
+    },
+}
+
+
+def check_model_receipt(receipt: dict, pinned: dict, where: str) -> None:
+    """A model a measurement used must be the pinned one: repository, revision and tree digest.
+
+    `receipt` is what the producer wrote after hashing the directory it ran; `pinned` is the
+    reviewed declaration (vendor-tuned.json). Used by the producer (before inference), the
+    harness (before scoring) and the merge, so no step trusts the one before it.
+    """
+    for key in ("model", "revision", "tree_sha256"):
+        if receipt.get(key) != pinned[key]:
+            raise ValueError(f"{where}: model {key} is {receipt.get(key)!r}, the pinned value is {pinned[key]!r}")
+
+
+def check_own_input(own: dict, prediction_sha256: str, dataset_sha256: str, where: str) -> None:
+    """A vendor evaluator's score must be of the measured row's own predictions on the pinned dataset.
+
+    `own["input"]` is the receipt the replay wrote: the SHA-256 of the prediction file it read and
+    of the dataset it scored against.
+    """
+    receipt = own.get("input")
+    if not receipt:
+        raise ValueError(f"{where}: the own-scorer result records no input receipt")
+    if receipt.get("prediction_sha256") != prediction_sha256:
+        raise ValueError(f"{where}: the own scorer read predictions {receipt.get('prediction_sha256')}, "
+                         f"the measured row's are {prediction_sha256}")
+    if receipt.get("dataset_sha256") != dataset_sha256:
+        raise ValueError(f"{where}: the own scorer used dataset {receipt.get('dataset_sha256')}, "
+                         f"the pinned one is {dataset_sha256}")
+
+
+def check_own_score(own: dict, documents: int, where: str) -> None:
+    """Recompute a vendor evaluator's precision, recall and F-beta from the counts in its receipt.
+
+    The receipt (`own["input"]`) carries the evaluator's raw counts (true positives, predicted,
+    annotated), the beta and the rounding it applies; the published fields must be exactly
+    what those counts give, and the document count must be the measured split's. A score
+    edited after the fact, or one whose counts do not yield it, is refused.
+    """
+    receipt, scored = own["input"], own.get("scored") or own.get("overall")
+    counts = receipt.get("counts")
+    if not counts or not scored:
+        raise ValueError(f"{where}: the own-scorer result carries no counts to recompute its score from")
+    if receipt.get("documents") != documents:
+        raise ValueError(f"{where}: the own scorer scored {receipt.get('documents')} documents, the split has {documents}")
+    for key in ("documents", "records"):
+        if key in scored and scored[key] != documents:
+            raise ValueError(f"{where}: the published {key} count {scored[key]} is not the split's {documents}")
+    tp, predicted, annotated = counts["true_positives"], counts["predicted"], counts["annotated"]
+    if not (0 <= tp <= min(predicted, annotated)):
+        raise ValueError(f"{where}: counts are inconsistent (tp {tp}, predicted {predicted}, annotated {annotated})")
+    beta, digits = receipt["beta"], receipt["digits"]
+    precision = tp / predicted if predicted else 0.0
+    recall = tp / annotated if annotated else 0.0
+    denominator = beta * beta * precision + recall
+    f_beta = (1 + beta * beta) * precision * recall / denominator if denominator else 0.0
+    headline = "f2" if "f2" in scored else "f1"
+    for key, value in (("precision", precision), ("recall", recall), (headline, f_beta)):
+        if abs(scored[key] - round(value, digits)) > 1e-9:
+            raise ValueError(f"{where}: published {key} {scored[key]} is not what its counts give ({round(value, digits)})")

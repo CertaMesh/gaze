@@ -67,6 +67,7 @@ fn pii_class_audit_wrapper_uses_canonical_json_without_changing_bare_pii_class()
 #[test]
 fn validator_fail_reason_round_trips_all_variants() {
     let reasons = [
+        ValidatorFailReason::RegexGuardRejected,
         ValidatorFailReason::LuhnFailed,
         ValidatorFailReason::IbanMod97Failed,
         ValidatorFailReason::EmailRfcRejected,

@@ -51,6 +51,8 @@ pub enum RawMatch {
         pattern_template: Option<String>,
         #[serde(default)]
         capture_groups: Option<Vec<u32>>,
+        #[serde(default)]
+        complete_labelled_value: bool,
     },
     Dictionary {
         #[serde(default)]

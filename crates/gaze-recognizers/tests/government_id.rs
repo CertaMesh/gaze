@@ -1,7 +1,8 @@
 //! Regression fixtures for the government-ID cluster recognizers.
 //!
-//! EVERY positive fixture encodes a structural shape MEASURED in the Dataiku EN/DE holdout. The
-//! measured distribution driving these rules:
+//! The original government-ID fixtures cover structural shapes measured in the Dataiku EN/DE
+//! holdout. The later labelled-identifier fixtures use synthetic shapes beyond that corpus.
+//! The measured distribution that drove the original rules:
 //!
 //! | class            | gold spans / bytes | cue adjacency        | chosen coverage      |
 //! |------------------|--------------------|----------------------|----------------------|
@@ -10,8 +11,8 @@
 //! | DRIVERLICENSENUM | 216 / 2,160        | 92.1%                | 71 spans / 682 B     |
 //! | TAXNUM           | 212 / 2,495        | 92.9%                | 34 spans / 418 B     |
 //!
-//! Every chosen variant measures ZERO matches across all 1,024 A4 negative documents and zero
-//! non-gold matches in the holdout.
+//! The original chosen variants measured zero matches across all 1,024 A4 negative documents and
+//! zero non-gold matches in the holdout. Later fallbacks require their own benchmark gate.
 //!
 //! Locale basis (the #414 mixed model): `ssn.de_cue` is `format` (same class and national
 //! identifier shape as `ssn.us`, German cue vocabulary, DACH provenance); the three bilingual
@@ -27,7 +28,9 @@ use gaze::{
     RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
-use gaze_types::ValidatorFailReason;
+use gaze_types::{LabelledValueScanReason, ValidatorFailReason, LABELLED_FIELD_CONNECTORS};
+use regex::Regex;
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 
 fn empty_context() -> Context {
@@ -82,6 +85,14 @@ struct CapturingLogger {
     entries: Arc<Mutex<Vec<RedactionEntry>>>,
 }
 
+fn without_gaze_tokens(cleaned: &str) -> String {
+    static TOKEN: OnceLock<Regex> = OnceLock::new();
+    TOKEN
+        .get_or_init(|| Regex::new(r"<[0-9a-f]{8}:[^>]*>").unwrap())
+        .replace_all(cleaned, "")
+        .into_owned()
+}
+
 impl RedactionLogger for CapturingLogger {
     fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         self.entries.lock().unwrap().push(entry.clone());
@@ -127,7 +138,7 @@ fn clean_with_winners(chain: &[LocaleTag], text: &str) -> (String, Vec<String>) 
 fn failed_cued_steuer_id_is_tokenized_with_audit_reason() {
     let invalid = "Steuer-ID 48 954 371 208";
     let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], invalid);
-    assert!(!cleaned.contains("48 954 371 208"));
+    assert!(!without_gaze_tokens(&cleaned).contains("48 954 371 208"));
     assert_eq!(
         entries.len(),
         1,
@@ -142,7 +153,7 @@ fn failed_cued_steuer_id_is_tokenized_with_audit_reason() {
 
     let valid = "Steuer-ID 48 954 371 207";
     let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], valid);
-    assert!(!cleaned.contains("48 954 371 207"));
+    assert!(!without_gaze_tokens(&cleaned).contains("48 954 371 207"));
     let winners = entries
         .iter()
         .filter(|entry| !entry.conflict_loser)
@@ -173,7 +184,7 @@ fn all_zero_ids_and_vehicle_identification_cue_stay_raw() {
     }
     let (cleaned, _) =
         clean_with_entries(&[LocaleTag::Global], "Identifikationsnummer 86095742718");
-    assert!(!cleaned.contains("86095742718"));
+    assert!(!without_gaze_tokens(&cleaned).contains("86095742718"));
 }
 
 fn clean_under(chain: &[LocaleTag], text: &str) -> String {
@@ -200,12 +211,12 @@ fn clean(text: &str) -> String {
 fn assert_id_removed(text: &str, id: &str, surviving_context: &[&str]) {
     let cleaned = clean(text);
     assert!(
-        !cleaned.contains(id),
+        !without_gaze_tokens(&cleaned).contains(id),
         "identifier {id:?} survived tokenization in {cleaned:?}"
     );
     for fragment in surviving_context {
         assert!(
-            cleaned.contains(fragment),
+            without_gaze_tokens(&cleaned).contains(fragment),
             "context {fragment:?} should survive but is missing from {cleaned:?}"
         );
     }
@@ -254,7 +265,7 @@ fn english_cued_ssn_stays_with_ssn_us_and_is_not_claimed_by_the_german_arm() {
     let (cleaned, winners) =
         clean_with_winners(&[LocaleTag::Global], "His SSN: 123-45-6789 is on file.");
     assert!(
-        !cleaned.contains("123-45-6789"),
+        !without_gaze_tokens(&cleaned).contains("123-45-6789"),
         "ssn.us regressed: {cleaned:?}"
     );
     assert_eq!(winners, vec!["ssn.us".to_string()], "{cleaned:?}");
@@ -274,7 +285,10 @@ fn german_cued_ssn_is_claimed_by_the_german_arm_alone() {
             &chain,
             "Die Sozialversicherungsnummer lautet 123-45-6789 und ist hinterlegt.",
         );
-        assert!(!cleaned.contains("123-45-6789"), "{chain:?}: {cleaned:?}");
+        assert!(
+            !without_gaze_tokens(&cleaned).contains("123-45-6789"),
+            "{chain:?}: {cleaned:?}"
+        );
         assert_eq!(
             winners,
             vec!["ssn.de_cue".to_string()],
@@ -304,7 +318,10 @@ fn ssn_arms_never_co_fire_even_when_both_cues_touch_one_number() {
         ),
     ] {
         let (cleaned, winners) = clean_with_winners(&[LocaleTag::Global], text);
-        assert!(!cleaned.contains("123-45-6789"), "{text:?}: {cleaned:?}");
+        assert!(
+            !without_gaze_tokens(&cleaned).contains("123-45-6789"),
+            "{text:?}: {cleaned:?}"
+        );
         assert!(
             winners.iter().all(|id| !id.contains('+')),
             "same-class composite id emitted for {text:?}: {winners:?}"
@@ -473,6 +490,957 @@ fn a4_negative_shapes_are_untouched() {
     assert_unchanged("invoice 123-456-789 has no tax cue anywhere near it");
 }
 
+#[test]
+fn labelled_identifier_values_are_captured_without_the_field_name() {
+    for (input, value, class) in [
+        (
+            "Tax Number: 67-853-422 is on file.",
+            "67-853-422",
+            "tax_number",
+        ),
+        (
+            "Permis de conduire: 987654321.",
+            "987654321",
+            "driver_license",
+        ),
+        (
+            "Driver's licence number, 987654321 was filed.",
+            "987654321",
+            "driver_license",
+        ),
+        (
+            "Rijbewijsnummer:\u{00A0}NL-12345678.",
+            "NL-12345678",
+            "driver_license",
+        ),
+        (
+            "Identification card: 5123-6789-0456.",
+            "5123-6789-0456",
+            "national_id",
+        ),
+        (
+            "ID card number, 5123-6789-0456 was filed.",
+            "5123-6789-0456",
+            "national_id",
+        ),
+        (
+            r#"{"national_id":"NL12345678"}"#,
+            "NL12345678",
+            "national_id",
+        ),
+        (
+            r#"{"carte_d'identité":"FR12345678"}"#,
+            "FR12345678",
+            "national_id",
+        ),
+        (
+            r#"{"numéro_fiscal":"FR-12345678"}"#,
+            "FR-12345678",
+            "tax_number",
+        ),
+        (
+            "Cartão de identidade | PT12345678",
+            "PT12345678",
+            "national_id",
+        ),
+        (
+            "Steuernummer lautet AB12 CD3456.",
+            "AB12 CD3456",
+            "tax_number",
+        ),
+        ("Tax number AB12-CD3456", "AB12-CD3456", "tax_number"),
+        ("Steuernummer: 12AB3456", "12AB3456", "tax_number"),
+        (
+            "Führerschein Nr. DE 1234ABCD ist gültig.",
+            "DE 1234ABCD",
+            "driver_license",
+        ),
+        ("Driver's licence: 12AB-3456", "12AB-3456", "driver_license"),
+        (
+            "Carte d'identité est FR23/AB4567.",
+            "FR23/AB4567",
+            "national_id",
+        ),
+        ("ID card: 12AB-3456", "12AB-3456", "national_id"),
+        ("Tax number:\n  AB12-CD3456", "AB12-CD3456", "tax_number"),
+        (
+            "Rijbewijsnummer\r\n NL12345678",
+            "NL12345678",
+            "driver_license",
+        ),
+        (
+            "national_id:\u{00A0}\"NL23.456789\"",
+            "NL23.456789",
+            "national_id",
+        ),
+    ] {
+        let cleaned = clean(input);
+        assert!(
+            !without_gaze_tokens(&cleaned).contains(value),
+            "value leaked: {input:?} -> {cleaned:?}"
+        );
+        assert!(
+            cleaned.contains(&format!(":Custom:{class}_")),
+            "wrong class: {input:?} -> {cleaned:?}"
+        );
+    }
+}
+
+#[test]
+fn labelled_identifier_field_boundaries_reject_lookalikes() {
+    for input in [
+        "order_id: 5123-6789-0456",
+        "international_id: NL12345678",
+        "invoice_number: 67-853-422",
+        "invoice_number: 12AB-3456",
+        "Identification card: A12345678901234567890",
+        "Permis de conduire:\nnotes\n987654321",
+        "Tax Number: 12345678901",
+        "Permis de conduire: 2024-09-28",
+        "Identification card: 2024/09/28",
+        "ID card number, 28/09/2024",
+        "Identification card: 1234.50",
+        "Tax number is invoice 123-456-789",
+        "Tax number invoice AB12-CD3456",
+        "Tax number: AB12-CD3456ZZZZZZZZZZZZ",
+        "order_id: AB12 CD3456 XYZ123456",
+        "invoice_number: AB12 CD3456 XYZ123456",
+        "sku: AB12 CD3456 XYZ123456",
+        "Tax number: 1234.50",
+        "Tax number: EUR 1234.50",
+        "ID card: $1234.50",
+        "ID card: 2024/09/28",
+        "Order number: AB12 CD3456",
+        "Invoice: AB12 CD3456",
+        "SKU: AB12 CD3456",
+        "Tax number: see attached",
+        "Tax number: N/A",
+        "Tax number:",
+    ] {
+        assert_unchanged(input);
+    }
+}
+
+#[test]
+fn labelled_identifier_json_restores_exact_input() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, value) in [
+        (
+            "{\"rijbewijsnummer\":\"NL-12345678\",\"note\":\"synthetic\"}",
+            "NL-12345678",
+        ),
+        ("Tax number:\n  AB12-CD3456", "AB12-CD3456"),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text");
+        };
+        assert!(!without_gaze_tokens(&cleaned).contains(value));
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&session, &cleaned)
+                .expect("restore"),
+            input
+        );
+    }
+}
+
+#[test]
+fn labelled_identifiers_never_emit_a_grouped_prefix() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, value, class) in [
+        (
+            "Tax number: AB12 CD3456 XYZ123456",
+            "AB12 CD3456 XYZ123456",
+            "tax_number",
+        ),
+        (
+            "Driver's licence: AB12 CD3456 XYZ123456",
+            "AB12 CD3456 XYZ123456",
+            "driver_license",
+        ),
+        (
+            "ID card: AB12 CD3456 XYZ123456",
+            "AB12 CD3456 XYZ123456",
+            "national_id",
+        ),
+        (
+            r#"{"tax_number":"AB12 CD3456 XYZ123456"}"#,
+            "AB12 CD3456 XYZ123456",
+            "tax_number",
+        ),
+        (
+            "Driver's licence:\n  AB12 CD3456 XYZ123456",
+            "AB12 CD3456 XYZ123456",
+            "driver_license",
+        ),
+        (
+            "| ID card | AB12 CD3456 XYZ123456 |",
+            "AB12 CD3456 XYZ123456",
+            "national_id",
+        ),
+        (
+            "Tax number: AB12 CD3456 XYZ123456.",
+            "AB12 CD3456 XYZ123456",
+            "tax_number",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text");
+        };
+        assert!(
+            !without_gaze_tokens(&cleaned).contains(value),
+            "whole value leaked: {input:?} -> {cleaned:?}"
+        );
+        assert!(
+            !without_gaze_tokens(&cleaned).contains("XYZ123456"),
+            "value suffix leaked: {input:?} -> {cleaned:?}"
+        );
+        assert!(
+            cleaned.contains(&format!(":Custom:{class}_")),
+            "wrong class: {input:?} -> {cleaned:?}"
+        );
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&session, &cleaned)
+                .expect("restore"),
+            input
+        );
+    }
+}
+
+#[test]
+fn labelled_identifiers_tokenize_overlong_or_overgrouped_values() {
+    for input in [
+        "Tax number: AB12 CD3456 XYZ123456 ABCDEFGHIJK123",
+        "Driver's licence: AB12 CD3456 XYZ123456 ABC123 DEF456 GHI789",
+        "ID card: AB12 CD3456 XYZ12345678901234567890",
+        r#"{"national_id":"AB12 CD3456 XYZ12345678901234567890"}"#,
+        "| Tax number | AB12 CD3456 XYZ123456 ABCDEFGHIJK123 |",
+        "Tax number: AB12 CD3456 XYZ123456/ABC123",
+    ] {
+        let cleaned = clean(input);
+        let visible = without_gaze_tokens(&cleaned);
+        for group in ["AB12", "CD3456", "XYZ123456", "ABC123", "DEF456", "GHI789"] {
+            if input.contains(group) {
+                assert!(
+                    !visible.contains(group),
+                    "value group leaked: {input:?} -> {cleaned:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn labelled_value_limit_is_audited_without_refusing_the_value() {
+    let input = "Tax number: AB12 CD3456 XYZ123456 ABC123 DEF456";
+    let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], input);
+    assert!(
+        !without_gaze_tokens(&cleaned).contains("DEF456"),
+        "{cleaned:?}"
+    );
+    assert!(
+        entries.iter().any(|entry| {
+            !entry.conflict_loser
+                && entry.labelled_value_scan_reason == Some(LabelledValueScanReason::LimitExceeded)
+        }),
+        "missing typed limit reason: {entries:?}"
+    );
+    let (_, bounded_entries) = clean_with_entries(&[LocaleTag::Global], "Tax number: AB12 CD3456");
+    assert!(bounded_entries
+        .iter()
+        .all(|entry| entry.labelled_value_scan_reason.is_none()));
+}
+
+#[test]
+fn date_after_labelled_identifier_never_vetoes_the_identifier() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, value, date) in [
+        (
+            "Tax number: AB12 CD3456 2024-09-28",
+            "AB12 CD3456",
+            "2024-09-28",
+        ),
+        (
+            "Tax number: AB12 CD3456 - 28.09.2024",
+            "AB12 CD3456",
+            "28.09.2024",
+        ),
+        (
+            "Tax number: AB12 CD3456 / 2024-09-28",
+            "AB12 CD3456",
+            "2024-09-28",
+        ),
+        (
+            "Tax number: AB12 CD3456 VALID 2024-09-28",
+            "AB12 CD3456",
+            "2024-09-28",
+        ),
+        (
+            "Tax number: AB12-CD3456 28/09/2024",
+            "AB12-CD3456",
+            "28/09/2024",
+        ),
+        (
+            "Tax number: AB12 CD3456 DOB 01.01.1990",
+            "AB12 CD3456",
+            "01.01.1990",
+        ),
+        (
+            "| Tax number | AB12 CD3456 2024-09-28 |",
+            "AB12 CD3456",
+            "2024-09-28",
+        ),
+        ("UTR: AB12 CD3456 2024-09-28", "AB12 CD3456", "2024-09-28"),
+        ("TIN: AB123456 01.02.2023", "AB123456", "01.02.2023"),
+        (
+            "Driver's licence: AB12 CD3456 01.01.2030",
+            "AB12 CD3456",
+            "01.01.2030",
+        ),
+        (
+            "Driver's licence number: AB12 CD3456 EXP 01.01.2030",
+            "AB12 CD3456",
+            "01.01.2030",
+        ),
+        (
+            "Führerschein: AB12 CD3456 2030-01-01",
+            "AB12 CD3456",
+            "2030-01-01",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.into()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .unwrap();
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        assert!(
+            !without_gaze_tokens(&cleaned).contains(value),
+            "identifier leaked: {input:?} => {cleaned:?}"
+        );
+        assert!(
+            cleaned.contains(date),
+            "date was swallowed: {input:?} => {cleaned:?}"
+        );
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
+fn labelled_identifier_stops_at_other_field_cues_and_classes() {
+    let chain = [LocaleTag::Global];
+    let rulepack = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
+    let mut policy = gaze::Policy::default();
+    policy.rules = vec![RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    policy.rulepacks.bundled = vec!["core".into()];
+    policy.rulepacks.auto_activate_locale_gated = false;
+    let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&chain));
+    let pipeline =
+        gaze_assembly::build_pipeline(&policy, &empty_context(), &[rulepack], &locale_chain, None)
+            .unwrap();
+    for (input, first, second, second_class) in [
+        (
+            "ID card: T22000129 SSN 123-45-6789",
+            "T22000129",
+            "SSN",
+            "ssn",
+        ),
+        (
+            "Tax number: AB12 CD3456 4111 1111 1111 1111",
+            "AB12 CD3456",
+            "4111",
+            "credit_card",
+        ),
+        (
+            "Tax number: AB12 CD3456 ID card: EF34 GH5678",
+            "AB12 CD3456",
+            "ID card",
+            "national_id",
+        ),
+        (
+            "Tax number: AB12 CD3456 TIN AB123456",
+            "AB12 CD3456",
+            "TIN",
+            "tax_number",
+        ),
+        (
+            "Tax number: AB12 CD3456 DOB 01.01.1990",
+            "AB12 CD3456",
+            "DOB",
+            "birth_date",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.into()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .unwrap();
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        assert!(
+            !without_gaze_tokens(&cleaned).contains(first),
+            "identifier leaked: {input:?} => {cleaned:?}"
+        );
+        if second_class == "credit_card" {
+            assert!(
+                !without_gaze_tokens(&cleaned).contains(second),
+                "card leaked: {input:?} => {cleaned:?}"
+            );
+        } else {
+            assert!(
+                cleaned.contains(second),
+                "next field swallowed: {input:?} => {cleaned:?}"
+            );
+        }
+        assert!(
+            cleaned.contains(&format!(":Custom:{second_class}_")),
+            "next class missing: {input:?} => {cleaned:?}"
+        );
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+
+    let input = "Tax number: AB12 CD3456 4111 1111 1111 1112";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(input.into()),
+            &chain,
+            &DictionaryBundle::default(),
+        )
+        .unwrap();
+    let CleanDocument::Text(cleaned) = clean else {
+        panic!("expected text")
+    };
+    assert!(
+        !without_gaze_tokens(&cleaned).contains("1112"),
+        "failed card left raw: {cleaned:?}"
+    );
+    assert!(
+        cleaned.contains(":Custom:tax_number_"),
+        "tax value missing: {cleaned:?}"
+    );
+    assert_eq!(
+        pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+        input
+    );
+}
+
+#[test]
+fn rejected_date_capture_has_an_audit_row() {
+    let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], "Tax number: 2024/09/28");
+    assert_eq!(cleaned, "Tax number: 2024/09/28");
+    assert!(
+        entries.iter().any(|entry| {
+            entry.conflict_loser
+                && entry.validator_fail_reason == Some(ValidatorFailReason::RegexGuardRejected)
+        }),
+        "rejection was silent: {entries:?}"
+    );
+}
+
+#[test]
+fn labelled_value_joiners_keep_identifier_groups_together() {
+    for value in [
+        "AB12_CD3456",
+        "AB12:CD3456",
+        "AB123456\u{2060}CD3456",
+        "AB123456\u{FEFF}CD3456",
+        "AB123456\u{200F}CD3456",
+        "AB123456 C\u{0301}D3456",
+    ] {
+        let input = format!("Tax number: {value}");
+        let cleaned = clean(&input);
+        assert!(
+            !without_gaze_tokens(&cleaned).contains("CD3456")
+                && !without_gaze_tokens(&cleaned).contains("D3456"),
+            "value suffix leaked: {input:?} => {cleaned:?}"
+        );
+    }
+}
+
+#[test]
+fn labelled_tax_value_does_not_leave_a_phone_suffix_raw() {
+    let chain = [LocaleTag::DeDe, LocaleTag::Global];
+    let rulepack = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
+    let mut policy = gaze::Policy::default();
+    policy.rules = vec![RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    policy.rulepacks.bundled = vec!["core".into()];
+    policy.rulepacks.auto_activate_locale_gated = false;
+    let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&chain));
+    let pipeline =
+        gaze_assembly::build_pipeline(&policy, &empty_context(), &[rulepack], &locale_chain, None)
+            .unwrap();
+    let input = "Tax number: AB12 CD3456 030 1234567";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(input.into()),
+            &chain,
+            &DictionaryBundle::default(),
+        )
+        .unwrap();
+    let CleanDocument::Text(cleaned) = clean else {
+        panic!("expected text")
+    };
+    assert!(
+        !without_gaze_tokens(&cleaned).contains("CD3456")
+            && !without_gaze_tokens(&cleaned).contains("1234567"),
+        "identifier or phone leaked: {cleaned:?}"
+    );
+    assert_eq!(
+        pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+        input
+    );
+}
+
+#[test]
+fn cue_anchored_identifier_scans_the_whole_grouped_run() {
+    let input = "Tax ID: 123 456 789 012 345";
+    let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], input);
+    assert!(
+        !without_gaze_tokens(&cleaned).contains("345"),
+        "{cleaned:?}"
+    );
+    assert!(
+        entries.iter().any(|entry| {
+            entry
+                .recognizer_id
+                .as_deref()
+                .is_some_and(|id| id.contains("tax_number.cue_anchored"))
+        }),
+        "cue rule did not contribute: {entries:?}"
+    );
+}
+
+#[test]
+fn cue_anchored_dates_inside_original_capture_stay_protected() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, value, suffix) in [
+        (
+            "Steuernummer: 181/12/03/2019 bitte",
+            "181/12/03/2019",
+            "/12/03/2019",
+        ),
+        (
+            "National ID: 756.12.05.2020 ok",
+            "756.12.05.2020",
+            ".12.05.2020",
+        ),
+        (
+            "Tax number: 123 12.05.2020 ok",
+            "123 12.05.2020",
+            "12.05.2020",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        assert!(
+            !without_gaze_tokens(&cleaned).contains(value),
+            "original capture leaked: {cleaned:?}"
+        );
+        assert!(
+            !without_gaze_tokens(&cleaned).contains(suffix),
+            "capture suffix leaked: {cleaned:?}"
+        );
+        assert_eq!(cleaned.matches('<').count(), 1, "{cleaned:?}");
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
+fn uppercase_next_field_labels_remain_visible_with_correct_ownership() {
+    let chain = [LocaleTag::Global];
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_for(&chain).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    for (input, next_label, next_rule, token_count) in [
+        (
+            "Tax number: AB12 CD3456 DRIVER LICENSE: EF34 GH5678",
+            "DRIVER LICENSE:",
+            Some("driver_license.labelled"),
+            2,
+        ),
+        (
+            "Tax number: AB12 CD3456 PASSPORT: P12345678",
+            "PASSPORT:",
+            Some("passport.cue_anchored"),
+            2,
+        ),
+        (
+            "Tax number: AB12 CD3456 STATUS: ACTIVE",
+            "STATUS: ACTIVE",
+            None,
+            1,
+        ),
+    ] {
+        entries.lock().unwrap().clear();
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        if next_rule.is_some() {
+            assert!(
+                cleaned.contains(next_label),
+                "verified field label swallowed: {cleaned:?}"
+            );
+        } else {
+            assert!(
+                !without_gaze_tokens(&cleaned).contains(next_label),
+                "unverified field value was left outside the prior token: {cleaned:?}"
+            );
+        }
+        assert_eq!(cleaned.matches('<').count(), token_count, "{cleaned:?}");
+        let winners: Vec<_> = entries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| !entry.conflict_loser)
+            .filter_map(|entry| entry.recognizer_id.clone())
+            .collect();
+        assert!(
+            winners.iter().any(|id| id.starts_with("tax_number.")),
+            "{winners:?}"
+        );
+        if let Some(rule) = next_rule {
+            assert!(winners.iter().any(|id| id == rule), "{winners:?}");
+        }
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
+fn earlier_class_at_byte_zero_cannot_break_a_later_labelled_identifier() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, identifier) in [
+        ("X9Y8Z7  Ausweisnummer: A12345678901", "A12345678901"),
+        ("alice@example.invalid Tax number: AB123456", "AB123456"),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        assert!(
+            !without_gaze_tokens(&cleaned).contains(identifier),
+            "labelled identifier remained raw: {cleaned:?}"
+        );
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
+fn labelled_next_field_connector_matrix_protects_values_and_restores() {
+    // This fixed assertion makes removal of tab from the shared list fail the matrix test.
+    assert_eq!(
+        LABELLED_FIELD_CONNECTORS,
+        &[':', '=', '|', '\t', ',', ';', '-']
+    );
+    let chain = [LocaleTag::Global];
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_for(&chain).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    for (prefix, label, value, next_rule) in [
+        (
+            "Driver license: EF34 GH5678",
+            "TAX NUMBER",
+            "AB12 CD3456",
+            "tax_number.labelled",
+        ),
+        (
+            "Tax number: AB12 CD3456",
+            "DRIVER LICENSE",
+            "EF34 GH5678",
+            "driver_license.labelled",
+        ),
+        (
+            "Tax number: AB12 CD3456",
+            "NATIONAL INSURANCE",
+            "AB12345678",
+            "national_id.cue_anchored",
+        ),
+        (
+            "Tax number: AB12 CD3456",
+            "ID CARD",
+            "EF34 GH5678",
+            "id_card.labelled",
+        ),
+        (
+            "Tax number: AB12 CD3456",
+            "PASSPORT",
+            "P12345678",
+            "passport.cue_anchored",
+        ),
+    ] {
+        for connector in LABELLED_FIELD_CONNECTORS {
+            let input = format!("{prefix} {label}{connector} {value}");
+            entries.lock().unwrap().clear();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let (clean, _, _) = pipeline
+                .clean_with_safety_net_detect_context(
+                    &session,
+                    RawDocument::Text(input.clone()),
+                    &chain,
+                    &DictionaryBundle::default(),
+                )
+                .unwrap();
+            let CleanDocument::Text(cleaned) = clean else {
+                panic!("expected text")
+            };
+            assert!(
+                cleaned.contains(label),
+                "next label swallowed: {input:?} -> {cleaned:?}"
+            );
+            let visible = without_gaze_tokens(&cleaned);
+            for group in value.split_ascii_whitespace() {
+                assert!(
+                    !visible.contains(group),
+                    "next value group leaked: {input:?} -> {cleaned:?}"
+                );
+            }
+            assert_eq!(cleaned.matches('<').count(), 2, "{input:?} -> {cleaned:?}");
+            let winners: Vec<_> = entries
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| !entry.conflict_loser)
+                .filter_map(|entry| entry.recognizer_id.as_deref().map(str::to_owned))
+                .collect();
+            assert!(
+                winners.iter().any(|id| id == next_rule),
+                "{input:?} -> {winners:?}"
+            );
+            assert_eq!(
+                pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+                input
+            );
+        }
+    }
+}
+
+#[test]
+fn unrecognized_next_value_remains_covered_by_previous_labelled_value() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for connector in LABELLED_FIELD_CONNECTORS {
+        let input = format!("Tax number: AB12 CD3456 PASSPORT{connector} EF34 GH5678");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.clone()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .unwrap();
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        let visible = without_gaze_tokens(&cleaned);
+        for group in ["EF34", "GH5678"] {
+            assert!(
+                !visible.contains(group),
+                "unrecognized next value group leaked: {input:?} -> {cleaned:?}"
+            );
+        }
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
+fn labelled_identifier_boundaries_keep_value_bytes_protected() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, groups) in [
+        ("Tax number: AB12 CD3456 (Germany)", &["AB12", "CD3456"][..]),
+        ("Tax number: AB12 CD3456 - verified", &["AB12", "CD3456"]),
+        (
+            "Tax number: AB12 CD3456 for the client",
+            &["AB12", "CD3456"],
+        ),
+        ("Tax number: AB12 CD3456 Über", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456)", &["AB12", "CD3456"]),
+        ("(Tax number: AB12 CD3456)", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456</td>", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456<br>", &["AB12", "CD3456"]),
+        ("Tax number\tAB12 CD3456\tName", &["AB12", "CD3456"]),
+        (
+            "Tax number: AB12 CD3456. Then we filed",
+            &["AB12", "CD3456"],
+        ),
+        (
+            "My tax number is AB12 CD3456 and I live in Berlin.",
+            &["AB12", "CD3456"],
+        ),
+        (
+            "Driver's licence: B123 456 789 issued in Berlin",
+            &["B123", "456", "789"],
+        ),
+        (
+            "ID card no. T22 000 129 (copy attached)",
+            &["T22", "000", "129"],
+        ),
+        (
+            "Tax number: AB12 CD3456; ID card: EF34 GH5678",
+            &["AB12", "CD3456", "EF34", "GH5678"],
+        ),
+        ("Tax number: AB12 CD3456\u{0085}", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\u{2028}", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\u{2029}", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\u{3000}", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\u{200B}", &["AB12", "CD3456"]),
+        (
+            "ID card: AB12 CD3456\u{200B}XYZ123456",
+            &["AB12", "CD3456", "XYZ123456"],
+        ),
+        ("Tax number: AB12 CD3456?", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456!", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456>", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456*", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456_", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456\\", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456)", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456 ”", &["AB12", "CD3456"]),
+        ("Tax number: AB12 CD3456 »", &["AB12", "CD3456"]),
+        ("tax number: xy 12345 zq", &["xy", "12345", "zq"]),
+        (
+            "Tax number: AB12 CD3456. XYZ123456",
+            &["AB12", "CD3456", "XYZ123456"],
+        ),
+        (
+            "Tax ID: 123 456 789 012 345",
+            &["123", "456", "789", "012", "345"],
+        ),
+        (
+            "Tax number: AB12 CD3456 US 123-45-6789",
+            &["AB12", "CD3456", "123-45-6789"],
+        ),
+        (
+            "Tax number: AB12 CD3456 UK 123-45-6789",
+            &["AB12", "CD3456", "123-45-6789"],
+        ),
+        (
+            "Tax number: AB12 CD3456 4111 1111 1111 1112",
+            &["AB12", "CD3456", "4111", "1112"],
+        ),
+        (
+            "ID card: 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234 1234",
+            &["1234"],
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        let visible = without_gaze_tokens(&cleaned);
+        for group in groups {
+            assert!(
+                !visible.contains(group),
+                "value group leaked: {input:?} -> {cleaned:?}"
+            );
+        }
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&session, &cleaned)
+                .expect("restore"),
+            input
+        );
+    }
+}
+
 // ------------------------------------------------------- cross-class collision determinism
 //
 // The numeric silhouettes genuinely overlap across these classes: `d3-d2-d4` appears in SSN
@@ -517,8 +1485,8 @@ fn collision_resolution_is_stable_within_a_single_session() {
     // occurrences.
     let text = "Tax ID number: 123.4567.8901.23 and Tax ID number: 456.7890.1234.56 both filed.";
     let cleaned = clean(text);
-    assert!(!cleaned.contains("123.4567.8901.23"));
-    assert!(!cleaned.contains("456.7890.1234.56"));
+    assert!(!without_gaze_tokens(&cleaned).contains("123.4567.8901.23"));
+    assert!(!without_gaze_tokens(&cleaned).contains("456.7890.1234.56"));
 }
 
 // -------------------------------------------------------------------- locale-chain activation
@@ -595,7 +1563,7 @@ fn every_class_fires_under_every_benchmark_and_default_adopter_chain() {
         for (text, id) in cases {
             let cleaned = clean_under(&chain, text);
             assert!(
-                !cleaned.contains(id),
+                !without_gaze_tokens(&cleaned).contains(id),
                 "{id:?} survived on chain {chain:?}: {cleaned:?}"
             );
         }
@@ -645,7 +1613,7 @@ fn government_ids_restore_exactly() {
 
 /// The canonical shared connector grammar. It appears byte-identical in all six family patterns;
 /// `shared_connector_grammar_is_byte_identical_across_the_family` fails the moment one copy drifts.
-const SHARED_CONNECTOR: &str = r#"\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?"#;
+const SHARED_CONNECTOR: &str = r#"\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?"#;
 
 const CONNECTOR_FAMILY: [&str; 6] = [
     "ssn.us",
@@ -941,7 +1909,7 @@ fn passport_class_wins_over_national_id_for_a_passport_cue() {
     // fires and the test would be vacuous (precedence 15->40 would change nothing — review nit N1).
     let cleaned = clean("passport ID number NZ1234567 was recorded.");
     assert!(
-        !cleaned.contains("NZ1234567"),
+        !without_gaze_tokens(&cleaned).contains("NZ1234567"),
         "passport value survived: {cleaned}"
     );
     assert!(
