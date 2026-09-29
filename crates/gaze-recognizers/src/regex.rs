@@ -513,7 +513,7 @@ fn scan_labelled_value(input: &str, capture: std::ops::Range<usize>) -> Labelled
                         | '-'
                         | '_'
                         | ':'
-                ) || ('\u{0300}'..='\u{036F}').contains(&ch)
+                ) || ('\u{0300}'..='\u{036F}').contains(ch)
             })
             .last()
             .map_or(0, |(at, ch)| at + ch.len_utf8());

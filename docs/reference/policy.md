@@ -380,6 +380,15 @@ emitted. This guard sees text outside `capture_groups`; an invalid guard
 regex fails pipeline assembly. It is unavailable in
 `[[policy.custom_recognizers]]`.
 
+Regex rulepacks may also set `complete_labelled_value = true` under
+`[recognizers.match]` when a labelled identifier's captured value can continue
+through adjacent groups. The scanner protects the complete value run and
+records a typed `labelled_value_scan_reason` for a date boundary, field
+boundary, other-class boundary, or a value over four groups or 40 bytes.
+Those limits are audit signals, not reasons to leave a suffix raw. The setting
+is rulepack-only; `[[policy.custom_recognizers]]` has no equivalent field. See
+[labelled identifiers](../explanation/detection/labelled-identifiers.md).
+
 When same-class spans strictly contain one another, the resolver prefers the
 longer span regardless of evidence tier, score, or rule priority. If that
 choice would expose bytes covered by the prior arbitration of the entire

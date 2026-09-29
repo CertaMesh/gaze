@@ -3967,6 +3967,7 @@ mod redaction_logger_tests {
             created_at: 0,
             session_id: None,
             validator_fail_reason: None,
+            labelled_value_scan_reason: None,
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,

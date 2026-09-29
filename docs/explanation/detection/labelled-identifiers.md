@@ -8,10 +8,12 @@ fixed identifier shape. English, German, French, Dutch, and Portuguese labels ar
 
 Only the value becomes a token. The label and punctuation remain visible so an agent can still
 understand the field. The original value bytes go into the manifest, so strict restore returns
-the input exactly. A shared field-boundary check extends digit-bearing or uppercase groups after
-a bounded regex capture. It emits a token only when the whole grouped value fits, or refuses
-the candidate if a suffix remains. The limit is four chunks and 40 bytes. Bounded letter-led
-and digit-led groups may use spaces, dots, slashes, or hyphens.
+the input exactly. A shared complete-value scan extends digit-bearing or uppercase groups after
+a bounded regex capture. It protects the entire adjacent value run, including values longer than
+four groups or 40 bytes; those limits produce an audit reason, not a cutoff that exposes a suffix.
+The scan stops before a date or a new field cue. A second recognizer can also establish a class
+boundary. The audit reason records the boundary without recording value bytes. Letter-led and
+digit-led groups may use spaces, dots, slashes, or hyphens.
 Grouped numbers need at least three chunks, keeping ordinary decimal amounts out of this fallback.
 
 The rules do not infer a class from a bare value or a generic `id` or `number` field. A field
@@ -22,3 +24,9 @@ precision boundaries, not claims that every real identifier will fit the fallbac
 evidence and hand-written shape probes are required before adding a new label or value shape.
 An unpunctuated `license number` remains outside the driver-licence fallback because it can
 refer to a non-personal licence.
+
+The three fallback rows and their activation stay in the
+[redaction-class inventory](../../reference/redaction-classes.md#embedded-recognizers). The
+rulepack's `complete_labelled_value` field is documented in the
+[policy reference](../../reference/policy.md); it is available to external rulepacks but not to
+`[[policy.custom_recognizers]]`.
