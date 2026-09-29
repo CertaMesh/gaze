@@ -10,6 +10,10 @@ from pathlib import Path
 
 LAYERS = ("C", "A", "D", "R")
 CONTRACTS = ("v2", "v1")
+MATCH_KINDS = (
+    "exact", "whitespace_flexible", "case_folded",
+    "whitespace_case_folded", "corroborated_single",
+)
 
 
 def table(v2: dict, v1: dict) -> dict:
@@ -72,17 +76,24 @@ def table(v2: dict, v1: dict) -> dict:
         output_rows.append({
             "record_class": record_class,
             "match_kind": match_kind,
-            "default_gain_pass": all(
-                contract_rows[contract]["gain_pass"] for contract in CONTRACTS
+            "default_gain_pass": (
+                None if record_class == "unattributed" else all(
+                    contract_rows[contract]["gain_pass"] for contract in CONTRACTS
+                )
             ),
             "contracts": contract_rows,
         })
+    observed_kinds = {
+        row["match_kind"] for row in output_rows
+        if row["record_class"] != "unattributed"
+    }
     return {
         "schema_version": 1,
         "source_commit": v2["source_commit"],
         "policy_sha256": v2["policy_sha256"],
         "dataset_sha256": v2["dataset_sha256"],
         "rule": "leaked gold bytes fall > false-positive bytes rise under both contracts",
+        "unmeasured_match_kinds": sorted(set(MATCH_KINDS) - observed_kinds),
         "rows": output_rows,
     }
 
