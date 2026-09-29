@@ -1,0 +1,240 @@
+"""release_char_level.py: character-level scores of tagged releases, offline checks."""
+
+from __future__ import annotations
+
+import copy
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import release_char_level as rcl  # noqa: E402
+
+DATA = json.loads(rcl.OUTPUT.read_text(encoding="utf-8"))
+HISTORY = rcl.history_doc.load_history(rcl.history_doc.DEFAULT_HISTORY)
+CORPUS = rcl.REPO / "target/bench-data/dataiku-en-de/test.parquet"
+
+
+def test_committed_file_matches_history_and_metrics() -> None:
+    rcl.check(DATA, HISTORY)
+    assert set(DATA["releases"]) == {"v0.14.0", "v0.15.0", "v0.15.1"}
+    for row in DATA["releases"].values():
+        assert row["char_level"]["unit"] == "unicode_code_point"
+        assert 0 < row["char_level"]["f2"] < 1
+
+
+@pytest.mark.parametrize("mutation, match", [
+    (lambda d: d["releases"]["v0.15.1"].update(leaked_bytes=1), "leaked bytes"),
+    (lambda d: d["releases"]["v0.15.1"].update(false_positive_bytes=1), "false-positive bytes"),
+    (lambda d: d["releases"]["v0.15.1"].update(record_sha256="0" * 64), "record hash"),
+    (lambda d: d.update(metrics_sha256="0" * 64), "comparison_metrics"),
+    (lambda d: d["releases"].update({"main": d["releases"]["v0.15.1"]}), "not a release tag"),
+    (lambda d: d["releases"]["v0.15.1"]["char_level"].update(f2=0.99), "stored f2"),
+    (lambda d: d["releases"]["v0.15.1"]["char_level"].update(recall=0.5), "stored recall"),
+    (lambda d: d["releases"]["v0.15.1"]["char_level"].update(fn=10**9), "stored"),
+    (lambda d: d["releases"]["v0.15.1"].update(crates_tree="0" * 40), "crates tree"),
+    (lambda d: d["releases"]["v0.15.1"].update(total_bytes=10**9), "total_bytes"),
+    (lambda d: d["releases"]["v0.15.1"].update(total_bytes=1), "total_bytes"),
+])
+def test_check_refuses_tampered_rows(mutation, match) -> None:
+    data = copy.deepcopy(DATA)
+    mutation(data)
+    with pytest.raises(ValueError, match=match):
+        rcl.check(data, HISTORY)
+
+
+@pytest.mark.skipif(not CORPUS.exists(), reason="needs the local benchmark corpus")
+def test_record_reproduces_the_committed_scores(tmp_path) -> None:
+    evidence, rebuilt = rcl.build(CORPUS)
+    rebuilt["evidence_sha256"] = rcl.write_evidence(Path(tmp_path) / "evidence.json.gz", evidence)
+    assert rebuilt == DATA
+    assert rcl.load_evidence(Path(tmp_path) / "evidence.json.gz") == rcl.load_evidence(rcl.EVIDENCE)
+
+
+def test_a_corrupted_record_file_is_refused(tmp_path) -> None:
+    """`check` hashes the committed record itself, not just the hash the history states."""
+    import shutil
+
+    shutil.copy(rcl.EVIDENCE, tmp_path / rcl.EVIDENCE.name)
+    for entry in HISTORY["releases"]:
+        observation = rcl.observation_of(entry)
+        if observation:
+            shutil.copy(rcl.BENCH_DIR / observation["file"], tmp_path / observation["file"])
+    rcl.check(DATA, HISTORY, tmp_path)
+    victim = tmp_path / rcl.observation_of(HISTORY["releases"][-1])["file"]
+    victim.write_bytes(victim.read_bytes() + b"x")
+    with pytest.raises(ValueError, match="does not match its recorded hash"):
+        rcl.check(DATA, HISTORY, tmp_path)
+
+
+def test_the_corpus_must_be_the_one_the_release_was_measured_on(monkeypatch) -> None:
+    if not CORPUS.exists():
+        pytest.skip("needs the local benchmark corpus")
+    import compare
+
+    real = compare.load_corpus
+
+    def other(dataset, packs):
+        layers, identity = real(dataset, packs)
+        identity = {**identity, "negative_corpus_sha256": "0" * 64}
+        return layers, identity
+
+    monkeypatch.setattr(compare, "load_corpus", other)
+    with pytest.raises(ValueError, match="not the one it was measured on"):
+        rcl.build(CORPUS)
+
+
+def test_character_counts_cannot_exceed_the_byte_counts() -> None:
+    """Consistent P/R/F2 but more missed characters than leaked bytes is impossible."""
+    tp, fp, fn = 90, 0, 10
+    precision, recall = 1.0, 0.9
+    f2 = 5 * precision * recall / (4 * precision + recall)
+    row = {"leaked_bytes": 5, "false_positive_bytes": 0,
+           "char_level": {"tp": tp, "fp": fp, "fn": fn, "precision": precision,
+                          "recall": recall, "f2": f2}}
+    with pytest.raises(ValueError, match="exceed 5 leaked bytes"):
+        rcl.check_char_level("v9.9.9", row)
+    row["leaked_bytes"] = 10
+    rcl.check_char_level("v9.9.9", row)
+
+
+
+
+def test_check_needs_only_the_tags_not_the_history_commits(monkeypatch) -> None:
+    """History commits may live only on a local branch; the check never resolves them."""
+    real = rcl._crates_of
+    commits = {entry["commit"] for entry in HISTORY["releases"]}
+
+    def tags_only(commit: str) -> str:
+        if commit in commits:
+            raise rcl.GitError(f"cannot read crates/ of {commit[:12]}: not on this remote")
+        return real(commit)
+
+    monkeypatch.setattr(rcl, "_crates_of", tags_only)
+    rcl.check(DATA, HISTORY)
+
+
+def test_a_missing_tag_is_a_readable_error_not_a_traceback() -> None:
+    with pytest.raises(rcl.GitError, match="v9.9.9 is not a git tag.*fetch-depth: 0"):
+        rcl.tag_crates_tree("v9.9.9")
+    data = copy.deepcopy(DATA)
+    data["releases"]["v9.9.9"] = copy.deepcopy(data["releases"]["v0.15.1"])
+    history = copy.deepcopy(HISTORY)
+    row = copy.deepcopy(history["releases"][-1])
+    row["version"] = "v9.9.9"
+    history["releases"].append(row)
+    with pytest.raises(Exception, match="v9.9.9 is not a git tag"):
+        rcl.check(data, history)
+
+
+def test_a_version_shaped_branch_is_not_a_release_tag(tmp_path) -> None:
+    """`git rev-parse v1.2.3:crates` resolves branches too; the tag namespace must be named."""
+    import subprocess
+
+    from tagged_gaze import UntaggedGazeError, tag_commit
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "-c",
+                        "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
+                       cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q", "-b", "main")
+    (tmp_path / "crates").mkdir()
+    (tmp_path / "crates" / "f").write_text("x")
+    git("add", "-A")
+    git("commit", "-q", "-m", "c")
+    git("branch", "v1.2.3")
+    assert subprocess.run(["git", "rev-parse", "v1.2.3:crates"], cwd=tmp_path,
+                          capture_output=True).returncode == 0  # the trap this guards against
+    with pytest.raises(UntaggedGazeError, match="not a git tag"):
+        tag_commit("v1.2.3", tmp_path)
+    git("tag", "-a", "-m", "release", "v1.2.4")
+    assert len(tag_commit("v1.2.4", tmp_path)) == 40
+
+
+def test_forged_counts_with_consistent_scores_fail_the_recount() -> None:
+    """P/R/F2 that follow from forged tp/fp/fn still contradict the record and evidence."""
+    data = copy.deepcopy(DATA)
+    char = data["releases"]["v0.15.1"]["char_level"]
+    char.update(tp=120000, fp=0, fn=2494)
+    char.update(precision=1.0, recall=120000 / 122494)
+    char["f2"] = 5 * 1.0 * char["recall"] / (4 * 1.0 + char["recall"])
+    with pytest.raises(ValueError, match="differ from the recount"):
+        rcl.check(data, HISTORY)
+
+
+def _copy_bench(tmp_path):
+    import shutil
+
+    shutil.copy(rcl.EVIDENCE, tmp_path / rcl.EVIDENCE.name)
+    for entry in HISTORY["releases"]:
+        observation = rcl.observation_of(entry)
+        if observation:
+            shutil.copy(rcl.BENCH_DIR / observation["file"], tmp_path / observation["file"])
+    return tmp_path
+
+
+def test_edited_evidence_is_refused_by_its_hash(tmp_path) -> None:
+    bench = _copy_bench(tmp_path)
+    evidence = rcl.load_evidence(bench / rcl.EVIDENCE.name)
+    uid = next(iter(evidence["documents"]))
+    evidence["documents"][uid]["gold"].append([0, 1])
+    rcl.write_evidence(bench / rcl.EVIDENCE.name, evidence)
+    with pytest.raises(ValueError, match="does not match its recorded hash"):
+        rcl.check(DATA, HISTORY, bench)
+
+
+def test_rehashed_forged_evidence_still_fails_the_recount(tmp_path) -> None:
+    """An attacker who also updates the stored evidence hash is caught by the byte counts."""
+    bench = _copy_bench(tmp_path)
+    evidence = rcl.load_evidence(bench / rcl.EVIDENCE.name)
+    for document in evidence["documents"].values():
+        document["gold"] = []  # nothing leaked, nothing missed
+    data = copy.deepcopy(DATA)
+    data["evidence_sha256"] = rcl.write_evidence(bench / rcl.EVIDENCE.name, evidence)
+    with pytest.raises(ValueError, match="differ"):
+        rcl.check(data, HISTORY, bench)
+
+
+def test_evidence_holds_offsets_only_no_document_text() -> None:
+    evidence = rcl.load_evidence(rcl.EVIDENCE)
+    assert set(evidence) == {"schema_version", "documents", "ignored"}
+    for document in evidence["documents"].values():
+        assert set(document) == {"gold", "cont", "size"}
+        assert all(isinstance(number, int) for pair in document["gold"] + document["cont"] for number in pair)
+
+
+def test_fake_continuation_intervals_fail_the_utf8_structure_check(tmp_path) -> None:
+    """Codex's attack: mark false-positive spans as continuation bytes, forge the row to match, rehash."""
+    bench = _copy_bench(tmp_path)
+    evidence = rcl.load_evidence(bench / rcl.EVIDENCE.name)
+    entry = next(e for e in HISTORY["releases"] if e["version"] == "v0.15.1")
+    # Hide a long stretch of every document as "continuation" so its characters stop counting.
+    for document in evidence["documents"].values():
+        document["cont"] = [[5, 45]]
+    forged = rcl.recompute(entry, evidence, bench)  # what a forger would write into the row
+    assert forged["fp"] != DATA["releases"]["v0.15.1"]["char_level"]["fp"]
+    data = copy.deepcopy(DATA)
+    char = data["releases"]["v0.15.1"]["char_level"]
+    char.update(tp=forged["tp"], fp=forged["fp"], fn=forged["fn"])
+    precision = char["tp"] / (char["tp"] + char["fp"])
+    recall = char["tp"] / (char["tp"] + char["fn"])
+    char.update(precision=precision, recall=recall, f2=5 * precision * recall / (4 * precision + recall))
+    data["evidence_sha256"] = rcl.write_evidence(bench / rcl.EVIDENCE.name, evidence)
+    with pytest.raises(ValueError, match="continuation run .* is not 1-3 bytes"):
+        rcl.check(data, HISTORY, bench)
+
+
+@pytest.mark.parametrize("cont, match", [
+    ([[0, 1]], "no lead byte"),  # a continuation byte cannot start the document
+    ([[10, 12], [12, 13]], "no lead byte"),  # runs of one character are merged, never adjacent
+    ([[10, 2**31]], "is not 1-3 bytes"),
+])
+def test_continuation_shapes_an_honest_recording_never_has(cont, match) -> None:
+    evidence = rcl.load_evidence(rcl.EVIDENCE)
+    uid = next(iter(evidence["documents"]))
+    evidence["documents"][uid]["cont"] = cont
+    with pytest.raises(ValueError, match=match):
+        rcl.check_evidence_structure(evidence)

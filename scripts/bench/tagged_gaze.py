@@ -11,6 +11,8 @@ renderer instead of reaching the README.
 from __future__ import annotations
 
 import re
+import subprocess
+from pathlib import Path
 
 TAG = re.compile(r"v\d+\.\d+\.\d+")
 
@@ -48,4 +50,33 @@ def require_tag(version: str, where: str) -> str:
     """A Gaze version that is a release tag, or raise."""
     if not TAG.fullmatch(version):
         raise UntaggedGazeError(f"{where}: {version!r} is not a release tag")
+    return version
+
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+def tag_commit(version: str, repo: Path = REPO) -> str:
+    """The commit a release tag points at, resolved as `refs/tags/<version>` only.
+
+    A bare `<version>:crates` would also resolve a branch or a hex-named ref, so a
+    version-shaped branch could pass for a release. This names the tag namespace.
+    """
+    require_tag(version, "release tag")
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{version}^{{commit}}"],
+            cwd=repo, text=True, stderr=subprocess.PIPE,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+        raise UntaggedGazeError(
+            f"{version} is not a git tag in this checkout (a branch of that name does not "
+            "count); fetch tags, for example actions/checkout with fetch-depth: 0"
+        ) from error
+
+
+def require_release_tag(version: str, where: str) -> str:
+    """`version` names a real release tag, or raise."""
+    require_tag(version, where)
+    tag_commit(version)
     return version

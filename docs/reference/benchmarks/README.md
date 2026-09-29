@@ -400,34 +400,45 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../../docs/assets/benchmarks/benchmark-panels-dark.svg">
-  <img alt="Bar panels of PII protected and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="../../../docs/assets/benchmarks/benchmark-panels-light.svg">
+  <img alt="Bar panels of character-level F2 and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="../../../docs/assets/benchmarks/benchmark-panels-light.svg">
 </picture>
 
-**PII protected** (higher is better; best per row in bold):
+**Character-level F2 (β=2, label-agnostic, micro)** (higher is better; best per row in bold):
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 82.1% | **89.2%** | 79.5% | 16.2% | 76.4% | 31.7% | 83.7% | 80.5% |
-| Presidio Research | not run | pending | 38.5% | 21.7% | 33.6% | 14.7% | 59.2% | **70.5%** |
-| PIIBench-commercial | not run | pending | 60.7% | 37.5% | **64.9%** | 19.3% | 42.1% | 47.3% |
+| Own corpus | 0.665 | **0.868** | 0.765 | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
+| Presidio Research | not run | pending | **0.721** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
+| PIIBench-commercial | not run | pending | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
+
+**Leaked PII bytes** (lower is better; best per row in bold):
+
+| Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Own corpus | 22,144 | **13,319** | 25,314 | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
+| Presidio Research | not run | pending | **12,383** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
+| PIIBench-commercial | not run | pending | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
 
 **False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 184.2 | 21.7 | 48.0 | **6.8** | 285.4 | 14.0 | 60.3 | 32.3 |
-| Presidio Research | not run | pending | 2.3 | **0.0** | 20.0 | 0.1 | 5.7 | 4.9 |
-| PIIBench-commercial | not run | pending | 5.0 | 1.8 | 30.1 | **0.6** | 3.1 | 3.9 |
+| Own corpus | 164.9 | 19.4 | 42.9 | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
+| Presidio Research | not run | pending | 25.4 | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
+| PIIBench-commercial | not run | pending | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
 
-A document a tool skips counts all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
+A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
 
 Gaze 0.15 on Presidio Research and PIIBench-commercial: measurement pending; no untagged build is shown.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
-- **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), scored on the labels every tool can emit; rows from [`their-benchmarks.json`](their-benchmarks.json).
-- **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), scored on the labels every tool can emit; rows from [`their-benchmarks.json`](their-benchmarks.json).
+- **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
+- **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
 - **Configurations:** competitors use the rows declared in [`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen before results were reviewed; full versions and settings are in [`competitors.md`](competitors.md).
-- **Metrics:** PII protected = 1 - leaked gold bytes / gold bytes. False positives are bytes redacted that are not PII, per 1,000 corpus bytes; the own corpus counts a protected repeat of a labelled value as protected (contract v3), the third-party sets do not.
+- **Metric:** F2 counts Unicode code points (not grapheme clusters) inside the merged byte spans of each document, ignores labels, pools every document (micro), weights recall four times precision, scores 0 when precision and recall are both 0 (0/0 = 0), and counts all of a skipped document's gold characters as missed.
+- **False positives:** F2 counts every false-positive character for every tool; the false-positive row (bytes redacted that are not PII, per 1,000 bytes of the scored documents) also credits a protected repeat of a labelled value on the own corpus (contract v3). Every tool is treated identically within each row, and the third-party sets have no such credit.
+- **Gaze release scores:** each tagged release is scored by replaying its committed observation record over the corpus (`compare/release_char_level.py record`). The offline `check` that CI runs proves the stored numbers are consistent with the committed record, its evidence file and the UTF-8 structure of that evidence; only `record` (the corpus replay) proves the character counts, so a pull request that changes `release-char-level.json` or its evidence file must include the replay command's output in its description.
+- **Vendors' own metrics:** Presidio Research: F2, binary PII vs O (presidio-evaluator); PIIBench-commercial: span F1, exact span + type (PIIBench seqeval). They appear in the third-party tables below, not in the panels.
 
 <!-- END GENERATED: panels -->
 
