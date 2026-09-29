@@ -228,20 +228,37 @@ class RecordReplayTests(unittest.TestCase):
         writer.write(path, card, add_reference=False)
         return card
 
-    def with_lineage(self, **provenance):
+    def with_lineage(self, events=None, **provenance):
         response = copy.deepcopy(self.response)
         item = response["final_protection_trace"][0]
+        start, end = item["raw_start"], item["raw_end"]
         item["provenance"].update({
             "settlement": "resolve",
             "contributions": [
                 {"recognizer_id": "synthetic:email", "role": "winner",
-                 "raw_start": item["raw_start"], "raw_end": item["raw_end"], "tier": None},
+                 "raw_start": start, "raw_end": end,
+                 "tier": None, "defeat_kind": None, "defeated_by": None},
                 {"recognizer_id": "synthetic:name", "role": "defeated",
-                 "raw_start": item["raw_start"], "raw_end": item["raw_start"] + 5,
-                 "tier": "ClassPriority"},
+                 "raw_start": start, "raw_end": start + 5,
+                 "tier": "class_priority", "defeat_kind": "pair",
+                 "defeated_by": "synthetic:email"},
             ],
         })
         item["provenance"].update(provenance)
+        base = {key: None for key in record.EVENT_FIELDS}
+        response["candidate_events"] = events if events is not None else [
+            {**base, "original": 0, "recognizer_id": "synthetic:email", "class": "email",
+             "raw_start": start, "raw_end": end, "outcome": "selected",
+             "selection_start": start, "selection_end": end, "settlement": "resolve",
+             "role": "winner"},
+            {**base, "original": 1, "recognizer_id": "synthetic:name", "class": "name",
+             "raw_start": start, "raw_end": start + 5, "outcome": "defeated",
+             "selection_start": start, "selection_end": end, "settlement": "resolve",
+             "tier": "class_priority", "defeat_kind": "pair", "winner": 0},
+            {**base, "recognizer_id": "synthetic:card", "class": "custom:credit_card",
+             "raw_start": 44, "raw_end": 50, "outcome": "vetoed",
+             "veto_reason": "luhn_failed"},
+        ]
         return response
 
     def test_lineage_writes_schema_v2_and_scores_identically(self):
@@ -254,10 +271,12 @@ class RecordReplayTests(unittest.TestCase):
             header, rows = record._read(typed)
             self.assertEqual(header["schema_version"], 2)
             self.assertEqual(record._read(plain)[0]["schema_version"], 1)
+            response = rows[0]["response"]
             self.assertEqual(
-                rows[0]["response"]["final_protection_trace"][0]["provenance"]["contributions"][1]["role"],
+                response["final_protection_trace"][0]["provenance"]["contributions"][1]["role"],
                 "defeated",
             )
+            self.assertEqual(len(response["candidate_events"]), 3)
             # Lineage is metadata: every contract scores the two records alike.
             self.assertEqual(record.rescore(typed, score.SCORED_LABEL_CONTRACT_V1), card)
             for contract in (
@@ -280,42 +299,70 @@ class RecordReplayTests(unittest.TestCase):
                     record._read(forged)
 
     def test_malformed_lineage_is_refused(self):
-        winner = self.with_lineage()["final_protection_trace"][0]["provenance"]["contributions"][0]
-        defeated = self.with_lineage()["final_protection_trace"][0]["provenance"]["contributions"][1]
-        cases = {
+        typed = self.with_lineage()
+        winner, defeated = typed["final_protection_trace"][0]["provenance"]["contributions"]
+        selected, lost, vetoed = typed["candidate_events"]
+        trace_cases = {
             "unknown settlement": {"settlement": "guess"},
             "disagrees with stage": {"settlement": "safety_net"},
             "without contributions": {"contributions": []},
             "unknown contribution role": {"contributions": [{**winner, "role": "helper"}]},
             "fields differ": {"contributions": [{**winner, "score": 1}]},
-            "half a span": {"contributions": [{**winner, "raw_end": None}]},
-            "outside the document": {"contributions": [{**winner, "raw_end": 10_000}]},
-            "without its own span": {"contributions": [
-                {**winner, "raw_start": None, "raw_end": None}]},
+            "without its own span": {"contributions": [{**winner, "raw_end": None}]},
+            "co_member contribution without its own span": {"contributions": [
+                winner, {**winner, "role": "co_member", "raw_start": None, "raw_end": None}]},
+            "own span in the document": {"contributions": [{**winner, "raw_end": 10_000}]},
+            "does not overlap its trace item": {"contributions": [
+                {**winner, "raw_start": 44, "raw_end": 50}]},
             "detected no span": {"contributions": [
                 winner, {**winner, "recognizer_id": "ner", "role": "derived_dependency"}]},
-            "exactly the defeated role": {"contributions": [winner, {**defeated, "tier": None}]},
+            "unknown conflict tier": {"contributions": [winner, {**defeated, "tier": "InventedTier"}]},
+            "unknown defeat kind": {"contributions": [winner, {**defeated, "defeat_kind": "vibes"}]},
+            "names no winner": {"contributions": [winner, {**defeated, "defeated_by": None}]},
+            "exactly the defeated role": {"contributions": [{**winner, "tier": "score"}]},
             "without a detecting contribution": {"contributions": [defeated]},
         }
-        for message, provenance in cases.items():
+        event_cases = {
+            "event fields differ": [{**selected, "value": "x"}],
+            "unknown candidate outcome": [{**selected, "outcome": "maybe"}],
+            "candidate span outside": [{**selected, "raw_end": 10_000}],
+            "exactly a vetoed candidate has no pool index": [{**vetoed, "original": 2}],
+            "pool index malformed": [{**selected, "original": -1}],
+            "placed twice in one selection": [selected, {**lost, "original": 0, "winner": 0}, vetoed],
+            "selected twice": [selected, {**selected, "selection_start": 44, "selection_end": 50}],
+            "unlinked candidate has a placement": [selected, {
+                **{key: None for key in record.EVENT_FIELDS}, "original": 0,
+                "recognizer_id": "synthetic:email", "class": "email",
+                "raw_start": 0, "raw_end": 5, "outcome": "unlinked"}],
+            "one per candidate": [{**selected, "original": 3}],
+            "role does not belong": [{**lost, "original": 0, "role": "winner"}],
+            "tier does not belong": [{**selected, "tier": "score"}],
+            "has a detecting role": [{**selected, "role": "defeated"}],
+            "unknown selection settlement": [{**selected, "settlement": "residual"}],
+            "unknown conflict tier": [selected, {**lost, "tier": "InventedTier"}],
+            "unknown defeat kind": [selected, {**lost, "defeat_kind": "vibes"}],
+            "not a placed candidate": [selected, {**lost, "winner": 1}],
+            "unknown veto reason": [{**vetoed, "veto_reason": "felt_wrong"}],
+        }
+        cases = [(message, self.with_lineage(**change)) for message, change in trace_cases.items()]
+        cases += [(message, self.with_lineage(events=events)) for message, events in event_cases.items()]
+        for message, response in cases:
             with self.subTest(message):
                 writer = record.RecordWriter(
                     [self.document], self.measurements, corpus_sha256="0" * 64
                 )
                 with self.assertRaisesRegex(record.RecordError, message):
-                    writer.add("C", "policy-file", self.document,
-                               self.with_lineage(**provenance), self.measurements)
+                    writer.add("C", "policy-file", self.document, response, self.measurements)
         half = copy.deepcopy(self.response)
         half["final_protection_trace"][0]["provenance"]["settlement"] = "resolve"
         writer = record.RecordWriter([self.document], self.measurements, corpus_sha256="0" * 64)
         with self.assertRaisesRegex(record.RecordError, "half a lineage"):
             writer.add("C", "policy-file", self.document, half, self.measurements)
-        mixed = self.with_lineage()
-        mixed["final_protection_trace"].append(copy.deepcopy(self.response["final_protection_trace"][0]))
-        mixed["final_protection_trace"][1].update(raw_start=44, raw_end=50)
+        no_events = self.with_lineage()
+        del no_events["candidate_events"]
         writer = record.RecordWriter([self.document], self.measurements, corpus_sha256="0" * 64)
         with self.assertRaisesRegex(record.RecordError, "some trace items carry lineage"):
-            writer.add("C", "policy-file", self.document, mixed, self.measurements)
+            writer.add("C", "policy-file", self.document, no_events, self.measurements)
 
     def test_v1_is_exact_v2_changes_gold_and_v3_credits_repeat(self):
         with tempfile.TemporaryDirectory() as temporary:
