@@ -221,6 +221,85 @@ impl SafetyNet for InvalidSpanNet {
     }
 }
 
+struct RefusingNet;
+
+impl SafetyNet for RefusingNet {
+    fn id(&self) -> &str {
+        "nym-small-int8"
+    }
+
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        _clean_text: &str,
+        _context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        Ok(Vec::new())
+    }
+
+    fn check_with_telemetry(
+        &self,
+        _clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
+        Ok((
+            Vec::new(),
+            vec![LeakReportTelemetry::ModelSpanRefused {
+                safety_net_id: self.id().to_string(),
+                reason: gaze_types::SafetyNetRefusalReason::NymPaginationKeyV1,
+                span: 0..1,
+                document_kind: context.document_kind,
+                field_path: context.field_path.map(str::to_string),
+            }],
+        ))
+    }
+}
+
+struct FollowupRefusingNet {
+    calls: Arc<AtomicUsize>,
+}
+
+impl SafetyNet for FollowupRefusingNet {
+    fn id(&self) -> &str {
+        "nym-small-int8"
+    }
+
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        _clean_text: &str,
+        _context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        Ok(Vec::new())
+    }
+
+    fn check_with_telemetry(
+        &self,
+        _clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) != 1 {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        Ok((
+            Vec::new(),
+            vec![LeakReportTelemetry::ModelSpanRefused {
+                safety_net_id: self.id().to_string(),
+                reason: gaze_types::SafetyNetRefusalReason::NymPaginationKeyV1,
+                span: 0..1,
+                document_kind: context.document_kind,
+                field_path: context.field_path.map(str::to_string),
+            }],
+        ))
+    }
+}
+
 fn session() -> Session {
     Session::new(Scope::Ephemeral).expect("session")
 }
@@ -1144,6 +1223,60 @@ fn scan_safety_nets_does_not_mutate_session() {
     assert_eq!(result.nets_run, 1);
     assert_eq!(result.report.stats.suspect_count, 1);
     assert_eq!(session.tokens().len(), before);
+}
+
+#[test]
+fn scan_safety_nets_preserves_typed_model_refusal_without_a_suspect() {
+    let pipeline = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(RefusingNet)
+        .build()
+        .unwrap();
+    let result = pipeline
+        .scan_safety_nets(&session(), "2", &[gaze::LocaleTag::Global])
+        .unwrap();
+    assert!(result.report.suspects.is_empty());
+    assert!(matches!(
+        result.report.telemetry.as_slice(),
+        [LeakReportTelemetry::ModelSpanRefused {
+            reason: gaze_types::SafetyNetRefusalReason::NymPaginationKeyV1,
+            span,
+            ..
+        }] if *span == (0..1)
+    ));
+}
+
+#[test]
+fn resolve_preserves_refusal_first_reported_by_followup_scan() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let pipeline = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(FollowupRefusingNet {
+            calls: calls.clone(),
+        })
+        .build()
+        .unwrap();
+    let (clean, manifest, report) = clean_with_policy(
+        &pipeline,
+        &session(),
+        RawDocument::Text("2".to_string()),
+        &[gaze::LocaleTag::Global],
+        gaze::SafetyNetPolicy::default(),
+    )
+    .unwrap();
+
+    assert_eq!(text(clean), "2");
+    assert!(manifest.is_empty());
+    assert!(calls.load(Ordering::SeqCst) >= 2);
+    assert!(report.suspects.is_empty());
+    assert!(matches!(
+        report.telemetry.as_slice(),
+        [LeakReportTelemetry::ModelSpanRefused {
+            reason: gaze_types::SafetyNetRefusalReason::NymPaginationKeyV1,
+            span,
+            ..
+        }] if *span == (0..1)
+    ));
 }
 
 #[test]

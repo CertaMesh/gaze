@@ -1462,6 +1462,17 @@ pub trait SafetyNet: Send + Sync {
         clean_text: &str,
         context: SafetyNetContext<'_>,
     ) -> Result<Vec<LeakSuspect>, SafetyNetError>;
+
+    /// Checks text and returns metadata for spans deliberately refused by the backend.
+    /// Existing implementations keep their suspect-only behavior.
+    fn check_with_telemetry(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
+        self.check(clean_text, context)
+            .map(|suspects| (suspects, Vec::new()))
+    }
 }
 
 /// Context passed to a privacy safety net.
@@ -1780,6 +1791,42 @@ pub enum LeakReportTelemetry {
         /// Optional structured field path of the suspect.
         field_path: Option<String>,
     },
+    /// A validated model span rejected by a narrow, versioned context guard.
+    ModelSpanRefused {
+        /// Safety-net backend identifier.
+        safety_net_id: String,
+        /// Typed refusal reason, without source text.
+        reason: SafetyNetRefusalReason,
+        /// Byte span in clean text.
+        span: Range<usize>,
+        /// Document kind checked.
+        document_kind: DocumentKind,
+        /// Optional structured field path.
+        field_path: Option<String>,
+    },
+}
+
+/// Closed reasons for refusing a validated safety-net model span.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SafetyNetRefusalReason {
+    /// Nym BUILDING_NUMBER on an ASCII-digit pagination/count field from key table v1.
+    NymPaginationKeyV1,
+}
+
+impl SafetyNetRefusalReason {
+    /// Stable metadata-only audit spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NymPaginationKeyV1 => "nym_pagination_key_v1",
+        }
+    }
+
+    /// Raw model label and mapped class for a refused span's audit row.
+    pub fn audit_labels(self) -> (&'static str, &'static str) {
+        match self {
+            Self::NymPaginationKeyV1 => ("BUILDING_NUMBER", "custom:building_number"),
+        }
+    }
 }
 
 /// Aggregate leak report statistics.

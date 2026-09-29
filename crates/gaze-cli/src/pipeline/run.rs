@@ -14,7 +14,7 @@ use gaze::{
     RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult,
     SensitiveSnapshot, Session, SessionScope, SessionSnapshotEntry, TypedContext,
 };
-use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
+use gaze_audit::SqliteLogger;
 
 use crate::clean_overrides::CleanOverrides;
 use crate::commands::{
@@ -632,17 +632,12 @@ impl CountingLogger {
             return Ok(());
         };
         let created_at = chrono::Utc::now().timestamp_millis();
-        for suspect in &report.suspects {
-            let entry = LeakSuspectLogEntry::from_suspect(
-                suspect,
-                document_kind,
-                created_at,
-                Some(session.audit_session_id().to_string()),
-                report.replay_hash.clone(),
-            );
-            audit.log_leak_suspect(&entry)?;
-        }
-        Ok(())
+        audit.log_safety_net_report(
+            report,
+            document_kind,
+            created_at,
+            Some(session.audit_session_id().to_string()),
+        )
     }
 }
 
@@ -832,6 +827,15 @@ enum LeakTelemetryResponse {
         #[serde(skip_serializing_if = "Option::is_none")]
         field_path: Option<String>,
     },
+    ModelSpanRefused {
+        safety_net_id: String,
+        reason: String,
+        start: usize,
+        end: usize,
+        document_kind: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        field_path: Option<String>,
+    },
 }
 
 impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
@@ -855,6 +859,20 @@ impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
             } => Self::UnactionableSubword {
                 safety_net_id: safety_net_id.clone(),
                 class: class.to_canonical_str(),
+                start: span.start,
+                end: span.end,
+                document_kind: document_kind_label(*document_kind).to_string(),
+                field_path: field_path.clone(),
+            },
+            LeakReportTelemetry::ModelSpanRefused {
+                safety_net_id,
+                reason,
+                span,
+                document_kind,
+                field_path,
+            } => Self::ModelSpanRefused {
+                safety_net_id: safety_net_id.clone(),
+                reason: reason.as_str().to_string(),
                 start: span.start,
                 end: span.end,
                 document_kind: document_kind_label(*document_kind).to_string(),
