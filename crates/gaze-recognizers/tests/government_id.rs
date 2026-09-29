@@ -28,7 +28,9 @@ use gaze::{
     RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
-use gaze_types::{LabelledValueScanReason, ValidatorFailReason};
+use gaze_types::{LabelledValueScanReason, ValidatorFailReason, LABELLED_FIELD_CONNECTORS};
+use regex::Regex;
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 
 fn empty_context() -> Context {
@@ -83,6 +85,14 @@ struct CapturingLogger {
     entries: Arc<Mutex<Vec<RedactionEntry>>>,
 }
 
+fn without_gaze_tokens(cleaned: &str) -> String {
+    static TOKEN: OnceLock<Regex> = OnceLock::new();
+    TOKEN
+        .get_or_init(|| Regex::new(r"<[0-9a-f]{8}:[^>]*>").unwrap())
+        .replace_all(cleaned, "")
+        .into_owned()
+}
+
 impl RedactionLogger for CapturingLogger {
     fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         self.entries.lock().unwrap().push(entry.clone());
@@ -128,7 +138,7 @@ fn clean_with_winners(chain: &[LocaleTag], text: &str) -> (String, Vec<String>) 
 fn failed_cued_steuer_id_is_tokenized_with_audit_reason() {
     let invalid = "Steuer-ID 48 954 371 208";
     let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], invalid);
-    assert!(!cleaned.contains("48 954 371 208"));
+    assert!(!without_gaze_tokens(&cleaned).contains("48 954 371 208"));
     assert_eq!(
         entries.len(),
         1,
@@ -143,7 +153,7 @@ fn failed_cued_steuer_id_is_tokenized_with_audit_reason() {
 
     let valid = "Steuer-ID 48 954 371 207";
     let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], valid);
-    assert!(!cleaned.contains("48 954 371 207"));
+    assert!(!without_gaze_tokens(&cleaned).contains("48 954 371 207"));
     let winners = entries
         .iter()
         .filter(|entry| !entry.conflict_loser)
@@ -174,7 +184,7 @@ fn all_zero_ids_and_vehicle_identification_cue_stay_raw() {
     }
     let (cleaned, _) =
         clean_with_entries(&[LocaleTag::Global], "Identifikationsnummer 86095742718");
-    assert!(!cleaned.contains("86095742718"));
+    assert!(!without_gaze_tokens(&cleaned).contains("86095742718"));
 }
 
 fn clean_under(chain: &[LocaleTag], text: &str) -> String {
@@ -201,12 +211,12 @@ fn clean(text: &str) -> String {
 fn assert_id_removed(text: &str, id: &str, surviving_context: &[&str]) {
     let cleaned = clean(text);
     assert!(
-        !cleaned.contains(id),
+        !without_gaze_tokens(&cleaned).contains(id),
         "identifier {id:?} survived tokenization in {cleaned:?}"
     );
     for fragment in surviving_context {
         assert!(
-            cleaned.contains(fragment),
+            without_gaze_tokens(&cleaned).contains(fragment),
             "context {fragment:?} should survive but is missing from {cleaned:?}"
         );
     }
@@ -255,7 +265,7 @@ fn english_cued_ssn_stays_with_ssn_us_and_is_not_claimed_by_the_german_arm() {
     let (cleaned, winners) =
         clean_with_winners(&[LocaleTag::Global], "His SSN: 123-45-6789 is on file.");
     assert!(
-        !cleaned.contains("123-45-6789"),
+        !without_gaze_tokens(&cleaned).contains("123-45-6789"),
         "ssn.us regressed: {cleaned:?}"
     );
     assert_eq!(winners, vec!["ssn.us".to_string()], "{cleaned:?}");
@@ -275,7 +285,10 @@ fn german_cued_ssn_is_claimed_by_the_german_arm_alone() {
             &chain,
             "Die Sozialversicherungsnummer lautet 123-45-6789 und ist hinterlegt.",
         );
-        assert!(!cleaned.contains("123-45-6789"), "{chain:?}: {cleaned:?}");
+        assert!(
+            !without_gaze_tokens(&cleaned).contains("123-45-6789"),
+            "{chain:?}: {cleaned:?}"
+        );
         assert_eq!(
             winners,
             vec!["ssn.de_cue".to_string()],
@@ -305,7 +318,10 @@ fn ssn_arms_never_co_fire_even_when_both_cues_touch_one_number() {
         ),
     ] {
         let (cleaned, winners) = clean_with_winners(&[LocaleTag::Global], text);
-        assert!(!cleaned.contains("123-45-6789"), "{text:?}: {cleaned:?}");
+        assert!(
+            !without_gaze_tokens(&cleaned).contains("123-45-6789"),
+            "{text:?}: {cleaned:?}"
+        );
         assert!(
             winners.iter().all(|id| !id.contains('+')),
             "same-class composite id emitted for {text:?}: {winners:?}"
@@ -560,7 +576,7 @@ fn labelled_identifier_values_are_captured_without_the_field_name() {
     ] {
         let cleaned = clean(input);
         assert!(
-            !cleaned.contains(value),
+            !without_gaze_tokens(&cleaned).contains(value),
             "value leaked: {input:?} -> {cleaned:?}"
         );
         assert!(
@@ -628,7 +644,7 @@ fn labelled_identifier_json_restores_exact_input() {
         let CleanDocument::Text(cleaned) = clean else {
             panic!("expected text");
         };
-        assert!(!cleaned.contains(value));
+        assert!(!without_gaze_tokens(&cleaned).contains(value));
         assert_eq!(
             pipeline
                 .restore_strict_text(&session, &cleaned)
@@ -692,11 +708,11 @@ fn labelled_identifiers_never_emit_a_grouped_prefix() {
             panic!("expected text");
         };
         assert!(
-            !cleaned.contains(value),
+            !without_gaze_tokens(&cleaned).contains(value),
             "whole value leaked: {input:?} -> {cleaned:?}"
         );
         assert!(
-            !cleaned.contains("XYZ123456"),
+            !without_gaze_tokens(&cleaned).contains("XYZ123456"),
             "value suffix leaked: {input:?} -> {cleaned:?}"
         );
         assert!(
@@ -723,10 +739,11 @@ fn labelled_identifiers_tokenize_overlong_or_overgrouped_values() {
         "Tax number: AB12 CD3456 XYZ123456/ABC123",
     ] {
         let cleaned = clean(input);
+        let visible = without_gaze_tokens(&cleaned);
         for group in ["AB12", "CD3456", "XYZ123456", "ABC123", "DEF456", "GHI789"] {
             if input.contains(group) {
                 assert!(
-                    !cleaned.contains(group),
+                    !visible.contains(group),
                     "value group leaked: {input:?} -> {cleaned:?}"
                 );
             }
@@ -738,7 +755,10 @@ fn labelled_identifiers_tokenize_overlong_or_overgrouped_values() {
 fn labelled_value_limit_is_audited_without_refusing_the_value() {
     let input = "Tax number: AB12 CD3456 XYZ123456 ABC123 DEF456";
     let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], input);
-    assert!(!cleaned.contains("DEF456"), "{cleaned:?}");
+    assert!(
+        !without_gaze_tokens(&cleaned).contains("DEF456"),
+        "{cleaned:?}"
+    );
     assert!(
         entries.iter().any(|entry| {
             !entry.conflict_loser
@@ -823,7 +843,7 @@ fn date_after_labelled_identifier_never_vetoes_the_identifier() {
             panic!("expected text")
         };
         assert!(
-            !cleaned.contains(value),
+            !without_gaze_tokens(&cleaned).contains(value),
             "identifier leaked: {input:?} => {cleaned:?}"
         );
         assert!(
@@ -896,12 +916,12 @@ fn labelled_identifier_stops_at_other_field_cues_and_classes() {
             panic!("expected text")
         };
         assert!(
-            !cleaned.contains(first),
+            !without_gaze_tokens(&cleaned).contains(first),
             "identifier leaked: {input:?} => {cleaned:?}"
         );
         if second_class == "credit_card" {
             assert!(
-                !cleaned.contains(second),
+                !without_gaze_tokens(&cleaned).contains(second),
                 "card leaked: {input:?} => {cleaned:?}"
             );
         } else {
@@ -934,7 +954,7 @@ fn labelled_identifier_stops_at_other_field_cues_and_classes() {
         panic!("expected text")
     };
     assert!(
-        !cleaned.contains("1112"),
+        !without_gaze_tokens(&cleaned).contains("1112"),
         "failed card left raw: {cleaned:?}"
     );
     assert!(
@@ -973,7 +993,8 @@ fn labelled_value_joiners_keep_identifier_groups_together() {
         let input = format!("Tax number: {value}");
         let cleaned = clean(&input);
         assert!(
-            !cleaned.contains("CD3456") && !cleaned.contains("D3456"),
+            !without_gaze_tokens(&cleaned).contains("CD3456")
+                && !without_gaze_tokens(&cleaned).contains("D3456"),
             "value suffix leaked: {input:?} => {cleaned:?}"
         );
     }
@@ -1007,7 +1028,8 @@ fn labelled_tax_value_does_not_leave_a_phone_suffix_raw() {
         panic!("expected text")
     };
     assert!(
-        !cleaned.contains("CD3456") && !cleaned.contains("1234567"),
+        !without_gaze_tokens(&cleaned).contains("CD3456")
+            && !without_gaze_tokens(&cleaned).contains("1234567"),
         "identifier or phone leaked: {cleaned:?}"
     );
     assert_eq!(
@@ -1020,7 +1042,10 @@ fn labelled_tax_value_does_not_leave_a_phone_suffix_raw() {
 fn cue_anchored_identifier_scans_the_whole_grouped_run() {
     let input = "Tax ID: 123 456 789 012 345";
     let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], input);
-    assert!(!cleaned.contains("345"), "{cleaned:?}");
+    assert!(
+        !without_gaze_tokens(&cleaned).contains("345"),
+        "{cleaned:?}"
+    );
     assert!(
         entries.iter().any(|entry| {
             entry
@@ -1066,11 +1091,11 @@ fn cue_anchored_dates_inside_original_capture_stay_protected() {
             panic!("expected text")
         };
         assert!(
-            !cleaned.contains(value),
+            !without_gaze_tokens(&cleaned).contains(value),
             "original capture leaked: {cleaned:?}"
         );
         assert!(
-            !cleaned.contains(suffix),
+            !without_gaze_tokens(&cleaned).contains(suffix),
             "capture suffix leaked: {cleaned:?}"
         );
         assert_eq!(cleaned.matches('<').count(), 1, "{cleaned:?}");
@@ -1121,10 +1146,17 @@ fn uppercase_next_field_labels_remain_visible_with_correct_ownership() {
         let CleanDocument::Text(cleaned) = clean else {
             panic!("expected text")
         };
-        assert!(
-            cleaned.contains(next_label),
-            "field label swallowed: {cleaned:?}"
-        );
+        if next_rule.is_some() {
+            assert!(
+                cleaned.contains(next_label),
+                "verified field label swallowed: {cleaned:?}"
+            );
+        } else {
+            assert!(
+                !without_gaze_tokens(&cleaned).contains(next_label),
+                "unverified field value was left outside the prior token: {cleaned:?}"
+            );
+        }
         assert_eq!(cleaned.matches('<').count(), token_count, "{cleaned:?}");
         let winners: Vec<_> = entries
             .lock()
@@ -1139,6 +1171,128 @@ fn uppercase_next_field_labels_remain_visible_with_correct_ownership() {
         );
         if let Some(rule) = next_rule {
             assert!(winners.iter().any(|id| id == rule), "{winners:?}");
+        }
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            input
+        );
+    }
+}
+
+#[test]
+fn labelled_next_field_connector_matrix_protects_values_and_restores() {
+    // This fixed assertion makes removal of tab from the shared list fail the matrix test.
+    assert_eq!(
+        LABELLED_FIELD_CONNECTORS,
+        &[':', '=', '|', '\t', ',', ';', '-']
+    );
+    let chain = [LocaleTag::Global];
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_for(&chain).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    for (prefix, label, value, next_rule) in [
+        (
+            "Driver license: EF34 GH5678",
+            "TAX NUMBER",
+            "AB12 CD3456",
+            "tax_number.labelled",
+        ),
+        (
+            "Tax number: AB12 CD3456",
+            "DRIVER LICENSE",
+            "EF34 GH5678",
+            "driver_license.labelled",
+        ),
+        (
+            "Tax number: AB12 CD3456",
+            "NATIONAL INSURANCE",
+            "AB12345678",
+            "national_id.cue_anchored",
+        ),
+        (
+            "Tax number: AB12 CD3456",
+            "ID CARD",
+            "EF34 GH5678",
+            "id_card.labelled",
+        ),
+        (
+            "Tax number: AB12 CD3456",
+            "PASSPORT",
+            "P12345678",
+            "passport.cue_anchored",
+        ),
+    ] {
+        for connector in LABELLED_FIELD_CONNECTORS {
+            let input = format!("{prefix} {label}{connector} {value}");
+            entries.lock().unwrap().clear();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let (clean, _, _) = pipeline
+                .clean_with_safety_net_detect_context(
+                    &session,
+                    RawDocument::Text(input.clone()),
+                    &chain,
+                    &DictionaryBundle::default(),
+                )
+                .unwrap();
+            let CleanDocument::Text(cleaned) = clean else {
+                panic!("expected text")
+            };
+            assert!(
+                cleaned.contains(label),
+                "next label swallowed: {input:?} -> {cleaned:?}"
+            );
+            let visible = without_gaze_tokens(&cleaned);
+            for group in value.split_ascii_whitespace() {
+                assert!(
+                    !visible.contains(group),
+                    "next value group leaked: {input:?} -> {cleaned:?}"
+                );
+            }
+            assert_eq!(cleaned.matches('<').count(), 2, "{input:?} -> {cleaned:?}");
+            let winners: Vec<_> = entries
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|entry| !entry.conflict_loser)
+                .filter_map(|entry| entry.recognizer_id.as_deref().map(str::to_owned))
+                .collect();
+            assert!(
+                winners.iter().any(|id| id == next_rule),
+                "{input:?} -> {winners:?}"
+            );
+            assert_eq!(
+                pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+                input
+            );
+        }
+    }
+}
+
+#[test]
+fn unrecognized_next_value_remains_covered_by_previous_labelled_value() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for connector in LABELLED_FIELD_CONNECTORS {
+        let input = format!("Tax number: AB12 CD3456 PASSPORT{connector} EF34 GH5678");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.clone()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .unwrap();
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text")
+        };
+        let visible = without_gaze_tokens(&cleaned);
+        for group in ["EF34", "GH5678"] {
+            assert!(
+                !visible.contains(group),
+                "unrecognized next value group leaked: {input:?} -> {cleaned:?}"
+            );
         }
         assert_eq!(
             pipeline.restore_strict_text(&session, &cleaned).unwrap(),
@@ -1240,9 +1394,10 @@ fn labelled_identifier_boundaries_keep_value_bytes_protected() {
         let CleanDocument::Text(cleaned) = clean else {
             panic!("expected text")
         };
+        let visible = without_gaze_tokens(&cleaned);
         for group in groups {
             assert!(
-                !cleaned.contains(group),
+                !visible.contains(group),
                 "value group leaked: {input:?} -> {cleaned:?}"
             );
         }
@@ -1299,8 +1454,8 @@ fn collision_resolution_is_stable_within_a_single_session() {
     // occurrences.
     let text = "Tax ID number: 123.4567.8901.23 and Tax ID number: 456.7890.1234.56 both filed.";
     let cleaned = clean(text);
-    assert!(!cleaned.contains("123.4567.8901.23"));
-    assert!(!cleaned.contains("456.7890.1234.56"));
+    assert!(!without_gaze_tokens(&cleaned).contains("123.4567.8901.23"));
+    assert!(!without_gaze_tokens(&cleaned).contains("456.7890.1234.56"));
 }
 
 // -------------------------------------------------------------------- locale-chain activation
@@ -1377,7 +1532,7 @@ fn every_class_fires_under_every_benchmark_and_default_adopter_chain() {
         for (text, id) in cases {
             let cleaned = clean_under(&chain, text);
             assert!(
-                !cleaned.contains(id),
+                !without_gaze_tokens(&cleaned).contains(id),
                 "{id:?} survived on chain {chain:?}: {cleaned:?}"
             );
         }
@@ -1427,7 +1582,7 @@ fn government_ids_restore_exactly() {
 
 /// The canonical shared connector grammar. It appears byte-identical in all six family patterns;
 /// `shared_connector_grammar_is_byte_identical_across_the_family` fails the moment one copy drifts.
-const SHARED_CONNECTOR: &str = r#"\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?"#;
+const SHARED_CONNECTOR: &str = r#"\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?"#;
 
 const CONNECTOR_FAMILY: [&str; 6] = [
     "ssn.us",
@@ -1723,7 +1878,7 @@ fn passport_class_wins_over_national_id_for_a_passport_cue() {
     // fires and the test would be vacuous (precedence 15->40 would change nothing — review nit N1).
     let cleaned = clean("passport ID number NZ1234567 was recorded.");
     assert!(
-        !cleaned.contains("NZ1234567"),
+        !without_gaze_tokens(&cleaned).contains("NZ1234567"),
         "passport value survived: {cleaned}"
     );
     assert!(

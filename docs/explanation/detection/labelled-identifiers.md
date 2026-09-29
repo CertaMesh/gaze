@@ -1,18 +1,20 @@
 # Labelled identifiers
 
 The bundled tax-number, driver-licence, and national-ID or ID-card fallbacks read a class-specific field name,
-an explicit separator (`:`, `=`, `#`, `|`, or a comma) or a short connector such as `is`, `lautet`,
+an explicit separator (`:`, `=`, `#`, `|`, tab, comma, semicolon, or hyphen) or a short connector such as `is`, `lautet`,
 `est`, or `Nr.`. A value can follow on the next line when the label ends the current line.
 They cover form fields, JSON keys, logs, and table cells whose values do not fit a country's
 fixed identifier shape. English, German, French, Dutch, and Portuguese labels are included.
 
-Only the value becomes a token. The label and punctuation remain visible so an agent can still
+Only the recognized field's value becomes a token. Its label and punctuation remain visible so an agent can still
 understand the field. The original value bytes go into the manifest, so strict restore returns
 the input exactly. A shared complete-value scan extends digit-bearing or uppercase groups after
 a bounded regex capture. It protects adjacent grouped runs even when they exceed four groups or
 40 bytes; those limits produce an audit reason, not a cutoff that exposes a suffix. The scan
-stops before a following date or field cue, including a multiword uppercase label followed by
-`:`, `=`, a tab, `|`, or a comma. A second recognizer can also establish a class boundary. The
+stops before a following date or field cue. For an uppercase next-field label, it waits until a
+second recognizer claims the following value before exposing that label. If no rule claims the
+value, the prior token keeps the label and value covered. The shared connector set is `:`, `=`,
+`|`, tab, comma, semicolon, and hyphen, with optional surrounding spaces. The
 audit reason records the boundary without recording value bytes. Letter-led and digit-led groups
 may use spaces, dots, slashes, or hyphens. A single ungrouped value still needs a matching regex
 shape. The three older `*.cue_anchored` rules also use this scan; their original regex captures

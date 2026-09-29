@@ -511,8 +511,7 @@ fn scan_labelled_value(
             .take_while(|(_, ch)| {
                 matches!(
                     ch,
-                    ' ' | '\t'
-                        | '\u{00A0}'
+                    ' ' | '\u{00A0}'
                         | '\u{202F}'
                         | '\u{200B}'
                         | '\u{2060}'
@@ -520,10 +519,9 @@ fn scan_labelled_value(
                         | '\u{200F}'
                         | '.'
                         | '/'
-                        | '-'
                         | '_'
-                        | ':'
-                ) || ('\u{0300}'..='\u{036F}').contains(ch)
+                ) || gaze_types::LABELLED_FIELD_CONNECTORS.contains(&ch)
+                    || ('\u{0300}'..='\u{036F}').contains(ch)
             })
             .last()
             .map_or(0, |(at, ch)| at + ch.len_utf8());
@@ -539,15 +537,18 @@ fn scan_labelled_value(
             break;
         }
         let next = &input[next_start..next_start + next_len];
-        // Dates never cut a proven capture. Only the new fallback rules may split an internal
-        // field label from their broad capture.
+        // Dates never cut a proven capture. A following uppercase field stays covered until
+        // another recognizer actually claims its value; the registry then exposes the label.
         let beyond_capture = next_start >= capture.end;
         if beyond_capture && starts_with_date(&input[next_start..]) {
             stop_reason = Some(LabelledValueScanReason::DateBoundary);
             break;
         }
+        let uppercase_label = is_uppercase_field_boundary(&input[next_start..])
+            || is_uppercase_field_boundary(&input[group_start..]);
         if (beyond_capture || trim_internal_field_boundary)
-            && (is_field_boundary(next) || is_uppercase_field_boundary(&input[next_start..]))
+            && is_field_boundary(next)
+            && !uppercase_label
         {
             stop_reason = Some(LabelledValueScanReason::LabelBoundary);
             break;
@@ -622,7 +623,10 @@ fn is_uppercase_field_boundary(rest: &str) -> bool {
         while bytes.get(at) == Some(&b' ') {
             at += 1;
         }
-        if matches!(bytes.get(at), Some(b':' | b'=' | b'\t' | b'|' | b',')) {
+        if bytes
+            .get(at)
+            .is_some_and(|byte| gaze_types::LABELLED_FIELD_CONNECTORS.contains(&(*byte as char)))
+        {
             return true;
         }
         if at == spaces_start {
@@ -672,14 +676,15 @@ mod tests {
     }
 
     #[test]
-    fn uppercase_field_boundary_requires_a_separator() {
-        for separator in [":", "=", "\t", "|", ","] {
+    fn uppercase_field_boundary_waits_for_a_verified_next_value() {
+        for separator in gaze_types::LABELLED_FIELD_CONNECTORS {
             let input = format!("AB12 CD3456 DRIVER LICENSE{separator} EF34 GH5678");
             let scan = scan_labelled_value(&input, 0..11, true);
-            assert_eq!(&input[scan.span], "AB12 CD3456", "{input:?}");
-            assert_eq!(scan.reason, Some(LabelledValueScanReason::LabelBoundary));
+            assert!(is_uppercase_field_boundary(&input["AB12 CD3456 ".len()..]));
+            assert_eq!(&input[scan.span], input, "{input:?}");
         }
         let input = "AB12 CD3456 XYZ123456";
+        assert!(!is_uppercase_field_boundary(&input["AB12 CD3456 ".len()..]));
         let scan = scan_labelled_value(input, 0..11, true);
         assert_eq!(&input[scan.span], input);
     }

@@ -149,7 +149,9 @@ not the field name, becomes the token. They cooperate with the older
 `*.cue_anchored` rows of the same class. All six rows use
 `match.complete_labelled_value` to scan adjacent groups. An older cue rule keeps
 its full original capture even when a date-like group appears inside it; a
-following uppercase field label with a separator remains visible. Grouped runs
+following uppercase field label remains visible when its value is claimed by a
+second recognizer. Otherwise the prior token covers that field as a fail-closed
+fallback. Grouped runs
 can extend beyond four groups or 40 bytes with a typed audit reason; the
 [labelled-identifier explanation](../explanation/detection/labelled-identifiers.md)
 describes its stop and audit rules. The `redaction_classes_doc` test pins these

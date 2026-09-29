@@ -94,6 +94,7 @@ use crate::house_number::{StreetLexicon, StreetNumberOrder};
 pub use gaze_types::{Candidate, DetectContext, DetectError, EvidenceKind, Recognizer};
 use gaze_types::{
     CollisionMembership, LabelledValueScanReason, LocaleBasis, LocaleChain, LocaleTag, PiiClass,
+    LABELLED_FIELD_CONNECTORS,
 };
 
 pub trait Validator: Send + Sync {
@@ -287,6 +288,52 @@ fn labelled_cross_class_boundary_floor(
     } else {
         first_group_end
     }
+}
+
+fn uppercase_field_label_before(
+    input: &str,
+    value_start: usize,
+    span_start: usize,
+) -> Option<usize> {
+    let bytes = input.as_bytes();
+    let mut at = value_start;
+    while at > span_start && bytes[at - 1] == b' ' {
+        at -= 1;
+    }
+    if at == span_start || !LABELLED_FIELD_CONNECTORS.contains(&(bytes[at - 1] as char)) {
+        return None;
+    }
+    at -= 1;
+    while at > span_start && bytes[at - 1] == b' ' {
+        at -= 1;
+    }
+    let last_end = at;
+    while at > span_start && bytes[at - 1].is_ascii_uppercase() {
+        at -= 1;
+    }
+    if last_end - at < 2 {
+        return None;
+    }
+    let last_start = at;
+    let last = &input[last_start..last_end];
+    while at > span_start && bytes[at - 1] == b' ' {
+        at -= 1;
+    }
+    let previous_end = at;
+    while at > span_start && bytes[at - 1].is_ascii_uppercase() {
+        at -= 1;
+    }
+    let previous = &input[at..previous_end];
+    let pair = matches!(
+        (previous, last),
+        ("DRIVER" | "DRIVING", "LICENSE" | "LICENCE")
+            | ("NATIONAL", "ID" | "INSURANCE")
+            | ("ID" | "IDENTITY", "CARD")
+            | ("TAX" | "LICENSE" | "LICENCE" | "PASSPORT", "NUMBER")
+            | ("PASSPORT", "ID")
+    );
+    let start = if pair { at } else { last_start };
+    (start == span_start || !bytes[start - 1].is_ascii_alphanumeric()).then_some(start)
 }
 
 #[cfg(test)]
@@ -1335,21 +1382,34 @@ impl RecognizerRegistry {
             }
             let next = boundaries
                 .iter()
-                .filter(|(start, class, validated)| {
-                    *start
-                        >= labelled_cross_class_boundary_floor(
-                            &candidate.recognizer_id,
-                            capture_end,
-                            first_group_end,
-                            *validated,
-                        )
-                        && *start < candidate.span.end
-                        && class != &candidate.class
+                .filter_map(|(start, class, validated)| {
+                    if *start >= candidate.span.end || class == &candidate.class {
+                        return None;
+                    }
+                    let floor = labelled_cross_class_boundary_floor(
+                        &candidate.recognizer_id,
+                        capture_end,
+                        first_group_end,
+                        *validated,
+                    );
+                    let label = uppercase_field_label_before(input, *start, candidate.span.start)
+                        .filter(|label_start| {
+                            *label_start >= first_group_end
+                                && (!matches!(
+                                    candidate.recognizer_id.as_str(),
+                                    "tax_number.cue_anchored"
+                                        | "driver_license.cue_anchored"
+                                        | "national_id.cue_anchored"
+                                ) || *label_start >= capture_end)
+                        });
+                    if *start < floor && label.is_none() {
+                        return None;
+                    }
+                    Some(label.unwrap_or(*start))
                 })
-                .map(|(start, _, _)| *start)
                 .min();
-            if let Some(start) = next {
-                let end = input[..start]
+            if let Some(boundary) = next {
+                let end = input[..boundary]
                     .trim_end_matches(|ch: char| {
                         ch.is_whitespace() || matches!(ch, '-' | '/' | '.' | ':')
                     })

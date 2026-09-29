@@ -641,6 +641,9 @@ pub enum ValidatorFailReason {
     UkNhsMod11Failed,
 }
 
+/// Field separators that the bundled labelled identifier rules must all accept.
+pub const LABELLED_FIELD_CONNECTORS: &[char] = &[':', '=', '|', '\t', ',', ';', '-'];
+
 /// Why a labelled identifier scan stopped or exceeded its usual precision bound.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
