@@ -128,6 +128,7 @@ fn multiple_gap_parent_overlap_on_owned_bytes_is_permutation_deterministic() {
                     emitted.class.clone(),
                     GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
                     vec!["primary.fixture".into()],
+                    lineage::Lineage::fixture("primary.fixture"),
                 )
                 .unwrap();
         }
