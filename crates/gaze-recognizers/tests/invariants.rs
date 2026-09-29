@@ -21,15 +21,33 @@ fn core_extended() -> Rulepack {
 fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
     let RawMatch::Regex {
         pattern,
-        pattern_template: None,
+        pattern_template,
         capture_groups,
     } = &spec.matcher
     else {
-        panic!("expected plain regex recognizer {}", spec.id);
+        panic!("expected regex recognizer {}", spec.id);
     };
 
+    let lowered = pattern_template.as_ref().map(|template| {
+        let core = Rulepack::load(RulepackSource::Embedded(
+            embedded("core").expect("core rulepack"),
+        ))
+        .expect("core loads");
+        let labels = &core.locale.expect("core locale").buckets["phone_labels"].names;
+        let alternation = labels
+            .iter()
+            .map(|label| regex::escape(label))
+            .collect::<Vec<_>>()
+            .join("|");
+        template.replace("{locale.phone_labels}", &format!("(?:{alternation})"))
+    });
+    let pattern = pattern
+        .as_deref()
+        .or(lowered.as_deref())
+        .expect("regex pattern");
+
     RegexDetector::with_rulepack_fields(
-        pattern.as_deref().expect("regex pattern"),
+        pattern,
         spec.class.clone(),
         &spec.id,
         spec.locales.clone(),

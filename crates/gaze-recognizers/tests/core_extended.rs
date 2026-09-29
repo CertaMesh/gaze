@@ -7,7 +7,8 @@ use gaze::{
 };
 use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind, ValidatorOnFail};
 use gaze_types::{
-    DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer, ValidatorOutcome,
+    DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer, ValidatorFailReason,
+    ValidatorOutcome,
 };
 use std::sync::{Arc, Mutex};
 
@@ -25,15 +26,33 @@ fn core_extended() -> Rulepack {
 fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
     let RawMatch::Regex {
         pattern,
-        pattern_template: None,
+        pattern_template,
         capture_groups,
     } = &spec.matcher
     else {
-        panic!("expected plain regex recognizer {}", spec.id);
+        panic!("expected regex recognizer {}", spec.id);
     };
 
+    let lowered = pattern_template.as_ref().map(|template| {
+        let core = Rulepack::load(RulepackSource::Embedded(
+            embedded("core").expect("core rulepack"),
+        ))
+        .expect("core loads");
+        let labels = &core.locale.expect("core locale").buckets["phone_labels"].names;
+        let alternation = labels
+            .iter()
+            .map(|label| regex::escape(label))
+            .collect::<Vec<_>>()
+            .join("|");
+        template.replace("{locale.phone_labels}", &format!("(?:{alternation})"))
+    });
+    let pattern = pattern
+        .as_deref()
+        .or(lowered.as_deref())
+        .expect("regex pattern");
+
     RegexDetector::with_rulepack_fields(
-        pattern.as_deref().expect("regex pattern"),
+        pattern,
         spec.class.clone(),
         &spec.id,
         spec.locales.clone(),
@@ -60,6 +79,12 @@ fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
             .map_or(ValidatorOnFail::Veto, |validator| validator.on_fail),
     )
     .expect("validator on_fail")
+    .with_rejection_pattern(
+        spec.context
+            .as_ref()
+            .and_then(|context| context.reject_match_regex.as_deref()),
+    )
+    .expect("rejection pattern")
 }
 
 fn detect_recognizer(
@@ -217,6 +242,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "nir.fr",
             "pan.in",
             "phone.national.us",
+            "phone.national.us.cued",
             // Alphanumeric postal codes: letter/digit interleaving is the precision
             // mechanism, so these need no document-locale gate and run at every locale.
             "postal.ca",
@@ -232,7 +258,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 45);
+    assert_eq!(core.recognizers.len(), 47);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -609,6 +635,54 @@ fn overlapping_phone_recognizers_pick_single_winners_without_span_loss() {
         }),
         "expected phone.e164.spaced to lose at least one same-class overlap: {entries:?}"
     );
+}
+
+#[test]
+fn cued_parser_failed_us_phone_keeps_reason_without_sweeping_a_lookalike() {
+    let rulepack = core_extended();
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_from_rulepack(&rulepack).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    // NANPA's reserved 555-01xx range; a seven-digit value fails the US region parser.
+    let input = concat!(
+        "phoneNumber=555-0199; Order: 555-0199; tracking=555-0199; ",
+        "voucher=555-0199; phoneModel=555-0199; Phone accessory: 555-0199"
+    );
+
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+    assert_eq!(clean.matches("555-0199").count(), 5, "{clean}");
+    assert_eq!(restore_tokens(&session, &clean), input);
+
+    let entries = entries.lock().unwrap();
+    assert!(entries.iter().any(|entry| {
+        !entry.conflict_loser
+            && entry.recognizer_id.as_deref() == Some("phone.national.us.cued")
+            && entry.validator_fail_reason == Some(ValidatorFailReason::PhoneNationalRegionMismatch)
+    }));
+}
+
+#[test]
+fn cued_e164_rejection_is_tokenized_with_audit_reason_and_restores() {
+    let rulepack = core_extended();
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_from_rulepack(&rulepack).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    // Reserved Ofcom digits with punctuation that the regional parser rejects.
+    let input = "Phone: +44 7/7/0/0/9/0/0/1/2/3";
+
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnGb);
+    assert!(!clean.contains("+44 7/7/0/0/9/0/0/1/2/3"), "{clean}");
+    assert_eq!(restore_tokens(&session, &clean), input);
+    let entries = entries.lock().unwrap();
+    assert!(entries.iter().any(|entry| {
+        !entry.conflict_loser
+            && entry.recognizer_id.as_deref() == Some("phone.e164.spaced.cued")
+            && entry.validator_fail_reason == Some(ValidatorFailReason::PhoneE164Rejected)
+    }));
 }
 
 #[test]
@@ -1801,20 +1875,40 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         vec![
             "phone.e164.spaced",
             "phone.national.de",
-            "phone.national.us"
+            "phone.national.us",
+            "phone.e164.spaced.cued",
+            "phone.national.us.cued"
         ]
     );
     assert_eq!(
         phone_spaced.cooperates_with,
-        vec!["phone.structural", "phone.national.de", "phone.national.us"]
+        vec![
+            "phone.structural",
+            "phone.national.de",
+            "phone.national.us",
+            "phone.e164.spaced.cued",
+            "phone.national.us.cued"
+        ]
     );
     assert_eq!(
         phone_de.cooperates_with,
-        vec!["phone.structural", "phone.e164.spaced", "phone.national.us"]
+        vec![
+            "phone.structural",
+            "phone.e164.spaced",
+            "phone.national.us",
+            "phone.e164.spaced.cued",
+            "phone.national.us.cued"
+        ]
     );
     assert_eq!(
         phone_us.cooperates_with,
-        vec!["phone.structural", "phone.e164.spaced", "phone.national.de"]
+        vec![
+            "phone.structural",
+            "phone.e164.spaced",
+            "phone.national.de",
+            "phone.e164.spaced.cued",
+            "phone.national.us.cued"
+        ]
     );
 
     let one_side_removed = raw.replace("cooperates_with = [\"ip.v4\"]\n", "");

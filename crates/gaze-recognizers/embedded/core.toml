@@ -3,6 +3,9 @@ rulepack_id = "gaze-core"
 rulepack_version = "0.6.0"
 default_locales = ["global"]
 
+[locale.phone_labels]
+names = ["phone", "mobile", "tel", "telephone", "msisdn"]
+
 [locale.email_headers]
 names = ["From", "To", "Cc", "Bcc", "Reply-To", "Sender"]
 
@@ -227,6 +230,37 @@ variant = "phone"
 precedence = 10
 
 [[recognizers]]
+id = "phone.e164.spaced.cued"
+safety_tier = "safe_default"
+class = "custom:phone"
+cooperates_with = ["phone.structural", "phone.e164.spaced", "phone.national.de", "phone.national.us", "phone.national.us.cued"]
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+# The broad international shape keeps its parser veto. A same-line phone label
+# gives a rejected regional parse enough evidence to keep only that value.
+[recognizers.match]
+kind = "regex"
+pattern_template = '''(?i)\b(?:phone(?:[\x20\t\x{00A0}\x{202F}_-]?(?:number|num|no))?|{locale.phone_labels})\b\.?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*[:=]?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*(\+(?:[235-9]\d{0,2}|4(?:[0-8]\d?|9\d))[\s.\-/]?(?:\d[\s.\-/]?){6,14}\d)\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "e164_phone"
+on_fail = "record"
+
+[recognizers.scoring]
+base = 0.70
+priority = 78
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "phone-or-imei"
+variant = "phone"
+precedence = 10
+
+[[recognizers]]
 id = "phone.national.de"
 safety_tier = "locale_gated"
 class = "custom:phone"
@@ -290,6 +324,35 @@ kind = "e164_phone_national_us"
 [recognizers.scoring]
 base = 0.82
 priority = 85
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "phone-or-imei"
+variant = "phone"
+precedence = 10
+
+[[recognizers]]
+id = "phone.national.us.cued"
+safety_tier = "safe_default"
+class = "custom:phone"
+cooperates_with = ["phone.structural", "phone.e164.spaced", "phone.e164.spaced.cued", "phone.national.de", "phone.national.us"]
+enabled = true
+locales = ["en-US"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''(?i)\b(?:phone(?:[\x20\t\x{00A0}\x{202F}_-]?(?:number|num|no))?|{locale.phone_labels})\b\.?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*[:=]?[\x20\t\x{00A0}\x{202F}]*["']?[\x20\t\x{00A0}\x{202F}]*((?:\+?1[\s.-]+555[\s.-]*01\d{2}|\+?1[\s.-]+(?:\([2-9]\d{2}\)|[2-9]\d{2})[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|\([2-9]\d{2}\)[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|[2-9]\d{2}[\s.-]+[2-9]\d{2}[\s.-]+\d{4}|555[\s.-]*01\d{2}))\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "e164_phone_national_us"
+on_fail = "record"
+
+[recognizers.scoring]
+base = 0.82
+priority = 79
 
 [recognizers.token]
 
@@ -695,11 +758,17 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|identifikationsnummer|tax[_-]?id(?:[_-]?(?:number|no))?)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
+pattern = '''(?i)(?:\b|_)(?:steuer[\s_-]?id(?:[_-]?(?:nr|nummer|number|no))?|steuer[_-]?identifikationsnummer|idnr\.?|steuerliche[\s_-]+identifikationsnummer|(?:fahrzeug[\s_-]*)?identifikationsnummer|tax[_-]?id(?:[_-]?(?:number|no))?)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
 capture_groups = [1]
+
+[recognizers.context]
+# A vehicle-identification label can contain the generic ID cue. Consuming
+# its prefix lets this guard reject the whole match before the inner cue fires.
+reject_match_regex = '''(?i)(?:0(?:[ -]?0){10}\b|\Afahrzeug[\s_-]*identifikationsnummer\b)'''
 
 [recognizers.validator]
 kind = "de_steuer_id_mod1110"
+on_fail = "record"
 
 [recognizers.scoring]
 base = 0.88
@@ -764,8 +833,12 @@ kind = "regex"
 pattern = '''(?i)(?:\b|_)(?:bsn(?:[_-]?(?:nr|nummer|number|no))?|burger[_-]?service[_-]?nummer)\s*\\?["']?\s*[:=#-]?\s*\\?["']?(\d{9})\b'''
 capture_groups = [1]
 
+[recognizers.context]
+reject_match_regex = '''\b000000000\b'''
+
 [recognizers.validator]
 kind = "bsn_mod11"
+on_fail = "record"
 
 [recognizers.scoring]
 base = 0.88
@@ -788,6 +861,7 @@ capture_groups = [1]
 
 [recognizers.validator]
 kind = "cpf_mod11"
+on_fail = "record"
 
 [recognizers.scoring]
 base = 0.88
@@ -1408,21 +1482,19 @@ license = "Apache-2.0"
 #
 # Separators alone were NOT sufficient, and the repo's own contract caught it. A separator-only
 # form with a 2-or-3 digit lead covers 45 spans / 545 bytes (21.8%) but matches the grouped
-# 2-3-3-3 ELEVEN-DIGIT form, which IS the German Steuer-ID. `cli_pipe.rs` pins that an invalid
-# Steuer-ID must stay untokenized (validator veto via `de_steuer_id_mod1110`), so that form
-# regressed a deliberate contract. Requiring a THREE-DIGIT LEAD cedes the 2-3-3-3 shape to
-# `steuer_id.de`, where the checksum belongs, and covers 34 spans / 418 bytes (16.8%) at ZERO A4
+# 2-3-3-3 ELEVEN-DIGIT form, which IS the German Steuer-ID. Its own cued rule
+# must own that shape and record any checksum failure on the Steuer-ID audit row.
+# Requiring a THREE-DIGIT LEAD cedes the 2-3-3-3 shape to `steuer_id.de` and
+# covers 34 spans / 418 bytes (16.8%) at ZERO A4
 # and zero holdout false positives.
 #
 # The 16.8% is therefore a deliberate precision choice paid for twice — once to avoid A4's
-# invalids and once to respect the Steuer-ID validator contract — NOT a detection deficiency. The
-# checksummed shape is not unprotected: it remains `steuer_id.de`'s, which is the only rule that
-# can tell a valid Steuer-ID from an invalid one.
-#
-# `steuer_id.de` and its `de_steuer_id_mod1110` validator are left untouched; this recognizer
-# carries the distinct `custom:tax_number` class so the checksummed Steuer-ID contract is
-# unchanged. This supersedes the held grouped-TAXNUM stack ec6b92d, whose 2-3-3-3-only shape is a
-# strict subset covering 3 spans / 42 bytes against this rule's 34 / 418.
+# invalids and once to keep the Steuer-ID class authoritative — NOT a detection deficiency.
+# The grouped Steuer-ID shape remains `steuer_id.de`'s, which records its checksum outcome.
+# This recognizer carries the distinct `custom:tax_number` class, so it must not
+# claim that span. This supersedes the held grouped-TAXNUM stack ec6b92d,
+# whose 2-3-3-3-only shape is a strict subset covering 3 spans / 42 bytes
+# against this rule's 34 / 418.
 #
 # LOCALE BASIS: `document` + `global`, like `birth_date.cue`. The captured shape (three
 # separated digit groups) belongs to no single nation — it deliberately cedes the DE Steuer-ID form
@@ -1521,8 +1593,11 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:national[ \t_-]?id(?:entity|entification)?(?:[ \t_-]?(?:number|nummer))?|nationalid|nationale[nr]?[ \t_-]+(?:id(?:-?nummer)?|identifikationsnummer|identit[äa]tsnummer|id-nummer)|national(?:-?ausweis(?:es)?|er[ \t_-]+identit[äa]tsausweis)(?:nummer)?|identity[ \t_-]?(?:card|number)|id[ \t_-]?(?:card|number|nummer|karte)(?:n?nummer)?|idcard|id-kartennummer|identit[äa]tskarte(?:n?nummer)?|personalausweis(?:es|nummer)?|ausweis(?:es)?(?:nummer)?|national[ \t_-]?insurance(?:[ \t_-]?number)?|identifikationsnummer|personalnummer|staatsb[üu]rgerschaftsnummer|b[üu]rgerschaftsnummer|ahv(?:-?nummer)?)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?([A-Z]{2}-?756\.\d{4}\.\d{4}\.\d{1,2}|[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,13}|\d{6}-\d{4}|\d\.\d{2}\.\d{6}\.\d)\b'''
+pattern = '''(?i)(?:\b|_)(?:national[ \t_-]?id(?:entity|entification)?(?:[ \t_-]?(?:number|nummer))?|nationalid|nationale[nr]?[ \t_-]+(?:id(?:-?nummer)?|identifikationsnummer|identit[äa]tsnummer|id-nummer)|national(?:-?ausweis(?:es)?|er[ \t_-]+identit[äa]tsausweis)(?:nummer)?|identity[ \t_-]?(?:card|number)|id[ \t_-]?(?:card|number|nummer|karte)(?:n?nummer)?|idcard|id-kartennummer|identit[äa]tskarte(?:n?nummer)?|personalausweis(?:es|nummer)?|ausweis(?:es)?(?:nummer)?|national[ \t_-]?insurance(?:[ \t_-]?number)?|(?:fahrzeug[ \t_-]*)?identifikationsnummer|personalnummer|staatsb[üu]rgerschaftsnummer|b[üu]rgerschaftsnummer|ahv(?:-?nummer)?)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?([A-Z]{2}-?756\.\d{4}\.\d{4}\.\d{1,2}|[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,13}|\d{6}-\d{4}|\d\.\d{2}\.\d{6}\.\d)\b'''
 capture_groups = [1]
+
+[recognizers.context]
+reject_match_regex = '''(?i)\Afahrzeug[ \t_-]*identifikationsnummer\b'''
 
 [recognizers.scoring]
 base = 0.82

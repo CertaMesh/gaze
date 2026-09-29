@@ -741,12 +741,26 @@ impl ValidatorOnFail {
 }
 
 impl ValidatorKind {
-    /// Whether a checksum failure of this kind may keep its candidate
-    /// ([`ValidatorOnFail::Record`]). Only IBAN mod-97 and Luhn: a mistyped or masked IBAN or
-    /// card number is still someone's financial data (user ruling 2026-09-27). Every other
-    /// validator vetoes on failure.
+    /// Whether a failed validation may keep a candidate with its failure reason.
+    /// Rulepacks opt in per recognizer; broad scanners must still veto.
     pub fn allows_recorded_failure(self) -> bool {
-        matches!(self, Self::Luhn | Self::IbanMod97)
+        matches!(
+            self,
+            Self::Luhn
+                | Self::IbanMod97
+                | Self::DeSteuerIdMod1110
+                | Self::BsnMod11
+                | Self::CpfMod11
+        ) || {
+            #[cfg(feature = "phone-parser")]
+            {
+                matches!(self, Self::E164Phone | Self::E164PhoneNational(Region::Us))
+            }
+            #[cfg(not(feature = "phone-parser"))]
+            {
+                false
+            }
+        }
     }
 
     /// Parses a policy validator kind.
