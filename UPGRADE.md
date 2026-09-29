@@ -59,33 +59,16 @@ re-tokenize stored manifests.
    unless it returns `EvidenceKind::Rule` from `evidence()`. It also ranks
    lower in cross-class containment, so its spans no longer swallow an
    enclosed rule match of another class.
-5. **Rulepack files cannot declare `benign_lookalikes`.** Delete those lines
-   from any rulepack copied from the bundled `core` pack, or it fails to load.
 
-### Breaking: custom rulepacks cannot declare `benign_lookalikes`
+### Changed: loopback IP addresses stay raw
 
-**Action required only if you load a rulepack file copied from the bundled
-`core` pack**, or wrote `benign_lookalikes` into your own. The key lets a
-weak phone rule skip a candidate inside a digit run too long to be a phone
-number. Only the two audited bundled rules (`phone.national.de`,
-`phone.national.us`) may use it, because a custom pattern cannot prove it has no cue or anchor. A rulepack
-file that declares it now fails to load with
-`RulepackError::IneligibleBenignLookalike` instead of silently weakening
-protection. Delete every `benign_lookalikes = [...]` line from the file; the
-empty `[recognizers.context]` table may stay. Your rules then protect exactly
-what they matched before.
-
-### Changed: over-long digit runs and loopback addresses stay raw
-
-**No action required.** The bundled national phone rules now skip a
-candidate that is a strict part of one digit run longer than any phone
-number (part of a 16-digit product code), unless a phone, postal or address
-word appears anywhere in the document or structured record, or any letter
-outside Latin script. Loopback IP addresses (`127.0.0.0/8`, `::1`) are no
-longer tokenized. Every skip writes a loser audit row with a `benign_*` or
-`*_loopback_range` reason, so an audit query can list them.
-Reference-number tails and amounts that look like postcodes are still
-tokenized.
+**No action required.** The bundled IPv4 and IPv6 rules no longer tokenize
+loopback addresses (`127.0.0.0/8`, `::1`, IPv4-mapped or IPv4-compatible
+loopback): they never leave the host. Each rejection writes a loser audit row
+with `ipv4_loopback_range` or `ipv6_loopback_range`. Private and link-local
+addresses stay protected. A rulepack that declares the never-released
+`[recognizers.context] benign_lookalikes` key fails to load with
+`RulepackError::RemovedKey`; delete the key.
 
 ### Changed: `SafetyNetFallback::Redact` tokenizes a resolvable residual
 

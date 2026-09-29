@@ -28,12 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `fn contract(&self) -> AdapterContract<'_> { AdapterContract::legacy() }`
   to keep today's behavior. The bundled OpenAI and Gemini adapters now declare
   it explicitly; `PiiSurface` is unchanged. See UPGRADE.md.
-- **Custom rulepacks can no longer declare `benign_lookalikes`.** Only the
-  two audited bundled recognizers (`phone.national.de`,
-  `phone.national.us`) may carry it. A rulepack file that declares it,
-  including a copy of the bundled `core` pack, fails to load with
-  `RulepackError::IneligibleBenignLookalike`. Delete the `benign_lookalikes`
-  lines from a forked pack. See UPGRADE.md.
 - **`session_blob` / `SensitiveSnapshot` now use envelope version 6**,
   which records each manifest entry's evidence tier. Gaze v0.15 and older
   refuse a v6 blob with `InvalidSnapshotVersion(6)`. v5 and older blobs still
@@ -173,19 +167,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **A phone inside an over-long digit run no longer tokenizes.** The bundled
-  national phone rules skip a candidate that is a strict part of one digit
-  run longer than any E.164 number (part of a 16-digit product code), unless
-  a phone, postal or address cue word appears anywhere in the document or
-  structured record, or any letter outside Latin script. Each skip writes a
-  loser audit row with `decided_by = validator_veto` and
-  `benign_digit_run_fragment`; a skip that cannot be placed on the source
-  text fails the document (`Error::UnauditableVeto`). Reference-number tails
-  and currency amounts are deliberately still tokenized: only a missing
-  label could call them benign. Contract:
-  docs/explanation/detection/validator-veto.md.
 - **Loopback IP addresses no longer tokenize.** The bundled IPv4 and IPv6
-  rules reject `127.0.0.0/8`, `::1` and IPv4-mapped loopback with the new
+  rules reject `127.0.0.0/8`, `::1` and IPv4-mapped or IPv4-compatible
+  loopback with the new
   `ipv4_loopback_range` / `ipv6_loopback_range` reasons: a loopback address
   never leaves the host. Private and link-local addresses stay protected.
 - **README and benchmark charts are static SVG panels** (solo todo #3932). One panel per benchmark with the value printed on every bar, light and dark variants, released Gaze versions and declared competitor configurations only; the mermaid `xychart-beta` charts (no labels on GitHub) and the README results table are gone. See `docs/reference/benchmarks/README.md#benchmark-panels`. The headline row is character-level F2 (β=2, label-agnostic, micro) with leaked bytes under each bar; tagged Gaze releases are scored by `release_char_level.py` from their committed observation records.
