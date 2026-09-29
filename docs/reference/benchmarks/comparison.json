@@ -18795,7 +18795,7 @@
   "rescore_source_revision": "b1446215ad8b17777edc81d98c2abad5cb16c1ee",
   "runner_sha256": "a53c909b025777ed620a9a7e29f8293918b52c18d226cb4cc2656523d54f4b09",
   "schema_version": 2,
-  "scorer_sha256": "10954991346dbf835d0c4fb89cb7a6888dc94652195077f4381b200f4bcde79c",
+  "scorer_sha256": "0777d5d314340ac305bfe492dc546f1ae9326ce14bb300e87be6368aa9ec8816",
   "scrubadub_requirements_sha256": "50192ba69c4f1b2ffc4e776aa736bf83e3d6443e7b0b8cda985be424449fe059",
   "selected_threshold_rows": {
     "gliner": "gliner-high-recall",

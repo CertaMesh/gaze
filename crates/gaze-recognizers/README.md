@@ -68,8 +68,15 @@ Use `RegexDetector::emails()` for the built-in email recognizer. Rulepack
 assembly uses `RegexDetector::with_rulepack_fields` so locale tags, scores,
 priorities, token families, capture groups, exclusions, validators, and
 normalizers can flow from TOML rulepacks into the registry.
-Optional rulepack-only `context.reject_match_regex` checks the full regex match.
-A guard match rejects that candidate; an invalid guard fails pipeline assembly.
+Optional rulepack-only `context.reject_match_regex` checks the original regex capture and
+label, never value groups found later by the scanner. A guard match produces an audit veto row;
+an invalid guard fails pipeline assembly. Optional regex `match.complete_labelled_value` extends
+a captured identifier through adjacent value groups. It stops at dates, field cues, and values
+claimed by another class. The bundled tax, driver-licence and national-ID fallback rules enable
+it. `labelled_value_scan_reason` records `limit_exceeded`, `date_boundary`, `label_boundary`, or
+`other_class_boundary` in the redaction audit and SQLite export; it contains no value bytes.
+Ambiguous `US`/`UK` prefixes stay in the protected value when no second recognizer claims the
+following digits, so a missing locale arm does not leave an identifier raw.
 
 `ValidatorKind` and `NormalizerKind` are closed sets. The complete variant
 lists, rulepack spellings, feature gates and fail-closed wiring stage are in
@@ -217,7 +224,7 @@ Full contract:
 
 ## Explicit birth-date, age, postcode and credential fields
 
-The embedded `gaze-core` rulepack version **0.6.0** contains 45 recognizers.
+The embedded `gaze-core` rulepack version **0.6.0** contains 50 recognizers.
 `birth_date.cue` and `age.cue` are global `safe_default` rules in `core`.
 `postal.cued_four_digit` is a global `safe_default` rule that needs an explicit postal label.
 `password.field` ships in the opt-in

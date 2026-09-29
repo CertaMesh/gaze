@@ -70,7 +70,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     }
     for row in rows {
         let base = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.recognizer_id.as_deref().unwrap_or(""),
             row.recognizer_version_id.as_deref().unwrap_or(""),
@@ -123,7 +123,8 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
                 .unwrap_or_default(),
             row.restore_trap_shape_count
                 .map(|count| count.to_string())
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            row.labelled_value_scan_reason.as_deref().unwrap_or("")
         );
         if include_ambiguity {
             writeln!(
@@ -405,6 +406,7 @@ struct JsonlRow {
     restore_fresh_pii_count: Option<i64>,
     restore_phase_mask: Option<i64>,
     restore_trap_shape_count: Option<i64>,
+    labelled_value_scan_reason: Option<String>,
 }
 
 impl TryFrom<AuditLogRow> for JsonlRow {
@@ -449,6 +451,7 @@ impl TryFrom<AuditLogRow> for JsonlRow {
             restore_fresh_pii_count: row.restore_fresh_pii_count,
             restore_phase_mask: row.restore_phase_mask,
             restore_trap_shape_count: row.restore_trap_shape_count,
+            labelled_value_scan_reason: row.labelled_value_scan_reason,
         })
     }
 }

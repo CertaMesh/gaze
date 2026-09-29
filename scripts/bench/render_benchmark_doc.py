@@ -1649,6 +1649,7 @@ def render_readme_chart(
         "declared in [`chart-configs.json`](scripts/bench/compare/chart-configs.json). "
         "Numbers, sources and the model-card tables: "
         "[benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
+        + "".join(f" {panel.caption}." for panel in panel_set if panel.caption)
         + _pending_note(panel_set)
     )
     definition = f"{charts.METRIC_DEFINITION} {charts.FP_NOTE}"
