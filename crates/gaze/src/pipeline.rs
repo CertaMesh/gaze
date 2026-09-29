@@ -9000,7 +9000,7 @@ mod veto_audit_tests {
                 ConflictTier::None,
                 Vec::new(),
             ),
-            reason: ValidatorFailReason::BenignJoinedIdentifier,
+            reason: ValidatorFailReason::BenignDigitRunFragment,
         }
     }
 

@@ -292,8 +292,8 @@ capture_groups = [1]
 kind = "e164_phone_national_de"
 
 [recognizers.context]
-# Benign structures that veto this weak, cue-less shape (docs/explanation/detection/validator-veto.md).
-benign_lookalikes = ["joined_identifier", "digit_run_fragment"]
+# A strict part of a digit run longer than any E.164 number is not a phone (docs/explanation/detection/validator-veto.md).
+benign_lookalikes = ["digit_run_fragment"]
 
 [recognizers.scoring]
 base = 0.82
@@ -326,8 +326,8 @@ capture_groups = [1]
 kind = "e164_phone_national_us"
 
 [recognizers.context]
-# Benign structures that veto this weak, cue-less shape (docs/explanation/detection/validator-veto.md).
-benign_lookalikes = ["joined_identifier", "digit_run_fragment"]
+# A strict part of a digit run longer than any E.164 number is not a phone (docs/explanation/detection/validator-veto.md).
+benign_lookalikes = ["digit_run_fragment"]
 
 [recognizers.scoring]
 base = 0.82
@@ -1022,10 +1022,6 @@ locale_basis = "document"
 kind = "regex"
 pattern = '''\b\d{5}\b'''
 
-[recognizers.context]
-# Benign structures that veto this weak, cue-less shape (docs/explanation/detection/validator-veto.md).
-benign_lookalikes = ["joined_identifier", "currency_amount"]
-
 [recognizers.scoring]
 base = 0.70
 priority = 70
@@ -1044,10 +1040,6 @@ locale_basis = "document"
 [recognizers.match]
 kind = "regex"
 pattern = '''\b\d{5}(-\d{4})?\b'''
-
-[recognizers.context]
-# Benign structures that veto this weak, cue-less shape (docs/explanation/detection/validator-veto.md).
-benign_lookalikes = ["joined_identifier", "currency_amount"]
 
 [recognizers.scoring]
 base = 0.70

@@ -101,9 +101,7 @@ fn clean_document(locale: &str, document: RawDocument) -> (CleanDocument, Vetoes
             matches!(
                 entry.validator_fail_reason,
                 Some(
-                    ValidatorFailReason::BenignJoinedIdentifier
-                        | ValidatorFailReason::BenignCurrencyAmount
-                        | ValidatorFailReason::BenignDigitRunFragment
+                    ValidatorFailReason::BenignDigitRunFragment
                         | ValidatorFailReason::Ipv4LoopbackRange
                         | ValidatorFailReason::Ipv6LoopbackRange
                 )
@@ -153,31 +151,15 @@ fn assert_raw(locale: &str, input: &str, expected: &[(&str, ValidatorFailReason)
 }
 
 #[test]
-fn reference_tails_amounts_skus_and_loopbacks_leave_raw_with_one_row_per_veto() {
+fn value_proven_lookalikes_leave_raw_with_one_row_per_veto() {
     use ValidatorFailReason::*;
-    assert_raw(
-        "en-US",
-        "Lagerartikel SKU-DEMO-73821 und Charge BATCH-SAMPLE-92163; fertig.",
-        &[
-            ("postal.us", BenignJoinedIdentifier),
-            ("postal.us", BenignJoinedIdentifier),
-        ],
-    );
-    assert_raw(
-        "de-DE",
-        "invoice INVOICE-TEST-03687455, done",
-        &[("phone.national.de", BenignJoinedIdentifier)],
-    );
-    assert_raw(
-        "en-US",
-        "level=info svc=orders grandTotal=EUR 22186,12 status=done",
-        &[("postal.us", BenignCurrencyAmount)],
-    );
+    // A strict part of a 16-digit same-separator run cannot be a phone number.
     assert_raw(
         "de-DE",
         "level=info svc=orders itemCode=0593-9506-3395-7573 status=done",
         &[("phone.national.de", BenignDigitRunFragment)],
     );
+    // Loopback addresses never leave the host.
     assert_raw(
         "en-US",
         "values: 127.0.0.8 ::ffff:127.0.0.5 ::1 done",
@@ -190,56 +172,70 @@ fn reference_tails_amounts_skus_and_loopbacks_leave_raw_with_one_row_per_veto() 
     );
 }
 
+/// The documented cost of the reduced contract: order-number tails and amounts are no longer
+/// vetoed, because only a missing label could call them benign. They tokenize like any other
+/// postcode- or phone-shaped value, and write no benign row.
+#[test]
+fn reference_numbers_and_amounts_are_tokenized() {
+    for (locale, input, value) in [
+        (
+            "en-US",
+            "Lagerartikel SKU-DEMO-73821 und Charge BATCH-SAMPLE-92163; fertig.",
+            "73821",
+        ),
+        (
+            "en-US",
+            "Lagerartikel SKU-DEMO-73821 und Charge BATCH-SAMPLE-92163; fertig.",
+            "92163",
+        ),
+        ("de-DE", "invoice INVOICE-TEST-03687455, done", "03687455"),
+        (
+            "en-US",
+            "level=info svc=orders grandTotal=EUR 22186,12 status=done",
+            "22186",
+        ),
+        (
+            "en-US",
+            "Rechnung RECHNUNG-2026-80331 an 80331 Boston",
+            "80331",
+        ),
+    ] {
+        assert_protected(locale, input, value);
+    }
+    let (leaves, vetoes) = clean_structured(
+        "en-US",
+        &[(
+            "order",
+            object(&[
+                ("ref", string("ORDER-90210")),
+                ("total", string("EUR 22186,12")),
+            ]),
+        )],
+    );
+    assert!(
+        leaves
+            .iter()
+            .all(|leaf| !leaf.contains("90210") && !leaf.contains("22186")),
+        "{leaves:?}"
+    );
+    assert!(vetoes.is_empty(), "{vetoes:?}");
+}
+
 #[test]
 fn a_trailing_cue_a_field_name_or_a_city_anchor_keeps_the_value_protected() {
-    // Review 10815 probes: each leaked raw before the fix.
+    // Review 10815 probes: each leaked raw in an early round.
     assert_protected("en-US", "ORDER-90210 (ZIP)", "90210");
     assert_protected("en-US", "ORDER-212-555-0187 (phone)", "555-0187");
     assert_protected("de-AT", "Room 1010 Wien", "1010");
     assert_protected("en-US", r#"{"postal_code":"ORDER-90210"}"#, "90210");
-    // The same value as a structured field: the field name is the cue.
-    for field in ["postal_code", "zipCode", "phone"] {
-        let mut map = std::collections::BTreeMap::new();
-        map.insert(
-            field.to_string(),
-            gaze::Value::String("ORDER-90210".to_string()),
-        );
-        let (clean, vetoes) = clean_document("en-US", RawDocument::Structured(map));
-        let CleanDocument::Structured(map) = clean else {
-            panic!("expected structured");
-        };
-        let gaze::Value::String(value) = &map[field] else {
-            panic!("expected string");
-        };
-        assert!(!value.contains("90210"), "{field}: {value}");
-        assert!(vetoes.is_empty(), "{field}: {vetoes:?}");
-    }
-    // A field name without a cue leaves the order tail raw, with its row.
-    let mut map = std::collections::BTreeMap::new();
-    map.insert(
-        "orderRef".to_string(),
-        gaze::Value::String("ORDER-90210".to_string()),
-    );
-    let (clean, vetoes) = clean_document("en-US", RawDocument::Structured(map));
-    let CleanDocument::Structured(map) = clean else {
-        panic!("expected structured");
-    };
-    assert_eq!(
-        map["orderRef"],
-        gaze::Value::String("ORDER-90210".to_string())
-    );
-    assert_eq!(
-        vetoes,
-        vec![(
-            "postal.us".to_string(),
-            ValidatorFailReason::BenignJoinedIdentifier
-        )]
-    );
-    // Review 10815 rev 2: a label line directly above the value.
     assert_protected("en-US", "ZIP:\nORDER-90210", "90210");
     assert_protected("de-DE", "Telefon:\nORDER-0301234567", "0301234567");
-    // Review 10815 rev 2: address-labelled fields, in every spelling.
+    // Structured fields, labelled or not: reference tails are no longer vetoed at all.
     for field in [
+        "postal_code",
+        "zipCode",
+        "phone",
+        "orderRef",
         "shippingAddress",
         "billing_address",
         "delivery-address",
@@ -249,19 +245,11 @@ fn a_trailing_cue_a_field_name_or_a_city_anchor_keeps_the_value_protected() {
         "street",
         "city",
     ] {
-        let mut map = std::collections::BTreeMap::new();
-        map.insert(
-            field.to_string(),
-            gaze::Value::String("ORDER-90210".to_string()),
+        let (leaves, vetoes) = clean_structured("en-US", &[(field, string("ORDER-90210"))]);
+        assert!(
+            leaves.iter().all(|leaf| !leaf.contains("90210")),
+            "{field}: {leaves:?}"
         );
-        let (clean, vetoes) = clean_document("en-US", RawDocument::Structured(map));
-        let CleanDocument::Structured(map) = clean else {
-            panic!("expected structured");
-        };
-        let gaze::Value::String(value) = &map[field] else {
-            panic!("expected string");
-        };
-        assert!(!value.contains("90210"), "{field}: {value}");
         assert!(vetoes.is_empty(), "{field}: {vetoes:?}");
     }
     // A non-loopback IPv4-mapped address stays protected.
@@ -357,13 +345,12 @@ fn cued_real_pii_next_to_lookalikes_still_tokenizes() {
     assert_value_protected("de-AT", "PLZ: 1010 Wien, Room 4833", "1010");
     assert_value_protected("en-US", "EUR 12,00 to 10115 Berlin", "10115");
     // The same five digits: vetoed as an order tail, still protected as a postcode.
-    let (text, vetoes) = clean("de-DE", "Rechnung RECHNUNG-2026-80331 an 80331 München");
-    assert!(
-        text.starts_with("Rechnung RECHNUNG-2026-80331 an <"),
-        "{text}"
+    // The same five digits as an order tail and as a postcode: both tokenized.
+    assert_value_protected(
+        "de-DE",
+        "Rechnung RECHNUNG-2026-80331 an 80331 München",
+        "80331",
     );
-    assert!(!text.ends_with("80331 München"), "{text}");
-    assert!(!vetoes.is_empty());
     // An email and a routable IP next to loopback and a reference stay protected.
     assert_value_protected(
         "en-US",
@@ -382,8 +369,8 @@ fn cued_real_pii_next_to_lookalikes_still_tokenizes() {
     );
 }
 
-/// The bundled opt-in set is exactly the four uncued single-branch shape rules. Adding a
-/// rule here needs a leak-direction review first.
+/// The bundled opt-in set is exactly the two national phone rules with the one structure a value
+/// can prove by itself. Adding a rule or a structure here needs a leak-direction review first.
 #[test]
 fn only_the_audited_bundled_rules_declare_benign_lookalikes() {
     let declared: Vec<(String, Vec<String>)> = rulepacks()
@@ -395,26 +382,10 @@ fn only_the_audited_bundled_rules_declare_benign_lookalikes() {
                 .then(|| (recognizer.id.clone(), context.benign_lookalikes.clone()))
         })
         .collect();
-    let pair = |id: &str, structures: &[&str]| {
-        (
-            id.to_string(),
-            structures.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-        )
-    };
+    let pair = |id: &str| (id.to_string(), vec!["digit_run_fragment".to_string()]);
     assert_eq!(
         declared,
-        vec![
-            pair(
-                "phone.national.de",
-                &["joined_identifier", "digit_run_fragment"]
-            ),
-            pair(
-                "phone.national.us",
-                &["joined_identifier", "digit_run_fragment"]
-            ),
-            pair("postal.de", &["joined_identifier", "currency_amount"]),
-            pair("postal.us", &["joined_identifier", "currency_amount"]),
-        ]
+        vec![pair("phone.national.de"), pair("phone.national.us")]
     );
 }
 
@@ -448,53 +419,94 @@ fn refused(pack: Result<Rulepack, gaze::RulepackError>) -> bool {
     )
 }
 
+fn phone_rule(id: &str, pattern: &str, extra: &str) -> String {
+    format!(
+        "id = \"{id}\"\nclass = \"custom:phone\"\nlocales = [\"en-US\"]\n\
+         locale_basis = \"format\"\n[recognizers.match]\nkind = \"regex\"\n\
+         pattern = '''{pattern}'''\n{extra}\
+         [recognizers.context]\nbenign_lookalikes = [\"digit_run_fragment\"]\n"
+    )
+}
+
 #[test]
 fn the_loader_refuses_benign_lookalikes_outside_the_audited_bundled_rules() {
-    let rule = |id: &str, pattern: &str, extra: &str| {
-        format!(
-            "id = \"{id}\"\nclass = \"custom:postal_code\"\nlocales = [\"global\"]\n\
-             locale_basis = \"document\"\n[recognizers.match]\nkind = \"regex\"\n\
-             pattern = '''{pattern}'''\n{extra}\
-             [recognizers.context]\nbenign_lookalikes = [\"joined_identifier\"]\n"
-        )
-    };
-    let plain = rule("postal.us", r"\b\d{5}\b", "");
+    let plain = phone_rule("phone.national.us", r"\b\d{10}\b", "");
     assert!(
         bundled_pack(&plain).is_ok(),
-        "the audited bundled rule may opt in"
+        "an audited id in a bundled pack passes the loader; the grant decides later"
     );
-    // Review 10815 rev 2: a one-capture, city-anchored custom rule. Refused from a file and
-    // even when handed to the bundled parser.
-    let beverly = rule(
-        "custom.order_zip",
-        r"ORDER-(\d{5})\s+Beverly",
+    // A custom id, from a file or handed to the bundled parser; an audited id from a file.
+    let custom = phone_rule(
+        "custom.order_phone",
+        r"ORDER-(\d{10})\s+Beverly",
         "capture_groups = [1]\n",
     );
-    assert!(refused(load_pack(&beverly)));
-    assert!(refused(bundled_pack(&beverly)));
-    // An adopter file may not borrow an audited id either.
+    assert!(refused(load_pack(&custom)));
+    assert!(refused(bundled_pack(&custom)));
     assert!(refused(load_pack(&plain)));
+    // The retired postal ids are no longer eligible anywhere.
+    assert!(refused(bundled_pack(
+        &plain.replace("phone.national.us", "postal.us")
+    )));
     // Defence in depth on an audited id: a mandatory anchor or a non-regex matcher.
-    assert!(refused(bundled_pack(&rule(
-        "postal.us",
-        r"\b\d{5}\b",
+    assert!(refused(bundled_pack(&phone_rule(
+        "phone.national.us",
+        r"\b\d{10}\b",
         "[recognizers.collision]\nfamily = \"probe-family\"\nvariant = \"a\"\nprecedence = 10\n\
          mandatory_anchor = \"iban\"\n"
     ))));
     assert!(refused(bundled_pack(
-        "id = \"postal.us\"\nclass = \"custom:postal_code\"\nlocales = [\"global\"]\n\
-         locale_basis = \"document\"\n[recognizers.match]\nkind = \"dictionary\"\n\
-         terms = [\"90210\"]\n[recognizers.context]\nbenign_lookalikes = [\"currency_amount\"]\n"
+        "id = \"phone.national.us\"\nclass = \"custom:phone\"\nlocales = [\"en-US\"]\n\
+         locale_basis = \"format\"\n[recognizers.match]\nkind = \"dictionary\"\n\
+         terms = [\"2125550187\"]\n[recognizers.context]\nbenign_lookalikes = [\"digit_run_fragment\"]\n"
     )));
 }
 
+/// The exact bundled `phone.national.us` rule, rebuilt from the embedded core spec the same way
+/// assembly wires it, so these probes borrow a genuine grant.
+fn bundled_phone_us() -> gaze_recognizers::RegexDetector {
+    let spec = rulepacks()[0]
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "phone.national.us")
+        .expect("bundled phone.national.us");
+    let gaze::RawMatch::Regex {
+        pattern: Some(pattern),
+        capture_groups,
+        ..
+    } = &spec.matcher
+    else {
+        panic!("phone.national.us is a plain regex rule");
+    };
+    let validator = spec.validator.as_ref().map(|validator| {
+        gaze_recognizers::ValidatorKind::parse(&validator.kind).expect("bundled validator")
+    });
+    gaze_recognizers::RegexDetector::with_rulepack_fields(
+        pattern,
+        spec.class.clone(),
+        &spec.id,
+        spec.locales.clone(),
+        spec.scoring.base,
+        spec.scoring.priority,
+        spec.token.family.as_deref().unwrap_or("counter"),
+        capture_groups.clone(),
+        Vec::new(),
+        validator,
+        None,
+    )
+    .expect("detector")
+    .with_locale_basis(spec.locale_basis)
+    .with_benign_lookalikes(vec![gaze_recognizers::BenignLookalike::DigitRunFragment])
+    .expect("the exact bundled phone.national.us rule is granted")
+}
+
 #[test]
-fn the_regex_builder_refuses_ids_outside_the_allowlist() {
-    let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
-        r"ORDER-(\d{5})\s+Beverly",
-        gaze::PiiClass::custom("postal_code").expect("class"),
-        "custom.order_zip",
-        vec![gaze::LocaleTag::Global],
+fn the_regex_builder_refuses_rules_that_are_not_exactly_audited() {
+    let custom = gaze_recognizers::RegexDetector::with_rulepack_fields(
+        r"ORDER-(\d{10})\s+Beverly",
+        gaze::PiiClass::custom("phone").expect("class"),
+        "custom.order_phone",
+        vec![gaze::LocaleTag::EnUs],
         0.7,
         0,
         "counter",
@@ -505,20 +517,21 @@ fn the_regex_builder_refuses_ids_outside_the_allowlist() {
     )
     .expect("detector");
     assert!(matches!(
-        detector.with_benign_lookalikes(vec![gaze_recognizers::BenignLookalike::JoinedIdentifier]),
+        custom.with_benign_lookalikes(vec![gaze_recognizers::BenignLookalike::DigitRunFragment]),
         Err(gaze_recognizers::RecognizerError::UnsupportedBenignLookalike { .. })
     ));
+    let _ = bundled_phone_us();
 }
 
-/// Review 10815 rev 3, spoof 1: a rule that borrows the audited id `postal.us` with a different
-/// pattern, handed to the bundled parser (or `RulepackSource::Embedded`), parses, but no grant is
-/// minted for it, so building the pipeline fails closed.
+/// Spoof 1: a rule that borrows the audited id `phone.national.us` with another pattern, handed
+/// to the bundled parser, parses but mints no grant, so building the pipeline fails closed.
 #[test]
 fn a_spoofed_bundled_rule_gets_no_grant() {
-    let spoof = "id = \"postal.us\"\nclass = \"custom:postal_code\"\nlocales = [\"en-US\"]\n\
-                 locale_basis = \"document\"\n[recognizers.match]\nkind = \"regex\"\n\
-                 pattern = '''ORDER-(\\d{5})\\s+Beverly'''\ncapture_groups = [1]\n\
-                 [recognizers.context]\nbenign_lookalikes = [\"joined_identifier\"]\n";
+    let spoof = phone_rule(
+        "phone.national.us",
+        r"ORDER-(\d{10})\s+Beverly",
+        "capture_groups = [1]\n",
+    );
     let text: &'static str = Box::leak(
         format!(
             "schema_version = \"0.1.0\"\nrulepack_id = \"probe\"\nrulepack_version = \"0.1.0\"\n\
@@ -540,91 +553,81 @@ fn a_spoofed_bundled_rule_gets_no_grant() {
     );
 }
 
-/// Review 10815 rev 3, spoof 2: a custom recognizer claims the audited identity and presents a
-/// genuine grant borrowed from the real rule, but emits a span the audited pattern never
-/// matches. Validator veto re-matches the audited pattern, so the span stays protected.
-#[test]
-fn a_borrowed_grant_vetoes_nothing_the_audited_pattern_does_not_emit() {
-    use gaze_recognizers::{BenignLookalike, RegexDetector};
-    let real = RegexDetector::with_rulepack_fields(
-        r"\b\d{5}(-\d{4})?\b",
-        gaze::PiiClass::custom("postal_code").expect("class"),
-        "postal.us",
-        vec![gaze::LocaleTag::EnUs],
-        0.70,
-        70,
-        "counter",
-        None,
-        Vec::new(),
-        None,
-        None,
-    )
-    .expect("detector")
-    .with_benign_lookalikes(vec![
-        BenignLookalike::JoinedIdentifier,
-        BenignLookalike::CurrencyAmount,
-    ])
-    .expect("the exact bundled postal.us rule is granted");
-    struct Spoof(RegexDetector);
-    impl gaze::Recognizer for Spoof {
-        fn id(&self) -> &str {
-            self.0.id()
-        }
-        fn supported_class(&self) -> &gaze::PiiClass {
-            self.0.supported_class()
-        }
-        fn token_family(&self) -> &str {
-            "counter"
-        }
-        fn locales(&self) -> &[gaze::LocaleTag] {
-            self.0.locales()
-        }
-        fn locale_basis(&self) -> gaze::LocaleBasis {
-            self.0.locale_basis()
-        }
-        fn detect(
-            &self,
-            input: &str,
-            _: &gaze::DetectContext<'_>,
-        ) -> Result<Vec<gaze::Candidate>, gaze::DetectError> {
-            // Four digits after a currency code: the audited five-digit pattern never emits it.
-            Ok(input
-                .find("9021")
-                .map(|start| {
-                    gaze::Candidate::new(
-                        start..start + 4,
-                        self.0.supported_class().clone(),
-                        "postal.us",
-                        0.9,
-                        90,
-                        None,
-                        "counter",
-                        "postal.us",
-                        ConflictTier::None,
-                        Vec::new(),
-                    )
-                })
-                .into_iter()
-                .collect())
-        }
-        fn benign_lookalike_grant(&self) -> Option<&gaze_recognizers::BenignLookalikeGrant> {
-            self.0.benign_lookalike_grant()
+/// A custom recognizer that presents a real grant it borrowed, and emits `span` for the phone
+/// class. `global` locales stand for "gates differently from the audited rule".
+struct Borrowed {
+    real: gaze_recognizers::RegexDetector,
+    span_of: &'static str,
+    global: bool,
+}
+
+impl gaze::Recognizer for Borrowed {
+    fn id(&self) -> &str {
+        gaze::Recognizer::id(&self.real)
+    }
+    fn supported_class(&self) -> &gaze::PiiClass {
+        gaze::Recognizer::supported_class(&self.real)
+    }
+    fn token_family(&self) -> &str {
+        "counter"
+    }
+    fn locales(&self) -> &[gaze::LocaleTag] {
+        if self.global {
+            &[gaze::LocaleTag::Global]
+        } else {
+            gaze::Recognizer::locales(&self.real)
         }
     }
-    let policy = policy("en-US");
+    fn locale_basis(&self) -> gaze::LocaleBasis {
+        gaze::Recognizer::locale_basis(&self.real)
+    }
+    fn validator_kind(&self) -> Option<gaze_recognizers::ValidatorKind> {
+        gaze::Recognizer::validator_kind(&self.real)
+    }
+    fn detect(
+        &self,
+        input: &str,
+        _: &gaze::DetectContext<'_>,
+    ) -> Result<Vec<gaze::Candidate>, gaze::DetectError> {
+        Ok(input
+            .find(self.span_of)
+            .map(|start| {
+                gaze::Candidate::new(
+                    start..start + self.span_of.len(),
+                    gaze::Recognizer::supported_class(&self.real).clone(),
+                    "phone.national.us",
+                    0.9,
+                    90,
+                    None,
+                    "counter",
+                    "phone.national.us",
+                    ConflictTier::None,
+                    Vec::new(),
+                )
+            })
+            .into_iter()
+            .collect())
+    }
+    fn benign_lookalike_grant(&self) -> Option<&gaze_recognizers::BenignLookalikeGrant> {
+        gaze::Recognizer::benign_lookalike_grant(&self.real)
+    }
+}
+
+fn clean_with(recognizer: Borrowed, locale: &str, input: &str) -> String {
+    let policy = policy(locale);
     let context = Context::from_json_str(r#"{"dictionaries":{},"class_map":{},"fields":{}}"#)
         .expect("context");
     let active = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let pipeline = build_pipeline_builder(&policy, &context, rulepacks(), &active, None)
         .expect("builder")
-        .recognizer(Spoof(real))
+        .recognizer(recognizer)
         .build()
         .expect("pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
     let (clean, _, _) = pipeline
         .clean_with_safety_net_policy_detect_context(
             &session,
-            RawDocument::Text("total EUR 9021 today".to_string()),
+            RawDocument::Text(input.to_string()),
             active.as_slice(),
             &DictionaryBundle::default(),
             SafetyNetPolicy::default(),
@@ -633,16 +636,50 @@ fn a_borrowed_grant_vetoes_nothing_the_audited_pattern_does_not_emit() {
     let CleanDocument::Text(text) = clean else {
         panic!("expected text");
     };
-    assert!(!text.contains("9021"), "{text}");
+    text
+}
+
+/// Spoof 2: a borrowed genuine grant on a span the audited pattern never emits: a compact
+/// `2125550187` passes the US phone validator, but the bundled pattern needs separators, so it
+/// never emits it. Inside a 16-digit run the structure fires; validator veto re-matches the
+/// audited pattern, so the candidate stays.
+#[test]
+fn a_borrowed_grant_vetoes_nothing_the_audited_pattern_does_not_emit() {
+    let text = clean_with(
+        Borrowed {
+            real: bundled_phone_us(),
+            span_of: "2125550187",
+            global: false,
+        },
+        "en-US",
+        "itemCode=2125550187-4444-99 status=done",
+    );
+    assert!(!text.contains("2125550187"), "{text}");
+}
+
+/// Spoof 3: a borrowed genuine grant presented by a recognizer that gates differently is not
+/// the audited rule; its candidate on an audited-pattern match inside a long run is kept.
+#[test]
+fn a_borrowed_grant_with_another_identity_vetoes_nothing() {
+    let text = clean_with(
+        Borrowed {
+            real: bundled_phone_us(),
+            span_of: "212-555-0187",
+            global: true,
+        },
+        "en-GB",
+        "run 212-555-0187-4444-99 end",
+    );
+    assert!(!text.contains("212-555-0187"), "{text}");
 }
 
 #[test]
 fn a_multi_branch_pattern_cannot_declare_benign_lookalikes() {
     let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
-        r"(?:plz (\d{4})|(\d{4}) [A-Z][a-z]+)",
-        gaze::PiiClass::custom("postal_code").expect("class"),
-        "postal.us",
-        vec![gaze::LocaleTag::Global],
+        r"(?:tel (\d{10})|(\d{10}) [A-Z][a-z]+)",
+        gaze::PiiClass::custom("phone").expect("class"),
+        "phone.national.us",
+        vec![gaze::LocaleTag::EnUs],
         0.7,
         0,
         "counter",
@@ -653,18 +690,19 @@ fn a_multi_branch_pattern_cannot_declare_benign_lookalikes() {
     )
     .expect("detector");
     assert!(matches!(
-        detector.with_benign_lookalikes(vec![gaze_recognizers::BenignLookalike::CurrencyAmount]),
+        detector.with_benign_lookalikes(vec![gaze_recognizers::BenignLookalike::DigitRunFragment]),
         Err(gaze_recognizers::RecognizerError::UnsupportedBenignLookalike { .. })
     ));
 }
 
 #[test]
 fn a_recorded_failure_rule_cannot_declare_benign_lookalikes() {
-    let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
+    let detector = bundled_phone_us();
+    let recording = gaze_recognizers::RegexDetector::with_rulepack_fields(
         r"\b\d{10}\b",
         gaze::PiiClass::custom("phone").expect("class"),
         "phone.national.us",
-        vec![gaze::LocaleTag::Global],
+        vec![gaze::LocaleTag::EnUs],
         0.7,
         0,
         "counter",
@@ -680,102 +718,10 @@ fn a_recorded_failure_rule_cannot_declare_benign_lookalikes() {
     .with_validator_on_fail(gaze_recognizers::ValidatorOnFail::Record)
     .expect("a US national phone may record");
     assert!(matches!(
-        detector.with_benign_lookalikes(vec![gaze_recognizers::BenignLookalike::CurrencyAmount]),
+        recording.with_benign_lookalikes(vec![gaze_recognizers::BenignLookalike::DigitRunFragment]),
         Err(gaze_recognizers::RecognizerError::UnsupportedBenignLookalike { .. })
     ));
-}
-
-/// Review 10815 rev 3: a recognizer that borrows the real `postal.us` grant but gates
-/// differently (global locales, so it runs on an en-GB document where the audited rule is
-/// off) is not the audited rule; its candidate is never vetoed, even on an audited-pattern
-/// match inside a benign structure.
-#[test]
-fn a_borrowed_grant_with_another_identity_vetoes_nothing() {
-    use gaze_recognizers::{BenignLookalike, RegexDetector};
-    let real = RegexDetector::with_rulepack_fields(
-        r"\b\d{5}(-\d{4})?\b",
-        gaze::PiiClass::custom("postal_code").expect("class"),
-        "postal.us",
-        vec![gaze::LocaleTag::EnUs],
-        0.70,
-        70,
-        "counter",
-        None,
-        Vec::new(),
-        None,
-        None,
-    )
-    .expect("detector")
-    .with_benign_lookalikes(vec![
-        BenignLookalike::JoinedIdentifier,
-        BenignLookalike::CurrencyAmount,
-    ])
-    .expect("the exact bundled postal.us rule is granted");
-    struct Everywhere(RegexDetector);
-    impl gaze::Recognizer for Everywhere {
-        fn id(&self) -> &str {
-            self.0.id()
-        }
-        fn supported_class(&self) -> &gaze::PiiClass {
-            self.0.supported_class()
-        }
-        fn token_family(&self) -> &str {
-            "counter"
-        }
-        fn locales(&self) -> &[gaze::LocaleTag] {
-            &[gaze::LocaleTag::Global]
-        }
-        fn detect(
-            &self,
-            input: &str,
-            _: &gaze::DetectContext<'_>,
-        ) -> Result<Vec<gaze::Candidate>, gaze::DetectError> {
-            Ok(input
-                .find("90210")
-                .map(|start| {
-                    gaze::Candidate::new(
-                        start..start + 5,
-                        self.0.supported_class().clone(),
-                        "postal.us",
-                        0.9,
-                        90,
-                        None,
-                        "counter",
-                        "postal.us",
-                        ConflictTier::None,
-                        Vec::new(),
-                    )
-                })
-                .into_iter()
-                .collect())
-        }
-        fn benign_lookalike_grant(&self) -> Option<&gaze_recognizers::BenignLookalikeGrant> {
-            self.0.benign_lookalike_grant()
-        }
-    }
-    let policy = policy("en-GB");
-    let context = Context::from_json_str(r#"{"dictionaries":{},"class_map":{},"fields":{}}"#)
-        .expect("context");
-    let active = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
-    let pipeline = build_pipeline_builder(&policy, &context, rulepacks(), &active, None)
-        .expect("builder")
-        .recognizer(Everywhere(real))
-        .build()
-        .expect("pipeline");
-    let session = Session::new(Scope::Ephemeral).expect("session");
-    let (clean, _, _) = pipeline
-        .clean_with_safety_net_policy_detect_context(
-            &session,
-            RawDocument::Text("Lagerartikel SKU-DEMO-90210 fertig".to_string()),
-            active.as_slice(),
-            &DictionaryBundle::default(),
-            SafetyNetPolicy::default(),
-        )
-        .expect("clean");
-    let CleanDocument::Text(text) = clean else {
-        panic!("expected text");
-    };
-    assert!(!text.contains("90210"), "{text}");
+    drop(detector);
 }
 
 fn object(fields: &[(&str, gaze::Value)]) -> gaze::Value {
@@ -894,31 +840,10 @@ fn review_10848_labelled_values_stay_protected_with_no_veto_row() {
     }
 }
 
-/// Counterweights: benign references, amounts and long SKUs in structured records whose path
-/// and siblings carry no cue still leave raw, one audit row each.
+/// Counterweight: a long SKU in a structured record with no cue anywhere still leaves raw, one
+/// audit row.
 #[test]
-fn structured_benign_lookalikes_still_leave_raw_with_one_row_each() {
-    use ValidatorFailReason::*;
-    let (leaves, vetoes) = clean_structured(
-        "en-US",
-        &[(
-            "order",
-            object(&[
-                ("ref", string("ORDER-90210")),
-                ("total", string("EUR 22186,12")),
-            ]),
-        )],
-    );
-    assert_eq!(leaves, vec!["ORDER-90210", "EUR 22186,12"]);
-    let mut vetoes = vetoes;
-    vetoes.sort_by_key(|row| format!("{row:?}"));
-    assert_eq!(
-        vetoes,
-        vec![
-            ("postal.us".to_string(), BenignCurrencyAmount),
-            ("postal.us".to_string(), BenignJoinedIdentifier),
-        ]
-    );
+fn structured_digit_run_fragment_still_leaves_raw_with_one_row() {
     let (leaves, vetoes) = clean_structured(
         "de-DE",
         &[(
@@ -929,7 +854,10 @@ fn structured_benign_lookalikes_still_leave_raw_with_one_row_each() {
     assert_eq!(leaves, vec!["0593-9506-3395-7573"]);
     assert_eq!(
         vetoes,
-        vec![("phone.national.de".to_string(), BenignDigitRunFragment)]
+        vec![(
+            "phone.national.de".to_string(),
+            ValidatorFailReason::BenignDigitRunFragment
+        )]
     );
 }
 
@@ -1075,4 +1003,51 @@ fn cue_vocabulary_equals_the_benchmark_single_source() {
     assert_eq!(list("whole_words", "postal"), owned(v::POSTAL_WORDS));
     assert_eq!(list("whole_words", "phone"), owned(v::PHONE_WORDS));
     assert_eq!(list("whole_words", "address"), owned(v::ADDRESS_WORDS));
+}
+
+/// Review 10848 round 3: labels a cue list cannot read (markup, zero-width, decomposed accents,
+/// Polish, Hungarian, Finnish, typos, percent- and base64-encoded labels). With the reference
+/// and amount structures gone, every one of them stays protected with no benign row.
+#[test]
+fn review_10848_round_3_labels_stay_protected_with_no_benign_row() {
+    for (input, value) in [
+        ("Ph<b>one</b>: ORDER-212-555-0187", "555-0187"),
+        ("Ph\u{200b}one: ORDER-212-555-0187", "555-0187"),
+        ("Z<b>IP</b>: ORDER-90210", "90210"),
+        ("Te\u{301}l.: ORDER-212-555-0187", "555-0187"),
+        ("Kod pocztowy: ORDER-90210", "90210"),
+        ("Irányítószám: ORDER-90210", "90210"),
+        ("Puhelinnumero: ORDER-212-555-0187", "555-0187"),
+        ("Phne: ORDER-212-555-0187", "555-0187"),
+        ("Potsal: ORDER-90210", "90210"),
+        ("%70%68%6F%6E%65: ORDER-212-555-0187", "555-0187"),
+        ("cGhvbmU=: ORDER-212-555-0187", "555-0187"),
+    ] {
+        assert_protected("en-US", input, value);
+    }
+    let (leaves, vetoes) = clean_structured(
+        "en-US",
+        &[
+            ("metadata", object(&[("kind", string("%5A%49%50"))])),
+            ("entry", object(&[("ref", string("ORDER-90210"))])),
+        ],
+    );
+    assert!(
+        leaves.iter().all(|leaf| !leaf.contains("90210")),
+        "{leaves:?}"
+    );
+    assert!(vetoes.is_empty(), "{vetoes:?}");
+}
+
+/// The digit-run veto is proven by the value, but a cue anywhere in the document or record, or
+/// a non-Latin letter, still keeps it off: extra caution at no measured cost.
+#[test]
+fn a_cue_or_non_latin_letter_keeps_even_the_digit_run_veto_off() {
+    for input in [
+        "Telefon des Kunden:\nBitte den Wert unten verwenden.\n0593-9506-3395-7573",
+        "itemCode=0593-9506-3395-7573\n\nTel<b>efon</b> siehe oben",
+        "товар 0593-9506-3395-7573",
+    ] {
+        assert_protected("de-DE", input, "0593-9506-3395");
+    }
 }

@@ -642,10 +642,6 @@ pub enum ValidatorFailReason {
     Ipv4LoopbackRange,
     /// Built-in IPv6 rule excluded a loopback address (`::1` or an embedded 127.0.0.0/8).
     Ipv6LoopbackRange,
-    /// The candidate ends a document-reference identifier (`SKU-DEMO-73821`).
-    BenignJoinedIdentifier,
-    /// A currency code or sign sits next to the candidate (`EUR 22186,12`).
-    BenignCurrencyAmount,
     /// The candidate is part of a digit-group run longer than any phone number.
     BenignDigitRunFragment,
 }

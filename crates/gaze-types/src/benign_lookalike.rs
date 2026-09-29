@@ -1,17 +1,18 @@
-//! Benign lookalike structures: text around a weak, cue-less shape match that
-//! positively identifies a non-PII value (an order number, an amount, a SKU).
+//! Benign lookalikes: values whose benignness is proven by the value itself,
+//! never by a missing label.
 //!
-//! A recognizer opts in per structure (`[recognizers.context] benign_lookalikes`).
-//! Validator veto then drops that recognizer's candidate before conflict
-//! resolution with a typed [`ValidatorFailReason`], exactly like a failed
-//! validator. Only the opted-in recognizer's own candidate is dropped; any other
-//! candidate over the same bytes (a cued phone, an IBAN, a card) still protects
-//! them.
+//! Only one structure remains: a phone candidate that is a strict part of one
+//! digit run longer than any E.164 number cannot be a phone number, whatever
+//! its label. (Loopback IP addresses are excluded by the IP validators.) Earlier
+//! structures that rested on the absence of a recognised label (an order-number
+//! tail, a currency amount) were removed: a finite cue list cannot prove that a
+//! label is absent (markup, typos, other languages and encodings all evade it).
 //!
-//! A cue anywhere keeps every value protected: validator veto scans the whole
-//! document (or, for a structured document, every key and string value of the
-//! whole record) with [`CueEvidence`], and a postal, phone or address cue for the
-//! candidate's family, or any letter outside Latin script, disables the veto.
+//! A recognizer opts in per structure (`[recognizers.context] benign_lookalikes`),
+//! and only with a [`BenignLookalikeGrant`] for its exact audited rule. As extra
+//! caution, validator veto still scans the whole document or record with
+//! [`CueEvidence`] and keeps every candidate when any cue word or any non-Latin
+//! letter appears.
 
 use std::ops::Range;
 
@@ -26,48 +27,11 @@ use crate::{
 #[non_exhaustive]
 #[serde(rename_all = "snake_case")]
 pub enum BenignLookalike {
-    /// The candidate is the last hyphen segment of a token whose first segment is a
-    /// document-reference label word: `SKU-DEMO-73821`, `INVOICE-TEST-03687455`.
-    JoinedIdentifier,
-    /// A currency code or sign sits directly before the candidate, or after it (optionally
-    /// past two decimals): `EUR 22186,12`, `22186,12 EUR`, `$90210`.
-    CurrencyAmount,
     /// The candidate is a strict part of one same-separator digit-group run holding at least
     /// 16 digits, longer than any E.164 number: the SKU `0593-9506-3395-7573`.
     DigitRunFragment,
 }
 
-/// Label words that open a document-reference identifier. Cue words of any PII class
-/// (`tel`, `plz`, `zip`, ...) must never appear here.
-const REFERENCE_LABELS: &[&str] = &[
-    "art",
-    "artikel",
-    "auftrag",
-    "batch",
-    "beleg",
-    "bestellung",
-    "case",
-    "charge",
-    "gutschein",
-    "inv",
-    "invoice",
-    "item",
-    "lot",
-    "ord",
-    "order",
-    "po",
-    "quote",
-    "rechnung",
-    "ref",
-    "rma",
-    "shipment",
-    "sku",
-    "ticket",
-    "track",
-    "tracking",
-    "voucher",
-    "vorgang",
-];
 /// Whether `recognizer_id` names an audited bundled rule (an early, friendly check for the
 /// rulepack loader). Only a [`BenignLookalikeGrant`] actually permits a veto.
 pub fn is_audited(recognizer_id: &str) -> bool {
@@ -126,8 +90,6 @@ pub const ADDRESS_STEMS: &[&str] = &[
 pub const POSTAL_WORDS: &[&str] = &["cap", "cp", "cep"];
 pub const PHONE_WORDS: &[&str] = &["gsm"];
 pub const ADDRESS_WORDS: &[&str] = &["rue", "rua"];
-const CURRENCY_CODES: &[&str] = &["CHF", "EUR", "GBP", "USD"];
-const CURRENCY_SIGNS: &[char] = &['€', '$', '£'];
 /// No E.164 number has more digits than this, so a longer run cannot be one phone number.
 const MAX_PHONE_DIGITS: usize = 15;
 
@@ -135,8 +97,6 @@ impl BenignLookalike {
     /// Parses a rulepack spelling.
     pub fn parse(value: &str) -> Option<Self> {
         match value {
-            "joined_identifier" => Some(Self::JoinedIdentifier),
-            "currency_amount" => Some(Self::CurrencyAmount),
             "digit_run_fragment" => Some(Self::DigitRunFragment),
             _ => None,
         }
@@ -145,8 +105,6 @@ impl BenignLookalike {
     /// The audit reason a veto by this structure records.
     pub fn reason(self) -> ValidatorFailReason {
         match self {
-            Self::JoinedIdentifier => ValidatorFailReason::BenignJoinedIdentifier,
-            Self::CurrencyAmount => ValidatorFailReason::BenignCurrencyAmount,
             Self::DigitRunFragment => ValidatorFailReason::BenignDigitRunFragment,
         }
     }
@@ -159,8 +117,6 @@ impl BenignLookalike {
             return false;
         }
         match self {
-            Self::JoinedIdentifier => joined_identifier(text, span),
-            Self::CurrencyAmount => currency_amount(text, span),
             Self::DigitRunFragment => digit_run_fragment(text, span),
         }
     }
@@ -198,6 +154,45 @@ fn is_latin_letter(c: char) -> bool {
     )
 }
 
+/// Zero-width characters, the soft hyphen, the word joiner, the byte-order mark and combining
+/// marks: read as nothing, so they cannot split a cue word. A combining mark after a base
+/// letter is its decomposed accent (`e` + U+0301 reads `e`).
+fn is_invisible(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0x00AD | 0x200B..=0x200D | 0x2060 | 0xFEFF | 0x0300..=0x036F | 0x1AB0..=0x1AFF
+            | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE20..=0xFE2F
+    )
+}
+
+/// `text` with markup-like tags removed: a `<` followed within 64 characters by a `>` with no
+/// other `<` in between. `Ph<b>one</b>` reads `Phone`.
+fn strip_markup(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.contains('<') {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('<') {
+        out.push_str(&rest[..open]);
+        let tail = &rest[open + 1..];
+        let close = tail
+            .char_indices()
+            .take(64)
+            .find(|&(_, c)| c == '>' || c == '<')
+            .filter(|&(_, c)| c == '>');
+        match close {
+            Some((end, _)) => rest = &tail[end + 1..],
+            None => {
+                out.push('<');
+                rest = tail;
+            }
+        }
+    }
+    out.push_str(rest);
+    std::borrow::Cow::Owned(out)
+}
+
 /// What a whole document or record says about postcodes and phone numbers. A benign lookalike
 /// veto needs positive structural evidence *and* the absence of every cue for its family
 /// anywhere in the document or record: a bounded window can never prove that a labelled value
@@ -210,13 +205,21 @@ pub struct CueEvidence {
 }
 
 impl CueEvidence {
-    /// Scans every word and letter of `text`. Words split at every non-letter and at each
-    /// lower-to-upper case change, so `postal_code`, `zipCode` and `phoneNumber` all count.
+    /// Scans every word and letter of `text`. Before splitting, markup-like tags (`<b>`,
+    /// `</span>`) are removed, and zero-width characters, soft hyphens and combining marks are
+    /// read as nothing, so `Ph<b>one</b>`, `Ph\u{200b}one` and a decomposed `Te\u{301}l` read
+    /// `phone` and `tel`. Words then split at every other non-letter and at each lower-to-upper
+    /// case change, so `postal_code`, `zipCode` and `phoneNumber` all count. Encoded labels
+    /// (percent-encoding, base64) are not decoded.
     pub fn scan(text: &str) -> Self {
+        let text = strip_markup(text);
         let mut evidence = Self::default();
         let mut word = String::new();
         let mut previous_lower = false;
         for c in text.chars().chain(std::iter::once(' ')) {
+            if is_invisible(c) {
+                continue;
+            }
             if (!c.is_alphabetic() || (c.is_uppercase() && previous_lower)) && !word.is_empty() {
                 evidence.add_word(&std::mem::take(&mut word));
             }
@@ -280,74 +283,6 @@ impl CueEvidence {
     }
 }
 
-fn is_word(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric()
-}
-
-fn joined_identifier(text: &str, span: Range<usize>) -> bool {
-    let bytes = text.as_bytes();
-    if span.start == 0 || bytes[span.start - 1] != b'-' {
-        return false;
-    }
-    // The candidate must end the token: no word byte, and no further `-segment`.
-    match bytes.get(span.end) {
-        Some(&next) if is_word(next) => return false,
-        Some(b'-') if bytes.get(span.end + 1).copied().is_some_and(is_word) => return false,
-        _ => {}
-    }
-    let mut start = span.start - 1;
-    while start > 0 && (is_word(bytes[start - 1]) || bytes[start - 1] == b'-') {
-        start -= 1;
-    }
-    let first = text[start..span.start - 1].split('-').next().unwrap_or("");
-    !first.is_empty()
-        && first.bytes().all(|byte| byte.is_ascii_alphabetic())
-        && REFERENCE_LABELS.contains(&first.to_ascii_lowercase().as_str())
-}
-
-/// Strips one space, NBSP or narrow NBSP from the end of `text`.
-fn strip_gap_end(text: &str) -> &str {
-    text.strip_suffix([' ', '\u{00A0}', '\u{202F}'])
-        .unwrap_or(text)
-}
-
-fn strip_gap_start(text: &str) -> &str {
-    text.strip_prefix([' ', '\u{00A0}', '\u{202F}'])
-        .unwrap_or(text)
-}
-
-fn currency_amount(text: &str, span: Range<usize>) -> bool {
-    let before = strip_gap_end(&text[..span.start]);
-    let code_before = CURRENCY_CODES.iter().any(|code| {
-        before
-            .strip_suffix(code)
-            .is_some_and(|rest| !rest.bytes().next_back().is_some_and(is_word))
-    });
-    if code_before || before.ends_with(CURRENCY_SIGNS) {
-        return true;
-    }
-    let mut after = &text[span.end..];
-    let decimals = after.as_bytes();
-    if decimals.len() >= 3
-        && matches!(decimals[0], b'.' | b',')
-        && decimals[1].is_ascii_digit()
-        && decimals[2].is_ascii_digit()
-        && !decimals
-            .get(3)
-            .copied()
-            .is_some_and(|byte| byte.is_ascii_digit())
-    {
-        after = &after[3..];
-    }
-    let after = strip_gap_start(after);
-    after.starts_with(CURRENCY_SIGNS)
-        || CURRENCY_CODES.iter().any(|code| {
-            after
-                .strip_prefix(code)
-                .is_some_and(|rest| !rest.bytes().next().is_some_and(is_word))
-        })
-}
-
 fn digit_run_fragment(text: &str, span: Range<usize>) -> bool {
     let bytes = text.as_bytes();
     let separator = |byte: u8| matches!(byte, b'-' | b'.' | b'/');
@@ -399,19 +334,11 @@ pub struct GrantRequest<'a> {
 const AUDITED_FINGERPRINTS: &[(&str, &str)] = &[
     (
         "phone.national.de",
-        "c74c5882ee5043938a26a341779dbcb919cf4aae3dca46b99fa97649614f6eba",
+        "8d0d575fafa9b73df08bc17d699919a2fb1a5c16de48ac764d22b003766a6551",
     ),
     (
         "phone.national.us",
-        "6286ab60bc67af15dca3bb32ea242492cad079b2bba4dca3f7fcb0a405232fe1",
-    ),
-    (
-        "postal.de",
-        "8360f7b62bc7c502301cad396afb9d1cdb839c5dff405982caaacdd9fe1202c1",
-    ),
-    (
-        "postal.us",
-        "3d87bba275a2fde7bb1450b214de668b8f4e575b5dfbb008d6ba4adf1937a323",
+        "caee26c9cfd34a190cdafc41555b7a81a220457055c5fe77cbcf47ad92cfc8b1",
     ),
 ];
 
@@ -521,21 +448,6 @@ mod tests {
     }
 
     #[test]
-    fn joined_identifier_needs_a_reference_label_first_and_the_value_last() {
-        use BenignLookalike::JoinedIdentifier as J;
-        assert!(fires(J, "Lagerartikel SKU-DEMO-73821 und", "73821"));
-        assert!(fires(J, "invoice INVOICE-TEST-03687455, stock", "03687455"));
-        assert!(fires(J, "order ORDER-9041-145684.", "145684"));
-        // Security tokens and country-prefixed postcodes are not references.
-        assert!(!fires(J, "token ASDFG-98765-ZXCVB here", "98765"));
-        assert!(!fires(J, "token XYZ123-abcde-98765 here", "98765"));
-        assert!(!fires(J, "D-80331 München", "80331"));
-        // The value must end the token.
-        assert!(!fires(J, "SKU-73821-A1 x", "73821"));
-        assert!(!fires(J, "SKU 73821", "73821"));
-    }
-
-    #[test]
     fn cue_evidence_reads_the_whole_document() {
         let postal = PiiClass::custom("postal_code").expect("class");
         let phone = PiiClass::custom("phone").expect("class");
@@ -588,6 +500,22 @@ mod tests {
         ] {
             assert!(scan(label).postal(), "{label}");
         }
+        // Markup, zero-width characters and decomposed accents cannot hide a cue.
+        for label in [
+            "Ph<b>one</b>:",
+            "Ph\u{200b}one:",
+            "Z<b>IP</b>:",
+            "Te\u{301}l.:",
+            "Tel\u{ad}efon",
+        ] {
+            let evidence = scan(label);
+            assert!(
+                evidence.blocks(&postal) && evidence.blocks(&phone),
+                "{label:?}"
+            );
+        }
+        // A lone `<` or `>` (a comparison) is kept as text.
+        assert!(scan("a < b and ZIP").postal());
         // A word merely containing a cue, or a short word only as a stem, does not count.
         let near_miss = scan("Hotel capital recap");
         assert!(!near_miss.blocks(&postal) && !near_miss.blocks(&phone));
@@ -626,17 +554,6 @@ mod tests {
     }
 
     #[test]
-    fn currency_amount_needs_a_code_or_sign_right_next_to_the_value() {
-        use BenignLookalike::CurrencyAmount as C;
-        assert!(fires(C, "total EUR 22186,12 today", "22186"));
-        assert!(fires(C, "total 22186,12\u{00A0}EUR", "22186"));
-        assert!(fires(C, "price $90210 now", "90210"));
-        assert!(!fires(C, "EURO 80331 München", "80331"));
-        assert!(!fires(C, "80331 München, EUR 50", "80331"));
-        assert!(!fires(C, "80331 EURASIA", "80331"));
-    }
-
-    #[test]
     fn digit_run_fragment_needs_a_run_longer_than_any_phone_number() {
         use BenignLookalike::DigitRunFragment as D;
         assert!(fires(
@@ -655,8 +572,9 @@ mod tests {
 
     #[test]
     fn only_audited_bundled_recognizers_are_eligible() {
-        assert!(is_audited("postal.us"));
+        assert!(is_audited("phone.national.us"));
         assert!(is_audited("phone.national.de"));
+        assert!(!is_audited("postal.us"));
         assert!(!is_audited("postal.at_ch"));
         assert!(!is_audited("custom.order_zip"));
     }
@@ -687,59 +605,35 @@ mod grant_tests {
     }
 
     #[test]
-    fn only_the_exact_audited_rule_is_granted() {
-        let class = PiiClass::custom("postal_code").expect("class");
-        let structures = [
-            BenignLookalike::JoinedIdentifier,
-            BenignLookalike::CurrencyAmount,
-        ];
+    fn only_the_audited_phone_rules_can_be_granted() {
+        let postal = PiiClass::custom("postal_code").expect("class");
+        let phone = PiiClass::custom("phone").expect("class");
+        let structures = [BenignLookalike::DigitRunFragment];
         let en_us = [LocaleTag::EnUs];
-        let exact = request(
+        // The postal rules were audited once but carry no structure any more: no grant.
+        let postal_us = request(
             r"\b\d{5}(-\d{4})?\b",
             &en_us,
             ValidatorOnFail::Veto,
-            &class,
+            &postal,
             &structures,
         );
-        assert!(BenignLookalikeGrant::audited(&exact).is_some());
-        // Any change to the tuple loses the grant.
-        let pattern = request(
-            r"ORDER-(\d{5})\s+Beverly",
+        assert!(BenignLookalikeGrant::audited(&postal_us).is_none());
+        assert!(!is_audited("postal.us") && !is_audited("postal.de"));
+        assert!(is_audited("phone.national.us") && is_audited("phone.national.de"));
+        // A borrowed audited id with another pattern, or a recorded-failure rule, never is.
+        let mut spoof = request(
+            r"\d{10}",
             &en_us,
             ValidatorOnFail::Veto,
-            &class,
+            &phone,
             &structures,
         );
-        assert!(BenignLookalikeGrant::audited(&pattern).is_none());
-        let de = [LocaleTag::DeDe];
-        let locale = request(
-            r"\b\d{5}(-\d{4})?\b",
-            &de,
-            ValidatorOnFail::Veto,
-            &class,
-            &structures,
-        );
-        assert!(BenignLookalikeGrant::audited(&locale).is_none());
-        let record = request(
-            r"\b\d{5}(-\d{4})?\b",
-            &en_us,
-            ValidatorOnFail::Record,
-            &class,
-            &structures,
-        );
-        assert!(BenignLookalikeGrant::audited(&record).is_none());
-        let more = [
-            BenignLookalike::JoinedIdentifier,
-            BenignLookalike::CurrencyAmount,
-            BenignLookalike::DigitRunFragment,
-        ];
-        let widened = request(
-            r"\b\d{5}(-\d{4})?\b",
-            &en_us,
-            ValidatorOnFail::Veto,
-            &class,
-            &more,
-        );
-        assert!(BenignLookalikeGrant::audited(&widened).is_none());
+        spoof.id = "phone.national.us";
+        assert!(BenignLookalikeGrant::audited(&spoof).is_none());
+        spoof.on_fail = ValidatorOnFail::Record;
+        assert!(BenignLookalikeGrant::audited(&spoof).is_none());
+        // The positive case, the exact bundled phone rules, is pinned end to end: building the
+        // bundled pipeline fails unless both mint a grant.
     }
 }
