@@ -999,7 +999,8 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             self.panels(their=tampered)
         # The untagged `gaze-full` row and the comparison's main run are never read.
         moved = copy.deepcopy(self.their)
-        for bench in moved.values():
+        # A benchmark measured only for the vendor's own model (PII-TRACE) has no Gaze row yet.
+        for bench in (b for b in moved.values() if "gaze-full" in b["rows"]):
             bench["rows"]["gaze-full"]["product_coverage"]["leaked_bytes"] = 1
             bench["rows"]["gaze-full"]["product_coverage"]["char_level"]["f2"] = 0.99
         changed = copy.deepcopy(self.comparison)

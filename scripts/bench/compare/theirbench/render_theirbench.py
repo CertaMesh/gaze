@@ -177,6 +177,38 @@ def add_tool(data: dict[str, Any], report_path: Path, own_path: Path, tool: str)
         "rescored_with": report["rescored_with"]}
 
 
+def add_benchmark(data: dict[str, Any], report_path: Path, own_path: Path, tool: str) -> None:
+    """Add a benchmark that only one tool has been measured on (the vendor's own tuned model).
+
+    Other tools and Gaze rows join later through add_tool once they are measured on the same
+    documents. Same guards as assemble: clean, rescored, no preflight, no smoke.
+    """
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    name = report["benchmark"]
+    if name in data["benchmarks"]:
+        raise ValueError(f"{name} is already assembled; use add-tool")
+    if report.get("preflight"):
+        raise ValueError(f"{report_path}: preflight results are never published")
+    if "rescored_with" not in report or report["rescored_with"]["harness_dirty"] or report["harness_dirty"]:
+        raise ValueError(f"{report_path}: publish only a clean measurement rescored on a clean harness")
+    if set(report["rows"]) != {tool}:
+        raise ValueError(f"{report_path}: expected exactly the {tool} row, found {sorted(report['rows'])}")
+    own = json.loads(own_path.read_text(encoding="utf-8"))
+    if own.get("smoke_limit") or own["system"] != tool:
+        raise ValueError(f"{own_path}: not a full own-scorer result for {tool}")
+    entry = {key: report[key] for key in (
+        "identity", "harness_revision", "gaze_crates_tree", "label_maps_sha256", "mapping_sha256",
+        "hardware", "common_intersection_labels", "splits", "provenance", "comparison_revision",
+        "comparison_sha256", "typed_hold", "rescored_with")}
+    scored = own.get("scored") or own["overall"]
+    entry["rows"] = {tool: report["rows"][tool]["test"]}
+    entry["own_metric"] = {tool: scored}
+    entry["reproduction"] = {"published": None, "vendor_system": tool, "vendor_result": own["overall"],
+                             "versions": own["versions"]}
+    entry["chart_rows"] = [tool]
+    data["benchmarks"][name] = entry
+
+
 def is_tagged_gaze_row(tool: str) -> bool:
     return tool.startswith("gaze-") and TAG.fullmatch(tool[len("gaze-"):]) is not None
 
@@ -356,6 +388,10 @@ def main(argv: list[str] | None = None) -> int:
     extra.add_argument("--report", type=Path, required=True)
     extra.add_argument("--own", type=Path, required=True)
     extra.add_argument("--tool", required=True)
+    first = sub.add_parser("add-benchmark")
+    first.add_argument("--report", type=Path, required=True)
+    first.add_argument("--own", type=Path, required=True)
+    first.add_argument("--tool", required=True)
     show = sub.add_parser("render")
     show.add_argument("--check", action="store_true")
     show.add_argument("--data", type=Path, default=DATA)
@@ -365,6 +401,11 @@ def main(argv: list[str] | None = None) -> int:
         DATA.write_text(json.dumps(assemble(args.report, args.own, args.reproduction, args.historical,
                                        dict(item.split("=", 1) for item in args.harness_tag)), indent=2,
                                    sort_keys=True) + "\n", encoding="utf-8")
+        return 0
+    if args.command == "add-benchmark":
+        data = json.loads(DATA.read_text(encoding="utf-8"))
+        add_benchmark(data, args.report, args.own, args.tool)
+        DATA.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return 0
     if args.command == "add-tool":
         data = json.loads(DATA.read_text(encoding="utf-8"))

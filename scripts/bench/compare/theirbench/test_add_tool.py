@@ -75,3 +75,35 @@ def test_refuses_dirty_unrescored_preflight_wrong_tool_and_smoke(tmp_path: Path)
         render.add_tool(data(), *write(tmp_path, body, {"system": "pii-tracer", "smoke_limit": 5, "overall": {}}), "pii-tracer")
     with pytest.raises(ValueError, match="own-scorer"):
         render.add_tool(data(), *write(tmp_path, body, {"system": "other", "overall": {}}), "pii-tracer")
+
+
+def own_pii_trace() -> dict:
+    return {"system": "pii-tracer", "overall": {"char_f1": 0.97, "exact_typed_micro_f1": 0.72}, "versions": {"python": "3.12"}}
+
+
+def trace_report(**changes: object) -> dict:
+    base = report(benchmark="pii-trace", chart_configs={}, comparison_sha256={}, gaze_crates_tree="t", hardware="hw",
+                  label_maps_sha256="l")
+    return {**base, **changes}
+
+
+def test_add_benchmark_creates_an_entry_with_only_the_vendor_row(tmp_path: Path) -> None:
+    body = data()
+    render.add_benchmark(body, *write(tmp_path, trace_report(), own_pii_trace()), "pii-tracer")
+    entry = body["benchmarks"]["pii-trace"]
+    assert list(entry["rows"]) == ["pii-tracer"] and entry["chart_rows"] == ["pii-tracer"]
+    assert entry["reproduction"]["published"] is None
+    assert entry["reproduction"]["vendor_result"]["char_f1"] == 0.97
+    assert "presidio-research" in body["benchmarks"]  # the others are untouched
+
+
+def test_add_benchmark_refuses_an_existing_benchmark_and_bad_inputs(tmp_path: Path) -> None:
+    body = data()
+    with pytest.raises(ValueError, match="already assembled"):
+        render.add_benchmark(body, *write(tmp_path, report(), own_pii_trace()), "pii-tracer")
+    for broken in (trace_report(harness_dirty=True), trace_report(preflight=3),
+                   trace_report(rows={"opf": {"test": ROW}})):
+        with pytest.raises(ValueError):
+            render.add_benchmark(data(), *write(tmp_path, broken, own_pii_trace()), "pii-tracer")
+    with pytest.raises(ValueError, match="own-scorer"):
+        render.add_benchmark(data(), *write(tmp_path, trace_report(), {**own_pii_trace(), "smoke_limit": 5}), "pii-tracer")
