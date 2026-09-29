@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Policy-matrix enumeration for collision-family token actions (todo #3746).
+"""Policy-matrix enumeration for collision-family token actions.
 
 Runs the #3708 IBAN document set (`iban_trailing_word_enumeration.documents()`:
 89 registry countries x 2 BBAN alphabets x 4 IBANs x spaced/compact x 3 prefixes

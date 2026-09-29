@@ -1,4 +1,4 @@
-//! Street-corroborated house numbers through the whole pipeline (todo 3670).
+//! Street-corroborated house numbers through the whole pipeline.
 //!
 //! A stub stands in for the NER recognizer: it reports the given words as
 //! locations under the recognizer id `ner`, exactly as the Davlan backend does.

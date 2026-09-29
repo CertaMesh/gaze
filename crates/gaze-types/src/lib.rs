@@ -1127,7 +1127,7 @@ fn iban_mod97_check(input: &str) -> bool {
 /// `iban_mod97` validator gates candidates on it, and the `iban.structural`
 /// pattern in the bundled `core` rulepack carries one alternation branch per
 /// registry length so a candidate span stops at the country's real IBAN length
-/// instead of borrowing the following word (solo todo #3708). The two are held
+/// instead of borrowing the following word. The two are held
 /// in agreement by a drift test in `gaze-recognizers`, which is why this needs
 /// to be reachable from outside the crate.
 #[must_use]
@@ -2418,8 +2418,8 @@ fn is_word_char(ch: char) -> bool {
 /// value, not more value. An empty run, an offset out of range, or one not on a character
 /// boundary returns false.
 ///
-/// This is the trailing boundary for identifier recognizers whose pattern must not end in `\b`
-/// (solo todo #3756): `iban.structural` matches a registry-length candidate without a trailing
+/// This is the trailing boundary for identifier recognizers whose pattern must not end in `\b`:
+/// `iban.structural` matches a registry-length candidate without a trailing
 /// boundary so a compact IBAN glued to the next label (`IBAN AT611904300234573201BIC`) is still a
 /// candidate, and this decides whether what follows is a label or the rest of a longer opaque
 /// token (`AT611904300234573201XQ7`). Rust `regex` has no lookahead, so it cannot be said in the

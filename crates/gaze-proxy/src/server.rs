@@ -1314,7 +1314,7 @@ impl<'pipeline, 'context, 'transaction, 'session>
         input: &str,
         _prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
-        // `gaze clean --safety-net-fallback strict`'s Resolve step (todo 3847); admission
+        // `gaze clean --safety-net-fallback strict`'s Resolve step; admission
         // follows on the leaf.
         let result = self.pipeline.resolve_boundary_text_transaction(
             self.transaction,
@@ -2822,7 +2822,7 @@ fn redact_surfaces(
     let mut redacted = RedactedSurfaces::default();
     for surface in surfaces {
         // `gaze clean --safety-net-fallback strict`'s Resolve step, so a net-flagged date becomes
-        // a token here instead of a refusal at admission (todo 3847). Admission stays the final
+        // a token here instead of a refusal at admission. Admission stays the final
         // gate.
         let text = pipeline
             .resolve_boundary_text(session, surface.text, locale_chain, dictionaries)

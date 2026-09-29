@@ -486,7 +486,7 @@ fn protect_json_leaves(
 ///
 /// The locator is `"inline-sha256:<hex>"` — we explicitly do NOT write the
 /// bytes to a side store from the dispatcher (out-of-row guarantee per
-/// scratchpad 1453). Adopters who want byte-level persistence wrap their
+/// (internal design note). Adopters who want byte-level persistence wrap their
 /// `ManifestStore` impl and persist before calling `finish_call`.
 fn build_snapshot_ref(
     audit_session_id: &str,

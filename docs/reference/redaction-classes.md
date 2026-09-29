@@ -107,7 +107,7 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `card.structural` | `regex` | a digit run with optional spaces or dashes; all-zero card windows are excluded; the recognizer finds the Luhn-valid 13 to 19 digit card inside it (the old 13-19 window or a group-aligned card layout: compact, 4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4; overlapping Luhn-valid windows are one token over their union), so a touching CVV, expiry or number does not hide it | `custom:credit_card` | `global` | `luhn` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `card.cued` | `regex` | A card layout (4-4-4-4-3 whole, 4-4-4-4, 4-6-5, 4-6-4, compact 16 to 19 digits starting 2-6, compact 14 to 15 digits starting 3; a trailing 3-digit group after the other layouts stays outside the token, further digits refuse the match) within 32 characters after a card cue (`card` with credit/debit/payment/bank/prepaid/gift and number/no/nr/holder, German card compounds, a bare `Karte` only with `Nummer`/`Nr`, card brands) on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it); a span holding a card stays whole (a cued 4-4-4-4-3 is one token); a Luhn-failing 13- or 15-digit compact card not starting with 3 stays raw; Luhn failures are recorded, not vetoed. `card.structural` keeps its Luhn veto | `custom:credit_card` | `global` | `luhn` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `ip.v4` | `regex` | Decimal dotted-quad IPv4 addresses with octets from 0 through 255, excluding RFC 5737 documentation ranges and loopback (`127.0.0.0/8`) | `custom:ip_address` | `global` | `ipv4_parse_non_documentation` | `none` | `safe_default` | yes | 0.70 | 80 |
-| `core, core-extended` | `ip.v6` | `regex` | Full, compressed (including the bare double-colon form), and IPv4-embedded IPv6 textual forms at every locale, excluding RFC 3849 and embedded RFC 5737 documentation ranges and loopback (`::1`, IPv4-mapped or IPv4-compatible `127.0.0.0/8`). The word guard excludes an address adjacent to an identifier character, so Rust and C++ double-colon paths survive; an explicit `Address:`, `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` cue admits a glued address after full IPv6 parsing (case-insensitive cues; `global` document-basis activation; todos #3710 and #3762, superseding #2402). `_2001:db9::1` remains outside the cue rule. A standalone path whose segments are all short hex words and which has no surrounding context is still an address | `custom:ip_address` | `global` | `ipv6_parse_non_documentation` | `none` | `safe_default` | yes | 0.70 | 80 |
+| `core, core-extended` | `ip.v6` | `regex` | Full, compressed (including the bare double-colon form), and IPv4-embedded IPv6 textual forms at every locale, excluding RFC 3849 and embedded RFC 5737 documentation ranges and loopback (`::1`, IPv4-mapped or IPv4-compatible `127.0.0.0/8`). The word guard excludes an address adjacent to an identifier character, so Rust and C++ double-colon paths survive; an explicit `Address:`, `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` cue admits a glued address after full IPv6 parsing (case-insensitive cues; `global` document-basis activation, superseding #2402). `_2001:db9::1` remains outside the cue rule. A standalone path whose segments are all short hex words and which has no surrounding context is still an address | `custom:ip_address` | `global` | `ipv6_parse_non_documentation` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `eth.address` | `regex` | Forty-hex-digit Ethereum addresses prefixed by 0x and accepted by EIP-55 rules | `custom:eth_address` | `global` | `eth_eip55` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `aadhaar.in` | `regex` | Cue-anchored Indian Aadhaar or UID values containing 12 digits and passing Verhoeff | `custom:aadhaar` | `en-IN, hi-IN` | `aadhaar_verhoeff` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `nir.fr` | `regex` | Cue-anchored French NIR social-security values with 15 digits and a valid MOD-97 key | `custom:nir` | `fr-FR` | `fr_nir_mod97` | `none` | `safe_default` | yes | 0.88 | 86 |
@@ -360,7 +360,7 @@ company names. Deterministic `Name` coverage is deliberately limited to email
 display names and locale-cue-anchored person-name shapes
 (`crates/gaze-recognizers/embedded/core.toml:51-155`).
 
-The no-OPF measurement supplied for todo #2419 found all six corresponding
+The no-OPF measurement supplied for the policy audit found all six corresponding
 benchmark labels **0-covered and 0-overlapped** at the deterministic rule floor:
 
 - `STREET`
@@ -503,7 +503,7 @@ upper-case alphanumeric run of k characters (0.7 % at k = 1, 0.07 % at k = 8).
 The Dataiku EN/DE holdout, the A4 negative corpus and `docs/**/*.md` are
 byte-identical under either rule (the A4 corpus contains no registry-shaped
 mod-97-valid token), so the evidence for the rule is the synthetic enumeration
-in `scripts/bench/iban_trailing_word_enumeration.py` (solo todo #3756).
+in `scripts/bench/iban_trailing_word_enumeration.py`.
 One related shape is only partly covered: a spaced German example IBAN glued
 to `BIC` is a candidate, but
 `phone.national.de` (priority 85) still claims the `0532 0130` sub-run, because
@@ -511,7 +511,7 @@ its 22-character IBAN-consuming branch keeps its trailing `\b` and stops
 consuming at the glued label; with `custom:phone` tokenized every byte is
 covered as `[IBAN fragment][phone fragment][IBAN fragment]`; with it preserved
 the IBAN stays raw
-as before (solo todo #3764). Compact German IBANs glued to a label tokenize whole.
+as before. Compact German IBANs glued to a label tokenize whole.
 
 ## Residual coverage
 

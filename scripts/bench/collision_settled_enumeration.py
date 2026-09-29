@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""IBAN class enumeration for the collision-settled resolver state (todo #3709).
+"""IBAN class enumeration for the collision-settled resolver state.
 
 Runs a deterministic IBAN document set through two `gaze daemon` binaries
 (base, fix) under five policies and compares, per document, the class each

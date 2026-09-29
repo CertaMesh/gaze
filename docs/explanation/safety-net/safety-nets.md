@@ -283,7 +283,7 @@ replacement, and each remaining suspect is classified into a closed set:
 | Case | Condition | Outcome |
 |------|-----------|---------|
 | `FallbackIncomplete` | The suspect covers bytes the fallback's own audit rows say it removed. | Deny. Nothing further is replaced first. |
-| `SeamManufactured` | The suspect's span strictly **contains** a deletion seam, so part of its shape exists only because the fallback removed what sat between two fragments. Abutting a seam is not this. | One bounded replacement through the ordinary fallback path. A second one denies. **Unreachable since the fallback started writing a marker** — a marker separates the fragments a deletion used to glue together, so no seam exists to contain. Kept, unmeasured-for-removal, under solo todo 3739. |
+| `SeamManufactured` | The suspect's span strictly **contains** a deletion seam, so part of its shape exists only because the fallback removed what sat between two fragments. Abutting a seam is not this. | One bounded replacement through the ordinary fallback path. A second one denies. **Unreachable since the fallback started writing a marker** — a marker separates the fragments a deletion used to glue together, so no seam exists to contain. Kept, unmeasured-for-removal. |
 | `Unjudgeable` | The suspect names no real range of the document, its own coverage claim contradicts the manifest, or the bytes it covers carry a token shape this pipeline never minted. | Deny. |
 | `Admit` | Anything else: a finding about the document that no stage is permitted to act on. | Merged into the returned `LeakReport`; the document completes carrying it. |
 
@@ -311,7 +311,7 @@ marker is an ordinary one-way manifest entry — `Action::Redact`, not owned,
 exactly the shape the primary pass has always emitted for a redacting policy —
 so the clean/raw alignment stays affine and the plain mapper describes the
 document end to end. The layout code that reconciled a deletion ledger against
-the manifest remains in tree but is no longer reachable; solo todo 3739 measures
+the manifest remains in tree but is no longer reachable; a measurement covers
 its removal.
 
 A
@@ -567,7 +567,7 @@ so there is no int8-kernel speedup.
 
 ### Measured
 
-The 2,910-document probe (todo 3675) ran op-B through the full pipeline and
+The 2,910-document probe ran op-B through the full pipeline and
 measured: **6,017 leaked gold bytes bought** under scored-label contract v2,
 **+517 false-positive bytes**, action precision 0.890, 1 false flag across
 1,024 PII-free documents, 1 one-way deletion. See
@@ -599,7 +599,7 @@ fallback, including `strict`
 (`nym_suspect_inside_its_own_token_text_is_dropped_under_every_resolve_fallback`).
 The eight-byte session prefix is replaced with a stable hex digest of the
 placeholder shape before inference; emitted tokens and byte offsets stay
-unchanged. Hiding the remaining token text is a follow-up (todo 3681). A first
+unchanged. Hiding the remaining token text is a follow-up. A first
 attempt replaced every manifest token with same-length spaces before inference
 and was measured and not shipped: it removed the token-text flags, but the
 model lost the tokens as context and bought 18 % fewer leaked bytes (v2 6,154

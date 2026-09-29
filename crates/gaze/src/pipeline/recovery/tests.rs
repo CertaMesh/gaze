@@ -561,7 +561,7 @@ fn work_counts_show_disjoint_gaps_are_not_replayed() {
         assert_eq!(baseline.work.pools, 1);
         assert_eq!(baseline.work.candidates, count);
         // Each disjoint arrival inspects only its left neighbour, so the
-        // resolver's work grows linearly (todo 3895; a full scan was
+        // resolver's work grows linearly (a full scan was
         // count * (count - 1) / 2).
         assert_eq!(baseline.work.overlap_probes, count - 1);
         let mut input = triple();
@@ -643,7 +643,7 @@ fn evidence_retains_original_ids_and_recovered_geometry_without_relabeling_membe
     assert_eq!(primary.members, vec![2]);
 }
 
-/// Todo #3709 through the whole-plan path and the differential oracle: a
+/// Through the whole-plan path and the differential oracle: a
 /// family settled by collision policy (IBAN over the card variant) must not
 /// reopen the anchor check when a later, unrelated, lower-priority overlap is
 /// decided on the base ladder. Both resolvers once keyed the fallback on the

@@ -1,5 +1,4 @@
-//! National IDs and NBSP-grouped IBANs inside OpenAI `tool_calls[].function.arguments`
-//! (solo todos #3818 + #3819).
+//! National IDs and NBSP-grouped IBANs inside OpenAI `tool_calls[].function.arguments`.
 //!
 //! The adapter hands the arguments string to the pipeline as one text surface, so a real agent
 //! tool call looks like `{"bsn":"111222333"}` to the recognizers. Before the fix the cue rules

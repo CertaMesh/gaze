@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""IBAN trailing-word enumeration for the `iban.structural` length branches (todo #3708).
+"""IBAN trailing-word enumeration for the `iban.structural` length branches.
 
 Runs a deterministic IBAN document set through two `gaze daemon` binaries (base,
 fix) under five policies and compares, per document, the class each binary gives
@@ -17,7 +17,7 @@ one alternation branch per ISO 13616 registry length.
 
 Document set: every one of the 89 registry countries x 2 BBAN alphabets x
 PER_COUNTRY valid mod-97 IBANs x spaced/compact x 3 prefixes x TRAILERS trailing
-contexts. Since todo #3756 the trailers include GLUED shapes (no separator at
+contexts. Since the trailing-word fix the trailers include GLUED shapes (no separator at
 all: `…3201BIC`, `…3201:`, `…32011234`): the trailing boundary of
 `iban.structural` moved out of the pattern into code, so a glued label must be
 recovered while a glued digit or underscore must leave the document unchanged
@@ -137,7 +137,7 @@ TRAILERS = {
     ",": False,
     "\nBIC": False,
     "": False,
-    # GLUED trailers (todo #3756): nothing separates the IBAN from what follows.
+    # GLUED trailers: nothing separates the IBAN from what follows.
     # Letters are a glued label or word and must tokenize; the fix arm recovers
     # them. A digit or an underscore glued to the IBAN is ambiguous with a longer
     # opaque identifier and stays raw in BOTH arms by design -- those rows must
@@ -374,7 +374,7 @@ def main() -> int:
             # `postal.at_ch` claims an IBAN's last four-digit group when a
             # capitalised word follows (`... 4500 BIC`). With postal_code
             # preserved, that preserve winner displaces the IBAN, and the card
-            # bytes the IBAN had displaced end up covered by nothing (todo 3740):
+            # bytes the IBAN had displaced end up covered by nothing:
             # 40 bytes over 8 documents, de-AT only, all one PL IBAN. With
             # postal_code tokenized the fix leaves zero raw bytes there while
             # main still leaks the country code and a group.
@@ -435,7 +435,7 @@ def main() -> int:
                 # be trailer-independent on the same document. A Luhn-valid card
                 # run that crosses the IBAN's end into trailing digits (`... 73
                 # 1234`) collides with the IBAN in both arms and, with no cue,
-                # falls to the family fallback (todo 3746); that dependence is
+                # falls to the family fallback; that dependence is
                 # shared and reported, not attributed to this change.
                 if f_bytes != fix_bare:
                     if fix_bare_whole and b_bytes == base_bare:

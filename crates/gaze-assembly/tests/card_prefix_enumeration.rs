@@ -1,6 +1,6 @@
 //! Forward path, no policy: every 1- to 4-digit number (`0` to `9999`, leading zeros included)
 //! written before a card, separated by a space, glued by a ZERO WIDTH JOINER, or glued in
-//! fullwidth digits. No digit of the card may reach the model raw (solo todo 3843 round 2: a
+//! fullwidth digits. No digit of the card may reach the model raw (a
 //! prefix whose window passes Luhn by chance used to win over the card and leave its tail raw).
 
 use gaze::{CleanDocument, LocaleTag, PiiClass, RawDocument, Scope, Session};

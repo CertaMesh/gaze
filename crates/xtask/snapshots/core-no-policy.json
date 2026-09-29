@@ -2,7 +2,7 @@
   "schema_version": 1,
   "bundle": "core",
   "rulepack_version": "0.6.0",
-  "fixtures_sha256": "faceb45be5c656ffd39dbff4e89bd40d913eb767521951d2bb4bbbe43fba8e83",
+  "fixtures_sha256": "8fea8da103670df3302bc4f88b70559e4af4a7be1d5a0ba496aa1e472f2091a7",
   "entries": [
     {
       "recognizer_id": "card.cued+card.structural",

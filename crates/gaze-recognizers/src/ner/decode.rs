@@ -89,7 +89,7 @@ pub(crate) fn merge_bio_span_results(
 /// Merge-time span validity against `document_text`. Deliberately does NOT
 /// suppress spans that sit inside a larger identifier (`Artist` in
 /// `Artistfy`): that suppression was never active in production and turning
-/// it on is a measured recall/precision decision (solo todo #2904), not a
+/// it on is a measured recall/precision decision, not a
 /// side effect of passing the right text.
 pub(crate) fn is_valid_entity_span(
     document_text: &str,
@@ -167,7 +167,7 @@ fn is_cli_flag(token: &str) -> bool {
 // PII string colliding with a command word is silently suppressed). The structural
 // fix is an NER span provenance trust-tier + corroboration gate (reuse anchored_match
 // + locale cues) plus an idempotence xtask invariant and a code/argv distractor
-// corpus. See gaze todo #1024 and scratchpad analysis/gaze-overredaction-architecture.
+// corpus. See the over-redaction architecture analysis.
 // Do not grow this list reflexively; add a corpus row and let the structural gate handle it.
 fn is_program_identifier_token(token: &str) -> bool {
     if token.is_empty() || !token.chars().all(|ch| ch.is_ascii_alphanumeric()) {
@@ -440,7 +440,7 @@ mod tests {
     /// Guard against silent activation: partial-identifier spans were never
     /// suppressed in production (the old check compared against the
     /// provenance label, not the text). Activating suppression is a measured
-    /// decision tracked in solo todo #2904, so the merge must keep the span.
+    /// decision tracked as a follow-up, so the merge must keep the span.
     #[test]
     fn does_not_suppress_partial_identifier_span_at_merge() {
         let source = "Artistfy";

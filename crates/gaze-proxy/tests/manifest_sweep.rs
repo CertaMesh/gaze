@@ -1,4 +1,4 @@
-//! Repeat-value sweep (solo todo 3849) through the proxy: a name found by a
+//! Repeat-value sweep through the proxy: a name found by a
 //! rule in one message must not ship raw in another message of the same
 //! request. Synthetic names only.
 

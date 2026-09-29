@@ -1,4 +1,4 @@
-//! Restored values must land in the syntax of the field that carries them (todo #3837).
+//! Restored values must land in the syntax of the field that carries them.
 //!
 //! A token the model echoes into tool-call `arguments` or into JSON-mode content sits inside a
 //! JSON string literal of a serialized JSON document. Restoring the raw value there verbatim
