@@ -392,6 +392,43 @@ Validator-backed labels on `policy-file`, scored labels v1. Gold that fails its 
 
 ---
 
+## Benchmark panels
+
+One panel per benchmark, released Gaze versions and declared competitor configurations only. The chart and both tables are generated from the committed JSON by [`render_benchmark_doc.py`](../../../scripts/bench/render_benchmark_doc.py); untagged builds are never drawn.
+
+<!-- BEGIN GENERATED: panels -->
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../../docs/assets/benchmarks/benchmark-panels-dark.svg">
+  <img alt="Bar panels of PII protected and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="../../../docs/assets/benchmarks/benchmark-panels-light.svg">
+</picture>
+
+**PII protected** (higher is better; best per row in bold):
+
+| Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Own corpus | 82.1% | **89.2%** | 79.5% | 16.2% | 76.4% | 31.7% | 83.7% | 80.5% |
+| Presidio Research | not run | pending | 38.5% | 21.7% | 33.6% | 14.7% | 59.2% | **70.5%** |
+| PIIBench-commercial | not run | pending | 60.7% | 37.5% | **64.9%** | 19.3% | 42.1% | 47.3% |
+
+**False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
+
+| Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Own corpus | 184.2 | 21.7 | 48.0 | **6.8** | 285.4 | 14.0 | 60.3 | 32.3 |
+| Presidio Research | not run | pending | 2.3 | **0.0** | 20.0 | 0.1 | 5.7 | 4.9 |
+| PIIBench-commercial | not run | pending | 5.0 | 1.8 | 30.1 | **0.6** | 3.1 | 3.9 |
+
+Gaze 0.15 on Presidio Research and PIIBench-commercial: measurement pending; no untagged build is shown.
+
+- **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
+- **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), scored on the labels every tool can emit; rows from [`their-benchmarks.json`](their-benchmarks.json).
+- **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), scored on the labels every tool can emit; rows from [`their-benchmarks.json`](their-benchmarks.json).
+- **Configurations:** competitors use the rows declared in [`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen before results were reviewed; full versions and settings are in [`competitors.md`](competitors.md).
+- **Metrics:** PII protected = 1 - leaked gold bytes / gold bytes. False positives are bytes redacted that are not PII, per 1,000 corpus bytes; the own corpus counts a protected repeat of a labelled value as protected (contract v3), the third-party sets do not.
+
+<!-- END GENERATED: panels -->
+
 ## Charts
 
 <!-- BEGIN GENERATED: charts -->

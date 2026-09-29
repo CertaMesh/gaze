@@ -167,6 +167,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **README and benchmark charts are static SVG panels** (solo todo #3932). One panel per benchmark with the value printed on every bar, light and dark variants, released Gaze versions and declared competitor configurations only; the mermaid `xychart-beta` charts (no labels on GitHub) and the README results table are gone. See `docs/reference/benchmarks/README.md#benchmark-panels`.
+
 - **The benchmark headline is scored-label contract v3** (solo todo #3696,
   after the gold-gap audit passed). Leaked bytes are unchanged from v2; false
   positives and byte precision are after the audited gold-gap credit, which
