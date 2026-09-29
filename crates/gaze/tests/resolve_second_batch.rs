@@ -99,7 +99,7 @@ fn mismatch(span: std::ops::Range<usize>) -> LeakSuspect {
     s
 }
 /// A residual the follow-up planner declines: a class mismatch on plain text. The `Redact`
-/// fallback tokenizes a residual set it can plan completely (todo 3879), so a test about what
+/// fallback tokenizes a residual set it can plan completely, so a test about what
 /// happens after the fallback deletes needs a residual of this shape to reach the deletion.
 fn declined(span: std::ops::Range<usize>) -> LeakSuspect {
     mismatch(span)
@@ -596,7 +596,7 @@ fn five_sweeps_can_mean_ten_backend_calls_and_still_only_one_second_batch() {
 }
 
 /// The same cascade with a residual the planner can resolve: the fallback tokenizes `c` instead
-/// of deleting it (todo 3879), the document restores exactly, and the scan bound above is
+/// of deleting it, the document restores exactly, and the scan bound above is
 /// unchanged — still five sweeps, ten backend calls, one second batch.
 #[test]
 fn five_sweeps_tokenize_a_plannable_fallback_residual_without_an_extra_sweep() {

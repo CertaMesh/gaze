@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every-Action policy matrix for collision-family token actions (todo #3746).
+"""Every-Action policy matrix for collision-family token actions.
 
 Scores what a stricter derived family action does to the bytes that leave the
 process, for EVERY value of `Action` on every axis the derivation reads:
@@ -15,7 +15,7 @@ document set where a family token can occur plus a seeded 1% control sample.
 `custom:phone` and `custom:postal_code` are held at `tokenize` in every arm:
 they are not members of the payment family, so they cannot change the
 derivation, but they keep the phone-sub-run / residual-cell path live. That
-path is where review 3746 found the regression the 10-arm matrix
+path is where review found the regression the 10-arm matrix
 (`family_action_policy_matrix.py`) could not see: it had no `redact` arm, and
 a family token deriving `redact` switched residual coverage off, so the
 losing IBAN's bytes beside a phone win shipped raw (872 documents).

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Model-free tests for the agentic benchmark layers A and D."""
 
+import contextlib
 import copy
+import csv
 import dataclasses
 import hashlib
+import io
 import ipaddress
 import json
 import os
@@ -26,6 +29,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
+    "dev": "e1b6bc315cb52d41aaf93fd48cf9719d67e665317fc927cc9c6a5e33a3e57af7",
+    "test": "9e6597c4b38a6adf6fe5b034da3a4ca585819e044d3437aafc02bcb721607d4a",
+}
+# v5: everything before the address cells.
+V5_CORPUS_SHA256 = {
     "dev": "b9a17a2d1b57c3adaba687f5f1051ac0e1769c4814e59cd971d098bc1f34cb6c",
     "test": "9a648a1c5cbb261ba9e3503ddfa5b65cbeb0d0d489cbc3d42464851bd88d8545",
 }
@@ -114,6 +122,10 @@ class GeneratorTests(unittest.TestCase):
 
     def test_previous_partition_documents_are_byte_identical(self) -> None:
         for partition, records in self.corpora.items():
+            v5 = agentic.records_as_of(5, records)
+            self.assertEqual(
+                hashlib.sha256(agentic.corpus_bytes(v5)).hexdigest(), V5_CORPUS_SHA256[partition]
+            )
             v4 = agentic.records_as_of(4, records)
             self.assertEqual(
                 hashlib.sha256(agentic.corpus_bytes(v4)).hexdigest(), V4_CORPUS_SHA256[partition]
@@ -414,13 +426,14 @@ class RepeatSliceTests(unittest.TestCase):
         self.assertIn(agentic.NBSP, texts["nbsp"])
 
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
+        # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS:
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith("address_"):
                 self.assertNotIn("decoys", record.to_json())
 
 
 class LabelledLookalikeCellTests(unittest.TestCase):
-    """Todo 3995: labelled PII inside benign structures is gold; each cell's
+    """Labelled PII inside benign structures is gold; each cell's
     layer D twin has the same shape, structure and position and no cue."""
 
     @classmethod
@@ -581,6 +594,186 @@ class LabelledLookalikeCellTests(unittest.TestCase):
             self.assertFalse(set(dev) & set(test))
 
 
+class AddressCellTests(unittest.TestCase):
+    """Layer A addresses are whole and every part is gold; each unit spelling
+    they score has a layer D twin spelled the same way, with no address."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.cells = {
+            partition: [r for r in agentic.generate(partition) if r.surface.startswith("address_")]
+            for partition in agentic.PARTITIONS
+        }
+
+    def test_every_cell_and_twin_is_generated_in_both_partitions(self) -> None:
+        for partition, records in self.cells.items():
+            for layer, cells in (("A", agentic.ADDRESS_CELLS), ("D", agentic.ADDRESS_TWINS)):
+                for cell in cells:
+                    matching = [r for r in records if r.layer == layer and r.family == cell.family]
+                    self.assertEqual(len(matching), agentic.DOCS_PER_ADDRESS_CELL[layer], (partition, cell.family))
+            self.assertEqual({r.surface for r in records if r.layer == "A"}, set(agentic.ADDRESS_SURFACES))
+            self.assertEqual(
+                {c.designator for c in agentic.ADDRESS_CELLS} - {None}, set(agentic.Designator)
+            )
+
+    def test_growth_stays_within_ten_percent_per_layer(self) -> None:
+        records = agentic.generate("test")
+        for layer in ("A", "D"):
+            new = sum(1 for r in self.cells["test"] if r.layer == layer)
+            old = sum(1 for r in records if r.layer == layer) - new
+            self.assertLessEqual(new * 10, old, layer)
+
+    def test_addresses_are_whole_with_only_separators_between_gold_parts(self) -> None:
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "A"):
+                encoded = record.text.encode("utf-8")
+                self.assertTrue(record.gold, record.uid)
+                self.assertLessEqual({g.label for g in record.gold}, agentic.ADDRESS_LABELS, record.uid)
+                parts = sorted(record.gold, key=lambda g: g.start)
+                for gold in parts:
+                    self.assertEqual(encoded[gold.start : gold.end].decode("utf-8"), gold.value)
+                if record.surface in ("address_csv", "address_tool_json"):
+                    continue
+                for left, right in zip(parts, parts[1:]):
+                    between = encoded[left.end : right.start].decode("utf-8")
+                    self.assertRegex(between, r"^[ ,\n]+$", record.uid)
+
+    def test_decoys_stand_apart_from_the_address(self) -> None:
+        checked = 0
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "A" and r.decoys):
+                (decoy,) = record.decoys
+                last = max(g.end for g in record.gold)
+                self.assertGreater(decoy.start, last, record.uid)
+                self.assertRegex(record.text.encode()[last : decoy.start].decode(), r"[.\n]", record.uid)
+                checked += 1
+        self.assertEqual(checked, 2 * agentic.DOCS_PER_ADDRESS_CELL["A"] * sum(
+            1 for cell in agentic.ADDRESS_CELLS if cell.decoy is not None
+        ))
+
+    def test_counterweights_carry_one_designator_and_no_address(self) -> None:
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "D"):
+                twin = next(t for t in agentic.ADDRESS_TWINS if t.family == record.family)
+                self.assertEqual(record.gold, (), record.uid)
+                self.assertEqual(record.validity, agentic.BENIGN)
+                (decoy,) = record.decoys
+                self.assertRegex(decoy.value, agentic.DESIGNATOR_WORDS[twin.designator], record.uid)
+                self.assertNotRegex(record.text, r"\d{5}|ZZ\d", record.uid)
+
+    def test_values_use_unassigned_postcode_ranges(self) -> None:
+        pattern = {"US": r"^000\d\d$", "DE": r"^00\d{3}$", "GB": r"^ZZ\d\d \dZZ$"}
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "A"):
+                for gold in (g for g in record.gold if g.label == "ZIPCODE"):
+                    self.assertRegex(gold.value, pattern[record.region], record.uid)
+
+    def test_structured_cells_parse(self) -> None:
+        for records in self.cells.values():
+            for record in records:
+                if record.surface == "address_tool_json":
+                    json.loads(record.text)
+                if record.surface == "address_csv":
+                    rows = list(csv.reader(io.StringIO(record.text)))
+                    self.assertEqual({len(row) for row in rows}, {len(rows[0])}, record.uid)
+
+    def test_address_vocabularies_split_by_partition(self) -> None:
+        for pool in (agentic.ADDRESS_STREET_STEMS, agentic.US_STATES, agentic.MILITARY_POST_OFFICES,
+                     agentic.MILITARY_STATES, agentic.MILITARY_BOX_NUMBERS):
+            self.assertFalse(set(pool["dev"]) & set(pool["test"]))
+        for region in ("US", "GB", "DE"):
+            self.assertFalse(
+                set(agentic.ADDRESS_CITIES["dev"][region]) & set(agentic.ADDRESS_CITIES["test"][region])
+            )
+        for cell in (*agentic.ADDRESS_CELLS, *agentic.ADDRESS_TWINS):
+            self.assertNotEqual(cell.templates["dev"], cell.templates["test"], cell.family)
+
+    def generate_with(self, **patches) -> None:
+        with contextlib.ExitStack() as stack:
+            for name, value in patches.items():
+                stack.enter_context(mock.patch.object(agentic, name, value))
+            agentic.generate("test")
+
+    def test_a_designator_without_a_twin_fails_generation(self) -> None:
+        twins = tuple(t for t in agentic.ADDRESS_TWINS if t.designator is not agentic.Designator.ETAGE)
+        with self.assertRaisesRegex(agentic.LayerError, "no layer D counterweight: .*Etage"):
+            self.generate_with(ADDRESS_TWINS=twins)
+
+    def test_a_twin_no_cell_uses_fails_generation(self) -> None:
+        cells = tuple(c for c in agentic.ADDRESS_CELLS if c.designator is not agentic.Designator.ETAGE)
+        with self.assertRaisesRegex(agentic.LayerError, "no layer A cell uses"):
+            self.generate_with(ADDRESS_CELLS=cells)
+
+    def test_a_twin_with_a_postcode_fails_generation(self) -> None:
+        twins = list(agentic.ADDRESS_TWINS)
+        twins[0] = dataclasses.replace(
+            twins[0], templates={**twins[0].templates, "test": "Run {X} for 00042 today."}
+        )
+        with self.assertRaisesRegex(agentic.LayerError, "postcode shape"):
+            self.generate_with(ADDRESS_TWINS=tuple(twins))
+
+    def test_a_missing_address_part_fails_generation(self) -> None:
+        cells = list(agentic.ADDRESS_CELLS)
+        cells[0] = dataclasses.replace(
+            cells[0], templates={**cells[0].templates, "test": "Deliver to {HN} {ST} {UN}, {SA} {ZP}."}
+        )
+        with self.assertRaisesRegex(agentic.LayerError, "placeholders"):
+            self.generate_with(ADDRESS_CELLS=tuple(cells))
+
+    def test_a_spelling_without_a_benign_twin_fails_generation(self) -> None:
+        # A rule matching only `Ste.` must cost false positives somewhere: drop
+        # that one spelling from the D side and generation refuses.
+        forms = {**agentic.DESIGNATOR_FORMS, agentic.Designator.SUITE: ("Suite {n}", "STE {n}")}
+        twins = tuple(
+            dataclasses.replace(t, forms=forms[t.designator]) if t.designator is agentic.Designator.SUITE else t
+            for t in agentic.ADDRESS_TWINS
+        )
+        with self.assertRaisesRegex(agentic.LayerError, r"no layer D counterweight: \['Ste\. \{n\}'\]"):
+            self.generate_with(ADDRESS_TWINS=twins)
+
+    def test_every_spelling_is_generated_on_both_sides(self) -> None:
+        for records in self.cells.values():
+            benign = {agentic.designator_spelling(d.value) for r in records if r.layer == "D" for d in r.decoys}
+            scored = {
+                agentic.designator_spelling(span.value)
+                for r in records if r.layer == "A"
+                for part, span in agentic.address_part_values(
+                    r, next(c for c in agentic.ADDRESS_CELLS if c.family == r.family)
+                )
+                if part in ("UN", "BX")
+            }
+            forms = {
+                form for c in agentic.ADDRESS_CELLS if c.designator is not None
+                for form in agentic.DESIGNATOR_FORMS[c.designator]
+            }
+            self.assertEqual(scored, forms | {"Box {n}"})
+            self.assertLessEqual(scored, benign)
+
+    def test_a_house_number_left_unscored_fails_the_check(self) -> None:
+        # House number and unit are both BUILDINGNUM: the label set alone
+        # cannot tell a missing house number from a present unit.
+        record = next(r for r in self.cells["test"] if r.family == "address_us_suite_prose")
+        cell = next(c for c in agentic.ADDRESS_CELLS if c.family == record.family)
+        house = dict(agentic.address_part_values(record, cell))["HN"]
+        stripped = dataclasses.replace(record, gold=tuple(g for g in record.gold if g != house))
+        self.assertIn("BUILDINGNUM", {g.label for g in stripped.gold})
+        with self.assertRaisesRegex(agentic.LayerError, "gold parts for placeholders"):
+            agentic.check_address_cells([stripped])
+
+    def test_a_template_without_its_house_number_fails_generation(self) -> None:
+        cells = list(agentic.ADDRESS_CELLS)
+        cells[0] = dataclasses.replace(
+            cells[0], templates={**cells[0].templates, "test": cells[0].templates["test"].replace("{HN} ", "")}
+        )
+        with self.assertRaisesRegex(agentic.LayerError, "placeholders .* are not the shape's"):
+            self.generate_with(ADDRESS_CELLS=tuple(cells))
+
+    def test_a_unit_without_its_designator_word_fails_generation(self) -> None:
+        forms = {**agentic.DESIGNATOR_FORMS, agentic.Designator.SUITE: ("Room {n}",)}
+        with self.assertRaisesRegex(agentic.LayerError, "no gold part carries the suite designator"):
+            self.generate_with(DESIGNATOR_FORMS=forms)
+
+
 class PartitionTests(unittest.TestCase):
     def test_vocabularies_are_split_before_generation(self) -> None:
         pools = [
@@ -663,6 +856,18 @@ class ContractTests(unittest.TestCase):
             contract = agentic.load_contract(REPO_ROOT, self.write_contract(Path(temporary), add_stale))
             with self.assertRaisesRegex(agentic.LayerError, "PASSPORTNUM"):
                 agentic.apply_contract(self.documents(), contract)
+
+    def test_an_older_generator_loads_its_own_committed_contract(self) -> None:
+        # A record measured on v4 or v5 is rescored under the contract that
+        # ruled on exactly the labels that generator emitted.
+        for version in (4, 5):
+            contract = agentic.load_contract(REPO_ROOT, version=version)
+            self.assertNotIn("STREET", contract.scored_labels)
+        self.assertIn("STREET", agentic.load_contract(REPO_ROOT).scored_labels)
+        with self.assertRaisesRegex(agentic.LayerError, "no committed scored-label contract"):
+            agentic.load_contract(REPO_ROOT, version=3)
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 6"):
+            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=5)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -4,7 +4,7 @@ Once Gaze tokenizes a value that a rule found, every other copy of that value
 in the same document, and in later documents of the same session, is
 tokenized too. Before the sweep a copy was protected only when a recognizer
 fired at that exact spot, so a name caught in an email header shipped raw in
-the body, in a different case, or in the next turn (solo todo 3849).
+the body, in a different case, or in the next turn.
 
 ```text
 input   From: Maria Schneider <[synthetic email]>
@@ -108,7 +108,7 @@ Why runs: a cue-found value keeps its cue's honorific
 (`From: Herr Tobias Brenner <…>` yields `Herr Tobias Brenner`), so the bare
 name `tobias brenner` or `TOBIAS BRENNER` is not a spelling of the whole
 value. Before runs, only title-case parts matched, and the all-caps copy
-shipped raw (solo todo 3897). A single word on a closed list of
+shipped raw. A single word on a closed list of
 common words that are also names is never swept: months, weekdays, English
 names that are everyday words (`Will`, `Mark`, `Rose`, `May`), English
 surnames that are everyday verbs or nouns (`Grant`, `Price`, `Banks`,

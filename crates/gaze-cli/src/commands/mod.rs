@@ -897,7 +897,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
 }
 
 /// `gaze setup` flags to setup arguments. The GLiNER DOB judge is opt-in
-/// (`--dob-judge`) until its bundle is shrunk (todo 3905).
+/// (`--dob-judge`) until its bundle is shrunk.
 #[cfg(feature = "setup")]
 fn setup_args(
     safety_net: Option<setup::SetupSafetyNet>,
@@ -1147,7 +1147,7 @@ mod tests {
     /// that a new flag landing on only one verb fails here, and so that closing
     /// one of these gaps has to update this list deliberately.
     ///
-    /// The safety-net half of this list was closed by solo todo #3004: `daemon`
+    /// The safety-net half of this list was closed earlier: `daemon`
     /// now opts into the locale-aware registry and takes
     /// rulepack overrides, because none of those have a policy.toml equivalent
     /// and `daemon` could otherwise only ever run a single safety-net backend.

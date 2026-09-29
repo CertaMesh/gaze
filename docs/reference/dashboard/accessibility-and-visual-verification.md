@@ -2,7 +2,7 @@
 
 This document is the human-readable record of the rendered verification of the
 `gaze-proxy-dashboard` frontend assets against the frozen 44-state visual
-matrix (plan #4740 revision 60 §12) and the frontend/XSS/accessibility
+matrix (the dashboard plan) and the frontend/XSS/accessibility
 contract (§11). The machine-readable per-assertion record is
 [`crates/gaze-proxy-dashboard/browser-tests/evidence/state-ledger.json`](../../../crates/gaze-proxy-dashboard/browser-tests/evidence/state-ledger.json),
 regenerated on every run of the browser contract.
@@ -25,7 +25,7 @@ data only.
 
 ## Run identity
 
-- Implementer/verifier: visual/frontend worker, Solo process 4593
+- Implementer/verifier: visual/frontend worker
   (`track-b-visual-impl-4590`), Claude (Fable 5).
 - Branch: `agent/proxy-dashboard-visual-4590`, based on frozen Track A
   `edc063761f6e21617d9fe3a5d414acb3e27d37de`
@@ -195,7 +195,7 @@ control when concealment removes the focused region.
   token entry only after affirmatively proving that no service worker controls
   or is registered for the origin — enumeration failure or API unavailability
   keeps entry disabled (fail closed).
-- **SSE rule (seam audit #5953 INFO-2):** stream rows render ordinal, event
+- **SSE rule:** stream rows render ordinal, event
   kind, delta kind, and content-block index only. Table headers are asserted
   exactly; per-entry byte counts, timestamps, cadence, latency, and relative
   timing are asserted absent, and the accepted limitation is stated in the UI

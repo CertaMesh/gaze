@@ -1,4 +1,4 @@
-//! Repeat-value sweep (solo todo 3849) at the library boundary.
+//! Repeat-value sweep at the library boundary.
 //!
 //! Two synthetic recognizers stand in for the evidence tiers: `Header` is a
 //! rule (it finds the name in a `From:` header, like `email.header.name`),
@@ -374,7 +374,7 @@ fn precision_probe_occupational_and_verb_surnames() {
     }
 }
 
-/// Solo todo 3897: the cue-found value carries its honorific, so every bare
+/// The cue-found value carries its honorific, so every bare
 /// spelling of the name is a run of its parts. All-caps, lower-case, mixed
 /// case and NBSP copies each ship as one token and restore exactly.
 #[test]

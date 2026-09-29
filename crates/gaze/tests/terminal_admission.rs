@@ -58,7 +58,7 @@ fn uncovered(span: std::ops::Range<usize>) -> LeakSuspect {
 }
 
 /// A residual the follow-up planner declines: a class mismatch on plain text. The `Redact`
-/// fallback tokenizes a residual set it can plan completely (todo 3879), so reaching the deletion
+/// fallback tokenizes a residual set it can plan completely, so reaching the deletion
 /// this file is about takes a residual of this shape.
 fn declined(span: std::ops::Range<usize>) -> LeakSuspect {
     let mut suspect = uncovered(span);
@@ -281,7 +281,7 @@ fn terminal_resolves_a_fresh_finding_once_and_completes() {
 }
 
 /// The fallback's reversible branch: when the planner can resolve the whole residual set, the
-/// fallback tokenizes `charlie` instead of deleting it (todo 3879). Nothing was deleted, so the
+/// fallback tokenizes `charlie` instead of deleting it. Nothing was deleted, so the
 /// terminal scan finds no marker and the document restores byte for byte.
 #[test]
 fn a_plannable_fallback_residual_is_tokenized_and_restores_exactly() {

@@ -1,4 +1,4 @@
-# GLiNER DOB judge memory feasibility (todo 3905)
+# GLiNER DOB judge memory feasibility
 
 The GLiNER DOB judge stays opt-in. The tested pruning recipes did not establish
 both unchanged decisions and at most 400 MiB of added peak RSS. `gaze setup`

@@ -1483,7 +1483,7 @@ fn phase2_formatted_card_with_hyphens_tokenizes_and_round_trips() {
     assert_eq!(restore_tokens(&session, &clean), input);
 }
 
-/// A Luhn-failing card still tokenizes after a card cue (solo todo 3906): `card.structural`
+/// A Luhn-failing card still tokenizes after a card cue: `card.structural`
 /// vetoes it, `card.cued` keeps it. Without a cue it stays raw.
 #[test]
 fn phase2_formatted_card_failing_luhn_tokenizes_only_after_a_card_cue() {
@@ -1536,7 +1536,7 @@ fn phase2_iban_and_cards_are_universal_classes_with_cued_siblings() {
             .map(|collision| collision.family.as_str()),
         Some("payment-card-or-iban")
     );
-    // The structural rule plus its cue-anchored checksum-failure sibling (solo todo 3906).
+    // The structural rule plus its cue-anchored checksum-failure sibling.
     assert_eq!(
         rulepack
             .recognizers
@@ -1546,7 +1546,7 @@ fn phase2_iban_and_cards_are_universal_classes_with_cued_siblings() {
             .collect::<std::collections::BTreeSet<_>>(),
         std::collections::BTreeSet::from(["iban.cued", "iban.structural"])
     );
-    // The structural rule plus its cue-anchored checksum-failure sibling (solo todo 3906).
+    // The structural rule plus its cue-anchored checksum-failure sibling.
     assert_eq!(
         rulepack
             .recognizers

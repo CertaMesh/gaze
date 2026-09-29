@@ -155,8 +155,7 @@ pub(crate) struct SafetyNetLimitArgs {
 /// no policy.toml equivalent — [`gaze::Policy`] carries no safety-net section —
 /// so a verb without these flags cannot run the multi-backend registry under
 /// *any* configuration, only the single-backend path. That made the daemon
-/// chokepoint structurally weaker than `clean` under an identical policy
-/// (solo todo #3004), which is why this group is owned in one place.
+/// chokepoint structurally weaker than `clean` under an identical policy, which is why this group is owned in one place.
 #[derive(Args, Debug)]
 pub(crate) struct SafetyNetRegistryArgs {
     /// Enable locale-aware Pass-3 safety-net registry dispatch.

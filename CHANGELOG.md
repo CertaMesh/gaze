@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Breaking
 
 - **Repeat-value sweep evidence is declared per emitter, and the default is
-  `Learned`** (solo todo #3884). `Recognizer` and `Detector` gain
+  `Learned`**. `Recognizer` and `Detector` gain
   `fn evidence(&self) -> EvidenceKind`, which defaults to
   `EvidenceKind::Learned`, and `Candidate` gains an `evidence` field that the
   registry stamps from it. The sweep and the resolver's evidence tiers used to
@@ -21,8 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the sweep, and in cross-class containment its span no longer swallows an
   enclosed rule candidate of another class (the tokens split around it; no
   raw bytes ship). Declare `Rule` to keep v0.15 behaviour. See UPGRADE.md.
-- **`gaze_proxy::ProviderAdapter::contract()` is required** (solo todo
-  #2400). The default body, which silently gave every third-party adapter
+- **`gaze_proxy::ProviderAdapter::contract()` is required**. The default body, which silently gave every third-party adapter
   `AdapterContract::legacy()`, is gone; an adapter that declares no contract
   no longer compiles (`E0046`). Add
   `fn contract(&self) -> AdapterContract<'_> { AdapterContract::legacy() }`
@@ -57,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retain their vetoes; `phone.national.de` has no separate cued relaxation.
 
 - **All-caps, lower-case and hyphenated copies of a header name no longer ship
-  raw** (solo todo #3897). Three stages leaked. The repeat-value sweep matched
+  raw**. Three stages leaked. The repeat-value sweep matched
   a cue-found `Herr Tobias Brenner` only as a whole or as title-case parts, so
   `TOBIAS BRENNER` shipped raw; runs of two or more adjacent name parts now
   match in any case when one part is distinctive, and parts also sweep in
@@ -72,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   false-positive bytes +95, zero refusals, exact restore unchanged.
 
 - **IBAN and payment card numbers are tokenized even when mod-97 or Luhn
-  fails** (solo todo #3906). A mistyped or masked account or card number is
+  fails**. A mistyped or masked account or card number is
   still someone's financial data. `iban.structural` now keeps a
   registry-shaped IBAN that fails mod-97; the new `iban.cued` tokenizes an
   IBAN-structured value after the word `IBAN` whose country code is a real
@@ -91,8 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `validator_fail_reason`, and `Recognizer` gains `validator_on_fail()`
   (default `Veto`). See
   [validator veto](docs/explanation/detection/validator-veto.md#recorded-failures).
-- **Australian state plus postcode addresses are tokenized deterministically**
-  (solo todo #3880). `postal.au` protects the state abbreviation and four-digit
+- **Australian state plus postcode addresses are tokenized deterministically**.
+  `postal.au` protects the state abbreviation and four-digit
   postcode together whenever `en-AU` is in the effective locale chain, so
   these spans no longer rely on Nym context. The no-policy `core-extended`
   chain includes `en-AU` on every document. New Zealand postcodes remain
@@ -105,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   but other capitalised words, including German nouns, can still trigger it;
   terminal CSV/table state-and-number cells, including years, can also match.
 
-- **Dates of birth after a birth cue are tokenized** (solo todo #3651).
+- **Dates of birth after a birth cue are tokenized**.
   Every release up to and including v0.15.1 sent these raw through
   `gaze clean` and `gaze proxy` alike: a German birth-date field,
   a DOB field in a tool result, a French day-first birth date, and any
@@ -114,18 +113,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A value a rule found once is now tokenized everywhere it repeats. Before,
   a copy was protected only when a recognizer fired at that exact spot, so a
   name caught in an email header shipped raw in the body, in another case, or
-  in the next turn of a daemon or proxy session (solo todo 3849). See
+  in the next turn of a daemon or proxy session. See
   [`docs/explanation/detection/manifest-sweep.md`](docs/explanation/detection/manifest-sweep.md).
 
-- **House numbers beside a street the NER model found are tokenized**
-  (solo todo #3670). Every release up to and including v0.15.1 tokenized
+- **House numbers beside a street the NER model found are tokenized**.
+  Every release up to and including v0.15.1 tokenized
   `Musterweg` in `Musterweg 17b` and `Example Street` in `17 Example Street`,
   but sent the house number raw, because the location span ends at the
   street word.
 
 ### Added
 
-- **Per-mechanism benchmark arms** (solo todo #3900). A release row measures
+- **Per-mechanism benchmark arms**. A release row measures
   the whole stack; a mechanism arm measures one mechanism on its own: the same
   binary, corpus and seed with and without one policy delta file under
   `scripts/bench/mechanisms/`. `scripts/bench/mechanism_arms.py record`
@@ -137,11 +136,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first row: on the main corpus it cut layer C leaked bytes by 85
   (DATEOFBIRTH 810 to 725) and agentic layer A by 20 under contracts v2 and
   v1, with no false-positive bytes added and no refusals. It stays opt-in
-  (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk (todo #3905):
+  (`gaze setup --dob-judge`) until its 352 MB bundle is shrunk:
   on a quiet Apple M5 Max (`scripts/bench/mechanism_latency.py`, 200
   documents) it moved warm p50 75.6 to 76.1 ms, p95 137 to 160 ms, the cold
   first document 2.2 to 3.7 s and peak RSS 1,076 to 1,740 MiB.
-- **The contract v3 gold-gap audit passed** (solo todo #3696): 3 of 200
+- **The contract v3 gold-gap audit passed**: 3 of 200
   sampled credits failed (one-sided 95 % bound 3.83 %, limit 5 %), each in a
   different document. Three model judges (Claude Opus, Codex, TypeSafe)
   agreed on 188 cards; the user decided the 12 contested ones. Verdicts are
@@ -183,10 +182,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loopback with the new
   `ipv4_loopback_range` / `ipv6_loopback_range` reasons: a loopback address
   never leaves the host. Private and link-local addresses stay protected.
-- **README and benchmark charts are static SVG panels** (solo todo #3932). One panel per benchmark with the value printed on every bar, light and dark variants, released Gaze versions and declared competitor configurations only; the mermaid `xychart-beta` charts (no labels on GitHub) and the README results table are gone. See `docs/reference/benchmarks/README.md#benchmark-panels`. The headline row is character-level F2 (β=2, label-agnostic, micro) with leaked bytes under each bar; tagged Gaze releases are scored by `release_char_level.py` from their committed observation records.
+- **README and benchmark charts are static SVG panels**. One panel per benchmark with the value printed on every bar, light and dark variants, released Gaze versions and declared competitor configurations only; the mermaid `xychart-beta` charts (no labels on GitHub) and the README results table are gone. See `docs/reference/benchmarks/README.md#benchmark-panels`. The headline row is character-level F2 (β=2, label-agnostic, micro) with leaked bytes under each bar; tagged Gaze releases are scored by `release_char_level.py` from their committed observation records.
 
-- **The benchmark headline is scored-label contract v3** (solo todo #3696,
-  after the gold-gap audit passed). Leaked bytes are unchanged from v2; false
+- **The benchmark headline is scored-label contract v3** (after the gold-gap audit passed). Leaked bytes are unchanged from v2; false
   positives and byte precision are after the audited gold-gap credit, which
   gets its own column. For the `gaze setup` default (v0.15.0 and v0.15.1):
   13,319 leaked bytes, 18,488 false-positive bytes (v2: 30,073), byte
@@ -195,6 +193,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from new observation records of their own benchmark binaries; each record
   reproduces the release's committed v1 and v2 results
   (`verify_record_scorecards.py --capture`).
+
+- **[bundle-tokenization-drift] `core` and `secrets` snapshots record a new corpus hash.** A comment line in the drift corpus lost a private tracker id; every detection entry is unchanged.
 
 - **[bundle-tokenization-drift] `core` excludes documentation IPs.** The
   no-policy snapshot drops RFC 5737 IPv4 and RFC 3849 IPv6 detections; nearby
@@ -257,7 +257,7 @@ in Keep a Changelog form.
 **Security.** Every release up to and including v0.15.0 sent a payment card
 number raw to the model when digits touched it: a CVV or expiry after it, an
 order or year number before it, or digits glued on by normalization. This was
-the v0.15.0 known limitation (solo todo #3843). The card is now tokenized on
+the v0.15.0 known limitation. The card is now tokenized on
 the forward path, and the restore-boundary DLP check finds it in model output
 through the same code (PR #658).
 
@@ -303,28 +303,26 @@ What #660 does not change, stated so nobody reads more into it:
 
 **Known limitations.** These gaps ship in this release:
 
-- **A repeat of a tokenized name can reach the model raw** (solo todo #3849).
+- **A repeat of a tokenized name can reach the model raw**.
   Gaze tokenizes each occurrence only where a recognizer fires; it does not
   carry a value it already tokenized to that value's other occurrences.
   Without NER (no policy, `core` only), a name found in an email header stays
   raw when the same document repeats it in prose. With NER (the `gaze setup`
   policy), prose repeats are caught, but names written in lowercase can leak
   whole or in fragments.
-- **UK national-format phone numbers are not detected** (solo todo #3848).
+- **UK national-format phone numbers are not detected**.
   Numbers written with a leading `0` and a UK area code reach the model raw
   under every setup, the Nym net included; `+44` numbers are covered.
-- **Some dates of birth pass raw** (solo todo #3651). Dates without a
+- **Some dates of birth pass raw**. Dates without a
   birth-date cue in non-ISO formats, a German `Geburtsdatum` followed by a
   `DD.MM.YYYY` date, and a `DD.MM.YYYY` value under a `dob` key in a JSON
   tool result reach the model
   raw on every path, `gaze clean` included.
-- **Two `gaze proxy` restore gaps from v0.15.0 remain** (solo todos #3841,
-  #3842). A token split across streaming events is not restored on the legacy
+- **Two `gaze proxy` restore gaps from v0.15.0 remain**. A token split across streaming events is not restored on the legacy
   OpenAI chat and Gemini streaming paths, and the Anthropic path can restore a
   JSON-escaped spelling. Both fail toward pseudonymized or escaped output,
   never toward a leak.
-- **The MCP chokepoint still refuses what the safety net flags** (solo todo
-  #3850). `gaze clean`, `gaze daemon` and `gaze proxy` tokenize a net finding;
+- **The MCP chokepoint still refuses what the safety net flags**. `gaze clean`, `gaze daemon` and `gaze proxy` tokenize a net finding;
   MCP tool calls refuse it. That fails closed; parity needs a contract
   decision.
 
@@ -405,7 +403,7 @@ pipeline.
   the `gaze_read_file` path gate now accept `<<{owned token}>>`; an unowned
   token there is still rejected before any filesystem access.
 - **The safety net's `Redact` fallback tokenizes a residual it can resolve
-  instead of redacting it** (solo todo 3879). A token's class name in the
+  instead of redacting it**. A token's class name in the
   re-scan text can make Nym flag the plain value beside it, so each resolve
   round can surface one more value. After the one follow-up round the fallback
   replaced the next one with a `[REDACTED:<class>]` marker, and restore was no
@@ -435,8 +433,7 @@ pipeline.
   still reach the provider raw, exactly as `gaze clean` prints them. The old
   behaviour blocked some of them only because it refused the whole request
   whenever any other date in it was flagged. No leak shipped: the old
-  behaviour failed closed. Affected: v0.15.0 with a configured net (PR #660,
-  solo todo #3847).
+  behaviour failed closed. Affected: v0.15.0 with a configured net (PR #660).
 - **Proxy refusals say why.** A refusal is now `422` with the typed
   `ProtectionError` variant, the fallback reason and the suspect classes,
   never the text, and one line on the proxy's stderr. The legacy adapters
@@ -446,7 +443,7 @@ pipeline.
   with an empty log. The shape is documented in
   `docs/explanation/proxy/proxy-runtime.md`. **Breaking** for clients that
   matched the old status or error name. `gaze_proxy::DirectProxyError` is
-  `Clone` but no longer `Copy` (PR #660, solo todo #3847).
+  `Clone` but no longer `Copy` (PR #660).
 
 ### Security
 
@@ -495,7 +492,7 @@ pipeline.
   39,395 card-token bytes). Every such token restores exactly. The no-OPF
   scorecard (2,910 documents) is unchanged: its card gold fails Luhn. The
   `luhn` validator now also skips any Unicode whitespace and non-ASCII
-  digits, as the restore check already did. (PR #658, solo todo #3843)
+  digits, as the restore check already did. (PR #658)
   This fixes the v0.15.0 Known limitation "A payment card next to other
   digits can reach the model untokenized".
 - **The restore-boundary DLP check (PR #652, v0.15.0) now scans the whole
@@ -613,8 +610,8 @@ non-breaking spaces, in every release through v0.14.0 (PR #647).
 **Known limitations.** One detection gap and two `gaze proxy` restore gaps
 ship in this release:
 
-- **A payment card next to other digits can reach the model untokenized**
-  (solo todo #3843). A card followed by a separated CVV or expiry
+- **A payment card next to other digits can reach the model untokenized**.
+  A card followed by a separated CVV or expiry
   (a checksum-valid test card followed by three digits) or preceded by other
   digits fails the Luhn check
   as one run, so the forward path does not tokenize it. The restore-boundary
@@ -625,13 +622,13 @@ The two restore gaps fail toward pseudonymized or escaped output, never toward
 a leak, and both are planned for v0.16:
 
 - **A token split across streaming events is not restored** on the legacy
-  OpenAI chat and Gemini streaming paths (solo todo #3841). The proxy restores
+  OpenAI chat and Gemini streaming paths. The proxy restores
   each server-sent event on its own, and upstream streams usually split a Gaze
   token over several events, so the client can receive the placeholder instead
   of the original value in streamed text and tool-call arguments. Non-streaming
   responses and the Anthropic path, which accumulates per content block, are
   not affected.
-- **The Anthropic path can restore a JSON-escaped spelling** (solo todo #3842).
+- **The Anthropic path can restore a JSON-escaped spelling**.
   When a value was captured inside a JSON string in a text block, the manifest
   holds its escaped source spelling, so restoring it into `tool_use.input` or
   into plain text keeps the escapes: a literal backslash before a quote, or a
@@ -719,8 +716,7 @@ committed; the v1 row stays the version's benchmark figure.
   quoted, single-quoted and escaped JSON keys, `=` and `:` log forms, and those
   key spellings. A camelCase prefix before the cue (`customerSsn`) is not yet
   matched, and CSV header-to-column association is not covered: a CSV column
-  headed `bsn` with bare values is not tokenized by this change (PR #647,
-  solo todo #3818; CSV is solo todo #3829).
+  headed `bsn` with bare values is not tokenized by this change (PR #647; CSV is a separate follow-up).
 - **Identifiers grouped with non-breaking or thin spaces are now tokenized.**
   Every release up to and including v0.14.0 missed IBANs, payment cards,
   Steuer-IDs and other grouped identifiers whose groups were separated by
@@ -730,7 +726,7 @@ committed; the v1 row stays the version's benchmark figure.
   separator, so each value shipped raw; an NBSP-grouped Steuer-ID leaked its
   first two digits next to a `phone` token. Detection now reads every Unicode space
   separator as an ASCII space; tokens, manifests and restore keep the original
-  bytes (PR #647, solo todo #3819).
+  bytes (PR #647).
 - **`gaze setup` policies now tokenize every detected class.** Generated policies
   in v0.11.2–v0.14.0 preserved unmatched classes, allowing detected phone,
   IBAN, payment card, and IP address values to pass through raw. The generated
@@ -783,8 +779,7 @@ committed; the v1 row stays the version's benchmark figure.
   behind `RedactionEntry::ambiguity_record`. `gaze-assembly` pins that the
   registry's anchored-family member map equals the one
   `uncovered_collision_family_classes` derives from policy and rulepacks
-  (the validation solo todo 3761 asked for; the single-source refactor is
-  not done).
+  (the single-source refactor is not done).
 - **`Action::strictness_rank` and `Action::strictest`** in `gaze-types`: the
   fail-closed order over the closed action set (`redact` > `tokenize` >
   `generalize` > `format_preserve` > `preserve`), and `Action` now serializes
@@ -1041,7 +1036,7 @@ committed; the v1 row stays the version's benchmark figure.
   activating a safety net.
 
 - **Custom rulepack paths keep the `core` detection floor by default** (solo
-  todo #3712; breaking in 0.x). Since the v0.4.0 rulepack policy loader, a
+  breaking in 0.x). Since the v0.4.0 rulepack policy loader, a
   `[policy.rulepacks]` table with `paths` but no `bundled` key silently selected
   no bundled packs. The same happened with policy-less `gaze clean
   --rulepack-path`. Omission now means `["core"]` on both surfaces. Explicit
@@ -1049,8 +1044,7 @@ committed; the v1 row stays the version's benchmark figure.
   successful build prints a one-line stderr notice whenever the resolved
   bundled selection omits `core` and its `core-extended` alias, even if another
   bundled pack is selected without a custom path.
-- **One entity, one token: containment precedence** (solo todo #3740,
-  concept v2 approved 2026-09-23; breaking in 0.x). When one candidate
+- **One entity, one token: containment precedence** (concept v2 approved 2026-09-23; breaking in 0.x). When one candidate
   wholly contains a candidate of a different class, the container wins the
   whole span as one token with its own class and action, unless its
   evidence tier is below the contained candidate's (validator passed >
@@ -1061,13 +1055,13 @@ committed; the v1 row stays the version's benchmark figure.
   refuses. `IBAN PL56 0942 … 4500 BIC` (a spaced Polish IBAN, de-AT) is now
   `IBAN <iban_n> BIC` instead of five tokens; a Luhn-valid card whose tail is
   a German phone shape is one card token. Partial overlaps keep today's
-  rules (solo todo #3769). Measured on the 98,256-document IBAN enumeration
+  rules. Measured on the 98,256-document IBAN enumeration
   (3 locales): split IBANs 8,955 → 423, wrong-class IBAN tokens 11,196 →
   2,706, leaked and false-positive bytes unchanged; 4 of 1,886 real holdout
   documents change (`<credit_card_n><phone_n>` → `<credit_card_n>`); 0 of
   1,024 negative documents change.
 - **Protection beats preservation: per-character residual coverage** (solo
-  todo #3740; breaking in 0.x). Residual admission is per original, not per
+  breaking in 0.x). Residual admission is per original, not per
   overlap component; a `preserve` winner no longer shields bytes a protected
   class claimed (they leave as a fragment of the highest-ranked claimant with
   `decided_by: protection_override`); adjacent fragments of one claimant
@@ -1434,7 +1428,7 @@ committed; the v1 row stays the version's benchmark figure.
   as a field of a JSON tool result, is already escaped in the manifest. It is
   still written into these fields as it is, so it is not escaped twice. The
   Anthropic Messages codec and Gemini `functionCall.args` were already exact and
-  are pinned by the same end-to-end suite (PR #656, solo todo #3837).
+  are pinned by the same end-to-end suite (PR #656).
 
 - Safety nets now scan manifest-owned and session-verified placeholders with a stable eight-byte
   surrogate prefix derived from the placeholder shape after removing the random
@@ -1465,8 +1459,7 @@ committed; the v1 row stays the version's benchmark figure.
   `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` (case-insensitively at every
   locale). The existing word guard remains
   in force, so Rust and C++ double-colon paths, including `Address::new`, stay untouched.
-  An identifier-glued IPv6 documentation address remains outside this cue rule
-  (solo todo #3762).
+  An identifier-glued IPv6 documentation address remains outside this cue rule.
 
 - **Security: a compact IBAN glued to the next word shipped raw.**
   `IBAN AT6119…3201BIC` and the dense footer `IBAN:AT6119…3201BIC:BKAUATWW`
@@ -1496,7 +1489,7 @@ committed; the v1 row stays the version's benchmark figure.
   the first 22 characters of every longer spaced IBAN, which repairs 1,866
   fragmented documents per German policy but uncovers 7,212 bytes that an
   accidental phone token had hidden on digit-glued documents, so it is a
-  separate change with its own trade (solo todo #3764).
+  separate change with its own trade.
   **Residual gap, by design:** an IBAN glued to a digit or an underscore
   (`…32011234`, `…3201_x`) stays raw exactly as before, because it is
   indistinguishable from a longer opaque identifier; accepting every validated
@@ -1513,7 +1506,7 @@ committed; the v1 row stays the version's benchmark figure.
   `crates/gaze-recognizers/tests/iban_trailing_group.rs` pin both directions
   and the spaced-German phone interplay; the enumeration script now reads the registry
   length table out of `crates/gaze-types/src/lib.rs` instead of carrying a
-  third hand-copied table. Solo todo #3756.
+  third hand-copied table.
 - **Security: a collision family of policy regex recognizers shipped its
   family token raw under a `preserve` default.** A `kind = "regex"`
   `[[policy.custom_recognizers]]` rule registered through the `Detector`
@@ -1540,7 +1533,7 @@ committed; the v1 row stays the version's benchmark figure.
   `docs/reference/policy.md` example, and the anchored member with and
   without its cue. Measured both directions with
   `scripts/bench/policy_regex_collision_matrix.py` (36 arms, synthetic set
-  plus the Dataiku en/de holdout): 1,907 documents, 658 expected spans, `lost_bytes = 0` and `lost_values = 0` in every arm; the only changed documents are 427 family tokens (395 documents, +2,162 protected bytes) that base shipped raw under a `preserve` default and head protects, and the same tokens written as `[REDACTED]` where a `redact` member outranks a `tokenize` default; every collision-off and preserve-member arm is byte-identical, so no conflict winner moved. Solo todo 3757.
+  plus the Dataiku en/de holdout): 1,907 documents, 658 expected spans, `lost_bytes = 0` and `lost_values = 0` in every arm; the only changed documents are 427 family tokens (395 documents, +2,162 protected bytes) that base shipped raw under a `preserve` default and head protects, and the same tokens written as `[REDACTED]` where a `redact` member outranks a `tokenize` default; every collision-off and preserve-member arm is byte-identical, so no conflict winner moved.
 
 - **Security: a custom policy naming only member classes shipped no-cue IBANs
   raw.** The mandatory-anchor fallback and precedence-tie family token
@@ -1558,7 +1551,7 @@ committed; the v1 row stays the version's benchmark figure.
   sub-run `phone.national.de` wins previously left the rest raw, and with the
   derivation alone would have failed the whole document closed
   (`residual policy preview mismatch`); its remaining bytes now carry
-  family-class residual tokens. Solo todo #3746.
+  family-class residual tokens.
 - **Security: residual coverage switched off under any action but `tokenize`.**
   The cells that cover a losing candidate's remaining bytes beside an
   overlapping winner were planned only when every previewed action in the
@@ -1633,7 +1626,7 @@ committed; the v1 row stays the version's benchmark figure.
   documents per policy go from leaking to fully covered, and no IBAN byte is lost
   that main protected on the same IBAN with no trailing word. The remaining
   losses (275 B under de-DE, 1,715 B under de-AT, all in documents with no IBAN
-  cue) are the pre-existing family-fallback class tracked as todo 3746: with
+  cue) are the pre-existing family-fallback class tracked as a follow-up: with
   `custom:family:payment-card-or-iban` left to a policy's default `preserve`,
   main's extra coverage in those documents came only from the swallowed word.
   Fixtures in `crates/gaze-recognizers/tests/iban_trailing_group.rs`
@@ -1658,8 +1651,7 @@ committed; the v1 row stays the version's benchmark figure.
   existing index**: stored snippets keep the raw values until then. No
   workaround exists on older releases; do not pass their search output to an
   agent for documents with structured identifiers. `gaze-assembly` gains
-  `build_pipeline_builder` and `CorpusIngestor` gains `with_dictionaries`
-  (solo todo #3711).
+  `build_pipeline_builder` and `CorpusIngestor` gains `with_dictionaries`.
 - **Security: `gaze clean` without `--policy` now runs the `core` rulepack.**
   Shipped defect in every release from v0.3.0 through v0.14.0: with neither
   `--policy` nor `--rulepack-bundled`/`--rulepack-path`, `gaze clean` ran a
@@ -1674,7 +1666,7 @@ committed; the v1 row stays the version's benchmark figure.
   on older releases: pass `--rulepack-bundled core`. `gaze daemon` always
   required a policy; `gaze mcp serve` and policy-less `gaze proxy` already ran
   `core`. The now unreachable `UnsupportedSessionScope` CLI error variant is
-  removed (solo todo #3706).
+  removed.
 
 - **A family settled by collision policy stays settled when a later,
   unrelated overlap is decided.** Shipped defect in v0.14.0 (since the
@@ -2048,7 +2040,7 @@ committed; the v1 row stays the version's benchmark figure.
 
 - **`passport.cue_anchored` recognizer and an extended `national_id.cue_anchored`
   expand passport / national-ID / ID-card detection on the shipped
-  default** (solo todo #3025, slice A). A new `custom:passport` recognizer
+  default**. A new `custom:passport` recognizer
   (government-ID collision family, precedence 15 — a passport cue beats a
   tax-number or national-ID cue but yields to an SSN cue) covers passport /
   Reisepass numbers, and `national_id.cue_anchored` gains cue vocabulary
@@ -2096,8 +2088,8 @@ committed; the v1 row stays the version's benchmark figure.
   `#[non_exhaustive]` and the stored field is private, so this addition does not
   break external struct construction.
 
-- **Scheme- and web-prefix-anchored URL detection at the deterministic rule floor**
-  (todo #2254). The new `url.anchored` recognizer in the embedded `core` bundle
+- **Scheme- and web-prefix-anchored URL detection at the deterministic rule floor**.
+  The new `url.anchored` recognizer in the embedded `core` bundle
   tokenizes URLs with an HTTP(S) scheme or a `www` prefix as
   `custom:url`, covering the whole span rather than a fragment. It is
   `safety_tier = "safe_default"` with `locales = ["global"]`, so it is active for
@@ -2115,8 +2107,8 @@ committed; the v1 row stays the version's benchmark figure.
   manifest, so an over-tokenized public URL is a recoverable ergonomics cost
   (axis 5) while an under-tokenized private one is a leak (axis 1).
 
-- **Cue-anchored bearer-credential detection at the deterministic rule floor**
-  (todo #2318). The new `security_token.anchored` recognizer is one two-arm,
+- **Cue-anchored bearer-credential detection at the deterministic rule floor**.
+  The new `security_token.anchored` recognizer is one two-arm,
   `safe_default`, global rule in the embedded `core` bundle. It protects
   structurally typed AWS access-key/JWT shapes and high-entropy values adjacent
   to explicit English or German credential cues, emitting the reversible
@@ -2141,8 +2133,8 @@ committed; the v1 row stays the version's benchmark figure.
   recoverable axis-5 ergonomics cost in service of axis-1 reliability. The CLI's
   separate no-policy stub path is unchanged.
 
-- **Corpus-informed government-ID recognizers at the deterministic rule floor**
-  (todos #2318 follow-on, #2923). Four cue-anchored `safe_default` recognizers
+- **Corpus-informed government-ID recognizers at the deterministic rule floor**.
+  Four cue-anchored `safe_default` recognizers
   join the embedded `core` bundle: `ssn.de_cue` (German social-insurance cues
   such as `Sozialversicherungsnummer` and `SV-Nummer` before dashed, dotted, or
   9 to 11 digit values, class `custom:ssn`), `tax_number.cue_anchored`
@@ -2168,7 +2160,7 @@ committed; the v1 row stays the version's benchmark figure.
   adds none. The full-stack Kiji `resolve` cell removes 3,093 leaked bytes and
   613 false-positive bytes with no change in false-positive documents.
   **Disclosed regression:** the Kiji cell loses 6 covered `PASSWORD` bytes, the
-  downstream safety-net interaction tracked as todo #2491 (mechanism #2420),
+  downstream safety-net interaction tracked as a follow-up,
   not a resolver decision and unaffected by collision precedence.
 
   `tax_number.cue_anchored` deliberately requires a three-digit lead and
@@ -2204,8 +2196,7 @@ committed; the v1 row stays the version's benchmark figure.
   move together to 0.13.0 in this release (#452).
 
 
-- **`gaze-cli` declares each shared flag group once** (audit 7201 S11-F1, solo
-  todo #2368). `gaze clean` and `gaze daemon` each declared their flags inline
+- **`gaze-cli` declares each shared flag group once**. `gaze clean` and `gaze daemon` each declared their flags inline
   in `Cmd`, restated them in a 33- and 23-field destructure, and rebuilt them
   into a runtime `Args` struct — five mirrors of one list. `gaze proxy serve`
   and `gaze proxy start` carried two byte-identical 31-line dashboard blocks
@@ -2227,8 +2218,7 @@ committed; the v1 row stays the version's benchmark figure.
   Its help-surface comparison describes the refactor alone, not the cumulative
   v0.13.0 release.
 
-- **One documented safety-net default across the library and the CLI** (audit
-  7201 S01-F1, solo todo #2949). `Pipeline::clean_with_safety_net` and
+- **One documented safety-net default across the library and the CLI**. `Pipeline::clean_with_safety_net` and
   `clean_with_safety_net_detect_context` — the policy-less convenience entry
   points — previously hard-coded `SafetyNetMode::Strict` + `Redact`, which
   contradicted `SafetyNetPolicy::default()` (`Resolve` + `Redact`, the shipped
@@ -2243,7 +2233,7 @@ committed; the v1 row stays the version's benchmark figure.
   register no safety net are unaffected.
 
 - **The three structured-document walkers are one `walk_structured` with a
-  `LeafOp`** (audit 7201 S01-F2, solo todo #2950). The pseudonymize,
+  `LeafOp`**. The pseudonymize,
   clean-and-scan, and scan-only traversals of `RawDocument::Structured` were
   three near-identical recursive copies that had already drifted. They are now
   one function parameterized by `LeafOp { Pseudonymize, CleanAndScan, ScanOnly }`,
@@ -2253,10 +2243,10 @@ committed; the v1 row stays the version's benchmark figure.
   on all three paths, including the pre-existing divergence where
   `scan_safety_nets_structured` reports bare-key field paths (`profile.email`)
   and `clean_with_safety_net*` reports JSONPath-style ones (`$.profile.email`),
-  which is preserved deliberately and tracked as solo todo #2958.
+  which is preserved deliberately and tracked as a follow-up.
 
 - **`SafetyNetMode` x `SafetyNetFallback` is lowered once to a total
-  `SafetyNetDecision`** (audit 7201 S01-F1, solo todo #2949). The two public
+  `SafetyNetDecision`**. The two public
   fields spell twelve pairs; the runtime has six behaviours, and seven pairs
   previously differed only in a field nothing read. `SafetyNetPolicy::decision()`
   is now the single, total lowering to
@@ -2268,7 +2258,7 @@ committed; the v1 row stays the version's benchmark figure.
   `safety_net_policy_lowering_covers_all_twelve_representable_pairs`.
 
 - **`gaze clean` no longer warns that `--safety-net-fallback` is "ignored when
-  `--safety-net-mode` is terminal"** (audit 7201 S01-F1, solo todo #2949). The
+  `--safety-net-mode` is terminal"**. The
   lowering documents which pairs consult the fallback, so the runtime warning is
   redundant. Relatedly, the tolerant-deprecation warning now fires only where a
   tolerant disposition is reachable — `--safety-net-mode tolerant`, or a tolerant
@@ -2278,8 +2268,7 @@ committed; the v1 row stays the version's benchmark figure.
   rejects a tolerant flag in any position.
 
 - **Persistent owner-side corpus index schema v2: each document is stored
-  once, postings are derived on load, and re-ingest upserts** (audit 7201
-  S17-F1, todo #2936). `gaze_token_bridge::persistent::FileCorpusIndexStore`
+  once, postings are derived on load, and re-ingest upserts**. `gaze_token_bridge::persistent::FileCorpusIndexStore`
   previously wrote one record per distinct fingerprint, each carrying a full
   copy of the document (snippet plus every entity's raw value), so a document
   with E entities was duplicated E times on disk, and re-ingesting a `doc_id`
@@ -2304,16 +2293,14 @@ committed; the v1 row stays the version's benchmark figure.
   (indexed document/fingerprint pairs). `FileCorpusIndexStore::hit_count_for_domain`
   was removed (it had no callers). The AEAD/key layer and the sealed-file
   envelope are unchanged.
-- **Audit-row enums now own one canonical string form** (audit S05-F2, solo todo
-  #2935). `Action`, `ConflictTier`, `DocumentKind`, and `FallbackReason` expose
+- **Audit-row enums now own one canonical string form** (audit S05-F2). `Action`, `ConflictTier`, `DocumentKind`, and `FallbackReason` expose
   matching `as_str` / `from_canonical_str` methods, and SQLite plus CLI consumers
   delegate to them instead of maintaining panic-prone copies. `FallbackReason`
   JSON now serializes as snake_case to match SQLite; every former PascalCase
   spelling remains accepted as a serde alias.
 
 - **`gaze_assembly::build_pipeline` derives its `NoRecognizers` guard from
-  actual registration and uses one locale predicate** (audit 7201 S10-F1,
-  todo #2928). The guard now fails closed when zero recognizers were
+  actual registration and uses one locale predicate**. The guard now fails closed when zero recognizers were
   registered, instead of re-deriving eligibility from policy and rulepack
   metadata. Two behavioural consequences for adopters:
   - Rulepack recognizers with an **empty locale list** (a pack that omits both
@@ -2330,8 +2317,8 @@ committed; the v1 row stays the version's benchmark figure.
   NER model loading now runs before the guard; error precedence is unchanged
   for reachable configurations (a configured `model_dir` that fails to load
   still surfaces as `NerLoad`).
-- **Locale-gated auto-activation is derived from the loaded rulepacks**
-  (audit 7201 S10-F2, todo #2929). The `auto_activate_locale_gated` locale set
+- **Locale-gated auto-activation is derived from the loaded rulepacks**.
+  The `auto_activate_locale_gated` locale set
   (`core-extended` compatibility alias) is now computed by the new public
   `gaze_assembly::locale_gated_activation_locales(&[Rulepack])` — the union of
   `locales` over enabled, document-basis `safety_tier = "locale_gated"`
@@ -2353,8 +2340,8 @@ committed; the v1 row stays the version's benchmark figure.
 - `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated for the
   mixed locale-basis rulepack version bump (`0.5.1` -> `0.5.2`). Detection count
   remains 12; no detection changed class, span, or shape.
-- **Bundled identifier recognizers now use explicit mixed locale semantics**
-  (todo #2417). Rulepacks gain additive
+- **Bundled identifier recognizers now use explicit mixed locale semantics**.
+  Rulepacks gain additive
   `locale_basis = "document" | "format"` metadata. External and adopter
   rulepacks that omit it retain the legacy `document` default. Bundled
   recognizers declare it explicitly.
@@ -2367,7 +2354,7 @@ committed; the v1 row stays the version's benchmark figure.
   conflict resolver runs. Linguistic `name.*` recognizers remain
   document-basis. `phone.national.de`, `postal.de`, and `postal.us` remain
   temporarily document-gated pending precision hardening; postal promotion
-  depends on todo #2424.
+  depends on a follow-up.
 
   **Breaking behavior:** `--locale=global` and narrow locale chains no longer
   suppress the format-basis identifiers. Adopters relying on that suppression
@@ -2409,8 +2396,8 @@ committed; the v1 row stays the version's benchmark figure.
 
 ### Fixed
 
-- **A builtin-class sub-token can no longer split a structured identifier**
-  (solo todo #3025, slice U). The base conflict ladder ranks `Email`, `Name`,
+- **A builtin-class sub-token can no longer split a structured identifier**.
+  The base conflict ladder ranks `Email`, `Name`,
   `Organization` and `Location` above every `Custom` class, so an NER
   organisation or name token that sat *inside* a rule-recognised span
   (`url.anchored`, `security_token.anchored`, …) won on `ClassPriority`,
@@ -2431,7 +2418,7 @@ committed; the v1 row stays the version's benchmark figure.
   custom spans keep their existing rungs.
 
 - **The five SSN / government-ID recognizers share one cue-to-value connector grammar, so
-  multi-word phrasing between the cue and the value is covered** (solo todo #3025, slice G).
+  multi-word phrasing between the cue and the value is covered**.
   `ssn.us`, `ssn.de_cue`, `tax_number.cue_anchored`, `driver_license.cue_anchored` and
   `national_id.cue_anchored` previously allowed a single optional keyword plus one punctuation
   mark between the cue and the value, so real phrasing such as a licence cue followed by a comma,
@@ -2450,7 +2437,7 @@ committed; the v1 row stays the version's benchmark figure.
   of the five copies is edited alone.
 
 - **Audit rows now name the conflict tier that actually decided the overlap**
-  (audit S02-F1, solo todo #2948). The resolver probed its comparator twice —
+  (audit S02-F1). The resolver probed its comparator twice —
   once per direction — and reused the second answer as the winner's
   `decided_by` label. The mandatory-anchor rung is not antisymmetric (it
   inspects one candidate and ignores the rival), so when an anchored incumbent
@@ -2466,7 +2453,7 @@ committed; the v1 row stays the version's benchmark figure.
   derived from it in `gaze-audit` / JSON exports) moves.
 
 - **The `mcp-tier-isolation` gate now actually fails when the agent/operator
-  tier boundary is violated** (audit 7359 §6-F1, solo todo #2993). **The tier
+  tier boundary is violated**. **The tier
   partition itself was, and remains, enforced by rustc:** the operator surface
   sits behind `#[cfg(feature = "operator-tier")]` in
   `crates/gaze-mcp-core/src/{lib.rs,tools/mod.rs}`, and no agent-tier build has
@@ -2494,7 +2481,7 @@ committed; the v1 row stays the version's benchmark figure.
   "nobody filled this in".
 
 - **Structured documents no longer accept a safety-net enforcement request and
-  silently perform observation** (audit 7201 S01-F2, solo todo #2950). The
+  silently perform observation**. The
   structured arm of `clean_with_safety_net_policy_detect_context` cleaned each
   field, ran the nets over the result, and returned `Ok` — with no enforcement
   stage anywhere on the path. A caller passing `SafetyNetMode::Redact` or
@@ -2512,7 +2499,7 @@ committed; the v1 row stays the version's benchmark figure.
 
 - **Safety-net `resolve` fallback acted on the primary report instead of the
   residual one, destroying tokens and shipping residual PII under the default
-  policy** (audit 7201 S01-F1, solo todos #2949 and #2956). When the resolve
+  policy**. When the resolve
   pass converged and the post-resolution re-run flagged a residual suspect, the
   fallback was handed the *primary* `LeakReport`, which by then described
   pre-resolve coordinates.
@@ -2542,7 +2529,7 @@ committed; the v1 row stays the version's benchmark figure.
   are required by name in the `safety-net-sanity` gate.
 
 - **A residual found only by the post-resolution re-run was invisible in the
-  returned `LeakReport`** (solo todo #2959). The report handed back to the
+  returned `LeakReport`**. The report handed back to the
   caller is the first pass's, so a boundary that decides on it — the CLI's
   tolerant-mode deprecation warning, or an adopter's "did anything leak?" check
   — was told nothing was found while the residual shipped under `tolerant` or
@@ -2551,8 +2538,8 @@ committed; the v1 row stays the version's benchmark figure.
   deterministic net that re-reports the same suspect does not produce
   duplicates.
 
-- **Fallback audit rows now state what happened to the suspect's bytes**
-  (audit 7201 S01-F1, solo todo #2949). `fallback_action` was renamed to
+- **Fallback audit rows now state what happened to the suspect's bytes**.
+  `fallback_action` was renamed to
   `fallback_row_action` and documented as the row's claim about the bytes:
   `Action::Redact` only when the residual span is actually deleted,
   `Action::Preserve` when it is left in place (shipped under `tolerant`,
@@ -2560,7 +2547,7 @@ committed; the v1 row stays the version's benchmark figure.
   `decided_by: Fallback` row now also names the residual suspect that drove it
   rather than a stale primary-pass suspect.
 - **A detached `gaze proxy start --policy prod.toml` now runs the policy instead
-  of the bundled `core` pipeline** (solo todo #2965). `start` persisted the
+  of the bundled `core` pipeline**. `start` persisted the
   policy into its daemon config and then spawned the serving child with only
   `--bind` and `--session-ttl`, so the detached daemon resolved
   `build_pipeline(None, "core")`: no policy rules, no custom recognizers, no
@@ -2569,7 +2556,7 @@ committed; the v1 row stays the version's benchmark figure.
   `gaze proxy status` could print upstreams the running daemon never used. The
   child's argument list is now derived from the daemon config as a whole, so the
   daemonized proxy resolves the same pipeline as `gaze clean`. **The previous
-  entry for `gaze proxy` (solo todo #2937, PR #437) covered `gaze proxy serve`
+  entry for `gaze proxy` (PR #437) covered `gaze proxy serve`
   only**; adopters running the daemon were unaffected by that fix. `restart`
   carried the same defect and is fixed by the same change.
 
@@ -2585,27 +2572,26 @@ committed; the v1 row stays the version's benchmark figure.
   unprotected.
 
 - **`custom:family:*` policy classes now preserve the collision-family namespace**
-  (audit S05-F1, solo todo #2934). `PiiClass::from_policy_name` previously
+  (audit S05-F1). `PiiClass::from_policy_name` previously
   normalized the reserved `family:` separator and hyphenated family name, so a
   protective class rule could silently miss a family-level ambiguity token and
   preserve the original value. `PiiClass::family` and `as_family_name` now model
   that namespace once, and policy and rulepack parsing share the same
   non-normalizing path. The enum and manifest wire shape are unchanged.
 - **`gaze proxy` now resolves the same rulepacks, dictionaries, and
-  auto-activated locales as `gaze clean` for the same policy** (audit 7201
-  S11-F2, solo todo #2937). Previously the proxy assembled a narrower pipeline
+  auto-activated locales as `gaze clean` for the same policy**. Previously the proxy assembled a narrower pipeline
   that skipped dictionary values and locale-gated auto-activation.
 - **Proxy request protection and fail-closed residual validation now read the
   same configured `DictionaryBundle`.** This covers direct/codec JSON and SSE
   response validation plus the legacy primary and residual request passes; the
   residual can no longer know fewer dictionary terms than the primary pass.
 - **`gaze-proxy` direct/codec primary and residual passes now use the resolved
-  locale chain instead of a pinned Global chain** (solo todo #2411). This
+  locale chain instead of a pinned Global chain**. This
   closes the direct/codec half after #2403 fixed the legacy path, and keeps both
   passes aligned with the same configured dictionaries and document locales.
 
 - **The ORT NER backend now hands the BIO decoder the document text, not its
-  provenance label** (audit S07-F1, solo todo #2902). `OrtBackend::detect` passed
+  provenance label** (audit S07-F1). `OrtBackend::detect` passed
   the constant `"ner/ort"` where `merge_bio_span_results` expected the string
   the tokenizer offsets index into, so in production (a) joiner bridging read
   the bytes between tokens from `"ner/ort"` and was dead — hyphenated or dotted
@@ -2622,7 +2608,7 @@ committed; the v1 row stays the version's benchmark figure.
   argument was text by comparing span ends to its length) and the
   `is_token_boundary_match` suppression it gated were removed rather than
   silently activated by the corrected argument: that suppression never ran in
-  production and turning it on is a measured decision (solo todo #2904).
+  production and turning it on is a measured decision.
   Production output changes only by adding spans the decoder was designed to
   emit; no span the previous decoder emitted is dropped.
 
@@ -2645,7 +2631,7 @@ committed; the v1 row stays the version's benchmark figure.
   existing redact-and-deliver meaning for every fallback reason.
 
 - **Kiji safety net: location and organization suspects were swapped** (PR
-  #425, todo #2312, defect todo #2925). Since v0.9.0-rc.1 the in-process Kiji
+  #425). Since v0.9.0-rc.1 the in-process Kiji
   DistilBERT decoders (`ort`, `tract`, `candle`) mapped classifier ids 3–6 as
   `B-LOC, I-LOC, B-ORG, I-ORG` while the pinned model actually emits
   `B-ORG, I-ORG, B-LOC, I-LOC`, and the Python subprocess runner used a third,
@@ -2936,8 +2922,8 @@ and the signed snapshot wire format are unchanged from v0.9.0.
 - **Daemon-mode docs reframed as stdio server.** `gaze daemon` is now documented
   as a long-lived stdio server in the LSP / MCP / language-server-protocol
   tradition rather than a Unix daemon in the strict sense. The subcommand verb is
-  unchanged through v0.9.x; a `gaze serve` canonical alias is planned for v0.10
-  (todo #486). External adopter feedback prompted the reframe. (Axis 4 trust,
+  unchanged through v0.9.x; a `gaze serve` canonical alias is planned for v0.10.
+  External adopter feedback prompted the reframe. (Axis 4 trust,
   Axis 5 ergonomics.)
 - **`gaze document clean` bundle layout splits into agent + owner paths** (axis 1
   enforcement). `Bundle::write` now requires distinct `AgentBundleDir` and
@@ -2951,7 +2937,7 @@ and the signed snapshot wire format are unchanged from v0.9.0.
 
 ### Fixed
 
-- **Axis-1 bundle leak risk** (closes todo #489): `gaze document clean` previously
+- **Axis-1 bundle leak risk**: `gaze document clean` previously
   wrote `manifest.json` next to `clean.md` in a single caller-selected `out_dir`,
   with no runtime enforcement of the agent / owner partition. Adopters following
   the README who uploaded the bundle directory to an LLM workspace leaked

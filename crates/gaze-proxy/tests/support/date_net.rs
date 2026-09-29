@@ -1,4 +1,4 @@
-//! Deterministic stand-in for the Nym date finding under the `gaze setup` policy (todo 3847).
+//! Deterministic stand-in for the Nym date finding under the `gaze setup` policy.
 //!
 //! Flags dates the primary rules do not cover, as `Custom("date")`, the class Nym maps its
 //! `DATE_OF_BIRTH` label to. It sees only the scan text, where owned tokens are already

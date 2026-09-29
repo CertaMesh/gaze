@@ -1,4 +1,4 @@
-//! House numbers licensed by the real `NerRecognizer` (todo 3670).
+//! House numbers licensed by the real `NerRecognizer`.
 //!
 //! The house-number stage trusts only candidates carrying the NER recognizer id. Every other
 //! test uses a stand-in with that id, so this one drives the real recognizer: renaming its id

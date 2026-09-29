@@ -182,7 +182,7 @@ impl Detector for NerDetector {
 /// Grows every word-class span to whole words, and every `Name` over glued name parts.
 ///
 /// The model labels sub-word pieces, so a span can stop inside a word (`jorunn vas` of
-/// `jorunn vasquez-ellery`) and ship the rest raw (todo 3897). Names, locations and
+/// `jorunn vasquez-ellery`) and ship the rest raw. Names, locations and
 /// organizations are words; identifier classes keep their spans, because their values
 /// legitimately sit inside longer strings. An edge never grows into bytes another span
 /// already claims, so two entities glued together (`BobMary`) stay two pseudonyms. Runs on
@@ -274,7 +274,7 @@ mod tests {
             .collect()
     }
 
-    /// Todo 3897: sub-word pieces left `quez-ellery`, `-Elle` and `ORUNN` raw.
+    /// Sub-word pieces left `quez-ellery`, `-Elle` and `ORUNN` raw.
     #[test]
     fn word_class_spans_grow_to_whole_words_and_glued_name_parts() {
         let input = "From: Jorunn Vasquez-Ellery\nping jorunn vasquez-ellery and JORUNN VASQUEZ";
