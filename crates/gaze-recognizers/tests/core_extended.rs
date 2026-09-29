@@ -620,10 +620,13 @@ fn cued_parser_failed_us_phone_keeps_reason_without_sweeping_a_lookalike() {
     });
     let session = Session::new(Scope::Ephemeral).expect("session");
     // NANPA's reserved 555-01xx range; a seven-digit value fails the US region parser.
-    let input = "phoneNumber=555-0199; Order: 555-0199";
+    let input = concat!(
+        "phoneNumber=555-0199; Order: 555-0199; tracking=555-0199; ",
+        "voucher=555-0199; phoneModel=555-0199; Phone accessory: 555-0199"
+    );
 
     let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
-    assert_eq!(clean.matches("555-0199").count(), 1, "{clean}");
+    assert_eq!(clean.matches("555-0199").count(), 5, "{clean}");
     assert_eq!(restore_tokens(&session, &clean), input);
 
     let entries = entries.lock().unwrap();
