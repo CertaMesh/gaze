@@ -18,6 +18,42 @@ def _ratio(numerator: int, denominator: int) -> float:
     return numerator / denominator if denominator else 0.0
 
 
+def f_beta(precision: float, recall: float, beta: int) -> float:
+    """F-beta; 0.0 when precision and recall are both 0 (never the 1.0 of `safe_ratio`)."""
+    weight = beta * beta
+    return _ratio((1 + weight) * precision * recall, weight * precision + recall)
+
+
+class CharCounter:
+    """Unicode code points inside merged UTF-8 byte intervals of one document.
+
+    Byte offsets stay the scorer's coordinate system; this only converts a
+    length. Interval ends must be code-point boundaries, or the count would
+    silently skew, so a mid-character end raises.
+    """
+
+    def __init__(self, text: str) -> None:
+        self._data = None if text.isascii() else text.encode("utf-8")
+        self._starts: list[int] = []
+        if self._data is not None:
+            total = 0
+            self._starts.append(0)
+            for byte in self._data:
+                total += (byte & 0xC0) != 0x80
+                self._starts.append(total)
+
+    def length(self, intervals: Sequence[tuple[int, int]]) -> int:
+        if self._data is None:
+            return score.interval_length(intervals)
+        total = 0
+        for start, end in intervals:
+            for offset in (start, end):
+                if offset < len(self._data) and (self._data[offset] & 0xC0) == 0x80:
+                    raise ValueError(f"span offset {offset} is inside a UTF-8 character")
+            total += self._starts[end] - self._starts[start]
+        return total
+
+
 @dataclass
 class ComparisonMetrics:
     mapping: Mapping[str, Sequence[str]]
@@ -36,6 +72,9 @@ class ComparisonMetrics:
     typed_tp: int = 0
     typed_fp: int = 0
     typed_fn: int = 0
+    char_tp: int = 0
+    char_fp: int = 0
+    char_fn: int = 0
 
     def add(self, document: score.Document, predictions: Sequence[score.Span]) -> None:
         if self.included_labels is not None:
@@ -74,6 +113,16 @@ class ComparisonMetrics:
         self.false_positive_bytes += predicted_bytes - tp_bytes
         self.leaked_bytes += gold_bytes - tp_bytes
 
+        # Character-level, label-agnostic, over the same merged intervals.
+        chars = CharCounter(document.text)
+        leaked = score.subtract_intervals(gold, predicted)
+        gold_chars = chars.length(gold)
+        leaked_chars = chars.length(leaked)
+        predicted_chars = chars.length(predicted)
+        self.char_tp += gold_chars - leaked_chars
+        self.char_fn += leaked_chars
+        self.char_fp += predicted_chars - (gold_chars - leaked_chars)
+
         unmatched = list(document.spans)
         for prediction in retained:
             labels = (self.mapping if self.typed_mapping is None else self.typed_mapping)[prediction.label]
@@ -87,6 +136,18 @@ class ComparisonMetrics:
                 self.typed_tp += 1
                 unmatched.pop(match)
         self.typed_fn += len(unmatched)
+
+    def char_level(self) -> dict[str, object]:
+        precision = _ratio(self.char_tp, self.char_tp + self.char_fp)
+        recall = _ratio(self.char_tp, self.char_tp + self.char_fn)
+        return {
+            "unit": "unicode_code_point",
+            "tp": self.char_tp, "fp": self.char_fp, "fn": self.char_fn,
+            "precision": precision, "recall": recall,
+            "f1": f_beta(precision, recall, 1),
+            "f2": f_beta(precision, recall, 2),
+            "f5": f_beta(precision, recall, 5),
+        }
 
     def result(self) -> dict[str, object]:
         precision = _ratio(self.typed_tp, self.typed_tp + self.typed_fp)
@@ -105,6 +166,7 @@ class ComparisonMetrics:
             "true_positive_bytes": self.true_positive_bytes,
             "false_positive_bytes": self.false_positive_bytes,
             "leaked_bytes": self.leaked_bytes,
+            "char_level": self.char_level(),
             "typed_entities": {
                 "tp": self.typed_tp, "fp": self.typed_fp, "fn": self.typed_fn,
                 "precision": precision, "recall": recall,
