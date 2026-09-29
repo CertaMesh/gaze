@@ -2055,7 +2055,7 @@ pub(crate) struct StrictRestoreToken {
 pub(crate) fn strict_restore_tokens(text: &str) -> Result<Vec<StrictRestoreToken>> {
     let mut tokens = Vec::new();
     // Tokens are matched by their exact grammar, so a literal `<` or `>` beside one is
-    // ordinary text (`<alice@example.invalid>` cleans to `<{token}>`). Rejecting such
+    // ordinary text (an email address in angle brackets cleans to `<{token}>`). Rejecting such
     // neighbours as "nested" broke round-trip for HTML, generics and mail headers.
     for matched in crate::token_shape::pattern().find_iter(text) {
         tokens.push(StrictRestoreToken {
