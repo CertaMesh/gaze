@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
 import json
+import re
 import os
 import platform
 import subprocess
@@ -37,10 +39,47 @@ import backends  # noqa: E402
 from cpu_contention import ForeignCpuSampler  # noqa: E402
 import loaders  # noqa: E402
 from comparison_metrics import ComparisonMetrics  # noqa: E402
+import tagged_gaze  # noqa: E402
 
 score = loaders.score
 BENCHMARKS = ("presidio-research", "piibench-commercial")
 GAZE_ROWS = ("gaze-rules-only", "gaze-rules-ner", "gaze-full")
+
+
+TAGGED_ROW = re.compile(r"gaze-(v\d+\.\d+\.\d+)")
+
+
+def tagged_row_version(name: str) -> str | None:
+    """`gaze-v0.15.1` -> `v0.15.1`; None for every other row name."""
+    match = TAGGED_ROW.fullmatch(name)
+    return match.group(1) if match else None
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+
+
+def verify_release_checkout(tag: str, root: Path, binary: Path, policy: Path) -> dict[str, object]:
+    """A tagged Gaze row is measured from a clean checkout of the tag itself.
+
+    The tag is resolved as `refs/tags/<tag>` (never a branch of that name), the checkout
+    must be exactly that commit with no local changes, and the binary must live in it.
+    """
+    tagged_gaze.require_release_tag(tag, "tagged Gaze row")
+    commit = tagged_gaze.tag_commit(tag, compare.REPO)
+    if _git(root, "rev-parse", "HEAD") != commit:
+        raise SystemExit(f"{root} is not at the commit of tag {tag} ({commit[:12]})")
+    if _git(root, "status", "--porcelain"):
+        raise SystemExit(f"{root} has local changes; a tagged row needs a clean checkout")
+    binary = binary.resolve()
+    if root.resolve() not in binary.parents:
+        raise SystemExit(f"{binary} is not built inside the {tag} checkout {root}")
+    return {
+        "tag": tag, "commit": commit, "crates_tree": _git(root, "rev-parse", "HEAD:crates"),
+        "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+        "binary": "clean_for_bench --features safety-net-nym, debug profile, built from the tag",
+        "policy_sha256": hashlib.sha256(policy.read_bytes()).hexdigest(),
+    }
 
 
 def tool_family(name: str) -> str:
@@ -210,6 +249,8 @@ def main() -> int:
     parser.add_argument("--presidio-research-checkout", type=Path)
     parser.add_argument("--piibench-data", type=Path, help="piibench_commercial.py --output-dir")
     parser.add_argument("--tool", action="append", choices=[*compare.TOOLS, *GAZE_ROWS])
+    parser.add_argument("--gaze-release-tag", help="measure this release tag as row gaze-<tag> (only)")
+    parser.add_argument("--gaze-release-root", type=Path, help="clean checkout of that tag, holding --gaze-binary")
     parser.add_argument("--gaze-binary", type=Path)
     parser.add_argument("--gaze-model-dir", type=Path)
     parser.add_argument("--gaze-policy-rules", type=Path)
@@ -227,7 +268,15 @@ def main() -> int:
     if args.preflight:
         splits = {split: preflight_sample(documents, args.preflight) for split, documents in splits.items()}
     mappings = compare.load_mapping()
-    selected = args.tool or [*GAZE_ROWS, *compare.TOOLS]
+    release = None
+    if args.gaze_release_tag:
+        if args.tool or args.gaze_release_root is None or args.gaze_binary is None or args.gaze_policy is None:
+            raise SystemExit("--gaze-release-tag needs --gaze-release-root, --gaze-binary, --gaze-policy and no --tool")
+        release = verify_release_checkout(args.gaze_release_tag, args.gaze_release_root,
+                                          args.gaze_binary, args.gaze_policy)
+        selected = [f"gaze-{args.gaze_release_tag}"]
+    else:
+        selected = args.tool or [*GAZE_ROWS, *compare.TOOLS]
     # The whole roster, not just --tool: the common intersection must not depend
     # on which subset one invocation runs (runs resume into one report).
     composed = {
@@ -279,17 +328,18 @@ def main() -> int:
             if name in report["rows"]:
                 continue
             mapping = composed[tool_family(name)]
-            if name in GAZE_ROWS:
+            if name in GAZE_ROWS or tagged_row_version(name):
                 policy = {"gaze-rules-only": args.gaze_policy_rules,
                           "gaze-rules-ner": args.gaze_policy_rules_ner,
-                          "gaze-full": args.gaze_policy}[name]
+                          "gaze-full": args.gaze_policy}.get(name, args.gaze_policy)
                 if policy is None or args.gaze_binary is None or args.gaze_model_dir is None:
                     raise SystemExit(f"{name} needs --gaze-binary, --gaze-model-dir and its policy")
                 with ForeignCpuSampler() as watch:
                     report["rows"][name] = measure_gaze(name, args, policy, splits, mapping, common,
                                                         args.predictions_dir, Path(scratch))
                 report["provenance"][name] = {"policy_sha256_home_normalized": compare.normalized_policy_sha256(
-                    policy, compare.digest_file(policy)), "cpu": watch.result()}
+                    policy, compare.digest_file(policy)), "cpu": watch.result(),
+                    **({"release": release} if tagged_row_version(name) else {})}
             else:
                 backend, provenance, _ = backends.build_backend(name, args, mappings, Path(scratch))
                 if backend is None:
