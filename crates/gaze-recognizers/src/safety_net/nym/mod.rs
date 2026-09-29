@@ -309,19 +309,6 @@ fn is_pagination_number(text: &str, span: &NymSpan, field_path: Option<&str>) ->
     is_pagination_key(line) && matches!(yaml_tail.chars().next(), None | Some('\n' | '\r' | '#'))
 }
 
-#[cfg(test)]
-fn span_to_suspect(
-    span: NymSpan,
-    clean_text: &str,
-    operating_point: &NymOperatingPoint,
-    context: SafetyNetContext<'_>,
-) -> Result<Option<LeakSuspect>, SafetyNetError> {
-    match span_to_disposition(span, clean_text, operating_point, context)? {
-        SpanDisposition::Suspect(suspect) => Ok(Some(suspect)),
-        SpanDisposition::Refused(_) | SpanDisposition::Covered => Ok(None),
-    }
-}
-
 /// `LABEL>=THRESHOLD`, the audit spelling of which rule fired.
 fn raw_label(label: NymLabel, threshold: f32) -> String {
     format!("{label}>={threshold}")
@@ -378,9 +365,12 @@ mod tests {
             label: NymLabel::LicensePlate,
             score: 0.97,
         };
-        let suspect = span_to_suspect(span, text, &NymOperatingPoint::op_b(), context(&manifest))
-            .unwrap()
-            .unwrap();
+        let SpanDisposition::Suspect(suspect) =
+            span_to_disposition(span, text, &NymOperatingPoint::op_b(), context(&manifest))
+                .unwrap()
+        else {
+            panic!("expected a suspect");
+        };
         assert_eq!(suspect.safety_net_id, "nym-small-int8");
         assert_eq!(suspect.raw_label, "LICENSE_PLATE>=0.5");
         assert_eq!(suspect.score, Some(0.97));
@@ -482,9 +472,11 @@ mod tests {
                 score: 0.99,
             };
             assert!(
-                span_to_suspect(span, text, &NymOperatingPoint::op_b(), context(&manifest))
-                    .unwrap()
-                    .is_some(),
+                matches!(
+                    span_to_disposition(span, text, &NymOperatingPoint::op_b(), context(&manifest))
+                        .unwrap(),
+                    SpanDisposition::Suspect(_)
+                ),
                 "{text}"
             );
         }
@@ -513,7 +505,7 @@ mod tests {
             score: 0.99,
         };
         assert!(matches!(
-            span_to_suspect(
+            span_to_disposition(
                 span,
                 "12345",
                 &NymOperatingPoint::op_b(),
@@ -528,7 +520,7 @@ mod tests {
             score: 0.99,
         };
         assert!(
-            span_to_suspect(span, "ü", &NymOperatingPoint::op_b(), context(&manifest)).is_err()
+            span_to_disposition(span, "ü", &NymOperatingPoint::op_b(), context(&manifest)).is_err()
         );
     }
 
