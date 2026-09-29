@@ -8,6 +8,11 @@
     "setup": "notebook 5, custom analyzer: OpenMed NER recognizer, title/year/age pattern recognizers, lemma context enhancement, 14 predefined recognizers removed, score threshold 0.3",
     "source": "https://github.com/microsoft/presidio-research/blob/6db3769a3388b4075b93ab2229c5e0b9c30137f7/notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb",
     "commit": "6db3769a3388b4075b93ab2229c5e0b9c30137f7",
+    "model": {
+      "model": "OpenMed/OpenMed-PII-SuperClinical-Large-434M-v1",
+      "revision": "df7af994d39d358e52f929ff1b3a40d894adf022",
+      "tree_sha256": "a23c7b82ed9cd5ef60f48510d77fe14addd234254af797544d7535fabc414f97"
+    },
     "extra_labels": {
       "FIRST_NAME": ["FIRSTNAME"], "LAST_NAME": ["SURNAME"], "AGE": ["AGE"], "TITLE": ["TITLE"],
       "DATE_OF_BIRTH": ["DATEOFBIRTH"], "ACCOUNT_NUMBER": ["ACCOUNTNUM"], "PASSWORD": ["PASSWORD"],

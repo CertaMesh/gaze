@@ -110,6 +110,9 @@ def main() -> int:
         "published_full_mix": build.PUBLISHED if args.system == "presidio-default" else None,
         "hardware": platform.platform(), "predict_seconds": seconds and round(seconds, 1),
     }
+    if args.predictions is not None:
+        report["input"] = {"prediction_sha256": build.sha256(args.predictions),
+                           "dataset_sha256": manifest["files"]["test_5k.jsonl"], "documents": len(records)}
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report["overall"]))
     return 0

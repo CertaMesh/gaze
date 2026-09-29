@@ -22,6 +22,11 @@ from pathlib import Path
 
 import presidio_research_repro as repro
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import tagged_gaze  # noqa: E402
+
+DECLARATION = Path(__file__).with_name("vendor-tuned.json")
+
 
 def model_sha256(model: Path) -> str:
     digest = hashlib.sha256()
@@ -39,6 +44,13 @@ def main() -> int:
     parser.add_argument("--meta", type=Path, required=True)
     parser.add_argument("--limit", type=int, help="smoke only; never published")
     args = parser.parse_args()
+    pinned = json.loads(DECLARATION.read_text(encoding="utf-8"))["presidio-research"]["model"]
+    # The model directory is hashed and compared with the reviewed pin BEFORE any inference.
+    receipt = {**pinned, "tree_sha256": model_sha256(args.openmed_model)}
+    try:
+        tagged_gaze.check_model_receipt(receipt, pinned, "--openmed-model")
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=args.checkout, text=True).strip()
     if head != repro.COMMIT:
         raise SystemExit(f"presidio-research checkout is at {head}, expected {repro.COMMIT}")
@@ -60,8 +72,7 @@ def main() -> int:
             sink.write(json.dumps({"index": index, "results": rows}) + "\n")
     args.meta.write_text(json.dumps({
         "analyzer_kwargs": {key: kwargs[key] for key in ("language", "score_threshold")},
-        "openmed": {"model": repro.OPENMED_MODEL, "revision": repro.OPENMED_REVISION,
-                    "tree_sha256": model_sha256(args.openmed_model)},
+        "openmed": receipt, "model_verified_before_inference": True,
         "presidio_research_commit": head, "dataset_sha256": repro.sha256(dataset_path),
         "raw_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
         "documents": len(dataset), "smoke_limit": args.limit,

@@ -269,6 +269,10 @@ def main() -> int:
         report["scored"] = evaluate("precomputed", dataset_path, None, args.limit, args.predictions, labels,
                                     notebook5_rules=args.tuned)
         report["tuned_replay"] = args.tuned
+        # The receipt the merge compares with the measured row: what was scored, on what.
+        report["input"] = {"prediction_sha256": sha256(args.predictions),
+                           "dataset_sha256": report["benchmark"]["dataset_sha256"],
+                           "documents": report["scored"]["documents"]}
         print(f"{args.system}: {report['scored']}", file=sys.stderr, flush=True)
     for config in configs if args.predictions is None else ():
         report["reproduced"][config] = evaluate(config, dataset_path, args.openmed_model, args.limit,

@@ -92,3 +92,32 @@ RELEASE_PINS = {
         "nym_model_tree_sha256": "1878b4af812a531f5710692287e529106951d78e0e270820b05fa8e6ae082a2d",
     },
 }
+
+
+def check_model_receipt(receipt: dict, pinned: dict, where: str) -> None:
+    """A model a measurement used must be the pinned one: repository, revision and tree digest.
+
+    `receipt` is what the producer wrote after hashing the directory it ran; `pinned` is the
+    reviewed declaration (vendor-tuned.json). Used by the producer (before inference), the
+    harness (before scoring) and the merge, so no step trusts the one before it.
+    """
+    for key in ("model", "revision", "tree_sha256"):
+        if receipt.get(key) != pinned[key]:
+            raise ValueError(f"{where}: model {key} is {receipt.get(key)!r}, the pinned value is {pinned[key]!r}")
+
+
+def check_own_input(own: dict, prediction_sha256: str, dataset_sha256: str, where: str) -> None:
+    """A vendor evaluator's score must be of the measured row's own predictions on the pinned dataset.
+
+    `own["input"]` is the receipt the replay wrote: the SHA-256 of the prediction file it read and
+    of the dataset it scored against.
+    """
+    receipt = own.get("input")
+    if not receipt:
+        raise ValueError(f"{where}: the own-scorer result records no input receipt")
+    if receipt.get("prediction_sha256") != prediction_sha256:
+        raise ValueError(f"{where}: the own scorer read predictions {receipt.get('prediction_sha256')}, "
+                         f"the measured row's are {prediction_sha256}")
+    if receipt.get("dataset_sha256") != dataset_sha256:
+        raise ValueError(f"{where}: the own scorer used dataset {receipt.get('dataset_sha256')}, "
+                         f"the pinned one is {dataset_sha256}")

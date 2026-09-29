@@ -391,7 +391,7 @@ class TaggedRowTest(unittest.TestCase):
     def entry_and_report(self):
         data = synthetic()
         entry = data["benchmarks"]["presidio-research"]
-        entry.update(identity={"documents": 1500}, splits={"test": {"documents": 1500}},
+        entry.update(identity={"documents": 1500, "sha256": "d" * 64}, splits={"test": {"documents": 1500}},
                      label_maps_sha256="a" * 64, mapping_sha256="b" * 64, typed_hold=["gaze", "opf"])
         entry["rescored_with"]["comparison_sha256"] = {"compare.py": "c" * 64}
         del entry["rows"]["gaze-v0.15.1"]
@@ -406,7 +406,8 @@ class TaggedRowTest(unittest.TestCase):
             "rows": {"gaze-v0.15.1": {"test": row(12)}},
             "provenance": {"gaze-v0.15.1": {"release": release_provenance()}},
         }
-        own = {"system": "gaze-v0.15.1", "scored": {"f2": 0.7}}
+        own = {"system": "gaze-v0.15.1", "scored": {"f2": 0.7},
+               "input": {"prediction_sha256": "9" * 64, "dataset_sha256": "d" * 64}}
         return data, entry, report, own
 
     def test_a_valid_report_adds_one_row_the_page_shows_first(self) -> None:
@@ -452,6 +453,10 @@ class TaggedRowTest(unittest.TestCase):
         refused(lambda r, o: release(r)["reproduces"].update(prediction_sha256="0" * 64), "no clean earlier run")
         refused(lambda r, o: release(r)["reproduces"].update(harness_dirty=True), "no clean earlier run")
         refused(lambda r, o: o.update(system="gaze-full"), "own-scorer result is for")
+        # The vendor evaluator's score must be of THESE predictions on the pinned dataset.
+        refused(lambda r, o: o["input"].update(prediction_sha256="0" * 64), "own scorer read predictions")
+        refused(lambda r, o: o["input"].update(dataset_sha256="0" * 64), "own scorer used dataset")
+        refused(lambda r, o: o.pop("input"), "no input receipt")
         refused(lambda r, o: (r["rows"].update({"gaze-main": r["rows"].pop("gaze-v0.15.1")}),
                               r["provenance"].update({"gaze-main": {}})), "exactly one")
 
@@ -634,7 +639,7 @@ class VendorTunedRowTest(unittest.TestCase):
     def entry_and_report(self):
         data = synthetic()
         entry = data["benchmarks"]["presidio-research"]
-        entry.update(identity={"documents": 1500}, splits={"test": {"documents": 1500}},
+        entry.update(identity={"documents": 1500, "sha256": "d" * 64}, splits={"test": {"documents": 1500}},
                      label_maps_sha256="a" * 64, mapping_sha256="b" * 64, typed_hold=["gaze", "opf"])
         entry["rescored_with"]["comparison_sha256"] = {"compare.py": "c" * 64}
         entry["reproduction"]["reproduced"]["custom"] = {"f2": 0.9}
@@ -651,10 +656,12 @@ class VendorTunedRowTest(unittest.TestCase):
             "rows": {TUNED: {"test": row(7)}},
             "provenance": {TUNED: {"vendor_tuned": {
                 **{key: decl[key] for key in ("setup", "source", "commit", "caption")},
-                "producer": {"raw_sha256": raw, "smoke_limit": None}, "raw_sha256": raw,
+                "producer": {"raw_sha256": raw, "smoke_limit": None, "openmed": dict(decl["model"]),
+                             "dataset_sha256": "d" * 64}, "raw_sha256": raw,
                 "prediction_sha256": "8" * 64}}},
         }
-        own = {"system": TUNED, "tuned_replay": True, "scored": {"f2": 0.9}, "evaluator_commit": "6db3769a"}
+        own = {"system": TUNED, "tuned_replay": True, "scored": {"f2": 0.9}, "evaluator_commit": "6db3769a",
+               "input": {"prediction_sha256": "8" * 64, "dataset_sha256": "d" * 64}}
         return data, entry, report, own
 
     def test_the_tuned_row_replaces_the_declared_presidio_bar_only(self) -> None:
@@ -729,6 +736,17 @@ class VendorTunedRowTest(unittest.TestCase):
         refused(lambda r, o, d: tuned(r).update(source="https://example.invalid"), "does not match the declared")
         refused(lambda r, o, d: tuned(r)["producer"].update(smoke_limit=10), "smoke run")
         refused(lambda r, o, d: tuned(r)["producer"].update(raw_sha256="0" * 64), "does not describe")
+        # P1: the model the producer ran must be the pinned one, at merge as well as at run time.
+        model = lambda r: tuned(r)["producer"]["openmed"]  # noqa: E731
+        refused(lambda r, o, d: model(r).update(revision="wrong"), "model revision")
+        refused(lambda r, o, d: model(r).update(tree_sha256="0" * 64), "model tree_sha256")
+        refused(lambda r, o, d: model(r).update(model="someone/else"), "model model")
+        refused(lambda r, o, d: tuned(r)["producer"].pop("openmed"), "model model")
+        refused(lambda r, o, d: tuned(r)["producer"].update(dataset_sha256="0" * 64), "different dataset")
+        # P2: the replay's score must be of the measured row's predictions on the pinned dataset.
+        refused(lambda r, o, d: o["input"].update(prediction_sha256="0" * 64), "own scorer read predictions")
+        refused(lambda r, o, d: o["input"].update(dataset_sha256="0" * 64), "own scorer used dataset")
+        refused(lambda r, o, d: o.pop("input"), "no input receipt")
         refused(lambda r, o, d: o.update(tuned_replay=False), "notebook-5 replay")
         refused(lambda r, o, d: o.update(system="presidio-strong"), "notebook-5 replay")
         refused(lambda r, o, d: d["benchmarks"]["presidio-research"]["reproduction"]["reproduced"].clear(),
@@ -779,6 +797,34 @@ class VendorTunedRowTest(unittest.TestCase):
             out.write_text("{}")
             with self.assertRaisesRegex(SystemExit, "fresh report"):
                 theirbench.validate_vendor_tuned_args(argparse.Namespace(**ok))
+
+    def test_the_pin_is_in_the_declaration_and_the_shared_checks_refuse_a_mismatch(self) -> None:
+        import tagged_gaze
+
+        model = self.declaration()["model"]
+        self.assertEqual(set(model), {"model", "revision", "tree_sha256"})
+        self.assertEqual(len(model["revision"]), 40)
+        self.assertEqual(len(model["tree_sha256"]), 64)
+        tagged_gaze.check_model_receipt(dict(model), model, "ok")
+        for key in model:
+            with self.assertRaisesRegex(ValueError, f"model {key}"):
+                tagged_gaze.check_model_receipt({**model, key: "x"}, model, "receipt")
+
+    def test_the_producer_refuses_a_model_directory_that_is_not_the_pin_before_inference(self) -> None:
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "model"
+            fake.mkdir()
+            (fake / "config.json").write_text("{}")
+            # Runs under the plain interpreter: the pin check comes before any vendor import.
+            done = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("tuned_presidio.py")), "--checkout", tmp,
+                 "--openmed-model", str(fake), "--output", str(Path(tmp) / "o"), "--meta", str(Path(tmp) / "m")],
+                capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("--openmed-model: model tree_sha256", done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
 
     def test_benchmark_without_a_tuned_setup_is_refused(self) -> None:
         import theirbench

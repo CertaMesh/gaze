@@ -20,7 +20,8 @@ from typing import Any, Callable, Mapping
 REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO / "scripts/bench"))
 from markdown_table import table_header  # noqa: E402
-from tagged_gaze import RELEASE_PINS, TAG, check_public, tag_commit  # noqa: E402
+from tagged_gaze import (  # noqa: E402
+    RELEASE_PINS, TAG, check_model_receipt, check_own_input, check_public, tag_commit)
 VENDOR_TUNED = Path(__file__).with_name("vendor-tuned.json")
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
 DOC = REPO / "docs/reference/benchmarks/README.md"
@@ -187,11 +188,12 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
         raise ValueError(f"{row} is already in {name}")
     if own["system"] != row:
         raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
+    check_own_input(own, release["prediction_sha256"], dataset_sha256(name, entry), row)
     _check_release(row, release, resolve or (lambda tag: (tag_commit(tag, REPO), _crates_tree(tag_commit(tag, REPO)))))
     scored = own.get("scored") or own["overall"]
     entry["rows"][row] = report["rows"][row]["test"]
     entry["own_metric"][row] = scored
-    entry["provenance"][row] = report["provenance"][row]
+    entry["provenance"][row] = {**report["provenance"][row], "own_scorer_input": own["input"]}
     reproduced = release["reproduces"]
     entry.setdefault("tagged_measurements", {})[row] = {
         "harness_revision": report["harness_revision"], "harness_dirty": False,
@@ -244,15 +246,19 @@ def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str,
         raise ValueError(f"{row}: provenance does not match the declared vendor setup")
     if tuned["producer"].get("smoke_limit") or tuned["producer"]["raw_sha256"] != tuned["raw_sha256"]:
         raise ValueError(f"{row}: the producer record is a smoke run or does not describe the findings")
+    check_model_receipt(tuned["producer"].get("openmed", {}), declaration["model"], row)
+    if tuned["producer"].get("dataset_sha256") != dataset_sha256(name, entry):
+        raise ValueError(f"{row}: the producer ran on a different dataset than the pinned one")
     if row in entry["rows"] or "vendor_tuned" in entry:
         raise ValueError(f"{name} already has a vendor-tuned row")
     if own["system"] != row or not own.get("tuned_replay") or own.get("smoke_limit"):
         raise ValueError(f"the own-scorer result must be the full notebook-5 replay of {row}")
+    check_own_input(own, tuned["prediction_sha256"], dataset_sha256(name, entry), row)
     if not entry["reproduction"].get("reproduced", {}).get("custom"):
         raise ValueError(f"{name}: the vendor's tuned number must be reproduced first")
     entry["rows"][row] = report["rows"][row]["test"]
     entry["own_metric"][row] = own["scored"]
-    entry["provenance"][row] = report["provenance"][row]
+    entry["provenance"][row] = {**report["provenance"][row], "own_scorer_input": own["input"]}
     entry["vendor_tuned"] = {declaration["family"]: {key: declaration[key] for key in (
         "row", "bar_name", "caption", "setup", "source", "commit")}}
     entry["chart_rows"] = [row if chosen == f"{declaration['family']}-strong" else chosen
@@ -284,6 +290,11 @@ def _check_release(row: str, release: Mapping[str, Any], resolve: Callable[[str]
     if (not reproduced or reproduced["prediction_sha256"] != release.get("prediction_sha256")
             or reproduced.get("harness_dirty") is not False):
         raise ValueError(f"{row}: no clean earlier run reproduces these predictions")
+
+
+def dataset_sha256(name: str, entry: Mapping[str, Any]) -> str:
+    """The dataset digest the committed identity pins (Presidio Research file, PIIBench test_5k)."""
+    return entry["identity"]["sha256"] if name == "presidio-research" else entry["identity"]["test_5k_sha256"]
 
 
 def pct(value: float) -> str:

@@ -3216,6 +3216,11 @@
             "sample_errors": [],
             "valid": true
           },
+          "own_scorer_input": {
+            "dataset_sha256": "631f5f87946a8220d8f1b4ea24e9758e3aee3cd3fd98fbac1bb582112011eaad",
+            "documents": 5000,
+            "prediction_sha256": "626efa0ca3286d03ca653a4db238499a8d4a216d9c574bf22da7b114d7c0f4fb"
+          },
           "policy_sha256_home_normalized": "481f5df7a9b0b562bf2c2db7274cfbf2ea701231c52f1287b27de00554453ff1",
           "release": {
             "build": {
@@ -13906,7 +13911,7 @@
           "documents": 1500,
           "f2": 0.702,
           "precision": 0.764,
-          "predict_seconds": 0.1,
+          "predict_seconds": 0.2,
           "recall": 0.688
         },
         "gliner": {
@@ -13969,7 +13974,7 @@
           "documents": 1500,
           "f2": 0.857,
           "precision": 0.874,
-          "predict_seconds": 0.4,
+          "predict_seconds": 0.2,
           "recall": 0.852
         },
         "scrubadub-base": {
@@ -14467,6 +14472,11 @@
             ],
             "sample_errors": [],
             "valid": true
+          },
+          "own_scorer_input": {
+            "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+            "documents": 1500,
+            "prediction_sha256": "463fc3da7fd8ac7fd26e1063a581b0dc26b5112fadcc56e1ed1e8ae8aae63f1a"
           },
           "policy_sha256_home_normalized": "481f5df7a9b0b562bf2c2db7274cfbf2ea701231c52f1287b27de00554453ff1",
           "release": {
@@ -15934,6 +15944,11 @@
           }
         },
         "presidio-tuned-presidio-research": {
+          "own_scorer_input": {
+            "dataset_sha256": "ec08a771ba8135314cafb60752b2295212222ba3a4cd75d73811839c699e0012",
+            "documents": 1500,
+            "prediction_sha256": "c62883684d19d9ba93bc242b4f6043d2547220026a3edfbee0f63e92f5688a14"
+          },
           "vendor_tuned": {
             "caption": "Presidio tuned for this dataset by its authors (their published custom setup)",
             "commit": "6db3769a3388b4075b93ab2229c5e0b9c30137f7",

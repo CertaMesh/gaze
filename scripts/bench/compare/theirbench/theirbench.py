@@ -193,9 +193,15 @@ def validate_vendor_tuned_args(args: argparse.Namespace) -> None:
         raise SystemExit(f"{args.output} exists; a vendor-tuned row is measured into a fresh report")
 
 
+def identity_sha256(benchmark: str, identity: Mapping[str, object]) -> str:
+    """The dataset digest a benchmark's identity pins (what own scorers must have read)."""
+    return identity["sha256"] if benchmark == "presidio-research" else identity["test_5k_sha256"]
+
+
 def measure_vendor_tuned(
     entry: Mapping[str, object], args: argparse.Namespace, splits: Mapping[str, Sequence[score.Document]],
     mapping: Mapping[str, Sequence[str]], common: frozenset[str], predictions_dir: Path,
+    entry_identity: Mapping[str, object],
 ) -> tuple[dict[str, object], dict[str, object]]:
     """Score the tuned analyzer's findings like every other Presidio row.
 
@@ -210,6 +216,12 @@ def measure_vendor_tuned(
         raise SystemExit("the tuned metadata is a smoke run or does not describe --tuned-raw")
     if meta["presidio_research_commit"] != entry["commit"]:
         raise SystemExit("the tuned findings were produced at a different presidio-research commit")
+    try:
+        tagged_gaze.check_model_receipt(meta["openmed"], entry["model"], "the tuned producer's receipt")
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    if meta["dataset_sha256"] != identity_sha256(args.benchmark, entry_identity):
+        raise SystemExit("the tuned findings were produced on a different dataset than the one scored")
     rows = [json.loads(line) for line in args.tuned_raw.read_text(encoding="utf-8").splitlines()]
     (documents,) = splits.values()
     if [row["index"] for row in rows] != list(range(len(documents))):
@@ -504,7 +516,7 @@ def main() -> int:
                     json.dumps({label: list(labels) for label, labels in mapping.items()}, indent=2) + "\n",
                     encoding="utf-8")
                 report["rows"][name], report["provenance"][name] = measure_vendor_tuned(
-                    tuned, args, splits, mapping, common, args.predictions_dir)
+                    tuned, args, splits, mapping, common, args.predictions_dir, identity)
             elif name in GAZE_ROWS or tagged_row_version(name):
                 policy = {"gaze-rules-only": args.gaze_policy_rules,
                           "gaze-rules-ner": args.gaze_policy_rules_ner,
