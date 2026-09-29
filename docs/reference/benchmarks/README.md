@@ -400,34 +400,45 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../../docs/assets/benchmarks/benchmark-panels-dark.svg">
-  <img alt="Bar panels of PII protected and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="../../../docs/assets/benchmarks/benchmark-panels-light.svg">
+  <img alt="Bar panels of character-level F2 and false-positive bytes per 1,000 bytes for Gaze releases and competitors on three benchmarks; the values are printed on the bars." src="../../../docs/assets/benchmarks/benchmark-panels-light.svg">
 </picture>
 
-**PII protected** (higher is better; best per row in bold):
+**Character-level F2 (β=2, label-agnostic, micro)** (higher is better; best per row in bold):
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 82.1% | **89.2%** | 79.5% | 16.2% | 76.4% | 31.7% | 83.7% | 80.5% |
-| Presidio Research | not run | pending | 38.5% | 21.7% | 33.6% | 14.7% | 59.2% | **70.5%** |
-| PIIBench-commercial | not run | pending | 60.7% | 37.5% | **64.9%** | 19.3% | 42.1% | 47.3% |
+| Own corpus | 0.665 | **0.868** | 0.765 | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
+| Presidio Research | not run | pending | **0.721** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
+| PIIBench-commercial | not run | pending | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
+
+**Leaked PII bytes** (lower is better; best per row in bold):
+
+| Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Own corpus | 22,144 | **13,319** | 25,314 | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
+| Presidio Research | not run | pending | **12,383** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
+| PIIBench-commercial | not run | pending | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
 
 **False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Own corpus | 184.2 | 21.7 | 48.0 | **6.8** | 285.4 | 14.0 | 60.3 | 32.3 |
-| Presidio Research | not run | pending | 2.3 | **0.0** | 20.0 | 0.1 | 5.7 | 4.9 |
-| PIIBench-commercial | not run | pending | 5.0 | 1.8 | 30.1 | **0.6** | 3.1 | 3.9 |
+| Own corpus | 164.9 | 19.4 | 42.9 | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
+| Presidio Research | not run | pending | 25.4 | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
+| PIIBench-commercial | not run | pending | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
 
-A document a tool skips counts all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
+A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
 
 Gaze 0.15 on Presidio Research and PIIBench-commercial: measurement pending; no untagged build is shown.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
-- **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), scored on the labels every tool can emit; rows from [`their-benchmarks.json`](their-benchmarks.json).
-- **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), scored on the labels every tool can emit; rows from [`their-benchmarks.json`](their-benchmarks.json).
+- **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
+- **PIIBench-commercial:** pritesh-2711/pii-bench (5,000 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
 - **Configurations:** competitors use the rows declared in [`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen before results were reviewed; full versions and settings are in [`competitors.md`](competitors.md).
-- **Metrics:** PII protected = 1 - leaked gold bytes / gold bytes. False positives are bytes redacted that are not PII, per 1,000 corpus bytes; the own corpus counts a protected repeat of a labelled value as protected (contract v3), the third-party sets do not.
+- **Metric:** F2 counts Unicode code points (not grapheme clusters) inside the merged byte spans of each document, ignores labels, pools every document (micro), weights recall four times precision, scores 0 when precision and recall are both 0 (0/0 = 0), and counts all of a skipped document's gold characters as missed.
+- **False positives:** F2 counts every false-positive character for every tool; the false-positive row (bytes redacted that are not PII, per 1,000 bytes of the scored documents) also credits a protected repeat of a labelled value on the own corpus (contract v3). Every tool is treated identically within each row, and the third-party sets have no such credit.
+- **Gaze release scores:** each tagged release is scored by replaying its committed observation record over the corpus (`compare/release_char_level.py record`). The offline `check` that CI runs proves the stored numbers are consistent with the committed record, its evidence file and the UTF-8 structure of that evidence; only `record` (the corpus replay) proves the character counts, so a pull request that changes `release-char-level.json` or its evidence file must include the replay command's output in its description.
+- **Vendors' own metrics:** Presidio Research: F2, binary PII vs O (presidio-evaluator); PIIBench-commercial: span F1, exact span + type (PIIBench seqeval). They appear in the third-party tables below, not in the panels.
 
 <!-- END GENERATED: panels -->
 
@@ -1115,8 +1126,19 @@ model:
 - **Layer D adjacency counterweights:** adjacent versions, hex hashes, times,
   four-digit room numbers, due dates, word-attached double-colon paths, RFC 3849
   documentation IPs, loopback IPs and link-local IPs. They carry no gold.
-  The v3 documents remain byte identical within each partition; the
-  generator and both partition hashes are pinned at v4.
+  The v3 documents remain byte identical within each partition.
+- **Labelled lookalikes (generator v5):** layer A adds a US or German
+  postcode or a reserved-range phone (NANPA `555-01xx`, German `01555`) as
+  the tail of an `ORDER-` style reference or after `EUR` / `USD`. A label
+  names the value somewhere in the same document: lines above or below it,
+  past a blank line, on the same line, in English, German, French, Spanish,
+  Italian, Dutch and Portuguese, in Cyrillic or Japanese, in a log field, a
+  CSV header, or a JSON ancestor key, sibling, nested `meta` field or a
+  `type` string longer than 64 bytes. Every such value is gold and gated.
+  Layer D adds each cell's twin with no cue anywhere. See
+  [Labelled lookalikes](#labelled-lookalikes) below. The v4 documents remain
+  byte identical within each partition; the generator and both partition
+  hashes are pinned at v5.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1176,6 +1198,55 @@ gold's display shapes. A shape maps digits to `9` and letters to `A`, and keeps
 every other character exactly, because a rule for `9999 9999` never sees
 `9999-9999`. IBAN twins are exempt: an IBAN shape that fails mod-97 has no
 common benign use.
+
+#### Labelled lookalikes
+
+A weak postcode or phone rule may be vetoed when its match sits in a benign
+structure (see [validator veto](../../explanation/detection/validator-veto.md)).
+A veto that ignores a label elsewhere in the document leaves a real value raw,
+and a veto that never fires leaves reference numbers tokenized. Layer A prices
+the first mistake as leaked bytes, and layer D prices the second as
+false-positive bytes.
+
+Each layer A cell (`LabelledCell` in `agentic_layers.py`) names one layer D
+twin (`LookalikeTwin`) and a label relation. The twin fixes the surface, the
+value kind and the benign structure, so the cell cannot differ from it there.
+The generator then checks every pair and fails closed unless both render:
+
+- the same value display shape and locale;
+- the same benign structure: a reference word joined by `-`, a currency code,
+  or a 16-digit run;
+- the same position: for tool JSON, the value's path from the root with each
+  step's container kind, index and sibling count; otherwise whether its line
+  is the first and the last non-blank line, and whether text precedes the
+  structure or follows the value on that line;
+- a cue word or a non-Latin letter in every A document, and neither anywhere in
+  a D document.
+
+| Layer A cells (gold, gated) | Layer D twin (no cue anywhere) |
+| --- | --- |
+| Postcode joined to a reference word, label 1 to 10 lines above, past a blank line, or below; German `PLZ` / `Postleitzahl` | `ORDER-99999` style references at the same line position, English and German |
+| Postcode after `EUR` / `USD`, label above | Totals `EUR 99999` |
+| Phone joined to a reference word, labelled above in English, German, Spanish, Italian, Dutch and Portuguese, or on the same line in French, Cyrillic and Japanese | `TICKET-999-555-0199` style references, block and inline |
+| Log field, CSV header, and nested object, entries array, sibling-after, nested `meta` and long-`type` JSON labels | Order, invoice and ticket log lines, CSV rows and JSON records of the same topology |
+
+`LOOKALIKE_COUNTERWEIGHTS` is derived from the cells. One twin has no A cell:
+the Luhn-invalid 16-digit run of a `01555` phone shape. No phone number has 16
+digits, so a labelled 16-digit run is not one phone value. The new gold is
+unchecked (no checksum), so the credit tables are unchanged: it is always
+gated. Each A cell has 6 documents per partition and each twin 4: 27 A cells
+(+162 documents, +7.0 %) and 19 D twins (+76 documents, +9.0 %).
+
+The cue vocabulary is one checked file,
+[`lookalike_cue_vocabulary.json`](../../../scripts/bench/lookalike_cue_vocabulary.json),
+with stems and whole words per family and the Latin letter ranges. The
+generator classifies with it, and the veto's Rust test asserts its own lists
+equal it.
+
+The generated route is text (`text.clean_for_bench`), so JSON cells exercise
+the text veto on pretty-printed tool JSON. A structured-input
+(`RawDocument::Structured`) veto path is not measured here and needs its own
+end-to-end tests.
 
 Two deliberately over-broad rules check the counterweights end to end.
 [`mutant-bare-nine-digits.toml`](../../../scripts/bench/fixtures/agentic/mutant-bare-nine-digits.toml)
