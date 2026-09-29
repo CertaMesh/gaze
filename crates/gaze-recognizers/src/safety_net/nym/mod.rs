@@ -460,8 +460,17 @@ mod tests {
             ("?house_number=7&page=2", "7"),
             ("page: 2 nearby house 7", "7"),
             ("{\"page\":2,\"name\":7}", "7"),
+            ("{\"homepage_phone\":2}", "2"),
+            ("{\"pagex\":2}", "2"),
+            ("{\"cursorlike_id\":2}", "2"),
+            ("{\"p!age\":2}", "2"),
             ("x\"page\":2}", "2"),
             ("{\"page\":2x}", "2"),
+            ("{\"page\":2 Main}", "2"),
+            ("?page=2 Main Street 5", "2"),
+            ("?page=x2&limit=3", "2"),
+            ("?page=2x&limit=3", "2"),
+            ("page: 2 Main Street\n", "2"),
             ("page: ٢\n", "٢"),
         ] {
             let start = text.rfind(value).unwrap();
@@ -493,6 +502,12 @@ mod tests {
             disposition_for("{\"page\":2}", "2", NymLabel::DateOfBirth, None),
             SpanDisposition::Suspect(_)
         ));
+        for text in ["2 Main Street", "Main Street 2"] {
+            assert!(matches!(
+                disposition_for(text, "2", NymLabel::BuildingNumber, Some("$.page")),
+                SpanDisposition::Suspect(_)
+            ));
+        }
     }
 
     #[test]

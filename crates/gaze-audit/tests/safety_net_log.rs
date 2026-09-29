@@ -97,6 +97,10 @@ fn safety_net_log_insert_and_read_round_trips_bytes_free_metadata() {
 
 #[test]
 fn nym_pagination_refusal_has_a_typed_audit_row_without_source_bytes() {
+    assert_eq!(
+        SafetyNetRefusalReason::NymPaginationKeyV1.audit_labels(),
+        ("BUILDING_NUMBER", "custom:building_number")
+    );
     let temp = NamedTempFile::new().expect("temp db");
     let logger = SqliteLogger::new(temp.path()).expect("sqlite logger");
     let event = LeakReportTelemetry::ModelSpanRefused {
@@ -118,6 +122,8 @@ fn nym_pagination_refusal_has_a_typed_audit_row_without_source_bytes() {
         .expect("query safety net");
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].leak_kind, "refused");
+    assert_eq!(rows[0].raw_label, "BUILDING_NUMBER");
+    assert_eq!(rows[0].mapped_class, "custom:building_number");
     assert_eq!(
         rows[0].telemetry_kind.as_deref(),
         Some("nym_pagination_key_v1")
