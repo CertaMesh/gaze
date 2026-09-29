@@ -17,12 +17,14 @@ import subprocess
 import tomllib
 from collections import Counter
 from pathlib import Path
+from typing import Sequence
 from unittest.mock import patch
 
 import agentic_layers as agentic
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
 import known_record_attribution as attribution
+import known_record_cells as kind_cells
 from iban_trailing_word_enumeration import LENGTHS as IBAN_COUNTRY_LENGTHS
 import run_no_opf_benchmark as benchmark
 
@@ -184,8 +186,16 @@ def enable_name_multi_measurement(context: str | None) -> str | None:
     return json.dumps(parsed, ensure_ascii=False)
 
 
+def kind_contexts_for_measurement(pairs: Sequence[kind_cells.Pair]) -> dict[str, str]:
+    return {
+        cell.uid: kind_cells.arm_context(cell, probes_on=True)
+        for cell in kind_cells.cells(pairs)
+    }
+
+
 def name_multi_positive_spans(
-    documents: list[score.Document], contexts: dict[str, str | None]
+    documents: list[score.Document], contexts: dict[str, str | None],
+    *, kind_pairs: Sequence[kind_cells.Pair] = (),
 ) -> dict[str, int]:
     counts: Counter[str] = Counter()
     for document in documents:
@@ -210,6 +220,16 @@ def name_multi_positive_spans(
                 raise ValueError("one name gold span matches multiple record kinds")
             for kind in kinds:
                 counts[kind] += 1
+    by_uid = {document.uid: document for document in documents}
+    for pair in kind_pairs:
+        document = by_uid.get(pair.positive.uid)
+        if document is None or contexts.get(document.uid) is None:
+            continue
+        for target in pair.positive.primary_targets():
+            group, kind = target.attribution
+            if group == "name_multi" and kind in NAME_MULTI_KINDS:
+                if any(span.start < target.end and target.start < span.end for span in document.spans):
+                    counts[kind] += 1
     return {kind: counts[kind] for kind in NAME_MULTI_KINDS}
 
 
@@ -366,6 +386,11 @@ def main() -> None:
             known_pool.setdefault(document.language, []).append(context)
     counterweight_documents, counterweight_contexts = explicit_counterweights(known_pool)
     layers["D"] = [*layers["D"], *counterweight_documents]
+    # These records differ from the text by a match kind; they are supplied,
+    # not derived from gold like the primary oracle records.
+    kind_pairs = kind_cells.generate()
+    layers["K"], _ = kind_cells.documents(repo, args.contract, kind_pairs)
+    kind_contexts = kind_contexts_for_measurement(kind_pairs)
     output: dict[str, object] = {
         "arm": "known-record oracle (caller already knows the selected gold values)",
         "contract": args.contract,
@@ -374,6 +399,7 @@ def main() -> None:
         "policy_sha256": hashlib.sha256(policy_path.read_bytes()).hexdigest(),
         "dataset_sha256": dataiku.DATASET_SHA256,
         "agentic_manifest": agentic.manifest(agentic.PUBLISHED_PARTITION, agentic.generate(agentic.PUBLISHED_PARTITION)),
+        "kind_cells_manifest": kind_cells.manifest(kind_pairs),
         "name_multi_measurement_kinds": list(NAME_MULTI_KINDS),
         "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown (Solo scratchpad 10781)",
         "layers": {},
@@ -383,14 +409,20 @@ def main() -> None:
         if args.max_documents and layer == "D":
             one_per_cell = {document.cell: document for document in reversed(counterweight_documents)}
             documents = [*documents, *one_per_cell.values()]
-        core_documents = [document for document in documents if document.uid not in counterweight_contexts]
+        core_documents = [
+            document for document in documents
+            if document.uid not in counterweight_contexts and document.uid not in kind_contexts
+        ]
         contexts, eligible = paired_records(
             core_documents, policy, known_pool if layer == "D" else None
         )
         selected_ids = {document.uid for document in documents}
         contexts.update({uid: context for uid, context in counterweight_contexts.items() if uid in selected_ids})
+        contexts.update({uid: context for uid, context in kind_contexts.items() if uid in selected_ids})
         contexts = {uid: enable_name_multi_measurement(context) for uid, context in contexts.items()}
-        name_multi_inputs = name_multi_positive_spans(documents, contexts)
+        name_multi_inputs = name_multi_positive_spans(
+            documents, contexts, kind_pairs=kind_pairs if layer == "K" else ()
+        )
         common_values, common_hits = common_name_counts(documents, contexts, common_words)
         if not any(contexts.values()):
             output["layers"][layer] = {"skipped": "no eligible record contexts"}
@@ -413,12 +445,14 @@ def main() -> None:
         recorder = attribution.AttributionRecorder.create(
             common_words, frozenset(LABEL_CLASS)
         )
+        kind_tally = kind_cells.VariantTally.create(kind_pairs)
 
         def baseline_observer(
             config: str, document: score.Document, response: dict, validators: object
         ) -> None:
             baseline_record(config, document, response, validators)
             recorder.record_baseline(document, response)
+            kind_tally.record_baseline(document, response)
 
         def record_observer(
             config: str, document: score.Document, response: dict, validators: object
@@ -431,6 +465,7 @@ def main() -> None:
                 record_values(context) if context is not None else [],
                 decoy=document.source_dataset == "known-record-oracle-counterweight",
             )
+            kind_tally.record_candidate(document, response)
 
         clean_environment = dict(os.environ)
         clean_environment.pop("GAZE_BENCH_KNOWN_RECORD_ARM", None)
@@ -464,6 +499,7 @@ def main() -> None:
                 eligible_leak_fall=sum(baseline_eligible_leaks.values())
                 - sum(record_eligible_leaks.values()),
             ),
+            **({"kind_cells": kind_tally.result()} if layer == "K" else {}),
             "baseline": {
                 key: baseline[key]
                 for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")

@@ -16,6 +16,7 @@ def arm(contract: str, *, gold: int, fp: int, layer: str = "C", population: str 
         }
         for name in gain.LAYERS
     }
+    layers["K"]["kind_cells"] = {"schema_version": 1, "rows": [{"bucket": "synthetic"}]}
     layers[layer]["attribution"]["rows"] = [{
         "record_class": "name_single", "match_kind": "exact", "population": population,
         "gold_recovered_bytes": gold, "gold_lost_bytes": 0,
@@ -24,6 +25,7 @@ def arm(contract: str, *, gold: int, fp: int, layer: str = "C", population: str 
     return {
         "contract": contract, "full": True, "layers": layers,
         "source_commit": "abc", "policy_sha256": "policy", "dataset_sha256": "corpus",
+        "kind_cells_manifest": {"pairs": 1, "corpus_sha256": "synthetic"},
         "name_multi_measurement_kinds": list(gain.NAME_MULTI_KINDS),
     }
 

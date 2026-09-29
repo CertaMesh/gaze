@@ -38,9 +38,11 @@ def table(v2: dict, v1: dict) -> dict:
             raise ValueError(f"{contract}: expected a full {contract} oracle arm")
         if set(arm.get("layers", {})) != set(LAYERS):
             raise ValueError(f"{contract}: missing oracle layer")
-    for key in ("source_commit", "policy_sha256", "dataset_sha256"):
+    for key in ("source_commit", "policy_sha256", "dataset_sha256", "kind_cells_manifest"):
         if v2.get(key) != v1.get(key):
             raise ValueError(f"oracle arms differ in {key}")
+    if not isinstance(v2.get("kind_cells_manifest"), dict) or not v2["kind_cells_manifest"].get("pairs"):
+        raise ValueError("oracle arms have no layer K manifest")
     if any(arm.get("name_multi_measurement_kinds") != list(NAME_MULTI_KINDS) for arm in inputs.values()):
         raise ValueError("oracle arms did not opt into every name_multi measurement kind")
 
@@ -49,6 +51,10 @@ def table(v2: dict, v1: dict) -> dict:
         rows[("name_multi", kind)] = {}
     for contract, arm in inputs.items():
         for layer in LAYERS:
+            if layer == "K":
+                cells = arm["layers"][layer].get("kind_cells")
+                if not isinstance(cells, dict) or cells.get("schema_version") != 1 or not cells.get("rows"):
+                    raise ValueError(f"{contract} K: missing scored kind cells")
             positives = arm["layers"][layer].get("name_multi_positive_spans_by_kind")
             if not isinstance(positives, dict) or set(positives) != set(NAME_MULTI_KINDS):
                 raise ValueError(f"{contract} {layer}: missing name_multi positive input counts")

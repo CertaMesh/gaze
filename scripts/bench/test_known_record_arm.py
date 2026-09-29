@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import gaze_bench_score as score
 import known_record_arm as arm
+import known_record_cells as cells
 
 
 POLICY = {"rule": [{"kind": "default", "action": "tokenize"}]}
@@ -122,6 +123,20 @@ def test_name_multi_measurement_opts_in_and_counts_input_spans() -> None:
     }
     email = '{"record":{"v00":{"email":"alice@example.invalid"}}}'
     assert arm.enable_name_multi_measurement(email) == email
+
+
+def test_layer_k_supplies_positive_full_name_targets_under_both_contracts() -> None:
+    root = Path(__file__).resolve().parents[2]
+    pairs = cells.generate()
+    measurement = arm.kind_contexts_for_measurement(pairs)
+    iban = next(pair.positive for pair in pairs if pair.positive.variant == "iban_double_space")
+    assert "whitespace_flexible" in json.loads(measurement[iban.uid])["record_match_kinds"]["custom:iban"]
+    for contract in ("v2", "v1"):
+        documents, _ = cells.documents(root, contract, pairs)
+        assert set(measurement) == {document.uid for document in documents}
+        contexts = {uid: arm.enable_name_multi_measurement(raw) for uid, raw in measurement.items()}
+        counts = arm.name_multi_positive_spans(documents, contexts, kind_pairs=pairs)
+        assert all(counts[kind] > 0 for kind in arm.NAME_MULTI_KINDS)
 
 
 def test_negative_receives_paired_record_and_counterweights() -> None:
