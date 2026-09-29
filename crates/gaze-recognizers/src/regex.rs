@@ -520,7 +520,7 @@ fn scan_labelled_value(
                         | '.'
                         | '/'
                         | '_'
-                ) || gaze_types::LABELLED_FIELD_CONNECTORS.contains(&ch)
+                ) || gaze_types::LABELLED_FIELD_CONNECTORS.contains(ch)
                     || ('\u{0300}'..='\u{036F}').contains(ch)
             })
             .last()
