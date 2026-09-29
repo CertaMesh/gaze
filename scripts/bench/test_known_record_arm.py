@@ -125,6 +125,58 @@ def test_name_multi_measurement_opts_in_and_counts_input_spans() -> None:
     assert arm.enable_name_multi_measurement(email) == email
 
 
+def test_split_name_gold_adds_full_name_record_and_counts_each_kind() -> None:
+    cases = ("Alice Smith", "ALICE SMITH", "Alice  Smith", "ALICE  SMITH")
+    items = []
+    for index, text in enumerate(cases):
+        gap = text.index(" ")
+        last = text.rfind(" ") + 1
+        items.append(score.Document(
+            uid=f"split-name-{index}", text=text, language="en", region="US",
+            source_dataset="synthetic",
+            spans=(score.Span(0, gap, "GIVENNAME"), score.Span(last, len(text), "SURNAME")),
+            negative_category=None,
+        ))
+    raw, eligible = arm.record_for_document(items[0], POLICY)
+    assert [fields["name"] for fields in json.loads(raw)["record"].values()] == [
+        "Alice", "Smith", "Alice Smith",
+    ]
+    assert eligible == {"GIVENNAME": 5, "SURNAME": 5}
+    measured = arm.enable_name_multi_measurement(raw)
+    assert arm.name_multi_positive_spans(items, {item.uid: measured for item in items}) == {
+        "exact": 1, "case_folded": 1, "whitespace_flexible": 1,
+        "whitespace_case_folded": 1,
+    }
+
+
+def test_repeated_split_name_variants_keep_one_full_name_record() -> None:
+    text = "Alice Smith, ALICE SMITH"
+    item = score.Document(
+        uid="name-variants", text=text, language="en", region="US",
+        source_dataset="synthetic",
+        spans=(
+            score.Span(0, 5, "GIVENNAME"), score.Span(6, 11, "SURNAME"),
+            score.Span(13, 18, "GIVENNAME"), score.Span(19, 24, "SURNAME"),
+        ),
+        negative_category=None,
+    )
+    raw, _ = arm.record_for_document(item, POLICY)
+    names = [fields["name"] for fields in json.loads(raw)["record"].values()]
+    assert names.count("Alice Smith") == 1
+    assert "ALICE SMITH" not in names
+    assert arm.name_multi_positive_spans([item], {item.uid: raw}) == {
+        "exact": 1, "case_folded": 1, "whitespace_flexible": 0,
+        "whitespace_case_folded": 0,
+    }
+    separated = item.__class__(
+        uid="separated", text="Alice\nSmith", language="en", region="US",
+        source_dataset="synthetic",
+        spans=(score.Span(0, 5, "GIVENNAME"), score.Span(6, 11, "SURNAME")),
+        negative_category=None,
+    )
+    assert arm.full_name_gold_spans(separated) == []
+
+
 def test_layer_k_supplies_positive_full_name_targets_under_both_contracts() -> None:
     root = Path(__file__).resolve().parents[2]
     pairs = cells.generate()

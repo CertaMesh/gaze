@@ -126,6 +126,23 @@ def safe_record_value(value: str, class_name: str) -> bool:
     )
 
 
+def full_name_gold_spans(document: score.Document) -> list[tuple[int, int]]:
+    """Join adjacent given/surname gold so split labels can measure full names."""
+    encoded = document.text.encode("utf-8")
+    names = sorted(
+        (span for span in document.spans if span.label in {"GIVENNAME", "FIRSTNAME", "SURNAME"}),
+        key=lambda span: span.start,
+    )
+    return [
+        (first.start, last.end)
+        for first, last in zip(names, names[1:])
+        if first.label in {"GIVENNAME", "FIRSTNAME"} and last.label == "SURNAME"
+        if first.end < last.start
+        if (gap := encoded[first.end:last.start].decode("utf-8")).isspace()
+        if "\n" not in gap and "\r" not in gap
+    ]
+
+
 def record_for_document(document: score.Document, policy: dict) -> tuple[str | None, Counter[str]]:
     encoded = document.text.encode("utf-8")
     fields: dict[str, dict[str, str]] = {}
@@ -154,6 +171,21 @@ def record_for_document(document: score.Document, policy: dict) -> tuple[str | N
         if class_name not in INFERRED_KEYS:
             mapping[f"/{slot}/{key}"] = class_name
         eligible[span.label] += span.end - span.start
+    seen_full_names = {
+        value.casefold() for class_name, value in seen_values
+        if class_name == "Name" and len(value.split()) > 1
+    }
+    for start, end in full_name_gold_spans(document):
+        value = encoded[start:end].decode("utf-8")
+        canonical_key = ("Name", " ".join(value.split()))
+        folded_name = canonical_key[1].casefold()
+        if folded_name in seen_full_names or len(fields) >= MAX_FIELDS:
+            continue
+        if not safe_record_value(value, "Name") or len(value.encode("utf-8")) > MAX_VALUE_BYTES:
+            continue
+        seen_full_names.add(folded_name)
+        seen_values.add(canonical_key)
+        fields[f"v{len(fields):02d}"] = {"name": value}
     if not fields:
         return None, eligible
     context = {"record": fields}
@@ -197,7 +229,7 @@ def name_multi_positive_spans(
     documents: list[score.Document], contexts: dict[str, str | None],
     *, kind_pairs: Sequence[kind_cells.Pair] = (),
 ) -> dict[str, int]:
-    counts: Counter[str] = Counter()
+    targets: set[tuple[str, int, int, str]] = set()
     for document in documents:
         context = contexts.get(document.uid)
         if context is None:
@@ -207,10 +239,12 @@ def name_multi_positive_spans(
             if class_name == "Name" and len(value.split()) > 1
         ]
         encoded = document.text.encode("utf-8")
-        for span in document.spans:
-            if LABEL_CLASS.get(span.label) != "Name":
-                continue
-            text = encoded[span.start : span.end].decode("utf-8")
+        spans = [
+            (span.start, span.end) for span in document.spans
+            if LABEL_CLASS.get(span.label) == "Name"
+        ] + full_name_gold_spans(document)
+        for start, end in spans:
+            text = encoded[start:end].decode("utf-8")
             kinds = set()
             for value in names:
                 group, kind = attribution.match_group_and_kind(text, "Name", value, frozenset())
@@ -219,7 +253,7 @@ def name_multi_positive_spans(
             if len(kinds) > 1:
                 raise ValueError("one name gold span matches multiple record kinds")
             for kind in kinds:
-                counts[kind] += 1
+                targets.add((document.uid, start, end, kind))
     by_uid = {document.uid: document for document in documents}
     for pair in kind_pairs:
         document = by_uid.get(pair.positive.uid)
@@ -229,7 +263,8 @@ def name_multi_positive_spans(
             group, kind = target.attribution
             if group == "name_multi" and kind in NAME_MULTI_KINDS:
                 if any(span.start < target.end and target.start < span.end for span in document.spans):
-                    counts[kind] += 1
+                    targets.add((document.uid, target.start, target.end, kind))
+    counts = Counter(kind for _, _, _, kind in targets)
     return {kind: counts[kind] for kind in NAME_MULTI_KINDS}
 
 
