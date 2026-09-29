@@ -648,8 +648,6 @@ pub enum ValidatorFailReason {
     BenignCurrencyAmount,
     /// The candidate is part of a digit-group run longer than any phone number.
     BenignDigitRunFragment,
-    /// A room, seat or gate label sits right before the candidate (`Room 4833`).
-    BenignLabelNumber,
 }
 
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
@@ -4448,6 +4446,9 @@ pub struct DetectContext<'a> {
     /// Raw candidates found by ordinary recognizers, available only to a recognizer that
     /// requests the post-floor pass. They have not passed validator veto or conflict resolution.
     pub prior_candidates: Option<&'a [Candidate]>,
+    /// The structured field the input came from, if any. Validator veto reads it so a PII cue
+    /// in the field name (`postal_code`, `phoneNumber`) keeps a benign lookalike veto off.
+    pub field_name: Option<&'a str>,
 }
 
 impl<'a> DetectContext<'a> {
@@ -4460,7 +4461,14 @@ impl<'a> DetectContext<'a> {
             degraded: Cell::new(false),
             source_spans: None,
             prior_candidates: None,
+            field_name: None,
         }
+    }
+
+    /// Records the structured field the input came from; see [`DetectContext::field_name`].
+    pub fn with_field_name(mut self, field_name: Option<&'a str>) -> Self {
+        self.field_name = field_name;
+        self
     }
 
     /// Records the source span of every input byte; see [`DetectContext::source_spans`].

@@ -101,6 +101,10 @@ pub enum Error {
     UnsupportedActionVariant,
     #[error("manifest sweep failed closed: {0}")]
     ManifestSweep(#[from] crate::sweep::ManifestSweepError),
+    /// A vetoed candidate has no source span to put on its audit row. Every veto must be
+    /// audited, so the document fails closed instead of dropping the row.
+    #[error("validator veto failed closed: a vetoed candidate has no source span to audit")]
+    UnauditableVeto,
 }
 
 /// Primary safety-net action. See [`SafetyNetPolicy`] for how it composes with
@@ -1028,7 +1032,9 @@ impl Pipeline {
     ) -> Result<CleanText> {
         let normalized = normalize(text);
         let spans = &normalized.spans;
-        let ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
+        let ctx = DetectContext::new(locale_chain, dictionaries)
+            .with_source_spans(spans)
+            .with_field_name(field_name);
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
@@ -1106,10 +1112,7 @@ impl Pipeline {
             })
             .collect::<BTreeMap<_, _>>();
         let mut ledger = Ledger::new(evidence);
-        let vetoed = vetoed
-            .into_iter()
-            .filter_map(|vetoed| translate_vetoed_candidate(vetoed, spans))
-            .collect::<Vec<_>>();
+        let vetoed = translate_vetoed_candidates(vetoed, spans)?;
         let losers = merged_losers(&resolved, &self.registry);
         let mut detections = resolved
             .into_iter()
@@ -5225,6 +5228,18 @@ fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option
     crate::normalize::raw_range(candidate.span.clone(), spans).map(|span| candidate.with_span(span))
 }
 
+/// Every veto writes one audit row, so a vetoed candidate that cannot be placed on the source
+/// text fails the document instead of vanishing from the log.
+fn translate_vetoed_candidates(
+    vetoed: Vec<crate::validator_veto::VetoedCandidate>,
+    spans: &[(usize, usize)],
+) -> Result<Vec<crate::validator_veto::VetoedCandidate>> {
+    vetoed
+        .into_iter()
+        .map(|vetoed| translate_vetoed_candidate(vetoed, spans).ok_or(Error::UnauditableVeto))
+        .collect()
+}
+
 fn translate_vetoed_candidate(
     vetoed: crate::validator_veto::VetoedCandidate,
     spans: &[(usize, usize)],
@@ -8916,3 +8931,40 @@ mod occurrence_tests;
 
 #[cfg(test)]
 mod residual_tests;
+
+#[cfg(test)]
+mod veto_audit_tests {
+    use super::*;
+    use crate::validator_veto::VetoedCandidate;
+    use gaze_types::ValidatorFailReason;
+
+    fn vetoed(span: std::ops::Range<usize>) -> VetoedCandidate {
+        VetoedCandidate {
+            candidate: Candidate::new(
+                span,
+                PiiClass::custom("postal_code").expect("class"),
+                "postal.us",
+                0.7,
+                70,
+                None,
+                "counter",
+                "postal.us",
+                ConflictTier::None,
+                Vec::new(),
+            ),
+            reason: ValidatorFailReason::BenignJoinedIdentifier,
+        }
+    }
+
+    #[test]
+    fn every_veto_is_placed_or_the_document_fails_closed() {
+        let spans = [(0, 1), (1, 2), (2, 3)];
+        let placed = translate_vetoed_candidates(vec![vetoed(0..2), vetoed(1..3)], &spans)
+            .expect("both vetoes map to source bytes");
+        assert_eq!(placed.len(), 2);
+        assert!(matches!(
+            translate_vetoed_candidates(vec![vetoed(0..2), vetoed(2..9)], &spans),
+            Err(Error::UnauditableVeto)
+        ));
+    }
+}

@@ -1227,7 +1227,7 @@ impl RecognizerRegistry {
         );
 
         let (candidates, vetoed) =
-            crate::validator_veto::apply(candidates, self, input, ctx.source_spans);
+            crate::validator_veto::apply(candidates, self, input, ctx.source_spans, ctx.field_name);
         Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }
 

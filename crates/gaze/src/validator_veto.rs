@@ -16,6 +16,7 @@ pub fn apply(
     registry: &RecognizerRegistry,
     input: &str,
     source_spans: Option<&[(usize, usize)]>,
+    field_name: Option<&str>,
 ) -> (Vec<Candidate>, Vec<VetoedCandidate>) {
     let mut kept = Vec::with_capacity(candidates.len());
     let mut vetoed = Vec::new();
@@ -31,7 +32,7 @@ pub fn apply(
         if let Some(structure) = recognizer
             .benign_lookalikes()
             .iter()
-            .find(|structure| structure.matches(input, candidate.span.clone()))
+            .find(|structure| structure.matches(input, candidate.span.clone(), field_name))
         {
             vetoed.push(VetoedCandidate {
                 candidate,
@@ -163,7 +164,7 @@ mod tests {
             Vec::new(),
         )
         .with_evidence(EvidenceKind::Rule);
-        apply(vec![candidate], &registry, text, None)
+        apply(vec![candidate], &registry, text, None, None)
     }
 
     #[test]

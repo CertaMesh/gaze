@@ -202,6 +202,10 @@ pub enum RulepackError {
     },
     #[error("failed to parse rulepack TOML: {0}")]
     Toml(#[source] toml::de::Error),
+    /// `benign_lookalikes` on a recognizer that is not a plain uncued regex. Only a weak,
+    /// cue-less shape may be vetoed by its surroundings.
+    #[error("recognizer {id} cannot declare benign lookalikes: {reason}")]
+    IneligibleBenignLookalike { id: String, reason: &'static str },
     #[error("unsupported rulepack schema_version {found}; supported {supported}")]
     SchemaVersion { found: String, supported: String },
     #[error("unknown pii class: {0}")]
@@ -709,6 +713,27 @@ fn parse_recognizer(
             value: err.value().to_string(),
         })?
         .unwrap_or_default();
+    if raw
+        .context
+        .as_ref()
+        .is_some_and(|context| !context.benign_lookalikes.is_empty())
+    {
+        let refuse = |reason| RulepackError::IneligibleBenignLookalike {
+            id: raw.id.clone(),
+            reason,
+        };
+        if !matches!(raw.matcher, RawMatch::Regex { .. }) {
+            return Err(refuse(
+                "only a regex recognizer can be vetoed by a benign lookalike",
+            ));
+        }
+        if collision
+            .as_ref()
+            .is_some_and(|collision| collision.mandatory_anchor.is_some())
+        {
+            return Err(refuse("a recognizer with a mandatory anchor is cued"));
+        }
+    }
 
     Ok(RecognizerSpec {
         id: raw.id,

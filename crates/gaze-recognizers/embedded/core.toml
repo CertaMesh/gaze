@@ -1024,7 +1024,7 @@ pattern = '''\b\d{5}\b'''
 
 [recognizers.context]
 # Benign structures that veto this weak, cue-less shape (docs/explanation/detection/validator-veto.md).
-benign_lookalikes = ["joined_identifier", "currency_amount", "label_number"]
+benign_lookalikes = ["joined_identifier", "currency_amount"]
 
 [recognizers.scoring]
 base = 0.70
@@ -1047,7 +1047,7 @@ pattern = '''\b\d{5}(-\d{4})?\b'''
 
 [recognizers.context]
 # Benign structures that veto this weak, cue-less shape (docs/explanation/detection/validator-veto.md).
-benign_lookalikes = ["joined_identifier", "currency_amount", "label_number"]
+benign_lookalikes = ["joined_identifier", "currency_amount"]
 
 [recognizers.scoring]
 base = 0.70
@@ -1108,10 +1108,6 @@ locale_basis = "document"
 kind = "regex"
 pattern = '''(?:(?i:\b(?:plz|postleitzahl|post[- \t]?code|postal[- \t]?code|zip(?:[- \t]?code)?))[ \t]*[:#.]?[ \u{00A0}\u{202F}]*(?:(?i:ist|lautet)[ \t\u{00A0}\u{202F}]+)?((?:(?:A|CH|FL)-)?\d{4})\b|(?:\A|[^#])\b((?:(?:A|CH|FL)-)?\d{4}),?[ \u{00A0}\u{202F}]{1,3}(?:\p{Lu}[\p{L}\-]{2,}|St(?:\.[ \u{00A0}\u{202F}]?|[ \u{00A0}\u{202F}])\p{Lu}))'''
 capture_groups = [1, 2]
-
-[recognizers.context]
-# Benign structures that veto this weak, cue-less shape (docs/explanation/detection/validator-veto.md).
-benign_lookalikes = ["joined_identifier", "currency_amount", "label_number"]
 
 [recognizers.scoring]
 base = 0.70

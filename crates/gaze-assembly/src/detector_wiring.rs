@@ -164,11 +164,11 @@ pub(crate) fn register_rulepack_recognizers(
                     .unwrap_or_default()
                     .iter()
                     .map(|value| {
-                        gaze_recognizers::BenignLookalike::parse(value).ok_or_else(
-                            || gaze_recognizers::RecognizerError::UnknownBenignLookalike {
+                        gaze_recognizers::BenignLookalike::parse(value).ok_or_else(|| {
+                            gaze_recognizers::RecognizerError::UnknownBenignLookalike {
                                 value: value.clone(),
-                            },
-                        )
+                            }
+                        })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 let normalizer_kind = recognizer

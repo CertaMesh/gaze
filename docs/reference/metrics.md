@@ -154,7 +154,6 @@ in Rust and additive variants can ship in any minor release.
 | `benign_joined_identifier` | The candidate ends a document-reference identifier such as `SKU-DEMO-73821`. | unreleased |
 | `benign_currency_amount` | A currency code or sign sits next to the candidate. | unreleased |
 | `benign_digit_run_fragment` | The candidate is part of a digit run longer than any phone number. | unreleased |
-| `benign_label_number` | A room, seat or gate label sits right before the candidate. | unreleased |
 
 **`fallback_triggered` (`FallbackReason`)** — serialization at
 `gaze-types/src/lib.rs:1735-1746`:

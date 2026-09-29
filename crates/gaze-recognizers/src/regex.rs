@@ -284,19 +284,32 @@ impl RegexDetector {
     }
 
     /// Benign structures that veto this recognizer's candidates. Refused on a recognizer whose
-    /// validator is a checksum or recorded failure: a value a checksum vouches for, or a
-    /// financial number kept despite its checksum, is never waved through by its surroundings.
+    /// validator is a checksum (a value a checksum vouches for, or a financial number kept
+    /// despite its checksum, is never waved through by its surroundings) and on a pattern that
+    /// emits more than one capture group. The rulepack loader also refuses non-regex matchers
+    /// and mandatory-anchor members.
     pub fn with_benign_lookalikes(
         mut self,
         structures: Vec<gaze_types::benign_lookalike::BenignLookalike>,
     ) -> Result<Self> {
+        let refuse = |reason| RecognizerError::UnsupportedBenignLookalike {
+            recognizer_id: self.source.clone(),
+            reason,
+        };
+        if !structures.is_empty() && self.validator_kind.is_some_and(|kind| kind.is_checksum()) {
+            return Err(refuse(
+                "a checksum-backed recognizer cannot be vetoed by context",
+            ));
+        }
+        // Several emitted groups mean several alternatives, typically one anchored by a cue or
+        // a city; a candidate does not record which one matched, so none may be vetoed.
         if !structures.is_empty()
-            && self.validator_kind.is_some_and(|kind| kind.is_checksum())
+            && self
+                .capture_groups
+                .as_ref()
+                .is_some_and(|groups| groups.len() > 1)
         {
-            return Err(RecognizerError::UnsupportedBenignLookalike {
-                recognizer_id: self.source.clone(),
-                reason: "a checksum-backed recognizer cannot be vetoed by context",
-            });
+            return Err(refuse("a multi-branch pattern may hold an anchored branch"));
         }
         self.benign_lookalikes = structures;
         Ok(self)

@@ -1,12 +1,17 @@
 //! Benign lookalike structures: text around a weak, cue-less shape match that
-//! positively identifies a non-PII value (an order number, an amount, a room).
+//! positively identifies a non-PII value (an order number, an amount, a SKU).
 //!
 //! A recognizer opts in per structure (`[recognizers.context] benign_lookalikes`).
 //! Validator veto then drops that recognizer's candidate before conflict
 //! resolution with a typed [`ValidatorFailReason`], exactly like a failed
 //! validator. Only the opted-in recognizer's own candidate is dropped; any other
 //! candidate over the same bytes (a cued phone, an IBAN, a card) still protects
-//! them. Every check reads only ASCII context next to the candidate span.
+//! them.
+//!
+//! A PII cue always wins, and uncertainty keeps the value protected: a cue word
+//! on the candidate's line before or after it, or in the structured field name
+//! the value came from, disables every structure. Cue words match by stem, so a
+//! longer word that merely starts like a cue also disables the veto.
 
 use std::ops::Range;
 
@@ -28,27 +33,47 @@ pub enum BenignLookalike {
     /// The candidate is a strict part of one same-separator digit-group run holding at least
     /// 16 digits, longer than any E.164 number: the SKU `0593-9506-3395-7573`.
     DigitRunFragment,
-    /// A room, seat or gate label sits directly before the candidate: `Room 4833`.
-    LabelNumber,
 }
 
 /// Label words that open a document-reference identifier. Cue words of any PII class
 /// (`tel`, `plz`, `zip`, ...) must never appear here.
 const REFERENCE_LABELS: &[&str] = &[
-    "art", "artikel", "auftrag", "batch", "beleg", "bestellung", "case", "charge", "gutschein",
-    "inv", "invoice", "item", "lot", "ord", "order", "po", "quote", "rechnung", "ref", "rma",
-    "shipment", "sku", "ticket", "track", "tracking", "voucher", "vorgang",
+    "art",
+    "artikel",
+    "auftrag",
+    "batch",
+    "beleg",
+    "bestellung",
+    "case",
+    "charge",
+    "gutschein",
+    "inv",
+    "invoice",
+    "item",
+    "lot",
+    "ord",
+    "order",
+    "po",
+    "quote",
+    "rechnung",
+    "ref",
+    "rma",
+    "shipment",
+    "sku",
+    "ticket",
+    "track",
+    "tracking",
+    "voucher",
+    "vorgang",
 ];
-const PLACE_LABELS: &[&str] = &[
-    "etage", "floor", "gate", "gleis", "platform", "raum", "room", "seat", "sitz", "zimmer",
+/// Stems of cue words for the classes that opt in (phone, postal code). A word starting with
+/// one of these on the candidate's line, or in its field name, means the writer may have
+/// labelled the value as PII, so no structure fires. Matching by stem errs toward protection.
+const CUE_STEMS: &[&str] = &[
+    "anruf", "call", "cell", "contact", "fax", "handy", "kontakt", "mobil", "phone", "plz", "post",
+    "ruf", "tel", "zip",
 ];
-/// Cue words of the classes that opt in (phone, postal code). One of these on the same line
-/// shortly before the candidate means the writer labelled it as PII, so no structure fires.
-const CUE_WORDS: &[&str] = &[
-    "call", "cell", "fax", "handy", "mobil", "mobile", "phone", "plz", "postal", "postcode",
-    "postleitzahl", "ruf", "tel", "telefon", "telephone", "zip",
-];
-/// How far before the candidate a cue word still counts, in bytes.
+/// How far before or after the candidate a cue word still counts, in bytes.
 const CUE_WINDOW: usize = 40;
 const CURRENCY_CODES: &[&str] = &["CHF", "EUR", "GBP", "USD"];
 const CURRENCY_SIGNS: &[char] = &['€', '$', '£'];
@@ -62,7 +87,6 @@ impl BenignLookalike {
             "joined_identifier" => Some(Self::JoinedIdentifier),
             "currency_amount" => Some(Self::CurrencyAmount),
             "digit_run_fragment" => Some(Self::DigitRunFragment),
-            "label_number" => Some(Self::LabelNumber),
             _ => None,
         }
     }
@@ -73,35 +97,66 @@ impl BenignLookalike {
             Self::JoinedIdentifier => ValidatorFailReason::BenignJoinedIdentifier,
             Self::CurrencyAmount => ValidatorFailReason::BenignCurrencyAmount,
             Self::DigitRunFragment => ValidatorFailReason::BenignDigitRunFragment,
-            Self::LabelNumber => ValidatorFailReason::BenignLabelNumber,
         }
     }
 
-    /// Whether `text[span]` sits inside this benign structure.
-    pub fn matches(self, text: &str, span: Range<usize>) -> bool {
-        if span.start >= span.end || text.get(span.clone()).is_none() || cued(text, span.start) {
+    /// Whether `text[span]` sits inside this benign structure. `field_name` is the structured
+    /// field the text came from, if any.
+    pub fn matches(self, text: &str, span: Range<usize>, field_name: Option<&str>) -> bool {
+        if span.start >= span.end
+            || text.get(span.clone()).is_none()
+            || field_name.is_some_and(has_cue)
+            || cued(text, span.clone())
+        {
             return false;
         }
         match self {
             Self::JoinedIdentifier => joined_identifier(text, span),
             Self::CurrencyAmount => currency_amount(text, span),
             Self::DigitRunFragment => digit_run_fragment(text, span),
-            Self::LabelNumber => label_number(text, span),
         }
     }
 }
 
-/// Whether a cue word stands on the candidate's line within [`CUE_WINDOW`] bytes before it.
-fn cued(text: &str, start: usize) -> bool {
-    let mut from = start.saturating_sub(CUE_WINDOW);
+/// Whether any word of `text` starts with a cue stem. Words split at every non-letter and at
+/// each lower-to-upper case change, so `postal_code`, `zipCode` and `phoneNumber` all count.
+fn has_cue(text: &str) -> bool {
+    let mut word = String::new();
+    let mut previous_lower = false;
+    let mut words = Vec::new();
+    for c in text.chars() {
+        if !c.is_alphabetic() || (c.is_uppercase() && previous_lower) {
+            if !word.is_empty() {
+                words.push(std::mem::take(&mut word));
+            }
+        }
+        if c.is_alphabetic() {
+            word.extend(c.to_lowercase());
+        }
+        previous_lower = c.is_lowercase();
+    }
+    words.push(word);
+    words
+        .iter()
+        .any(|word| CUE_STEMS.iter().any(|stem| word.starts_with(stem)))
+}
+
+/// Whether a cue word stands on the candidate's line within [`CUE_WINDOW`] bytes before or
+/// after it, or inside the candidate's own token.
+fn cued(text: &str, span: Range<usize>) -> bool {
+    let mut from = span.start.saturating_sub(CUE_WINDOW);
     while !text.is_char_boundary(from) {
         from += 1;
     }
-    let window = &text[from..start];
-    let window = window.rsplit(['\n', '\r']).next().unwrap_or(window);
-    window
-        .split(|c: char| !c.is_ascii_alphabetic())
-        .any(|word| CUE_WORDS.contains(&word.to_ascii_lowercase().as_str()))
+    let mut to = (span.end + CUE_WINDOW).min(text.len());
+    while !text.is_char_boundary(to) {
+        to -= 1;
+    }
+    let before = &text[from..span.start];
+    let before = before.rsplit(['\n', '\r']).next().unwrap_or(before);
+    let after = &text[span.end..to];
+    let after = after.split(['\n', '\r']).next().unwrap_or(after);
+    has_cue(before) || has_cue(after)
 }
 
 fn is_word(byte: u8) -> bool {
@@ -131,17 +186,21 @@ fn joined_identifier(text: &str, span: Range<usize>) -> bool {
 
 /// Strips one space, NBSP or narrow NBSP from the end of `text`.
 fn strip_gap_end(text: &str) -> &str {
-    text.strip_suffix([' ', '\u{00A0}', '\u{202F}']).unwrap_or(text)
+    text.strip_suffix([' ', '\u{00A0}', '\u{202F}'])
+        .unwrap_or(text)
 }
 
 fn strip_gap_start(text: &str) -> &str {
-    text.strip_prefix([' ', '\u{00A0}', '\u{202F}']).unwrap_or(text)
+    text.strip_prefix([' ', '\u{00A0}', '\u{202F}'])
+        .unwrap_or(text)
 }
 
 fn currency_amount(text: &str, span: Range<usize>) -> bool {
     let before = strip_gap_end(&text[..span.start]);
     let code_before = CURRENCY_CODES.iter().any(|code| {
-        before.strip_suffix(code).is_some_and(|rest| !rest.bytes().next_back().is_some_and(is_word))
+        before
+            .strip_suffix(code)
+            .is_some_and(|rest| !rest.bytes().next_back().is_some_and(is_word))
     });
     if code_before || before.ends_with(CURRENCY_SIGNS) {
         return true;
@@ -152,14 +211,19 @@ fn currency_amount(text: &str, span: Range<usize>) -> bool {
         && matches!(decimals[0], b'.' | b',')
         && decimals[1].is_ascii_digit()
         && decimals[2].is_ascii_digit()
-        && !decimals.get(3).copied().is_some_and(|byte| byte.is_ascii_digit())
+        && !decimals
+            .get(3)
+            .copied()
+            .is_some_and(|byte| byte.is_ascii_digit())
     {
         after = &after[3..];
     }
     let after = strip_gap_start(after);
     after.starts_with(CURRENCY_SIGNS)
         || CURRENCY_CODES.iter().any(|code| {
-            after.strip_prefix(code).is_some_and(|rest| !rest.bytes().next().is_some_and(is_word))
+            after
+                .strip_prefix(code)
+                .is_some_and(|rest| !rest.bytes().next().is_some_and(is_word))
         })
 }
 
@@ -190,21 +254,6 @@ fn digit_run_fragment(text: &str, span: Range<usize>) -> bool {
         && run.iter().filter(|byte| byte.is_ascii_digit()).count() > MAX_PHONE_DIGITS
 }
 
-fn label_number(text: &str, span: Range<usize>) -> bool {
-    let before = &text[..span.start];
-    let stripped = strip_gap_end(before);
-    if stripped.len() == before.len() {
-        return false;
-    }
-    let word_start = stripped
-        .bytes()
-        .rposition(|byte| !byte.is_ascii_alphabetic())
-        .map_or(0, |index| index + 1);
-    let word = &stripped[word_start..];
-    let bounded = !stripped[..word_start].bytes().next_back().is_some_and(is_word);
-    bounded && PLACE_LABELS.contains(&word.to_ascii_lowercase().as_str())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,7 +264,7 @@ mod tests {
     }
 
     fn fires(kind: BenignLookalike, text: &str, value: &str) -> bool {
-        kind.matches(text, at(text, value))
+        kind.matches(text, at(text, value), None)
     }
 
     #[test]
@@ -228,26 +277,80 @@ mod tests {
         assert!(!fires(J, "token ASDFG-98765-ZXCVB here", "98765"));
         assert!(!fires(J, "token XYZ123-abcde-98765 here", "98765"));
         assert!(!fires(J, "D-80331 München", "80331"));
-        assert!(!fires(J, "PLZ-80331 München", "80331"));
-        assert!(!fires(J, "Tel-0301234567", "0301234567"));
         // The value must end the token.
         assert!(!fires(J, "SKU-73821-A1 x", "73821"));
         assert!(!fires(J, "SKU 73821", "73821"));
     }
 
     #[test]
-    fn a_cue_word_before_the_candidate_disables_every_structure() {
-        assert!(!fires(BenignLookalike::CurrencyAmount, "Tel: 2125550187 USD", "2125550187"));
-        assert!(!fires(BenignLookalike::JoinedIdentifier, "zip SKU-DEMO-73821", "73821"));
+    fn a_cue_before_or_after_the_candidate_disables_every_structure() {
+        use BenignLookalike::*;
+        // Before, inside the token, and after the value, on the same line.
+        assert!(!fires(CurrencyAmount, "Tel: 2125550187 USD", "2125550187"));
+        assert!(!fires(JoinedIdentifier, "PLZ-80331 München", "80331"));
+        assert!(!fires(JoinedIdentifier, "Tel-0301234567", "0301234567"));
+        assert!(!fires(JoinedIdentifier, "ORDER-90210 (ZIP)", "90210"));
         assert!(!fires(
-            BenignLookalike::DigitRunFragment,
-            "Telefon 0593-9506-3395-7573",
+            JoinedIdentifier,
+            "ORDER-212-555-0187 (phone)",
+            "212-555-0187"
+        ));
+        assert!(!fires(CurrencyAmount, "EUR 90210 is my zip", "90210"));
+        assert!(!fires(
+            DigitRunFragment,
+            "0593-9506-3395-7573 Telefon",
             "0593-9506-3395"
         ));
-        assert!(!fires(BenignLookalike::LabelNumber, "PLZ Raum 1010", "1010"));
-        // A cue on an earlier line does not count; neither does a cue-shaped word part.
-        assert!(fires(BenignLookalike::LabelNumber, "Tel\nRoom 4833", "4833"));
-        assert!(fires(BenignLookalike::CurrencyAmount, "Hotel EUR 22186,12", "22186"));
+        // JSON keys: snake_case and camelCase words both count.
+        assert!(!fires(
+            JoinedIdentifier,
+            r#"{"postal_code":"ORDER-90210"}"#,
+            "90210"
+        ));
+        assert!(!fires(
+            JoinedIdentifier,
+            r#"{"zipCode": "ORDER-90210"}"#,
+            "90210"
+        ));
+        assert!(!fires(
+            JoinedIdentifier,
+            r#"{"phoneNumber": "ORDER-2125550187"}"#,
+            "2125550187"
+        ));
+        // Stems: a longer word starting like a cue also counts.
+        assert!(!fires(
+            JoinedIdentifier,
+            "Telefonnummer ORDER-0301234567",
+            "0301234567"
+        ));
+        assert!(!fires(
+            JoinedIdentifier,
+            "Postleitzahl ORDER-80331",
+            "80331"
+        ));
+        // A cue on another line, or a word merely containing a cue, does not count.
+        assert!(fires(CurrencyAmount, "Tel\nEUR 22186,12", "22186"));
+        assert!(fires(CurrencyAmount, "EUR 22186,12\nTel", "22186"));
+        assert!(fires(CurrencyAmount, "Hotel EUR 22186,12", "22186"));
+    }
+
+    #[test]
+    fn a_cue_in_the_field_name_disables_every_structure() {
+        use BenignLookalike::JoinedIdentifier as J;
+        let text = "ORDER-90210";
+        for field in [
+            "postal_code",
+            "zipCode",
+            "PLZ",
+            "phone",
+            "customer.telefon",
+            "contact",
+        ] {
+            assert!(!J.matches(text, at(text, "90210"), Some(field)), "{field}");
+        }
+        for field in ["order", "reference", "itemCode"] {
+            assert!(J.matches(text, at(text, "90210"), Some(field)), "{field}");
+        }
     }
 
     #[test]
@@ -264,23 +367,17 @@ mod tests {
     #[test]
     fn digit_run_fragment_needs_a_run_longer_than_any_phone_number() {
         use BenignLookalike::DigitRunFragment as D;
-        assert!(fires(D, "itemCode=0593-9506-3395-7573 status", "0593-9506-3395"));
+        assert!(fires(
+            D,
+            "itemCode=0593-9506-3395-7573 status",
+            "0593-9506-3395"
+        ));
         // A direct-dial extension keeps a phone number well under 16 digits.
-        assert!(!fires(D, "Tel. 089/12345-0 bitte", "089/12345"));
-        assert!(!fires(D, "Tel. 030-1234567-89 bitte", "030-1234567"));
+        assert!(!fires(D, "Bitte 089/12345-0 bitte", "089/12345"));
+        assert!(!fires(D, "Bitte 030-1234567-89 bitte", "030-1234567"));
         // The whole run is not a fragment.
         assert!(!fires(D, "x 0593-9506-3395-7573 y", "0593-9506-3395-7573"));
         // Mixed separators are two values, not one run.
         assert!(!fires(D, "0593-9506.3395-7573.1111", "0593-9506"));
-    }
-
-    #[test]
-    fn label_number_needs_a_place_label_right_before_the_value() {
-        use BenignLookalike::LabelNumber as L;
-        assert!(fires(L, "values: Room 4833 Room 4844", "4833"));
-        assert!(fires(L, "im Raum\u{00A0}1010", "1010"));
-        assert!(!fires(L, "Bedroom 4833 Wien", "4833"));
-        assert!(!fires(L, "1010 Wien Room", "1010"));
-        assert!(!fires(L, "Room4833", "4833"));
     }
 }
