@@ -252,6 +252,13 @@ the held-out protocol and the rule gate (`agentic_layers.py gate`) are described
 in [Agentic layers and the rule gate](../../docs/reference/benchmarks/README.md#agentic-layers-and-the-rule-gate).
 Regression and release readiness below read layer C (`runs[]`) only.
 
+`known_record_cells.py` generates layer K for the separate known-record oracle
+arm only, never the main scorecard. Each pair gives a record that differs from
+the text only in whitespace, in case and whitespace, or as a single
+common-word name that needs corroboration, next to a benign twin with the same
+record and shape. `python3 scripts/bench/known_record_cells.py --manifest`
+prints its pinned hash.
+
 Regression and release readiness are deliberately independent. Regression uses
 integer counts with zero tolerance and fails closed on missing, empty, invalid,
 or population-mismatched candidates. Release readiness requires every candidate
