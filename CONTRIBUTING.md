@@ -228,9 +228,9 @@ citation points at a meaningful behavioral assertion.
 
 Test and benchmark fixtures that contain phone numbers MUST use synthetic, non-reachable values from documented reservation ranges:
 
-- US/NA fixtures: NANPA "555" exchanges (`+1-555-01xx` etc.), reserved for fictional use under [NANPA reservation 555-01xx](https://nationalnanpa.com/).
+- US/NA fixtures: only line numbers `555-0100` to `555-0199` behind any area code (for example `+1 212 555 0142`). NANPA reserves exactly these as fictitious numbers for entertainment and advertising; other `555` line numbers can be assigned. Source: [NANPA 555 line numbers](https://www.nanpa.com/numbering/555-line-numbers).
 - UK fixtures: Ofcom drama-reserved ranges (`+44-7700-900xxx`), per [Ofcom drama numbers guidance](https://www.ofcom.org.uk/phones-and-broadband/phone-numbers/numbers-for-drama).
-- DE fixtures: synthetic non-reachable mobile shapes the `phonenumber` parser still accepts as valid E.164 (e.g. `+49 1555 0112233`-style values used in v0.4.4 S3a / v0.4.5 S2 phone-recognizer tests). The `1555` mobile prefix mirrors the NANPA 555 carve-out — non-reachable but parseable. Cite the v0.4.5 S2 phonenumber-region tests rather than introducing real-looking BNetzA-assigned ranges.
+- DE fixtures: the Bundesnetzagentur drama numbers ("Rufnummern für Medienproduktionen", Mitteilung 148/2021), which are never assigned to a subscriber. Mobile: `(0)171 39200 00` to `99` and `(0)176 040690 00` to `99` (100 numbers each), plus ten single numbers. Landline: 1,000 numbers each in Berlin `(0)30 23125 xxx`, Frankfurt `(0)69 90009 xxx`, Hamburg `(0)40 66969 xxx`, Köln `(0)221 4710 xxx` and München `(0)89 99998 xxx`. The `phonenumber` parser accepts them as valid E.164. Source: [BNetzA Mitteilung 148/2021](https://www.bundesnetzagentur.de/DE/Fachthemen/Telekommunikation/Nummerierung/_DL/mittlg148_2021.pdf?__blob=publicationFile&v=1). Do not use `+49 1555`: `(0)15-550` is an allocated mobile block, not a fictional one. Older fixtures that still use it are tracked for replacement.
 - Other locales: synthesize a non-reachable shape (e.g. exchange code `0` or out-of-band country code) and add a fixture comment noting the synthetic origin.
 
 Rationale: drawer `gaze_decisions_e1ab6dc0`. Real reachable numbers in test

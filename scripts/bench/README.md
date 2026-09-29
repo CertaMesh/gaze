@@ -252,6 +252,35 @@ the held-out protocol and the rule gate (`agentic_layers.py gate`) are described
 in [Agentic layers and the rule gate](../../docs/reference/benchmarks/README.md#agentic-layers-and-the-rule-gate).
 Regression and release readiness below read layer C (`runs[]`) only.
 
+`known_record_cells.py` generates layer K for the separate known-record oracle
+arm only, never the main scorecard. Each probe pair gives a record that differs
+from the text only in the way one match kind is for (`whitespace_flexible`,
+`whitespace_case_folded`, `corroborated_single`), next to a benign twin with the
+same record and shape. Kinds are derived after Gaze's own folding, which turns
+NBSP-class separators into spaces before detection, so an NBSP copy is an exact
+match. Such pairs, and the other pairs that exercise no probe kind, are typed
+controls in their own buckets. `python3 scripts/bench/known_record_cells.py`
+prints the pinned manifest. `... known_record_cells.py prove --binary <clean_for_bench>
+--policy <policy> --model-dir <ner> --contract v2 --output <json>` scores layer K
+three ways (no record, record with the default kinds, record with the probe kinds
+on) and reports bytes per bucket. Its `kind_switch_effective` is false when the
+binary ignores the per-request `record_match_kinds`.
+
+The PR #724 proof used the Known-Record producer at #718 commit
+`2be21a54ec925e13d5e8fec64182bfbe21cd703c`, whose `clean_for_bench` had SHA-256
+`3f33b3528c705b97a3fa489fde12b98b96d253a30d3d311d73921ec8c7dd16cc`. It was built
+on aarch64-apple-darwin with Homebrew cargo and rustc 1.95.0 (`59807616e`), which
+ignore the repository's `rust-toolchain.toml` pin. Two separate builds from the
+same checkout path produced that hash. From a detached checkout of that commit, run:
+
+```bash
+CARGO_TARGET_DIR="$PWD/target" /opt/homebrew/bin/cargo build -q -p gaze-recognizers --example clean_for_bench --features safety-net-nym --release
+```
+
+The hash depends on the checkout path and toolchain; a rustup 1.96 build
+differs. Compare the proof's `binary_sha256` field rather than expecting a
+byte-identical build elsewhere.
+
 Regression and release readiness are deliberately independent. Regression uses
 integer counts with zero tolerance and fails closed on missing, empty, invalid,
 or population-mismatched candidates. Release readiness requires every candidate
