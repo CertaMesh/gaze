@@ -167,6 +167,9 @@ def test_char_level_recall_weighting() -> None:
     assert abs(noisy["f2"] - 5 * 0.5 * 1 / (4 * 0.5 + 1)) < 1e-12
     assert noisy["f2"] > leaky["f2"] and leaky["f1"] == noisy["f1"]
     assert noisy["f5"] > leaky["f5"]
+    # Hand-computed pins: F5 = 26 P R / (25 P + R).
+    assert abs(leaky["f5"] - 26 * 0.5 / (25 + 0.5)) < 1e-12  # 0.5098039...
+    assert abs(noisy["f5"] - 26 * 0.5 / (25 * 0.5 + 1)) < 1e-12  # 0.9629629...
 
 
 def test_char_level_empty_denominators_score_zero_not_one() -> None:
