@@ -109,3 +109,105 @@ def test_policy_ablations_preserve_other_sections() -> None:
         source, ("ner", "safety_net", "safety_net.nym")
     )
     assert tomllib.loads(result) == {"policy": {"rulepacks": {"bundled": ["core"]}}}
+
+
+def _char(text: str, gold: tuple[score.Span, ...], predictions: list[score.Span],
+          **document_fields: object) -> tuple[dict, dict]:
+    document = score.Document("synthetic", text, "en", "", "synthetic", gold, **document_fields)
+    accumulator = metrics.ComparisonMetrics({"PERSON": ("SURNAME",), "ANY": ("SURNAME",)})
+    accumulator.add(document, predictions)
+    result = accumulator.result()
+    return result["char_level"], result
+
+
+def test_char_level_counts_code_points_not_bytes_for_umlauts() -> None:
+    # "Grüße" is 7 bytes / 5 chars, so "Müller" is bytes 8..15 (7 bytes, 6 chars).
+    text = "Grüße Müller"
+    gold = (score.Span(8, 15, "SURNAME"),)
+    char, result = _char(text, gold, [score.Span(7, 15, "PERSON")])  # also the space
+    assert (char["tp"], char["fp"], char["fn"]) == (6, 1, 0)
+    assert (result["true_positive_bytes"], result["false_positive_bytes"]) == (7, 1)
+    assert char["unit"] == "unicode_code_point"
+    assert char["precision"] == 6 / 7 and char["recall"] == 1.0
+    assert abs(char["f2"] - 30 / 31) < 1e-12  # 5*(6/7)/(4*(6/7)+1)
+    assert abs(char["f1"] - 12 / 13) < 1e-12
+
+
+def test_char_level_differs_from_byte_level_for_cjk_partial_cover() -> None:
+    # Four 3-byte characters; the prediction covers the first two only.
+    text = "田中太郎 bob"
+    gold = (score.Span(0, 12, "SURNAME"),)
+    char, result = _char(text, gold, [score.Span(0, 6, "PERSON")])
+    assert (char["tp"], char["fp"], char["fn"]) == (2, 0, 2)
+    assert (result["true_positive_bytes"], result["leaked_bytes"]) == (6, 6)
+    # Mixed script: 1 leaked ASCII char next to 2 leaked CJK chars.
+    text = "田中 x"
+    gold = (score.Span(0, 6, "SURNAME"), score.Span(7, 8, "SURNAME"))
+    char, result = _char(text, gold, [score.Span(0, 3, "PERSON")])
+    assert (char["tp"], char["fn"]) == (1, 2)
+    assert (result["true_positive_bytes"], result["leaked_bytes"]) == (3, 4)
+
+
+def test_char_level_merges_overlapping_gold_and_predictions() -> None:
+    text = "abcdefghijkl"
+    gold = (score.Span(0, 5, "SURNAME"), score.Span(3, 8, "SURNAME"))  # merged 0..8
+    predictions = [score.Span(2, 6, "PERSON"), score.Span(5, 10, "ANY")]  # merged 2..10
+    char, _ = _char(text, gold, predictions)
+    assert (char["tp"], char["fp"], char["fn"]) == (6, 2, 2)
+    for key in ("precision", "recall", "f1", "f2", "f5"):
+        assert char[key] == 0.75
+
+
+def test_char_level_recall_weighting() -> None:
+    text = "a" * 100
+    gold = (score.Span(0, 10, "SURNAME"),)
+    leaky, _ = _char(text, gold, [score.Span(0, 5, "PERSON")])          # P=1 R=.5
+    noisy, _ = _char(text, gold, [score.Span(0, 10, "PERSON"), score.Span(20, 30, "PERSON")])  # P=.5 R=1
+    assert abs(leaky["f2"] - 5 * 1 * 0.5 / (4 * 1 + 0.5)) < 1e-12
+    assert abs(noisy["f2"] - 5 * 0.5 * 1 / (4 * 0.5 + 1)) < 1e-12
+    assert noisy["f2"] > leaky["f2"] and leaky["f1"] == noisy["f1"]
+    assert noisy["f5"] > leaky["f5"]
+
+
+def test_char_level_empty_denominators_score_zero_not_one() -> None:
+    assert metrics.f_beta(0.0, 0.0, 2) == 0.0
+    empty, _ = _char("nothing here", (), [])
+    assert (empty["tp"], empty["fp"], empty["fn"]) == (0, 0, 0)
+    assert all(empty[key] == 0.0 for key in ("precision", "recall", "f1", "f2", "f5"))
+    only_gold, _ = _char("alice", (score.Span(0, 5, "SURNAME"),), [])
+    assert only_gold["fn"] == 5
+    assert all(only_gold[key] == 0.0 for key in ("precision", "recall", "f1", "f2", "f5"))
+    only_noise, _ = _char("alice", (), [score.Span(0, 5, "PERSON")])
+    assert only_noise["fp"] == 5
+    assert all(only_noise[key] == 0.0 for key in ("precision", "recall", "f1", "f2", "f5"))
+
+
+def test_char_level_matches_byte_level_on_ascii() -> None:
+    text = "Dr. Schmidt alice@example.invalid"
+    gold = (score.Span(4, 11, "SURNAME"), score.Span(12, 33, "SURNAME"))
+    char, result = _char(text, gold, [score.Span(4, 11, "PERSON"), score.Span(10, 20, "ANY")])
+    assert char["tp"] == result["true_positive_bytes"]
+    assert char["fp"] == result["false_positive_bytes"]
+    assert char["fn"] == result["leaked_bytes"]
+
+
+def test_char_level_respects_contract_ignored_bytes() -> None:
+    text = "abcdefghijk"
+    gold = (score.Span(0, 5, "SURNAME"),)
+    excluded = (score.Span(6, 11, "OTHER"),)
+    # Only ignored bytes covered: dropped, neither TP nor FP.
+    char, _ = _char(text, gold, [score.Span(6, 11, "PERSON")], excluded_spans=excluded)
+    assert (char["tp"], char["fp"], char["fn"]) == (0, 0, 5)
+    # Overlaps gold tail and ignored bytes: the ignored part is not a false positive.
+    char, _ = _char(text, gold, [score.Span(4, 11, "PERSON")], excluded_spans=excluded)
+    assert (char["tp"], char["fp"], char["fn"]) == (1, 1, 4)
+
+
+def test_char_level_rejects_offsets_inside_a_character() -> None:
+    import pytest
+
+    document = score.Document("synthetic", "Müller", "en", "", "synthetic",
+                              (score.Span(0, 7, "SURNAME"),))
+    accumulator = metrics.ComparisonMetrics({"PERSON": ("SURNAME",)})
+    with pytest.raises(ValueError, match="inside a UTF-8 character"):
+        accumulator.add(document, [score.Span(0, 2, "PERSON")])  # byte 2 is ü's second byte
