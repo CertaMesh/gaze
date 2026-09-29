@@ -46,6 +46,12 @@ re-tokenize stored manifests.
 
 ### TL;DR
 
+**Typed `Context` literals:** add `record_match_kinds: Default::default()`.
+If your caller-known records rely on full-name, email, whitespace-flexible, or
+common-word name matching, specify the needed kinds in `record_match_kinds` in
+the context JSON. These unmeasured combinations are off by default until the
+oracle prices their benign lookalikes; ordinary detectors still run.
+
 **Context JSON callers:** files over 4 MiB now fail with a typed size error.
 Duplicate keys now fail instead of silently keeping the last value. JSON parse
 errors are generic and no longer include source text; use a local JSON

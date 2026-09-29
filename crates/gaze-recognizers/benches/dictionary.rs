@@ -18,6 +18,7 @@ fn build_recognizer(term_count: usize) -> (DictionaryRecognizer, DictionaryBundl
         )]),
         class_map: HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
     };
     let bundle = dictionary_bundle_from_context(&ctx);
     (

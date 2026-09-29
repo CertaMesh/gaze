@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use gaze_types::{
     Candidate, ConflictTier, DetectContext, DictionaryEntry, LocaleBasis, LocaleTag, PiiClass,
-    Recognizer,
+    Recognizer, RecordMatchKind,
 };
 use unicode_casefold::UnicodeCaseFold;
 
@@ -35,6 +35,7 @@ pub struct DictionaryRecognizer {
     compiled_unicode: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
     unicode_case_insensitive: bool,
     record_matching: bool,
+    record_allowed_kinds: BTreeSet<RecordMatchKind>,
     cache_capacity: usize,
 }
 
@@ -83,6 +84,7 @@ impl DictionaryRecognizer {
             compiled_unicode: Mutex::new(HashMap::new()),
             unicode_case_insensitive: false,
             record_matching: false,
+            record_allowed_kinds: BTreeSet::new(),
             cache_capacity: usize::MAX,
         }
     }
@@ -109,6 +111,21 @@ impl DictionaryRecognizer {
 
     pub fn with_record_matching(mut self) -> Self {
         self.record_matching = true;
+        self.record_allowed_kinds = [
+            RecordMatchKind::Exact,
+            RecordMatchKind::WhitespaceFlexible,
+            RecordMatchKind::CaseFolded,
+            RecordMatchKind::WhitespaceCaseFolded,
+            RecordMatchKind::CorroboratedSingle,
+        ]
+        .into_iter()
+        .collect();
+        self
+    }
+
+    pub fn with_record_allowed_kinds(mut self, allowed: BTreeSet<RecordMatchKind>) -> Self {
+        self.record_matching = true;
+        self.record_allowed_kinds = allowed;
         self
     }
 
@@ -247,16 +264,27 @@ impl Recognizer for DictionaryRecognizer {
         Ok(matches
             .into_iter()
             .filter(|(start, end, _)| is_token_boundary_match(input, *start, *end))
-            .filter(|(start, end, _)| {
-                !corroborate_single_name
-                    || corroborated_record_name(
-                        input,
-                        normalized_text.as_deref().unwrap_or(input),
-                        *start,
-                        *end,
-                        ctx,
-                        &self.dictionary_name,
-                    )
+            .filter(|(start, end, index)| {
+                if !self.record_matching {
+                    return true;
+                }
+                let matched = &input[*start..*end];
+                let term = &entry.terms()[*index];
+                let kind = if corroborate_single_name {
+                    RecordMatchKind::CorroboratedSingle
+                } else {
+                    record_match_kind(matched, term)
+                };
+                self.record_allowed_kinds.contains(&kind)
+                    && (!corroborate_single_name
+                        || corroborated_record_name(
+                            input,
+                            normalized_text.as_deref().unwrap_or(input),
+                            *start,
+                            *end,
+                            ctx,
+                            &self.dictionary_name,
+                        ))
             })
             .map(|(start, end, index)| {
                 Candidate::new(
@@ -294,6 +322,21 @@ impl Recognizer for DictionaryRecognizer {
 
     fn requires_prior_candidates(&self) -> bool {
         self.record_matching && self.class == PiiClass::Name
+    }
+}
+
+fn record_match_kind(matched: &str, term: &str) -> RecordMatchKind {
+    if matched == term {
+        return RecordMatchKind::Exact;
+    }
+    let collapsed = matched.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed == term {
+        return RecordMatchKind::WhitespaceFlexible;
+    }
+    if matched.case_fold().collect::<String>() == term.case_fold().collect::<String>() {
+        RecordMatchKind::CaseFolded
+    } else {
+        RecordMatchKind::WhitespaceCaseFolded
     }
 }
 
@@ -503,6 +546,7 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -519,6 +563,65 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].span, 0..raw.len());
         assert_eq!(hits[0].canonical_form.as_deref(), Some(raw));
+    }
+
+    #[test]
+    fn record_match_kinds_are_enforced_on_original_spans() {
+        let context = TypedContext {
+            dictionaries: HashMap::from([(
+                "record-name".into(),
+                ContextDictionary {
+                    terms: vec!["Maren Okafor".into()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+        };
+        let bundle = dictionary_bundle_from_context(&context);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "context/record-name",
+            PiiClass::Name,
+            "record-name",
+            true,
+            "counter",
+        )
+        .with_record_matching()
+        .with_unicode_case_insensitive()
+        .with_record_allowed_kinds([RecordMatchKind::Exact].into_iter().collect());
+        assert_eq!(
+            recognizer
+                .detect("Maren Okafor", &detect_context)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(recognizer
+            .detect("Maren  Okafor", &detect_context)
+            .unwrap()
+            .is_empty());
+        assert!(recognizer
+            .detect("MAREN OKAFOR", &detect_context)
+            .unwrap()
+            .is_empty());
+        let recognizer = recognizer.with_record_allowed_kinds(
+            [RecordMatchKind::WhitespaceCaseFolded]
+                .into_iter()
+                .collect(),
+        );
+        assert_eq!(
+            recognizer
+                .detect("MAREN\u{a0}OKAFOR", &detect_context)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(recognizer
+            .detect("Maren Okafor", &detect_context)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -544,6 +647,7 @@ mod tests {
             ]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let recognizer = DictionaryRecognizer::new(
@@ -603,6 +707,7 @@ mod tests {
                 )]),
                 class_map: HashMap::new(),
                 fields: Map::new(),
+                record_match_kinds: Default::default(),
             };
             let bundle = dictionary_bundle_from_context(&ctx);
             let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -643,6 +748,7 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -668,6 +774,7 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -708,6 +815,7 @@ mod tests {
                 )]),
                 class_map: HashMap::new(),
                 fields: Map::new(),
+                record_match_kinds: Default::default(),
             };
             let bundle = dictionary_bundle_from_context(&context);
             let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -728,6 +836,7 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::EnUs], &bundle);
@@ -765,6 +874,7 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -813,6 +923,7 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -845,6 +956,7 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -874,6 +986,7 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);

@@ -45,6 +45,7 @@ fn pipeline() -> Pipeline {
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
     };
     let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&chain()));
     gaze_assembly::build_pipeline(&policy, &context, &[rulepack], &locale_chain, None)

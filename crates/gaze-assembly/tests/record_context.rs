@@ -6,7 +6,7 @@ use gaze_assembly::{build_pipeline, BuildError};
 
 fn context() -> Context {
     Context::from_json_str(
-        r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"}}"#,
+        r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"},"record_match_kinds":{"name_multi":["exact","case_folded"],"email":["exact"]}}"#,
     )
     .unwrap()
 }
@@ -53,7 +53,7 @@ fn record_name_casing_tokenizes_and_restores_exact_source_bytes() {
 #[test]
 fn record_unicode_name_case_match_restores_source_bytes() {
     let context = Context::from_json_str(
-        r#"{"record":{"name":"Émilie Müller"},"field_map":{"/name":"Name"}}"#,
+        r#"{"record":{"name":"Émilie Müller"},"field_map":{"/name":"Name"},"record_match_kinds":{"name_multi":["exact","case_folded"]}}"#,
     )
     .unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);
@@ -88,7 +88,7 @@ fn record_unicode_name_case_match_restores_source_bytes() {
 #[test]
 fn record_full_unicode_fold_preserves_original_byte_span() {
     let context = Context::from_json_str(
-        r#"{"record":{"name":"JÖRG STRASSE"},"field_map":{"/name":"Name"}}"#,
+        r#"{"record":{"name":"JÖRG STRASSE"},"field_map":{"/name":"Name"},"record_match_kinds":{"name_multi":["exact","case_folded"]}}"#,
     )
     .unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);
@@ -123,7 +123,7 @@ fn record_full_unicode_fold_preserves_original_byte_span() {
 #[test]
 fn record_whitespace_variants_restore_original_bytes() {
     let context =
-        Context::from_json_str(r#"{"record":{"customer":{"full_name":" Maren\u00a0Okafor "}}}"#)
+        Context::from_json_str(r#"{"record":{"customer":{"full_name":" Maren\u00a0Okafor "}},"record_match_kinds":{"name_multi":["exact","whitespace_flexible","whitespace_case_folded"]}}"#)
             .unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);
     let pipeline =
@@ -158,7 +158,7 @@ fn record_whitespace_variants_restore_original_bytes() {
 
 #[test]
 fn record_whitespace_flex_has_a_bounded_gap() {
-    let context = Context::from_json_str(r#"{"record":{"full_name":"Maren Okafor"}}"#).unwrap();
+    let context = Context::from_json_str(r#"{"record":{"full_name":"Maren Okafor"},"record_match_kinds":{"name_multi":["whitespace_flexible"]}}"#).unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);
     let pipeline =
         build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
@@ -193,7 +193,7 @@ fn record_whitespace_flex_has_a_bounded_gap() {
 #[test]
 fn single_token_record_names_need_corroboration() {
     let context = Context::from_json_str(
-        r#"{"record":{"first_name":"Will","last_name":"Smith","full_name":"Will Smith"}}"#,
+        r#"{"record":{"first_name":"Will","last_name":"Smith","full_name":"Will Smith"},"record_match_kinds":{"name_single":["exact","case_folded","corroborated_single"],"name_multi":["exact"]}}"#,
     )
     .unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);
@@ -257,6 +257,45 @@ fn common_may_stays_raw_and_unlisted_maren_tokenizes() {
             .text,
         raw
     );
+}
+
+#[test]
+fn unmeasured_record_class_is_off_until_adopter_enables_it() {
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let raw = "Synthetic reference ZXCVB12345.";
+    for (override_kinds, expected_protected) in [
+        ("", false),
+        (r#", "record_match_kinds":{"custom:tag":["exact"]}"#, true),
+    ] {
+        let context = Context::from_json_str(&format!(
+            r#"{{"record":{{"tag":"ZXCVB12345"}},"field_map":{{"/tag":"custom:tag"}}{override_kinds}}}"#
+        ))
+        .unwrap();
+        let pipeline =
+            build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+        let bundle = gaze::dictionary_bundle_from_context(&context);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(raw.into()),
+                locales.as_slice(),
+                &bundle,
+            )
+            .unwrap()
+        else {
+            panic!("expected text")
+        };
+        assert_eq!(!clean.contains("ZXCVB12345"), expected_protected);
+        assert_eq!(
+            pipeline
+                .restore_with_telemetry(&session, &clean)
+                .unwrap()
+                .0
+                .text,
+            raw
+        );
+    }
 }
 
 #[test]

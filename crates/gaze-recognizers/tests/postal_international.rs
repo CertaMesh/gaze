@@ -47,6 +47,7 @@ fn empty_context() -> Context {
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
     }
 }
 

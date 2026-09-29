@@ -209,22 +209,53 @@ mapping paths without a leaf, arrays, nulls and duplicate JSON keys fail closed.
 Record errors name the field path, never its value.
 
 Values are trimmed and whitespace runs, including nonbreaking spaces, collapse
-to one space. The record recognizer accepts a run of up to 32 whitespace
-characters between value tokens; Gaze's separate repeat-value sweep can still
-protect later copies under its own rules. The manifest restores the exact
-source bytes. Values with fewer than
+to one space. Exact matches are enabled by default only for the measured
+classes below. Whitespace-flexible matching (up to 32 characters between
+tokens), combined whitespace and case folding, and corroborated common-word
+names are available through `record_match_kinds` but are off by default because
+their byte trade-offs have not yet been measured. Gaze's separate repeat-value
+sweep can still protect later copies under its own rules. The manifest restores
+the exact source bytes. Values with fewer than
 three letters or digit-only values shorter than four digits are rejected.
 Single-token names in the [version 1 common-word dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
-such as `Will`, `Grace`, `May` and `Mark`, are accepted but require
-corroboration at each occurrence: a person span from NER, another record name
+such as `Will`, `Grace`, `May` and `Mark`, are accepted. Their record recognizer
+is off by default; enabling `corroborated_single` requires corroboration at
+each occurrence: a person span from NER, another record name
 in the same phrase, or a full record name elsewhere in the document plus a
-name-position cue. Other single-token names match wherever they occur. The
+name-position cue. Other single-token names match wherever they occur by default. The
 dictionary is matched with Unicode folding and Aho–Corasick; no common name is
 silently discarded. The current default Nym operating point has no person
 label, so model corroboration currently comes from the NER candidate layer.
 
-Gaze matches each full value. `Name` values also match full Unicode
-case folds, including `ß`/`SS`, while preserving the original matched bytes for restore. The prototype
+The default record matcher enables `exact` for address parts, credit cards,
+IBANs, national IDs, passports, phone numbers, Steuer IDs, and unlisted
+single-token names. It also enables `case_folded` for unlisted single-token
+names. Other class and match-kind pairs are off until measured. The adopter
+can replace a class group's allowed kinds in the same context JSON:
+
+```json
+{
+  "record": {"customer": {"full_name": "[customer name]"}},
+  "record_match_kinds": {
+    "name_multi": ["exact", "case_folded", "whitespace_flexible"]
+  }
+}
+```
+
+Keys are `name_single`, `name_multi`, `address_part`, or a canonical class name
+such as `email` or `custom:phone`. Each list replaces that group's defaults;
+an empty list disables it. Allowed kinds are `exact`, `case_folded`,
+`whitespace_flexible`, `whitespace_case_folded`, and `corroborated_single`.
+The last kind applies to common-word single-token names. Enabling an
+unmeasured kind is an explicit precision choice; the separate oracle has not
+established that its recovered leaked bytes exceed its added false-positive
+bytes. Case-folded kinds apply only to names; whitespace kinds require a
+multi-token value. Incompatible combinations fail with a path-only error.
+A record field whose class is off supplies no extra record detection;
+ordinary recognizers still run.
+
+`Name` values can also match full Unicode
+case folds, including `ß`/`SS`, when the kind is enabled, while preserving the original matched bytes for restore. The prototype
 does not match reversed name order, email case changes, fragments or fuzzy
 spellings. Each record dictionary uses the existing class action and manifest
 path; its class must resolve to `tokenize` or `format_preserve`. A nonreversible

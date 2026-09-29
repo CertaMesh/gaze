@@ -52,6 +52,7 @@ mod tests {
                 PiiClass::Custom("class_alpha".to_string()),
             )]),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
 
         let bundle = dictionary_bundle_from_context(&ctx);
@@ -93,6 +94,7 @@ mod tests {
                 PiiClass::Custom("class_alpha".to_string()),
             )]),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
         };
 
         let bundle = DictionaryBundle::from_context(&ctx);

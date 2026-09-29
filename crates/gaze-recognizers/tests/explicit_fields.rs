@@ -448,6 +448,7 @@ fn assembled(
         dictionaries: Default::default(),
         class_map: Default::default(),
         fields: Default::default(),
+        record_match_kinds: Default::default(),
     };
     gaze_assembly::build_pipeline(
         &policy,

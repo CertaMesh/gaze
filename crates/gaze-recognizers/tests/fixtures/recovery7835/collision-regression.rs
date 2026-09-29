@@ -20,7 +20,7 @@ priority = 0
 "#).unwrap();
     let mut policy = Policy::default();
     policy.rules = vec![RuleSpec::Default { action: Action::Tokenize }];
-    let context = Context { dictionaries: Default::default(), class_map: Default::default(), fields: Default::default() };
+    let context = Context { dictionaries: Default::default(), class_map: Default::default(), fields: Default::default(), record_match_kinds: Default::default() };
     let pipeline = gaze_assembly::build_pipeline(&policy, &context, &[core,competitor], &LocaleChain::from(&[LocaleTag::Global][..]), None).unwrap();
     let session = Session::new(Scope::Ephemeral).unwrap();
     let (clean,spans,_,trace) = pipeline.clean_text_with_safety_net_policy_detect_context_and_protection_trace(&session,RAW,&[LocaleTag::Global],&DictionaryBundle::default(),SafetyNetPolicy::default()).unwrap();

@@ -25,15 +25,28 @@ nonreversible column action rejects record mode because it could leave a
 matching value raw in that column. Audit source IDs describe a class and slot,
 never the supplied value.
 
-This mode trims record values and collapses whitespace runs, then matches
-full values across text whitespace runs of up to 32 characters. Names also match full Unicode case
-folds; the original source bytes are kept in the manifest for exact restore.
+This mode trims record values and collapses whitespace runs. By default it
+matches only class and match-kind pairs that passed the round-3 byte trade-off
+check: exact address parts, credit cards, IBANs, national IDs, passports,
+phones, Steuer IDs, and unlisted single-token names, plus case-folded unlisted
+single-token names. Full names, email, other unmeasured classes, flexible
+whitespace, and combined whitespace/case matches are off by default. The
+adopter can enable these kinds with `record_match_kinds` in the context JSON.
+The recognizer can match text whitespace runs of up to 32 characters and full
+Unicode name case folds when enabled. The original source bytes are kept in
+the manifest for exact restore.
 Single-token names in the [version 1 common-word dictionary](../../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
-including `Will`, require person-model evidence, an adjacent record name, or
-a full record name elsewhere in the document with a name-position cue.
-Unlisted names such as `Maren` match everywhere. Short letter and digit values still fail closed. It does
+including `Will`, are off by default. Adopters can enable
+`record_match_kinds.name_single = ["exact", "case_folded", "corroborated_single"]`;
+then those common names require person-model evidence, an adjacent record name,
+or a full record name elsewhere in the document with a name-position cue.
+Unlisted names such as `Maren` match everywhere by default. Short letter and digit values still fail closed. It does
 not infer name order, email case changes, abbreviations, fragments or typos.
 Homonyms with corroborating context remain a false-positive risk.
+The unmeasured kinds stay off because their gain against benign lookalikes is
+unknown; enabling them explicitly accepts that precision risk. A record field
+whose group is off adds no record-context detection. Ordinary detectors still
+run on the document.
 The current default Nym operating point has no person label; model
 corroboration currently uses NER person spans.
 The app must keep its context file private and avoid logging it.

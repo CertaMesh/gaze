@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- **Typed `Context` literals gain `record_match_kinds`.** Add
+  `record_match_kinds: Default::default()` to direct Rust struct literals.
+  Caller-known record matching now defaults to measured class and match-kind
+  pairs only; callers who need unmeasured variants must opt in through the
+  context JSON. See the policy reference and UPGRADE.md.
+
 - **Context JSON is size-bounded and duplicate-key strict.** Files larger than
   4 MiB and JSON objects with duplicate keys now fail closed. Parse errors are
   generic to avoid echoing raw context into logs. See UPGRADE.md.
@@ -170,6 +176,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the sweep's value list passes its size cap or its matcher cannot be built.
 
 ### Changed
+
+- **Caller-known record matching uses measured defaults.** Round-3 v2/v1
+  attribution found a positive net-byte gain for nine class and match-kind
+  pairs. Exact address parts, card, IBAN, national ID, passport, phone,
+  Steuer ID, and unlisted single-token names remain on; case-folded unlisted
+  single-token names also remain on. Flexible whitespace, combined whitespace
+  and case folding, common-word corroboration, and other unmeasured pairs are
+  off by default. Adopters can enable them with `record_match_kinds` in the
+  call-scoped context JSON. These defaults reduce unmeasured false-positive
+  exposure but can leave caller-known values to ordinary detectors until the
+  separate oracle measures those variants.
 
 - **The benchmark headline is scored-label contract v3** (solo todo #3696,
   after the gold-gap audit passed). Leaked bytes are unchanged from v2; false

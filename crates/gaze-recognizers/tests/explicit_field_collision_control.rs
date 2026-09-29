@@ -59,6 +59,7 @@ priority = 0
         dictionaries: Default::default(),
         class_map: Default::default(),
         fields: Default::default(),
+        record_match_kinds: Default::default(),
     };
     let pipeline = gaze_assembly::build_pipeline(
         &policy,

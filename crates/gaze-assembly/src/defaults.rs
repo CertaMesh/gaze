@@ -79,6 +79,7 @@ impl CorePipelineConfig {
             dictionaries: std::collections::HashMap::new(),
             class_map: std::collections::HashMap::new(),
             fields: serde_json::Map::new(),
+            record_match_kinds: Default::default(),
         };
         let pipeline = build_pipeline(&policy, &context, &rulepacks, &locale_chain, None)?;
 

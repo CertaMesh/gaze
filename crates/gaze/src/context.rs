@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::PiiClass;
+use gaze_types::RecordMatchKind;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -24,6 +25,8 @@ pub(crate) struct RawContext {
     pub(crate) record: Option<Value>,
     #[serde(default)]
     pub(crate) field_map: HashMap<String, String>,
+    #[serde(default)]
+    pub(crate) record_match_kinds: HashMap<String, BTreeSet<RecordMatchKind>>,
 }
 
 const MAX_CONTEXT_BYTES: usize = 4 * 1024 * 1024;
@@ -54,6 +57,7 @@ pub struct Context {
     pub dictionaries: HashMap<String, ContextDictionary>,
     pub class_map: HashMap<String, PiiClass>,
     pub fields: Map<String, Value>,
+    pub record_match_kinds: HashMap<String, BTreeSet<RecordMatchKind>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -136,7 +140,8 @@ impl Context {
         if let Value::Object(top) = &strict.0 {
             let has_record = top.contains_key("record");
             let has_field_map = top.contains_key("field_map");
-            if has_field_map && !has_record {
+            let has_match_kinds = top.contains_key("record_match_kinds");
+            if (has_field_map || has_match_kinds) && !has_record {
                 return Err(ContextError::IncompleteRecord);
             }
             if top.get("record").is_some_and(Value::is_null) {
@@ -154,7 +159,62 @@ impl Context {
         ContextFieldsRef(&self.fields)
     }
 
+    pub fn record_allowed_match_kinds(
+        &self,
+        class: &PiiClass,
+        term: &str,
+    ) -> BTreeSet<RecordMatchKind> {
+        let group = record_match_group(class, term);
+        if let Some(override_kinds) = self.record_match_kinds.get(&group) {
+            return override_kinds.clone();
+        }
+        match group.as_str() {
+            "name_single" => [RecordMatchKind::Exact, RecordMatchKind::CaseFolded]
+                .into_iter()
+                .collect(),
+            "address_part" | "custom:credit_card" | "custom:iban" | "custom:national_id"
+            | "custom:passport" | "custom:phone" | "custom:steuer_id" => {
+                [RecordMatchKind::Exact].into_iter().collect()
+            }
+            _ => BTreeSet::new(),
+        }
+    }
+
     fn from_raw(raw: RawContext) -> Result<Self, ContextError> {
+        if raw.record_match_kinds.keys().any(|name| {
+            !matches!(name.as_str(), "name_single" | "name_multi" | "address_part")
+                && PiiClass::from_policy_name(name).is_none_or(|class| {
+                    class.to_canonical_str() != *name
+                        || matches!(class, PiiClass::Name | PiiClass::Location)
+                })
+        }) {
+            return Err(ContextError::InvalidRecordMapping {
+                path: "/record_match_kinds".into(),
+            });
+        }
+        if raw.record_match_kinds.iter().any(|(name, kinds)| {
+            (name != "name_single" && kinds.contains(&RecordMatchKind::CorroboratedSingle))
+                || (name != "name_single"
+                    && name != "name_multi"
+                    && kinds.iter().any(|kind| {
+                        matches!(
+                            kind,
+                            RecordMatchKind::CaseFolded | RecordMatchKind::WhitespaceCaseFolded
+                        )
+                    }))
+                || (name == "name_single"
+                    && kinds.iter().any(|kind| {
+                        matches!(
+                            kind,
+                            RecordMatchKind::WhitespaceFlexible
+                                | RecordMatchKind::WhitespaceCaseFolded
+                        )
+                    }))
+        }) {
+            return Err(ContextError::InvalidRecordMapping {
+                path: "/record_match_kinds".into(),
+            });
+        }
         if raw
             .dictionaries
             .keys()
@@ -245,7 +305,17 @@ impl Context {
             dictionaries,
             class_map,
             fields: raw.fields,
+            record_match_kinds: raw.record_match_kinds,
         })
+    }
+}
+
+fn record_match_group(class: &PiiClass, term: &str) -> String {
+    match class {
+        PiiClass::Name if term.split_whitespace().count() == 1 => "name_single".into(),
+        PiiClass::Name => "name_multi".into(),
+        PiiClass::Location => "address_part".into(),
+        _ => class.to_canonical_str(),
     }
 }
 
@@ -553,6 +623,73 @@ mod tests {
             .map(|(name, _)| name)
             .unwrap();
         assert!(ctx.dictionaries[email].case_sensitive);
+    }
+
+    #[test]
+    fn record_match_defaults_and_overrides_are_explicit() {
+        let context = Context::from_json_str(
+            r#"{"record":{"first_name":"Maren","full_name":"Maren Okafor","email":"alice@example.invalid","phone":"+1-555-0104"}}"#,
+        ).unwrap();
+        assert_eq!(
+            context.record_allowed_match_kinds(&PiiClass::Name, "Maren"),
+            [RecordMatchKind::Exact, RecordMatchKind::CaseFolded]
+                .into_iter()
+                .collect(),
+        );
+        assert!(context
+            .record_allowed_match_kinds(&PiiClass::Name, "Maren Okafor")
+            .is_empty());
+        assert!(context
+            .record_allowed_match_kinds(&PiiClass::Email, "alice@example.invalid")
+            .is_empty());
+        assert_eq!(
+            context.record_allowed_match_kinds(&PiiClass::Custom("phone".into()), "+1-555-0104"),
+            [RecordMatchKind::Exact].into_iter().collect(),
+        );
+        for class in [
+            PiiClass::Location,
+            PiiClass::Custom("credit_card".into()),
+            PiiClass::Custom("iban".into()),
+            PiiClass::Custom("national_id".into()),
+            PiiClass::Custom("passport".into()),
+            PiiClass::Custom("steuer_id".into()),
+        ] {
+            assert_eq!(
+                context.record_allowed_match_kinds(&class, "Synthetic Value"),
+                [RecordMatchKind::Exact].into_iter().collect(),
+            );
+        }
+
+        let opted = Context::from_json_str(
+            r#"{"record":{"name":"Maren Okafor"},"record_match_kinds":{"name_multi":["whitespace_flexible","whitespace_case_folded"]}}"#,
+        ).unwrap();
+        assert_eq!(
+            opted.record_allowed_match_kinds(&PiiClass::Name, "Maren Okafor"),
+            [
+                RecordMatchKind::WhitespaceFlexible,
+                RecordMatchKind::WhitespaceCaseFolded
+            ]
+            .into_iter()
+            .collect(),
+        );
+        assert!(matches!(
+            Context::from_json_str(
+                r#"{"record":{"name":"Maren"},"record_match_kinds":{"Name":["exact"]}}"#
+            ),
+            Err(ContextError::InvalidRecordMapping { .. })
+        ));
+        assert!(matches!(
+            Context::from_json_str(
+                r#"{"record":{"email":"alice@example.invalid"},"record_match_kinds":{"email":["case_folded"]}}"#
+            ),
+            Err(ContextError::InvalidRecordMapping { .. })
+        ));
+        assert!(matches!(
+            Context::from_json_str(
+                r#"{"record":{"name":"Maren"},"record_match_kinds":{"name_single":["unknown"]}}"#
+            ),
+            Err(ContextError::RecordJson { .. })
+        ));
     }
 
     #[test]

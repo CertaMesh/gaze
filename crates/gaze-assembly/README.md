@@ -50,6 +50,7 @@ let context = Context {
     dictionaries: HashMap::new(),
     class_map: HashMap::new(),
     fields: serde_json::Map::new(),
+    record_match_kinds: Default::default(),
 };
 let rulepacks: Vec<Rulepack> = Vec::new();
 let active_locales = LocaleChain::merge_policy_and_cli(None, None);

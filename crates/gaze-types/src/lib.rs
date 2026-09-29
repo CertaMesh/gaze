@@ -30,6 +30,18 @@ pub enum EvidenceKind {
     Rule,
 }
 
+/// Matching variants available to a caller-known record. Unmeasured variants
+/// require an explicit adopter opt-in in the context envelope.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordMatchKind {
+    Exact,
+    WhitespaceFlexible,
+    CaseFolded,
+    WhitespaceCaseFolded,
+    CorroboratedSingle,
+}
+
 /// Shared detector contract for text-only PII detection.
 pub trait Detector: Send + Sync {
     /// Detect PII spans in the supplied input string.
