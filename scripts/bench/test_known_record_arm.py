@@ -48,6 +48,51 @@ def document(uid: str, text: str, label: str | None) -> score.Document:
     )
 
 
+def test_oracle_context_uses_real_scorer_request_id() -> None:
+    item = document("known-record-fixture", "Alice Smith", "GIVENNAME")
+    requests = []
+
+    class StoppingTransport:
+        message_deadline = None
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def exchange(self, request):
+            requests.append(request)
+            raise RuntimeError("request captured")
+
+    with patch.object(score, "BenchSubprocess", StoppingTransport):
+        try:
+            arm.run_with_record_context(
+                {item.uid: '{"record":{}}'},
+                repo_root=Path(__file__).resolve().parents[2],
+                binary=Path("synthetic-binary"),
+                config="policy-file",
+                documents=[item],
+                model_dir=Path("synthetic-model"),
+                opf_command=None,
+                opf_checkpoint=None,
+                opf_daemon_socket=None,
+                threshold=0.3,
+                diagnostics_dir=Path("synthetic-diagnostics"),
+            )
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("real scorer request was not sent")
+
+    assert len(requests) == 1
+    assert requests[0]["fixture_id"] == item.uid
+    assert requests[0]["context_json"] == '{"record":{}}'
+
+
 def test_gold_value_becomes_explicit_record_field() -> None:
     raw, eligible = arm.record_for_document(
         document("email", "alice@example.invalid", "EMAIL"), POLICY
