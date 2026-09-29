@@ -4448,9 +4448,10 @@ pub struct DetectContext<'a> {
     /// Raw candidates found by ordinary recognizers, available only to a recognizer that
     /// requests the post-floor pass. They have not passed validator veto or conflict resolution.
     pub prior_candidates: Option<&'a [Candidate]>,
-    /// The structured field the input came from, if any. Validator veto reads it so a PII cue
-    /// in the field name (`postal_code`, `phoneNumber`) keeps a benign lookalike veto off.
-    pub field_name: Option<&'a str>,
+    /// The structured context the input came from, if any: path keys, sibling keys and short
+    /// sibling values. Validator veto reads it so a PII cue there (`shippingAddress`,
+    /// `{"type": "phone"}`) keeps a benign lookalike veto off.
+    pub veto_context: Option<&'a benign_lookalike::VetoContext>,
 }
 
 impl<'a> DetectContext<'a> {
@@ -4463,13 +4464,16 @@ impl<'a> DetectContext<'a> {
             degraded: Cell::new(false),
             source_spans: None,
             prior_candidates: None,
-            field_name: None,
+            veto_context: None,
         }
     }
 
-    /// Records the structured field the input came from; see [`DetectContext::field_name`].
-    pub fn with_field_name(mut self, field_name: Option<&'a str>) -> Self {
-        self.field_name = field_name;
+    /// Records the structured context the input came from; see [`DetectContext::veto_context`].
+    pub fn with_veto_context(
+        mut self,
+        veto_context: Option<&'a benign_lookalike::VetoContext>,
+    ) -> Self {
+        self.veto_context = veto_context;
         self
     }
 

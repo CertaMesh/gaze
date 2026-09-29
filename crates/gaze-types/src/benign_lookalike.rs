@@ -76,42 +76,77 @@ pub fn is_audited(recognizer_id: &str) -> bool {
         .any(|(id, _)| *id == recognizer_id)
 }
 
-/// Stems of cue words for the classes that opt in (phone, postal code). A word starting with
-/// one of these on the candidate's line, or in its field name, means the writer may have
-/// labelled the value as PII, so no structure fires. Matching by stem errs toward protection.
-/// Address words count too: a postcode or phone in an address field is the address's own.
+/// Stems of cue words for the classes that opt in (phone, postal code) and for addresses, in
+/// every language Gaze ships a locale pack or a postal rule for (en, de, fr, es, it, nl, pt).
+/// Words are case-folded and accent-folded first (`Téléphone` reads `telephone`), and a word
+/// starting with a stem counts, so a longer word that merely starts like a cue also disables
+/// the veto: matching errs toward protection. Every `phone_labels` entry in the bundled locale
+/// packs must trip this check (`gaze-recognizers` drift test).
 const CUE_STEMS: &[&str] = &[
-    "addr",
-    "adress",
-    "anruf",
-    "anschrift",
-    "billing",
-    "call",
-    "cell",
-    "city",
-    "contact",
-    "delivery",
-    "fax",
-    "handy",
-    "kontakt",
-    "liefer",
-    "mobil",
-    "ort",
+    // phone
+    "tel",
     "phone",
+    "fon",
+    "fax",
+    "mobil",
+    "mobiel",
+    "movil",
+    "cell",
+    "celular",
+    "handy",
+    "portable",
+    "ruf",
+    "anruf",
+    "call",
+    "contact",
+    "contatto",
+    "contacto",
+    "kontakt",
+    // postal code
+    "zip",
     "plz",
     "post",
-    "ruf",
+    "codigo",
+    "codice",
+    "npa",
+    // address
+    "addr",
+    "adres",
+    "adress",
+    "anschrift",
+    "billing",
     "shipping",
-    "stadt",
-    "strasse",
-    "straße",
+    "delivery",
+    "liefer",
     "street",
-    "tel",
+    "strasse",
+    "straat",
+    "calle",
+    "indirizzo",
+    "direccion",
+    "endereco",
+    "city",
+    "stadt",
+    "ort",
     "wohn",
-    "zip",
+    "ville",
+    "citta",
+    "ciudad",
+    "cidade",
+    "woonplaats",
 ];
-/// How far before or after the candidate a cue word still counts, in bytes.
-const CUE_WINDOW: usize = 40;
+/// Short cue words that only count as whole words: as stems they would match common words
+/// (`capital`, `cepa`).
+const CUE_WORDS: &[&str] = &["cap", "cp", "cep", "gsm", "rue", "rua"];
+/// A label heads the record it labels, and a blank line ends a record, so the cue window reaches
+/// back to the previous blank line. It is capped at [`BLOCK_LINES_ABOVE`] lines and
+/// [`BLOCK_BYTES_ABOVE`] bytes above the candidate so one heading does not switch off every veto
+/// in a long document, while a label line followed by a short instruction line or two (a typical
+/// agent prompt) stays in reach.
+const BLOCK_LINES_ABOVE: usize = 6;
+const BLOCK_BYTES_ABOVE: usize = 400;
+/// After the candidate: the rest of its line and the next non-blank line, this many bytes each.
+const AFTER_BYTES: usize = 120;
 const CURRENCY_CODES: &[&str] = &["CHF", "EUR", "GBP", "USD"];
 const CURRENCY_SIGNS: &[char] = &['€', '$', '£'];
 /// No E.164 number has more digits than this, so a longer run cannot be one phone number.
@@ -137,12 +172,13 @@ impl BenignLookalike {
         }
     }
 
-    /// Whether `text[span]` sits inside this benign structure. `field_name` is the structured
-    /// field the text came from, if any.
-    pub fn matches(self, text: &str, span: Range<usize>, field_name: Option<&str>) -> bool {
+    /// Whether `text[span]` sits inside this benign structure. `context` is the structured
+    /// context the text came from, if any; a cue in it, or in the text around the candidate,
+    /// keeps the candidate protected.
+    pub fn matches(self, text: &str, span: Range<usize>, context: Option<&VetoContext>) -> bool {
         if span.start >= span.end
             || text.get(span.clone()).is_none()
-            || field_name.is_some_and(has_cue)
+            || context.is_some_and(VetoContext::has_cue)
             || cued(text, span.clone())
         {
             return false;
@@ -155,64 +191,98 @@ impl BenignLookalike {
     }
 }
 
-/// Whether any word of `text` starts with a cue stem. Words split at every non-letter and at
+/// Lowercases and strips the accents of common Latin letters, so `Téléphone` reads
+/// `telephone` and `Straße` reads `strasse`.
+fn fold(c: char) -> Vec<char> {
+    let lower: Vec<char> = c.to_lowercase().collect();
+    lower
+        .into_iter()
+        .flat_map(|c| match c {
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => vec!['a'],
+            'ç' => vec!['c'],
+            'è' | 'é' | 'ê' | 'ë' => vec!['e'],
+            'ì' | 'í' | 'î' | 'ï' => vec!['i'],
+            'ñ' => vec!['n'],
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' => vec!['o'],
+            'ù' | 'ú' | 'û' | 'ü' => vec!['u'],
+            'ß' => vec!['s', 's'],
+            other => vec![other],
+        })
+        .collect()
+}
+
+/// Whether any word of `text` is a cue: it starts with a [`CUE_STEMS`] stem or equals a
+/// [`CUE_WORDS`] word, after case and accent folding. Words split at every non-letter and at
 /// each lower-to-upper case change, so `postal_code`, `zipCode` and `phoneNumber` all count.
-fn has_cue(text: &str) -> bool {
+pub fn has_cue(text: &str) -> bool {
+    let mut words = Vec::new();
     let mut word = String::new();
     let mut previous_lower = false;
-    let mut words = Vec::new();
     for c in text.chars() {
         if (!c.is_alphabetic() || (c.is_uppercase() && previous_lower)) && !word.is_empty() {
             words.push(std::mem::take(&mut word));
         }
         if c.is_alphabetic() {
-            word.extend(c.to_lowercase());
+            word.extend(fold(c));
         }
         previous_lower = c.is_lowercase();
     }
     words.push(word);
-    words
-        .iter()
-        .any(|word| CUE_STEMS.iter().any(|stem| word.starts_with(stem)))
+    words.iter().any(|word| {
+        CUE_WORDS.contains(&word.as_str()) || CUE_STEMS.iter().any(|stem| word.starts_with(stem))
+    })
 }
 
-/// Whether a cue word stands within [`CUE_WINDOW`] bytes before or after the candidate on its
-/// own line, or on the line directly above or below it (a label line such as `ZIP:` over the
-/// value), or inside the candidate's own token.
+/// Whether a cue stands in the candidate's block: back to the previous blank line (at most
+/// [`BLOCK_LINES_ABOVE`] lines and [`BLOCK_BYTES_ABOVE`] bytes above the candidate's line),
+/// the candidate's own line, and the next non-blank line.
 fn cued(text: &str, span: Range<usize>) -> bool {
     let is_break = |c: char| c == '\n' || c == '\r';
-    // Current line up to the candidate, then the line above it.
     let head = &text[..span.start];
     let line_start = head.rfind(is_break).map_or(0, |index| index + 1);
-    let above = head[..line_start].trim_end_matches(is_break);
-    let above = &above[above.rfind(is_break).map_or(0, |index| index + 1)..];
-    // Current line after the candidate, then the line below it.
+    // Lines above, nearest first, until a blank line or a cap.
+    let mut above = Vec::new();
+    let mut rest = &head[..line_start];
+    let mut bytes = 0;
+    while above.len() < BLOCK_LINES_ABOVE && !rest.is_empty() {
+        let trimmed = rest
+            .strip_suffix("\r\n")
+            .or_else(|| rest.strip_suffix(['\n', '\r']))
+            .unwrap_or(rest);
+        let start = trimmed.rfind(is_break).map_or(0, |index| index + 1);
+        let line = &trimmed[start..];
+        if line.trim().is_empty() {
+            break;
+        }
+        // A line that crosses the byte cap still counts up to the cap, nearest bytes first.
+        let budget = BLOCK_BYTES_ABOVE - bytes;
+        if line.len() >= budget {
+            let mut from = line.len() - budget;
+            while !line.is_char_boundary(from) {
+                from += 1;
+            }
+            above.push(&line[from..]);
+            break;
+        }
+        bytes += line.len();
+        above.push(line);
+        rest = &trimmed[..start];
+    }
     let tail = &text[span.end..];
     let line_end = tail.find(is_break).unwrap_or(tail.len());
-    let below = tail[line_end..].trim_start_matches(is_break);
-    let below = &below[..below.find(is_break).unwrap_or(below.len())];
-    [
-        last_bytes(&head[line_start..]),
-        last_bytes(above),
-        first_bytes(&tail[..line_end]),
-        first_bytes(below),
-    ]
-    .into_iter()
-    .any(has_cue)
+    let below = tail[line_end..]
+        .split(is_break)
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("");
+    has_cue(&head[line_start..])
+        || above.into_iter().any(has_cue)
+        || has_cue(first_bytes(&tail[..line_end]))
+        || has_cue(first_bytes(below))
 }
 
-/// The last [`CUE_WINDOW`] bytes of `text`, widened to a character boundary.
-fn last_bytes(text: &str) -> &str {
-    let mut from = text.len().saturating_sub(CUE_WINDOW);
-    while !text.is_char_boundary(from) {
-        from -= 1;
-    }
-    &text[from..]
-}
-
-/// The first [`CUE_WINDOW`] bytes of `text`, widened to a character boundary.
+/// The first [`AFTER_BYTES`] bytes of `text`, widened to a character boundary.
 fn first_bytes(text: &str) -> &str {
-    let mut to = CUE_WINDOW.min(text.len());
+    let mut to = AFTER_BYTES.min(text.len());
     while !text.is_char_boundary(to) {
         to += 1;
     }
@@ -312,6 +382,38 @@ fn digit_run_fragment(text: &str, span: Range<usize>) -> bool {
     first.is_some()
         && separators.all(|byte| Some(byte) == first)
         && run.iter().filter(|byte| byte.is_ascii_digit()).count() > MAX_PHONE_DIGITS
+}
+
+/// Structured context around a value: the keys on its path (`shippingAddress`, `code`), its
+/// sibling keys and short sibling string values (`{"type": "phone", "value": ...}`). A cue
+/// anywhere in it keeps every candidate in the value protected.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct VetoContext {
+    labels: Vec<String>,
+}
+
+/// Sibling string values longer than this are content, not labels.
+pub const SIBLING_LABEL_MAX_BYTES: usize = 64;
+
+impl VetoContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds one label: a key on the path, a sibling key, or a short sibling value.
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.labels.push(label.into());
+        self
+    }
+
+    pub fn labels(&self) -> &[String] {
+        &self.labels
+    }
+
+    /// Whether any label carries a cue.
+    pub fn has_cue(&self) -> bool {
+        self.labels.iter().any(|label| has_cue(label))
+    }
 }
 
 /// The exact rule a benign lookalike veto may apply to: id, class, pattern, capture groups,
@@ -520,7 +622,8 @@ mod tests {
             "Postleitzahl ORDER-80331",
             "80331"
         ));
-        // A label line directly above or below counts, CRLF too; two lines away does not.
+        // A label anywhere in the block above counts (CRLF too), and on the next line below;
+        // a blank line ends the block.
         assert!(!fires(JoinedIdentifier, "ZIP:\nORDER-90210", "90210"));
         assert!(!fires(
             JoinedIdentifier,
@@ -528,36 +631,83 @@ mod tests {
             "0301234567"
         ));
         assert!(!fires(CurrencyAmount, "EUR 22186,12\n(phone)", "22186"));
-        assert!(fires(CurrencyAmount, "Tel\nnote\nEUR 22186,12", "22186"));
+        assert!(!fires(CurrencyAmount, "Tel\nnote\nEUR 22186,12", "22186"));
+        assert!(!fires(
+            JoinedIdentifier,
+            "ZIP for delivery:\nUse the customer value below.\nORDER-90210",
+            "90210"
+        ));
+        assert!(fires(CurrencyAmount, "Tel\n\nEUR 22186,12", "22186"));
+        // The block reaches six lines up, and no further.
+        let six = "ZIP\na\nb\nc\nd\ne\nEUR 22186,12";
+        let seven = "ZIP\na\nb\nc\nd\ne\nf\nEUR 22186,12";
+        assert!(!fires(CurrencyAmount, six, "22186"));
+        assert!(fires(CurrencyAmount, seven, "22186"));
+        // And 400 bytes up: a cue in the last 400 bytes of a long line above counts.
+        let near = format!("{}ZIP {}\nEUR 22186,12", "x ".repeat(300), "y ".repeat(190));
+        let far = format!("ZIP {}\nEUR 22186,12", "y ".repeat(205));
+        assert!(!fires(CurrencyAmount, &near, "22186"));
+        assert!(fires(CurrencyAmount, &far, "22186"));
+        // Other languages, case- and accent-folded.
+        for label in [
+            "Téléphone:",
+            "TÉL.",
+            "Teléfono:",
+            "Telefono:",
+            "Código postal:",
+            "CAP:",
+            "Postcode:",
+            "Telefoon:",
+            "Endereço:",
+            "Straße:",
+            "Indirizzo:",
+            "gsm",
+        ] {
+            assert!(
+                !fires(JoinedIdentifier, &format!("{label} ORDER-90210"), "90210"),
+                "{label}"
+            );
+        }
         // A word merely containing a cue does not count.
         assert!(fires(CurrencyAmount, "Hotel EUR 22186,12", "22186"));
     }
 
     #[test]
-    fn a_cue_in_the_field_name_disables_every_structure() {
+    fn a_cue_in_the_structured_context_disables_every_structure() {
         use BenignLookalike::JoinedIdentifier as J;
         let text = "ORDER-90210";
-        for field in [
-            "postal_code",
-            "zipCode",
-            "PLZ",
-            "phone",
-            "customer.telefon",
-            "contact",
-            "address",
-            "shippingAddress",
-            "billing_address",
-            "delivery-address",
-            "Anschrift",
-            "adresse",
-            "street",
-            "city",
-            "Wohnort",
+        let context = |labels: &[&str]| {
+            labels.iter().fold(VetoContext::new(), |context, label| {
+                context.with_label(*label)
+            })
+        };
+        for labels in [
+            &["postal_code"][..],
+            &["zipCode"],
+            &["PLZ"],
+            &["customer", "telefon"],
+            &["contact", "value"],
+            &["shippingAddress", "code"],
+            &["billing_address"],
+            &["delivery-address"],
+            &["Anschrift"],
+            &["item", "value", "type", "phone"],
+            &["item", "value", "label", "ZIP"],
         ] {
-            assert!(!J.matches(text, at(text, "90210"), Some(field)), "{field}");
+            assert!(
+                !J.matches(text, at(text, "90210"), Some(&context(labels))),
+                "{labels:?}"
+            );
         }
-        for field in ["order", "reference", "itemCode", "orderRef", "sku"] {
-            assert!(J.matches(text, at(text, "90210"), Some(field)), "{field}");
+        for labels in [
+            &["order"][..],
+            &["items", "reference"],
+            &["itemCode", "sku"],
+        ] {
+            assert!(
+                J.matches(text, at(text, "90210"), Some(&context(labels))),
+                "{labels:?}"
+            );
         }
     }
 

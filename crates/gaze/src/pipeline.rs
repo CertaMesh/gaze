@@ -630,6 +630,7 @@ impl Pipeline {
                 target,
                 &text,
                 None,
+                None,
                 DocumentKind::Text,
                 locale_chain,
                 dictionaries,
@@ -780,6 +781,7 @@ impl Pipeline {
             target,
             text,
             None,
+            None,
             DocumentKind::Text,
             locale_chain,
             dictionaries,
@@ -827,6 +829,7 @@ impl Pipeline {
         let mut clean = self.redact_text_with_manifest_uncached(
             &mut target,
             text,
+            None,
             None,
             DocumentKind::Text,
             locale_chain,
@@ -975,11 +978,13 @@ impl Pipeline {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn pseudonymize_text(
         &self,
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
+        veto_context: Option<&gaze_types::benign_lookalike::VetoContext>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
@@ -989,6 +994,7 @@ impl Pipeline {
                 target,
                 text,
                 field_name,
+                veto_context,
                 document_kind,
                 locale_chain,
                 dictionaries,
@@ -1002,6 +1008,7 @@ impl Pipeline {
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
+        veto_context: Option<&gaze_types::benign_lookalike::VetoContext>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
@@ -1012,6 +1019,7 @@ impl Pipeline {
             target,
             text,
             field_name,
+            veto_context,
             document_kind,
             locale_chain,
             dictionaries,
@@ -1025,6 +1033,7 @@ impl Pipeline {
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
+        veto_context: Option<&gaze_types::benign_lookalike::VetoContext>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
@@ -1034,7 +1043,7 @@ impl Pipeline {
         let spans = &normalized.spans;
         let ctx = DetectContext::new(locale_chain, dictionaries)
             .with_source_spans(spans)
-            .with_field_name(field_name);
+            .with_veto_context(veto_context);
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
@@ -5067,8 +5076,10 @@ fn walk_structured(
     op: LeafOp,
 ) -> Result<BTreeMap<String, Value>> {
     let mut clean = BTreeMap::new();
+    let root = gaze_types::benign_lookalike::VetoContext::new();
     for (key, value) in fields {
         let path = op.root_path(key);
+        let veto = child_veto_context(&root, key, fields);
         // A field error aborts the whole document rather than yielding a partially protected
         // one: the caller asked for a protected document, not a best-effort one.
         if let Some(value) = walk_structured_value(
@@ -5077,6 +5088,7 @@ fn walk_structured(
             value,
             key,
             &path,
+            &veto,
             locale_chain,
             dictionaries,
             report,
@@ -5086,6 +5098,29 @@ fn walk_structured(
         }
     }
     Ok(clean)
+}
+
+/// The benign-lookalike context of `fields[key]`: everything its parent carried, plus its own key,
+/// its sibling keys and its short sibling string values, so `shippingAddress.code` and
+/// `{"type": "phone", "value": ...}` both reach the veto.
+fn child_veto_context(
+    parent: &gaze_types::benign_lookalike::VetoContext,
+    key: &str,
+    fields: &BTreeMap<String, Value>,
+) -> gaze_types::benign_lookalike::VetoContext {
+    let mut context = parent.clone().with_label(key);
+    for (sibling, value) in fields {
+        if sibling == key {
+            continue;
+        }
+        context = context.with_label(sibling.as_str());
+        if let Value::String(text) = value {
+            if text.len() <= gaze_types::benign_lookalike::SIBLING_LABEL_MAX_BYTES {
+                context = context.with_label(text.as_str());
+            }
+        }
+    }
+    context
 }
 
 /// Walks one structured value under `op`.
@@ -5099,6 +5134,7 @@ fn walk_structured_value(
     value: &Value,
     field_name: &str,
     field_path: &str,
+    veto: &gaze_types::benign_lookalike::VetoContext,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
     report: &mut LeakReport,
@@ -5110,6 +5146,7 @@ fn walk_structured_value(
                 target,
                 text,
                 Some(field_name),
+                Some(veto),
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
@@ -5122,6 +5159,7 @@ fn walk_structured_value(
                     target,
                     text,
                     Some(field_name),
+                    Some(veto),
                     DocumentKind::Structured,
                     locale_chain,
                     dictionaries,
@@ -5170,6 +5208,7 @@ fn walk_structured_value(
                     child,
                     field_name,
                     &format!("{field_path}[{idx}]"),
+                    veto,
                     locale_chain,
                     dictionaries,
                     report,
@@ -5183,12 +5222,14 @@ fn walk_structured_value(
         Value::Object(fields) => {
             let mut clean = BTreeMap::new();
             for (key, child) in fields {
+                let child_veto = child_veto_context(veto, key, fields);
                 if let Some(child) = walk_structured_value(
                     pipeline,
                     target,
                     child,
                     key,
                     &format!("{field_path}.{key}"),
+                    &child_veto,
                     locale_chain,
                     dictionaries,
                     report,

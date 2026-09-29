@@ -16,7 +16,7 @@ pub fn apply(
     registry: &RecognizerRegistry,
     input: &str,
     source_spans: Option<&[(usize, usize)]>,
-    field_name: Option<&str>,
+    context: Option<&gaze_types::benign_lookalike::VetoContext>,
 ) -> (Vec<Candidate>, Vec<VetoedCandidate>) {
     let mut kept = Vec::with_capacity(candidates.len());
     let mut vetoed = Vec::new();
@@ -40,7 +40,7 @@ pub fn apply(
             if let Some(structure) = grant
                 .structures()
                 .iter()
-                .find(|structure| structure.matches(input, candidate.span.clone(), field_name))
+                .find(|structure| structure.matches(input, candidate.span.clone(), context))
                 .filter(|_| audited_match(&mut patterns, grant, input, candidate.span.clone()))
             {
                 vetoed.push(VetoedCandidate {

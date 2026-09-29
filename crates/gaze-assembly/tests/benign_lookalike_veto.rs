@@ -777,3 +777,190 @@ fn a_borrowed_grant_with_another_identity_vetoes_nothing() {
     };
     assert!(!text.contains("90210"), "{text}");
 }
+
+fn object(fields: &[(&str, gaze::Value)]) -> gaze::Value {
+    gaze::Value::Object(
+        fields
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.clone()))
+            .collect(),
+    )
+}
+
+fn string(text: &str) -> gaze::Value {
+    gaze::Value::String(text.to_string())
+}
+
+/// The structured document with every string leaf, in path order.
+fn leaves(value: &gaze::Value, out: &mut Vec<String>) {
+    match value {
+        gaze::Value::String(text) => out.push(text.clone()),
+        gaze::Value::Array(values) => values.iter().for_each(|value| leaves(value, out)),
+        gaze::Value::Object(fields) => fields.values().for_each(|value| leaves(value, out)),
+        _ => {}
+    }
+}
+
+fn clean_structured(locale: &str, root: &[(&str, gaze::Value)]) -> (Vec<String>, Vetoes) {
+    let map = root
+        .iter()
+        .map(|(key, value)| (key.to_string(), value.clone()))
+        .collect();
+    let (clean, vetoes) = clean_document(locale, RawDocument::Structured(map));
+    let CleanDocument::Structured(map) = clean else {
+        panic!("expected structured");
+    };
+    let mut out = Vec::new();
+    map.values().for_each(|value| leaves(value, &mut out));
+    (out, vetoes)
+}
+
+/// Review 10848, all nine probes: labelled values in nested records, sibling type or label
+/// fields, block-level labels a few lines up, and French labels stay protected with no veto row.
+#[test]
+fn review_10848_labelled_values_stay_protected_with_no_veto_row() {
+    let structured: [(&str, &str, Vec<(&str, gaze::Value)>); 4] = [
+        (
+            "90210",
+            "shippingAddress.code",
+            vec![(
+                "shippingAddress",
+                object(&[("code", string("ORDER-90210"))]),
+            )],
+        ),
+        (
+            "555-0187",
+            "contact.value",
+            vec![(
+                "contact",
+                object(&[("value", string("ORDER-212-555-0187"))]),
+            )],
+        ),
+        (
+            "555-0187",
+            "type phone sibling",
+            vec![(
+                "item",
+                object(&[
+                    ("type", string("phone")),
+                    ("value", string("ORDER-212-555-0187")),
+                ]),
+            )],
+        ),
+        (
+            "90210",
+            "label ZIP sibling",
+            vec![(
+                "item",
+                object(&[("label", string("ZIP")), ("value", string("ORDER-90210"))]),
+            )],
+        ),
+    ];
+    for (value, name, root) in structured {
+        let (leaves, vetoes) = clean_structured("en-US", &root);
+        assert!(
+            leaves.iter().all(|leaf| !leaf.contains(value)),
+            "{name}: {leaves:?}"
+        );
+        assert!(vetoes.is_empty(), "{name}: {vetoes:?}");
+    }
+    for (locale, input, value) in [
+        (
+            "en-US",
+            "ZIP for delivery:\nUse the customer value below.\nORDER-90210",
+            "90210",
+        ),
+        (
+            "de-DE",
+            "Telefonnummer des Kunden:\nBitte den Wert unten verwenden.\nORDER-0301234567",
+            "0301234567",
+        ),
+        ("en-US", "Téléphone: ORDER-212-555-0187", "555-0187"),
+        (
+            "en-US",
+            "ZIP for shipping:\nUse the customer value below.\nEUR 90210",
+            "90210",
+        ),
+        (
+            "de-DE",
+            "Telefon des Kunden:\nBitte den Wert unten verwenden.\n0593-9506-3395-7573",
+            "0593-9506-3395",
+        ),
+    ] {
+        assert_protected(locale, input, value);
+    }
+}
+
+/// Counterweights: benign references, amounts and long SKUs in structured records whose path
+/// and siblings carry no cue still leave raw, one audit row each.
+#[test]
+fn structured_benign_lookalikes_still_leave_raw_with_one_row_each() {
+    use ValidatorFailReason::*;
+    let (leaves, vetoes) = clean_structured(
+        "en-US",
+        &[(
+            "order",
+            object(&[
+                ("ref", string("ORDER-90210")),
+                ("total", string("EUR 22186,12")),
+            ]),
+        )],
+    );
+    assert_eq!(leaves, vec!["ORDER-90210", "EUR 22186,12"]);
+    let mut vetoes = vetoes;
+    vetoes.sort_by_key(|row| format!("{row:?}"));
+    assert_eq!(
+        vetoes,
+        vec![
+            ("postal.us".to_string(), BenignCurrencyAmount),
+            ("postal.us".to_string(), BenignJoinedIdentifier),
+        ]
+    );
+    let (leaves, vetoes) = clean_structured(
+        "de-DE",
+        &[(
+            "items",
+            gaze::Value::Array(vec![object(&[("itemCode", string("0593-9506-3395-7573"))])]),
+        )],
+    );
+    assert_eq!(leaves, vec!["0593-9506-3395-7573"]);
+    assert_eq!(
+        vetoes,
+        vec![("phone.national.de".to_string(), BenignDigitRunFragment)]
+    );
+}
+
+/// Drift guard: every phone label a bundled locale pack ships (`[locale.phone_labels]`) must be
+/// a benign-lookalike cue, so a label the locale packs know can never be waved through.
+#[test]
+fn every_bundled_phone_label_is_a_benign_lookalike_cue() {
+    let mut checked = 0;
+    for name in [
+        "locale-de",
+        "locale-en",
+        "locale-fr",
+        "locale-nl",
+        "locale-br",
+        "locale-in",
+        "locale-uk",
+    ] {
+        let pack = Rulepack::load(RulepackSource::Embedded(
+            gaze_recognizers::embedded(name).expect("embedded locale pack"),
+        ))
+        .expect("locale pack");
+        let Some(locale) = pack.locale.as_ref() else {
+            continue;
+        };
+        if let Some(bucket) = locale.buckets.get("phone_labels") {
+            for label in &bucket.names {
+                assert!(
+                    gaze_recognizers::benign_lookalike_has_cue(label),
+                    "{name} phone label {label:?} is not a cue"
+                );
+                checked += 1;
+            }
+        }
+    }
+    // de, fr, nl and br ship phone labels today; an empty scan would prove nothing.
+    assert!(checked >= 15, "only {checked} phone labels checked");
+}

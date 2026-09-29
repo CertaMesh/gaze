@@ -456,6 +456,7 @@ impl Pipeline {
                 &mut target,
                 input,
                 None,
+                None,
                 DocumentKind::Text,
                 context.locale_chain,
                 context.dictionaries,

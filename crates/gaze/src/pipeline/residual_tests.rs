@@ -59,6 +59,7 @@ fn clean(p: &Pipeline, session: &Session, raw: &str) -> Result<CleanText> {
         &mut ProtectionTarget::Live(session),
         raw,
         None,
+        None,
         DocumentKind::Text,
         &[crate::LocaleTag::Global],
         &DictionaryBundle::default(),
@@ -795,6 +796,7 @@ fn audit_failures_preserve_original_order_and_residual_allocate_before_log() {
             .redact_text_with_manifest_uncached(
                 &mut ProtectionTarget::Staged(&mut tx),
                 raw,
+                None,
                 None,
                 DocumentKind::Text,
                 &[crate::LocaleTag::Global],

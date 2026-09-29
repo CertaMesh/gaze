@@ -863,6 +863,7 @@ mod tests {
                 &mut ProtectionTarget::Live(&session),
                 raw,
                 None,
+                None,
                 DocumentKind::Text,
                 &[crate::LocaleTag::Global],
                 &DictionaryBundle::default(),
@@ -1161,6 +1162,7 @@ mod tests {
             .redact_text_with_manifest_uncached(
                 &mut ProtectionTarget::Live(&session),
                 "alice@example.invalid",
+                None,
                 None,
                 DocumentKind::Text,
                 &[crate::LocaleTag::Global],
