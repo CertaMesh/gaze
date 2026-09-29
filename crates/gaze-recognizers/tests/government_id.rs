@@ -508,16 +508,19 @@ fn labelled_identifier_values_are_captured_without_the_field_name() {
             "tax_number",
         ),
         ("Tax number AB12-CD3456", "AB12-CD3456", "tax_number"),
+        ("Steuernummer: 12AB3456", "12AB3456", "tax_number"),
         (
             "Führerschein Nr. DE 1234ABCD ist gültig.",
             "DE 1234ABCD",
             "driver_license",
         ),
+        ("Driver's licence: 12AB-3456", "12AB-3456", "driver_license"),
         (
             "Carte d'identité est FR23/AB4567.",
             "FR23/AB4567",
             "national_id",
         ),
+        ("ID card: 12AB-3456", "12AB-3456", "national_id"),
         ("Tax number:\n  AB12-CD3456", "AB12-CD3456", "tax_number"),
         (
             "Rijbewijsnummer\r\n NL12345678",
@@ -548,6 +551,7 @@ fn labelled_identifier_field_boundaries_reject_lookalikes() {
         "order_id: 5123-6789-0456",
         "international_id: NL12345678",
         "invoice_number: 67-853-422",
+        "invoice_number: 12AB-3456",
         "Identification card: A12345678901234567890",
         "Permis de conduire:\nnotes\n987654321",
         "Tax Number: 12345678901",
