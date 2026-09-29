@@ -2054,14 +2054,10 @@ pub(crate) struct StrictRestoreToken {
 
 pub(crate) fn strict_restore_tokens(text: &str) -> Result<Vec<StrictRestoreToken>> {
     let mut tokens = Vec::new();
+    // Tokens are matched by their exact grammar, so a literal `<` or `>` beside one is
+    // ordinary text (`<alice@example.invalid>` cleans to `<{token}>`). Rejecting such
+    // neighbours as "nested" broke round-trip for HTML, generics and mail headers (todo 4009).
     for matched in crate::token_shape::pattern().find_iter(text) {
-        let nested_start = matched.start() > 0 && text.as_bytes()[matched.start() - 1] == b'<';
-        let nested_end = matched.end() < text.len() && text.as_bytes()[matched.end()] == b'>';
-        if nested_start || nested_end {
-            let start = matched.start().saturating_sub(usize::from(nested_start));
-            let end = matched.end() + usize::from(nested_end);
-            return Err(unknown_token_error(&text[start..end]));
-        }
         tokens.push(StrictRestoreToken {
             start: matched.start(),
             end: matched.end(),
@@ -3966,7 +3962,7 @@ mod tests {
     }
 
     #[test]
-    fn transaction_token_shape_validation_rejects_unknown_malformed_nested_and_cross_session() {
+    fn transaction_token_shape_validation_rejects_unknown_malformed_and_cross_session() {
         let session = Session::new(Scope::Ephemeral).expect("session");
         let mut transaction = session.begin_transaction();
         let ordinary = transaction
@@ -3995,8 +3991,12 @@ mod tests {
                 transaction.session_hex()
             ))
             .is_err());
+        // todo 4009: literal angle brackets beside a known token are ordinary text.
+        transaction
+            .validate_token_shapes(&format!("<{ordinary}> <<{format_preserving}>>"))
+            .expect("angle neighbours of known tokens");
         assert!(transaction
-            .validate_token_shapes(&format!("nested <{ordinary}>"))
+            .validate_token_shapes(&format!("<<{}:Email_999>>", transaction.session_hex()))
             .is_err());
         assert!(transaction
             .validate_token_shapes("malformed <deadbeef:Email_>")

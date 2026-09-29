@@ -227,16 +227,21 @@ fn authorized_ranges_do_not_exempt_adjacent_or_boundary_composed_unknowns() {
 }
 
 #[test]
-fn strict_session_malformed_nested_and_atomic_failure_contracts_remain() {
+fn strict_session_malformed_and_atomic_failure_contracts_remain() {
     let session = Session::new(Scope::Ephemeral).unwrap();
     let token = session
         .tokenize(&PiiClass::Email, "alice@example.invalid")
         .unwrap();
+    // todo 4009: literal angle brackets beside an owned token are ordinary text.
+    assert_eq!(
+        session.restore_strict_text(&format!("<{token}>>")).unwrap(),
+        "<alice@example.invalid>>"
+    );
     for input in [
         "<Email_>".to_string(),
         "<deadbeef:Email_1 suffix".to_string(),
         "<deadbeef:Custom:record_1 suffix".to_string(),
-        format!("<{token}>"),
+        format!("<{token}> <<deadbeef:Email_999>>"),
         format!("{token} <deadbeef:Email_999>"),
     ] {
         assert!(session.restore_strict_text(&input).is_err());
