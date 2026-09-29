@@ -206,6 +206,16 @@ def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str
     return row
 
 
+def source_text(url: str) -> str:
+    """`https://github.com/<org>/<repo>/blob/<sha>/<path>` as `<org>/<repo> <path>`.
+
+    The page states the source as text: a published-docs scrub tokenizes a bare deep link,
+    and the repository, path and commit identify it without one.
+    """
+    head, _, rest = url.removeprefix("https://github.com/").partition("/blob/")
+    return f"`{head}` `{rest.partition('/')[2]}`"
+
+
 def add_tuned(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any],
               declaration: Mapping[str, Any]) -> str:
     """Merge a vendor's own tuned setup (theirbench.py --vendor-tuned) into the aggregate.
@@ -394,7 +404,7 @@ def render(data: Mapping[str, Any]) -> str:
                           f"scored with harness `{measured['harness_revision'][:8]}`; no timing is published."]
         for family_name, choice in entry.get("vendor_tuned", {}).items():
             lines += ["", f"Row {choice['row']}: {choice['caption']}. Setup: {choice['setup']} "
-                          f"([source]({choice['source']}), commit `{choice['commit'][:8]}`). "
+                          f"(source {source_text(choice['source'])}, commit `{choice['commit'][:8]}`). "
                           f"It replaces the declared {family_name} configuration on the chart panel; "
                           "the other Presidio rows stay in this table."]
         if not any(is_tagged_gaze_row(tool) for tool in rows):

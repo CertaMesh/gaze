@@ -682,6 +682,18 @@ class VendorTunedRowTest(unittest.TestCase):
         self.assertIn(f"Row {TUNED}: Presidio tuned for this dataset by its authors", body)
         self.assertIn("| presidio-strong |", body)  # still in the page table
 
+    def test_the_page_states_the_source_as_text_not_a_deep_link(self) -> None:
+        """The published-docs scrub tokenizes a bare deep link (CI `test`, xtask scrub_public_text)."""
+        import render_theirbench as render
+
+        data, entry, report, own = self.entry_and_report()
+        render.add_tuned(data, report, own, self.declaration())
+        body = render.render(data)
+        self.assertNotIn("https://", body)
+        self.assertIn("(source `microsoft/presidio-research` `notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb`, "
+                      "commit `6db3769a`)", body)
+        self.assertEqual(render.source_text("https://github.com/o/r/blob/abc/a/b.ipynb"), "`o/r` `a/b.ipynb`")
+
     def test_tuned_can_win_and_the_panel_shows_it(self) -> None:
         import benchmark_charts as charts
 
