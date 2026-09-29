@@ -215,21 +215,30 @@ recognizer declares `mandatory_anchor` without a matching bundled cue block.
 Full contract:
 [`docs/explanation/detection/anchor-resolution.md`](../../docs/explanation/detection/anchor-resolution.md).
 
-## Explicit birth-date and credential fields
+## Explicit birth-date, age, postcode and credential fields
 
-The embedded `gaze-core` rulepack version **0.6.0** contains 41 recognizers.
-Two project-authored `safe_default` rules with `locales = ["global"]` add
-birth-date and credential field recognition through the existing assembly and
-`RegexDetector` machinery, once their bundle is loaded.
-`birth_date.cue` ships in `core`. `password.field` ships in the opt-in
+The embedded `gaze-core` rulepack version **0.6.0** contains 45 recognizers.
+`birth_date.cue` and `age.cue` are global `safe_default` rules in `core`.
+`postal.cued_four_digit` is a global `safe_default` rule that needs an explicit postal label.
+`password.field` ships in the opt-in
 `secrets` bundle, because credentials are not PII; load it with
 `bundled = ["core", "secrets"]`. The former `username.field` rule was removed
 in core 0.6.0.
 
-| Rule / custom class | Bundle | Complete, case-insensitive cues |
+| Rule / custom class | Bundle | Cues and frames |
 | --- | --- | --- |
-| `birth_date.cue` / `custom:birth_date` | `core` | en `DOB`, `D.O.B.`, `date of birth`, `birth date`, `birthday`, `born`; de `Geburtsdatum`, `Geb.-Datum`, `geb.`, `Geburtstag`, `geboren`, trailing `am <date> geboren`; fr `né`/`née`, `date de naissance`; nl `geboortedatum`; da `fødselsdato`, `fødselsdag`, `født`; es `fecha de nacimiento`, `nacido`/`nacida`, `nació` |
+| `birth_date.cue` / `custom:birth_date` | `core` | en `DOB`, `D.O.B.`, `date of birth`, `birth date`, `birthday`, `born`; de `Geburtsdatum`, `Geb.-Datum`, `geb.`, `Geburtstag`, `geboren`, trailing `am <date> geboren`; fr `né`/`née`, `date de naissance`; nl `geboortedatum`; pt `data de nascimento`; da `fødselsdato`, `fødselsdag`, `født`; es `fecha de nacimiento`, `nacido`/`nacida`, `nació` |
+| `age.cue` / `custom:age` | `core` | Structured `age`, `Alter`/`alter`, `âge`, `idade`, `leeftijd` fields, person-framed `aged N`, `N years old`, `N-year-old person`, `N Jahre alt`, `âgé de N`, or a complete Portuguese `tem N anos` line; only the number is tokenized |
 | `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
+
+Bare `aged N`, bare `N-year-old`, and mid-line `age Ny` without a person cue
+remain raw because objects and durations use those shapes too. Lowercase
+`alter` is accepted only as a structured key, so English `alter N lines` stays raw.
+
+`postal.cued_four_digit` recognizes a four-digit value directly after
+`postcode`, `postal code`, or `zip`/`zip code`, including structured keys.
+Unlabelled street addresses and bare four-digit numbers stay raw because a
+year or amount can have the same shape.
 
 ### Supported grammar
 
