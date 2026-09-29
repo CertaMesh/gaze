@@ -228,8 +228,12 @@ in core 0.6.0.
 | Rule / custom class | Bundle | Cues and frames |
 | --- | --- | --- |
 | `birth_date.cue` / `custom:birth_date` | `core` | en `DOB`, `D.O.B.`, `date of birth`, `birth date`, `birthday`, `born`; de `Geburtsdatum`, `Geb.-Datum`, `geb.`, `Geburtstag`, `geboren`, trailing `am <date> geboren`; fr `né`/`née`, `date de naissance`; nl `geboortedatum`; pt `data de nascimento`; da `fødselsdato`, `fødselsdag`, `født`; es `fecha de nacimiento`, `nacido`/`nacida`, `nació` |
-| `age.cue` / `custom:age` | `core` | Structured `age`, `Alter`, `âge`, `idade`, `leeftijd` fields, or person-framed `aged N`, `N years old`, `N-year-old`, `N Jahre alt`, `âgé de N`; only the number is tokenized |
+| `age.cue` / `custom:age` | `core` | Structured `age`, `Alter`/`alter`, `âge`, `idade`, `leeftijd` fields, person-framed `aged N`, `N years old`, `N-year-old person`, `N Jahre alt`, `âgé de N`, or a complete Portuguese `tem N anos` line; only the number is tokenized |
 | `password.field` / `custom:password` | `secrets` (opt-in) | `password`, `passphrase`, `passwort`, `kennwort` |
+
+Bare `aged N`, bare `N-year-old`, and mid-line `age Ny` without a person cue
+remain raw because objects and durations use those shapes too. Lowercase
+`alter` is accepted only as a structured key, so English `alter N lines` stays raw.
 
 `postal.cued_four_digit` recognizes a four-digit value directly after
 `postcode`, `postal code`, or `zip`/`zip code`, including structured keys.

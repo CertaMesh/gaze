@@ -116,6 +116,15 @@ fn age_cues_cover_prose_fields_and_spacing() {
         ("leeftijd: 42", "42"),
         ("De persoon is 42 jaar oud.", "42"),
         ("idade: 42", "42"),
+        ("Idade: 42 anos", "42"),
+        ("Ela tem 42 anos.", "42"),
+        ("tem 42 anos", "42"),
+        ("{\"alter\": 42}", "42"),
+        ("My son is 42 years old.", "42"),
+        ("Meine Tochter ist 42 Jahre alt.", "42"),
+        ("A mãe tem 42 anos.", "42"),
+        ("The 42-year-old father arrived.", "42"),
+        ("The applicant age 42y", "42"),
     ] {
         assert_age(text, age);
     }
@@ -142,12 +151,32 @@ fn age_lookalikes_stay_raw() {
         "Das Gerät ist 12 Jahre alt.",
         "Cable age 7",
         "alter 3 lines",
+        "The whisky tem 42 anos.",
+        "tem 42 anos de história",
+        "Cable age 7y",
+        "aged 42 whisky",
     ] {
         let cleaned = clean_and_restore(&pipeline(), text);
         assert!(
             !cleaned.contains(":Custom:age_"),
             "false age match: {text:?} -> {cleaned:?}"
         );
+    }
+}
+
+#[test]
+fn age_cue_branches_each_have_a_distinct_probe() {
+    // Structured, standalone label, person prose, attributive, bare year-old,
+    // and Portuguese subject-omission forms must each survive independently.
+    for text in [
+        "{\"age\": 42}",
+        "Age 42y",
+        "The applicant is 42 years old.",
+        "A 42-year-old applicant arrived.",
+        "42 yrs old",
+        "tem 42 anos",
+    ] {
+        assert_age(text, "42");
     }
 }
 

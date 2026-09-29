@@ -1705,29 +1705,33 @@ kind = "regex"
 pattern = '''(?ix)
 (?:
   # Labeled fields can cross a line break after the separator.
-  \b(?:age|âge|idade|leeftijd|(?-i:Alter))\b[\x20\t\x{A0}\x{202F}"']*[:=][\x20\t\x{A0}\x{202F}\r\n"']*
+  \b(?:age|âge|idade|leeftijd|(?-i:Alter)|(?-i:alter))\b[\x20\t\x{A0}\x{202F}"']*[:=][\x20\t\x{A0}\x{202F}\r\n"']*
   ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))
-  (?:[\x20\t\x{A0}\x{202F}]*(?:years?|yrs?|y|jahre?|jaar|ans?)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+  (?:[\x20\t\x{A0}\x{202F}]*(?:years?|yrs?|y|jahre?|jaar|ans?|anos)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
  |
   # An unlabeled age line needs a year unit, or a terminal value boundary.
   (?:\A|[\r\n])[\x20\t]*(?:age|âge|idade|leeftijd|(?-i:Alter))[\x20\t\x{A0}\x{202F}]+
   ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))
-  (?:[\x20\t\x{A0}\x{202F}]*(?:years?|yrs?|y|jahre?|jaar|ans?)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+  (?:[\x20\t\x{A0}\x{202F}]*(?:years?|yrs?|y|jahre?|jaar|ans?|anos)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
  |
   # Person words license prose without matching object ages.
-  \b(?:applicant|patient|person|woman|man|child|girl|boy|adult|candidate|customer|client|user|employee|resident|suspect|she|he|they|ich|sie|er|frau|mann|kind|bewerber(?:in)?|homme|femme|elle|il|pessoa|mulher|homem|persoon|vrouw)\b
+  \b(?:applicant|patient|person|woman|man|child|girl|boy|adult|candidate|customer|client|user|employee|resident|suspect|son|daughter|mother|father|she|he|they|ich|sie|er|frau|mann|kind|bewerber(?:in)?|sohn|tochter|mutter|vater|homme|femme|elle|il|fils|fille|mère|père|pessoa|mulher|homem|filho|filha|mãe|pai|ela|ele|persoon|vrouw|zoon|dochter|moeder|vader)\b
   [^\n.!?]{0,32}?
   \b(?:aged|âgé(?:e)?|âge|age|(?-i:Alter)|idade|leeftijd|is|was|ist|war|est|é|tem|heeft)\b
   [\x20\t\x{A0}\x{202F}:="']*(?:de[\x20\t\x{A0}\x{202F}]+)?
-  ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b
-  (?:[\x20\t\x{A0}\x{202F}-]*(?:years?[\x20\t\x{A0}\x{202F}-]+old|yrs?[\x20\t\x{A0}\x{202F}-]+old|jahre?[\x20\t\x{A0}\x{202F}]+alt|jaar[\x20\t\x{A0}\x{202F}]+oud|ans?)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+  ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))
+  (?:[\x20\t\x{A0}\x{202F}-]*(?:years?[\x20\t\x{A0}\x{202F}-]+old|yrs?[\x20\t\x{A0}\x{202F}-]+old|jahre?[\x20\t\x{A0}\x{202F}]+alt|jaar[\x20\t\x{A0}\x{202F}]+oud|ans?|anos|y)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
  |
   # Attributive person ages and standalone "yrs old" records.
-  \b((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?|yrs?)[\x20\t\x{A0}\x{202F}-]+old[\x20\t\x{A0}\x{202F}-]+(?:applicant|patient|person|woman|man|child|girl|boy|adult|candidate|customer|client|user|employee|resident|suspect)\b
+  \b((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?|yrs?)[\x20\t\x{A0}\x{202F}-]+old[\x20\t\x{A0}\x{202F}-]+(?:applicant|patient|person|woman|man|child|girl|boy|adult|candidate|customer|client|user|employee|resident|suspect|son|daughter|mother|father|sohn|tochter|mutter|vater|fils|fille|mère|père|filho|filha|mãe|pai|zoon|dochter|moeder|vader)\b
  |
   (?:\A|[\r\n])[\x20\t]*((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?|yrs?)[\x20\t\x{A0}\x{202F}-]+old\b
+ |
+  # Portuguese permits a subject omitted from a complete age line.
+  (?:\A|[\r\n])[\x20\t]*tem[\x20\t\x{A0}\x{202F}]+((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}]+anos
+  (?:[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
 )'''
-capture_groups = [1, 2, 3, 4, 5]
+capture_groups = [1, 2, 3, 4, 5, 6]
 
 [recognizers.scoring]
 base = 0.90
