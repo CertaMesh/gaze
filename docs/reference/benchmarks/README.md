@@ -842,7 +842,7 @@ Where Gaze full is not best:
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
-Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `b1446215`; harness `b47f4ec1`. Gaze ran on crates tree `97e45cfe`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-b47f4ec1`.
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. Gaze ran on crates tree `97e45cfe`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-dab4a195`.
 
 #### Presidio Research synthetic set (synth_dataset_v2, 1,500 documents)
 
@@ -888,7 +888,7 @@ Where Gaze full is not best:
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
-Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `b1446215`; harness `b47f4ec1`. Gaze ran on crates tree `97e45cfe`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-b47f4ec1`.
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, typed metrics rescored with `2571ac37`; harness `dab4a195`. Gaze ran on crates tree `97e45cfe`. The measured harness commit is kept as signed tag `bench/theirbench-measured-a8293dc0`. The rescored harness commit is kept as signed tag `bench/theirbench-rescored-dab4a195`.
 
 Not run:
 
