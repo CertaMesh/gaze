@@ -497,7 +497,7 @@ Exit code `0` and `suspect_count = 0` is the contract for "no leaks".
 ### Synthetic example — tolerant mode
 
 ```console
-$ printf 'Sender: %s, phone +44 7700 900%s' 'Sample Sender' 123 \
+$ printf 'Sender: %s, phone +44 %s%s' 'Sample Sender' '7700 900' 123 \
   | gaze clean \
       --policy=policy.toml \
       --safety-net=openai-filter \

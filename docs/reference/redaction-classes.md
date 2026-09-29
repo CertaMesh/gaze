@@ -19,7 +19,7 @@ compatibility name for the same embedded `core.toml` bytes
 (`crates/gaze-recognizers/src/lib.rs:45-55`,
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
-The shared payload currently contains exactly 45 recognizer specs
+The shared payload currently contains exactly 50 recognizer specs
 (`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
 
 The opt-in `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
@@ -74,7 +74,7 @@ deprecated `core-extended` compatibility behavior. The tier contract is at
 `crates/gaze-types/src/lib.rs:2407-2447`.
 
 Validator and normalizer `none` means the recognizer intentionally has no such
-stage. A validator can veto a shape match before conflict resolution; a
+stage. A validator can veto a shape match or record a failure on a cued candidate before conflict resolution; a
 normalizer changes the canonical value only and never the original restore span.
 See [Validator Veto](../explanation/detection/validator-veto.md) and
 [Recognizer normalizers preserve the original span](../explanation/detection/recognizer-normalizer-spans.md).
@@ -98,8 +98,10 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `name.auto_footer` | `anchored_match` | Person-name-shaped text after locale-provided footer or sign-off cues | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
 | `core, core-extended` | `phone.structural` | `regex` | Compact international phone candidates beginning with plus and 6 to 15 digits | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `phone.e164.spaced` | `regex` | Spaced or punctuated international phone candidates outside the US and German branches | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 79 |
+| `core, core-extended` | `phone.e164.spaced.cued` | `regex` | Same-line international phone candidates after English or loaded locale phone-label buckets; parser failures retain a typed audit reason | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 78 |
 | `core, core-extended` | `phone.national.de` | `regex` | German national or plus-49 phone shapes accepted by the German regional parser | `custom:phone` | `de-DE, de-AT, de-CH` | `e164_phone_national_de` | `none` | `locale_gated` | no | 0.82 | 85 |
 | `core, core-extended` | `phone.national.us` | `regex` | US NANPA phone shapes, including the documented synthetic 555-01xx range | `custom:phone` | `en-US` | `e164_phone_national_us` | `none` | `safe_default` | yes | 0.82 | 85 |
+| `core, core-extended` | `phone.national.us.cued` | `regex` | Same-line US phone candidates after English or loaded locale phone-label buckets; region failures retain a typed audit reason | `custom:phone` | `en-US` | `e164_phone_national_us` | `none` | `safe_default` | yes | 0.82 | 79 |
 | `core, core-extended` | `iban.structural` | `regex` | Space-tolerant IBAN shapes at the country's ISO 13616 registry length, tokenized whether or not MOD-97 passes after canonicalization (`on_fail = "record"`: a failure is written on the audit row and the value is never swept); no trailing word boundary in the pattern, the code boundary accepts a glued label and refuses a glued digit or underscore | `custom:iban` | `global` | `iban_mod97` | `iban_canonical` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `iban.cued` | `regex` | IBAN-structured values with a real ISO 3166-1 country code (or `UK`) outside the ISO 13616 registry (two digits, then up to four letters and 6 to 26 digits compact, or three to eight digit-bearing groups after at most one letters-only bank-code group) within 32 characters after the word `IBAN` on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it); registry countries stay with `iban.structural`; MOD-97 failures are recorded, not vetoed | `custom:iban` | `global` | `iban_mod97` | `iban_canonical` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `card.structural` | `regex` | a digit run with optional spaces or dashes; all-zero card windows are excluded; the recognizer finds the Luhn-valid 13 to 19 digit card inside it (the old 13-19 window or a group-aligned card layout: compact, 4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4; overlapping Luhn-valid windows are one token over their union), so a touching CVV, expiry or number does not hide it | `custom:credit_card` | `global` | `luhn` | `none` | `safe_default` | yes | 0.70 | 80 |
@@ -109,11 +111,11 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `eth.address` | `regex` | Forty-hex-digit Ethereum addresses prefixed by 0x and accepted by EIP-55 rules | `custom:eth_address` | `global` | `eth_eip55` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `aadhaar.in` | `regex` | Cue-anchored Indian Aadhaar or UID values containing 12 digits and passing Verhoeff | `custom:aadhaar` | `en-IN, hi-IN` | `aadhaar_verhoeff` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `nir.fr` | `regex` | Cue-anchored French NIR social-security values with 15 digits and a valid MOD-97 key | `custom:nir` | `fr-FR` | `fr_nir_mod97` | `none` | `safe_default` | yes | 0.88 | 86 |
-| `core, core-extended` | `steuer_id.de` | `regex` | Cue-anchored German 11-digit Steuer-ID values passing MOD 11,10 | `custom:steuer_id` | `de-DE, de-AT, de-CH` | `de_steuer_id_mod1110` | `none` | `safe_default` | yes | 0.88 | 86 |
+| `core, core-extended` | `steuer_id.de` | `regex` | Cue-anchored German 11-digit Steuer-ID values, excluding all-zero placeholders and vehicle-ID labels; MOD 11,10 failures retain a typed audit reason and never seed the repeat-value sweep | `custom:steuer_id` | `de-DE, de-AT, de-CH` | `de_steuer_id_mod1110` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `vat.de` | `regex` | Cue-anchored German VAT identifiers shaped as DE followed by nine digits | `custom:vat_id` | `de-DE, de-AT, de-CH` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `vat.es` | `regex` | Cue-anchored Spanish VAT, CIF, or NIF identifiers in the ES alphanumeric shape | `custom:vat_id` | `es-ES` | `none` | `none` | `safe_default` | yes | 0.84 | 84 |
-| `core, core-extended` | `bsn.nl` | `regex` | Cue-anchored Dutch nine-digit BSN values passing the 11-test | `custom:bsn` | `nl-NL` | `bsn_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
-| `core, core-extended` | `cpf.br` | `regex` | Cue-anchored Brazilian CPF values passing both MOD-11 check digits | `custom:cpf` | `pt-BR` | `cpf_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
+| `core, core-extended` | `bsn.nl` | `regex` | Cue-anchored Dutch nine-digit BSN values, excluding all-zero placeholders; 11-test failures retain a typed audit reason and never seed the repeat-value sweep | `custom:bsn` | `nl-NL` | `bsn_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
+| `core, core-extended` | `cpf.br` | `regex` | Cue-anchored Brazilian CPF values; MOD-11 failures retain a typed audit reason and never seed the repeat-value sweep | `custom:cpf` | `pt-BR` | `cpf_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `cnpj.br` | `regex` | Cue-anchored Brazilian CNPJ values passing both MOD-11 check digits | `custom:cnpj` | `pt-BR` | `cnpj_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `nhs.uk` | `regex` | Cue-anchored UK NHS numbers containing 10 digits and passing MOD-11 | `custom:nhs_number` | `en-GB` | `uk_nhs_mod11` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `ssn.us` | `regex` | Cue-anchored US Social Security numbers in dashed or nine-digit form | `custom:ssn` | `en-US` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
@@ -131,7 +133,10 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `ssn.de_cue` | `regex` | Cue-anchored SSN values after German social-insurance cues (Sozialversicherungsnummer, SV-Nummer) in dashed, dotted, or 9 to 11 digit form; format basis; DACH provenance describes cue vocabulary until native SVNR/AHV shapes ship in #2926 | `custom:ssn` | `de-DE, de-AT, de-CH` | `none` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `tax_number.cue_anchored` | `regex` | Cue-anchored tax numbers with a three-digit lead and separated digit groups after German or English tax cues; bare digit runs and the checksummed 2-3-3-3 Steuer-ID shape are excluded | `custom:tax_number` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 |
 | `core, core-extended` | `driver_license.cue_anchored` | `regex` | Letter-led alphanumeric licence numbers after German or English driving-licence cues | `custom:driver_license` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 83 |
-| `core, core-extended` | `national_id.cue_anchored` | `regex` | Letter-led, digit-grouped, 9 to 13 digit, or Swiss AHV (`756.dddd.dddd.dd`) identifiers after German or English national-ID / identity-card / AHV cues | `custom:national_id` | `global` | `none` | `none` | `safe_default` | yes | 0.82 | 82 |
+| `core, core-extended` | `national_id.cue_anchored` | `regex` | Letter-led, digit-grouped, 9 to 13 digit, or Swiss AHV (`756.dddd.dddd.dd`) identifiers after German or English national-ID / identity-card / AHV cues; excludes vehicle IDs labelled `Fahrzeug-Identifikationsnummer` | `custom:national_id` | `global` | `none` | `none` | `safe_default` | yes | 0.82 | 82 |
+| `core, core-extended` | `tax_number.labelled` | `regex` | Class-specific tax labels with bounded grouped or alphanumeric values; the complete-value guard consumes the whole field or refuses a prefix | `custom:tax_number` | `global` | `none` | `none` | `safe_default` | yes | 0.84 | 84 |
+| `core, core-extended` | `driver_license.labelled` | `regex` | Class-specific driver-licence labels with bounded grouped or alphanumeric values; the complete-value guard consumes the whole field or refuses a prefix | `custom:driver_license` | `global` | `none` | `none` | `safe_default` | yes | 0.84 | 84 |
+| `core, core-extended` | `id_card.labelled` | `regex` | Class-specific national-ID and identity-card labels with bounded grouped or alphanumeric values; the complete-value guard consumes the whole field or refuses a prefix | `custom:national_id` | `global` | `none` | `none` | `safe_default` | yes | 0.84 | 84 |
 | `core, core-extended` | `passport.cue_anchored` | `regex` | Letter-led alphanumeric, Personalausweis-silhouette, or 9-digit passport numbers after passport / Reisepass cues | `custom:passport` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 |
 | `core, core-extended` | `birth_date.cue` | `regex` | Numeric and month-name dates after an en/de/fr/nl/pt/da/es birth cue in prose, JSON keys or `key=value` fields; a date without a birth cue stays raw; format recognition only, no calendar-validity claim | `custom:birth_date` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `core, core-extended` | `age.cue` | `regex` | Numeric person age from 0 to 122 in a structured field or a person-framed year phrase; only the number is tokenized | `custom:age` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
@@ -194,12 +199,14 @@ available.
 <!-- redaction-classes-gate:validators:end -->
 
 A validator vetoes a failing candidate by default. `[recognizers.validator]`
-accepts `on_fail = "record"` only with `iban_mod97` or `luhn`: the candidate is
-kept, its audit row carries `validator_fail_reason`, and its value is never
-swept to other copies (user ruling 2026-09-27; see
-[validator veto](../explanation/detection/validator-veto.md#recorded-failures-iban-and-payment-cards)).
+accepts `on_fail = "record"` only with `iban_mod97`, `luhn`,
+`de_steuer_id_mod1110`, `bsn_mod11`, `cpf_mod11`, `e164_phone`, or
+`e164_phone_national_us`. The phone kinds require `phone-parser` when the
+recognizer is built. A kept candidate's audit row carries
+`validator_fail_reason`, and its value is never swept to other copies (see
+[validator veto](../explanation/detection/validator-veto.md#recorded-failures)).
 Any other validator with `on_fail = "record"`, and any value other than `veto`
-or `record`, fails the rulepack load with
+or `record`, fails rulepack loading with
 `RulepackError::UnsupportedValidatorOnFail`.
 
 ### `NormalizerKind`
@@ -253,11 +260,15 @@ which beats the vaguer national-ID cues (30).
 | `payment-card-or-iban` | `card.structural` | `pan` | 20 | `none` | `crates/gaze-recognizers/embedded/core.toml:373-376` |
 | `phone-or-imei` | `phone.structural` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:182-185` |
 | `phone-or-imei` | `phone.e164.spaced` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:212-215` |
+| `phone-or-imei` | `phone.e164.spaced.cued` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml` |
 | `phone-or-imei` | `phone.national.de` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:246-249` |
 | `phone-or-imei` | `phone.national.us` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:275-278` |
+| `phone-or-imei` | `phone.national.us.cued` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml` |
 | `government-id` | `ssn.de_cue` | `ssn` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:957-960` |
 | `government-id` | `tax_number.cue_anchored` | `tax-number` | 20 | `none` | `crates/gaze-recognizers/embedded/core.toml:1024-1027` |
+| `government-id` | `tax_number.labelled` | `tax-number` | 20 | `none` | `crates/gaze-recognizers/embedded/core.toml` |
 | `government-id` | `national_id.cue_anchored` | `national-id` | 30 | `none` | `crates/gaze-recognizers/embedded/core.toml:1105-1108` |
+| `government-id` | `id_card.labelled` | `national-id` | 30 | `none` | `crates/gaze-recognizers/embedded/core.toml` |
 | `government-id` | `passport.cue_anchored` | `passport` | 15 | `none` | `crates/gaze-recognizers/embedded/core.toml` (`variant = "passport"`) |
 <!-- redaction-classes-gate:collisions:end -->
 
@@ -399,8 +410,8 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, age.cue, birth_date.cue, bsn.nl, card.cued, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.cued_four_digit, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, age.cue, birth_date.cue, bsn.nl, card.cued, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.at_ch, postal.au, postal.ca, postal.cued_four_digit, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, age.cue, birth_date.cue, bsn.nl, card.cued, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.us, phone.national.us.cued, phone.structural, postal.ca, postal.cued_four_digit, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, age.cue, birth_date.cue, bsn.nl, card.cued, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.de, phone.national.us, phone.national.us.cued, phone.structural, postal.at_ch, postal.au, postal.ca, postal.cued_four_digit, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate

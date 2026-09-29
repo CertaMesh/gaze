@@ -220,7 +220,7 @@ Full contract:
 
 ## Explicit birth-date, age, postcode and credential fields
 
-The embedded `gaze-core` rulepack version **0.6.0** contains 45 recognizers.
+The embedded `gaze-core` rulepack version **0.6.0** contains 50 recognizers.
 `birth_date.cue` and `age.cue` are global `safe_default` rules in `core`.
 `postal.cued_four_digit` is a global `safe_default` rule that needs an explicit postal label.
 `password.field` ships in the opt-in

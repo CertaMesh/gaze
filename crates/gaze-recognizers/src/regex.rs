@@ -247,9 +247,10 @@ impl Recognizer for RegexDetector {
 
 impl RegexDetector {
     /// What validator veto does when this recognizer's validator fails. `Record` is accepted
-    /// only for IBAN mod-97 and Luhn (`ValidatorKind::allows_recorded_failure`), and never on a
+    /// only for eligible validators (`ValidatorKind::allows_recorded_failure`), and never on a
     /// card-run recognizer: it offers every digit run in the text, so keeping the ones that fail
-    /// Luhn would tokenize every long number.
+    /// Luhn would tokenize every long number. Core rules opt in only when the candidate shape
+    /// and label make a failed value credible.
     pub fn with_validator_on_fail(mut self, on_fail: ValidatorOnFail) -> Result<Self> {
         if on_fail == ValidatorOnFail::Record {
             let refuse = |kind: String, reason| RecognizerError::UnsupportedValidatorOnFail {
@@ -263,7 +264,7 @@ impl RegexDetector {
             if !kind.allows_recorded_failure() {
                 return Err(refuse(
                     format!("{kind:?}"),
-                    "only iban_mod97 and luhn may keep a failed candidate",
+                    "this validator cannot keep a failed candidate",
                 ));
             }
             if self.card_runs {

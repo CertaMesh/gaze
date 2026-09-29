@@ -2,7 +2,7 @@
 //! 2026-09-27, solo todo 3906): a mistyped or masked account or card number is still someone's
 //! financial data.
 //!
-//! What now tokenizes without a passing checksum, and nothing else:
+//! In these two families, values can tokenize without a passing checksum:
 //!
 //! - `iban.structural`: a registry country code with that country's exact IBAN length, with or
 //!   without a cue (unchanged shape, `on_fail = "record"`).
@@ -756,7 +756,7 @@ fn detector(pattern: &str, validator: Option<ValidatorKind>) -> RegexDetector {
 }
 
 #[test]
-fn record_on_fail_is_refused_where_it_would_relax_anything_but_a_cued_iban_or_card() {
+fn record_on_fail_is_refused_for_broad_card_runs_and_unlisted_validators() {
     // A card-run recognizer offers every digit run in the text.
     let card_runs = detector(
         gaze_types::payment_card::CARD_RUN_PATTERN,
@@ -765,13 +765,8 @@ fn record_on_fail_is_refused_where_it_would_relax_anything_but_a_cued_iban_or_ca
     assert!(card_runs
         .with_validator_on_fail(ValidatorOnFail::Record)
         .is_err());
-    // Any other validator, or none.
-    for kind in [
-        ValidatorKind::DeSteuerIdMod1110,
-        ValidatorKind::BsnMod11,
-        ValidatorKind::UkNhsMod11,
-        ValidatorKind::EmailRfc,
-    ] {
+    // Validators outside the allowlist, or none.
+    for kind in [ValidatorKind::UkNhsMod11, ValidatorKind::EmailRfc] {
         assert!(
             detector(r"\d+", Some(kind))
                 .with_validator_on_fail(ValidatorOnFail::Record)
@@ -782,8 +777,14 @@ fn record_on_fail_is_refused_where_it_would_relax_anything_but_a_cued_iban_or_ca
     assert!(detector(r"\d+", None)
         .with_validator_on_fail(ValidatorOnFail::Record)
         .is_err());
-    // A pattern-anchored IBAN or card may record.
-    for kind in [ValidatorKind::IbanMod97, ValidatorKind::Luhn] {
+    // A pattern-anchored candidate with an eligible validator may record.
+    for kind in [
+        ValidatorKind::IbanMod97,
+        ValidatorKind::Luhn,
+        ValidatorKind::DeSteuerIdMod1110,
+        ValidatorKind::BsnMod11,
+        ValidatorKind::CpfMod11,
+    ] {
         assert!(detector(r"card (\d{16})", Some(kind))
             .with_validator_on_fail(ValidatorOnFail::Record)
             .is_ok());
