@@ -17,7 +17,9 @@ use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ValidatorFailReason;
+use crate::{
+    LocaleBasis, LocaleTag, PiiClass, ValidatorFailReason, ValidatorKind, ValidatorOnFail,
+};
 
 /// A closed set of benign structures a weak recognizer may be vetoed by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -66,19 +68,12 @@ const REFERENCE_LABELS: &[&str] = &[
     "voucher",
     "vorgang",
 ];
-/// The only recognizers that may be vetoed by a benign lookalike: bundled, uncued,
-/// single-branch shape rules that passed a leak-direction review. Custom and adopter rules can
-/// never opt in; the rulepack loader, the regex builder and validator veto all check this list.
-pub const AUDITED_RECOGNIZERS: &[&str] = &[
-    "phone.national.de",
-    "phone.national.us",
-    "postal.de",
-    "postal.us",
-];
-
-/// Whether `recognizer_id` is on [`AUDITED_RECOGNIZERS`].
+/// Whether `recognizer_id` names an audited bundled rule (an early, friendly check for the
+/// rulepack loader). Only a [`BenignLookalikeGrant`] actually permits a veto.
 pub fn is_audited(recognizer_id: &str) -> bool {
-    AUDITED_RECOGNIZERS.contains(&recognizer_id)
+    AUDITED_FINGERPRINTS
+        .iter()
+        .any(|(id, _)| *id == recognizer_id)
 }
 
 /// Stems of cue words for the classes that opt in (phone, postal code). A word starting with
@@ -319,6 +314,138 @@ fn digit_run_fragment(text: &str, span: Range<usize>) -> bool {
         && run.iter().filter(|byte| byte.is_ascii_digit()).count() > MAX_PHONE_DIGITS
 }
 
+/// The exact rule a benign lookalike veto may apply to: id, class, pattern, capture groups,
+/// validator and its failure mode, locales and locale basis, and the structures it declares.
+/// A caller describes its rule with this and asks [`BenignLookalikeGrant::audited`] for a grant.
+#[derive(Debug, Clone, Copy)]
+pub struct GrantRequest<'a> {
+    pub id: &'a str,
+    pub class: &'a PiiClass,
+    pub pattern: &'a str,
+    pub capture_groups: Option<&'a [u32]>,
+    pub validator: Option<ValidatorKind>,
+    pub on_fail: ValidatorOnFail,
+    pub locales: &'a [LocaleTag],
+    pub locale_basis: LocaleBasis,
+    pub structures: &'a [BenignLookalike],
+}
+
+/// Fingerprints of the audited bundled rules, one per id. A grant is minted only for a request
+/// whose fingerprint is listed here, so a rule that merely borrows an audited id (from a
+/// rulepack handed to `Rulepack::parse_bundled`, or a custom `Recognizer`) never gets one.
+/// `gaze-recognizers` pins these against its embedded `core` pack; update both together, and
+/// only after a leak-direction review.
+const AUDITED_FINGERPRINTS: &[(&str, &str)] = &[
+    (
+        "phone.national.de",
+        "c74c5882ee5043938a26a341779dbcb919cf4aae3dca46b99fa97649614f6eba",
+    ),
+    (
+        "phone.national.us",
+        "6286ab60bc67af15dca3bb32ea242492cad079b2bba4dca3f7fcb0a405232fe1",
+    ),
+    (
+        "postal.de",
+        "8360f7b62bc7c502301cad396afb9d1cdb839c5dff405982caaacdd9fe1202c1",
+    ),
+    (
+        "postal.us",
+        "3d87bba275a2fde7bb1450b214de668b8f4e575b5dfbb008d6ba4adf1937a323",
+    ),
+];
+
+/// The SHA3-256 fingerprint of a request, lowercase hex.
+pub fn fingerprint(request: &GrantRequest<'_>) -> String {
+    use sha3::{Digest, Sha3_256};
+    let canonical = format!(
+        "{}\u{0}{:?}\u{0}{}\u{0}{:?}\u{0}{:?}\u{0}{:?}\u{0}{:?}\u{0}{:?}\u{0}{:?}",
+        request.id,
+        request.class,
+        request.pattern,
+        request.capture_groups,
+        request.validator,
+        request.on_fail,
+        request.locales,
+        request.locale_basis,
+        request.structures,
+    );
+    Sha3_256::digest(canonical.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// Permission for one audited rule to be vetoed by benign lookalikes. Its fields are private
+/// and [`Self::audited`] is its only constructor, so it cannot be forged: holding one proves
+/// the rule is byte-for-byte an audited bundled rule. Validator veto still checks that the
+/// recognizer presenting it has the same identity ([`Self::binds`]) and that each vetoed span is
+/// a match of the audited pattern, so a grant borrowed from a real rule vetoes nothing else.
+#[derive(Debug, Clone)]
+pub struct BenignLookalikeGrant {
+    id: String,
+    class: PiiClass,
+    pattern: String,
+    capture_groups: Option<Vec<u32>>,
+    validator: Option<ValidatorKind>,
+    locales: Vec<LocaleTag>,
+    locale_basis: LocaleBasis,
+    structures: Vec<BenignLookalike>,
+}
+
+impl BenignLookalikeGrant {
+    /// A grant for `request`, or `None` unless it is exactly an audited bundled rule. A rule
+    /// that records validator failures is cued and never gets one.
+    pub fn audited(request: &GrantRequest<'_>) -> Option<Self> {
+        let expected = AUDITED_FINGERPRINTS
+            .iter()
+            .find(|(id, _)| *id == request.id)
+            .map(|(_, fingerprint)| *fingerprint)?;
+        (request.on_fail == ValidatorOnFail::Veto
+            && !request.structures.is_empty()
+            && fingerprint(request) == expected)
+            .then(|| Self {
+                id: request.id.to_string(),
+                class: request.class.clone(),
+                pattern: request.pattern.to_string(),
+                capture_groups: request.capture_groups.map(<[u32]>::to_vec),
+                validator: request.validator,
+                locales: request.locales.to_vec(),
+                locale_basis: request.locale_basis,
+                structures: request.structures.to_vec(),
+            })
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// The audited pattern; validator veto re-matches it to check a vetoed span.
+    pub fn pattern(&self) -> &str {
+        &self.pattern
+    }
+
+    /// The emitted capture groups of [`Self::pattern`]; `None` means the whole match.
+    pub fn capture_groups(&self) -> Option<&[u32]> {
+        self.capture_groups.as_deref()
+    }
+
+    pub fn structures(&self) -> &[BenignLookalike] {
+        &self.structures
+    }
+
+    /// Whether `recognizer` presents the audited rule's identity: the same id, class,
+    /// validator, failure mode, locales and locale basis. A recognizer that only borrows the
+    /// grant but gates or validates differently is refused.
+    pub fn binds(&self, recognizer: &(impl crate::Recognizer + ?Sized)) -> bool {
+        recognizer.id() == self.id
+            && recognizer.supported_class() == &self.class
+            && recognizer.validator_kind() == self.validator
+            && recognizer.validator_on_fail() == ValidatorOnFail::Veto
+            && recognizer.locales() == self.locales.as_slice()
+            && recognizer.locale_basis() == self.locale_basis
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,5 +595,87 @@ mod tests {
         assert!(is_audited("phone.national.de"));
         assert!(!is_audited("postal.at_ch"));
         assert!(!is_audited("custom.order_zip"));
+    }
+}
+
+#[cfg(test)]
+mod grant_tests {
+    use super::*;
+
+    fn request<'a>(
+        pattern: &'a str,
+        locales: &'a [LocaleTag],
+        on_fail: ValidatorOnFail,
+        class: &'a PiiClass,
+        structures: &'a [BenignLookalike],
+    ) -> GrantRequest<'a> {
+        GrantRequest {
+            id: "postal.us",
+            class,
+            pattern,
+            capture_groups: None,
+            validator: None,
+            on_fail,
+            locales,
+            locale_basis: LocaleBasis::Document,
+            structures,
+        }
+    }
+
+    #[test]
+    fn only_the_exact_audited_rule_is_granted() {
+        let class = PiiClass::custom("postal_code").expect("class");
+        let structures = [
+            BenignLookalike::JoinedIdentifier,
+            BenignLookalike::CurrencyAmount,
+        ];
+        let en_us = [LocaleTag::EnUs];
+        let exact = request(
+            r"\b\d{5}(-\d{4})?\b",
+            &en_us,
+            ValidatorOnFail::Veto,
+            &class,
+            &structures,
+        );
+        assert!(BenignLookalikeGrant::audited(&exact).is_some());
+        // Any change to the tuple loses the grant.
+        let pattern = request(
+            r"ORDER-(\d{5})\s+Beverly",
+            &en_us,
+            ValidatorOnFail::Veto,
+            &class,
+            &structures,
+        );
+        assert!(BenignLookalikeGrant::audited(&pattern).is_none());
+        let de = [LocaleTag::DeDe];
+        let locale = request(
+            r"\b\d{5}(-\d{4})?\b",
+            &de,
+            ValidatorOnFail::Veto,
+            &class,
+            &structures,
+        );
+        assert!(BenignLookalikeGrant::audited(&locale).is_none());
+        let record = request(
+            r"\b\d{5}(-\d{4})?\b",
+            &en_us,
+            ValidatorOnFail::Record,
+            &class,
+            &structures,
+        );
+        assert!(BenignLookalikeGrant::audited(&record).is_none());
+        let more = [
+            BenignLookalike::JoinedIdentifier,
+            BenignLookalike::CurrencyAmount,
+            BenignLookalike::DigitRunFragment,
+        ];
+        let widened = request(
+            r"\b\d{5}(-\d{4})?\b",
+            &en_us,
+            ValidatorOnFail::Veto,
+            &class,
+            &more,
+        );
+        assert!(BenignLookalikeGrant::audited(&widened).is_none());
     }
 }

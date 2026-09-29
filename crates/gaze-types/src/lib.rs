@@ -4268,10 +4268,12 @@ pub trait Recognizer: Send + Sync {
     fn validator_on_fail(&self) -> ValidatorOnFail {
         ValidatorOnFail::Veto
     }
-    /// Benign structures that veto this recognizer's candidate before conflict resolution
-    /// (`benign_lookalike`). Empty by default; only weak, cue-less shape rules opt in.
-    fn benign_lookalikes(&self) -> &[benign_lookalike::BenignLookalike] {
-        &[]
+    /// The grant that lets benign lookalikes veto this recognizer's candidates before conflict
+    /// resolution (`benign_lookalike`). `None` by default; only an audited bundled rule can
+    /// hold one, since [`benign_lookalike::BenignLookalikeGrant::audited`] is its only
+    /// constructor.
+    fn benign_lookalike_grant(&self) -> Option<&benign_lookalike::BenignLookalikeGrant> {
+        None
     }
     /// Locales where this recognizer is active.
     fn locales(&self) -> &[LocaleTag] {

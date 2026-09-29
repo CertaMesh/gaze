@@ -118,19 +118,24 @@ re-protects every byte a protective candidate claimed, even inside a
   its field name the same way, so `{"postal_code": "ORDER-90210"}` and
   `{"billing_address": "ORDER-90210"}` stay protected while
   `{"orderRef": "ORDER-90210"}` does not.
-- **Only audited bundled rules may opt in.** Eligibility is a checked
-  allowlist, `gaze_types::benign_lookalike::AUDITED_RECOGNIZERS`
-  (`postal.de`, `postal.us`, `phone.national.de`, `phone.national.us`): a
-  pattern cannot prove it is uncued, since a one-capture rule such as
-  `ORDER-(\d{5})\s+Beverly` is anchored by a city no stem list knows. The
-  rulepack loader refuses the declaration outside bundled packs and for any
-  other id (`RulepackError::IneligibleBenignLookalike`), and also on a
-  non-regex matcher or a `mandatory_anchor` member;
-  `RegexDetector::with_benign_lookalikes` refuses other ids, checksum
-  validators (`ValidatorKind::is_checksum`), recorded-failure rules and
-  multi-branch patterns; validator veto ignores the declaration on any
-  other recognizer, so a custom `Recognizer` impl cannot opt in either. A
-  custom pack forked from `core` must drop its `benign_lookalikes` lines.
+- **Only audited bundled rules may opt in, and the permission cannot be
+  forged.** A pattern cannot prove it is uncued (a one-capture rule such as
+  `ORDER-(\d{5})\s+Beverly` is anchored by a city no stem list knows), and
+  an id string can be borrowed. So a veto needs a
+  `gaze_types::benign_lookalike::BenignLookalikeGrant`, whose only
+  constructor, `BenignLookalikeGrant::audited`, mints it when the rule's
+  whole tuple (id, class, pattern, capture groups, validator and failure
+  mode, locales, locale basis, structures) hashes to one of four compiled-in
+  fingerprints: `postal.de`, `postal.us`, `phone.national.de`,
+  `phone.national.us` exactly as bundled. Validator veto then checks that the
+  recognizer presenting the grant has that identity and that the vetoed span
+  is a match of the audited pattern in the input, so a rule that reuses an
+  audited id with another pattern (even through `Rulepack::parse_bundled`)
+  fails to build, and a custom `Recognizer` that borrows a real grant vetoes
+  nothing the audited rule would not. The rulepack loader also refuses the
+  key in rulepack files and for other ids with
+  `RulepackError::IneligibleBenignLookalike`. A custom pack forked from
+  `core` must drop its `benign_lookalikes` lines.
 - **Every veto is audited.** Each vetoed candidate writes one loser row
   with its `Benign*` reason; a veto that cannot be placed on the source
   text fails the document (`Error::UnauditableVeto`) rather than dropping

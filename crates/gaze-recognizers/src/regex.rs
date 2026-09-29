@@ -66,8 +66,8 @@ pub struct RegexDetector {
     /// (`gaze_types::payment_card::scan_card_run`). Set for a `luhn` recognizer whose pattern is
     /// `gaze_types::payment_card::CARD_RUN_PATTERN`, as `card.structural` is.
     card_runs: bool,
-    /// Benign structures that veto this recognizer's candidates (`benign_lookalike`).
-    benign_lookalikes: Vec<gaze_types::benign_lookalike::BenignLookalike>,
+    /// The audited-rule grant that lets benign structures veto this recognizer's candidates.
+    benign_grant: Option<gaze_types::benign_lookalike::BenignLookalikeGrant>,
 }
 
 impl RegexDetector {
@@ -133,7 +133,7 @@ impl RegexDetector {
             ascii_email_boundary,
             identifier_run_boundary,
             card_runs,
-            benign_lookalikes: Vec::new(),
+            benign_grant: None,
         })
     }
 
@@ -232,8 +232,10 @@ impl Recognizer for RegexDetector {
         self.validator_on_fail
     }
 
-    fn benign_lookalikes(&self) -> &[gaze_types::benign_lookalike::BenignLookalike] {
-        &self.benign_lookalikes
+    fn benign_lookalike_grant(
+        &self,
+    ) -> Option<&gaze_types::benign_lookalike::BenignLookalikeGrant> {
+        self.benign_grant.as_ref()
     }
 
     fn locales(&self) -> &[LocaleTag] {
@@ -283,45 +285,40 @@ impl RegexDetector {
         Ok(self)
     }
 
-    /// Benign structures that veto this recognizer's candidates. Refused on a recognizer whose
-    /// validator is a checksum (a value a checksum vouches for, or a financial number kept
-    /// despite its checksum, is never waved through by its surroundings) and on a pattern that
-    /// emits more than one capture group, and on a rule that records validator failures
-    /// (`on_fail = "record"`, a cued rule). The rulepack loader also refuses non-regex matchers
-    /// and mandatory-anchor members. Call after [`Self::with_validator_on_fail`].
+    /// Benign structures that veto this recognizer's candidates. Granted only when the rule is
+    /// exactly an audited bundled rule (`BenignLookalikeGrant::audited`); any other rule,
+    /// including a copy with a changed pattern, validator, locale or id, is refused. Call last,
+    /// after [`Self::with_locale_basis`] and [`Self::with_validator_on_fail`].
     pub fn with_benign_lookalikes(
         mut self,
         structures: Vec<gaze_types::benign_lookalike::BenignLookalike>,
     ) -> Result<Self> {
-        let refuse = |reason| RecognizerError::UnsupportedBenignLookalike {
-            recognizer_id: self.source.clone(),
-            reason,
+        if structures.is_empty() {
+            self.benign_grant = None;
+            return Ok(self);
+        }
+        // Only a rule that is byte-for-byte an audited bundled rule gets a grant: id, class,
+        // pattern, capture groups, validator and failure mode, locales and basis, structures.
+        let grant = gaze_types::benign_lookalike::BenignLookalikeGrant::audited(
+            &gaze_types::benign_lookalike::GrantRequest {
+                id: &self.source,
+                class: &self.class,
+                pattern: self.regex.as_str(),
+                capture_groups: self.capture_groups.as_deref(),
+                validator: self.validator_kind,
+                on_fail: self.validator_on_fail,
+                locales: &self.locales,
+                locale_basis: self.locale_basis,
+                structures: &structures,
+            },
+        );
+        let Some(grant) = grant else {
+            return Err(RecognizerError::UnsupportedBenignLookalike {
+                recognizer_id: self.source.clone(),
+                reason: "only an audited bundled rule, unchanged, may declare benign lookalikes",
+            });
         };
-        if !structures.is_empty() && self.validator_kind.is_some_and(|kind| kind.is_checksum()) {
-            return Err(refuse(
-                "a checksum-backed recognizer cannot be vetoed by context",
-            ));
-        }
-        if !structures.is_empty() && !gaze_types::benign_lookalike::is_audited(&self.source) {
-            return Err(refuse(
-                "only the audited bundled recognizers may declare benign lookalikes",
-            ));
-        }
-        // `on_fail = "record"` marks a cued rule that keeps even a failed value: never weak.
-        if !structures.is_empty() && self.validator_on_fail == ValidatorOnFail::Record {
-            return Err(refuse("a recorded-failure rule is cued"));
-        }
-        // Several emitted groups mean several alternatives, typically one anchored by a cue or
-        // a city; a candidate does not record which one matched, so none may be vetoed.
-        if !structures.is_empty()
-            && self
-                .capture_groups
-                .as_ref()
-                .is_some_and(|groups| groups.len() > 1)
-        {
-            return Err(refuse("a multi-branch pattern may hold an anchored branch"));
-        }
-        self.benign_lookalikes = structures;
+        self.benign_grant = Some(grant);
         Ok(self)
     }
 

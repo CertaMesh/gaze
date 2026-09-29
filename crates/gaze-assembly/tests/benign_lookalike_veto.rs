@@ -510,38 +510,97 @@ fn the_regex_builder_refuses_ids_outside_the_allowlist() {
     ));
 }
 
-/// A custom `Recognizer` impl that claims a benign lookalike is still never vetoed: validator
-/// veto checks the allowlist itself.
+/// Review 10815 rev 3, spoof 1: a rule that borrows the audited id `postal.us` with a different
+/// pattern, handed to the bundled parser (or `RulepackSource::Embedded`), parses, but no grant is
+/// minted for it, so building the pipeline fails closed.
 #[test]
-fn a_custom_recognizer_cannot_opt_in_at_runtime() {
-    struct OrderZip(gaze::PiiClass);
-    impl gaze::Recognizer for OrderZip {
+fn a_spoofed_bundled_rule_gets_no_grant() {
+    let spoof = "id = \"postal.us\"\nclass = \"custom:postal_code\"\nlocales = [\"en-US\"]\n\
+                 locale_basis = \"document\"\n[recognizers.match]\nkind = \"regex\"\n\
+                 pattern = '''ORDER-(\\d{5})\\s+Beverly'''\ncapture_groups = [1]\n\
+                 [recognizers.context]\nbenign_lookalikes = [\"joined_identifier\"]\n";
+    let text: &'static str = Box::leak(
+        format!(
+            "schema_version = \"0.1.0\"\nrulepack_id = \"probe\"\nrulepack_version = \"0.1.0\"\n\
+             default_locales = [\"global\"]\n\n[[recognizers]]\n{spoof}"
+        )
+        .into_boxed_str(),
+    );
+    let pack = Rulepack::load(RulepackSource::Embedded(text)).expect("the id is audited");
+    let policy = policy("en-US");
+    let context = Context::from_json_str(r#"{"dictionaries":{},"class_map":{},"fields":{}}"#)
+        .expect("context");
+    let active = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let error = build_pipeline_builder(&policy, &context, &[pack], &active, None)
+        .err()
+        .expect("a spoofed audited id must not build");
+    assert!(
+        format!("{error:?}").contains("UnsupportedBenignLookalike"),
+        "{error:?}"
+    );
+}
+
+/// Review 10815 rev 3, spoof 2: a custom recognizer claims the audited identity and presents a
+/// genuine grant borrowed from the real rule, but emits a span the audited pattern never
+/// matches. Validator veto re-matches the audited pattern, so the span stays protected.
+#[test]
+fn a_borrowed_grant_vetoes_nothing_the_audited_pattern_does_not_emit() {
+    use gaze::Recognizer as _;
+    use gaze_recognizers::{BenignLookalike, RegexDetector};
+    let real = RegexDetector::with_rulepack_fields(
+        r"\b\d{5}(-\d{4})?\b",
+        gaze::PiiClass::custom("postal_code").expect("class"),
+        "postal.us",
+        vec![gaze::LocaleTag::EnUs],
+        0.70,
+        70,
+        "counter",
+        None,
+        Vec::new(),
+        None,
+        None,
+    )
+    .expect("detector")
+    .with_benign_lookalikes(vec![
+        BenignLookalike::JoinedIdentifier,
+        BenignLookalike::CurrencyAmount,
+    ])
+    .expect("the exact bundled postal.us rule is granted");
+    struct Spoof(RegexDetector);
+    impl gaze::Recognizer for Spoof {
         fn id(&self) -> &str {
-            "custom.order_zip"
+            self.0.id()
         }
         fn supported_class(&self) -> &gaze::PiiClass {
-            &self.0
+            self.0.supported_class()
         }
         fn token_family(&self) -> &str {
             "counter"
+        }
+        fn locales(&self) -> &[gaze::LocaleTag] {
+            self.0.locales()
+        }
+        fn locale_basis(&self) -> gaze::LocaleBasis {
+            self.0.locale_basis()
         }
         fn detect(
             &self,
             input: &str,
             _: &gaze::DetectContext<'_>,
         ) -> Result<Vec<gaze::Candidate>, gaze::DetectError> {
+            // Four digits after a currency code: the audited five-digit pattern never emits it.
             Ok(input
-                .find("90210")
+                .find("9021")
                 .map(|start| {
                     gaze::Candidate::new(
-                        start..start + 5,
-                        self.0.clone(),
-                        "custom.order_zip",
+                        start..start + 4,
+                        self.0.supported_class().clone(),
+                        "postal.us",
                         0.9,
                         90,
                         None,
                         "counter",
-                        "custom.order_zip",
+                        "postal.us",
                         ConflictTier::None,
                         Vec::new(),
                     )
@@ -549,26 +608,24 @@ fn a_custom_recognizer_cannot_opt_in_at_runtime() {
                 .into_iter()
                 .collect())
         }
-        fn benign_lookalikes(&self) -> &[gaze_recognizers::BenignLookalike] {
-            &[gaze_recognizers::BenignLookalike::JoinedIdentifier]
+        fn benign_lookalike_grant(&self) -> Option<&gaze_recognizers::BenignLookalikeGrant> {
+            self.0.benign_lookalike_grant()
         }
     }
-    let policy = policy("en-GB");
+    let policy = policy("en-US");
     let context = Context::from_json_str(r#"{"dictionaries":{},"class_map":{},"fields":{}}"#)
         .expect("context");
     let active = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let pipeline = build_pipeline_builder(&policy, &context, rulepacks(), &active, None)
         .expect("builder")
-        .recognizer(OrderZip(
-            gaze::PiiClass::custom("postal_code").expect("class"),
-        ))
+        .recognizer(Spoof(real))
         .build()
         .expect("pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
     let (clean, _, _) = pipeline
         .clean_with_safety_net_policy_detect_context(
             &session,
-            RawDocument::Text("ORDER-90210 Beverly".to_string()),
+            RawDocument::Text("total EUR 9021 today".to_string()),
             active.as_slice(),
             &DictionaryBundle::default(),
             SafetyNetPolicy::default(),
@@ -577,7 +634,7 @@ fn a_custom_recognizer_cannot_opt_in_at_runtime() {
     let CleanDocument::Text(text) = clean else {
         panic!("expected text");
     };
-    assert!(!text.contains("90210"), "{text}");
+    assert!(!text.contains("9021"), "{text}");
 }
 
 #[test]
