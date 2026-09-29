@@ -49,6 +49,9 @@ LABEL_CLASS = {
 MAX_FIELDS = 32
 MAX_VALUE_BYTES = 256
 INFERRED_KEYS = {"Email": "email", "Name": "name", "Location": "address", "custom:phone": "phone", "custom:iban": "iban"}
+NAME_MULTI_KINDS = (
+    "exact", "case_folded", "whitespace_flexible", "whitespace_case_folded"
+)
 
 
 def common_name_words(repo: Path) -> frozenset[str]:
@@ -168,6 +171,46 @@ def record_values(context: str) -> list[tuple[str, str]]:
                 class_name = next(cls for cls, alias in INFERRED_KEYS.items() if alias == key)
             values.append((class_name, value))
     return values
+
+
+def enable_name_multi_measurement(context: str | None) -> str | None:
+    if context is None:
+        return None
+    if not any(class_name == "Name" and len(value.split()) > 1 for class_name, value in record_values(context)):
+        return context
+    parsed = json.loads(context)
+    # The product default is OFF until these kinds have measured positive rows.
+    parsed.setdefault("record_match_kinds", {})["name_multi"] = list(NAME_MULTI_KINDS)
+    return json.dumps(parsed, ensure_ascii=False)
+
+
+def name_multi_positive_spans(
+    documents: list[score.Document], contexts: dict[str, str | None]
+) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for document in documents:
+        context = contexts.get(document.uid)
+        if context is None:
+            continue
+        names = [
+            value for class_name, value in record_values(context)
+            if class_name == "Name" and len(value.split()) > 1
+        ]
+        encoded = document.text.encode("utf-8")
+        for span in document.spans:
+            if LABEL_CLASS.get(span.label) != "Name":
+                continue
+            text = encoded[span.start : span.end].decode("utf-8")
+            kinds = set()
+            for value in names:
+                group, kind = attribution.match_group_and_kind(text, "Name", value, frozenset())
+                if group == "name_multi" and kind in NAME_MULTI_KINDS:
+                    kinds.add(kind)
+            if len(kinds) > 1:
+                raise ValueError("one name gold span matches multiple record kinds")
+            for kind in kinds:
+                counts[kind] += 1
+    return {kind: counts[kind] for kind in NAME_MULTI_KINDS}
 
 
 def paired_records(
@@ -331,6 +374,7 @@ def main() -> None:
         "policy_sha256": hashlib.sha256(policy_path.read_bytes()).hexdigest(),
         "dataset_sha256": dataiku.DATASET_SHA256,
         "agentic_manifest": agentic.manifest(agentic.PUBLISHED_PARTITION, agentic.generate(agentic.PUBLISHED_PARTITION)),
+        "name_multi_measurement_kinds": list(NAME_MULTI_KINDS),
         "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown (Solo scratchpad 10781)",
         "layers": {},
     }
@@ -345,6 +389,8 @@ def main() -> None:
         )
         selected_ids = {document.uid for document in documents}
         contexts.update({uid: context for uid, context in counterweight_contexts.items() if uid in selected_ids})
+        contexts = {uid: enable_name_multi_measurement(context) for uid, context in contexts.items()}
+        name_multi_inputs = name_multi_positive_spans(documents, contexts)
         common_values, common_hits = common_name_counts(documents, contexts, common_words)
         if not any(contexts.values()):
             output["layers"][layer] = {"skipped": "no eligible record contexts"}
@@ -404,6 +450,7 @@ def main() -> None:
             "record_documents": sum(value is not None for value in contexts.values()),
             "common_word_record_values": common_values,
             "common_word_text_hits": common_hits,
+            "name_multi_positive_spans_by_kind": name_multi_inputs,
             "explicit_counterweight_documents": sum(
                 document.uid in counterweight_contexts and document.negative_category is not None
                 for document in documents

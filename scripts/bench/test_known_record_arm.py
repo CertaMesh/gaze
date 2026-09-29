@@ -104,6 +104,26 @@ def test_gold_value_becomes_explicit_record_field() -> None:
     assert eligible == {"EMAIL": len("alice@example.invalid")}
 
 
+def test_name_multi_measurement_opts_in_and_counts_input_spans() -> None:
+    items = [
+        document(f"full-name-{index}", text, "GIVENNAME")
+        for index, text in enumerate((
+            "Alice Smith", "ALICE SMITH", "Alice  Smith", "ALICE  SMITH"
+        ))
+    ]
+    context = json.dumps({"record": {"v00": {"name": "Alice Smith"}}})
+    measured = arm.enable_name_multi_measurement(context)
+    assert json.loads(measured)["record_match_kinds"]["name_multi"] == [
+        "exact", "case_folded", "whitespace_flexible", "whitespace_case_folded"
+    ]
+    assert arm.name_multi_positive_spans(items, {item.uid: measured for item in items}) == {
+        "exact": 1, "case_folded": 1, "whitespace_flexible": 1,
+        "whitespace_case_folded": 1,
+    }
+    email = '{"record":{"v00":{"email":"alice@example.invalid"}}}'
+    assert arm.enable_name_multi_measurement(email) == email
+
+
 def test_negative_receives_paired_record_and_counterweights() -> None:
     positive = document("positive", "Alice Smith", "GIVENNAME")
     negative = document("negative", "The catalog is open.", None)
