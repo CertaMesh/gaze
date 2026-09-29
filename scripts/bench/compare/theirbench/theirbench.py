@@ -33,6 +33,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
 import compare  # noqa: E402
+import pii_tracer  # noqa: E402
 import backends  # noqa: E402
 from cpu_contention import ForeignCpuSampler  # noqa: E402
 import loaders  # noqa: E402
@@ -41,10 +42,12 @@ from comparison_metrics import ComparisonMetrics  # noqa: E402
 score = loaders.score
 BENCHMARKS = ("presidio-research", "piibench-commercial")
 GAZE_ROWS = ("gaze-rules-only", "gaze-rules-ner", "gaze-full")
+# compare.TOOLS plus the tool whose adapter lives beside the pinned comparison.
+ROSTER = (*compare.TOOLS, pii_tracer.TOOL)
 
 
 def tool_family(name: str) -> str:
-    for family in ("presidio", "gliner", "datafog-core", "scrubadub", "opf"):
+    for family in ("presidio", "gliner", "datafog-core", "scrubadub", "opf", "pii-tracer"):
         if name.startswith(family):
             return family
     if name.startswith("datafog-"):
@@ -202,7 +205,7 @@ def main() -> int:
     parser.add_argument("--benchmark", choices=BENCHMARKS, required=True)
     parser.add_argument("--presidio-research-checkout", type=Path)
     parser.add_argument("--piibench-data", type=Path, help="piibench_commercial.py --output-dir")
-    parser.add_argument("--tool", action="append", choices=[*compare.TOOLS, *GAZE_ROWS])
+    parser.add_argument("--tool", action="append", choices=[*ROSTER, *GAZE_ROWS])
     parser.add_argument("--gaze-binary", type=Path)
     parser.add_argument("--gaze-model-dir", type=Path)
     parser.add_argument("--gaze-policy-rules", type=Path)
@@ -219,13 +222,13 @@ def main() -> int:
     splits, identity = load_benchmark(args)
     if args.preflight:
         splits = {split: preflight_sample(documents, args.preflight) for split, documents in splits.items()}
-    mappings = compare.load_mapping()
-    selected = args.tool or [*GAZE_ROWS, *compare.TOOLS]
+    mappings = {**compare.load_mapping(), pii_tracer.TOOL: pii_tracer.load_label_map()}
+    selected = args.tool or [*GAZE_ROWS, *ROSTER]
     # The whole roster, not just --tool: the common intersection must not depend
     # on which subset one invocation runs (runs resume into one report).
     composed = {
         family: loaders.compose_mapping(family, mappings[family], args.benchmark)
-        for family in sorted({tool_family(name) for name in (*GAZE_ROWS, *compare.TOOLS)})
+        for family in sorted({tool_family(name) for name in (*GAZE_ROWS, *ROSTER)})
     }
     common = common_intersection(composed)
     args.predictions_dir.mkdir(parents=True, exist_ok=True)

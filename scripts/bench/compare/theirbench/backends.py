@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 if getattr(sys.modules.get("compare"), "__file__", "") is None:
     del sys.modules["compare"]
 import compare  # noqa: E402
+import pii_tracer  # noqa: E402
 
 COMPARISON_REVISION = "b1446215"
 # The rows were measured with compare.py at 154f3da6. Its backend construction
@@ -78,7 +79,7 @@ def add_tool_arguments(parser: argparse.ArgumentParser) -> None:
     for language in compare.PRESIDIO_LANGUAGES:
         parser.add_argument(f"--{language}-model", type=Path)
     for flag in ("--gaze-policy", "--gliner-model", "--gliner-tokenizer", "--transformer-model",
-                 "--opf-python", "--opf-checkpoint"):
+                 "--opf-python", "--opf-checkpoint", "--pii-tracer-python", "--pii-tracer-model"):
         parser.add_argument(flag, type=Path)
 
 
@@ -141,4 +142,14 @@ def build_backend(name: str, args: argparse.Namespace, mappings: dict, scratch: 
         backend = c.Opf(args.opf_python, args.opf_checkpoint, scratch)
         return backend, {"checkpoint_sha256": c.digest_tree(args.opf_checkpoint),
                          "runtime": c.opf_runtime_info(args.opf_python)}, mappings["opf"]
+    if name == pii_tracer.TOOL:
+        if args.pii_tracer_python is None or args.pii_tracer_model is None:
+            return None, {"skipped": "local PII-Tracer runtime or checkpoint not configured"}, None
+        backend = pii_tracer.PiiTracer(args.pii_tracer_python, args.pii_tracer_model)
+        return backend, {"model_repo": pii_tracer.MODEL_REPO, "revision": pii_tracer.REVISION,
+                         "runtime": {**backend.runtime,
+                                     "worker_sha256": c.digest_file(pii_tracer.WORKER),
+                                     "requirements_sha256": c.digest_file(pii_tracer.REQUIREMENTS)},
+                         "config": "cpu, stored bf16, predict() Viterbi decode, non-overlapping "
+                                   "4080-token windows, no threshold"}, mappings[pii_tracer.TOOL]
     raise ValueError(f"unknown tool {name}")

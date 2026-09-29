@@ -1,0 +1,4 @@
+# Recompile with Python 3.12 and uv pip compile --generate-hashes. Own environment: the checkpoint needs transformers>=5.2, which requirements.lock cannot take.
+torch==2.14.0
+transformers==5.17.0
+huggingface_hub

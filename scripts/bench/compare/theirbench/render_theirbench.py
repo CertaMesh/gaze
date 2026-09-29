@@ -40,7 +40,7 @@ NOT_RUN = {
 
 
 def family(tool: str) -> str:
-    for prefix in ("gaze", "presidio", "gliner", "datafog-core", "scrubadub", "opf"):
+    for prefix in ("gaze", "presidio", "gliner", "datafog-core", "scrubadub", "opf", "pii-tracer"):
         if tool.startswith(prefix):
             return prefix
     return "datafog-python"

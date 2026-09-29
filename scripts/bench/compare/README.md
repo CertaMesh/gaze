@@ -114,9 +114,42 @@ Copy the report to `docs/reference/benchmarks/comparison.json`, render
 hashes, model pins, tool roster, and document counts. The report records split
 ID digests for every layer and both halves.
 
+## PII-Tracer
+
+Perplexity PII-Tracer (MIT, model revision `d25c16f2e57e321f6d2527715c01df9112f956f5`)
+is measured by `pii_tracer.py`, not `compare.py`: the third-party benchmark runner
+pins `compare.py` byte for byte, so the adapter reuses `compare.measure` from beside
+it and writes its own aggregate report. The checkpoint needs `transformers>=5.2`, so a
+separate environment (`requirements-pii-tracer.lock`, Python 3.12, `uv pip sync
+--require-hashes`) runs `pii_tracer_worker.py` as a JSONL subprocess.
+
+The checkpoint's `modeling_pii_masking.py` is executed by `trust_remote_code`. It
+imports only `torch` and `transformers` and opens no network connection. The worker
+refuses to import it unless the SHA-256 of that file, the weights, the config and both
+tokenizer files equal the pins in `pii_tracer_worker.py`, and it runs with
+`HF_HUB_OFFLINE=1`. Download once with `huggingface_hub.snapshot_download(
+"perplexity-ai/PII-Tracer", revision=<pin>, local_dir=...)`.
+
+The declared configuration was fixed from the model card before any result: CPU,
+stored bf16, `predict()` decoding, and non-overlapping 4080-token windows for longer
+documents (the card says to chunk; truncation would score the dropped tail as leaked).
+The card documents no threshold, so there is no sweep. `other_pii` and `secret` follow
+the OPF treatment in `pii-tracer-label-map.json`, which explains every row.
+
+```sh
+python3.12 scripts/bench/compare/pii_tracer.py --dataset target/bench-data/dataiku-en-de/test.parquet \
+  --pii-tracer-python <venv>/bin/python --pii-tracer-model <snapshot dir> \
+  --predictions-dir /absolute/path/outside/repo --output target/bench-data/compare-3909/pii-tracer.json
+```
+
+`--preflight N` runs N documents per layer and language and fails on any unmapped
+native label; its output is never published. The third-party sets take the same
+`--pii-tracer-python` / `--pii-tracer-model` flags on `theirbench.py`.
+
 Presidio: https://github.com/data-privacy-stack/presidio/tree/main/docs/analyzer/nlp_engines
 DataFog Core: https://github.com/DataFog/datafog-core
 DataFog Python: https://github.com/DataFog/datafog-python
 scrubadub: https://github.com/LeapBeyond/scrubadub/blob/master/docs/usage.rst
 GLiNER PII model: https://huggingface.co/urchade/gliner_multi_pii-v1
 OPF: https://github.com/openai/privacy-filter
+PII-Tracer: https://huggingface.co/perplexity-ai/PII-Tracer
