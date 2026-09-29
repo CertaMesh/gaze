@@ -10,6 +10,9 @@ These scripts score Gaze and every compared tool on the benchmarks that competit
 | --- | --- | --- | --- |
 | Presidio Research | `microsoft/presidio-research` at `6db3769a`, `data/synth_dataset_v2.json`, 1,500 documents | MIT code; Fake Name Generator identities CC-BY-SA-3.0-US | whole set |
 | PIIBench-commercial | `pritesh-2711/pii-bench` at `f96e1364`, its own consolidation and split code, run on four sources only | Apache-2.0 code; sources are Apache-2.0 (Gretel finance), CC-BY-4.0 (Nemotron-PII) and CC-BY-SA-4.0 (Few-NERD, FiNER-139) | the 5,000-record `test_5k` subset |
+| PII-TRACE public subset | `perplexity-ai/PII-TRACE` at `1c3eb67b`, `data/train.parquet`, 500 English conversations | MIT | whole set, one document per message (4,500) |
+
+PII-TRACE is Perplexity's benchmark for PII-Tracer. Only this 500-conversation subset is public; the paper's 13,148-conversation, 13-language set and its 1,922-document test split are not, so no figure from the paper can be reproduced. Perplexity publishes no scorer either: `pii_trace_repro.py` implements the dataset card's exact typed and untyped span P/R/F1 and the paper's label-agnostic character P/R/F1 from their definitions. All 2,653 gold spans are in user messages; assistant messages have none, so a detection there is a false positive. The paper says PII-Tracer's training data shares production traffic with PII-TRACE and the subset carries no split label, so PII-Tracer's row is an upper bound rather than a clean holdout. On this set the vendor bar is PII-Tracer itself. Its native labels are the dataset's labels, so `label-maps.json` `native_gold` maps them by identity; every other tool goes through the canonical labels, which cannot reach `other_pii`.
 
 Not run, because of their licences:
 

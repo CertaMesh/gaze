@@ -40,7 +40,7 @@ import loaders  # noqa: E402
 from comparison_metrics import ComparisonMetrics  # noqa: E402
 
 score = loaders.score
-BENCHMARKS = ("presidio-research", "piibench-commercial")
+BENCHMARKS = ("presidio-research", "piibench-commercial", "pii-trace")
 GAZE_ROWS = ("gaze-rules-only", "gaze-rules-ner", "gaze-full")
 # compare.TOOLS plus the tool whose adapter lives beside the pinned comparison.
 ROSTER = (*compare.TOOLS, pii_tracer.TOOL)
@@ -62,6 +62,8 @@ def load_benchmark(args: argparse.Namespace) -> tuple[dict[str, list[score.Docum
     if args.benchmark == "presidio-research":
         documents, identity = loaders.load_presidio_research(args.presidio_research_checkout)
         return {"test": documents}, identity
+    if args.benchmark == "pii-trace":
+        return loaders.load_pii_trace(args.pii_trace_data)
     splits, identity = loaders.load_piibench_commercial(args.piibench_data)
     return splits, identity
 
@@ -212,6 +214,7 @@ def main() -> int:
     parser.add_argument("--benchmark", choices=BENCHMARKS, required=True)
     parser.add_argument("--presidio-research-checkout", type=Path)
     parser.add_argument("--piibench-data", type=Path, help="piibench_commercial.py --output-dir")
+    parser.add_argument("--pii-trace-data", type=Path, help="data/train.parquet of perplexity-ai/PII-TRACE")
     parser.add_argument("--tool", action="append", choices=[*ROSTER, *GAZE_ROWS])
     parser.add_argument("--gaze-binary", type=Path)
     parser.add_argument("--gaze-model-dir", type=Path)

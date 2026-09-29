@@ -27,9 +27,11 @@ BLOCK = "their-benchmarks"
 TITLES = {
     "presidio-research": "Presidio Research synthetic set (synth_dataset_v2, 1,500 documents)",
     "piibench-commercial": "PIIBench-commercial (four permissively licensed PIIBench sources, test_5k)",
+    "pii-trace": "PII-TRACE public subset (500 English conversations, 4,500 messages)",
 }
 OWN_METRIC = {"presidio-research": ("f2", "F2, binary PII vs O, presidio-evaluator"),
-              "piibench-commercial": ("f1", "span F1, exact span + type, PIIBench seqeval")}
+              "piibench-commercial": ("f1", "span F1, exact span + type, PIIBench seqeval"),
+              "pii-trace": ("char_f1", "character F1, label-agnostic, the paper's metric")}
 #: Untagged main-tree rows. They stay in their-benchmarks.json as evidence but are
 #: never published; a tagged run is stored as a `gaze-vX.Y.Z` row (tagged_gaze.py).
 GAZE_ROWS = ("gaze-full", "gaze-rules-ner", "gaze-rules-only")
@@ -38,6 +40,8 @@ HELD = "held (typed-metric review)"
 NOT_RUN = {
     "PIIBench full ten-source mix": "five sources carry non-commercial or custom-academic licences and "
                                     "WikiANN's licence is unknown; not downloaded or run",
+    "PII-TRACE full set (13,148 conversations, 13 languages, 1,922-document test split)":
+        "not public; only the 500-conversation English subset is, and it is what runs here",
     "ai4privacy/pii-masking-300k (OPF's published set)": "custom licence; commercial use requires a "
                                                          "licence from ai4privacy; not downloaded or run",
 }
@@ -106,11 +110,18 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
         result = json.loads(path.read_text(encoding="utf-8"))
         if result.get("smoke_limit"):
             raise ValueError(f"{path}: smoke results are never published")
-        benchmarks[name]["reproduction"] = (
-            {"published": result["published"], "reproduced": result["reproduced"], "versions": result["versions"]}
-            if name == "presidio-research"
-            else {"published_full_mix": result["published_full_mix"], "reproduced_commercial": result["overall"],
-                  "versions": result["versions"]})
+        if name == "presidio-research":
+            reproduction = {"published": result["published"], "reproduced": result["reproduced"],
+                            "versions": result["versions"]}
+        elif name == "pii-trace":
+            # Perplexity publishes no number for the public subset, so nothing can be reproduced;
+            # the vendor's own tuned model is measured here and is the bar.
+            reproduction = {"published": None, "vendor_system": result["system"],
+                            "vendor_result": result["overall"], "versions": result["versions"]}
+        else:
+            reproduction = {"published_full_mix": result["published_full_mix"],
+                            "reproduced_commercial": result["overall"], "versions": result["versions"]}
+        benchmarks[name]["reproduction"] = reproduction
     for path in historical:
         result = json.loads(path.read_text(encoding="utf-8"))
         if result.get("smoke_limit") or not result.get("reproduction_run"):
@@ -222,7 +233,7 @@ def render(data: Mapping[str, Any]) -> str:
         "No latency is published here: the machine was shared during these runs, and "
         "per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the "
         "main comparison's configurations; Presidio's default rows keep score threshold 0.0, so "
-        "they differ from the notebook's vanilla configuration (threshold 0.4). Both sets are "
+        "they differ from the notebook's vanilla configuration (threshold 0.4). Every set here is "
         "English only, so Presidio's three language configurations give identical rows.",
         "",
     ]
@@ -242,6 +253,16 @@ def render(data: Mapping[str, Any]) -> str:
                     f"reproduced {old['f2']} with the evaluator at `{old['evaluator_commit'][:8]}`, the "
                     f"version that produced the published number; {repro['reproduced'][config]['f2']} with "
                     f"the pinned evaluator, which scores every row below.")
+        elif name == "pii-trace":
+            vendor = repro["vendor_result"]
+            lines.append("- Perplexity publishes no number for this subset: its paper reports the 1,922-document, "
+                         "13-language test split, which is not public, so no vendor figure is reproduced. The bar "
+                         f"here is PII-Tracer, the vendor's own tuned model: character F1 {vendor['char_f1']:.3f}, "
+                         f"exact typed micro F1 {vendor['exact_typed_micro_f1']:.3f}.")
+            lines.append("- All 2,653 gold spans sit in user messages; assistant messages have none, so a detection "
+                         "there is a false positive. The paper says PII-Tracer's training data shares production "
+                         "traffic with PII-TRACE and the subset carries no split label, so overlap with its training "
+                         "data cannot be ruled out; treat that row as an upper bound, not a clean holdout.")
         else:
             published = repro["published_full_mix"]
             lines.append(f"- Published Presidio span F1 {published['f1']} is on the full ten-source mix "
