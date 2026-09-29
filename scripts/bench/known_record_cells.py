@@ -23,17 +23,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
+from unittest.mock import patch
 
 import agentic_layers as agentic
 import gaze_bench_score as score
 
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 SEED = 2026092901
 LAYER = "K"
 SOURCE_POSITIVE = "known-record-kind-cells"
@@ -41,8 +44,8 @@ SOURCE_POSITIVE = "known-record-kind-cells"
 SOURCE_COUNTERWEIGHT = "known-record-oracle-counterweight"
 CONTRACT_V2_PATH = Path("docs/reference/benchmarks/scored-labels-v2.json")
 
-NBSP = " "
-NARROW_NBSP = " "
+NBSP = "\u00a0"
+NARROW_NBSP = "\u202f"
 # Mirrors the record matcher's bound on one whitespace run.
 MAX_WHITESPACE_RUN = 32
 # Subset of crates/gaze-recognizers/assets/record-common-names-v1.txt the cells
@@ -58,6 +61,32 @@ class MatchKind(str, Enum):
     WHITESPACE_FLEXIBLE = "whitespace_flexible"
     WHITESPACE_CASE_FOLDED = "whitespace_case_folded"
     CORROBORATED_SINGLE = "corroborated_single"
+
+
+class ControlKind(str, Enum):
+    """Pairs kept for context that exercise no probe kind; never summed into one."""
+
+    # Compact record, grouped text: the matcher has no digit-run joining.
+    UNMATCHED_COMPACT_RECORD = "control_unmatched_compact_record"
+    # Irregular record spacing is canonicalized, so the text match is exact.
+    EXACT_CANONICAL_RECORD = "control_exact_canonical_record"
+    # An unlisted word-name matches every occurrence; its twin prices that.
+    EXACT_UNLISTED_NAME = "control_exact_unlisted_name"
+    # Gaze folds NBSP-class separators to a space before detection, so these
+    # are exact or case-folded matches, not whitespace-flexible ones.
+    EXACT_AFTER_SPACE_FOLDING = "control_exact_after_space_folding"
+    CASE_FOLDED_AFTER_SPACE_FOLDING = "control_case_folded_after_space_folding"
+
+
+Bucket = MatchKind | ControlKind
+# The matcher kind a control's positive target lands in.
+CONTROL_MEASURED_KIND = {
+    ControlKind.UNMATCHED_COMPACT_RECORD: "unmatched_term",
+    ControlKind.EXACT_CANONICAL_RECORD: "exact",
+    ControlKind.EXACT_UNLISTED_NAME: "exact",
+    ControlKind.EXACT_AFTER_SPACE_FOLDING: "exact",
+    ControlKind.CASE_FOLDED_AFTER_SPACE_FOLDING: "case_folded",
+}
 
 
 class Role(str, Enum):
@@ -87,14 +116,15 @@ class Target:
     start: int
     end: int
     slot: int
-    # Bucket #718's attribution recorder must assign, (record_class, match_kind).
+    # (record group, kind) the record matcher assigns, compared against the
+    # canonical record value as the Rust matcher does.
     attribution: tuple[str, str]
     expect_match: bool
 
 
 @dataclass(frozen=True)
 class PairDescriptor:
-    kind: MatchKind
+    bucket: Bucket
     variant: str
     surface: str
     language: str
@@ -107,7 +137,7 @@ class PairDescriptor:
 class Cell:
     uid: str
     role: Role
-    kind: MatchKind
+    bucket: Bucket
     variant: str
     surface: str
     language: str
@@ -118,7 +148,22 @@ class Cell:
 
     @property
     def cell(self) -> str:
-        return f"{LAYER}|{self.kind.value}/{self.variant}|{self.surface}|{self.role.value}"
+        return f"{LAYER}|{self.bucket.value}/{self.variant}|{self.surface}|{self.role.value}"
+
+    @property
+    def probe_kind(self) -> MatchKind | None:
+        return self.bucket if isinstance(self.bucket, MatchKind) else None
+
+    @property
+    def control_kind(self) -> ControlKind | None:
+        return self.bucket if isinstance(self.bucket, ControlKind) else None
+
+    def measured_kind(self) -> str:
+        """The kind the matcher gives the primary target, derived from text and record."""
+        (target,) = self.primary_targets()
+        text = self.text.encode("utf-8")[target.start : target.end].decode("utf-8")
+        field = self.record[target.slot]
+        return matcher_kind(text, field.class_name, field.raw)
 
     def primary_targets(self) -> tuple[Target, ...]:
         """Slot 0 carries the kind; other slots only corroborate it."""
@@ -127,7 +172,7 @@ class Cell:
     def descriptor(self) -> PairDescriptor:
         encoded = self.text.encode("utf-8")
         return PairDescriptor(
-            kind=self.kind,
+            bucket=self.bucket,
             variant=self.variant,
             surface=surface_of(self.text),
             language=self.language,
@@ -148,7 +193,7 @@ class Cell:
             region="",
             source_dataset=SOURCE_POSITIVE if positive else SOURCE_COUNTERWEIGHT,
             spans=tuple(score.Span(g.start, g.end, g.label) for g in self.gold),
-            negative_category=None if positive else f"record_{self.kind.value}",
+            negative_category=None if positive else f"record_{self.bucket.value}",
             cell=self.cell,
         )
 
@@ -156,7 +201,7 @@ class Cell:
         return {
             "id": self.uid,
             "role": self.role.value,
-            "kind": self.kind.value,
+            "bucket": self.bucket.value,
             "variant": self.variant,
             "surface": self.surface,
             "language": self.language,
@@ -300,6 +345,16 @@ def _identifier(variant: str, rng: agentic.Rng) -> tuple[str, list[str], str]:
         return "custom:iban", _groups(make(rng)), "IBAN"
     if variant.startswith("phone"):
         return "custom:phone", ["+49", "1555", "01" + rng.digits(5)], "PHONENUMBER"
+    # National identifiers in their official printed grouping.
+    if variant.startswith("steuer_id"):
+        value = agentic._steuer_id(rng)
+        return "custom:steuer_id", [value[:2], value[2:5], value[5:8], value[8:]], "TAXNUM"
+    if variant.startswith("bsn"):
+        value = agentic._bsn(rng)
+        return "custom:national_id", [value[:4], value[4:6], value[6:]], "NATIONALID"
+    if variant.startswith("nhs"):
+        value = agentic._nhs(rng)
+        return "custom:national_id", [value[:3], value[3:6], value[6:]], "NATIONALID"
     return "custom:credit_card", _groups(agentic._card(rng)), "CREDITCARDNUMBER"
 
 
@@ -307,6 +362,23 @@ IDENTIFIER_SENTENCES = {
     "en": ("Please use ", " for the refund.", "The unrelated catalog reference is ", "."),
     "de": ("Bitte nutze ", " für die Erstattung.", "Die fremde Katalognummer lautet ", "."),
 }
+# No class cue: the baseline leaks these grouped national identifiers, so only
+# a whitespace-flexible record match can protect them.
+UNCUED_SENTENCES = {
+    "en": ("Please update the file, ", " is correct now.", "The unrelated catalog reference is ", "."),
+    "de": ("Bitte in der Akte ändern, ", " stimmt jetzt.", "Die fremde Katalognummer lautet ", "."),
+}
+IDENTIFIER_SEPARATORS = {
+    "iban_double_space": "  ",
+    "phone_double_space": "  ",
+    "card_double_space": "  ",
+    "steuer_id_double_space": "  ",
+    "bsn_double_space": "  ",
+    "nhs_triple_space": "   ",
+    "steuer_id_nbsp": NBSP,
+    "card_narrow_nbsp": NARROW_NBSP,
+}
+UNCUED_VARIANTS = frozenset({"steuer_id_double_space", "bsn_double_space", "nhs_triple_space", "steuer_id_nbsp"})
 NAME_SENTENCES = {
     "en": ("The form was signed by ", " yesterday.", "Tickets for the ", " concert hall are sold out.", "field"),
     "de": ("Das Formular hat ", " gestern unterschrieben.", "Karten für die ", " Konzerthalle sind ausverkauft.", "haus"),
@@ -355,12 +427,13 @@ def _identifier_variant(variant: str, language: str, rng: agentic.Rng) -> tuple[
         record_raw, text_sep, expect = "".join(groups), " ", False
     else:
         record_raw = spaced
-        text_sep = {"iban_nbsp": NBSP, "phone_double_space": "  ", "card_narrow_nbsp": NARROW_NBSP}[variant]
+        text_sep = IDENTIFIER_SEPARATORS[variant]
         expect = True
     rendered = text_sep.join(groups)
     lure = text_sep.join(_digit_bump(spaced, rng).split(" "))
-    lead, tail, lure_lead, lure_tail = IDENTIFIER_SENTENCES[language]
-    kind = "unmatched_term" if not expect else MatchKind.WHITESPACE_FLEXIBLE.value
+    sentences = UNCUED_SENTENCES if variant in UNCUED_VARIANTS else IDENTIFIER_SENTENCES
+    lead, tail, lure_lead, lure_tail = sentences[language]
+    kind = matcher_kind(rendered, class_name, record_raw)
 
     def positive(b: Builder) -> list[Target]:
         b.add(lead)
@@ -377,7 +450,7 @@ def _identifier_variant(variant: str, language: str, rng: agentic.Rng) -> tuple[
     return positive, counterweight, (RecordField(class_name, record_raw),)
 
 
-def _name_variant(kind: MatchKind, variant: str, language: str, rng: agentic.Rng) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
+def _name_variant(variant: str, language: str, rng: agentic.Rng) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
     if variant.startswith("name_unicode"):
         given, surname = UNICODE_NAMES[rng.below(len(UNICODE_NAMES))]
     else:
@@ -386,12 +459,14 @@ def _name_variant(kind: MatchKind, variant: str, language: str, rng: agentic.Rng
         "name_line_break": "\n",
         "name_record_irregular": " ",
         "name_upper_double_space": "  ",
-        "name_lower_nbsp": NBSP,
+        "name_lower_double_space": "  ",
         "name_upper_line_break": "\n",
-        "name_unicode_upper_nbsp": NBSP,
+        "name_unicode_upper_double_space": "  ",
+        "name_lower_nbsp": NBSP,
     }[variant]
     record_raw = f"{given}  {surname}" if variant == "name_record_irregular" else f"{given} {surname}"
     case: Callable[[str], str] = str.upper if "upper" in variant else str.lower if "lower" in variant else str
+    kind = matcher_kind(case(given) + separator + case(surname), "Name", record_raw)
     lead, tail, lure_lead, lure_tail, suffix = NAME_SENTENCES[language]
 
     def positive(b: Builder) -> list[Target]:
@@ -400,13 +475,13 @@ def _name_variant(kind: MatchKind, variant: str, language: str, rng: agentic.Rng
         b.add(separator)
         _, end = b.gold_span(case(surname), "SURNAME")
         b.add(tail)
-        return [_target((start, end), 0, ("name_multi", kind.value))]
+        return [_target((start, end), 0, ("name_multi", kind))]
 
     def counterweight(b: Builder) -> list[Target]:
         b.add(lure_lead)
         span = b.add(case(given) + separator + case(surname + suffix))
         b.add(lure_tail)
-        return [_target(span, 0, ("name_multi", kind.value), False)]
+        return [_target(span, 0, ("name_multi", kind), False)]
 
     return positive, counterweight, (RecordField("Name", record_raw),)
 
@@ -416,19 +491,19 @@ def _street_variant(language: str, rng: agentic.Rng) -> tuple[Fill, Fill, tuple[
     number = str(rng.between(12, 89))
     lure_number = number[::-1] if number[0] != number[1] else str(int(number) + 1)
     lead, tail, lure_lead, lure_tail = STREET_SENTENCES[language]
-    bucket = ("address_part", MatchKind.WHITESPACE_FLEXIBLE.value)
+    bucket = ("address_part", matcher_kind(f"{street}  {number}", "Location", f"{street} {number}"))
 
     def positive(b: Builder) -> list[Target]:
         b.add(lead)
         start, _ = b.gold_span(street, "STREET")
-        b.add(NBSP)
+        b.add("  ")
         _, end = b.gold_span(number, "BUILDINGNUM")
         b.add(tail)
         return [_target((start, end), 0, bucket)]
 
     def counterweight(b: Builder) -> list[Target]:
         b.add(lure_lead)
-        span = b.add(street + NBSP + lure_number)
+        span = b.add(street + "  " + lure_number)
         b.add(lure_tail)
         return [_target(span, 0, bucket, False)]
 
@@ -505,23 +580,29 @@ def _corroborated_variant(variant: str, index: int, rng: agentic.Rng) -> tuple[F
     return positive, counterweight, record
 
 
-VARIANTS: dict[MatchKind, tuple[str, ...]] = {
+VARIANTS: dict[Bucket, tuple[str, ...]] = {
     MatchKind.WHITESPACE_FLEXIBLE: (
-        "iban_nbsp",
+        "iban_double_space",
         "phone_double_space",
-        "card_narrow_nbsp",
-        "iban_compact_record",
+        "card_double_space",
+        "steuer_id_double_space",
+        "bsn_double_space",
+        "nhs_triple_space",
         "name_line_break",
-        "name_record_irregular",
-        "street_nbsp",
+        "street_double_space",
     ),
     MatchKind.WHITESPACE_CASE_FOLDED: (
         "name_upper_double_space",
-        "name_lower_nbsp",
+        "name_lower_double_space",
         "name_upper_line_break",
-        "name_unicode_upper_nbsp",
+        "name_unicode_upper_double_space",
     ),
-    MatchKind.CORROBORATED_SINGLE: (*CORROBORATED_VARIANTS, "unlisted_alone"),
+    MatchKind.CORROBORATED_SINGLE: CORROBORATED_VARIANTS,
+    ControlKind.UNMATCHED_COMPACT_RECORD: ("iban_compact_record",),
+    ControlKind.EXACT_CANONICAL_RECORD: ("name_record_irregular",),
+    ControlKind.EXACT_UNLISTED_NAME: ("unlisted_alone",),
+    ControlKind.EXACT_AFTER_SPACE_FOLDING: ("steuer_id_nbsp", "card_narrow_nbsp"),
+    ControlKind.CASE_FOLDED_AFTER_SPACE_FOLDING: ("name_lower_nbsp",),
 }
 
 
@@ -531,31 +612,35 @@ def surfaces_for(variant: str) -> tuple[str, ...]:
     return SURFACES
 
 
-def _variant_fills(kind: MatchKind, variant: str, language: str, index: int, rng: agentic.Rng) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
-    if kind is MatchKind.CORROBORATED_SINGLE:
+def _english_only(variant: str) -> bool:
+    return variant in CORROBORATED_VARIANTS or variant == "unlisted_alone"
+
+
+def _variant_fills(variant: str, language: str, index: int, rng: agentic.Rng) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
+    if _english_only(variant):
         return _corroborated_variant(variant, index, rng)
-    if variant.startswith(("iban", "phone", "card")):
+    if variant.startswith(("iban", "phone", "card", "steuer_id", "bsn", "nhs")):
         return _identifier_variant(variant, language, rng)
-    if variant == "street_nbsp":
+    if variant == "street_double_space":
         return _street_variant(language, rng)
-    return _name_variant(kind, variant, language, rng)
+    return _name_variant(variant, language, rng)
 
 
 def generate() -> list[Pair]:
     pairs: list[Pair] = []
     ticket = 4100
-    for kind, variants in VARIANTS.items():
+    for bucket, variants in VARIANTS.items():
         for variant in variants:
-            rng = agentic.Rng(SEED, f"{LAYER}/{kind.value}/{variant}")
+            rng = agentic.Rng(SEED, f"{LAYER}/{bucket.value}/{variant}")
             for index, surface in enumerate(surfaces_for(variant)):
-                language = "en" if kind is MatchKind.CORROBORATED_SINGLE or index % 2 == 0 else "de"
-                positive_fill, counterweight_fill, record = _variant_fills(kind, variant, language, index, rng)
+                language = "en" if _english_only(variant) or index % 2 == 0 else "de"
+                positive_fill, counterweight_fill, record = _variant_fills(variant, language, index, rng)
                 cells = []
                 for role, fill in ((Role.POSITIVE, positive_fill), (Role.COUNTERWEIGHT, counterweight_fill)):
                     ticket += 1
                     text, gold, targets = wrap(surface, ticket, fill)
-                    uid = f"known-record-kind-{kind.value}-{variant}-{surface}-{role.value}"
-                    cells.append(Cell(uid, role, kind, variant, surface, language, text, gold, record, targets))
+                    uid = f"known-record-kind-{bucket.value}-{variant}-{surface}-{role.value}"
+                    cells.append(Cell(uid, role, bucket, variant, surface, language, text, gold, record, targets))
                 pairs.append(Pair(*cells))
     check(pairs)
     return pairs
@@ -563,6 +648,49 @@ def generate() -> list[Pair]:
 
 # --------------------------------------------------------------------------
 # Fail-closed checks, including a model of the record matcher.
+
+
+def gaze_fold(text: str) -> str:
+    """Gaze's pre-detection folding (crates/gaze/src/normalize.rs).
+
+    Every Unicode space separator becomes an ASCII space and fullwidth ASCII
+    becomes ASCII, then NFC. Line breaks and tabs are not space separators.
+    """
+    out = []
+    for char in text:
+        if char in "\u200c\u200d":
+            continue
+        if unicodedata.category(char) == "Zs":
+            char = " "
+        elif "\uff01" <= char <= "\uff5e":
+            char = chr(ord(char) - 0xFEE0)
+        out.append(unicodedata.normalize("NFC", char))
+    return "".join(out)
+
+
+def matcher_kind(text: str, record_class: str, raw: str) -> str:
+    """The Rust matcher's kind for a hit on Gaze-folded text.
+
+    Mirrors `record_match_kind` plus the listed-name corroboration gate:
+    compared with the canonical record value, after `gaze_fold`. #718's
+    round-3 recorder compares the unfolded text with the raw value instead.
+    """
+    text = gaze_fold(text)
+    term = " ".join(raw.split())
+    collapsed = " ".join(text.split())
+    fold = record_class == "Name"
+    if collapsed != term and not (fold and collapsed.casefold() == term.casefold()):
+        return "unmatched_term"
+    listed = {name.casefold() for name in LISTED_COMMON_NAMES}
+    if fold and len(term.split()) == 1 and term.casefold() in listed:
+        return MatchKind.CORROBORATED_SINGLE.value
+    if text == term:
+        return "exact"
+    if collapsed == term:
+        return MatchKind.WHITESPACE_FLEXIBLE.value
+    if text.casefold() == term.casefold():
+        return "case_folded"
+    return MatchKind.WHITESPACE_CASE_FOLDED.value
 
 
 def _identifier_char(char: str) -> bool:
@@ -679,6 +807,18 @@ def check(pairs: Sequence[Pair]) -> None:
             raise CellError(f"{pair.positive.uid} and its twin differ in shape or position: {left} != {right}")
         for cell in (pair.positive, pair.counterweight):
             _check_cell(cell)
+        _check_bucket(pair.positive)
+
+
+def _check_bucket(positive: Cell) -> None:
+    """A probe must exercise its declared kind; a control lands in its own bucket."""
+    measured = positive.measured_kind()
+    expected = positive.probe_kind.value if positive.probe_kind else CONTROL_MEASURED_KIND[positive.control_kind]
+    if measured != expected:
+        raise CellError(f"{positive.uid}: primary target measures {measured}, bucket {positive.bucket.value} expects {expected}")
+    (target,) = positive.primary_targets()
+    if target.attribution[1] != measured:
+        raise CellError(f"{positive.uid}: declared attribution {target.attribution[1]} is not the measured {measured}")
 
 
 def accepted_record_value(value: str) -> bool:
@@ -734,13 +874,13 @@ def corpus_bytes(pairs: Sequence[Pair]) -> bytes:
 
 
 def manifest(pairs: Sequence[Pair]) -> dict[str, object]:
-    by_kind = Counter(f"{pair.positive.kind.value}" for pair in pairs)
+    by_kind = Counter(pair.positive.bucket.value for pair in pairs)
     return {
         "generator": "scripts/bench/known_record_cells.py",
         "generator_version": GENERATOR_VERSION,
         "seed": SEED,
         "pairs": len(pairs),
-        "pairs_by_kind": dict(sorted(by_kind.items())),
+        "pairs_by_bucket": dict(sorted(by_kind.items())),
         "corpus_sha256": hashlib.sha256(corpus_bytes(pairs)).hexdigest(),
         "synthetic_only": True,
     }
@@ -761,7 +901,9 @@ def documents(repo_root: Path, contract: str, pairs: Sequence[Pair] | None = Non
 
 @dataclass
 class VariantTally:
-    """Per (kind, variant, role) byte changes when the record is supplied.
+    """Per (bucket, variant, role) byte changes between two arms.
+
+    Probe buckets are match kinds; control buckets never add into one.
 
     Recovered gold and added false-positive bytes come from the scored view of
     the final protection trace, exactly as the byte score counts them.
@@ -797,7 +939,7 @@ class VariantTally:
         new = score.subtract_intervals(after, before)
         removed = score.subtract_intervals(before, after)
         targets = score.merge_intervals((t.start, t.end) for t in cell.targets)
-        key = (cell.kind.value, cell.variant, cell.role.value)
+        key = (cell.bucket.value, cell.variant, cell.role.value)
         self.totals[(*key, "gold_recovered_bytes")] += score.intersection_length(new, gold)
         self.totals[(*key, "false_positive_added_bytes")] += score.interval_length(new) - score.intersection_length(new, gold)
         self.totals[(*key, "gold_lost_bytes")] += score.intersection_length(removed, gold)
@@ -814,23 +956,179 @@ class VariantTally:
             "false_positive_added_bytes", "gold_lost_bytes", "false_positive_removed_bytes",
         )
         rows = [
-            {"kind": kind, "variant": variant, "role": role, **{f: self.totals[(kind, variant, role, f)] for f in fields}}
-            for kind, variant, role in sorted({key[:3] for key in self.totals})
+            {
+                "bucket": bucket,
+                "type": "probe" if bucket in {kind.value for kind in MatchKind} else "control",
+                "variant": variant,
+                "role": role,
+                **{f: self.totals[(bucket, variant, role, f)] for f in fields},
+            }
+            for bucket, variant, role in sorted({key[:3] for key in self.totals})
         ]
         return {"schema_version": 1, "rows": rows}
 
 
+# --------------------------------------------------------------------------
+# Score-only proof: three arms over layer K alone.
+
+# #718's default allowed kinds per record group (fa2aa8d9,
+# `Context::record_allowed_match_kinds`); the OFF arm states them explicitly.
+DEFAULT_MATCH_KINDS: dict[str, tuple[str, ...]] = {
+    "name_single": ("exact", "case_folded"),
+    "name_multi": (),
+    "address_part": ("exact",),
+    "custom:credit_card": ("exact",),
+    "custom:iban": ("exact",),
+    "custom:national_id": ("exact",),
+    "custom:passport": ("exact",),
+    "custom:phone": ("exact",),
+    "custom:steuer_id": ("exact",),
+}
+# The probe kinds each group may enable (the parser refuses the others).
+PROBE_KINDS_BY_GROUP: dict[str, tuple[str, ...]] = {
+    "name_single": (MatchKind.CORROBORATED_SINGLE.value,),
+    "name_multi": (MatchKind.WHITESPACE_FLEXIBLE.value, MatchKind.WHITESPACE_CASE_FOLDED.value),
+}
+
+
+def record_group(field: RecordField) -> str:
+    if field.class_name == "Name":
+        return "name_single" if len(field.raw.split()) == 1 else "name_multi"
+    return "address_part" if field.class_name == "Location" else field.class_name
+
+
+def arm_context(cell: Cell, probes_on: bool) -> str:
+    """The cell's record with every group's allowed kinds stated explicitly."""
+    context = json.loads(cell.context_json())
+    kinds: dict[str, list[str]] = {}
+    for field in cell.record:
+        group = record_group(field)
+        allowed = list(DEFAULT_MATCH_KINDS[group])
+        if probes_on:
+            allowed += PROBE_KINDS_BY_GROUP.get(group, (MatchKind.WHITESPACE_FLEXIBLE.value,))
+        kinds[group] = allowed
+    context["record_match_kinds"] = kinds
+    return json.dumps(context, ensure_ascii=False)
+
+
+def _run_arm(
+    documents: Sequence[score.Document], contexts: Mapping[str, str] | None, *, known_record: bool, **kwargs: object
+) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
+    """One scored run; the transport adds each document's context, as the oracle arm does."""
+    responses: dict[str, dict[str, object]] = {}
+
+    def observe(_config: str, document: score.Document, response: dict, _validators: object) -> None:
+        responses[document.uid] = response
+
+    base_transport = score.BenchSubprocess
+
+    class ContextTransport(base_transport):  # type: ignore[misc, valid-type]
+        def exchange(self, request: dict[str, object]) -> dict[str, object]:
+            if contexts is not None:
+                request = {**request, "context_json": contexts[str(request["fixture_id"])]}
+            return super().exchange(request)
+
+    environment = {key: value for key, value in os.environ.items() if key != "GAZE_BENCH_KNOWN_RECORD_ARM"}
+    if known_record:
+        environment["GAZE_BENCH_KNOWN_RECORD_ARM"] = "1"
+    with patch.object(score, "BenchSubprocess", ContextTransport):
+        result = score.run_config(documents=documents, base_environment=environment, record_document=observe, **kwargs)
+    return result, responses
+
+
+def _compare(pairs: Sequence[Pair], documents: Sequence[score.Document], before: Mapping, after: Mapping) -> dict[str, object]:
+    tally = VariantTally.create(pairs)
+    for document in documents:
+        tally.record_baseline(document, before[document.uid])
+    for document in documents:
+        tally.record_candidate(document, after[document.uid])
+    rows = tally.result()["rows"]
+    rollup: dict[tuple[str, str], Counter[str]] = {}
+    for row in rows:
+        counts = rollup.setdefault((row["bucket"], row["role"]), Counter())
+        counts.update({k: v for k, v in row.items() if isinstance(v, int)})
+    return {
+        "by_variant": rows,
+        "by_bucket": [
+            {"bucket": bucket, "role": role, **dict(sorted(counts.items()))}
+            for (bucket, role), counts in sorted(rollup.items())
+        ],
+    }
+
+
+def kind_switch_effective(off: Mapping[str, dict[str, object]], on: Mapping[str, dict[str, object]]) -> bool:
+    """Whether turning the probe kinds on changed any protected span.
+
+    A binary that builds its record recognizers once, before any request,
+    ignores the per-request `record_match_kinds`; its two arms are identical.
+    """
+    def spans(response: Mapping[str, object]) -> list[tuple[int, int]]:
+        return sorted((int(item["raw_start"]), int(item["raw_end"])) for item in response.get("final_protection_trace", []))
+
+    return any(spans(off[uid]) != spans(on[uid]) for uid in off)
+
+
+def prove(args: argparse.Namespace) -> dict[str, object]:
+    repo = args.repo.resolve()
+    pairs = generate()
+    scored, _ = documents(repo, args.contract, pairs)
+    by_uid = {cell.uid: cell for cell in cells(pairs)}
+    kwargs = dict(
+        repo_root=repo, binary=args.binary.resolve(), config="policy-file", model_dir=args.model_dir.resolve(),
+        opf_command=None, opf_checkpoint=None, opf_daemon_socket=None, threshold=0.3,
+        diagnostics_dir=args.output.parent / f"known-record-cells-{args.contract}-logs", policy_path=args.policy.resolve(),
+    )
+    arms = {
+        "no_record": (None, False),
+        "record_default_kinds": ({uid: arm_context(cell, False) for uid, cell in by_uid.items()}, True),
+        "record_probe_kinds_on": ({uid: arm_context(cell, True) for uid, cell in by_uid.items()}, True),
+    }
+    results: dict[str, dict[str, object]] = {}
+    responses: dict[str, Mapping[str, dict[str, object]]] = {}
+    for name, (contexts, known) in arms.items():
+        results[name], responses[name] = _run_arm(scored, contexts, known_record=known, **kwargs)
+    return {
+        "proof": "layer K only, score-only; aggregates without values",
+        "contract": args.contract,
+        "manifest": manifest(pairs),
+        "binary_sha256": hashlib.sha256(args.binary.read_bytes()).hexdigest(),
+        "policy_sha256": hashlib.sha256(args.policy.read_bytes()).hexdigest(),
+        "kind_switch_effective": kind_switch_effective(
+            responses["record_default_kinds"], responses["record_probe_kinds_on"]
+        ),
+        "arms": {
+            name: {key: result[key] for key in ("metrics", "pipeline_availability")}
+            for name, result in results.items()
+        },
+        # Controls show their effect here; probe kinds are off in both arms.
+        "default_kinds_vs_no_record": _compare(pairs, scored, responses["no_record"], responses["record_default_kinds"]),
+        # Only the probe kinds differ between these arms.
+        "probe_kinds_on_vs_default": _compare(pairs, scored, responses["record_default_kinds"], responses["record_probe_kinds_on"]),
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--manifest", action="store_true", help="print the manifest")
     parser.add_argument("--jsonl", type=Path, help="write the cells as JSON lines")
+    sub = parser.add_subparsers(dest="command")
+    proof = sub.add_parser("prove", help="score layer K with no record, default kinds, and probe kinds on")
+    proof.add_argument("--repo", type=Path, default=Path.cwd())
+    proof.add_argument("--binary", required=True, type=Path, help="a Known-Record build of clean_for_bench")
+    proof.add_argument("--policy", required=True, type=Path)
+    proof.add_argument("--model-dir", required=True, type=Path)
+    proof.add_argument("--contract", required=True, choices=("v1", "v2"))
+    proof.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
+    if args.command == "prove":
+        report = prove(args)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return 0
     pairs = generate()
     if args.jsonl:
         args.jsonl.write_bytes(corpus_bytes(pairs))
-    if args.manifest or not args.jsonl:
-        json.dump(manifest(pairs), sys.stdout, indent=2, sort_keys=True)
-        sys.stdout.write("\n")
+    json.dump(manifest(pairs), sys.stdout, indent=2, sort_keys=True)
+    sys.stdout.write("\n")
     return 0
 
 

@@ -253,11 +253,18 @@ in [Agentic layers and the rule gate](../../docs/reference/benchmarks/README.md#
 Regression and release readiness below read layer C (`runs[]`) only.
 
 `known_record_cells.py` generates layer K for the separate known-record oracle
-arm only, never the main scorecard. Each pair gives a record that differs from
-the text only in whitespace, in case and whitespace, or as a single
-common-word name that needs corroboration, next to a benign twin with the same
-record and shape. `python3 scripts/bench/known_record_cells.py --manifest`
-prints its pinned hash.
+arm only, never the main scorecard. Each probe pair gives a record that differs
+from the text only in the way one match kind is for (`whitespace_flexible`,
+`whitespace_case_folded`, `corroborated_single`), next to a benign twin with the
+same record and shape. Kinds are derived after Gaze's own folding, which turns
+NBSP-class separators into spaces before detection, so an NBSP copy is an exact
+match. Such pairs, and the other pairs that exercise no probe kind, are typed
+controls in their own buckets. `python3 scripts/bench/known_record_cells.py`
+prints the pinned manifest. `... known_record_cells.py prove --binary <clean_for_bench>
+--policy <policy> --model-dir <ner> --contract v2 --output <json>` scores layer K
+three ways (no record, record with the default kinds, record with the probe kinds
+on) and reports bytes per bucket. Its `kind_switch_effective` is false when the
+binary ignores the per-request `record_match_kinds`.
 
 Regression and release readiness are deliberately independent. Regression uses
 integer counts with zero tolerance and fails closed on missing, empty, invalid,
