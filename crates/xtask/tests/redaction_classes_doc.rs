@@ -629,18 +629,38 @@ fn expected_default_activation_rows() -> BTreeSet<DefaultActivationRow> {
 fn documented_default_activation_rows(document: &str) -> BTreeSet<DefaultActivationRow> {
     table_rows(document, "default-activation", 5)
         .into_iter()
-        .map(|cells| DefaultActivationRow {
-            selection: cells[0].clone(),
-            locale_chain: cells[1].clone(),
-            auto_locale_gated: cells[2].clone(),
-            recognizer_ids: cells[3]
+        .map(|cells| {
+            let ids = cells[3]
                 .split(',')
                 .map(str::trim)
                 .filter(|id| !id.is_empty())
                 .map(ToOwned::to_owned)
-                .collect(),
+                .collect::<Vec<_>>();
+            let unique_ids = ids.iter().cloned().collect::<BTreeSet<_>>();
+            assert_eq!(
+                ids.len(),
+                unique_ids.len(),
+                "duplicate recognizer id in {} default activation row",
+                cells[0]
+            );
+            DefaultActivationRow {
+                selection: cells[0].clone(),
+                locale_chain: cells[1].clone(),
+                auto_locale_gated: cells[2].clone(),
+                recognizer_ids: unique_ids,
+            }
         })
         .collect()
+}
+
+#[test]
+#[should_panic(expected = "duplicate recognizer id")]
+fn default_activation_rejects_duplicate_ids() {
+    documented_default_activation_rows("<!-- redaction-classes-gate:default-activation:start -->\n\
+| Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |\n\
+|---|---|---|---|---|\n\
+| `core` | `global` | no | `steuer_id.de, steuer_id.de` | test |\n\
+<!-- redaction-classes-gate:default-activation:end -->");
 }
 
 fn assert_sets_equal<T>(documented: BTreeSet<T>, expected: BTreeSet<T>, label: &str)

@@ -977,9 +977,9 @@ priority = 86
 # Postal collision policy (supersedes the research-855 two-rule note, which described a world with
 # only `postal.de` and `postal.us` in it).
 #
-# `custom:postal_code` is served by seven recognizers in two groups that cannot overlap:
+# `custom:postal_code` is served by eight recognizers in two groups that cannot overlap:
 #
-#   NUMERIC — document-basis, locale-gated: `postal.de`, `postal.us`, `postal.at_ch`, `postal.au`
+#   NUMERIC — document-basis: `postal.de`, `postal.us`, `postal.at_ch`, `postal.cued_four_digit`, `postal.au`
 #     `postal.de` / `postal.us` accept naked five-digit strings, a shape that carries no structural
 #     signal whatsoever and is indistinguishable from a year, an order number, or an amount. The
 #     DOCUMENT-locale gate is the only thing standing in for that missing structure, which is why
@@ -1005,7 +1005,7 @@ priority = 86
 id = "postal.de"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-DE"]
 locale_basis = "document"
@@ -1024,7 +1024,7 @@ priority = 70
 id = "postal.us"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-US"]
 locale_basis = "document"
@@ -1083,15 +1083,42 @@ priority = 70
 id = "postal.at_ch"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["de-AT", "de-CH"]
 locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?:(?i:\b(?:plz|postleitzahl|post[ \t]?code|postal[ \t]code|zip(?:[ \t]?code)?))[ \t]*[:#.]?[ \u{00A0}\u{202F}]*((?:(?:A|CH|FL)-)?\d{4})\b|(?:\A|[^#])\b((?:(?:A|CH|FL)-)?\d{4}),?[ \u{00A0}\u{202F}]{1,3}(?:\p{Lu}[\p{L}\-]{2,}|St(?:\.[ \u{00A0}\u{202F}]?|[ \u{00A0}\u{202F}])\p{Lu}))'''
+pattern = '''(?:(?i:\b(?:plz|postleitzahl|post[- \t]?code|postal[- \t]?code|zip(?:[- \t]?code)?))[ \t]*[:#.]?[ \u{00A0}\u{202F}]*(?:(?i:ist|lautet)[ \t\u{00A0}\u{202F}]+)?((?:(?:A|CH|FL)-)?\d{4})\b|(?:\A|[^#])\b((?:(?:A|CH|FL)-)?\d{4}),?[ \u{00A0}\u{202F}]{1,3}(?:\p{Lu}[\p{L}\-]{2,}|St(?:\.[ \u{00A0}\u{202F}]?|[ \u{00A0}\u{202F}])\p{Lu}))'''
 capture_groups = [1, 2]
+
+[recognizers.scoring]
+base = 0.70
+priority = 70
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# A four-digit code follows an explicit postal field cue. Street-and-town frames
+# also end in years or amounts, so they do not license a match. The cue carries
+# enough meaning to use this rule globally without activating another locale.
+[[recognizers]]
+id = "postal.cued_four_digit"
+safety_tier = "safe_default"
+class = "custom:postal_code"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb", "postal.ie"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?ix)\b(?:postcode|postal[\x20\t_-]*code|zip(?:[\x20\t_-]*code)?)\b[\x20\t\x{A0}\x{202F}:="'-]*(?:is[\x20\t\x{A0}\x{202F}]+)?([0-9]{4})\b'''
+capture_groups = [1]
 
 [recognizers.scoring]
 base = 0.70
@@ -1119,7 +1146,7 @@ license = "Apache-2.0"
 id = "postal.au"
 safety_tier = "locale_gated"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.ca", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.ca", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-AU"]
 locale_basis = "document"
@@ -1169,7 +1196,7 @@ license = "Apache-2.0"
 id = "postal.ca"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.gb", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.gb", "postal.ie"]
 enabled = true
 locales = ["en-CA"]
 locale_basis = "format"
@@ -1225,7 +1252,7 @@ license = "Apache-2.0"
 id = "postal.gb"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.ie"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.ie"]
 enabled = true
 locales = ["en-GB"]
 locale_basis = "format"
@@ -1277,7 +1304,7 @@ license = "Apache-2.0"
 id = "postal.ie"
 safety_tier = "safe_default"
 class = "custom:postal_code"
-cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.au", "postal.ca", "postal.gb"]
+cooperates_with = ["postal.de", "postal.us", "postal.at_ch", "postal.cued_four_digit", "postal.au", "postal.ca", "postal.gb"]
 enabled = true
 locales = ["en-IE"]
 locale_basis = "format"
@@ -1637,7 +1664,8 @@ license = "Apache-2.0"
 # (`date_of_birth`, `dateOfBirth`, `birth-date`) and quotes or escaped quotes around the key.
 #
 # Cues: en DOB / D.O.B. / date of birth / birth date / birthday / born; de Geburtsdatum /
-# Geb.-Datum / geb. / Geburtstag / geboren, plus the trailing `am <date> [in <Ort>] geboren`;
+# Geb.-Datum / geb. / Geburtstag / geboren, plus the trailing `am <date> [in <Ort>] geboren`
+# and `am <date> wurde [name/place] geboren`;
 # fr né(e) / date de naissance; nl geboortedatum / geboren; da fødselsdato / fødselsdag / født;
 # es fecha de nacimiento / nacido / nació. `anniversaire` and `since` are left out on purpose:
 # both name non-birth dates as often as birth dates. Up to eight filler tokens may sit between
@@ -1688,6 +1716,7 @@ pattern = '''
     | geboren
     | geboortedatum
     | date[\x20_-]de[\x20_-]naissance
+    | data[\x20_-]de[\x20_-]nascimento
     | née
     | né
     | fødselsdato
@@ -1701,7 +1730,7 @@ pattern = '''
 | geb\.
 )
 (?: [\s"'\\:=,()–-]+
-  | (?:is|was|ist|war|lautet|der|den|am|on|of|the|le|est|op|er|el|es|at)\b
+  | (?:is|was|ist|war|lautet|wurde|ich|sie|der|den|am|on|of|the|le|est|op|er|el|es|at|é)\b
 ){0,8}
 (
     [0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])
@@ -1722,9 +1751,62 @@ pattern = '''
   | (?:0?[1-9]|[12][0-9]|3[01])\.(?:0?[1-9]|1[0-2])\.(?:[0-9]{4}|[0-9]{2})
   | (?:0?[1-9]|[12][0-9]|3[01])\.?[\x20\t\x{A0}\x{202F}]+(?:januar|jänner|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)[\x20\t\x{A0}\x{202F}]+[0-9]{4}
 )
-[\x20\t\x{A0}\x{202F}]+(?:in[\x20\t\x{A0}\x{202F}]+[\p{L}-]+[\x20\t\x{A0}\x{202F}]+)?geboren\b
+[\x20\t\x{A0}\x{202F}]+(?:(?:in[\x20\t\x{A0}\x{202F}]+[\p{L}-]+[\x20\t\x{A0}\x{202F}]+)?geboren|wurde[\x20\t\x{A0}\x{202F}]+(?:[\p{L}-]+[\x20\t\x{A0}\x{202F}]+){0,6}geboren)\b
 '''
 capture_groups = [1, 2]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# An age needs a structured field or a person frame. Shorter units are durations,
+# and object ages are not person quasi-identifiers. Capture only the number.
+[[recognizers]]
+id = "age.cue"
+safety_tier = "safe_default"
+class = "custom:age"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?ix)
+(?:
+  # Labeled fields can cross a line break after the separator.
+  \b(?:age|âge|idade|leeftijd|(?-i:Alter)|(?-i:alter))\b[\x20\t\x{A0}\x{202F}"']*[:=][\x20\t\x{A0}\x{202F}\r\n"']*
+  ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))
+  (?:[\x20\t\x{A0}\x{202F}]*(?:years?|yrs?|y|jahre?|jaar|ans?|anos)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+ |
+  # An unlabeled age line needs a year unit, or a terminal value boundary.
+  (?:\A|[\r\n])[\x20\t]*(?:age|âge|idade|leeftijd|(?-i:Alter))[\x20\t\x{A0}\x{202F}]+
+  ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))
+  (?:[\x20\t\x{A0}\x{202F}]*(?:years?|yrs?|y|jahre?|jaar|ans?|anos)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+ |
+  # Person words license prose without matching object ages.
+  \b(?:applicant|patient|person|woman|man|child|girl|boy|adult|candidate|customer|client|user|employee|resident|suspect|son|daughter|mother|father|she|he|they|ich|sie|er|frau|mann|kind|bewerber(?:in)?|sohn|tochter|mutter|vater|homme|femme|elle|il|fils|fille|mère|père|pessoa|mulher|homem|filho|filha|mãe|pai|ela|ele|persoon|vrouw|zoon|dochter|moeder|vader)\b
+  [^\n.!?]{0,32}?
+  \b(?:aged|âgé(?:e)?|âge|age|(?-i:Alter)|idade|leeftijd|is|was|ist|war|est|é|tem|heeft)\b
+  [\x20\t\x{A0}\x{202F}:="']*(?:de[\x20\t\x{A0}\x{202F}]+)?
+  ((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))
+  (?:[\x20\t\x{A0}\x{202F}-]*(?:years?[\x20\t\x{A0}\x{202F}-]+old|yrs?[\x20\t\x{A0}\x{202F}-]+old|jahre?[\x20\t\x{A0}\x{202F}]+alt|jaar[\x20\t\x{A0}\x{202F}]+oud|ans?|anos|y)\b|[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+ |
+  # Attributive person ages and standalone "yrs old" records.
+  \b((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?|yrs?)[\x20\t\x{A0}\x{202F}-]+old[\x20\t\x{A0}\x{202F}-]+(?:applicant|patient|person|woman|man|child|girl|boy|adult|candidate|customer|client|user|employee|resident|suspect|son|daughter|mother|father|sohn|tochter|mutter|vater|fils|fille|mère|père|filho|filha|mãe|pai|zoon|dochter|moeder|vader)\b
+ |
+  (?:\A|[\r\n])[\x20\t]*((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}-]+(?:years?|yrs?)[\x20\t\x{A0}\x{202F}-]+old\b
+ |
+  # Portuguese permits a subject omitted from a complete age line.
+  (?:\A|[\r\n])[\x20\t]*tem[\x20\t\x{A0}\x{202F}]+((?:0|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-2]))\b[\x20\t\x{A0}\x{202F}]+anos
+  (?:[\x20\t\x{A0}\x{202F}]*[,.;}\]"']|\r?\n|\z)
+)'''
+capture_groups = [1, 2, 3, 4, 5, 6]
 
 [recognizers.scoring]
 base = 0.90

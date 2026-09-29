@@ -266,7 +266,9 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
         "phone.national.de",
         "postal.de",
         "postal.us",
+        "postal.cued_four_digit",
         "postal.au",
+        "age.cue",
         // Bilingual cue-anchored government-ID recognizers with no national shape stay on
         // document basis (`global`).
         "tax_number.cue_anchored",
@@ -1923,16 +1925,16 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         } if name == "ip_address"
     ));
 
-    // `custom:postal_code` is served by seven recognizers, so each names the other six. Dropping
+    // `custom:postal_code` is served by eight recognizers, so each names the other seven. Dropping
     // ONE rule's list leaves every pair it belongs to still covered from the other side, which the
     // loader permits. Dropping a SECOND leaves the (postal.ca, postal.de) pair with neither side
     // naming the other, which must fail closed. Both target strings are asserted unique first: a
     // `str.replace` that matches nothing is a silent no-op, which would turn this probe into a
     // Potemkin pass that asserts the loader accepts an unmutated pack.
     let ca_list =
-        "cooperates_with = [\"postal.de\", \"postal.us\", \"postal.at_ch\", \"postal.au\", \"postal.gb\", \"postal.ie\"]\n";
+        "cooperates_with = [\"postal.de\", \"postal.us\", \"postal.at_ch\", \"postal.cued_four_digit\", \"postal.au\", \"postal.gb\", \"postal.ie\"]\n";
     let de_list =
-        "cooperates_with = [\"postal.us\", \"postal.at_ch\", \"postal.au\", \"postal.ca\", \"postal.gb\", \"postal.ie\"]\n";
+        "cooperates_with = [\"postal.us\", \"postal.at_ch\", \"postal.cued_four_digit\", \"postal.au\", \"postal.ca\", \"postal.gb\", \"postal.ie\"]\n";
     assert_eq!(
         raw.matches(ca_list).count(),
         1,

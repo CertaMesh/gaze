@@ -84,6 +84,102 @@ fn assert_birth_date(text: &str, date: &str) {
     );
 }
 
+fn assert_age(text: &str, age: &str) {
+    let cleaned = clean_and_restore(&pipeline(), text);
+    assert!(
+        !without_tokens(&cleaned).contains(age),
+        "age leaked: {text:?} -> {cleaned:?}"
+    );
+    assert!(
+        cleaned.contains(":Custom:age_"),
+        "age took the wrong class: {text:?} -> {cleaned:?}"
+    );
+}
+
+#[test]
+fn age_cues_cover_prose_fields_and_spacing() {
+    for (text, age) in [
+        ("Applicant, aged 29, arrived.", "29"),
+        ("The 34-year-old applicant arrived.", "34"),
+        ("The applicant is 34 years old.", "34"),
+        ("Alter: 38 Jahre", "38"),
+        ("Sie ist 29 Jahre alt.", "29"),
+        ("L'homme est âgé de 42 ans.", "42"),
+        ("{\"age\": 45}", "45"),
+        ("age=45", "45"),
+        ("age:\u{00a0}45", "45"),
+        ("age: 0", "0"),
+        ("Applicant aged 122", "122"),
+        ("Age:\n42", "42"),
+        ("42 yrs old", "42"),
+        ("age 42y", "42"),
+        ("leeftijd: 42", "42"),
+        ("De persoon is 42 jaar oud.", "42"),
+        ("idade: 42", "42"),
+        ("Idade: 42 anos", "42"),
+        ("Ela tem 42 anos.", "42"),
+        ("tem 42 anos", "42"),
+        ("{\"alter\": 42}", "42"),
+        ("My son is 42 years old.", "42"),
+        ("Meine Tochter ist 42 Jahre alt.", "42"),
+        ("A mãe tem 42 anos.", "42"),
+        ("The 42-year-old father arrived.", "42"),
+        ("The applicant age 42y", "42"),
+    ] {
+        assert_age(text, age);
+    }
+}
+
+#[test]
+fn age_lookalikes_stay_raw() {
+    for text in [
+        "Order 29 shipped.",
+        "Version 34 shipped.",
+        "Invoice amount: 42 dollars.",
+        "The 2024 report was approved.",
+        "age: 290",
+        "Apt 45, Model Road",
+        "Mit 29 Jahren Erfahrung führt er das Team.",
+        "Depuis 29 ans, le produit existe.",
+        "Whisky aged 12 years.",
+        "Cheddar aged 18 months.",
+        "The document aged well.",
+        "age: 3 days",
+        "culture age 12 h",
+        "Alter 30 Tage",
+        "The engine is 12 years old.",
+        "Das Gerät ist 12 Jahre alt.",
+        "Cable age 7",
+        "alter 3 lines",
+        "The whisky tem 42 anos.",
+        "tem 42 anos de história",
+        "Cable age 7y",
+        "aged 42 whisky",
+    ] {
+        let cleaned = clean_and_restore(&pipeline(), text);
+        assert!(
+            !cleaned.contains(":Custom:age_"),
+            "false age match: {text:?} -> {cleaned:?}"
+        );
+    }
+}
+
+#[test]
+fn age_cue_branches_each_have_a_distinct_probe() {
+    // Structured, standalone label, person prose, attributive, bare year-old,
+    // and Portuguese subject-omission forms must each survive independently.
+    for text in [
+        "{\"age\": 42}",
+        "Age 42y",
+        "The applicant is 42 years old.",
+        "A 42-year-old applicant arrived.",
+        "42 yrs old",
+        "tem 42 anos",
+    ] {
+        assert_age(text, "42");
+    }
+}
+
 macro_rules! birth_date_cases {
     ($($name:ident: $text:expr => $date:expr;)+) => {
         $(
@@ -98,6 +194,7 @@ macro_rules! birth_date_cases {
 // One test per cue. The date shape is held fixed so each test pins its cue alone.
 birth_date_cases! {
     cue_en_dob: "DOB 12.03.1987" => "12.03.1987";
+    cue_en_dob_next_line: "DOB:\n1990-02-03" => "1990-02-03";
     cue_en_dotted_dob: "D.O.B. 12.03.1987" => "12.03.1987";
     cue_en_date_of_birth: "Her date of birth is 12.03.1987." => "12.03.1987";
     cue_en_birth_date: "Birth date: 12.03.1987" => "12.03.1987";
@@ -111,13 +208,17 @@ birth_date_cases! {
     cue_de_geb_datum: "Geb.-Datum: 30.05.1971" => "30.05.1971";
     cue_de_geburtstag: "Sein Geburtstag ist am 30.05.1971." => "30.05.1971";
     cue_de_geboren_am: "Frau Müller, geboren am 30.05.1971, wohnt" => "30.05.1971";
+    cue_de_geboren_wurde_ich_am: "Geboren wurde ich am 30.05.1971." => "30.05.1971";
     cue_de_trailing_geboren: "Ich wurde am 30.05.1971 geboren." => "30.05.1971";
     cue_de_trailing_geboren_with_place: "Ich wurde am 30.05.1971 in Hamburg geboren." => "30.05.1971";
+    cue_de_trailing_wurde_geboren_with_name: "Am 30.05.1971 wurde Herr Max Muster in Arcadia geboren." => "30.05.1971";
     cue_fr_nee_le: "Marie Dupont, née le 02/11/1992, habite" => "02/11/1992";
     cue_fr_ne_le: "Pierre Dubois, né le 02/11/1992." => "02/11/1992";
     cue_fr_date_de_naissance: "Ma date de naissance est le 02/11/1992." => "02/11/1992";
     cue_nl_geboren_op: "Jan de Vries, geboren op 02-11-1992, woont" => "02-11-1992";
     cue_nl_geboortedatum: "Mijn geboortedatum is 02-11-1992." => "02-11-1992";
+    cue_pt_data_de_nascimento: "Data de nascimento: 02/11/1992" => "02/11/1992";
+    cue_pt_data_de_nascimento_prose: "A data de nascimento é 02/11/1992." => "02/11/1992";
     cue_da_fodt_den: "Lars Jensen, født den 02.11.1992, bor" => "02.11.1992";
     cue_da_fodselsdato: "Min fødselsdato er 02.11.1992." => "02.11.1992";
     cue_da_fodselsdag: "Min fødselsdag er 02.11.1992." => "02.11.1992";
