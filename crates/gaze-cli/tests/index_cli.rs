@@ -556,6 +556,12 @@ fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
             raw: "1990-02-03",
             token: ":Custom:birth_date_",
         },
+        CoreCase {
+            class: "age",
+            line: "Applicant age: 72",
+            raw: "72",
+            token: ":Custom:age_",
+        },
     ];
 
     let core = Rulepack::parse_bundled(gaze_recognizers::embedded("core").expect("core bundle"))

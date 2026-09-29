@@ -99,6 +99,51 @@ fn postal_code_inside_fixed_token_hex_does_not_count_as_surviving() {
 
 const AT_CH: [LocaleTag; 2] = [LocaleTag::DeAt, LocaleTag::DeCh];
 
+#[test]
+fn postal_cues_accept_link_words_and_hyphens() {
+    for (text, cue) in [
+        ("Postleitzahl ist 8010", "Postleitzahl"),
+        ("ZIP-Code 8010", "ZIP-Code"),
+        ("Post-code: 8010", "Post-code"),
+    ] {
+        assert_removed(text, "8010", &[cue]);
+    }
+}
+
+#[test]
+fn four_digit_postcode_needs_an_explicit_postal_label() {
+    let nz = [LocaleTag::parse("en-NZ").expect("locale")];
+    let global = [LocaleTag::Global];
+    for text in [
+        "Postcode: 9016",
+        "Postal code is 9016",
+        "{\"zip_code\": \"9016\"}",
+    ] {
+        for chain in [&nz[..], &global[..]] {
+            let cleaned = clean_in(chain, text);
+            assert_code_removed(&cleaned, "9016", "explicit postal label");
+        }
+    }
+    for text in [
+        "The report was filed in March 2024.",
+        "Order 9016 shipped.",
+        "42 Model Road, report 2024",
+        "42 Model Road, Arcadia, 9016",
+        "42 Model Road, Arcadia 9016",
+        "5 Bridge Road, Total 1999 dollars",
+        "12 Main Street, Springfield 2024",
+        "3 Mile Lane Records 2001",
+    ] {
+        for chain in [&nz[..], &global[..]] {
+            let cleaned = clean_in(chain, text);
+            assert!(
+                !cleaned.contains(":Custom:postal_code_"),
+                "{text}: {cleaned}"
+            );
+        }
+    }
+}
+
 fn assert_code_removed(cleaned: &str, code: &str, locale: &str) {
     assert!(
         !without_tokens(cleaned).contains(code),
@@ -456,4 +501,30 @@ fn anchored_four_digit_codes_restore_exactly() {
             .expect("restore");
         assert_eq!(restored, original, "manifest-first restore must round-trip");
     }
+}
+
+#[test]
+fn cue_anchored_four_digit_postcode_restores_exactly() {
+    let locale = [LocaleTag::Global];
+    let pipeline = pipeline_for(&locale);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let original = "Postcode: 9016";
+    let (clean, _, _) = pipeline
+        .clean_with_safety_net_detect_context(
+            &session,
+            RawDocument::Text(original.to_string()),
+            &locale,
+            &DictionaryBundle::default(),
+        )
+        .expect("clean");
+    let CleanDocument::Text(cleaned) = clean else {
+        panic!("expected text");
+    };
+    assert_code_removed(&cleaned, "9016", "global");
+    assert_eq!(
+        pipeline
+            .restore_strict_text(&session, &cleaned)
+            .expect("restore"),
+        original
+    );
 }
