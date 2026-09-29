@@ -297,7 +297,7 @@ impl Recognizer for DictionaryRecognizer {
 
 /// A versioned common-word dictionary, compiled once through Aho–Corasick.
 /// Full-span checks prevent a substring such as `may` from gating `Mayer`.
-pub fn record_name_is_common(name: &str) -> bool {
+fn record_name_is_common(name: &str) -> bool {
     static COMMON: OnceLock<AhoCorasick> = OnceLock::new();
     let dictionary = COMMON.get_or_init(|| {
         let terms = include_str!("../assets/record-common-names-v1.txt")
