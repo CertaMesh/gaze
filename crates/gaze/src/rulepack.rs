@@ -653,18 +653,11 @@ fn parse_validator_spec(
         None => gaze_types::ValidatorOnFail::Veto,
         Some(value) => gaze_types::ValidatorOnFail::parse(value).ok_or_else(|| refuse(value))?,
     };
-    // Rulepack parsing must not depend on whether the phone-parser feature is compiled.
-    // Runtime detector construction still resolves each validator for its feature graph.
-    let recordable = matches!(
-        raw.kind.as_str(),
-        "luhn"
-            | "iban_mod97"
-            | "de_steuer_id_mod1110"
-            | "bsn_mod11"
-            | "cpf_mod11"
-            | "e164_phone"
-            | "e164_phone_national_us"
-    );
+    // Phone kinds cannot parse without phone-parser, but the bundled rulepack
+    // must still load. Detector construction resolves them for its feature graph.
+    let recordable = gaze_types::ValidatorKind::parse(&raw.kind)
+        .map(gaze_types::ValidatorKind::allows_recorded_failure)
+        .unwrap_or_else(|_| matches!(raw.kind.as_str(), "e164_phone" | "e164_phone_national_us"));
     if on_fail == gaze_types::ValidatorOnFail::Record && !recordable {
         return Err(refuse("record"));
     }
