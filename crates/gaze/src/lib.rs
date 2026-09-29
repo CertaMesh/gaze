@@ -54,9 +54,10 @@ pub use gaze_types::{
 pub use house_number::{StreetNumberOrder, HOUSE_NUMBER_RECOGNIZER_ID};
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{
-    BoundaryRefusal, Error, GazeLocalProtectionTraceItem, Pipeline, PipelineBuilder,
-    PipelineOptimizationConfig, PrefixCacheWriteMode, ProtectionContext, ProtectionError, Result,
-    SafetyNetDecision, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    BoundaryRefusal, CandidateEvent, CandidateOutcome, ContributionRole, Defeat, DefeatKind, Error,
+    GazeLocalProtectionTraceItem, Pipeline, PipelineBuilder, PipelineOptimizationConfig,
+    PrefixCacheWriteMode, ProtectionContext, ProtectionError, Result, SafetyNetDecision,
+    SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, TraceContribution, TraceSettlement,
 };
 pub use policy::{
     validate_ner_locale, DetectorKind, DetectorSpec, DobJudgePolicy, NerPolicy, Policy,

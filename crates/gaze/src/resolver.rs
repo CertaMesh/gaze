@@ -102,6 +102,8 @@ pub(crate) enum ResolutionEvent {
     Collateral {
         removed: usize,
         replacing: usize,
+        /// The rung the replacing winner took: the reason `removed` left the span.
+        tier: ConflictTier,
     },
     Recovery {
         node: usize,
@@ -997,6 +999,7 @@ fn remove_overlaps(
         events.push(ResolutionEvent::Collateral {
             removed: loser.node,
             replacing: winner.node,
+            tier,
         });
         winner.candidate.merged_sources.push(loser.candidate.source);
         // Audit relabel only; `settlement` belongs to the winner and is
@@ -2814,7 +2817,8 @@ mod recovery_event_tests {
                 },
                 ResolutionEvent::Collateral {
                     removed: 1,
-                    replacing: 3
+                    replacing: 3,
+                    tier: ConflictTier::ClassPriority
                 }
             ]
         ));
