@@ -79,7 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Candidate` gains
   `validator_fail_reason`, and `Recognizer` gains `validator_on_fail()`
   (default `Veto`). See
-  [validator veto](docs/explanation/detection/validator-veto.md#recorded-failures-iban-and-payment-cards).
+  [validator veto](docs/explanation/detection/validator-veto.md#recorded-failures).
 - **Australian state plus postcode addresses are tokenized deterministically**
   (solo todo #3880). `postal.au` protects the state abbreviation and four-digit
   postcode together whenever `en-AU` is in the effective locale chain, so
