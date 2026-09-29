@@ -563,6 +563,13 @@ fn labelled_identifier_field_boundaries_reject_lookalikes() {
         "Tax number is invoice 123-456-789",
         "Tax number invoice AB12-CD3456",
         "Tax number: AB12-CD3456ZZZZZZZZZZZZ",
+        "order_id: AB12 CD3456 XYZ123456",
+        "invoice_number: AB12 CD3456 XYZ123456",
+        "sku: AB12 CD3456 XYZ123456",
+        "Tax number: 1234.50",
+        "Tax number: EUR 1234.50",
+        "ID card: $1234.50",
+        "ID card: 2024/09/28",
     ] {
         assert_unchanged(input);
     }
@@ -598,6 +605,96 @@ fn labelled_identifier_json_restores_exact_input() {
                 .expect("restore"),
             input
         );
+    }
+}
+
+#[test]
+fn labelled_identifiers_never_emit_a_grouped_prefix() {
+    let chain = [LocaleTag::Global];
+    let pipeline = pipeline_for(&chain);
+    for (input, value, class) in [
+        (
+            "Tax number: AB12 CD3456 XYZ123456",
+            "AB12 CD3456 XYZ123456",
+            "tax_number",
+        ),
+        (
+            "Driver's licence: AB12 CD3456 XYZ123456",
+            "AB12 CD3456 XYZ123456",
+            "driver_license",
+        ),
+        (
+            "ID card: AB12 CD3456 XYZ123456",
+            "AB12 CD3456 XYZ123456",
+            "national_id",
+        ),
+        (
+            r#"{"tax_number":"AB12 CD3456 XYZ123456"}"#,
+            "AB12 CD3456 XYZ123456",
+            "tax_number",
+        ),
+        (
+            "Driver's licence:\n  AB12 CD3456 XYZ123456",
+            "AB12 CD3456 XYZ123456",
+            "driver_license",
+        ),
+        (
+            "| ID card | AB12 CD3456 XYZ123456 |",
+            "AB12 CD3456 XYZ123456",
+            "national_id",
+        ),
+        (
+            "Tax number: AB12 CD3456 XYZ123456.",
+            "AB12 CD3456 XYZ123456",
+            "tax_number",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                &chain,
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text");
+        };
+        assert!(
+            !cleaned.contains(value),
+            "whole value leaked: {input:?} -> {cleaned:?}"
+        );
+        assert!(
+            !cleaned.contains("XYZ123456"),
+            "value suffix leaked: {input:?} -> {cleaned:?}"
+        );
+        assert!(
+            cleaned.contains(&format!(":Custom:{class}_")),
+            "wrong class: {input:?} -> {cleaned:?}"
+        );
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&session, &cleaned)
+                .expect("restore"),
+            input
+        );
+    }
+}
+
+#[test]
+fn labelled_identifiers_refuse_overlong_or_overgrouped_values() {
+    for input in [
+        "Tax number: AB12 CD3456 XYZ123456 ABCDEFGHIJK123",
+        "Driver's licence: AB12 CD3456 XYZ123456 ABC123 DEF456 GHI789",
+        "ID card: AB12 CD3456 XYZ12345678901234567890",
+        r#"{"national_id":"AB12 CD3456 XYZ12345678901234567890"}"#,
+        "| Tax number | AB12 CD3456 XYZ123456 ABCDEFGHIJK123 |",
+        "Tax number: AB12 CD3456 XYZ123456/ABC123",
+        "ID card: AB12 CD3456 XYZ123456 abc",
+        "Tax number: AB12 CD3456. XYZ123456",
+    ] {
+        assert_unchanged(input);
     }
 }
 

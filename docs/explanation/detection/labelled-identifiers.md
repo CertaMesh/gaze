@@ -8,9 +8,10 @@ fixed identifier shape. English, German, French, Dutch, and Portuguese labels ar
 
 Only the value becomes a token. The label and punctuation remain visible so an agent can still
 understand the field. The original value bytes go into the manifest, so strict restore returns
-the input exactly. The terminal boundary rejects a contiguous suffix beyond the value grammar.
-Bounded letter-led and digit-led groups may use spaces, dots, slashes, or hyphens; a further
-space-separated group can still leave a partial match and needs a separate boundary check.
+the input exactly. A shared field-boundary check extends digit-bearing or uppercase groups after
+a bounded regex capture. It emits a token only when the whole grouped value fits, or refuses
+the candidate if a suffix remains. The limit is four chunks and 40 bytes. Bounded letter-led
+and digit-led groups may use spaces, dots, slashes, or hyphens.
 Grouped numbers need at least three chunks, keeping ordinary decimal amounts out of this fallback.
 
 The rules do not infer a class from a bare value or a generic `id` or `number` field. A field

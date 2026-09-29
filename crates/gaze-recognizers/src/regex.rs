@@ -52,6 +52,7 @@ pub struct RegexDetector {
     priority: i32,
     token_family: String,
     capture_groups: Option<Vec<u32>>,
+    complete_labelled_value: bool,
     exclusions: Vec<String>,
     reject_match_regex: Option<Regex>,
     validator_kind: Option<ValidatorKind>,
@@ -120,6 +121,7 @@ impl RegexDetector {
             priority,
             token_family: token_family.to_string(),
             capture_groups,
+            complete_labelled_value: false,
             exclusions: exclusions
                 .into_iter()
                 .map(|value| value.to_ascii_lowercase())
@@ -284,6 +286,13 @@ impl RegexDetector {
         Ok(self)
     }
 
+    /// Require the captured value to reach a field boundary. This closes the gap where a
+    /// bounded identifier regex can otherwise emit only its first space-separated groups.
+    pub fn with_complete_labelled_value(mut self, enabled: bool) -> Self {
+        self.complete_labelled_value = enabled;
+        self
+    }
+
     /// The candidate spans in `input`: pattern matches that pass the boundary checks, or for a
     /// card-run recognizer the cards in each run plus the Luhn-failing pattern windows that hold
     /// none, so validator veto still records those.
@@ -297,7 +306,13 @@ impl RegexDetector {
             while let Some(at) = search_at {
                 let caps = self.regex.captures_at(input, at)?;
                 let full = caps.get(0)?;
-                let span = self.span_from_captures(&caps);
+                let span = self.span_from_captures(&caps).and_then(|span| {
+                    if self.complete_labelled_value {
+                        complete_labelled_value_span(input, span)
+                    } else {
+                        Some(span)
+                    }
+                });
                 // A capture can end before a consuming suffix guard. Resume at the captured
                 // value so that separator can also be the next match's prefix guard.
                 let next = span.as_ref().map_or(full.end(), |span| span.end);
@@ -311,10 +326,14 @@ impl RegexDetector {
                 };
                 if let Some(span) = span.filter(|span| {
                     self.boundary_accepts(input, span)
-                        && !self
-                            .reject_match_regex
-                            .as_ref()
-                            .is_some_and(|guard| guard.is_match(full.as_str()))
+                        && !self.reject_match_regex.as_ref().is_some_and(|guard| {
+                            let checked = if self.complete_labelled_value {
+                                &input[full.start()..span.end]
+                            } else {
+                                full.as_str()
+                            };
+                            guard.is_match(checked)
+                        })
                 }) {
                     return Some(span);
                 }
@@ -394,6 +413,89 @@ impl RegexDetector {
 
         previous_ok && next_ok
     }
+}
+
+/// Extend a bounded regex capture to the end of its labelled field, or refuse it. The regex
+/// engine has no lookahead, so a space after a short capture can otherwise hide another group.
+fn complete_labelled_value_span(
+    input: &str,
+    mut span: std::ops::Range<usize>,
+) -> Option<std::ops::Range<usize>> {
+    loop {
+        if !bounded_labelled_value(&input[span.clone()]) {
+            return None;
+        }
+        let rest = &input[span.end..];
+        if rest.is_empty()
+            || rest.starts_with(['\r', '\n', '"', '\'', '}', ']', '|', ',', ';', ':', '='])
+        {
+            return Some(span);
+        }
+        if let Some(after_dot) = rest.strip_prefix('.') {
+            return terminal_labelled_period(after_dot).then_some(span);
+        }
+
+        let space_len = rest.len()
+            - rest
+                .trim_start_matches([' ', '\t', '\u{00A0}', '\u{202F}'])
+                .len();
+        if space_len == 0 {
+            return None;
+        }
+        let next = &rest[space_len..];
+        if next.is_empty()
+            || next.starts_with(['\r', '\n', '"', '\'', '}', ']', '|', ',', ';', ':', '='])
+        {
+            return Some(span);
+        }
+        if let Some(after_dot) = next.strip_prefix('.') {
+            return terminal_labelled_period(after_dot).then_some(span);
+        }
+        let group_len = next.bytes().take_while(u8::is_ascii_alphanumeric).count();
+        let group = &next[..group_len];
+        if matches!(
+            group,
+            "is" | "was" | "were" | "ist" | "est" | "sind" | "verified" | "filed"
+        ) {
+            return Some(span);
+        }
+        if group.is_empty()
+            || group_len > 12
+            || !(group.bytes().any(|byte| byte.is_ascii_digit())
+                || group.bytes().all(|byte| byte.is_ascii_uppercase()))
+        {
+            return None;
+        }
+        let new_end = span.end + space_len + group_len;
+        span.end = new_end;
+    }
+}
+
+fn bounded_labelled_value(value: &str) -> bool {
+    value.len() <= 40
+        && value
+            .split([' ', '.', '/', '-'])
+            .filter(|part| !part.is_empty())
+            .count()
+            <= 4
+}
+
+fn terminal_labelled_period(after_dot: &str) -> bool {
+    if after_dot.is_empty() || after_dot.starts_with(['\r', '\n', '"', '\'', '}', ']', '|']) {
+        return true;
+    }
+    let tail = after_dot.trim_start_matches([' ', '\t', '\u{00A0}', '\u{202F}']);
+    if tail.len() == after_dot.len() {
+        return false;
+    }
+    if tail.is_empty() || tail.starts_with(['\r', '\n']) {
+        return true;
+    }
+    let word = tail
+        .split(|ch: char| !ch.is_alphanumeric())
+        .next()
+        .unwrap_or_default();
+    !word.is_empty() && word.chars().all(char::is_lowercase)
 }
 
 fn iban_canonicalize(input: &str) -> String {

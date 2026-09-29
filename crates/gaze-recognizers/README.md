@@ -70,6 +70,9 @@ priorities, token families, capture groups, exclusions, validators, and
 normalizers can flow from TOML rulepacks into the registry.
 Optional rulepack-only `context.reject_match_regex` checks the full regex match.
 A guard match rejects that candidate; an invalid guard fails pipeline assembly.
+Optional regex `match.complete_labelled_value` checks the end of a captured labelled field and
+refuses a prefix when another identifier group remains. The bundled tax, driver-licence and
+national-ID fallback rules enable it.
 
 `ValidatorKind` and `NormalizerKind` are closed sets. The complete variant
 lists, rulepack spellings, feature gates and fail-closed wiring stage are in

@@ -23,6 +23,7 @@ fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
         pattern,
         pattern_template: None,
         capture_groups,
+        ..
     } = &spec.matcher
     else {
         panic!("expected plain regex recognizer {}", spec.id);
