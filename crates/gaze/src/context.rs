@@ -191,9 +191,6 @@ impl Context {
             );
         }
 
-        if raw.record.is_none() && !raw.field_map.is_empty() {
-            return Err(ContextError::IncompleteRecord);
-        }
         if let Some(record) = raw.record.as_ref() {
             if serde_json::to_vec(record).map_err(safe_json_error)?.len() > MAX_RECORD_BYTES {
                 return Err(ContextError::RecordLimit {
