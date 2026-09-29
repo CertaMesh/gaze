@@ -103,8 +103,10 @@ logger.log_leak_suspect(entry)?;
 `AuditLogRow` mirrors them as `Option<String>`:
 
 - `validator_fail_reason` — JSON-encoded closed `ValidatorFailReason` enum
-  (one variant per validator, such as `LuhnFailed`, `IbanMod97Failed`,
-  `EmailRfcRejected`, `PhoneE164Rejected`; full list in
+  (one variant per validator failure, such as `LuhnFailed`, `IbanMod97Failed`,
+  `EmailRfcRejected`, `PhoneE164Rejected`, plus the benign-lookalike and
+  loopback reasons such as `BenignJoinedIdentifier` and `Ipv4LoopbackRange`;
+  full list in
   [validator veto](../../docs/explanation/detection/validator-veto.md#type-ownership))
   for validator-veto losers. The older spellings `email_rfc_failed` and
   `e164_phone_failed` still deserialize. Populated only on rows where

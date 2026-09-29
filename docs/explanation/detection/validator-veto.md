@@ -14,6 +14,10 @@ the candidate list, the registry, and the normalized text used for matching.
 For each candidate:
 
 1. Look up `candidate.recognizer_id` in the registry's recognizer-id index.
+   If the recognizer presents a benign-lookalike grant for its own identity,
+   the span is a match of the audited pattern, no cue protects it, and it sits
+   inside one of the grant's structures, remove it with its `Benign*` reason
+   (see [Benign lookalikes](#benign-lookalikes)). Otherwise continue.
 2. Call `Recognizer::validator_kind()`.
 3. If the recognizer has no validator, keep the candidate. No audit row is
    emitted for this `NotApplicable` path.
@@ -165,6 +169,8 @@ RedactionEntry {
 }
 ```
 
+A benign-lookalike or loopback veto writes the same row with its `Benign*`
+or `*LoopbackRange` reason, one row per vetoed candidate.
 For a vetoed candidate, no token or manifest entry is created. A recorded
 failure instead emits a token and a manifest entry that restores exactly; its
 winner audit row carries the typed reason. Audit rows are metadata-only: source, class, action,
