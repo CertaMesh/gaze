@@ -77,6 +77,26 @@ still reports only mod-97-valid IBANs and Luhn-valid cards.
 the byte-coverage safeguard retains prior arbitration.
 `ConflictTier::ValidatorVeto` is only used for this pre-resolver drop.
 
+## Loopback addresses
+
+The bundled IP validators (`ipv4_parse_non_documentation`,
+`ipv6_parse_non_documentation`) also reject loopback addresses:
+`127.0.0.0/8`, `::1`, and IPv4-mapped (`::ffff:127.0.0.1`) or
+IPv4-compatible (`::127.0.0.1`) loopback. A loopback address never leaves
+the host, so it identifies no person or device. Each rejection writes the
+usual loser row with `Ipv4LoopbackRange` or `Ipv6LoopbackRange`.
+Link-local and private addresses stay protected.
+
+**Why there are no other lookalike vetoes.** Skipping a postcode- or
+phone-shaped value because it *looks* benign (an order-number tail, an
+amount, a fragment of a long digit run) needs proof that the value is not
+PII. A missing label proves nothing: markup, invisible characters, other
+languages, typos and encodings all hide labels from a finite cue list, and
+two valid phone numbers joined in one long digit run defeat a run-length
+bound. Such vetoes were tried and removed. The future path is an
+adopter-declared benign reference pattern in policy, a positive signal from
+the data owner (todo 4005).
+
 ## Audit shape
 
 The pipeline logs one loser-only `RedactionEntry` per vetoed candidate:
@@ -122,6 +142,8 @@ compatibility.
 - `CpfMod11Failed`
 - `CnpjMod11Failed`
 - `UkNhsMod11Failed`
+- `Ipv4LoopbackRange`
+- `Ipv6LoopbackRange`
 
 Phone reasons are always present in the type. They are emitted only when the
 `phone-parser` feature makes the corresponding validators available.

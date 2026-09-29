@@ -18,7 +18,8 @@
 //! the address it literally is, and refusing it would cost real recall.
 //!
 //! Boundary probes use the adjacent non-documentation prefixes `2001:db9::/32` and
-//! `192.0.3.0/24`, plus link-local `fe80::` and loopback `::1`.
+//! `192.0.3.0/24`, plus link-local `fe80::` and the short form `::2`. Loopback addresses
+//! (`::1`, `127.0.0.0/8`) are not personal data and leave raw; see `validator_veto.rs`.
 
 use gaze::Context;
 use gaze::{
@@ -281,7 +282,7 @@ fn a_path_segment_that_is_all_hex_still_survives() {
 #[test]
 fn bare_addresses_still_tokenize() {
     for address in [
-        "::1",
+        "::2",
         "::",
         "fe80::1",
         "2001:db9::a",
@@ -296,7 +297,7 @@ fn bare_addresses_still_tokenize() {
 
 #[test]
 fn addresses_in_the_usual_delimiters_still_tokenize() {
-    assert_tokenized("loopback ::1 here", "::1", &["loopback ", " here"]);
+    assert_tokenized("short ::2 here", "::2", &["short ", " here"]);
     assert_tokenized("[2001:db9::1]:443", "2001:db9::1", &["[", "]:443"]);
     assert_tokenized(
         "{\"ip\":\"2001:db9::1\"}",
@@ -317,10 +318,10 @@ fn addresses_in_the_usual_delimiters_still_tokenize() {
 #[test]
 fn adjacent_ipv6_addresses_both_tokenize_with_one_separator() {
     for (left, right) in [
-        ("::1", "fe80::1"),
-        ("fe80::1", "::1"),
-        ("::ffff:127.0.0.1", "fe80::1"),
-        ("fe80::1", "::ffff:127.0.0.1"),
+        ("::2", "fe80::1"),
+        ("fe80::1", "::2"),
+        ("::ffff:192.0.3.1", "fe80::1"),
+        ("fe80::1", "::ffff:192.0.3.1"),
     ] {
         for separator in [" ", ",", "\t", "\u{00a0}"] {
             assert_adjacent_addresses(
@@ -330,14 +331,14 @@ fn adjacent_ipv6_addresses_both_tokenize_with_one_separator() {
         }
     }
     assert_adjacent_addresses(
-        "host ::1 fe80::1 ::ffff:127.0.0.1 done",
-        &["::1", "fe80::1", "::ffff:127.0.0.1"],
+        "host ::2 fe80::1 ::ffff:192.0.3.1 done",
+        &["::2", "fe80::1", "::ffff:192.0.3.1"],
     );
 }
 
 #[test]
 fn adjacent_ipv4_and_ipv6_addresses_both_tokenize_in_either_order() {
-    for (left, right) in [("127.0.0.1", "fe80::1"), ("fe80::1", "127.0.0.1")] {
+    for (left, right) in [("192.0.3.1", "fe80::1"), ("fe80::1", "192.0.3.1")] {
         assert_adjacent_addresses(&format!("host {left} {right} done"), &[left, right]);
     }
 }
@@ -484,5 +485,5 @@ fn cue_words_followed_by_scope_separators_are_untouched() {
 /// The rule fired on `::1` before as well; the preserved URL used to shield it.
 #[test]
 fn an_address_inside_a_preserved_url_is_still_protected() {
-    assert_tokenized("http://[::1]:8080/", "::1", &["http://[", "]:8080/"]);
+    assert_tokenized("http://[::2]:8080/", "::2", &["http://[", "]:8080/"]);
 }
