@@ -245,19 +245,27 @@ fn steuer_id_json_key_wins_the_whole_value_with_its_own_class() {
 }
 
 #[test]
-fn checksum_invalid_values_under_a_cue_key_stay_vetoed() {
-    // Validator-veto contract (docs/explanation/detection/validator-veto.md): a failing checksum
-    // is logged as a loser and the value is left as it was. The key shape does not change that.
+fn checksum_invalid_values_under_a_cue_key_follow_each_rule_policy() {
     let pipeline = pipeline();
-    for text in [
-        r#"{"bsn": "111222334"}"#,
-        r#"{"steuer_id": "86095742718"}"#,
-        r#"{"nhs_number": "9434765918"}"#,
-        r#"{"cpf": "111.444.777-36"}"#,
-        "bsn=111222334",
+    for (text, value, class) in [
+        (r#"{"bsn": "111222334"}"#, "111222334", "bsn"),
+        (
+            r#"{"steuer_id": "86095742718"}"#,
+            "86095742718",
+            "steuer_id",
+        ),
+        (r#"{"cpf": "111.444.777-36"}"#, "111.444.777-36", "cpf"),
+        ("bsn=111222334", "111222334", "bsn"),
     ] {
-        assert_eq!(clean_and_restore(&pipeline, text), text);
+        let cleaned = clean_and_restore(&pipeline, text);
+        assert!(
+            cleaned.contains(&format!(":Custom:{class}_")),
+            "{cleaned:?}"
+        );
+        assert!(!cleaned.contains(value), "{cleaned:?}");
     }
+    let nhs = r#"{"nhs_number": "9434765918"}"#;
+    assert_eq!(clean_and_restore(&pipeline, nhs), nhs);
 }
 
 #[test]

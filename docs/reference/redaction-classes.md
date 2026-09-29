@@ -19,7 +19,7 @@ compatibility name for the same embedded `core.toml` bytes
 (`crates/gaze-recognizers/src/lib.rs:45-55`,
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
-The shared payload currently contains exactly 43 recognizer specs
+The shared payload currently contains exactly 45 recognizer specs
 (`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
 
 The opt-in `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
@@ -74,7 +74,7 @@ deprecated `core-extended` compatibility behavior. The tier contract is at
 `crates/gaze-types/src/lib.rs:2407-2447`.
 
 Validator and normalizer `none` means the recognizer intentionally has no such
-stage. A validator can veto a shape match before conflict resolution; a
+stage. A validator can veto a shape match or record a failure on a cued candidate before conflict resolution; a
 normalizer changes the canonical value only and never the original restore span.
 See [Validator Veto](../explanation/detection/validator-veto.md) and
 [Recognizer normalizers preserve the original span](../explanation/detection/recognizer-normalizer-spans.md).
@@ -98,8 +98,10 @@ remaining column is checked against the loaded rulepack by
 | `core, core-extended` | `name.auto_footer` | `anchored_match` | Person-name-shaped text after locale-provided footer or sign-off cues | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
 | `core, core-extended` | `phone.structural` | `regex` | Compact international phone candidates beginning with plus and 6 to 15 digits | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `phone.e164.spaced` | `regex` | Spaced or punctuated international phone candidates outside the US and German branches | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 79 |
+| `core, core-extended` | `phone.e164.spaced.cued` | `regex` | Same-line labelled international phone candidates; parser failures retain a typed audit reason | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 78 |
 | `core, core-extended` | `phone.national.de` | `regex` | German national or plus-49 phone shapes accepted by the German regional parser | `custom:phone` | `de-DE, de-AT, de-CH` | `e164_phone_national_de` | `none` | `locale_gated` | no | 0.82 | 85 |
 | `core, core-extended` | `phone.national.us` | `regex` | US NANPA phone shapes, including the documented synthetic 555-01xx range | `custom:phone` | `en-US` | `e164_phone_national_us` | `none` | `safe_default` | yes | 0.82 | 85 |
+| `core, core-extended` | `phone.national.us.cued` | `regex` | Same-line labelled US phone candidates; region failures retain a typed audit reason | `custom:phone` | `en-US` | `e164_phone_national_us` | `none` | `safe_default` | yes | 0.82 | 79 |
 | `core, core-extended` | `iban.structural` | `regex` | Space-tolerant IBAN shapes at the country's ISO 13616 registry length, tokenized whether or not MOD-97 passes after canonicalization (`on_fail = "record"`: a failure is written on the audit row and the value is never swept); no trailing word boundary in the pattern, the code boundary accepts a glued label and refuses a glued digit or underscore | `custom:iban` | `global` | `iban_mod97` | `iban_canonical` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `iban.cued` | `regex` | IBAN-structured values with a real ISO 3166-1 country code (or `UK`) outside the ISO 13616 registry (two digits, then up to four letters and 6 to 26 digits compact, or three to eight digit-bearing groups after at most one letters-only bank-code group) within 32 characters after the word `IBAN` on the same line through the shared cue window (one `:`, `,` or `=` right after the cue, one nested JSON key such as `{"number": "`, or one `label:` after a copula or parenthetical; any other `.`, `;`, `!`, `?`, `:`, `,` or `=` ends it); registry countries stay with `iban.structural`; MOD-97 failures are recorded, not vetoed | `custom:iban` | `global` | `iban_mod97` | `iban_canonical` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `card.structural` | `regex` | a digit run with optional spaces or dashes; all-zero card windows are excluded; the recognizer finds the Luhn-valid 13 to 19 digit card inside it (the old 13-19 window or a group-aligned card layout: compact, 4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4; overlapping Luhn-valid windows are one token over their union), so a touching CVV, expiry or number does not hide it | `custom:credit_card` | `global` | `luhn` | `none` | `safe_default` | yes | 0.70 | 80 |
@@ -251,8 +253,10 @@ which beats the vaguer national-ID cues (30).
 | `payment-card-or-iban` | `card.structural` | `pan` | 20 | `none` | `crates/gaze-recognizers/embedded/core.toml:373-376` |
 | `phone-or-imei` | `phone.structural` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:182-185` |
 | `phone-or-imei` | `phone.e164.spaced` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:212-215` |
+| `phone-or-imei` | `phone.e164.spaced.cued` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml` |
 | `phone-or-imei` | `phone.national.de` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:246-249` |
 | `phone-or-imei` | `phone.national.us` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:275-278` |
+| `phone-or-imei` | `phone.national.us.cued` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml` |
 | `government-id` | `ssn.de_cue` | `ssn` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:957-960` |
 | `government-id` | `tax_number.cue_anchored` | `tax-number` | 20 | `none` | `crates/gaze-recognizers/embedded/core.toml:1024-1027` |
 | `government-id` | `national_id.cue_anchored` | `national-id` | 30 | `none` | `crates/gaze-recognizers/embedded/core.toml:1105-1108` |
@@ -397,8 +401,8 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.cued, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, postal.ca, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.cued, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.at_ch, postal.au, postal.ca, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, birth_date.cue, bsn.nl, card.cued, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.us, phone.national.us.cued, phone.structural, postal.ca, postal.gb, postal.ie, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, birth_date.cue, bsn.nl, card.cued, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.cued, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.de, phone.national.us, phone.national.us.cued, phone.structural, postal.at_ch, postal.au, postal.ca, postal.de, postal.gb, postal.ie, postal.us, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate
