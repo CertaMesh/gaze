@@ -602,6 +602,49 @@ class ResponseValidationTests(unittest.TestCase):
         ):
             benchmark.validate_response(self.document(), response)
 
+    def lineage_response(self) -> dict[str, object]:
+        response = self.tokenize_response()
+        response["final_protection_trace"][0]["provenance"].update(
+            {
+                "settlement": "resolve",
+                "contributions": [
+                    {
+                        "original": 0,
+                        "recognizer_id": "rule.name",
+                        "role": "winner",
+                        "raw_start": 0,
+                        "raw_end": 2,
+                        "tier": None,
+                        "defeat_kind": None,
+                        "defeated_by": None,
+                    }
+                ],
+            }
+        )
+        response["candidate_events"] = []
+        return response
+
+    def test_trace_lineage_with_candidate_events_is_accepted(self) -> None:
+        benchmark.validate_response(self.trace_document(), self.lineage_response())
+
+    def test_half_a_trace_lineage_fails_closed(self) -> None:
+        response = self.lineage_response()
+        response["final_protection_trace"][0]["provenance"].pop("contributions")
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
+            benchmark.validate_response(self.trace_document(), response)
+
+    def test_trace_lineage_without_candidate_events_fails_closed(self) -> None:
+        response = self.lineage_response()
+        response.pop("candidate_events")
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "must appear together"):
+            benchmark.validate_response(self.trace_document(), response)
+
+    def test_candidate_events_without_trace_lineage_fails_closed(self) -> None:
+        response = self.tokenize_response()
+        response["candidate_events"] = []
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "must appear together"):
+            benchmark.validate_response(self.trace_document(), response)
+
     def test_wrong_typed_nested_field_fails_closed(self) -> None:
         response = self.success_response()
         response["manifest_integrity"]["spans"] = True
