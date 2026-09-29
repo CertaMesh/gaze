@@ -1793,7 +1793,7 @@ def check_lookalike_pairs(records: Sequence[Record]) -> None:
 
 
 # --------------------------------------------------------------------------
-# Address blocks (generator v6, todo 4013). An address is personal data as a
+# Address blocks (generator v6). An address is personal data as a
 # unit: a street, its house number, a secondary unit (`Suite 312`, `Apt. 771`,
 # `Wohnung 4`, `3. Etage`), a PO box or Postfach, a US military line
 # (`PSC 5512, Box 7730, APO AP ...`), the city, the state and the postcode.
@@ -1849,21 +1849,22 @@ DESIGNATOR_WORDS: dict[Designator, str] = {
     Designator.FLAT: r"\bFlat\b",
     Designator.FLOOR: r"\b(?:Floor|Fl\.)",
     Designator.PO_BOX: r"\b(?:PO|P\.O\.) Box\b",
-    Designator.MILITARY: r"\b(?:PSC|Unit|CMR)\b",
+    Designator.MILITARY: r"\b(?:PSC|Unit|CMR|Box)\b",
     Designator.WOHNUNG: r"\b(?:Wohnung|Whg\.)",
     Designator.ETAGE: r"\. (?:Etage|Stock|OG)\b",
     Designator.POSTFACH: r"\bPostfach\b",
 }
-# Benign twins of a designator; the D layer and the A decoys use these.
-DESIGNATOR_DECOY_FORMS: dict[Designator, tuple[str, ...]] = {
-    **DESIGNATOR_FORMS,
-    Designator.SUITE: ("Suite {n}",),
-    Designator.APARTMENT: ("Apt {n}", "Apartment {n}"),
-    Designator.UNIT: ("Unit {n}",),
-    Designator.FLOOR: ("Floor {n}",),
-    Designator.PO_BOX: ("PO Box {n}",),
-    Designator.MILITARY: ("PSC {n}",),
-}
+# A unit's spelling: the value with its number replaced by `{n}`. Coverage
+# is checked per spelling, because a rule can match `Ste.` and not `Suite`.
+_SPELLING_NUMBER = r"\d+[A-C]?"
+
+
+def designator_spelling(value: str) -> str:
+    import re
+
+    return re.sub(_SPELLING_NUMBER, "{n}", value)
+
+
 # Plausible number ranges per partition, disjoint so no gold value repeats
 # across partitions; every other designator takes the default.
 DESIGNATOR_NUMBERS: dict[Designator | None, dict[str, tuple[int, int]]] = {
@@ -1909,11 +1910,13 @@ def _address_zip(rng: Rng, partition: str, region: str) -> str:
     return f"{rng.between(low, high):05d}"
 
 
-def _designator(rng: Rng, partition: str, designator: Designator, forms: Mapping[Designator, tuple[str, ...]]) -> str:
+def _designator(rng: Rng, partition: str, designator: Designator, forms: Sequence[str], index: int) -> str:
+    """The `index`-th document's unit: spellings rotate, so every spelling of
+    a cell is generated whenever the cell has as many documents."""
     number = str(rng.between(*DESIGNATOR_NUMBERS.get(designator, DESIGNATOR_NUMBERS[None])[partition]))
     if designator in (Designator.APARTMENT, Designator.FLAT) and rng.below(3) == 0:
         number += rng.choice(("A", "B", "C"))
-    return rng.choice(forms[designator]).format(n=number)
+    return forms[index % len(forms)].format(n=number)
 
 
 @dataclass(frozen=True)
@@ -1940,6 +1943,12 @@ class DesignatorTwin:
     surface: str
     region: str
     templates: Mapping[str, str]
+    # Spellings in place of the designator's own (the military `Box N`).
+    forms: tuple[str, ...] | None = None
+
+    @property
+    def spellings(self) -> tuple[str, ...]:
+        return self.forms or DESIGNATOR_FORMS[self.designator]
 
 
 def _address(family: str, designator: Designator | None, region: str, surface: str, dev: str, test: str,
@@ -1947,8 +1956,9 @@ def _address(family: str, designator: Designator | None, region: str, surface: s
     return AddressCell(family, designator, region, f"address_{surface}", {"dev": dev, "test": test}, decoy)
 
 
-def _designator_twin(family: str, designator: Designator, surface: str, region: str, dev: str, test: str) -> DesignatorTwin:
-    return DesignatorTwin(family, designator, f"address_{surface}", region, {"dev": dev, "test": test})
+def _designator_twin(family: str, designator: Designator, surface: str, region: str, dev: str, test: str,
+                     forms: tuple[str, ...] | None = None) -> DesignatorTwin:
+    return DesignatorTwin(family, designator, f"address_{surface}", region, {"dev": dev, "test": test}, forms)
 
 
 D_ = Designator
@@ -2034,6 +2044,9 @@ ADDRESS_TWINS = (
                      '{"template":{"placeholder":"{X}","visible":true}}'),
     _designator_twin("designator_military_prose", D_.MILITARY, "prose", "US",
                      "The {X} steering group meets at ten.", "Minutes from {X} are attached."),
+    _designator_twin("designator_box_prose", D_.MILITARY, "prose", "US",
+                     "Put the spare cables in {X} on the top shelf.", "The returns are packed in {X} by the door.",
+                     forms=("Box {n}",)),
     _designator_twin("designator_wohnung_prose", D_.WOHNUNG, "prose", "DE",
                      "Im Exposé ist {X} bereits reserviert.", "Im Grundriss hat {X} einen Balkon."),
     _designator_twin("designator_etage_prose", D_.ETAGE, "prose", "DE",
@@ -2045,7 +2058,7 @@ ADDRESS_TWINS = (
 del D_
 
 
-def _address_fields(cell: AddressCell, rng: Rng, partition: str) -> dict[str, tuple[str, str | None]]:
+def _address_fields(cell: AddressCell, rng: Rng, partition: str, index: int) -> dict[str, tuple[str, str | None]]:
     region = cell.region
     stem = rng.choice(ADDRESS_STREET_STEMS[partition])
     suffix = rng.choice(ADDRESS_STREET_SUFFIXES[region])
@@ -2062,15 +2075,18 @@ def _address_fields(cell: AddressCell, rng: Rng, partition: str) -> dict[str, tu
     }
     if cell.designator is Designator.MILITARY:
         fields |= {
-            "UN": (_designator(rng, partition, Designator.MILITARY, DESIGNATOR_FORMS), "STREET"),
+            "UN": (_designator(rng, partition, Designator.MILITARY, DESIGNATOR_FORMS[Designator.MILITARY], index),
+                   "STREET"),
             "BX": (f"Box {rng.between(*MILITARY_BOX_NUMBERS[partition])}", "BUILDINGNUM"),
             "MC": (rng.choice(MILITARY_POST_OFFICES[partition]), "CITY"),
             "MS": (rng.choice(MILITARY_STATES[partition]), "STATE"),
         }
     elif cell.designator is not None:
-        fields["UN"] = (_designator(rng, partition, cell.designator, DESIGNATOR_FORMS), "BUILDINGNUM")
+        fields["UN"] = (_designator(rng, partition, cell.designator, DESIGNATOR_FORMS[cell.designator], index),
+                        "BUILDINGNUM")
     if cell.decoy is not None:
-        fields["X"] = (_designator(rng, partition, cell.decoy, DESIGNATOR_DECOY_FORMS), DECOY_PREFIX + "benign")
+        fields["X"] = (_designator(rng, partition, cell.decoy, DESIGNATOR_FORMS[cell.decoy], index),
+                       DECOY_PREFIX + "benign")
     return fields
 
 
@@ -2084,9 +2100,9 @@ def _address_records(cells: Sequence[AddressCell | DesignatorTwin], partition: s
         rng = Rng(seed, f"{layer}/address/{cell.family}")
         for index in range(DOCS_PER_ADDRESS_CELL[layer]):
             if isinstance(cell, AddressCell):
-                fields = _address_fields(cell, rng, partition)
+                fields = _address_fields(cell, rng, partition, index)
             else:
-                fields = {"X": (_designator(rng, partition, cell.designator, DESIGNATOR_DECOY_FORMS),
+                fields = {"X": (_designator(rng, partition, cell.designator, cell.spellings, index),
                                 DECOY_PREFIX + "benign")}
             text, gold, decoys = _fill_with_decoys(cell.templates[partition], fields)
             records.append(Record(
@@ -2101,39 +2117,83 @@ def _address_records(cells: Sequence[AddressCell | DesignatorTwin], partition: s
     return records
 
 
+# The label each address placeholder is scored under; `UN` is a street line
+# in a military address and a building number everywhere else.
+ADDRESS_PART_LABELS = {
+    "HN": "BUILDINGNUM", "ST": "STREET", "CI": "CITY", "SA": "STATE", "ZP": "ZIPCODE",
+    "BX": "BUILDINGNUM", "MC": "CITY", "MS": "STATE",
+}
+_ADDRESS_PLACEHOLDER = r"\{(HN|ST|UN|CI|SA|ZP|BX|MC|MS)\}"
+
+
+def required_address_parts(cell: AddressCell) -> set[str]:
+    """The placeholders a cell's shape must write, each exactly once."""
+    if cell.designator is Designator.MILITARY:
+        return {"UN", "BX", "MC", "MS", "ZP"}
+    parts = {"CI", "ZP"} | ({"SA"} if cell.region == "US" else set())
+    if cell.designator in (Designator.PO_BOX, Designator.POSTFACH):
+        return parts | {"UN"}
+    return parts | {"HN", "ST"} | ({"UN"} if cell.designator is not None else set())
+
+
+def address_part_values(record: Record, cell: AddressCell) -> list[tuple[str, Gold]]:
+    """Each gold span with the placeholder that wrote it, in text order.
+
+    Fails closed unless every placeholder of the template is gold under its
+    own label, so a house number and a unit (both BUILDINGNUM) are told apart.
+    """
+    import re
+
+    parts = re.findall(_ADDRESS_PLACEHOLDER, cell.templates[record.partition])
+    gold = sorted(record.gold, key=lambda span: span.start)
+    if len(parts) != len(gold):
+        raise LayerError(f"{record.uid}: {len(gold)} gold parts for placeholders {parts}")
+    labels = {**ADDRESS_PART_LABELS, "UN": "STREET" if cell.designator is Designator.MILITARY else "BUILDINGNUM"}
+    for part, span in zip(parts, gold):
+        if span.label != labels[part]:
+            raise LayerError(f"{record.uid}: placeholder {part} is gold {span.label}, not {labels[part]}")
+    return list(zip(parts, gold))
+
+
 def check_address_cells(records: Sequence[Record]) -> None:
-    """Fail closed unless every A address is whole and every designator it
-    uses, as a unit or as a decoy, has a layer D twin with no address."""
+    """Fail closed unless every A address is whole, part by part, and every
+    unit spelling it scores has a layer D twin spelled the same way."""
     import re
 
     cells = {cell.family: cell for cell in ADDRESS_CELLS}
     twins = {twin.family: twin for twin in ADDRESS_TWINS}
+    for cell in ADDRESS_CELLS:
+        for partition, template in cell.templates.items():
+            parts = re.findall(_ADDRESS_PLACEHOLDER, template)
+            if sorted(parts) != sorted(required_address_parts(cell)):
+                raise LayerError(
+                    f"{cell.family}/{partition}: placeholders {sorted(parts)} are not the shape's "
+                    f"{sorted(required_address_parts(cell))}"
+                )
     used = {c.designator for c in ADDRESS_CELLS} | {c.decoy for c in ADDRESS_CELLS}
-    missing = sorted(d.value for d in used - {None} - {t.designator for t in ADDRESS_TWINS})
-    if missing:
-        raise LayerError(f"designators without a layer D twin: {missing}")
     unused = sorted(t.family for t in ADDRESS_TWINS if t.designator not in used)
     if unused:
         raise LayerError(f"layer D designator twins no layer A cell uses: {unused}")
+    positive: dict[str, str] = {}
+    benign: set[str] = set()
     for record in records:
         if not record.surface.startswith("address_"):
             continue
         if record.layer == LAYER_IDENTIFIERS:
             cell = cells[record.family]
-            labels = {gold.label for gold in record.gold}
-            expected = {"BUILDINGNUM", "CITY", "ZIPCODE"} | ({"STREET"} if cell.designator not in (
-                Designator.PO_BOX, Designator.POSTFACH) else set()) | ({"STATE"} if cell.region == "US" else set())
-            if labels != expected:
-                raise LayerError(f"{record.uid}: address parts {sorted(labels)} are not {sorted(expected)}")
+            units = [span for part, span in address_part_values(record, cell) if part in ("UN", "BX")]
             if cell.designator is not None and not any(
-                re.search(DESIGNATOR_WORDS[cell.designator], gold.value) for gold in record.gold
+                re.search(DESIGNATOR_WORDS[cell.designator], span.value) for span in units
             ):
                 raise LayerError(f"{record.uid}: no gold part carries the {cell.designator.value} designator")
+            for span in units:
+                positive.setdefault(designator_spelling(span.value), record.uid)
             decoy = cell.decoy
         else:
             if record.gold:
                 raise LayerError(f"{record.uid}: a layer D designator twin carries gold")
             decoy = twins[record.family].designator
+            benign.update(designator_spelling(d.value) for d in record.decoys)
         if decoy is None:
             if record.decoys:
                 raise LayerError(f"{record.uid}: an undeclared decoy")
@@ -2142,6 +2202,9 @@ def check_address_cells(records: Sequence[Record]) -> None:
             raise LayerError(f"{record.uid}: expected one {decoy.value} decoy")
         if record.layer == LAYER_LOOKALIKES and re.search(r"\d{5}|ZZ\d", record.text):
             raise LayerError(f"{record.uid}: a designator twin carries a postcode shape")
+    uncovered = sorted(set(positive) - benign)
+    if uncovered:
+        raise LayerError(f"unit spellings with no layer D counterweight: {uncovered} (first in {positive[uncovered[0]]})")
 
 
 # The surface prefix each generator version added. Every earlier document stays

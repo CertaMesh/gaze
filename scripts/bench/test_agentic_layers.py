@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "9c5d5b38a12196ed1eda7127b3bea5defd129a5ab81e42c1beeb831087990b9e",
-    "test": "6dbbc77a83cdde24bb80c9921a1daf93b2e1c4569e889b5586e0de5fc19356a7",
+    "dev": "e1b6bc315cb52d41aaf93fd48cf9719d67e665317fc927cc9c6a5e33a3e57af7",
+    "test": "9e6597c4b38a6adf6fe5b034da3a4ca585819e044d3437aafc02bcb721607d4a",
 }
 # v5: everything before the address cells.
 V5_CORPUS_SHA256 = {
@@ -426,7 +426,7 @@ class RepeatSliceTests(unittest.TestCase):
         self.assertIn(agentic.NBSP, texts["nbsp"])
 
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
-        # Address cells record their benign designators as decoys (todo 4013).
+        # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
             if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith("address_"):
                 self.assertNotIn("decoys", record.to_json())
@@ -595,8 +595,8 @@ class LabelledLookalikeCellTests(unittest.TestCase):
 
 
 class AddressCellTests(unittest.TestCase):
-    """Todo 4013: layer A addresses are whole and every part is gold; each
-    designator they use has a layer D twin with no address anywhere."""
+    """Layer A addresses are whole and every part is gold; each unit spelling
+    they score has a layer D twin spelled the same way, with no address."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -696,7 +696,7 @@ class AddressCellTests(unittest.TestCase):
 
     def test_a_designator_without_a_twin_fails_generation(self) -> None:
         twins = tuple(t for t in agentic.ADDRESS_TWINS if t.designator is not agentic.Designator.ETAGE)
-        with self.assertRaisesRegex(agentic.LayerError, "without a layer D twin: \\['etage'\\]"):
+        with self.assertRaisesRegex(agentic.LayerError, "no layer D counterweight: .*Etage"):
             self.generate_with(ADDRESS_TWINS=twins)
 
     def test_a_twin_no_cell_uses_fails_generation(self) -> None:
@@ -717,7 +717,55 @@ class AddressCellTests(unittest.TestCase):
         cells[0] = dataclasses.replace(
             cells[0], templates={**cells[0].templates, "test": "Deliver to {HN} {ST} {UN}, {SA} {ZP}."}
         )
-        with self.assertRaisesRegex(agentic.LayerError, "address parts"):
+        with self.assertRaisesRegex(agentic.LayerError, "placeholders"):
+            self.generate_with(ADDRESS_CELLS=tuple(cells))
+
+    def test_a_spelling_without_a_benign_twin_fails_generation(self) -> None:
+        # A rule matching only `Ste.` must cost false positives somewhere: drop
+        # that one spelling from the D side and generation refuses.
+        forms = {**agentic.DESIGNATOR_FORMS, agentic.Designator.SUITE: ("Suite {n}", "STE {n}")}
+        twins = tuple(
+            dataclasses.replace(t, forms=forms[t.designator]) if t.designator is agentic.Designator.SUITE else t
+            for t in agentic.ADDRESS_TWINS
+        )
+        with self.assertRaisesRegex(agentic.LayerError, r"no layer D counterweight: \['Ste\. \{n\}'\]"):
+            self.generate_with(ADDRESS_TWINS=twins)
+
+    def test_every_spelling_is_generated_on_both_sides(self) -> None:
+        for records in self.cells.values():
+            benign = {agentic.designator_spelling(d.value) for r in records if r.layer == "D" for d in r.decoys}
+            scored = {
+                agentic.designator_spelling(span.value)
+                for r in records if r.layer == "A"
+                for part, span in agentic.address_part_values(
+                    r, next(c for c in agentic.ADDRESS_CELLS if c.family == r.family)
+                )
+                if part in ("UN", "BX")
+            }
+            forms = {
+                form for c in agentic.ADDRESS_CELLS if c.designator is not None
+                for form in agentic.DESIGNATOR_FORMS[c.designator]
+            }
+            self.assertEqual(scored, forms | {"Box {n}"})
+            self.assertLessEqual(scored, benign)
+
+    def test_a_house_number_left_unscored_fails_the_check(self) -> None:
+        # House number and unit are both BUILDINGNUM: the label set alone
+        # cannot tell a missing house number from a present unit.
+        record = next(r for r in self.cells["test"] if r.family == "address_us_suite_prose")
+        cell = next(c for c in agentic.ADDRESS_CELLS if c.family == record.family)
+        house = dict(agentic.address_part_values(record, cell))["HN"]
+        stripped = dataclasses.replace(record, gold=tuple(g for g in record.gold if g != house))
+        self.assertIn("BUILDINGNUM", {g.label for g in stripped.gold})
+        with self.assertRaisesRegex(agentic.LayerError, "gold parts for placeholders"):
+            agentic.check_address_cells([stripped])
+
+    def test_a_template_without_its_house_number_fails_generation(self) -> None:
+        cells = list(agentic.ADDRESS_CELLS)
+        cells[0] = dataclasses.replace(
+            cells[0], templates={**cells[0].templates, "test": cells[0].templates["test"].replace("{HN} ", "")}
+        )
+        with self.assertRaisesRegex(agentic.LayerError, "placeholders .* are not the shape's"):
             self.generate_with(ADDRESS_CELLS=tuple(cells))
 
     def test_a_unit_without_its_designator_word_fails_generation(self) -> None:

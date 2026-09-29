@@ -1280,28 +1280,35 @@ to `BUILDINGNUM`, `APO` / `FPO` / `DPO` to `CITY` and `AA` / `AE` / `AP` to
 | Layer A cells (gold, gated) | Layer D twins (no address anywhere) |
 | --- | --- |
 | US addresses with `Suite`, `Apt.`, `Unit`, `Floor` or `PO Box`, in prose, a multi-line block, a log field, CSV columns, a one-line JSON value and split JSON fields; a block with only the state between city and ZIP | `test Suite 4`, `Apartment 12` on a floor plan, `Unit 3` of a course, `Floor 20`, a `PO Box` form field, in prose, logs and JSON |
-| US military lines in prose and blocks | `PSC 311` as a steering group |
+| US military lines in prose and blocks | `PSC 311` / `Unit 4` / `CMR 12` as a steering group, `Box 7` on a shelf |
 | A GB address with `Flat` before the house number | `Flat 55` as a fee in a CSV |
 | German addresses with the house number after the street, `Wohnung` / `Whg.`, `3. Etage` / `Stock` / `OG` and `Postfach`, in prose, a block, CSV and JSON | `Wohnung 958` in a listing, `im 7. Stock`, a mail folder `Postfach 954` |
 | An address followed by a benign designator in the next sentence or line (`The regression Suite 810 is still red.`, `Postfach 123 der Buchhaltung`) | |
 
 The benign designator after an address is a recorded decoy: an address rule
 that grows past a sentence or line end pays for it in layer A false-positive
-bytes. The generator fails closed unless every A document carries each part its
-shape requires, a unit value carries its cell's designator word, every
-designator an A cell uses (as a unit or a decoy) has a layer D twin, every twin
-is used, and no D document carries a postcode shape. Values are synthetic:
+bytes. Every spelling of a designator (`Suite`, `Ste.`, `STE`, `Apt.`,
+`Unit #`, `Fl.`, `P.O. Box`, `CMR`, …) rotates through a cell's documents, so
+each one is generated on both sides. The generator fails closed unless every
+A document writes exactly the placeholders its shape requires and each one is
+gold under its own label (a house number and a unit are both `BUILDINGNUM`,
+so labels alone cannot tell a missing house number from a present unit), a
+unit value carries its cell's designator word, every unit spelling layer A
+scores also appears as a layer D decoy (a rule that matches only `Ste.` must
+pay somewhere), every twin is used, and no D document carries a postcode
+shape. Values are synthetic:
 invented street and city names, US ZIPs in the unassigned `000xx` range, German
 PLZ in the unassigned `00xxx` range, GB postcodes in the unused `ZZ` area, and
 number ranges split between the partitions. Each A cell has 6 documents per
-partition and each twin 4: 19 A cells (+114 documents, +4.6 %) and 11 D twins
-(+44 documents, +4.8 %).
+partition and each twin 4: 19 A cells (+114 documents, +4.6 %) and 12 D twins
+(+48 documents, +5.2 %).
 
 The counterweights have their own end-to-end check:
 [`mutant-standalone-designator.toml`](../../../scripts/bench/fixtures/agentic/mutant-standalone-designator.toml)
 tags every designator and number with no address anchor. Appended to the
 policy, it must lower layer A's leak on the address cells and raise layer D's
-false-positive bytes on the `designator_*` twins.
+false-positive bytes on the `designator_*` twins. A rule for one spelling
+alone (`\bSte\.? #?\d+[A-C]?\b`) must raise them too.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split

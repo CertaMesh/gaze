@@ -1,4 +1,4 @@
-# Deliberately over-broad rule for the address counterweight check (todo 4013).
+# Deliberately over-broad rule for the address counterweight check.
 # Appended to a policy, it tags every secondary-unit or box designator with its
 # number, with no address anchor: it must lower layer A's leak on the address
 # cells AND raise layer D's false-positive bytes on the `designator_*` twins.
