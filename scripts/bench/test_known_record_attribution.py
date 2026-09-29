@@ -62,6 +62,8 @@ def test_whitespace_and_casefold_kinds_keep_utf8_byte_counts() -> None:
     assert whitespace["gold_recovered_bytes"] == len("Alice\u00a0Smith".encode())
     folded = row_for("ALICE SMITH", "Alice Smith")
     assert folded["match_kind"] == "case_folded"
+    exact_nonbreaking = row_for("Alice\u00a0Smith", "Alice\u00a0Smith")
+    assert exact_nonbreaking["match_kind"] == "exact"
 
 
 def test_decoy_false_positive_is_counted_without_raw_value() -> None:

@@ -73,7 +73,7 @@ def match_group_and_kind(
             and canonical.casefold() in common_words
         ):
             kind = "corroborated_single"
-        elif text == canonical:
+        elif text == raw:
             kind = "exact"
         elif collapsed == canonical:
             kind = "whitespace_flexible"
