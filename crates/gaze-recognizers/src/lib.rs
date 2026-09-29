@@ -37,9 +37,8 @@ pub use dob_judge::{
     GLINER_DOB_UPSTREAM_FILES, REQUIRED_GLINER_DOB_ARTIFACTS,
 };
 pub use error::{RecognizerError, Result};
-pub use gaze_types::benign_lookalike::{
-    BenignLookalike, BenignLookalikeGrant, CueEvidence,
-};
+pub use gaze_types::benign_lookalike;
+pub use gaze_types::benign_lookalike::{BenignLookalike, BenignLookalikeGrant, CueEvidence};
 #[cfg(feature = "phone-parser")]
 pub use gaze_types::Region;
 pub use gaze_types::{SafetyTier, ValidatorFailReason, ValidatorKind, ValidatorOnFail};

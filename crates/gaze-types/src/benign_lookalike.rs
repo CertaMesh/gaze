@@ -76,19 +76,22 @@ pub fn is_audited(recognizer_id: &str) -> bool {
         .any(|(id, _)| *id == recognizer_id)
 }
 
+/// The single source these lists share with the benchmark generator is
+/// `scripts/bench/lookalike_cue_vocabulary.json`; a `gaze-assembly` test requires exact equality.
+///
 /// Cue stems per family, in every language Gaze ships a locale pack or a postal rule for (en,
 /// de, fr, es, it, nl, pt). Words are case- and accent-folded first (`Téléphone` reads
 /// `telephone`), and a word starting with a stem counts, so a longer word that merely starts
 /// like a cue also counts: matching errs toward protection. Every `phone_labels` entry in the
 /// bundled locale packs must be a phone cue (`gaze-assembly` drift test).
-const POSTAL_STEMS: &[&str] = &["zip", "plz", "post", "codigo", "codice", "npa"];
-const PHONE_STEMS: &[&str] = &[
+pub const POSTAL_STEMS: &[&str] = &["zip", "plz", "post", "codigo", "codice", "npa"];
+pub const PHONE_STEMS: &[&str] = &[
     "tel", "phone", "fon", "fax", "mobil", "mobiel", "movil", "cell", "celular", "handy",
     "portable", "ruf", "anruf", "call",
 ];
 /// Address and contact words: a postcode or a phone number in an address or contact record is
 /// the record's own, so these block both families.
-const ADDRESS_STEMS: &[&str] = &[
+pub const ADDRESS_STEMS: &[&str] = &[
     "contact",
     "contatto",
     "contacto",
@@ -120,9 +123,9 @@ const ADDRESS_STEMS: &[&str] = &[
 ];
 /// Short cue words that only count as whole words: as stems they would match common words
 /// (`capital`, `cepa`).
-const POSTAL_WORDS: &[&str] = &["cap", "cp", "cep"];
-const PHONE_WORDS: &[&str] = &["gsm"];
-const ADDRESS_WORDS: &[&str] = &["rue", "rua"];
+pub const POSTAL_WORDS: &[&str] = &["cap", "cp", "cep"];
+pub const PHONE_WORDS: &[&str] = &["gsm"];
+pub const ADDRESS_WORDS: &[&str] = &["rue", "rua"];
 const CURRENCY_CODES: &[&str] = &["CHF", "EUR", "GBP", "USD"];
 const CURRENCY_SIGNS: &[char] = &['€', '$', '£'];
 /// No E.164 number has more digits than this, so a longer run cannot be one phone number.

@@ -1042,3 +1042,37 @@ fn a_cue_anywhere_in_the_document_or_record_keeps_the_value_protected() {
         assert!(vetoes.is_empty(), "{name}: {vetoes:?}");
     }
 }
+
+/// Single source with the benchmark generator (#722): the cue vocabulary the veto reads must
+/// equal `scripts/bench/lookalike_cue_vocabulary.json` exactly, list by list and in order, so the
+/// generated counterweights and the code can never drift apart. A missing file fails.
+#[test]
+fn cue_vocabulary_equals_the_benchmark_single_source() {
+    use gaze_recognizers::benign_lookalike as v;
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/bench/lookalike_cue_vocabulary.json");
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("{} must exist: {error}", path.display()));
+    let file: serde_json::Value = serde_json::from_str(&text).expect("vocabulary JSON");
+    assert_eq!(file["schema_version"], 1);
+    let list = |group: &str, family: &str| -> Vec<String> {
+        file[group][family]
+            .as_array()
+            .unwrap_or_else(|| panic!("{group}.{family} must be a list"))
+            .iter()
+            .map(|word| word.as_str().expect("string").to_string())
+            .collect()
+    };
+    let owned = |words: &[&str]| {
+        words
+            .iter()
+            .map(|word| word.to_string())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(list("stems", "postal"), owned(v::POSTAL_STEMS));
+    assert_eq!(list("stems", "phone"), owned(v::PHONE_STEMS));
+    assert_eq!(list("stems", "address"), owned(v::ADDRESS_STEMS));
+    assert_eq!(list("whole_words", "postal"), owned(v::POSTAL_WORDS));
+    assert_eq!(list("whole_words", "phone"), owned(v::PHONE_WORDS));
+    assert_eq!(list("whole_words", "address"), owned(v::ADDRESS_WORDS));
+}
