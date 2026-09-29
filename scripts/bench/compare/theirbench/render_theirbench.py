@@ -149,6 +149,47 @@ def public_rows(rows: Mapping[str, Any]) -> list[str]:
     return [*tagged, *other]
 
 
+def add_tagged(data: dict[str, Any], report: Mapping[str, Any], own: Mapping[str, Any]) -> str:
+    """Merge one tagged Gaze row (theirbench.py --gaze-release-tag) into the aggregate.
+
+    The row joins only if the report measured the same benchmark identity, roster labels,
+    splits, label maps and pinned comparison code as the committed entry; the build was
+    from a clean checkout of the tag; and the row name is a new `gaze-vX.Y.Z`.
+    """
+    if report.get("preflight") or report.get("harness_dirty") or report.get("schema_version") != 1:
+        raise ValueError("only a clean, full, schema-1 report can add a tagged row")
+    name = report["benchmark"]
+    entry = data["benchmarks"][name]
+    for key in ("identity", "common_intersection_labels", "splits", "label_maps_sha256",
+                "mapping_sha256", "typed_hold"):
+        if report[key] != entry[key]:
+            raise ValueError(f"{name}: the report's {key} differs from the committed entry")
+    # The committed rows were rescored with today's pinned metric code; the new row was
+    # measured with it, so it must equal the rescore's pins, not the original measurement's.
+    if report["comparison_sha256"] != entry["rescored_with"]["comparison_sha256"]:
+        raise ValueError(f"{name}: the report used different pinned comparison code")
+    rows = [tool for tool in report["rows"] if is_tagged_gaze_row(tool)]
+    if len(rows) != 1 or len(report["rows"]) != 1:
+        raise ValueError("the report must hold exactly one gaze-vX.Y.Z row and nothing else")
+    row = rows[0]
+    release = report["provenance"][row].get("release")
+    if not release or f"gaze-{release['tag']}" != row:
+        raise ValueError(f"{row}: provenance does not name the release checkout it was measured from")
+    if row in entry["rows"]:
+        raise ValueError(f"{row} is already in {name}")
+    if own["system"] != row:
+        raise ValueError(f"own-scorer result is for {own['system']}, not {row}")
+    scored = own.get("scored") or own["overall"]
+    entry["rows"][row] = report["rows"][row]["test"]
+    entry["own_metric"][row] = scored
+    entry["provenance"][row] = report["provenance"][row]
+    entry.setdefault("tagged_measurements", {})[row] = {
+        "harness_revision": report["harness_revision"], "harness_dirty": False,
+        "hardware": report["hardware"], "generated_at": report["generated_at"],
+    }
+    return row
+
+
 def pct(value: float) -> str:
     return f"{value * 100:.1f}%"
 
@@ -293,6 +334,10 @@ def main(argv: list[str] | None = None) -> int:
                        help="measured=<tag> or rescored=<tag>; must resolve to the recorded harness commit")
     build.add_argument("--historical", type=Path, action="append", default=[],
                        help="presidio_research_repro.py --reproduction result")
+    tagged_cmd = sub.add_parser("add-tagged", help="merge one tagged Gaze row into their-benchmarks.json")
+    tagged_cmd.add_argument("--report", type=Path, required=True)
+    tagged_cmd.add_argument("--own", type=Path, required=True, help="the row's own-scorer result")
+    tagged_cmd.add_argument("--data", type=Path, default=DATA)
     show = sub.add_parser("render")
     show.add_argument("--check", action="store_true")
     show.add_argument("--data", type=Path, default=DATA)
@@ -302,6 +347,13 @@ def main(argv: list[str] | None = None) -> int:
         DATA.write_text(json.dumps(assemble(args.report, args.own, args.reproduction, args.historical,
                                        dict(item.split("=", 1) for item in args.harness_tag)), indent=2,
                                    sort_keys=True) + "\n", encoding="utf-8")
+        return 0
+    if args.command == "add-tagged":
+        data = json.loads(args.data.read_text(encoding="utf-8"))
+        row = add_tagged(data, json.loads(args.report.read_text(encoding="utf-8")),
+                         json.loads(args.own.read_text(encoding="utf-8")))
+        args.data.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"added {row}")
         return 0
     data = json.loads(args.data.read_text(encoding="utf-8"))
     current = args.doc.read_text(encoding="utf-8")

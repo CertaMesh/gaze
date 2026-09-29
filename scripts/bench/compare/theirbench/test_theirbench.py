@@ -363,6 +363,121 @@ class GuardTest(unittest.TestCase):
                     render.assemble([report], [], [])
 
 
+class TaggedRowTest(unittest.TestCase):
+    """A tagged Gaze release joins the aggregate only from a clean checkout of its tag."""
+
+    def entry_and_report(self):
+        data = synthetic()
+        entry = data["benchmarks"]["presidio-research"]
+        entry.update(identity={"documents": 1500}, splits={"test": {"documents": 1500}},
+                     label_maps_sha256="a" * 64, mapping_sha256="b" * 64, typed_hold=["gaze", "opf"])
+        entry["rescored_with"]["comparison_sha256"] = {"compare.py": "c" * 64}
+        del entry["rows"]["gaze-v0.15.1"]
+        report = {
+            "schema_version": 1, "benchmark": "presidio-research", "preflight": None,
+            "harness_dirty": False, "harness_revision": "d" * 40, "hardware": "hw",
+            "generated_at": "2026-09-29T00:00:00+00:00",
+            "identity": entry["identity"], "splits": entry["splits"],
+            "common_intersection_labels": entry["common_intersection_labels"],
+            "label_maps_sha256": entry["label_maps_sha256"], "mapping_sha256": entry["mapping_sha256"],
+            "typed_hold": entry["typed_hold"], "comparison_sha256": {"compare.py": "c" * 64},
+            "rows": {"gaze-v0.15.1": {"test": row(12)}},
+            "provenance": {"gaze-v0.15.1": {"release": {"tag": "v0.15.1", "commit": "e" * 40}}},
+        }
+        own = {"system": "gaze-v0.15.1", "scored": {"f2": 0.7}}
+        return data, entry, report, own
+
+    def test_a_valid_report_adds_one_row_the_page_shows_first(self) -> None:
+        import render_theirbench as render
+
+        data, entry, report, own = self.entry_and_report()
+        self.assertEqual(render.add_tagged(data, report, own), "gaze-v0.15.1")
+        self.assertEqual(entry["own_metric"]["gaze-v0.15.1"], {"f2": 0.7})
+        self.assertEqual(entry["tagged_measurements"]["gaze-v0.15.1"]["harness_revision"], "d" * 40)
+        body = render.render(data)
+        self.assertLess(body.index("| gaze-v0.15.1 |"), body.index("| opf |"))
+        self.assertNotIn("not yet measured", body)
+
+    def test_each_mismatch_refuses_the_row(self) -> None:
+        import render_theirbench as render
+
+        def refused(mutate, match: str) -> None:
+            data, _entry, report, own = self.entry_and_report()
+            mutate(report, own)
+            with self.assertRaisesRegex(ValueError, match):
+                render.add_tagged(data, report, own)
+
+        refused(lambda r, o: r.update(harness_dirty=True), "clean, full")
+        refused(lambda r, o: r.update(preflight=5), "clean, full")
+        refused(lambda r, o: r.update(identity={"documents": 1}), "identity differs")
+        refused(lambda r, o: r.update(label_maps_sha256="z"), "label_maps_sha256 differs")
+        refused(lambda r, o: r.update(comparison_sha256={"compare.py": "0"}), "different pinned comparison")
+        refused(lambda r, o: r["rows"].update({"presidio-en": {"test": row(5)}}), "exactly one")
+        refused(lambda r, o: r["provenance"]["gaze-v0.15.1"].pop("release"), "does not name the release")
+        refused(lambda r, o: o.update(system="gaze-full"), "own-scorer result is for")
+        refused(lambda r, o: (r["rows"].update({"gaze-main": r["rows"].pop("gaze-v0.15.1")}),
+                              r["provenance"].update({"gaze-main": {}})), "exactly one")
+
+    def test_a_row_already_present_is_refused(self) -> None:
+        import render_theirbench as render
+
+        data, entry, report, own = self.entry_and_report()
+        entry["rows"]["gaze-v0.15.1"] = row(1)
+        with self.assertRaisesRegex(ValueError, "already in"):
+            render.add_tagged(data, report, own)
+
+    def test_release_checkout_must_be_the_clean_tag_with_its_binary_inside(self) -> None:
+        import subprocess
+
+        import theirbench
+        from tagged_gaze import UntaggedGazeError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            def git(*args: str) -> str:
+                return subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "-c",
+                                       "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
+                                      cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+
+            git("init", "-q", "-b", "main")
+            (root / "crates").mkdir()
+            (root / "crates" / "f").write_text("x")
+            (root / "target").mkdir()
+            (root / ".gitignore").write_text("target\n")
+            binary, policy = root / "target" / "bin", root / "policy.toml"
+            binary.write_bytes(b"binary")
+            policy.write_text("[x]\n")
+            git("add", ".gitignore", "crates", "policy.toml")
+            git("commit", "-q", "-m", "c")
+            git("branch", "v1.2.3")  # a branch of that name is not a release
+            original = theirbench.compare.REPO
+            theirbench.compare.REPO = root
+            try:
+                with self.assertRaises(UntaggedGazeError):
+                    theirbench.verify_release_checkout("v1.2.3", root, binary, policy)
+                git("tag", "-a", "-m", "release", "v1.2.4")
+                got = theirbench.verify_release_checkout("v1.2.4", root, binary, policy)
+                self.assertEqual(got["tag"], "v1.2.4")
+                self.assertEqual(len(got["commit"]), 40)
+                self.assertEqual(got["crates_tree"], git("rev-parse", "HEAD:crates"))
+                (root / "crates" / "f").write_text("changed")
+                with self.assertRaises(SystemExit):  # local changes
+                    theirbench.verify_release_checkout("v1.2.4", root, binary, policy)
+                git("checkout", "-q", "--", "crates")
+                outside = Path(tmp).parent / "elsewhere-bin"
+                outside.write_bytes(b"binary")
+                with self.assertRaises(SystemExit):  # binary not built inside the tag's checkout
+                    theirbench.verify_release_checkout("v1.2.4", root, outside, policy)
+                (root / "later").write_text("y")
+                git("add", "later")
+                git("commit", "-q", "-m", "later")
+                with self.assertRaises(SystemExit):  # HEAD is no longer the tag's commit
+                    theirbench.verify_release_checkout("v1.2.4", root, binary, policy)
+            finally:
+                theirbench.compare.REPO = original
+
+
 class HarnessTagTest(unittest.TestCase):
     def test_tag_must_point_at_the_recorded_commit(self) -> None:
         import render_theirbench as render

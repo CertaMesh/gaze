@@ -65,7 +65,6 @@ def verify_release_checkout(tag: str, root: Path, binary: Path, policy: Path) ->
     The tag is resolved as `refs/tags/<tag>` (never a branch of that name), the checkout
     must be exactly that commit with no local changes, and the binary must live in it.
     """
-    tagged_gaze.require_release_tag(tag, "tagged Gaze row")
     commit = tagged_gaze.tag_commit(tag, compare.REPO)
     if _git(root, "rev-parse", "HEAD") != commit:
         raise SystemExit(f"{root} is not at the commit of tag {tag} ({commit[:12]})")
