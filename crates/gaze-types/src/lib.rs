@@ -665,6 +665,8 @@ impl ValidatorFailReason {
         Self::CpfMod11Failed,
         Self::CnpjMod11Failed,
         Self::UkNhsMod11Failed,
+        Self::Ipv4LoopbackRange,
+        Self::Ipv6LoopbackRange,
     ];
 
     /// Fails to compile when a variant is added without extending [`Self::ALL`].
@@ -687,7 +689,9 @@ impl ValidatorFailReason {
             | Self::BsnMod11Failed
             | Self::CpfMod11Failed
             | Self::CnpjMod11Failed
-            | Self::UkNhsMod11Failed => {}
+            | Self::UkNhsMod11Failed
+            | Self::Ipv4LoopbackRange
+            | Self::Ipv6LoopbackRange => {}
         }
     }
 }
