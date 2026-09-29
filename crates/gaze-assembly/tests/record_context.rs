@@ -18,6 +18,41 @@ fn policy(action: Action) -> Policy {
 }
 
 #[test]
+fn valid_de_iban_record_survives_short_name_and_restores() {
+    let iban = "DE36000000000000000000";
+    let context =
+        Context::from_json_str(&format!(r#"{{"record":{{"iban":"{iban}","name":"A"}}}}"#)).unwrap();
+    assert_eq!(context.record_value_rejections.len(), 1);
+    assert_eq!(context.record_value_rejections[0].path, "/name");
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let pipeline = build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None)
+        .expect("record pipeline");
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = format!("IBAN: {iban}");
+    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let CleanDocument::Text(clean) = pipeline
+        .pseudonymize_with_detect_context(
+            &session,
+            RawDocument::Text(raw.clone()),
+            locales.as_slice(),
+            &bundle,
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert!(!clean.contains(iban));
+    assert_eq!(
+        pipeline
+            .restore_with_telemetry(&session, &clean)
+            .unwrap()
+            .0
+            .text,
+        raw
+    );
+}
+
+#[test]
 fn record_name_casing_tokenizes_and_restores_exact_source_bytes() {
     let context = context();
     let locales = LocaleChain::merge_policy_and_cli(None, None);

@@ -216,7 +216,13 @@ names are available through `record_match_kinds` but are off by default because
 their byte trade-offs have not yet been measured. Gaze's separate repeat-value
 sweep can still protect later copies under its own rules. The manifest restores
 the exact source bytes. Values with fewer than
-three letters or digit-only values shorter than four digits are rejected.
+three letters or digit-only values shorter than four digits are skipped
+individually; other values in the record remain active. A structurally valid
+IBAN with a passing mod-97 checksum is accepted even when its country code is
+its only two letters. The Rust `Context::record_value_rejections` report gives
+each skipped field's safe path and typed reason, without its value. Check this
+report when loading a record so an unsupported value is not mistaken for a
+protected one.
 Single-token names in the [version 1 common-word dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
 such as `Will`, `Grace`, `May` and `Mark`, are accepted. Their record recognizer
 is off by default; enabling `corroborated_single` requires corroboration at

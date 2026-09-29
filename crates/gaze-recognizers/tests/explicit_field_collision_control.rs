@@ -60,6 +60,7 @@ priority = 0
         class_map: Default::default(),
         fields: Default::default(),
         record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     let pipeline = gaze_assembly::build_pipeline(
         &policy,

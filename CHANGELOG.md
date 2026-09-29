@@ -177,6 +177,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Caller-known records accept checksum-valid two-letter-country IBANs.**
+  Unsafe short values are skipped individually; the Rust context reports each
+  safe field path and a typed reason. Duplicate class/value fields share one
+  record source.
 - **Caller-known record matching uses measured defaults.** Round-3 v2/v1
   attribution found a positive net-byte gain for nine class and match-kind
   pairs. Exact address parts, card, IBAN, national ID, passport, phone,

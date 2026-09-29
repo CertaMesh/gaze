@@ -33,6 +33,7 @@ fn empty_context() -> Context {
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
         record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     }
 }
 
@@ -610,6 +611,7 @@ fn build_pipeline_context_only_still_succeeds() {
         )]),
         fields: serde_json::Map::new(),
         record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let pipeline = build_pipeline(&policy, &context, &[], &active_locales, None)
@@ -1033,6 +1035,7 @@ fn context_with_alpha_override() -> Context {
         )]),
         fields: serde_json::Map::new(),
         record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     }
 }
 
@@ -2232,6 +2235,7 @@ fn tenant_tie_policy(rules: Vec<RuleSpec>) -> (gaze::Policy, Context) {
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
         record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     (policy, context)
 }

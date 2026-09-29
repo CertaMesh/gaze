@@ -139,6 +139,23 @@ def test_oracle_filters_values_that_record_parser_rejects() -> None:
     for value in [" Alice Smith ", "Alice  Smith", "Alice\u00a0Smith", "Will"]:
         assert arm.safe_record_value(value, "Name")
     assert arm.safe_record_value("Jörg Straße", "Name")
+    for iban in ["DE36000000000000000000", "AT180000000000000000", "FR7600000000000000000000000"]:
+        assert arm.safe_record_value(iban, "custom:iban")
+    assert not arm.safe_record_value("DE00000000000000000000", "custom:iban")
+
+
+def test_repeated_gold_spans_share_one_record_slot_but_both_remain_eligible() -> None:
+    value = "DE36000000000000000000"
+    text = f"{value} and {value}"
+    second = text.index(value, len(value))
+    item = score.Document(
+        uid="repeat", text=text, language="de", region="DE", source_dataset="synthetic",
+        spans=(score.Span(0, len(value), "IBAN"), score.Span(second, second + len(value), "IBAN")),
+        negative_category=None,
+    )
+    raw, eligible = arm.record_for_document(item, POLICY)
+    assert len(json.loads(raw)["record"]) == 1
+    assert eligible == {"IBAN": 2 * len(value)}
 
 
 def test_registered_record_classes_cover_oracle_label_classes() -> None:

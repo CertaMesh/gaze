@@ -132,6 +132,7 @@ fn clean(chain: &[LocaleTag], text: &str, force_per_step: bool) -> Outcome {
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
         record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(chain));
     let calls = Arc::new(AtomicUsize::new(0));

@@ -26,7 +26,7 @@ mod validator_veto;
 
 pub use context::{
     record_dictionary_name, Context, Context as TypedContext, ContextDictionary, ContextError,
-    ContextFieldsRef, RECORD_DICTIONARY_PREFIX,
+    ContextFieldsRef, RecordValueRejection, RecordValueRejectionReason, RECORD_DICTIONARY_PREFIX,
 };
 pub use detector::{Detection, Detector, PiiClass, BUILTIN_CLASS_NAMES};
 pub use dictionaries::{

@@ -547,6 +547,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -578,6 +579,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&context);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -648,6 +650,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let recognizer = DictionaryRecognizer::new(
@@ -708,6 +711,7 @@ mod tests {
                 class_map: HashMap::new(),
                 fields: Map::new(),
                 record_match_kinds: Default::default(),
+                record_value_rejections: Default::default(),
             };
             let bundle = dictionary_bundle_from_context(&ctx);
             let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -749,6 +753,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -775,6 +780,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -816,6 +822,7 @@ mod tests {
                 class_map: HashMap::new(),
                 fields: Map::new(),
                 record_match_kinds: Default::default(),
+                record_value_rejections: Default::default(),
             };
             let bundle = dictionary_bundle_from_context(&context);
             let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -837,6 +844,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::EnUs], &bundle);
@@ -875,6 +883,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -924,6 +933,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -957,6 +967,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -987,6 +998,7 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);

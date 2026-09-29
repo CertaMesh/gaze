@@ -53,6 +53,7 @@ mod tests {
             )]),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
 
         let bundle = dictionary_bundle_from_context(&ctx);
@@ -95,6 +96,7 @@ mod tests {
             )]),
             fields: Map::new(),
             record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
 
         let bundle = DictionaryBundle::from_context(&ctx);

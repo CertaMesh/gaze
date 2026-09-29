@@ -23,6 +23,7 @@ import agentic_layers as agentic
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
 import known_record_attribution as attribution
+from iban_trailing_word_enumeration import LENGTHS as IBAN_COUNTRY_LENGTHS
 import run_no_opf_benchmark as benchmark
 
 
@@ -97,7 +98,22 @@ def class_action(policy: dict, class_name: str) -> str | None:
     return None
 
 
-def safe_record_value(value: str, _class_name: str) -> bool:
+def valid_iban(value: str) -> bool:
+    canonical = "".join(value.split()).upper()
+    if len(canonical) != IBAN_COUNTRY_LENGTHS.get(canonical[:2]):
+        return False
+    if not (canonical[:2].isalpha() and canonical[2:4].isdigit() and canonical.isascii() and canonical.isalnum()):
+        return False
+    remainder = 0
+    for char in canonical[4:] + canonical[:4]:
+        for digit in str(int(char, 36)):
+            remainder = (remainder * 10 + int(digit)) % 97
+    return remainder == 1
+
+
+def safe_record_value(value: str, class_name: str) -> bool:
+    if class_name == "custom:iban" and valid_iban(value):
+        return True
     letters = sum(ch.isalpha() for ch in value)
     digits = sum(ch.isnumeric() for ch in value)
     return (
@@ -110,6 +126,7 @@ def record_for_document(document: score.Document, policy: dict) -> tuple[str | N
     fields: dict[str, dict[str, str]] = {}
     mapping: dict[str, str] = {}
     eligible: Counter[str] = Counter()
+    seen_values: set[tuple[str, str]] = set()
     for span in document.spans:
         class_name = LABEL_CLASS.get(span.label)
         if class_name is None:
@@ -119,8 +136,13 @@ def record_for_document(document: score.Document, policy: dict) -> tuple[str | N
         value = encoded[span.start : span.end].decode("utf-8")
         if not safe_record_value(value, class_name) or len(value.encode("utf-8")) > MAX_VALUE_BYTES:
             continue
+        canonical_key = (class_name, " ".join(value.split()))
+        if canonical_key in seen_values:
+            eligible[span.label] += span.end - span.start
+            continue
         if len(fields) >= MAX_FIELDS:
             break
+        seen_values.add(canonical_key)
         slot = f"v{len(fields):02d}"
         key = INFERRED_KEYS.get(class_name, "value")
         fields[slot] = {key: value}

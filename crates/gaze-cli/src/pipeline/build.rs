@@ -343,6 +343,7 @@ fn pipeline_builder_from_policy(
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
         record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     gaze_assembly::build_pipeline_builder(
         policy,

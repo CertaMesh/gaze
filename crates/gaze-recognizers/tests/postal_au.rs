@@ -36,6 +36,7 @@ fn pipeline_for(locales: &[LocaleTag]) -> Pipeline {
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
         record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     gaze_assembly::build_pipeline(&policy, &context, &[rulepack], &chain, None).expect("pipeline")
 }

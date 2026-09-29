@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::PiiClass;
-use gaze_types::RecordMatchKind;
+use gaze_types::{RecordMatchKind, ValidatorKind};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -58,6 +58,20 @@ pub struct Context {
     pub class_map: HashMap<String, PiiClass>,
     pub fields: Map<String, Value>,
     pub record_match_kinds: HashMap<String, BTreeSet<RecordMatchKind>>,
+    /// Values refused by the record matcher. Paths and reasons never contain values.
+    pub record_value_rejections: Vec<RecordValueRejection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordValueRejection {
+    pub path: String,
+    pub reason: RecordValueRejectionReason,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RecordValueRejectionReason {
+    UnsafeShortMatch,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -116,8 +130,6 @@ pub enum ContextError {
     InvalidRecordMapping { path: String },
     #[error("record field at {path} exceeds a depth, field, or value limit")]
     RecordLimit { path: String },
-    #[error("record value at {path} is too short to match safely")]
-    UnsafeRecordValue { path: String },
 }
 
 impl Context {
@@ -273,6 +285,8 @@ impl Context {
             }
             let mut class_slots = HashMap::<PiiClass, usize>::new();
             let mut present_match_groups = HashSet::new();
+            let mut seen_values = HashSet::new();
+            let mut record_value_rejections = Vec::new();
             for (path, value) in leaves {
                 let mapped = raw.field_map.get(&path);
                 if mapped.is_some_and(|name| name == "ignore") {
@@ -286,8 +300,17 @@ impl Context {
                     path: safe_record_path(&path),
                 })?;
                 let canonical = canonical_record_value(value);
-                validate_record_value(&canonical, &path)?;
                 present_match_groups.insert(record_match_group(&class, &canonical));
+                if !safe_record_value(&canonical, &class) {
+                    record_value_rejections.push(RecordValueRejection {
+                        path: safe_record_path(&path),
+                        reason: RecordValueRejectionReason::UnsafeShortMatch,
+                    });
+                    continue;
+                }
+                if !seen_values.insert((class.clone(), canonical.clone())) {
+                    continue;
+                }
                 let slot = class_slots.entry(class.clone()).or_default();
                 let name = record_dictionary_name(&class, *slot);
                 *slot += 1;
@@ -310,6 +333,13 @@ impl Context {
                     path: "/record_match_kinds".into(),
                 });
             }
+            return Ok(Self {
+                dictionaries,
+                class_map,
+                fields: raw.fields,
+                record_match_kinds: raw.record_match_kinds,
+                record_value_rejections,
+            });
         }
 
         Ok(Self {
@@ -317,6 +347,7 @@ impl Context {
             class_map,
             fields: raw.fields,
             record_match_kinds: raw.record_match_kinds,
+            record_value_rejections: Vec::new(),
         })
     }
 }
@@ -461,15 +492,15 @@ fn collect_record_leaves<'a>(
     Ok(())
 }
 
-fn validate_record_value(value: &str, path: &str) -> Result<(), ContextError> {
+fn safe_record_value(value: &str, class: &PiiClass) -> bool {
+    if matches!(class, PiiClass::Custom(name) if name == "iban")
+        && ValidatorKind::IbanMod97.validates(value)
+    {
+        return true;
+    }
     let letters = value.chars().filter(|ch| ch.is_alphabetic()).count();
     let digits = value.chars().filter(|ch| ch.is_numeric()).count();
-    if (letters == 0 && digits < 4) || (letters > 0 && letters < 3) {
-        return Err(ContextError::UnsafeRecordValue {
-            path: safe_record_path(path),
-        });
-    }
-    Ok(())
+    (letters == 0 && digits >= 4) || letters >= 3
 }
 
 fn canonical_record_value(value: &str) -> String {
@@ -762,12 +793,52 @@ mod tests {
             ("A1234", "custom:tag"),
         ] {
             let raw = serde_json::json!({"record":{"value":value},"field_map":{"/value":class}});
-            let err = Context::from_json_str(&raw.to_string()).unwrap_err();
-            assert!(matches!(err, ContextError::UnsafeRecordValue { .. }));
-            assert!(err.to_string().contains("/value"));
-            assert!(!err.to_string().contains(value));
+            let context = Context::from_json_str(&raw.to_string()).unwrap();
+            assert!(context.dictionaries.is_empty());
+            assert_eq!(
+                context.record_value_rejections,
+                [RecordValueRejection {
+                    path: "/value".into(),
+                    reason: RecordValueRejectionReason::UnsafeShortMatch,
+                }]
+            );
+            assert!(!format!("{:?}", context.record_value_rejections).contains(value));
         }
         Context::from_json_str(r#"{"record":{"name":"Will"}}"#).unwrap();
+    }
+
+    #[test]
+    fn valid_two_letter_country_ibans_are_accepted_without_weakening_short_name_floor() {
+        for iban in [
+            "DE36000000000000000000",
+            "AT180000000000000000",
+            "FR7600000000000000000000000",
+        ] {
+            let raw = serde_json::json!({"record":{"iban":iban,"name":"A"}});
+            let context = Context::from_json_str(&raw.to_string()).unwrap();
+            assert_eq!(context.dictionaries.len(), 1);
+            assert_eq!(context.dictionaries.values().next().unwrap().terms, [iban]);
+            assert_eq!(
+                context.record_value_rejections,
+                [RecordValueRejection {
+                    path: "/name".into(),
+                    reason: RecordValueRejectionReason::UnsafeShortMatch,
+                }]
+            );
+        }
+        let invalid =
+            Context::from_json_str(r#"{"record":{"iban":"DE00000000000000000000"}}"#).unwrap();
+        assert!(invalid.dictionaries.is_empty());
+        assert_eq!(invalid.record_value_rejections.len(), 1);
+    }
+
+    #[test]
+    fn duplicate_record_values_share_one_source() {
+        let context =
+            Context::from_json_str(r#"{"record":{"a":{"name":"Maren"},"b":{"name":"Maren"}}}"#)
+                .unwrap();
+        assert_eq!(context.dictionaries.len(), 1);
+        assert!(context.record_value_rejections.is_empty());
     }
 
     #[test]

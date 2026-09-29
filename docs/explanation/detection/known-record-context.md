@@ -40,8 +40,12 @@ including `Will`, are off by default. Adopters can enable
 `record_match_kinds.name_single = ["exact", "case_folded", "corroborated_single"]`;
 then those common names require person-model evidence, an adjacent record name,
 or a full record name elsewhere in the document with a name-position cue.
-Unlisted names such as `Maren` match everywhere by default. Short letter and digit values still fail closed. It does
-not infer name order, email case changes, abbreviations, fragments or typos.
+Unlisted names such as `Maren` match everywhere by default. Unsafe short values
+are skipped individually and reported by path and typed reason in the Rust
+context. A valid IBAN passes even when its country code is its only two letters.
+Apps should inspect `record_value_rejections` so a skipped value is never
+mistaken for protected data. This mode does not infer name order, email case
+changes, abbreviations, fragments or typos.
 Homonyms with corroborating context remain a false-positive risk.
 The unmeasured kinds stay off because their gain against benign lookalikes is
 unknown; enabling them explicitly accepts that precision risk. A record field
