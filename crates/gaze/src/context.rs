@@ -94,6 +94,8 @@ pub enum ContextError {
     Io(#[source] std::io::Error),
     #[error("failed to parse context JSON")]
     Json(#[source] serde_json::Error),
+    #[error("failed to parse record JSON at {path}")]
+    RecordJson { path: String },
     #[error("unknown pii class in context class_map")]
     UnknownClass(String),
     #[error("context dictionary has no terms")]
@@ -129,7 +131,8 @@ impl Context {
         if raw.len() > MAX_CONTEXT_BYTES {
             return Err(ContextError::TooLarge);
         }
-        let strict = serde_json::from_str::<UniqueJsonValue>(raw).map_err(safe_json_error)?;
+        let strict = serde_json::from_str::<UniqueJsonValue>(raw)
+            .map_err(|error| safe_context_json_error(error, raw))?;
         if let Value::Object(top) = &strict.0 {
             let has_record = top.contains_key("record");
             let has_field_map = top.contains_key("field_map");
@@ -142,7 +145,8 @@ impl Context {
                 });
             }
         }
-        let raw = serde_json::from_value::<RawContext>(strict.0).map_err(safe_json_error)?;
+        let raw = serde_json::from_value::<RawContext>(strict.0)
+            .map_err(|error| safe_context_json_error(error, raw))?;
         Self::from_raw(raw)
     }
 
@@ -252,6 +256,16 @@ fn safe_json_error(_: serde_json::Error) -> ContextError {
     ContextError::Json(<serde_json::Error as de::Error>::custom(
         "invalid context JSON",
     ))
+}
+
+fn safe_context_json_error(error: serde_json::Error, raw: &str) -> ContextError {
+    if raw.contains("\"record\"") || raw.contains("\"field_map\"") {
+        ContextError::RecordJson {
+            path: "/record".into(),
+        }
+    } else {
+        safe_json_error(error)
+    }
 }
 
 // serde_json::Value silently keeps the last duplicate object key. A duplicate
@@ -574,7 +588,7 @@ mod tests {
             r#"{"record":{"name":"Alice Smith","name":"private marker"},"field_map":{"/name":"Name"}}"#,
         )
         .unwrap_err();
-        assert_eq!(err.to_string(), "failed to parse context JSON");
+        assert_eq!(err.to_string(), "failed to parse record JSON at /record");
         assert!(!format!("{err:?}").contains("private marker"));
     }
 
@@ -590,7 +604,12 @@ mod tests {
 
     #[test]
     fn record_rejects_only_short_values_with_path() {
-        for (value, class) in [("A", "Name"), ("12", "custom:phone"), ("A12", "custom:tag")] {
+        for (value, class) in [
+            ("A", "Name"),
+            ("12", "custom:phone"),
+            ("A12", "custom:tag"),
+            ("A1234", "custom:tag"),
+        ] {
             let raw = serde_json::json!({"record":{"value":value},"field_map":{"/value":class}});
             let err = Context::from_json_str(&raw.to_string()).unwrap_err();
             assert!(matches!(err, ContextError::UnsafeRecordValue { .. }));

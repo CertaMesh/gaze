@@ -134,7 +134,7 @@ def test_unsafe_record_value_is_excluded_from_oracle() -> None:
 
 
 def test_oracle_filters_values_that_record_parser_rejects() -> None:
-    for value, class_name in [("A12", "custom:tag"), ("12", "custom:phone")]:
+    for value, class_name in [("A12", "custom:tag"), ("A1234", "custom:tag"), ("12", "custom:phone")]:
         assert not arm.safe_record_value(value, class_name)
     for value in [" Alice Smith ", "Alice  Smith", "Alice\u00a0Smith", "Will"]:
         assert arm.safe_record_value(value, "Name")
