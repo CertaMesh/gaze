@@ -384,7 +384,7 @@ pipeline.
   header's angle brackets, a card number followed by `><`, HTML, or generics
   cleaned fine but strict restore failed with `UnknownToken`. Tokens are already matched by their exact grammar, so the
   veto is gone and neighbouring angle brackets restore as literal text. It
-  failed closed (no raw bytes shipped), but broke exact restore on 586 of
+  failed closed (no raw bytes shipped), but broke exact restore on 580 of
   20,000 seeded fragment documents under the `core` pack; now 0
   (`crates/gaze-assembly/tests/angle_adjacent_restore.rs`,
   `GAZE_ANGLE_PROBE_DOCS=20000`). Unowned or malformed tokens inside angle
