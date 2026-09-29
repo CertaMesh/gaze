@@ -60,6 +60,16 @@ re-tokenize stored manifests.
    lower in cross-class containment, so its spans no longer swallow an
    enclosed rule match of another class.
 
+### Changed: loopback IP addresses stay raw
+
+**No action required.** The bundled IPv4 and IPv6 rules no longer tokenize
+loopback addresses (`127.0.0.0/8`, `::1`, IPv4-mapped or IPv4-compatible
+loopback): they never leave the host. Each rejection writes a loser audit row
+with `ipv4_loopback_range` or `ipv6_loopback_range`. Private and link-local
+addresses stay protected. A rulepack that declares the never-released
+`[recognizers.context] benign_lookalikes` key fails to load with
+`RulepackError::RemovedKey`; delete the key.
+
 ### Changed: `SafetyNetFallback::Redact` tokenizes a resolvable residual
 
 **Action required only if you count or assert redaction markers.** This is
