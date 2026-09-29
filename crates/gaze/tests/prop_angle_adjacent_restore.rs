@@ -15,8 +15,9 @@ use gaze_recognizers::RegexDetector;
 use proptest::prelude::*;
 
 fn angle_fragment() -> impl Strategy<Value = &'static str> {
+    // No empty fragment: two bracketless tokens touching each other is word
+    // adjacency, a different class from the angle neighbours tested here.
     prop_oneof![
-        Just(""),
         Just("<"),
         Just(">"),
         Just("<<"),

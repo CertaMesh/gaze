@@ -3948,9 +3948,16 @@ mod tests {
         assert!(session
             .restore_strict_text_with_provenance("prefix <deadbeef:Email_1 suffix")
             .is_err());
-        assert!(session
+        // todo 4009: literal angle brackets beside a token are text outside its range.
+        let bracketed = session
             .restore_strict_text_with_provenance(&format!("prefix <{name}> suffix"))
-            .is_err());
+            .expect("angle neighbours restore");
+        assert_eq!(bracketed.text, "prefix <Dr. Schmidt> suffix");
+        let name_start = "prefix <".len();
+        assert_eq!(
+            bracketed.authorized_output_ranges,
+            vec![name_start..name_start + "Dr. Schmidt".len()]
+        );
 
         let other = Session::new(Scope::Ephemeral).expect("other session");
         let cross_session = other

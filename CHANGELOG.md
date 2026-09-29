@@ -380,10 +380,9 @@ pipeline.
 
 - **Strict restore round-trips a literal `<` or `>` beside a token** (solo
   todo 4009). The strict token scanner rejected any token whose neighbouring
-  byte was `<` or `>` as a "nested wrapper", so text such as
-  `Alice <alice@example.invalid>`, HTML, generics, or
-  `4111111111111111><AB12CD34>` cleaned fine but strict restore failed with
-  `UnknownToken`. Tokens are already matched by their exact grammar, so the
+  byte was `<` or `>` as a "nested wrapper", so an email address in a mail
+  header's angle brackets, a card number followed by `><`, HTML, or generics
+  cleaned fine but strict restore failed with `UnknownToken`. Tokens are already matched by their exact grammar, so the
   veto is gone and neighbouring angle brackets restore as literal text. It
   failed closed (no raw bytes shipped), but broke exact restore on 586 of
   20,000 seeded fragment documents under the `core` pack; now 0
