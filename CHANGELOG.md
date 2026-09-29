@@ -179,10 +179,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `BATCH`, `Rechnung`, ...) or sits next to a currency code or sign, and the
   national phone rules skip the tail of a reference identifier and part of a
   digit run longer than any phone number. A phone, postal or address cue
-  (seven languages, case- and accent-folded) in the value's text block (back
-  to the previous blank line, at most six lines and 400 bytes up, and one
-  line down) or in its structured context (path keys, sibling keys, short
-  sibling values) keeps the value protected. Each skip writes a loser audit row
+  word (seven languages, case- and accent-folded) anywhere in the document
+  or structured record, or any letter outside Latin script, disables the
+  skip for the whole document. Each skip writes a loser audit row
   with `decided_by = validator_veto` and a `benign_*` reason; a skip that
   cannot be placed on the source text fails the document
   (`Error::UnauditableVeto`). Contract: docs/explanation/detection/validator-veto.md.

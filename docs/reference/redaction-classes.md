@@ -211,10 +211,9 @@ stage: `postal.de` and `postal.us` (`joined_identifier`, `currency_amount`)
 and `phone.national.de` and `phone.national.us` (`joined_identifier`,
 `digit_run_fragment`). A candidate inside such a structure (the tail of
 `SKU-DEMO-73821`, the number in `EUR 22186,12`, part of a 16-digit product
-code) is dropped with a `benign_*` reason unless a phone, postal or address
-cue sits in its text block (back to the previous blank line, at most six
-lines and 400 bytes up, and one line down) or in its structured context
-(path keys, sibling keys, short sibling values). Only
+code) is dropped with a `benign_*` reason, unless the document or
+structured record contains a phone, postal or address cue word anywhere, or
+any letter outside Latin script. Only
 these four rules, with their exact bundled tuple, can hold the grant that
 permits it; a
 rulepack file that declares `benign_lookalikes` fails to load. See

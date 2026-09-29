@@ -15,8 +15,9 @@ For each candidate:
 
 1. Look up `candidate.recognizer_id` in the registry's recognizer-id index.
    If the recognizer presents a benign-lookalike grant for its own identity,
-   the span is a match of the audited pattern, no cue protects it, and it sits
-   inside one of the grant's structures, remove it with its `Benign*` reason
+   the document (or structured record) carries no cue and no non-Latin
+   letter, the span is a match of the audited pattern, and it sits inside
+   one of the grant's structures, remove it with its `Benign*` reason
    (see [Benign lookalikes](#benign-lookalikes)). Otherwise continue.
 2. Call `Recognizer::validator_kind()`.
 3. If the recognizer has no validator, keep the candidate. No audit row is
@@ -107,35 +108,29 @@ re-protects every byte a protective candidate claimed, even inside a
 - **Only the declaring rule's candidate goes.** Any other candidate over the
   same bytes (a cued phone, an IBAN, a card) is untouched and still
   protects them.
-- **A cue in the candidate's block keeps it protected.** The check reads
-  exactly this window: the candidate's own line, the lines above it back to
-  the previous blank line (at most six lines and 400 bytes; a longer line
-  counts up to the cap, nearest bytes first), and the rest of its line plus
-  the next non-blank line below (120 bytes each). A word in that window that
-  starts with a phone, postal or address cue stem, or equals a short cue
-  word, disables every structure. Words are case- and accent-folded
-  (`Téléphone` reads `telephone`) and split at non-letters and at camelCase,
-  so `ORDER-90210 (ZIP)`, a `ZIP for delivery:` label two lines above, and
-  JSON keys such as `postal_code` or `shippingAddress` all count. The stems
-  cover English, German, French, Spanish, Italian, Dutch and Portuguese
-  (for example `tel`, `phone`, `fax`, `mobil`, `movil`, `portable`,
-  `handy`, `ruf`, `contact`, `kontakt`, `zip`, `plz`, `post`, `codigo`,
-  `codice`, `addr`, `adres`, `anschrift`, `street`, `strasse`, `indirizzo`,
-  `direccion`, `endereco`, `city`, `ort`, `billing`, `shipping`,
-  `delivery`; whole words `cap`, `cp`, `cep`, `gsm`, `rue`, `rua`). A drift
-  test requires every `[locale.phone_labels]` entry of the bundled locale
-  packs to be a cue. Matching by stem errs toward protection. A cue further
-  away (past a blank line, more than six lines or 400 bytes up, or more than
-  one line down) is not seen.
-- **A cue in the structured context keeps it protected.** For a
-  `RawDocument::Structured` value the veto also reads a `VetoContext`: every
-  key on the value's path (`shippingAddress` and `code` for
-  `shippingAddress.code`), its sibling keys, and sibling string values of
-  at most 64 bytes (`{"type": "phone", "value": "..."}`,
-  `{"label": "ZIP", "value": "..."}`). A cue anywhere in it disables every
-  structure, so `{"billing_address": "ORDER-90210"}` stays protected while
-  `{"orderRef": "ORDER-90210"}` does not. Plain text has no structured
-  context; only its block counts.
+- **Any cue anywhere, or any non-Latin letter, disables the veto.** A
+  bounded window cannot prove that a labelled value is benign, so there is
+  none. Validator veto scans the whole input with
+  `gaze_types::benign_lookalike::CueEvidence`, and for a
+  `RawDocument::Structured` value it also merges the evidence of the whole
+  record: every key and every string value at every depth, including array
+  elements and nested metadata, with no length cap. If that document or
+  record contains a phone, postal or address cue word anywhere, before or
+  after the value and across blank lines, or any letter outside Latin
+  script (Cyrillic, Greek, CJK, Arabic, Hebrew, Devanagari, ...), no
+  benign-lookalike veto runs in it. A cue of either family blocks both:
+  a record that labels a phone may also hold a postcode. Cue words are
+  case- and accent-folded (`Téléphone` reads `telephone`) and split at
+  non-letters and at camelCase, and cover English, German, French, Spanish,
+  Italian, Dutch and Portuguese: a word starting with a stem such as `tel`,
+  `phone`, `fax`, `mobil`, `movil`, `portable`, `handy`, `ruf`, `call`,
+  `zip`, `plz`, `post`, `codigo`, `codice`, `contact`, `kontakt`, `addr`,
+  `adres`, `anschrift`, `street`, `strasse`, `indirizzo`, `direccion`,
+  `endereco`, `city`, `ort`, `billing`, `shipping` or `delivery`, or one of
+  the whole words `cap`, `cp`, `cep`, `gsm`, `rue`, `rua`. A drift test
+  requires every `[locale.phone_labels]` entry of the bundled locale packs
+  to be a phone cue. Matching by stem errs toward protection. The veto
+  therefore only ever runs on documents that carry no such word at all.
 - **Only the audited bundled rules are eligible, by exact tuple.** A
   pattern cannot prove it is uncued (a one-capture rule such as
   `ORDER-(\d{5})\s+Beverly` is anchored by a city no stem list knows), and
