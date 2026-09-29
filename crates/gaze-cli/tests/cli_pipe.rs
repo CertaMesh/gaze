@@ -3529,7 +3529,7 @@ fn record_context_cli_round_trips_name_case_and_email_exact() {
     let context_path = dir.path().join("context.json");
     fs::write(
         &context_path,
-        r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"}}"#,
+        r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"},"record_match_kinds":{"name_multi":["case_folded"],"email":["exact"]}}"#,
     )
     .unwrap();
     let input = "ALICE SMITH sent alice@example.invalid";
