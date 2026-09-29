@@ -89,6 +89,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
+use crate::address_block::{AddressGrammar, AddressVocabulary};
 use crate::anchor_resolver::AnchorResolver;
 use crate::house_number::{StreetLexicon, StreetNumberOrder};
 pub use gaze_types::{Candidate, DetectContext, DetectError, EvidenceKind, Recognizer};
@@ -119,6 +120,7 @@ pub struct RecognizerRegistry {
     family_policy: FamilyPolicyTable,
     anchor_resolver: AnchorResolver,
     street_lexicon: StreetLexicon,
+    address_grammar: AddressGrammar,
 }
 
 impl std::fmt::Debug for RecognizerRegistry {
@@ -1235,6 +1237,10 @@ impl RecognizerRegistry {
         &self.street_lexicon
     }
 
+    pub(crate) fn address_grammar(&self) -> &AddressGrammar {
+        &self.address_grammar
+    }
+
     pub fn recognizer(&self, id: &str) -> Option<&Arc<dyn Recognizer>> {
         self.recognizers_by_id.get(id)
     }
@@ -1282,6 +1288,7 @@ pub struct RecognizerRegistryBuilder {
     collision_memberships: HashMap<String, CollisionMembership>,
     anchor_resolver: AnchorResolver,
     street_lexicon: StreetLexicon,
+    address_grammar: AddressGrammar,
 }
 
 impl RecognizerRegistryBuilder {
@@ -1329,6 +1336,18 @@ impl RecognizerRegistryBuilder {
         self
     }
 
+    /// Registers the address words of `locale` that let an address winner grow
+    /// over the unit, box, state or post office written beside it (todo 4013).
+    pub fn register_address_vocabulary(
+        mut self,
+        locale: LocaleTag,
+        vocabulary: AddressVocabulary,
+        names: Vec<String>,
+    ) -> Self {
+        self.address_grammar.register(locale, vocabulary, names);
+        self
+    }
+
     pub fn build(self) -> RecognizerRegistry {
         let recognizers_by_id = self
             .entries
@@ -1343,6 +1362,7 @@ impl RecognizerRegistryBuilder {
             family_policy: FamilyPolicyTable::from_memberships(self.collision_memberships),
             anchor_resolver: self.anchor_resolver,
             street_lexicon: self.street_lexicon,
+            address_grammar: self.address_grammar,
         }
     }
 }

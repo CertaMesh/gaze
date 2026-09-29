@@ -1114,6 +1114,27 @@ impl Pipeline {
                 locale_chain,
             )?;
         }
+        // Address blocks grow from the settled address winners, house numbers
+        // included, so they are found last and the pool is resolved once more.
+        // A grown piece never overlaps a selection and is learned-tier evidence,
+        // so the sweep never propagates it (todo 4013).
+        let address_pieces = address_block_pieces(
+            &whole.evidence,
+            &normalized.text,
+            &self.registry,
+            locale_chain,
+        );
+        if !address_pieces.is_empty() {
+            let mut originals = whole.evidence.originals;
+            originals.extend(address_pieces);
+            whole = recovery::plan(
+                crate::resolver::CandidatePool::new(originals),
+                &self.registry,
+                &normalized,
+                text,
+                locale_chain,
+            )?;
+        }
         let recovery::WholePlan {
             evidence,
             order,
@@ -4742,6 +4763,7 @@ pub struct PipelineBuilder {
     collision_memberships: Vec<(String, CollisionMembership)>,
     anchor_cue_bundles: Vec<(crate::LocaleTag, String, Vec<String>, Option<u16>)>,
     street_lexicons: Vec<(crate::LocaleTag, crate::StreetNumberOrder, Vec<String>)>,
+    address_vocabularies: Vec<(crate::LocaleTag, crate::AddressVocabulary, Vec<String>)>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     #[cfg(feature = "bundled-recognizers")]
@@ -4801,6 +4823,19 @@ impl PipelineBuilder {
         names: Vec<String>,
     ) -> Self {
         self.street_lexicons.push((locale, order, names));
+        self
+    }
+
+    /// Registers the address words of `locale` (unit designators, state codes,
+    /// military post offices) that let an address winner grow over the pieces
+    /// written beside it (todo 4013). Without them no address block grows.
+    pub fn register_address_vocabulary(
+        mut self,
+        locale: crate::LocaleTag,
+        vocabulary: crate::AddressVocabulary,
+        names: Vec<String>,
+    ) -> Self {
+        self.address_vocabularies.push((locale, vocabulary, names));
         self
     }
 
@@ -4878,6 +4913,9 @@ impl PipelineBuilder {
         }
         for (locale, order, names) in self.street_lexicons {
             registry = registry.register_street_lexicon(locale, order, names);
+        }
+        for (locale, vocabulary, names) in self.address_vocabularies {
+            registry = registry.register_address_vocabulary(locale, vocabulary, names);
         }
         Ok(Pipeline {
             registry: Arc::new(registry.build()),
@@ -5425,6 +5463,86 @@ fn street_corroborated_house_numbers(
         }
     }
     found
+}
+
+/// Whether a settled selection is an address winner that may grow a block.
+fn is_address_anchor(class: &crate::PiiClass) -> bool {
+    matches!(class, crate::PiiClass::Location)
+        || matches!(
+            class.as_custom_name(),
+            Some("postal_code" | "building_number")
+        )
+}
+
+/// Address pieces grown from the settled address winners (todo 4013).
+///
+/// Reads the selections in normalized coordinates. Only a selection whose
+/// settled class is an address class starts growth; every selection is
+/// claimed, so a piece never overlaps one. Each piece is its own `Location`
+/// candidate whose recognizer id names why it joined, tracing the anchor's
+/// recognizer as the evidence it rests on.
+fn address_block_pieces(
+    evidence: &occurrence::Segment,
+    text: &str,
+    registry: &RecognizerRegistry,
+    locale_chain: &[crate::LocaleTag],
+) -> Vec<Candidate> {
+    let grammar = registry.address_grammar();
+    if grammar.is_empty() {
+        return Vec::new();
+    }
+    let selection_span = |selection: &occurrence::Selection| {
+        let spans = selection
+            .members
+            .iter()
+            .map(|&id| &evidence.originals[id].span);
+        let start = spans.clone().map(|span| span.start).min()?;
+        let end = spans.map(|span| span.end).max()?;
+        Some(start..end)
+    };
+    let claimed = evidence
+        .selections
+        .iter()
+        .filter_map(selection_span)
+        .collect::<Vec<_>>();
+    let anchors = evidence
+        .selections
+        .iter()
+        .filter(|selection| is_address_anchor(&selection.class))
+        .filter_map(|selection| {
+            let member = &evidence.originals[*selection.members.first()?];
+            Some((selection_span(selection)?, member))
+        })
+        .collect::<Vec<_>>();
+    let spans = anchors
+        .iter()
+        .map(|(span, _)| span.clone())
+        .collect::<Vec<_>>();
+    grammar
+        .grow(text, &spans, &claimed, locale_chain)
+        .into_iter()
+        .map(|piece| {
+            let anchor = anchors[piece.anchor].1;
+            let id = piece.growth.recognizer_id();
+            let mut candidate = Candidate::new(
+                piece.span,
+                crate::PiiClass::Location,
+                id,
+                anchor.score,
+                anchor.priority,
+                None,
+                // The counter token family of a NER location or house number.
+                "counter",
+                id,
+                ConflictTier::None,
+                Vec::new(),
+            );
+            candidate
+                .source_recognizer_ids
+                .push(anchor.recognizer_id.clone());
+            candidate.with_evidence(crate::EvidenceKind::Learned)
+        })
+        .collect()
 }
 
 fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<IndexedDetection> {

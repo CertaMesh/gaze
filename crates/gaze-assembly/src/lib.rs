@@ -60,7 +60,8 @@ pub use defaults::CorePipelineConfig;
 pub use error::BuildError;
 pub use locale::locale_gated_activation_locales;
 pub(crate) use locale::{
-    merged_locale_vocab, register_anchor_cue_bundles, register_street_lexicons,
+    merged_locale_vocab, register_address_vocabularies, register_anchor_cue_bundles,
+    register_street_lexicons,
 };
 pub use policy_inputs::{resolve_policy_inputs, ResolvedPolicyInputs};
 
@@ -228,6 +229,7 @@ pub fn build_pipeline_builder(
     )?;
     register_anchor_cue_bundles(&mut builder, rulepacks, active_locales);
     register_street_lexicons(&mut builder, rulepacks, active_locales);
+    register_address_vocabularies(&mut builder, rulepacks, active_locales);
     ner::register_ner(&mut builder, policy, ner_threshold)?;
     ner::register_dob_judge(&mut builder, policy)?;
 

@@ -25,6 +25,15 @@ names = ["Gesendet von", "Gesendet durch", "Sent by", "Sent via", "On behalf of"
 [locale.street_suffixes_number_after]
 names = ["straße", "strasse", "str.", "gasse", "weg", "platz", "allee", "ring", "damm", "ufer", "chaussee", "steig", "stieg", "pfad", "zeile", "graben", "promenade", "kai"]
 
+# Address words an already protected address part may grow over (todo 4013):
+# designators before a number (`Wohnung 4`, `Whg. 7`, `Postfach 505`) and
+# after an ordinal (`3. Etage`, `2. OG`). Never tokenized on their own.
+[locale.address_unit_designators]
+names = ["wohnung", "whg.", "appartement", "app.", "postfach"]
+
+[locale.address_unit_designators_number_before]
+names = ["etage", "stock", "og", "obergeschoss"]
+
 [locale.cues.iban]
 names = ["IBAN", "IBAN:", "Konto", "Kontonummer", "Bankverbindung"]
 window_chars = 64
