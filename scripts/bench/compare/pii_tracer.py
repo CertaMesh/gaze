@@ -85,6 +85,43 @@ class PiiTracer:
         self.process.wait(timeout=10)
 
 
+def as_of_committed_generator(committed: dict, layers: dict[str, list[score.Document]],
+                              corpus: dict[str, object]) -> tuple[dict[str, list[score.Document]], dict[str, object]]:
+    """The agentic layers exactly as the committed comparison measured them.
+
+    The competitor rows in comparison.json were measured on an older agentic generator. The
+    current generator rebuilds that corpus as a filter of its own output (records_as_of), and the
+    older scored-label contract stays committed, so PII-Tracer is scored on the same documents
+    under the same contract. The rebuilt layers must reproduce every committed layer digest, the
+    committed agentic corpus hash and the committed contract hash, or this raises: a different
+    corpus would make the rows incomparable. The shared loader is then pointed at that contract
+    for this process only, because compare.measure() loads it without a path.
+    """
+    version = committed["corpus"]["agentic"]["generator_version"]
+    if version == agentic.GENERATOR_VERSION:
+        return layers, corpus
+    path = compare.REPO / agentic.HISTORICAL_CONTRACTS[version]
+    contract = score.load_scored_label_contract(path, display_path=agentic.HISTORICAL_CONTRACTS[version].as_posix())
+    if contract.sha256 != committed["contracts"]["agentic"]:
+        raise ValueError("the historical agentic contract differs from the committed comparison's")
+    records = agentic.records_as_of(version, agentic.generate(agentic.PUBLISHED_PARTITION))
+    documents = agentic.apply_contract([record.to_document() for record in records], contract)
+    rebuilt = {"A": agentic.LAYER_IDENTIFIERS, "D": agentic.LAYER_LOOKALIKES, "R": agentic.LAYER_REPEATS}
+    restricted = dict(layers)
+    for layer, name in rebuilt.items():
+        restricted[layer] = [d for d in documents if d.cell and d.cell.startswith(name + "|")]
+    for layer, documents_in_layer in restricted.items():
+        expected = committed["corpus"]["layers"][layer]
+        actual = {"documents": len(documents_in_layer),
+                  "ids_sha256": score.document_ids_digest([d.uid for d in documents_in_layer])}
+        if actual != expected:
+            raise ValueError(f"layer {layer} as of generator v{version} differs from the committed comparison")
+    if agentic.corpus_identity(compare.REPO, version)[0] != committed["corpus"]["agentic"]["corpus_sha256"]:
+        raise ValueError(f"generator v{version} no longer rebuilds the committed agentic corpus")
+    agentic.load_contract = lambda repo_root, contract_path=None: contract
+    return restricted, committed["corpus"]
+
+
 def preflight(backend: PiiTracer, layers: dict[str, list[score.Document]], per_language: int,
               mapping: dict[str, tuple[str, ...]]) -> dict[str, object]:
     """STEER 4 label preflight: every language of every layer, unmapped labels fail; never published."""
@@ -115,9 +152,10 @@ def main() -> int:
     args = parser.parse_args()
     if args.predictions_dir is not None and args.predictions_dir.resolve().is_relative_to(compare.REPO):
         raise ValueError("per-document predictions must stay outside the repository")
-    layers, corpus = compare.load_corpus(args.dataset, args.pack_dir)
-    compare.preflight_contracts(layers)
     committed = json.loads((compare.REPO / "docs/reference/benchmarks/comparison.json").read_text(encoding="utf-8"))
+    layers, corpus = compare.load_corpus(args.dataset, args.pack_dir)
+    layers, corpus = as_of_committed_generator(committed, layers, corpus)
+    compare.preflight_contracts(layers)
     if committed["corpus"] != corpus:
         raise ValueError("corpus differs from the committed comparison; measure that corpus")
     base = compare.load_mapping()
