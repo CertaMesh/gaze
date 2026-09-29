@@ -1320,6 +1320,45 @@ add entries for a tenant's street vocabulary; measure both directions before
 broadening a list, because the NER span is the only evidence that the words
 form a street.
 
+### Address blocks (todo 4013)
+
+Once resolution has protected part of an address, the pieces written right
+beside it join the protection, so an address is never left half tokenized
+(`[LOCATION_1] Suite 312, [LOCATION_2]`). Growth starts only from a settled
+winner of class `location` (NER, or a house number), `custom:postal_code` or
+`custom:building_number`, and steps outward one piece at a time. Between two
+pieces only one to four bytes of spaces and commas with at most one comma and
+one line break may stand; a full stop, colon, semicolon, tab, pipe, quote or
+blank line ends the block, so JSON fields and the next sentence never join. A
+chain grows at most five pieces per side and never over another selection.
+The pieces come from four locale buckets:
+
+- `address_unit_designators` (`locale-en`, `locale-de`): a word, then one
+  space or `#`, then a unit number of one to five digits and one optional
+  letter (`Suite 312`, `Apt. 4B`, `Unit #3`, `PO Box 417`, `PSC 806`,
+  `Wohnung 7`, `Postfach 505`). Case-insensitive; a trailing dot marks an
+  abbreviation. `Box N` joins only right after a `PSC`, `CMR` or `Unit` line.
+- `address_unit_designators_number_before` (`locale-de`): a one- or two-digit
+  ordinal, a full stop, a space and the word (`3. Etage`, `2. OG`).
+- `address_region_codes` (`locale-en`): exact-case US state codes and the
+  military `AA` / `AE` / `AP`, only when a number follows (`IL 00068`), so
+  `Paris, OR maybe` stays raw.
+- `address_military_post_offices` (`locale-en`): exact-case `APO`, `FPO`,
+  `DPO`.
+
+Each piece is its own `location` token, so every piece restores exactly and
+the winner it grew from keeps its class; the separators stay raw. The
+recognizer id is the closed reason the piece joined, one of
+`address.block.unit`, `address.block.unit_number_before`,
+`address.block.military_box`, `address.block.region_code` and
+`address.block.military_post_office` (`gaze::AddressGrowth`), and the trace
+sources add the anchor's recognizer id. Pieces are `Learned` evidence, so the
+repeat-value sweep never copies `Suite 312` to a second, unanchored
+occurrence. A designator with no protected address beside it is never
+tokenized (`test Suite 4`). Adopters building a pipeline by hand register the
+words with `PipelineBuilder::register_address_vocabulary`; without them nothing
+grows.
+
 ## Known spec drift
 
 Documented here so users get the truth while the gaps land on the

@@ -275,6 +275,36 @@ fn without_a_vocabulary_nothing_grows() {
 }
 
 #[test]
+fn a_grown_piece_is_not_swept_into_a_later_document_of_the_session() {
+    // The session manifest seeds the sweep with its non-learned entries only;
+    // a grown piece is learned-tier, so a later bare `Suite 522` stays raw.
+    let pipeline = builder(vec![ner(&["Drusk Street"])], &Rows::default())
+        .build()
+        .unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = |raw: &str| {
+        let (_, spans, _) = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text(raw.into()),
+                &[LocaleTag::EnUs],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        spans
+            .into_iter()
+            .map(|span| raw[span.raw_span].to_string())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        clean("Drusk Street Suite 522 is new."),
+        ["Drusk Street", "Suite 522"]
+    );
+    assert!(clean("We booked Suite 522 for the review.").is_empty());
+}
+
+#[test]
 fn a_grown_piece_is_never_swept_to_another_copy() {
     // `Suite 522` is learned-tier evidence: its copy with no address beside
     // it in the same document stays raw.

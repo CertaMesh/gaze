@@ -350,12 +350,17 @@ fn is_military_line(unit: &str) -> bool {
     MILITARY_LINE_WORDS.contains(&word.as_str())
 }
 
+/// Spaces, commas and line breaks: the only bytes between two address pieces.
+fn is_separator_byte(b: &u8) -> bool {
+    matches!(b, b' ' | b',' | b'\n')
+}
+
 /// A separator is 1-4 bytes of spaces and commas with at most one line
 /// break. A full stop, colon, semicolon, tab, pipe or quote ends the block.
 fn is_separator(separator: &str) -> bool {
     !separator.is_empty()
         && separator.len() <= MAX_SEPARATOR_BYTES
-        && separator.bytes().all(|b| matches!(b, b' ' | b',' | b'\n'))
+        && separator.bytes().all(|b| is_separator_byte(&b))
         && separator.bytes().filter(|&b| b == b'\n').count() <= 1
         && separator.bytes().filter(|&b| b == b',').count() <= 1
 }
@@ -365,7 +370,7 @@ fn separator_end(text: &str, edge: usize) -> Option<usize> {
     let len = text[edge..]
         .bytes()
         .take(MAX_SEPARATOR_BYTES + 1)
-        .take_while(|b| matches!(b, b' ' | b',' | b'\n'))
+        .take_while(is_separator_byte)
         .count();
     is_separator(&text[edge..edge + len]).then_some(edge + len)
 }
@@ -376,7 +381,7 @@ fn separator_start(text: &str, edge: usize) -> Option<usize> {
         .bytes()
         .rev()
         .take(MAX_SEPARATOR_BYTES + 1)
-        .take_while(|b| matches!(b, b' ' | b',' | b'\n'))
+        .take_while(is_separator_byte)
         .count();
     is_separator(&text[edge - len..edge]).then_some(edge - len)
 }
@@ -618,6 +623,14 @@ mod tests {
 
     #[test]
     fn a_sentence_or_field_end_stops_growth() {
+        assert_eq!(
+            grown(
+                "Brinmoor, IL 00068. Suite 810 is red.",
+                &["Brinmoor", "00068"]
+            ),
+            [("IL".to_string(), RegionCode)]
+        );
+        assert!(grown("Drusk Lane: Suite 4", &["Drusk Lane"]).is_empty());
         assert!(grown(
             "Deliver to Brinmoor, IL 00068.\nThe regression Suite 810 is still red.",
             &["Brinmoor", "00068"]
