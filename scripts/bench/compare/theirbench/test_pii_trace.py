@@ -52,8 +52,9 @@ def test_loader_refuses_a_changed_file_or_a_wrong_count(parquet: Path, monkeypat
     monkeypatch.setitem(loaders.PII_TRACE, "gold_spans", 3)
     with pytest.raises(ValueError, match="count differs"):
         loaders.load_pii_trace(parquet)
+    monkeypatch.setitem(loaders.PII_TRACE, "gold_spans", 2)  # counts right again: only the digest is wrong
     monkeypatch.setitem(loaders.PII_TRACE, "sha256", "0" * 64)
-    with pytest.raises(ValueError, match="differs from its pin"):
+    with pytest.raises(ValueError, match="SHA-256"):
         loaders.load_pii_trace(parquet)
 
 
