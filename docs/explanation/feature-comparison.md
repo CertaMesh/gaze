@@ -98,6 +98,7 @@ manifest/session/restore contract.
 **Measured detection results:** [Gaze's competitor scorecards](../reference/benchmarks/competitors.md)
 report Presidio, GLiNER and OPF on the same Gaze benchmark corpus and scorer,
 with configurations, skipped-document accounting, false positives and latency.
+Perplexity PII-Tracer's scores on the same corpus are on [their own page](../reference/benchmarks/competitors-pii-tracer.md), and its rows on the [competitors' own benchmarks](../reference/benchmarks/README.md#competitors-own-benchmarks) sit beside the other tools'.
 They do **not** test competitor restore contracts and do not include DataFog,
 scrubadub or LLM Guard. The [benchmark methods](../reference/benchmarks/README.md)
 define the scored labels and generated layers. No general “best detector” claim
