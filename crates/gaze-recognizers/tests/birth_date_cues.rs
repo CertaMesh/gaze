@@ -165,6 +165,7 @@ macro_rules! birth_date_cases {
 // One test per cue. The date shape is held fixed so each test pins its cue alone.
 birth_date_cases! {
     cue_en_dob: "DOB 12.03.1987" => "12.03.1987";
+    cue_en_dob_next_line: "DOB:\n1990-02-03" => "1990-02-03";
     cue_en_dotted_dob: "D.O.B. 12.03.1987" => "12.03.1987";
     cue_en_date_of_birth: "Her date of birth is 12.03.1987." => "12.03.1987";
     cue_en_birth_date: "Birth date: 12.03.1987" => "12.03.1987";
