@@ -125,10 +125,8 @@ fn has_cue(text: &str) -> bool {
     let mut previous_lower = false;
     let mut words = Vec::new();
     for c in text.chars() {
-        if !c.is_alphabetic() || (c.is_uppercase() && previous_lower) {
-            if !word.is_empty() {
-                words.push(std::mem::take(&mut word));
-            }
+        if (!c.is_alphabetic() || (c.is_uppercase() && previous_lower)) && !word.is_empty() {
+            words.push(std::mem::take(&mut word));
         }
         if c.is_alphabetic() {
             word.extend(c.to_lowercase());
