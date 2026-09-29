@@ -140,3 +140,21 @@ def test_source_slot_disambiguates_same_class_values() -> None:
     )
     row = recorder.result(leaked_fall=5, false_positive_rise=0)["rows"][0]
     assert row["match_kind"] == "exact"
+
+
+def test_eligible_reconciliation_counts_overlapping_gold_spans() -> None:
+    doc = document("Maren", (
+        score.Span(0, 5, "GIVENNAME"), score.Span(1, 4, "SURNAME")
+    ))
+    recorder = attribution.AttributionRecorder.create(
+        frozenset(), frozenset({"GIVENNAME", "SURNAME"})
+    )
+    recorder.record_baseline(doc, response())
+    recorder.record_candidate(
+        doc, response(trace(0, 5)), [("Name", "Maren"), ("Name", "are")], decoy=False
+    )
+    row = recorder.result(
+        leaked_fall=5, false_positive_rise=0, eligible_leak_fall=8
+    )["rows"][0]
+    assert row["gold_recovered_bytes"] == 5
+    assert row["eligible_recovered_bytes"] == 8

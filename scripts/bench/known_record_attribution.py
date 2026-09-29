@@ -153,7 +153,8 @@ def add_bytes(
         return
     group, kind, population = bucket
     gold_bytes = score.intersection_length(segments, gold)
-    eligible_bytes = score.intersection_length(segments, eligible)
+    # The oracle's eligible-leak counter is per gold span, including overlaps.
+    eligible_bytes = sum(score.intersection_length(segments, [span]) for span in eligible)
     fp_bytes = score.interval_length(segments) - gold_bytes
     suffix = "recovered" if added else "lost"
     totals[(group, kind, population, f"gold_{suffix}_bytes")] += gold_bytes
@@ -179,12 +180,12 @@ def attribute_document(
     gold = score.merge_intervals((span.start, span.end) for span in document.spans)
     encoded = document.text.encode("utf-8")
     eligible_values = {value for _, value in values}
-    eligible = score.merge_intervals(
+    eligible = [
         (span.start, span.end)
         for span in document.spans
         if span.label in eligible_labels
         if encoded[span.start : span.end].decode("utf-8") in eligible_values
-    )
+    ]
     population = "decoy" if decoy else "non_decoy"
     totals: Counter[tuple[str, str, str, str]] = Counter()
     assigned: list[tuple[int, int]] = []
