@@ -1806,6 +1806,13 @@ impl SafetyNetRefusalReason {
             Self::NymPaginationKeyV1 => "nym_pagination_key_v1",
         }
     }
+
+    /// Raw model label and mapped class for a refused span's audit row.
+    pub fn audit_labels(self) -> (&'static str, &'static str) {
+        match self {
+            Self::NymPaginationKeyV1 => ("BUILDING_NUMBER", "custom:building_number"),
+        }
+    }
 }
 
 /// Aggregate leak report statistics.

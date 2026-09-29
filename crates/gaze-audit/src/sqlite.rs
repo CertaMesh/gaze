@@ -115,10 +115,11 @@ impl LeakSuspectLogEntry {
         else {
             return None;
         };
+        let (raw_label, mapped_class) = reason.audit_labels();
         Some(Self {
             safety_net_id: safety_net_id.clone(),
-            raw_label: "BUILDING_NUMBER".to_string(),
-            mapped_class: "custom:building_number".to_string(),
+            raw_label: raw_label.to_string(),
+            mapped_class: mapped_class.to_string(),
             leak_kind: "refused".to_string(),
             span_len: span.end.saturating_sub(span.start) as i64,
             document_kind: document_kind_to_db(document_kind).to_string(),
