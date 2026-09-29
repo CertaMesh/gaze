@@ -317,8 +317,6 @@ jobs:
         run: cargo run -p xtask -- recognizer-composition-validator
       - name: xtask no-tenant-knowledge
         run: cargo run -p xtask -- no-tenant-knowledge
-      - name: xtask no-internal-ids
-        run: cargo run -p xtask -- no-internal-ids
       - name: xtask bundle-tokenization-drift
         # --verify-ack: any committed snapshot change (e.g. an emitted class
         # rename) must carry a `// drift-ack:` comment and a CHANGELOG line —

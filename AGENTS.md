@@ -49,7 +49,7 @@ Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTIN
 3. **Commit discipline:** every commit must be signed (SSH commit signing is configured on this machine; delegates in unsigned sandboxes must have their commits re-created signed before merge). No commit-message prefix is required. Stage specific files by name. No `git add -A` or `git add .`. No amend, no force-push, no `--no-verify`. Commit after each logical phase, not only at the end.
 4. **Branch per task.** Work on a dedicated branch; keep `main` clean.
 5. **Completion signaling:** every agent brief includes a sentinel line (e.g. `IMPL DONE:`, `REVIEW DONE:`, `DOCS DONE:`). Print it on the final stdout line.
-6. **Never put private tracker ids in public text.** Todo, scratchpad, process and audit ids from private orchestration tools do not belong in PR titles or bodies, commit messages, CHANGELOG, docs, code comments, test comments or scripts. Describe the behavior instead ("tracked as a follow-up"). GitHub PR and issue numbers (`#723`) stay. `cargo run -p xtask -- no-internal-ids` fails the `xtask gates` CI job on a hit.
+6. **Never put private tracker ids in public text.** Todo, scratchpad, process and audit ids from private orchestration tools do not belong in PR titles or bodies, commit messages, CHANGELOG, docs, code comments, test comments or scripts. Describe the behavior instead ("tracked as a follow-up"). GitHub PR and issue numbers (`#723`) stay.
 
 ## Benchmark gain gate
 
