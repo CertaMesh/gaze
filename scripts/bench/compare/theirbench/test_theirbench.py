@@ -114,7 +114,10 @@ def synthetic() -> dict:
         "rows": rows, "chart_rows": ["gaze-full", "presidio-strong", "opf"], "typed_hold": ["opf"],
         "comparison_revision": "154f3da6", "gaze_crates_tree": "97e45cfe07d1",
         "rescored_with": {"comparison_revision": "b1446215", "harness_revision": "abcdef0123", "harness_dirty": False},
-        "provenance": {tool: quiet for tool in rows},
+        "provenance": {tool: (quiet if tool != "gaze-v0.15.1" else {**quiet, "release": {
+            "tag": "v0.15.1", "commit": "e" * 40, "crates_tree": "c" * 40, "binary_sha256": "b" * 64}})
+                       for tool in rows},
+        "tagged_measurements": {"gaze-v0.15.1": {"harness_revision": "d" * 40}},
         "common_intersection_labels": ["EMAIL_ADDRESS"], "hardware": "hw",
         "harness_revision": "0123456789", "own_metric": {tool: {"f2": 0.5} for tool in rows},
         "reproduction": {"published": {"vanilla": {"f2": 0.661, "source": "nb4"}},
@@ -138,7 +141,7 @@ class RenderTest(unittest.TestCase):
         body = render.render(synthetic())
         self.assertNotIn("gaze-full", body)
         self.assertNotIn("gaze-rules-only", body)
-        self.assertNotIn("crates tree", body)
+        self.assertNotIn("Gaze ran on crates tree", body)
         self.assertIn("| gaze-v0.15.1 |", body)
         self.assertLess(body.index("| gaze-v0.15.1 |"), body.index("| opf |"))
         # Changing the untagged rows cannot change the published block.
@@ -394,9 +397,12 @@ class TaggedRowTest(unittest.TestCase):
         self.assertEqual(render.add_tagged(data, report, own), "gaze-v0.15.1")
         self.assertEqual(entry["own_metric"]["gaze-v0.15.1"], {"f2": 0.7})
         self.assertEqual(entry["tagged_measurements"]["gaze-v0.15.1"]["harness_revision"], "d" * 40)
+        entry["provenance"]["gaze-v0.15.1"]["release"].update(crates_tree="f" * 40, binary_sha256="a" * 64)
         body = render.render(data)
         self.assertLess(body.index("| gaze-v0.15.1 |"), body.index("| opf |"))
         self.assertNotIn("not yet measured", body)
+        self.assertIn("Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `ffffffff`", body)
+        self.assertIn("harness `dddddddd`", body)
 
     def test_each_mismatch_refuses_the_row(self) -> None:
         import render_theirbench as render

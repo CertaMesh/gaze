@@ -20,6 +20,7 @@ import unittest
 from pathlib import Path
 
 import benchmark_charts as charts
+import subprocess as _subprocess
 from tagged_gaze import check_public
 import render_benchmark_doc as render
 
@@ -168,6 +169,13 @@ def _mutate(value):
     if isinstance(value, float):
         return value + 0.25
     raise AssertionError(f"no mutation defined for {value!r}")
+
+
+
+def render_tree(tag: str) -> str:
+    return _subprocess.check_output(
+        ["git", "rev-parse", f"refs/tags/{tag}^{{commit}}:crates"], cwd=render.REPO_ROOT, text=True
+    ).strip()
 
 
 class ScorecardMappingTest(unittest.TestCase):
@@ -976,7 +984,8 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         )
         for panel in third:
             self.assertEqual([b.name for b in panel.bars if b.gaze], ["Gaze 0.15"])
-            self.assertIsNone(next(b for b in panel.bars if b.gaze).f2)
+            bar = next(b for b in panel.bars if b.gaze)
+            self.assertIsNotNone(bar.f2)  # the tagged run is committed for both sets
         gliner = next(b for b in own.bars if b.name == "GLiNER")
         cell = self.comparison["tools"]["gliner"]["contracts"]["v3"]["C"]
         self.assertEqual(gliner.leaked, cell["leaked_bytes"])
@@ -1014,15 +1023,24 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             [r.version for r in render.chart_gaze_rows(history)], ["v0.14.0", "v0.15.0"]
         )
 
-    def test_a_tagged_third_party_run_replaces_the_pending_slot(self):
+    def test_a_third_party_gaze_slot_without_a_tagged_run_reads_pending(self):
         their = copy.deepcopy(self.their)
-        row = copy.deepcopy(their["presidio-research"]["rows"]["gaze-full"])
-        their["presidio-research"]["rows"]["gaze-v0.15.1"] = row
-        panel = self.panels(their=their)[1]
-        bar = next(b for b in panel.bars if b.gaze)
-        self.assertEqual(bar.f2, row["product_coverage"]["char_level"]["f2"])
-        self.assertEqual(bar.leaked, row["product_coverage"]["leaked_bytes"])
-        self.assertNotIn("pending", charts.model_card_tables([panel]))
+        for bench in their.values():
+            del bench["rows"]["gaze-v0.15.1"]
+        for panel in self.panels(their=their)[1:]:
+            bar = next(b for b in panel.bars if b.gaze)
+            self.assertIsNone(bar.f2)
+            self.assertIn("pending", charts.model_card_tables([panel]))
+        # With the committed tagged rows the slot holds that run's own numbers.
+        for key, panel in zip(("presidio-research", "piibench-commercial"), self.panels()[1:]):
+            row = self.their[key]["rows"]["gaze-v0.15.1"]["product_coverage"]
+            bar = next(b for b in panel.bars if b.gaze)
+            self.assertEqual(bar.f2, row["char_level"]["f2"])
+            self.assertEqual(bar.leaked, row["leaked_bytes"])
+            release = self.their[key]["provenance"]["gaze-v0.15.1"]["release"]
+            self.assertEqual(release["tag"], "v0.15.1")
+            self.assertEqual(release["crates_tree"],
+                             render_tree("v0.15.1"))
 
     def test_lower_leak_swept_row_is_not_selected(self):
         report = copy.deepcopy(self.comparison)

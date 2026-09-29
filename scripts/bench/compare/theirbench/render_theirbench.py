@@ -300,6 +300,12 @@ def render(data: Mapping[str, Any]) -> str:
             lines.append(f"| {tool} | " + " | ".join(cell(metric, name, entry, tool)
                                                     for metric in metrics(name)) + " |")
         rescored = entry["rescored_with"]
+        for tool in (t for t in public_rows(rows) if is_tagged_gaze_row(t)):
+            measured = entry["tagged_measurements"][tool]
+            release = entry["provenance"][tool]["release"]
+            lines += ["", f"Row {tool}: a clean checkout of tag `{release['tag']}` (crates tree "
+                          f"`{release['crates_tree'][:8]}`, benchmark binary `{release['binary_sha256'][:8]}`) "
+                          f"scored with harness `{measured['harness_revision'][:8]}`; no timing is published."]
         if not any(is_tagged_gaze_row(tool) for tool in rows):
             latest = json.loads(RELEASE_HISTORY.read_text(encoding="utf-8"))["releases"][-1]["version"]
             lines += ["", f"Gaze {latest}: not yet measured on this set, so no Gaze row is shown."]
