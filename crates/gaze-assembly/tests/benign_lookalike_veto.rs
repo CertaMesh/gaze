@@ -1051,3 +1051,12 @@ fn a_cue_or_non_latin_letter_keeps_even_the_digit_run_veto_off() {
         assert_protected("de-DE", input, "0593-9506-3395");
     }
 }
+
+/// A digit run of 12 to 15 digits can still be one phone number (E.164 allows 15), so a phone
+/// inside it is never vetoed: `212-555-0187-44` keeps the phone protected with no benign row.
+#[test]
+fn a_run_short_enough_to_be_a_phone_keeps_the_phone() {
+    assert_protected("en-US", "ref 212-555-0187-44 end", "555-0187");
+    assert_protected("en-US", "ref 212-555-0187-4444-9 end", "555-0187");
+}
+
