@@ -815,11 +815,14 @@ fn clean_structured(locale: &str, root: &[(&str, gaze::Value)]) -> (Vec<String>,
     (out, vetoes)
 }
 
+/// A structured probe: the protected value, a name, and the document's top-level fields.
+type Probe = (&'static str, &'static str, Vec<(&'static str, gaze::Value)>);
+
 /// Review 10848, all nine probes: labelled values in nested records, sibling type or label
 /// fields, block-level labels a few lines up, and French labels stay protected with no veto row.
 #[test]
 fn review_10848_labelled_values_stay_protected_with_no_veto_row() {
-    let structured: [(&str, &str, Vec<(&str, gaze::Value)>); 4] = [
+    let structured: [Probe; 4] = [
         (
             "90210",
             "shippingAddress.code",
