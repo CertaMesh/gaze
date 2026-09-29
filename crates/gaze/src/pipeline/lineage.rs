@@ -93,6 +93,10 @@ pub struct TraceContribution {
     /// a derived dependency.
     raw_span: Option<Range<usize>>,
     defeat: Option<Defeat>,
+    /// Pool index of the contributing candidate, joining this entry to its
+    /// [`CandidateEvent`]. `None` for a safety-net suspect or a derived
+    /// dependency, which have no pool candidate.
+    original: Option<usize>,
 }
 
 impl TraceContribution {
@@ -107,7 +111,18 @@ impl TraceContribution {
             role,
             raw_span,
             defeat,
+            original: None,
         }
+    }
+
+    fn with_original(mut self, original: usize) -> Self {
+        self.original = Some(original);
+        self
+    }
+
+    /// Pool index of the contributing candidate, if it has one.
+    pub fn original(&self) -> Option<usize> {
+        self.original
     }
 
     pub fn recognizer_id(&self) -> &str {
@@ -526,12 +541,15 @@ fn push_original(
     defeat: Option<Defeat>,
 ) {
     let original = &segment.originals[id];
-    out.push(TraceContribution::new(
-        original.recognizer_id.clone(),
-        role,
-        Some(segment.original_raw[id].clone()),
-        defeat,
-    ));
+    out.push(
+        TraceContribution::new(
+            original.recognizer_id.clone(),
+            role,
+            Some(segment.original_raw[id].clone()),
+            defeat,
+        )
+        .with_original(id),
+    );
     for dependency in &original.source_recognizer_ids {
         if dependency != &original.recognizer_id {
             out.push(TraceContribution::new(
@@ -575,6 +593,7 @@ fn finish(mut contributions: Vec<TraceContribution>) -> Vec<TraceContribution> {
             item.recognizer_id.clone(),
             item.role,
             item.raw_span.as_ref().map(|span| (span.start, span.end)),
+            item.original,
         )
     });
     contributions.dedup_by(|later, earlier| {

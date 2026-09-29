@@ -235,10 +235,10 @@ class RecordReplayTests(unittest.TestCase):
         item["provenance"].update({
             "settlement": "resolve",
             "contributions": [
-                {"recognizer_id": "synthetic:email", "role": "winner",
+                {"original": 0, "recognizer_id": "synthetic:email", "role": "winner",
                  "raw_start": start, "raw_end": end,
                  "tier": None, "defeat_kind": None, "defeated_by": None},
-                {"recognizer_id": "synthetic:name", "role": "defeated",
+                {"original": 1, "recognizer_id": "synthetic:name", "role": "defeated",
                  "raw_start": start, "raw_end": start + 5,
                  "tier": "class_priority", "defeat_kind": "pair",
                  "defeated_by": "synthetic:email"},
@@ -298,6 +298,35 @@ class RecordReplayTests(unittest.TestCase):
                 with self.assertRaisesRegex(record.RecordError, "disagrees with its trace lineage"):
                     record._read(forged)
 
+    def test_safety_net_and_residual_items_are_exempt_from_the_selection_join(self):
+        response = self.with_lineage()
+        base = {key: None for key in record.EVENT_FIELDS}
+        response["candidate_events"].append(
+            {**base, "original": 2, "recognizer_id": "synthetic:part", "class": "name",
+             "raw_start": 0, "raw_end": 5, "outcome": "unlinked"})
+        plain = {"tier": None, "defeat_kind": None, "defeated_by": None}
+        response["final_protection_trace"] = [
+            {"raw_start": 0, "raw_end": 5, "class": "name", "action": "tokenize",
+             "provenance": {"stage": "primary_pipeline", "decision": "policy",
+                            "source_ids": ["synthetic:part"], "settlement": "residual",
+                            "contributions": [{"original": 2, "recognizer_id": "synthetic:part",
+                                               "role": "winner", "raw_start": 0, "raw_end": 5,
+                                               **plain}]}},
+            *response["final_protection_trace"],
+            {"raw_start": 44, "raw_end": 50, "class": "name", "action": "redact",
+             "provenance": {"stage": "safety_net", "decision": "redact",
+                            "source_ids": ["nym"], "settlement": "safety_net",
+                            "contributions": [{"original": None, "recognizer_id": "nym",
+                                               "role": "winner", "raw_start": 44, "raw_end": 50,
+                                               **plain}]}},
+        ]
+        record.validate_response_lineage(response, 50, "exempt")
+        # A residual parent still needs its candidate event.
+        broken = copy.deepcopy(response)
+        broken["final_protection_trace"][0]["provenance"]["contributions"][0]["original"] = 9
+        with self.assertRaisesRegex(record.RecordError, "without a candidate event"):
+            record.validate_response_lineage(broken, 50, "exempt")
+
     def test_malformed_lineage_is_refused(self):
         typed = self.with_lineage()
         winner, defeated = typed["final_protection_trace"][0]["provenance"]["contributions"]
@@ -315,7 +344,8 @@ class RecordReplayTests(unittest.TestCase):
             "does not overlap its trace item": {"contributions": [
                 {**winner, "raw_start": 44, "raw_end": 50}]},
             "detected no span": {"contributions": [
-                winner, {**winner, "recognizer_id": "ner", "role": "derived_dependency"}]},
+                winner, {**winner, "original": None, "recognizer_id": "ner",
+                         "role": "derived_dependency"}]},
             "unknown conflict tier": {"contributions": [winner, {**defeated, "tier": "InventedTier"}]},
             "unknown defeat kind": {"contributions": [winner, {**defeated, "defeat_kind": "vibes"}]},
             "names no winner": {"contributions": [winner, {**defeated, "defeated_by": None}]},
@@ -344,7 +374,28 @@ class RecordReplayTests(unittest.TestCase):
             "not a placed candidate": [selected, {**lost, "winner": 1}],
             "unknown veto reason": [{**vetoed, "veto_reason": "felt_wrong"}],
         }
+        dependency = {**winner, "original": None, "recognizer_id": "ner", "role": "derived_dependency",
+                      "raw_start": None, "raw_end": None}
+        join_cases = {
+            # An empty events list cannot back a traced selection.
+            "contribution without a candidate event": ({}, []),
+            "contribution disagrees with its candidate's ID or span": (
+                {"contributions": [{**winner, "recognizer_id": "synthetic:other"}, defeated]}, None),
+            "not placed in its trace item's selection": (
+                {}, [{**selected, "selection_end": selected["selection_end"] - 1}, lost, vetoed]),
+            "settlement disagrees": ({}, [{**selected, "settlement": "recovery"}, lost, vetoed]),
+            "role disagrees with its candidate event": (
+                {"contributions": [{**winner, "role": "same_span_merge"}, defeated]}, None),
+            "defeated contribution disagrees": (
+                {"contributions": [winner, {**defeated, "tier": "score"}]}, None),
+            "defeated contribution disagrees with its candidate event": (
+                {"contributions": [winner, {**defeated, "defeated_by": "synthetic:name"}]}, None),
+            "event missing from its trace item": ({"contributions": [winner]}, None),
+            "has no pool candidate": ({"contributions": [winner, defeated, {**dependency, "original": 1}]}, None),
+        }
         cases = [(message, self.with_lineage(**change)) for message, change in trace_cases.items()]
+        cases += [(message, self.with_lineage(events=events, **change))
+                  for message, (change, events) in join_cases.items()]
         cases += [(message, self.with_lineage(events=events)) for message, events in event_cases.items()]
         for message, response in cases:
             with self.subTest(message):

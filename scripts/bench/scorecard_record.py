@@ -35,7 +35,7 @@ OUTCOMES = frozenset(VOCABULARY["outcomes"])
 CONFLICT_TIERS = frozenset(VOCABULARY["conflict_tiers"])
 VALIDATOR_FAIL_REASONS = frozenset(VOCABULARY["validator_fail_reasons"])
 CONTRIBUTION_FIELDS = frozenset({
-    "recognizer_id", "role", "raw_start", "raw_end", "tier", "defeat_kind", "defeated_by",
+    "original", "recognizer_id", "role", "raw_start", "raw_end", "tier", "defeat_kind", "defeated_by",
 })
 EVENT_FIELDS = frozenset({
     "original", "recognizer_id", "class", "raw_start", "raw_end", "outcome",
@@ -187,10 +187,75 @@ def validate_candidate_events(events: object, utf8_bytes: int, where: str) -> No
                 raise RecordError(f"{where}: a defeat's winner is not a placed candidate")
 
 
+# Items settled from a resolver selection; their contributions join candidate
+# events one to one. Exempt: `safety_net` (suspects have no pool candidate) and
+# `residual` (a residual cell is not a selection; its parents only need events).
+SELECTION_SETTLEMENTS = SETTLEMENTS - {"residual", "safety_net"}
+
+
 def validate_response_lineage(response: Mapping[str, object], utf8_bytes: int, where: str) -> None:
+    """Trace lineage and candidate events are each well formed, and they agree.
+
+    Every selection item's contribution names its pool candidate, whose event
+    places it in exactly that selection with the same role (or the same defeat),
+    span and settlement. Every event placed in a traced selection appears in
+    that item. Nothing here reads a value.
+    """
+    events = response["candidate_events"]
+    validate_candidate_events(events, utf8_bytes, where)
+    by_original: dict[int, list[Mapping[str, object]]] = {}
+    placed: dict[tuple[int, int, int], Mapping[str, object]] = {}
+    for event in events:
+        if event["original"] is None:
+            continue
+        by_original.setdefault(event["original"], []).append(event)
+        if event["outcome"] in {"selected", "defeated"}:
+            placed[(event["original"], event["selection_start"], event["selection_end"])] = event
+    traced: set[tuple[int, int]] = set()
+    joined: set[tuple[int, int, int]] = set()
     for item in response.get("final_protection_trace") or ():
         validate_lineage(item, utf8_bytes, where)
-    validate_candidate_events(response["candidate_events"], utf8_bytes, where)
+        settlement = item["provenance"]["settlement"]
+        span = (item["raw_start"], item["raw_end"])
+        if settlement in SELECTION_SETTLEMENTS:
+            traced.add(span)
+        for entry in item["provenance"]["contributions"]:
+            original = entry["original"]
+            if entry["role"] == "derived_dependency" or settlement == "safety_net":
+                if original is not None:
+                    raise RecordError(f"{where}: a {entry['role']} {settlement} entry has no pool candidate")
+                continue
+            candidates = by_original.get(original) if type(original) is int else None
+            if not candidates:
+                raise RecordError(f"{where}: contribution without a candidate event")
+            if any(
+                event["recognizer_id"] != entry["recognizer_id"]
+                or (event["raw_start"], event["raw_end"]) != (entry["raw_start"], entry["raw_end"])
+                for event in candidates
+            ):
+                raise RecordError(f"{where}: contribution disagrees with its candidate's ID or span")
+            if settlement == "residual":
+                continue
+            key = (original, *span)
+            event = placed.get(key)
+            if event is None:
+                raise RecordError(f"{where}: contribution not placed in its trace item's selection")
+            if event["settlement"] != settlement:
+                raise RecordError(f"{where}: candidate event settlement disagrees with its trace item")
+            if entry["role"] == "defeated":
+                winner = by_original.get(event["winner"], ())
+                if (event["outcome"] != "defeated"
+                        or (event["tier"], event["defeat_kind"]) != (entry["tier"], entry["defeat_kind"])
+                        or not winner or winner[0]["recognizer_id"] != entry["defeated_by"]):
+                    raise RecordError(f"{where}: defeated contribution disagrees with its candidate event")
+            elif event["outcome"] != "selected" or event["role"] != entry["role"]:
+                raise RecordError(f"{where}: contribution role disagrees with its candidate event")
+            if key in joined:
+                raise RecordError(f"{where}: candidate joined twice in one trace item")
+            joined.add(key)
+    for key in placed:
+        if key[1:] in traced and key not in joined:
+            raise RecordError(f"{where}: candidate event missing from its trace item")
 
 
 def _write_rows(path: Path, rows: Sequence[Mapping[str, object]]) -> None:

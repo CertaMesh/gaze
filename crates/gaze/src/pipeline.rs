@@ -7259,6 +7259,15 @@ mod tests {
             }
             other => panic!("expected a defeat, got {other:?}"),
         }
+        // Every trace contribution names the pool candidate whose event places it here.
+        for contribution in trace[0].contributions() {
+            let original = contribution.original().expect("pool candidate");
+            assert!(events.iter().any(|event| {
+                event.original == Some(original)
+                    && event.recognizer_id == contribution.recognizer_id()
+                    && Some(event.raw_span.clone()) == contribution.raw_span()
+            }));
+        }
     }
 
     /// `validate_clean_manifest` is defense in depth: `redact_text_with_manifest` emits an entry

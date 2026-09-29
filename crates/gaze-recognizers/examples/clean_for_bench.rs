@@ -148,6 +148,9 @@ struct FinalProtectionTraceProvenance {
 
 #[derive(Debug, Serialize)]
 struct FinalProtectionTraceContribution {
+    /// Pool index joining this entry to its `candidate_events` row; `None` for
+    /// a safety-net suspect or a derived dependency.
+    original: Option<usize>,
     recognizer_id: String,
     role: &'static str,
     raw_start: Option<usize>,
@@ -1199,6 +1202,7 @@ fn serialize_final_protection_trace(
                     .map(|contribution| {
                         let span = contribution.raw_span();
                         FinalProtectionTraceContribution {
+                            original: contribution.original(),
                             recognizer_id: contribution.recognizer_id().to_string(),
                             role: contribution.role().as_str(),
                             raw_start: span.as_ref().map(|span| span.start),
