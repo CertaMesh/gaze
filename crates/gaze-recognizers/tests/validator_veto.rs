@@ -106,8 +106,18 @@ fn bundled_ip_validators_name_documentation_vetoes_without_changing_parsing() {
         assert_fail(ipv4, address, ValidatorFailReason::Ipv4DocumentationRange);
         assert_pass(ValidatorKind::Ipv4Parse, address);
     }
-    for address in ["192.0.3.1", "192.168.1.1", "198.51.101.7"] {
+    for address in [
+        "192.0.3.1",
+        "192.168.1.1",
+        "198.51.101.7",
+        "126.255.255.255",
+        "128.0.0.1",
+    ] {
         assert_pass(ipv4, address);
+    }
+    for address in ["127.0.0.1", "127.255.0.9"] {
+        assert_fail(ipv4, address, ValidatorFailReason::Ipv4LoopbackRange);
+        assert_pass(ValidatorKind::Ipv4Parse, address);
     }
     assert_fail(ipv4, "192.000.2.1", ValidatorFailReason::Ipv4ParseFailed);
 
@@ -122,8 +132,13 @@ fn bundled_ip_validators_name_documentation_vetoes_without_changing_parsing() {
         assert_fail(ipv6, address, ValidatorFailReason::Ipv6DocumentationRange);
         assert_pass(ValidatorKind::Ipv6Parse, address);
     }
-    for address in ["2001:db9::1", "fe80::1", "::1", "::ffff:192.0.3.1"] {
+    for address in ["2001:db9::1", "fe80::1", "::2", "::ffff:192.0.3.1"] {
         assert_pass(ipv6, address);
+    }
+    // Loopback never leaves the host: rejected with its own reason, still a parseable address.
+    for address in ["::1", "::ffff:127.0.0.1", "::127.0.0.1"] {
+        assert_fail(ipv6, address, ValidatorFailReason::Ipv6LoopbackRange);
+        assert_pass(ValidatorKind::Ipv6Parse, address);
     }
     assert_fail(ipv6, "2001::1::2", ValidatorFailReason::Ipv6ParseFailed);
 }

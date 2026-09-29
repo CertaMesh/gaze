@@ -649,6 +649,63 @@ pub enum ValidatorFailReason {
     CnpjMod11Failed,
     /// UK NHS number MOD-11 checksum validation failed.
     UkNhsMod11Failed,
+    /// Built-in IPv4 rule excluded a loopback address (127.0.0.0/8).
+    Ipv4LoopbackRange,
+    /// Built-in IPv6 rule excluded a loopback address (`::1`, or an IPv4-mapped or IPv4-compatible
+    /// 127.0.0.0/8 address).
+    Ipv6LoopbackRange,
+}
+
+impl ValidatorFailReason {
+    /// Every variant, for closed-vocabulary checks (component ledger records).
+    #[doc(hidden)]
+    pub const ALL: &'static [Self] = &[
+        Self::LuhnFailed,
+        Self::IbanMod97Failed,
+        Self::EmailRfcRejected,
+        Self::PhoneE164Rejected,
+        Self::PhoneNationalRegionMismatch,
+        Self::Ipv4ParseFailed,
+        Self::Ipv6ParseFailed,
+        Self::Ipv4DocumentationRange,
+        Self::Ipv6DocumentationRange,
+        Self::EthEip55ChecksumFailed,
+        Self::AadhaarVerhoeffFailed,
+        Self::FrNirMod97Failed,
+        Self::DeSteuerIdMod1110Failed,
+        Self::BsnMod11Failed,
+        Self::CpfMod11Failed,
+        Self::CnpjMod11Failed,
+        Self::UkNhsMod11Failed,
+        Self::Ipv4LoopbackRange,
+        Self::Ipv6LoopbackRange,
+    ];
+
+    /// Fails to compile when a variant is added without extending [`Self::ALL`].
+    #[allow(dead_code)]
+    const fn all_is_exhaustive(value: Self) {
+        match value {
+            Self::LuhnFailed
+            | Self::IbanMod97Failed
+            | Self::EmailRfcRejected
+            | Self::PhoneE164Rejected
+            | Self::PhoneNationalRegionMismatch
+            | Self::Ipv4ParseFailed
+            | Self::Ipv6ParseFailed
+            | Self::Ipv4DocumentationRange
+            | Self::Ipv6DocumentationRange
+            | Self::EthEip55ChecksumFailed
+            | Self::AadhaarVerhoeffFailed
+            | Self::FrNirMod97Failed
+            | Self::DeSteuerIdMod1110Failed
+            | Self::BsnMod11Failed
+            | Self::CpfMod11Failed
+            | Self::CnpjMod11Failed
+            | Self::UkNhsMod11Failed
+            | Self::Ipv4LoopbackRange
+            | Self::Ipv6LoopbackRange => {}
+        }
+    }
 }
 
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
@@ -827,12 +884,20 @@ impl ValidatorKind {
             },
             None => ValidatorOutcome::Fail {
                 reason: match self {
-                    Self::Ipv4ParseNonDocumentation if ipv4_parse_check(input) => {
-                        ValidatorFailReason::Ipv4DocumentationRange
-                    }
-                    Self::Ipv6ParseNonDocumentation if ipv6_parse_check(input) => {
-                        ValidatorFailReason::Ipv6DocumentationRange
-                    }
+                    Self::Ipv4ParseNonDocumentation => match input.parse() {
+                        Ok(address) if ipv4_is_documentation(address) => {
+                            ValidatorFailReason::Ipv4DocumentationRange
+                        }
+                        Ok(_) => ValidatorFailReason::Ipv4LoopbackRange,
+                        Err(_) => self.fail_reason(),
+                    },
+                    Self::Ipv6ParseNonDocumentation => match input.parse() {
+                        Ok(address) if ipv6_is_documentation(address) => {
+                            ValidatorFailReason::Ipv6DocumentationRange
+                        }
+                        Ok(_) => ValidatorFailReason::Ipv6LoopbackRange,
+                        Err(_) => self.fail_reason(),
+                    },
                     _ => self.fail_reason(),
                 },
             },
@@ -854,12 +919,12 @@ impl ValidatorKind {
             Self::Ipv4ParseNonDocumentation => input
                 .parse::<std::net::Ipv4Addr>()
                 .ok()
-                .filter(|address| !ipv4_is_documentation(*address))
+                .filter(|address| !ipv4_is_documentation(*address) && !address.is_loopback())
                 .map(|_| input.to_string()),
             Self::Ipv6ParseNonDocumentation => input
                 .parse::<std::net::Ipv6Addr>()
                 .ok()
-                .filter(|address| !ipv6_is_documentation(*address))
+                .filter(|address| !ipv6_is_documentation(*address) && !ipv6_is_loopback(*address))
                 .map(|_| input.to_string()),
             Self::EthEip55 => eth_eip55_check(input).then(|| input.to_string()),
             Self::AadhaarVerhoeff => {
@@ -1182,6 +1247,12 @@ fn ipv6_is_documentation(address: std::net::Ipv6Addr) -> bool {
     let segments = address.segments();
     (segments[0] == 0x2001 && segments[1] == 0x0db8)
         || address.to_ipv4().is_some_and(ipv4_is_documentation)
+}
+
+/// `::1`, or an IPv4-mapped (`::ffff:127.0.0.1`) or IPv4-compatible (`::127.0.0.1`) loopback. A loopback
+/// address never leaves the host, so it identifies no person or device.
+fn ipv6_is_loopback(address: std::net::Ipv6Addr) -> bool {
+    address.is_loopback() || address.to_ipv4().is_some_and(|v4| v4.is_loopback())
 }
 
 fn eth_eip55_check(input: &str) -> bool {
@@ -2604,6 +2675,56 @@ pub enum ConflictTier {
 }
 
 impl ConflictTier {
+    /// Every variant, for closed-vocabulary checks (component ledger records).
+    #[doc(hidden)]
+    pub const ALL: &'static [Self] = &[
+        Self::None,
+        Self::ClassPriority,
+        Self::RulePriority,
+        Self::Score,
+        Self::SpanLength,
+        Self::Validator,
+        Self::SameClassContainment,
+        Self::ValidatorVeto,
+        Self::CollisionPolicy,
+        Self::AnchoredContext,
+        Self::StructuredContainment,
+        Self::ContainmentPrecedence,
+        Self::ProtectionOverride,
+        Self::RecognizerId,
+        Self::Merged,
+        Self::Redact,
+        Self::Resolve,
+        Self::Fallback,
+        Self::ManifestSweep,
+    ];
+
+    /// Fails to compile when a variant is added without extending [`Self::ALL`].
+    #[allow(dead_code)]
+    const fn all_is_exhaustive(value: Self) {
+        match value {
+            Self::None
+            | Self::ClassPriority
+            | Self::RulePriority
+            | Self::Score
+            | Self::SpanLength
+            | Self::Validator
+            | Self::SameClassContainment
+            | Self::ValidatorVeto
+            | Self::CollisionPolicy
+            | Self::AnchoredContext
+            | Self::StructuredContainment
+            | Self::ContainmentPrecedence
+            | Self::ProtectionOverride
+            | Self::RecognizerId
+            | Self::Merged
+            | Self::Redact
+            | Self::Resolve
+            | Self::Fallback
+            | Self::ManifestSweep => {}
+        }
+    }
+
     /// Returns the canonical audit-row spelling.
     pub fn as_str(&self) -> &'static str {
         match self {

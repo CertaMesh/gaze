@@ -181,16 +181,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Unsafe short values are skipped individually; the Rust context reports each
   safe field path and a typed reason. Duplicate class/value fields share one
   record source.
-- **Caller-known record matching uses measured defaults.** Round-3 v2/v1
-  attribution found a positive net-byte gain for nine class and match-kind
-  pairs. Exact address parts, card, IBAN, national ID, passport, phone,
-  Steuer ID, and unlisted single-token names remain on; case-folded unlisted
-  single-token names also remain on. Flexible whitespace, combined whitespace
-  and case folding, common-word corroboration, and other unmeasured pairs are
-  off by default. Adopters can enable them with `record_match_kinds` in the
-  call-scoped context JSON. These defaults reduce unmeasured false-positive
-  exposure but can leave caller-known values to ordinary detectors until the
-  separate oracle measures those variants.
+- **Caller-known record matching uses provisional defaults.** The earlier
+  attribution measured a benchmark configuration that differed from the
+  product, so the final v5 and layer K oracle still decides shipping defaults.
+  Exact address parts, card, IBAN, national ID, passport, phone, Steuer ID,
+  and unlisted single-token names are provisionally on. Multi-token names,
+  flexible whitespace, combined whitespace and case folding, and common-word
+  corroboration remain off until measured. Adopters can opt into them through
+  `record_match_kinds` in the call-scoped context JSON.
+- **Loopback IP addresses no longer tokenize.** The bundled IPv4 and IPv6
+  rules reject `127.0.0.0/8`, `::1` and IPv4-mapped or IPv4-compatible
+  loopback with the new
+  `ipv4_loopback_range` / `ipv6_loopback_range` reasons: a loopback address
+  never leaves the host. Private and link-local addresses stay protected.
 - **README and benchmark charts are static SVG panels** (solo todo #3932). One panel per benchmark with the value printed on every bar, light and dark variants, released Gaze versions and declared competitor configurations only; the mermaid `xychart-beta` charts (no labels on GitHub) and the README results table are gone. See `docs/reference/benchmarks/README.md#benchmark-panels`. The headline row is character-level F2 (β=2, label-agnostic, micro) with leaked bytes under each bar; tagged Gaze releases are scored by `release_char_level.py` from their committed observation records.
 
 - **The benchmark headline is scored-label contract v3** (solo todo #3696,
