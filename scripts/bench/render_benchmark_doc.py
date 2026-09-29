@@ -32,6 +32,8 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import benchmark_charts as charts
+from tagged_gaze import check_public
 from layer_display import layer_display_name
 from markdown_table import table_header
 
@@ -41,6 +43,7 @@ DEFAULT_DOC = BENCH_DIR / "README.md"
 DEFAULT_HISTORY = BENCH_DIR / "release-history.json"
 DEFAULT_COMPARISON = BENCH_DIR / "comparison.json"
 DEFAULT_README = REPO_ROOT / "README.md"
+CHART_ASSETS = Path("docs") / "assets" / "benchmarks"
 CHART_CONFIGS = REPO_ROOT / "scripts" / "bench" / "compare" / "chart-configs.json"
 
 HISTORY_SCHEMA_VERSION = 1
@@ -141,6 +144,8 @@ def check_gold_gap_arms(arms: Mapping[str, Any], contract_version: int, where: s
 
 
 BLOCK_NAMES = ("current-release", "charts", "history", "latency")
+#: Present only when a comparison report is rendered with the document.
+PANEL_BLOCK_NAMES = ("panels",)
 README_BLOCK_NAMES = ("readme-chart",)
 
 #: Plain-English chart labels for the arms a released row can carry. The table
@@ -1489,58 +1494,47 @@ def _render_contract_charts(history: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _competitor_family(name: str) -> str:
-    return name.split("-", 1)[0]
+def chart_gaze_rows(history: Mapping[str, Any]) -> list[charts.GazeRow]:
+    """Released Gaze defaults for the panels: the latest result group and the one before.
 
-
-def _competitor_label(name: str, tool: Mapping[str, Any]) -> str:
-    provenance = tool["provenance"]
-    if provenance.get("chart_label"):
-        return str(provenance["chart_label"])
-    if name == "presidio-strong":
-        return (f"Presidio {provenance['analyzer_version']}, "
-                f"{len(provenance['supported_languages'])} languages, "
-                "English transformer + spaCy lg, all applicable recognizers")
-    if name == "datafog-core":
-        return f"DataFog Core {provenance['version']}, built-in recognizers"
-    if name.startswith("datafog-"):
-        return f"DataFog Python {provenance['version']}, {provenance['engine']} engine"
-    if name.startswith("scrubadub-"):
-        plugin = " + spaCy en_core_web_lg" if provenance.get("plugin_version") else " built-ins"
-        return f"scrubadub {provenance['version']}{plugin}"
-    family = _competitor_family(name)
-    if family == "presidio":
-        languages = provenance["supported_languages"]
-        models = provenance["models"]
-        model_names = [
-            model.get("name", model.get("model_id", "")) for model in models.values()
-        ]
-        engine = provenance.get("nlp_engine") or (
-            "spaCy lg"
-            if all("_lg-" in model.get("wheel_source", "") for model in models.values())
-            else ", ".join(model_names)
+    A group counts through its newest release. Provisional rows (not measured on
+    the released tree) and groups scored on another corpus are dropped, and
+    `GazeRow` refuses anything that is not a `vX.Y.Z` tag, so an untagged
+    measurement cannot reach a chart.
+    """
+    releases = [entry for entry in history["releases"] if not entry.get("provisional")]
+    if not releases:
+        return []
+    dataset_sha = releases[-1]["dataset"]["integrity"]["sha256"]
+    rows: list[charts.GazeRow] = []
+    for group in release_groups(releases)[-2:]:
+        entry = group[-1]
+        if entry["dataset"]["integrity"]["sha256"] != dataset_sha:
+            continue
+        view = contract_view(entry, HEADLINE_CONTRACT)
+        if view is None:
+            continue
+        arm = view["arms"][shipped_default_arm(entry)]
+        rows.append(
+            charts.GazeRow(
+                entry["version"],
+                100.0 * (1.0 - arm["surviving_pii_utf8_bytes"] / arm["gold_pii_utf8_bytes"]),
+                arm["false_positive_utf8_bytes"],
+                arm["failed_closed_documents"],
+            )
         )
-        count = len(languages)
-        config = provenance.get("configuration") or (
-            f"{count} language{'s' if count != 1 else ''}, {engine}"
-        )
-        return f"Presidio {provenance['analyzer_version']}, {config}"
-    if family == "gliner":
-        config = provenance.get("configuration") or (
-            f"{provenance['model_repo']}, threshold {provenance['threshold']}"
-        )
-        return f"GLiNER {provenance['gliner_version']}, {config}"
-    if family == "opf":
-        config = provenance.get("configuration") or provenance["decode"]
-        return f"OPF {provenance['runtime']['version']}, {config}"
-    return f"{name}, {provenance.get('configuration', 'configuration unspecified')}"
+    return rows
 
 
-def readme_comparison_bars(
-    history: Mapping[str, Any], comparison: Mapping[str, Any], version: int
-) -> list[tuple[str, int]]:
-    """Layer C bars for configurations declared before measurement."""
+def chart_panels(
+    history: Mapping[str, Any], comparison: Mapping[str, Any], their: Mapping[str, Any]
+) -> list[charts.Panel]:
     latest = history["releases"][-1]
+    if comparison["latest_release_at_measurement"] != {
+        "version": latest["version"],
+        "scorecard_sha256": latest["scorecard_sha256"],
+    }:
+        raise RenderError("comparison report does not match the latest release row")
     components = latest["dataset"]["integrity"]["component_sha256"]
     corpus = comparison["corpus"]
     if (
@@ -1550,101 +1544,167 @@ def readme_comparison_bars(
         != latest["dataset"]["evaluated_population"]["documents"]
     ):
         raise RenderError("comparison report and release history use different layer C corpora")
-    contract = f"v{version}"
-    if contract not in comparison["gaze"]:
-        return []
-    gaze = comparison["gaze"][contract]
-    main_revision = comparison.get("gaze_main_revision")
-    if not isinstance(main_revision, str) or not re.fullmatch(r"[0-9a-f]{40}", main_revision):
-        raise RenderError("comparison report needs the main commit for Gaze's measured crates tree")
-    release = next(
-        (row["version"] for row in history["releases"] if row["commit"] == main_revision),
-        "unreleased",
-    )
-    gold = latest["arms"][shipped_default_arm(latest)]["gold_pii_utf8_bytes"]
-
-    def label(base: str, leaked: int) -> str:
-        return f"{base} ({leaked / gold:.1%})"
-
-    leaked = gaze["layers"]["C"]["leaked_bytes"]
-    bars = [(label(f"Gaze main {main_revision[:8]}, {release}", leaked), leaked)]
     config_bytes = CHART_CONFIGS.read_bytes()
-    config_sha = hashlib.sha256(config_bytes).hexdigest()
-    if comparison.get("schema_version", 1) >= 2 and comparison.get("chart_config_sha256") != config_sha:
+    if (
+        comparison.get("schema_version", 1) >= 2
+        and comparison.get("chart_config_sha256") != hashlib.sha256(config_bytes).hexdigest()
+    ):
         raise RenderError("comparison report chart configuration hash does not match")
     declared = json.loads(config_bytes)
     if len(set(declared.values())) != len(declared):
         raise RenderError("a README chart configuration was declared twice")
-    for family, name in declared.items():
-        tool = comparison["tools"].get(name)
-        if tool is None:
-            if comparison.get("schema_version", 1) >= 2:
-                raise RenderError(f"declared README chart configuration is missing: {name}")
-            continue
-        row = tool["contracts"].get(contract, {}).get("C")
-        if row is None:
-            raise RenderError(f"declared README chart configuration has no {contract} layer C: {name}")
-        skipped = (
-            f", {row['skipped_documents']} skipped" if row["skipped_documents"] else ""
+    for name in declared.values():
+        if name not in comparison["tools"]:
+            raise RenderError(f"declared README chart configuration is missing: {name}")
+    view = contract_view(latest, HEADLINE_CONTRACT)
+    if view is None:
+        raise RenderError("the latest release has no scored-labels v3 result for the panels")
+    gold = view["arms"][shipped_default_arm(latest)]["gold_pii_utf8_bytes"]
+    try:
+        return charts.panels(
+            chart_gaze_rows(history), comparison, their, declared, gold,
+            layer_display_name("C"),
         )
-        leaked = row["leaked_bytes"]
-        bars.append((label(_competitor_label(name, tool) + skipped, leaked), leaked))
-    return bars
+    except (charts.ChartError, KeyError) as error:
+        raise RenderError(f"benchmark panels: {error}") from error
+
+
+def chart_files(
+    history: Mapping[str, Any], comparison: Mapping[str, Any], their: Mapping[str, Any]
+) -> dict[str, str]:
+    try:
+        return charts.figure_files(chart_panels(history, comparison, their))
+    except charts.ChartError as error:
+        raise RenderError(f"benchmark panels: {error}") from error
+
+
+def _picture(prefix: str, alt: str) -> str:
+    base = f"{prefix}{CHART_ASSETS.as_posix()}/benchmark-panels"
+    return "\n".join(
+        [
+            "<picture>",
+            f'  <source media="(prefers-color-scheme: dark)" srcset="{base}-dark.svg">',
+            f'  <img alt="{alt}" src="{base}-light.svg">',
+            "</picture>",
+        ]
+    )
+
+
+_PANEL_ALT = (
+    "Bar panels of PII protected and false-positive bytes per 1,000 bytes for Gaze "
+    "releases and competitors on three benchmarks; the values are printed on the bars."
+)
+
+
+def _pending_note(panel_set: Sequence[charts.Panel]) -> str:
+    pending = [p.title for p in panel_set for b in p.bars if b.gaze and b.protected is None]
+    if not pending:
+        return ""
+    latest = [b.name for b in panel_set[0].bars if b.gaze][-1]
+    return (
+        f" {latest} on {' and '.join(pending)}: measurement pending; "
+        "no untagged build is shown."
+    )
 
 
 def render_readme_chart(
-    history: Mapping[str, Any], comparison: Mapping[str, Any] | None = None
+    history: Mapping[str, Any], comparison: Mapping[str, Any] | None = None,
+    their: Mapping[str, Any] | None = None,
 ) -> str:
     if not history["releases"]:
         return "> The chart renders once a release has been measured."
-    if comparison is not None:
-        latest = history["releases"][-1]
-        if comparison["latest_release_at_measurement"] != {
-            "version": latest["version"],
-            "scorecard_sha256": latest["scorecard_sha256"],
-        }:
-            raise RenderError("comparison report does not match the latest release row")
-    versions = shown_contracts(history)
-    if len(versions) == 1:
-        return _readme_contract_chart(history, comparison)
-    return "\n\n".join(
-        _readme_contract_chart(contract_history(history, version), comparison, version)
-        for version in versions
-    )
-
-
-def _readme_contract_chart(
-    history: Mapping[str, Any], comparison: Mapping[str, Any] | None,
-    version: int | None = None,
-) -> str:
-    releases = history["releases"]
-    entry = releases[-1]
-    if version is None:
-        version = _contract_key(entry)[0]
-    bars = comparison_bars(history)
-    if comparison is not None:
-        bars.extend(readme_comparison_bars(history, comparison, version))
+    if comparison is None:
+        # No comparison report: the history-only leak chart per contract.
+        versions = shown_contracts(history)
+        if len(versions) == 1:
+            return _readme_contract_chart(history)
+        return "\n\n".join(
+            _readme_contract_chart(contract_history(history, version))
+            for version in versions
+        )
+    if their is None:
+        raise RenderError("the README chart needs their-benchmarks.json")
+    panel_set = chart_panels(history, comparison, their)
+    own = panel_set[0]
+    gaze = [b for b in own.bars if b.gaze]
+    newest = gaze[-1]
     caption = (
-        f"The comparison bars use the same {comparison['corpus']['layers']['C']['documents']:,} "
-        f"documents from {layer_display_name('C')} and the same scorer. "
-        "The Gaze main bar is the run measured with the competitors. "
-        "Competitor bars use the declared configurations in "
-        "[`chart-configs.json`](scripts/bench/compare/chart-configs.json), "
-        "selected before results were reviewed. "
-        "Skipped documents count their gold bytes as leaked. "
-        "Configurations and false-positive bytes are in "
-        "[`competitors.md`](docs/reference/benchmarks/competitors.md)."
-        if comparison is not None else ""
+        f"{newest.name} protected {newest.protected:.1f}% of the PII bytes in "
+        f"{own.dataset.split(' docs')[0]} synthetic documents "
+        f"(scored labels v3), leaking {100 - newest.protected:.1f}%. "
+        "Each panel names its dataset and split; competitors run the configurations "
+        "declared in [`chart-configs.json`](scripts/bench/compare/chart-configs.json). "
+        "Numbers, sources and the model-card tables: "
+        "[benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
+        + _pending_note(panel_set)
     )
+    return "\n\n".join([_picture("", _PANEL_ALT), caption])
+
+
+def _readme_contract_chart(history: Mapping[str, Any]) -> str:
+    entry = history["releases"][-1]
     return "\n".join(
         [
             f"Leaked PII bytes per setup, {contract_label(entry)}, lower is better "
             "(generated from "
-            "[`release-history.json`](docs/reference/benchmarks/release-history.json)"
-            + (" and [`comparison.json`](docs/reference/benchmarks/comparison.json)" if comparison else "")
-            + "). " + f"{_leak_rate_caption(entry)} {caption}".rstrip(),
+            "[`release-history.json`](docs/reference/benchmarks/release-history.json)). "
+            + _leak_rate_caption(entry),
             "",
-            *_comparison_chart(history, bars, wide=comparison is not None),
+            *_comparison_chart(history, comparison_bars(history)),
+        ]
+    )
+
+
+def _source_lines(
+    history: Mapping[str, Any], comparison: Mapping[str, Any], their: Mapping[str, Any]
+) -> list[str]:
+    latest = history["releases"][-1]
+    dataset = latest["dataset"]
+    lines = [
+        f"- **Own corpus:** {layer_display_name('C')}, "
+        f"{dataset['evaluated_population']['documents']:,} documents, scored labels v3 (the labels Gaze commits to detect, protected repeats "
+        "credited). Gaze from [`release-history.json`](release-history.json) "
+        "(the shipped default of each tagged release); competitors from "
+        "[`comparison.json`](comparison.json)."
+    ]
+    for key, title in charts.THIRD_PARTY:
+        bench = their[key]
+        ident = bench["identity"]
+        split = next(iter(bench["splits"]))
+        source = ident.get("repository") or ident.get("piibench", {}).get("repository", key)
+        lines.append(
+            f"- **{title}:** {source} ({bench['splits'][split]['documents']:,} documents, "
+            f"{split} split), scored on the labels every tool can emit; rows from "
+            "[`their-benchmarks.json`](their-benchmarks.json)."
+        )
+    lines.append(
+        "- **Configurations:** competitors use the rows declared in "
+        "[`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen "
+        "before results were reviewed; full versions and settings are in "
+        "[`competitors.md`](competitors.md)."
+    )
+    lines.append(
+        "- **Metrics:** PII protected = 1 - leaked gold bytes / gold bytes. "
+        "False positives are bytes redacted that are not PII, per 1,000 corpus bytes; "
+        "the own corpus counts a protected repeat of a labelled value as protected "
+        "(contract v3), the third-party sets do not."
+    )
+    return lines
+
+
+def render_panels(
+    history: Mapping[str, Any], comparison: Mapping[str, Any] | None,
+    their: Mapping[str, Any] | None,
+) -> str:
+    if not history["releases"] or comparison is None or their is None:
+        return "> Panels render once a release and a comparison report exist."
+    panel_set = chart_panels(history, comparison, their)
+    return "\n\n".join(
+        [
+            _picture("../../../", _PANEL_ALT),
+            charts.model_card_tables(panel_set)
+            + ("\n\n" + _pending_note(panel_set).strip() if _pending_note(panel_set) else ""),
+            "\n".join(_source_lines(history, comparison, their)),
         ]
     )
 
@@ -2007,6 +2067,7 @@ def apply_blocks(
     names: Sequence[str] = BLOCK_NAMES,
     latency: Mapping[str, Any] | None = None,
     comparison: Mapping[str, Any] | None = None,
+    their: Mapping[str, Any] | None = None,
 ) -> str:
     """Replace each generated block in place, leaving all prose untouched.
 
@@ -2024,7 +2085,9 @@ def apply_blocks(
         if name == "latency":
             body = render_latency(history, latency)
         elif name == "readme-chart":
-            body = render_readme_chart(history, comparison)
+            body = check_public(render_readme_chart(history, comparison, their), "README chart")
+        elif name == "panels":
+            body = check_public(render_panels(history, comparison, their), "benchmark panels")
         else:
             body = RENDERERS[name](history)
         document = (
@@ -2199,6 +2262,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         readme = args.readme
         if readme is None and args.history.resolve() == DEFAULT_HISTORY.resolve():
             readme = DEFAULT_README
+        their_path = args.history.parent / "their-benchmarks.json"
+        their = (
+            json.loads(their_path.read_text(encoding="utf-8")).get("benchmarks")
+            if their_path.exists() else None
+        )
         targets = [(args.doc, BLOCK_NAMES)]
         if readme is not None:
             targets.append((readme, README_BLOCK_NAMES))
@@ -2208,12 +2276,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             comparison_path = DEFAULT_COMPARISON
         comparison = (json.loads(comparison_path.read_text(encoding="utf-8"))
                       if comparison_path else None)
+        if comparison is not None:
+            targets[0] = (args.doc, BLOCK_NAMES + PANEL_BLOCK_NAMES)
         outputs = []
         for path, names in targets:
             original = path.read_text(encoding="utf-8")
             outputs.append(
-                (path, original, apply_blocks(original, history, names, latency, comparison))
+                (path, original, apply_blocks(original, history, names, latency, comparison, their))
             )
+        if comparison is not None and readme is not None and their is not None:
+            assets = readme.parent / CHART_ASSETS
+            for name, svg in chart_files(history, comparison, their).items():
+                target = assets / name
+                outputs.append(
+                    (target, target.read_text(encoding="utf-8") if target.exists() else None, svg)
+                )
 
         if args.check:
             drifted = [path for path, original, rendered in outputs if rendered != original]
@@ -2229,6 +2306,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         for path, _, rendered in outputs:
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(rendered, encoding="utf-8")
         print(
             "render_benchmark_doc: wrote "
