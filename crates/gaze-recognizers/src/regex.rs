@@ -66,6 +66,8 @@ pub struct RegexDetector {
     /// (`gaze_types::payment_card::scan_card_run`). Set for a `luhn` recognizer whose pattern is
     /// `gaze_types::payment_card::CARD_RUN_PATTERN`, as `card.structural` is.
     card_runs: bool,
+    /// Benign structures that veto this recognizer's candidates (`benign_lookalike`).
+    benign_lookalikes: Vec<gaze_types::benign_lookalike::BenignLookalike>,
 }
 
 impl RegexDetector {
@@ -131,6 +133,7 @@ impl RegexDetector {
             ascii_email_boundary,
             identifier_run_boundary,
             card_runs,
+            benign_lookalikes: Vec::new(),
         })
     }
 
@@ -229,6 +232,10 @@ impl Recognizer for RegexDetector {
         self.validator_on_fail
     }
 
+    fn benign_lookalikes(&self) -> &[gaze_types::benign_lookalike::BenignLookalike] {
+        &self.benign_lookalikes
+    }
+
     fn locales(&self) -> &[LocaleTag] {
         &self.locales
     }
@@ -273,6 +280,25 @@ impl RegexDetector {
             }
         }
         self.validator_on_fail = on_fail;
+        Ok(self)
+    }
+
+    /// Benign structures that veto this recognizer's candidates. Refused on a recognizer whose
+    /// validator is a checksum or recorded failure: a value a checksum vouches for, or a
+    /// financial number kept despite its checksum, is never waved through by its surroundings.
+    pub fn with_benign_lookalikes(
+        mut self,
+        structures: Vec<gaze_types::benign_lookalike::BenignLookalike>,
+    ) -> Result<Self> {
+        if !structures.is_empty()
+            && self.validator_kind.is_some_and(|kind| kind.is_checksum())
+        {
+            return Err(RecognizerError::UnsupportedBenignLookalike {
+                recognizer_id: self.source.clone(),
+                reason: "a checksum-backed recognizer cannot be vetoed by context",
+            });
+        }
+        self.benign_lookalikes = structures;
         Ok(self)
     }
 

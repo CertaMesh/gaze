@@ -114,6 +114,9 @@ pub struct ContextSpec {
     pub boost: Option<f32>,
     pub exclusions: Vec<String>,
     pub reject_match_regex: Option<String>,
+    /// Benign structures (`gaze_types::benign_lookalike`) that veto this recognizer's
+    /// candidates, by rulepack spelling.
+    pub benign_lookalikes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -477,6 +480,8 @@ struct RawContextSpec {
     exclusions: Vec<String>,
     #[serde(default)]
     reject_match_regex: Option<String>,
+    #[serde(default)]
+    benign_lookalikes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -721,6 +726,7 @@ fn parse_recognizer(
             boost: context.boost,
             exclusions: context.exclusions,
             reject_match_regex: context.reject_match_regex,
+            benign_lookalikes: context.benign_lookalikes,
         }),
         validator,
         normalizer: raw.normalizer.map(|normalizer| NormalizerSpec {

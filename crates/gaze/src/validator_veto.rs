@@ -25,6 +25,20 @@ pub fn apply(
             kept.push(candidate);
             continue;
         };
+        // A weak, cue-less shape rule that opted in is vetoed when its match sits inside a
+        // benign structure (an order number's tail, an amount, a room). Only this recognizer's
+        // candidate goes; another candidate over the same bytes still protects them.
+        if let Some(structure) = recognizer
+            .benign_lookalikes()
+            .iter()
+            .find(|structure| structure.matches(input, candidate.span.clone()))
+        {
+            vetoed.push(VetoedCandidate {
+                candidate,
+                reason: structure.reason(),
+            });
+            continue;
+        }
         let Some(kind) = recognizer.validator_kind() else {
             kept.push(candidate);
             continue;

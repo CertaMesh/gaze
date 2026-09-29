@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub mod benign_lookalike;
 pub mod inspection;
 pub mod nym;
 pub mod payment_card;
@@ -637,6 +638,18 @@ pub enum ValidatorFailReason {
     CnpjMod11Failed,
     /// UK NHS number MOD-11 checksum validation failed.
     UkNhsMod11Failed,
+    /// Built-in IPv4 rule excluded a loopback address (127.0.0.0/8).
+    Ipv4LoopbackRange,
+    /// Built-in IPv6 rule excluded a loopback address (`::1` or an embedded 127.0.0.0/8).
+    Ipv6LoopbackRange,
+    /// The candidate ends a document-reference identifier (`SKU-DEMO-73821`).
+    BenignJoinedIdentifier,
+    /// A currency code or sign sits next to the candidate (`EUR 22186,12`).
+    BenignCurrencyAmount,
+    /// The candidate is part of a digit-group run longer than any phone number.
+    BenignDigitRunFragment,
+    /// A room, seat or gate label sits right before the candidate (`Room 4833`).
+    BenignLabelNumber,
 }
 
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
@@ -763,6 +776,24 @@ impl ValidatorKind {
         }
     }
 
+    /// Whether this validator is a checksum: a passing value is vouched for by its own digits,
+    /// so no surrounding text may veto it (`benign_lookalike`).
+    pub fn is_checksum(self) -> bool {
+        matches!(
+            self,
+            Self::Luhn
+                | Self::IbanMod97
+                | Self::EthEip55
+                | Self::AadhaarVerhoeff
+                | Self::FrNirMod97
+                | Self::DeSteuerIdMod1110
+                | Self::BsnMod11
+                | Self::CpfMod11
+                | Self::CnpjMod11
+                | Self::UkNhsMod11
+        )
+    }
+
     /// Parses a policy validator kind.
     pub fn parse(s: &str) -> Result<Self, ValidatorKindParseError> {
         match s {
@@ -815,12 +846,20 @@ impl ValidatorKind {
             },
             None => ValidatorOutcome::Fail {
                 reason: match self {
-                    Self::Ipv4ParseNonDocumentation if ipv4_parse_check(input) => {
-                        ValidatorFailReason::Ipv4DocumentationRange
-                    }
-                    Self::Ipv6ParseNonDocumentation if ipv6_parse_check(input) => {
-                        ValidatorFailReason::Ipv6DocumentationRange
-                    }
+                    Self::Ipv4ParseNonDocumentation => match input.parse() {
+                        Ok(address) if ipv4_is_documentation(address) => {
+                            ValidatorFailReason::Ipv4DocumentationRange
+                        }
+                        Ok(_) => ValidatorFailReason::Ipv4LoopbackRange,
+                        Err(_) => self.fail_reason(),
+                    },
+                    Self::Ipv6ParseNonDocumentation => match input.parse() {
+                        Ok(address) if ipv6_is_documentation(address) => {
+                            ValidatorFailReason::Ipv6DocumentationRange
+                        }
+                        Ok(_) => ValidatorFailReason::Ipv6LoopbackRange,
+                        Err(_) => self.fail_reason(),
+                    },
                     _ => self.fail_reason(),
                 },
             },
@@ -842,12 +881,12 @@ impl ValidatorKind {
             Self::Ipv4ParseNonDocumentation => input
                 .parse::<std::net::Ipv4Addr>()
                 .ok()
-                .filter(|address| !ipv4_is_documentation(*address))
+                .filter(|address| !ipv4_is_documentation(*address) && !address.is_loopback())
                 .map(|_| input.to_string()),
             Self::Ipv6ParseNonDocumentation => input
                 .parse::<std::net::Ipv6Addr>()
                 .ok()
-                .filter(|address| !ipv6_is_documentation(*address))
+                .filter(|address| !ipv6_is_documentation(*address) && !ipv6_is_loopback(*address))
                 .map(|_| input.to_string()),
             Self::EthEip55 => eth_eip55_check(input).then(|| input.to_string()),
             Self::AadhaarVerhoeff => {
@@ -1170,6 +1209,12 @@ fn ipv6_is_documentation(address: std::net::Ipv6Addr) -> bool {
     let segments = address.segments();
     (segments[0] == 0x2001 && segments[1] == 0x0db8)
         || address.to_ipv4().is_some_and(ipv4_is_documentation)
+}
+
+/// `::1`, or an IPv4-mapped or -compatible loopback (`::ffff:127.0.0.1`). A loopback
+/// address never leaves the host, so it identifies no person or device.
+fn ipv6_is_loopback(address: std::net::Ipv6Addr) -> bool {
+    address.is_loopback() || address.to_ipv4().is_some_and(|v4| v4.is_loopback())
 }
 
 fn eth_eip55_check(input: &str) -> bool {
@@ -4224,6 +4269,11 @@ pub trait Recognizer: Send + Sync {
     /// kinds where [`ValidatorKind::allows_recorded_failure`] holds.
     fn validator_on_fail(&self) -> ValidatorOnFail {
         ValidatorOnFail::Veto
+    }
+    /// Benign structures that veto this recognizer's candidate before conflict resolution
+    /// (`benign_lookalike`). Empty by default; only weak, cue-less shape rules opt in.
+    fn benign_lookalikes(&self) -> &[benign_lookalike::BenignLookalike] {
+        &[]
     }
     /// Locales where this recognizer is active.
     fn locales(&self) -> &[LocaleTag] {

@@ -39,7 +39,8 @@ pub use dob_judge::{
 pub use error::{RecognizerError, Result};
 #[cfg(feature = "phone-parser")]
 pub use gaze_types::Region;
-pub use gaze_types::{SafetyTier, ValidatorKind, ValidatorOnFail};
+pub use gaze_types::benign_lookalike::BenignLookalike;
+pub use gaze_types::{SafetyTier, ValidatorFailReason, ValidatorKind, ValidatorOnFail};
 pub use locale_aware::{
     LocaleAwareModel, LocaleAwareModelRegistry, ModelError, ModelHints, ModelInput, ModelSpan,
     ModelStage,
