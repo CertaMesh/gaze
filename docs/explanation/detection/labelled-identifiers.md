@@ -8,8 +8,9 @@ fixed identifier shape. English, German, French, Dutch, and Portuguese labels ar
 
 Only the value becomes a token. The label and punctuation remain visible so an agent can still
 understand the field. The original value bytes go into the manifest, so strict restore returns
-the input exactly. A terminal boundary stops the fallback from tokenizing a short prefix of a
-longer identifier. Bounded letter-led and digit-led groups may use spaces, dots, slashes, or hyphens.
+the input exactly. The terminal boundary rejects a contiguous suffix beyond the value grammar.
+Bounded letter-led and digit-led groups may use spaces, dots, slashes, or hyphens; a further
+space-separated group can still leave a partial match and needs a separate boundary check.
 Grouped numbers need at least three chunks, keeping ordinary decimal amounts out of this fallback.
 
 The rules do not infer a class from a bare value or a generic `id` or `number` field. A field
