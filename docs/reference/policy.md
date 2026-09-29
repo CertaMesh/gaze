@@ -199,7 +199,11 @@ separators. It recognizes EN/DE/FR/NL/PT keys: `email`, `e_mail`, `mail`,
 `date_de_naissance`, `geboortedatum`, `data_de_nascimento`; and `address`,
 `street`, `strasse`, `city`, `stadt`, `zip`, `postcode`, `plz`, `adresse`, `rue`,
 `ville`, `code_postal`, `adres`, `straat`, `plaats`, `endereco`, `rua`, `cidade`,
-`cep`. `field_map` overrides any inference, maps unknown keys to a built-in or
+`cep`. Email aliases map to `Email`, phone aliases to `custom:phone`, name aliases
+to `Name`, IBAN to `custom:iban`, birth-date aliases to `custom:date`, postal
+aliases (`zip`, `postcode`, `plz`, `code_postal`, `cep`) to
+`custom:postal_code`, and other address aliases to `Location`. `field_map`
+overrides any inference, maps unknown keys to a built-in or
 `custom:<name>` class, or sets a leaf to `"ignore"`. Unknown unmapped keys,
 mapping paths without a leaf, arrays, nulls and duplicate JSON keys fail closed.
 Record errors name the field path, never its value.

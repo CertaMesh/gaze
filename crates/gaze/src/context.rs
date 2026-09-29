@@ -429,9 +429,9 @@ fn inferred_record_class(key: &str) -> Option<PiiClass> {
         "iban" => "custom:iban",
         "dob" | "dateofbirth" | "birthdate" | "geburtsdatum" | "datedenaissance"
         | "geboortedatum" | "datadenascimento" => "custom:date",
-        "address" | "street" | "strasse" | "city" | "stadt" | "zip" | "postcode" | "plz"
-        | "adresse" | "rue" | "ville" | "codepostal" | "adres" | "straat" | "plaats"
-        | "endereco" | "rua" | "cidade" | "cep" => "Location",
+        "zip" | "postcode" | "plz" | "codepostal" | "cep" => "custom:postal_code",
+        "address" | "street" | "strasse" | "city" | "stadt" | "adresse" | "rue" | "ville"
+        | "adres" | "straat" | "plaats" | "endereco" | "rua" | "cidade" => "Location",
         _ => return None,
     };
     PiiClass::from_policy_name(class)
@@ -661,7 +661,8 @@ mod tests {
             ("geboorte_datum", PiiClass::Custom("date".into())),
             ("correioEletronico", PiiClass::Email),
             ("Strasse", PiiClass::Location),
-            ("plz", PiiClass::Location),
+            ("plz", PiiClass::Custom("postal_code".into())),
+            ("codePostal", PiiClass::Custom("postal_code".into())),
         ] {
             assert_eq!(inferred_record_class(key), Some(class), "{key}");
         }
