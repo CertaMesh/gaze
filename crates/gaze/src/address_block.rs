@@ -679,14 +679,16 @@ mod tests {
         let text = "Drusk Lane Suite 4, IL 00068";
         let street = 0..10;
         let suite = 11..18;
-        let found = grammar().grow(text, &[street.clone()], &[street, suite], CHAIN);
+        let claimed = [street, suite];
+        let found = grammar().grow(text, &claimed[..1], &claimed, CHAIN);
         assert!(found.is_empty());
     }
 
     #[test]
     fn inactive_locales_contribute_no_words() {
         let text = "Pellinorallee 7a, Wohnung 4";
-        let found = grammar().grow(text, &[0..16], &[0..16], &[LocaleTag::EnUs]);
+        let anchor = [Range { start: 0, end: 16 }];
+        let found = grammar().grow(text, &anchor, &anchor, &[LocaleTag::EnUs]);
         assert!(found.is_empty());
     }
 
