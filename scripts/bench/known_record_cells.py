@@ -36,7 +36,7 @@ from unittest.mock import patch
 import agentic_layers as agentic
 import gaze_bench_score as score
 
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 SEED = 2026092901
 LAYER = "K"
 SOURCE_POSITIVE = "known-record-kind-cells"
@@ -336,6 +336,19 @@ def _groups(value: str, size: int = 4) -> list[str]:
     return [value[i : i + size] for i in range(0, len(value), size)]
 
 
+# The NHS reserves numbers starting with 9 for testing; none is issued to a
+# patient (service-manual.nhs.uk, "Ask for NHS numbers").
+NHS_TEST_PREFIX = "9"
+
+
+def _nhs_test_number(rng: agentic.Rng) -> str:
+    while True:
+        payload = NHS_TEST_PREFIX + rng.digits(8)
+        check = agentic.nhs_check_digit(payload)
+        if check is not None:
+            return payload + check
+
+
 def _identifier(variant: str, rng: agentic.Rng) -> tuple[str, list[str], str]:
     """(record class, display groups, gold label)."""
     if variant.startswith("iban"):
@@ -353,7 +366,7 @@ def _identifier(variant: str, rng: agentic.Rng) -> tuple[str, list[str], str]:
         value = agentic._bsn(rng)
         return "custom:national_id", [value[:4], value[4:6], value[6:]], "NATIONALID"
     if variant.startswith("nhs"):
-        value = agentic._nhs(rng)
+        value = _nhs_test_number(rng)
         return "custom:national_id", [value[:3], value[3:6], value[6:]], "NATIONALID"
     return "custom:credit_card", _groups(agentic._card(rng)), "CREDITCARDNUMBER"
 

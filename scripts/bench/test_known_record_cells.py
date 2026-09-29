@@ -16,7 +16,7 @@ import known_record_cells as cells
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A generator change must bump GENERATOR_VERSION and this hash together.
-PINNED_CORPUS_SHA256 = "a54c383e598455321f795f56c7135b57034b2a84ab3f713143c4f1c85a84a8e3"
+PINNED_CORPUS_SHA256 = "16984c5264cb5e667a5931963a45fe212fa9f6a1c23fafb751d895103d5a6b6e"
 PAIRS = 84
 
 
@@ -220,6 +220,18 @@ class KnownRecordCellTests(unittest.TestCase):
                     self.assertTrue(validators[field.class_name](compact), field.raw)
                 if field.class_name == "custom:national_id":
                     self.assertTrue(agentic.bsn_valid(compact) or agentic.nhs_valid(compact), field.raw)
+
+    def test_nhs_numbers_stay_in_the_reserved_test_range(self) -> None:
+        nhs = [cell for cell in self.all_cells if cell.variant.startswith("nhs")]
+        self.assertEqual(len(nhs), 8)
+        for cell in nhs:
+            (field,) = cell.record
+            self.assertTrue(field.raw.startswith(cells.NHS_TEST_PREFIX), field.raw)
+            self.assertTrue(agentic.nhs_valid(field.raw.replace(" ", "")), field.raw)
+            for target in cell.targets:
+                digits = "".join(ch for ch in target_text(cell, target) if ch.isdigit())
+                self.assertEqual(len(digits), 10, cell.uid)
+                self.assertTrue(digits.startswith(cells.NHS_TEST_PREFIX), cell.uid)
 
     def test_single_line_surfaces_carry_no_line_break(self) -> None:
         for cell in self.all_cells:
