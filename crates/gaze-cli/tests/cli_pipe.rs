@@ -3466,6 +3466,31 @@ fn context_json_standalone_dictionary_detects_without_policy_entry() {
 }
 
 #[test]
+fn unsafe_record_value_warns_by_path_while_valid_iban_still_cleans() {
+    let dir = tempdir().unwrap();
+    let context_path = dir.path().join("context.json");
+    let iban = "DE36000000000000000000";
+    fs::write(
+        &context_path,
+        format!(r#"{{"record":{{"iban":"{iban}","name":"A"}}}}"#),
+    )
+    .unwrap();
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("clean")
+        .arg(format!("--context-json={}", context_path.display()))
+        .write_stdin(format!("IBAN {iban}"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("/name skipped: unsafe short match"));
+    assert!(!stderr.contains(iban));
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(!response["clean_text"].as_str().unwrap().contains(iban));
+}
+
+#[test]
 fn record_context_errors_and_unmatched_values_do_not_echo_context() {
     let dir = tempdir().unwrap();
     let context_path = dir.path().join("context.json");

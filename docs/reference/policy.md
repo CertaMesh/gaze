@@ -222,7 +222,8 @@ IBAN with a passing mod-97 checksum is accepted even when its country code is
 its only two letters. The Rust `Context::record_value_rejections` report gives
 each skipped field's safe path and typed reason, without its value. Check this
 report when loading a record so an unsupported value is not mistaken for a
-protected one.
+protected one. `gaze clean` also prints a path-only warning for each skipped
+value.
 Single-token names in the [version 1 common-word dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
 such as `Will`, `Grace`, `May` and `Mark`, are accepted. Their record recognizer
 is off by default; enabling `corroborated_single` requires corroboration at
