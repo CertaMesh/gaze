@@ -140,7 +140,7 @@ def test_oracle_filters_values_that_record_parser_rejects() -> None:
         ("Alice  Smith", "Name"),
         ("Alice\u00a0Smith", "Name"),
         ("Will", "Name"),
-        ("A12", "custom:order_id"),
+        ("A12", "custom:tag"),
     ]:
         assert not arm.safe_record_value(value, class_name)
     assert arm.safe_record_value("Jörg Straße", "Name")

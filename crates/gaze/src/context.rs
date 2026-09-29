@@ -539,7 +539,7 @@ mod tests {
             ("A", "Name"),
             ("Will", "Name"),
             ("12", "custom:phone"),
-            ("A12", "custom:order_id"),
+            ("A12", "custom:tag"),
         ] {
             let raw = serde_json::json!({"record":{"value":value},"field_map":{"/value":class}});
             let err = Context::from_json_str(&raw.to_string()).unwrap_err();
