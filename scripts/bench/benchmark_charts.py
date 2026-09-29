@@ -48,6 +48,15 @@ METRIC_DEFINITION = (
 )
 
 
+#: Why the F2 row and the false-positive row can differ in what they count as a false positive.
+FP_NOTE = (
+    "F2 counts every false-positive character for every tool; the false-positive row "
+    "(bytes redacted that are not PII, per 1,000 bytes of the scored documents) also credits "
+    "a protected repeat of a labelled value on the own corpus (contract v3). Every tool is "
+    "treated identically within each row, and the third-party sets have no such credit."
+)
+
+
 class ChartError(Exception):
     """The committed data cannot produce a truthful chart."""
 

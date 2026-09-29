@@ -9,9 +9,14 @@ headline scored-label contract, and feeds the spans to `ComparisonMetrics`, so
 the released Gaze and every competitor share one character-level scorer.
 
 `record` needs the corpus (`--dataset`, the Dataiku holdout parquet) and writes
-`docs/reference/benchmarks/release-char-level.json`. `check` needs neither corpus
-nor model: it verifies each stored row against the committed record hash, the
-release history's byte counts and the current metrics implementation hash.
+`docs/reference/benchmarks/release-char-level.json` plus a text-free evidence file,
+`release-char-level-evidence.json.gz`: per layer C document the scored gold byte
+intervals, the byte length, the positions of UTF-8 continuation bytes (so code
+points can be counted without the text) and, per release, the contract-ignored
+intervals. `check` needs neither corpus nor model: it hashes the evidence and the
+committed observation record, RECOMPUTES every byte and character count from them
+(trace spans from the record, intervals from the evidence), and requires them to
+equal the stored row, the release history's byte counts and the release tag's tree.
 
     uv run --project scripts/bench python scripts/bench/compare/release_char_level.py \\
       record --dataset target/bench-data/dataiku-en-de/test.parquet
@@ -21,6 +26,7 @@ release history's byte counts and the current metrics implementation hash.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import subprocess
@@ -36,10 +42,11 @@ import gaze_bench_score as score  # noqa: E402
 import render_benchmark_doc as history_doc  # noqa: E402
 import scorecard_record as record  # noqa: E402
 from comparison_metrics import ComparisonMetrics  # noqa: E402
-from tagged_gaze import require_tag  # noqa: E402
+from tagged_gaze import require_release_tag, require_tag, tag_commit  # noqa: E402
 
 BENCH_DIR = REPO / "docs/reference/benchmarks"
 OUTPUT = BENCH_DIR / "release-char-level.json"
+EVIDENCE = BENCH_DIR / "release-char-level-evidence.json.gz"
 METRICS = Path(__file__).with_name("comparison_metrics.py")
 CONTRACT = "v3"
 SCHEMA_VERSION = 1
@@ -63,18 +70,31 @@ class GitError(ValueError):
     """A git object the check needs is missing (for example, tags were not fetched)."""
 
 
-def crates_tree(ref: str) -> str:
-    """The `crates/` tree of a tag or commit, or a readable `GitError`."""
+def _crates_of(commit: str) -> str:
     try:
         return subprocess.check_output(
-            ["git", "rev-parse", f"{ref}:crates"], cwd=REPO, text=True, stderr=subprocess.PIPE
+            ["git", "rev-parse", f"{commit}:crates"], cwd=REPO, text=True, stderr=subprocess.PIPE
         ).strip()
     except (subprocess.CalledProcessError, FileNotFoundError) as error:
         detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) else str(error)
-        raise GitError(
-            f"cannot resolve {ref!r} in git ({detail}); the docs job must fetch tags "
-            "(actions/checkout fetch-depth: 0)"
-        ) from error
+        raise GitError(f"cannot read crates/ of {commit[:12]} ({detail})") from error
+
+
+def tag_crates_tree(version: str) -> str:
+    """The `crates/` tree of the commit the release TAG points at.
+
+    The tag is resolved as `refs/tags/<version>` (`tagged_gaze.tag_commit`), never as a
+    bare name, so a version-shaped branch cannot stand in for a release.
+    """
+    try:
+        return _crates_of(tag_commit(version))
+    except ValueError as error:  # UntaggedGazeError or GitError
+        raise GitError(str(error)) from error
+
+
+def commit_crates_tree(commit: str) -> str:
+    """The `crates/` tree of a commit sha (recording only; needs the commit locally)."""
+    return _crates_of(commit)
 
 
 def _release_records(history: dict) -> list[dict]:
@@ -85,8 +105,99 @@ def _release_records(history: dict) -> list[dict]:
     ]
 
 
+def continuation_intervals(text: str) -> list[list[int]]:
+    """Merged byte intervals of UTF-8 continuation bytes: code points = bytes minus these."""
+    out: list[list[int]] = []
+    for offset, byte in enumerate(text.encode("utf-8")):
+        if (byte & 0xC0) == 0x80:
+            if out and out[-1][1] == offset:
+                out[-1][1] = offset + 1
+            else:
+                out.append([offset, offset + 1])
+    return out
+
+
+def _pairs(intervals) -> list[tuple[int, int]]:
+    return [(int(start), int(end)) for start, end in intervals]
+
+
+def counts_from_evidence(spans, gold, ignored, cont, size) -> dict:
+    """Byte and code-point counts of one document, from intervals only (no text).
+
+    Mirrors `ComparisonMetrics.add`: predictions wholly inside ignored bytes are dropped,
+    the rest merged and stripped of ignored bytes; characters are bytes minus the
+    continuation bytes inside the interval.
+    """
+    gold = _pairs(gold)
+    ignored = _pairs(ignored)
+    cont = _pairs(cont)
+    retained = [
+        span for span in spans
+        if not ignored or not score.interval_is_covered(span, ignored)
+    ]
+    predicted = score.subtract_intervals(score.merge_intervals(retained), ignored)
+    leaked = score.subtract_intervals(gold, predicted)
+    tp_bytes = score.intersection_length(gold, predicted)
+
+    def chars(intervals) -> int:
+        return score.interval_length(intervals) - score.intersection_length(intervals, cont)
+
+    tp_chars = chars(gold) - chars(leaked)
+    return {
+        "leaked_bytes": score.interval_length(gold) - tp_bytes,
+        "false_positive_bytes": score.interval_length(predicted) - tp_bytes,
+        "total_bytes": size - score.interval_length(ignored),
+        "tp": tp_chars,
+        "fn": chars(leaked),
+        "fp": chars(predicted) - tp_chars,
+    }
+
+
+def recompute(entry: dict, evidence: dict, bench_dir: Path) -> dict:
+    """Recount one release from its committed observation record and the evidence."""
+    version, arm = entry["version"], history_doc.shipped_default_arm(entry)
+    _, observations = record._read(bench_dir / observation_of(entry)["file"])
+    ignored = evidence["ignored"].get(version, {})
+    total = {"leaked_bytes": 0, "false_positive_bytes": 0, "total_bytes": 0, "tp": 0, "fn": 0, "fp": 0}
+    seen = set()
+    for row in observations:
+        if row["layer"] != "C" or row["config"] != arm:
+            continue
+        uid = row["document_id"]
+        document = evidence["documents"].get(uid)
+        if document is None:
+            raise ValueError(f"{version}: record document {uid} has no evidence")
+        spans = [
+            (item["raw_start"], item["raw_end"])
+            for item in row["response"]["final_protection_trace"]
+        ]
+        counts = counts_from_evidence(
+            spans, document["gold"], ignored.get(uid, ()), document["cont"], document["size"]
+        )
+        for key in total:
+            total[key] += counts[key]
+        seen.add(uid)
+    if seen != set(evidence["documents"]):
+        raise ValueError(f"{version}: the record and the evidence cover different documents")
+    return total
+
+
+def write_evidence(path: Path, evidence: dict) -> str:
+    """Deterministic gzip JSON (no file name, fixed mtime, sorted keys); returns its SHA-256."""
+    payload = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    # No stored file name and a fixed mtime: the bytes depend on the content only.
+    with path.open("wb") as raw, gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as handle:
+        handle.write(payload)
+    return _sha256(path)
+
+
+def load_evidence(path: Path) -> dict:
+    with gzip.open(path, "rb") as handle:
+        return json.loads(handle.read())
+
+
 def measure_release(entry: dict, layer_c: list[score.Document], mapping: dict,
-                    typed_mapping: dict) -> dict:
+                    typed_mapping: dict, evidence: dict) -> dict:
     """Character-level metrics of the release's default arm on layer C under v3."""
     import compare  # noqa: E402  (imports the corpus stack lazily)
 
@@ -109,6 +220,14 @@ def measure_release(entry: dict, layer_c: list[score.Document], mapping: dict,
         compare.validate_labels(predictions, mapping)
         applied = score.apply_scored_label_contract([document], contract)[0]
         cell.add(applied, predictions)
+        gold, ignored, _retained = score.contract_scoring_view(applied, predictions)
+        evidence["documents"].setdefault(document.uid, {
+            "gold": [list(pair) for pair in gold],
+            "cont": continuation_intervals(document.text),
+            "size": len(document.text.encode("utf-8")),
+        })
+        if ignored:
+            evidence["ignored"].setdefault(entry["version"], {})[document.uid] = [list(p) for p in ignored]
         seen += 1
     if seen != len(layer_c):
         raise ValueError(f"{entry['version']}: record covers {seen} of {len(layer_c)} documents")
@@ -122,11 +241,11 @@ def measure_release(entry: dict, layer_c: list[score.Document], mapping: dict,
         "total_bytes": result["total_bytes"],
         "char_level": result["char_level"],
         "record_sha256": observation["sha256"],
-        "crates_tree": crates_tree(entry["version"]),
+        "crates_tree": tag_crates_tree(entry["version"]),
     }
 
 
-def build(dataset: Path) -> dict:
+def build(dataset: Path) -> tuple[dict, dict]:
     import compare
 
     history = history_doc.load_history(history_doc.DEFAULT_HISTORY)
@@ -134,20 +253,21 @@ def build(dataset: Path) -> dict:
     mapping = compare.load_mapping()["gaze"]
     typed = compare.typed_mapping_for_contract(mapping, CONTRACT)
     releases = {}
+    evidence: dict = {"schema_version": SCHEMA_VERSION, "documents": {}, "ignored": {}}
     for entry in _release_records(history):
-        require_tag(entry["version"], "release char-level")
+        require_release_tag(entry["version"], "release char-level")
         components = entry["dataset"]["integrity"]["component_sha256"]
         if (
             identity["main_dataset"]["sha256"] != components["dataiku"]
             or identity["negative_corpus_sha256"] != components["negative_corpus"]
         ):
             raise ValueError(f"{entry['version']}: the loaded corpus is not the one it was measured on")
-        row = measure_release(entry, layers["C"], mapping, typed)
+        row = measure_release(entry, layers["C"], mapping, typed, evidence)
         # Recording happens where the measured commit exists; the offline check reads the tag only.
-        if crates_tree(entry["commit"]) != row["crates_tree"]:
+        if commit_crates_tree(entry["commit"]) != row["crates_tree"]:
             raise ValueError(f"{entry['version']}: the tag and the measured commit hold different crates trees")
         releases[entry["version"]] = row
-    return {
+    return evidence, {
         "schema_version": SCHEMA_VERSION,
         "note": (
             "Character-level (Unicode code point), label-agnostic, micro P/R/F of each tagged "
@@ -181,35 +301,18 @@ def check_char_level(version: str, row: dict) -> None:
                          f"{row['false_positive_bytes']} false-positive bytes")
 
 
-def check_totals(version: str, row: dict, comparison: dict) -> None:
-    """`total_bytes` divides the false-positive rate, so it must be plausible.
-
-    It is the scored documents' bytes minus contract-ignored bytes. The contract's own
-    ignored labels fix an upper bound that comparison.json's tools reach (its largest
-    layer C block total); a release's own repeat credit can only lower it. It can never
-    be smaller than what was scored as gold.
-    """
-    char = row["char_level"]
-    ceiling = max(
-        tool["contracts"]["v3"]["C"]["metrics"]["product_coverage"]["full"]["total_bytes"]
-        for tool in comparison["tools"].values()
-        if "v3" in tool["contracts"]
-    )
-    floor = char["tp"] + char["fn"]
-    if not floor <= row["total_bytes"] <= ceiling:
-        raise ValueError(f"{version}: total_bytes {row['total_bytes']} is outside [{floor}, {ceiling}]")
-    if row["false_positive_bytes"] > row["total_bytes"]:
-        raise ValueError(f"{version}: false-positive bytes exceed total_bytes")
-
-
 def check(data: dict, history: dict, bench_dir: Path = BENCH_DIR) -> None:
-    """Offline consistency. Needs no corpus, but does read the committed records and
-    resolve the release tags in git (CI fetches tags; the measured commits need not be on origin)."""
-    comparison = json.loads((bench_dir / "comparison.json").read_text(encoding="utf-8"))
+    """Offline verification. Needs no corpus, but reads the committed evidence and
+    observation records and resolves the release TAGS in git (CI fetches tags; the
+    measured commits need not be on origin)."""
     if data["metrics_sha256"] != _sha256(METRICS):
         raise ValueError("release-char-level.json was measured with another comparison_metrics.py; rerun `record`")
+    evidence_path = bench_dir / EVIDENCE.name
+    if _sha256(evidence_path) != data["evidence_sha256"]:
+        raise ValueError("release-char-level-evidence.json.gz does not match its recorded hash")
+    evidence = load_evidence(evidence_path)
     for version, row in data["releases"].items():
-        require_tag(version, "release char-level")
+        require_release_tag(version, "release char-level")
         entry = next((e for e in history["releases"] if e["version"] == version), None)
         if entry is None:
             raise ValueError(f"{version} is not a release row in the history")
@@ -234,9 +337,18 @@ def check(data: dict, history: dict, bench_dir: Path = BENCH_DIR) -> None:
                     f"the history's {expected}"
                 )
         check_char_level(version, row)
-        check_totals(version, row, comparison)
+        # The decisive step: recount from the record and the evidence, compare to the row.
+        counted = recompute(entry, evidence, bench_dir)
+        stored = {
+            "leaked_bytes": row["leaked_bytes"], "false_positive_bytes": row["false_positive_bytes"],
+            "total_bytes": row["total_bytes"], "tp": row["char_level"]["tp"],
+            "fn": row["char_level"]["fn"], "fp": row["char_level"]["fp"],
+        }
+        if counted != stored:
+            differing = {k: (stored[k], counted[k]) for k in stored if stored[k] != counted[k]}
+            raise ValueError(f"{version}: stored counts differ from the recount (stored, recounted): {differing}")
         # The release tag (on origin) must still hold the detection code that was measured.
-        tag_tree = crates_tree(version)
+        tag_tree = tag_crates_tree(version)
         if row["crates_tree"] != tag_tree:
             raise ValueError(
                 f"{version}: the tag's crates tree {tag_tree[:12]} differs from the stored "
@@ -253,10 +365,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     history = history_doc.load_history(history_doc.DEFAULT_HISTORY)
     if args.command == "record":
-        data = build(args.dataset)
+        evidence, data = build(args.dataset)
+        data["evidence_sha256"] = write_evidence(EVIDENCE, evidence)
         check(data, history)
         OUTPUT.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        print(f"wrote {OUTPUT.relative_to(REPO)}")
+        print(f"wrote {OUTPUT.relative_to(REPO)} and {EVIDENCE.relative_to(REPO)}")
         return 0
     check(json.loads(OUTPUT.read_text(encoding="utf-8")), history)
     print("release-char-level.json matches the release history and metrics implementation")

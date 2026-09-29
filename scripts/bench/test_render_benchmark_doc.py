@@ -1091,6 +1091,21 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         opf = next(b for b in self.panels()[0].bars if b.name == "OPF")
         self.assertAlmostEqual(opf.fp_per_1k, 1000 * fp / block["total_bytes"])
 
+    def test_a_charted_version_must_be_a_real_git_tag(self):
+        import tagged_gaze
+
+        def no_tag(version, repo=None):
+            raise tagged_gaze.UntaggedGazeError(f"{version} is not a git tag in this checkout")
+
+        original = tagged_gaze.tag_commit
+        tagged_gaze.tag_commit = no_tag
+        try:
+            with self.assertRaisesRegex(render.RenderError, "not a git tag"):
+                render.chart_gaze_rows(self.history)
+        finally:
+            tagged_gaze.tag_commit = original
+        self.assertTrue(render.chart_gaze_rows(self.history))  # the real tags resolve
+
     def test_a_release_without_a_char_level_record_is_an_error_not_pending(self):
         history = copy.deepcopy(self.history)
         new = copy.deepcopy(history["releases"][-1])
@@ -1103,7 +1118,9 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         for path in (render.DEFAULT_README, render.DEFAULT_DOC):
             text = path.read_text(encoding="utf-8")
             for phrase in ("Unicode code points (not grapheme clusters)", "ignores labels",
-                           "micro", "0/0 = 0", "skipped document's gold characters as missed"):
+                           "micro", "0/0 = 0", "skipped document's gold characters as missed",
+                           "counts every false-positive character for every tool",
+                           "also credits a protected repeat"):
                 self.assertIn(phrase, text, (path.name, phrase))
 
     def test_model_card_bolds_the_best_value_per_row(self):

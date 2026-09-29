@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import benchmark_charts as charts
-from tagged_gaze import check_public
+from tagged_gaze import check_public, require_release_tag
 from layer_display import layer_display_name
 from markdown_table import table_header
 
@@ -1527,6 +1527,10 @@ def chart_gaze_rows(history: Mapping[str, Any]) -> list[charts.GazeRow]:
                 "release-char-level.json; run compare/release_char_level.py record "
                 "(only a third-party Gaze slot may read pending)"
             )
+        try:
+            require_release_tag(entry["version"], "chart Gaze bar")
+        except ValueError as error:  # UntaggedGazeError: a version-shaped name that is no git tag
+            raise RenderError(str(error)) from error
         rows.append(
             charts.GazeRow(
                 entry["version"],
@@ -1647,7 +1651,7 @@ def render_readme_chart(
         "[benchmarks](docs/reference/benchmarks/README.md#benchmark-panels)."
         + _pending_note(panel_set)
     )
-    definition = charts.METRIC_DEFINITION
+    definition = f"{charts.METRIC_DEFINITION} {charts.FP_NOTE}"
     return "\n\n".join([_picture("", _PANEL_ALT), caption, definition])
 
 
@@ -1695,12 +1699,7 @@ def _source_lines(
         "[`competitors.md`](competitors.md)."
     )
     lines.append(f"- **Metric:** {charts.METRIC_DEFINITION}")
-    lines.append(
-        "- **False positives:** bytes redacted that are not PII, per 1,000 bytes of the scored "
-        "documents, from the same all-labels view as the F2 and leaked bytes; the own corpus "
-        "counts a protected repeat of a labelled value as protected (contract v3), the "
-        "third-party sets do not."
-    )
+    lines.append(f"- **False positives:** {charts.FP_NOTE}")
     lines.append(
         "- **Vendors' own metrics:** "
         + "; ".join(f"{title}: {vendor}" for _, title, vendor in charts.THIRD_PARTY)

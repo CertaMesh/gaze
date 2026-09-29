@@ -1,4 +1,5 @@
 {
+  "evidence_sha256": "1e9b37dbd6d666d4696d72454aec92abd61938a66bdc76b01d123cf6227cfc70",
   "metrics_sha256": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
   "note": "Character-level (Unicode code point), label-agnostic, micro P/R/F of each tagged release's shipped default on layer C under the v3 contract, scored by the same ComparisonMetrics as the competitors.",
   "releases": {

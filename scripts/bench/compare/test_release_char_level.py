@@ -46,16 +46,18 @@ def test_check_refuses_tampered_rows(mutation, match) -> None:
 
 
 @pytest.mark.skipif(not CORPUS.exists(), reason="needs the local benchmark corpus")
-def test_record_reproduces_the_committed_scores() -> None:
-    rebuilt = rcl.build(CORPUS)
+def test_record_reproduces_the_committed_scores(tmp_path) -> None:
+    evidence, rebuilt = rcl.build(CORPUS)
+    rebuilt["evidence_sha256"] = rcl.write_evidence(Path(tmp_path) / "evidence.json.gz", evidence)
     assert rebuilt == DATA
+    assert rcl.load_evidence(Path(tmp_path) / "evidence.json.gz") == rcl.load_evidence(rcl.EVIDENCE)
 
 
 def test_a_corrupted_record_file_is_refused(tmp_path) -> None:
     """`check` hashes the committed record itself, not just the hash the history states."""
     import shutil
 
-    shutil.copy(rcl.BENCH_DIR / "comparison.json", tmp_path / "comparison.json")
+    shutil.copy(rcl.EVIDENCE, tmp_path / rcl.EVIDENCE.name)
     for entry in HISTORY["releases"]:
         observation = rcl.observation_of(entry)
         if observation:
@@ -98,32 +100,107 @@ def test_character_counts_cannot_exceed_the_byte_counts() -> None:
     rcl.check_char_level("v9.9.9", row)
 
 
+
+
 def test_check_needs_only_the_tags_not_the_history_commits(monkeypatch) -> None:
     """History commits may live only on a local branch; the check never resolves them."""
-    real = rcl.crates_tree
+    real = rcl._crates_of
     commits = {entry["commit"] for entry in HISTORY["releases"]}
 
-    def tags_only(ref: str) -> str:
-        if ref in commits:
-            raise rcl.GitError(f"cannot resolve {ref!r}: not on this remote")
-        return real(ref)
+    def tags_only(commit: str) -> str:
+        if commit in commits:
+            raise rcl.GitError(f"cannot read crates/ of {commit[:12]}: not on this remote")
+        return real(commit)
 
-    monkeypatch.setattr(rcl, "crates_tree", tags_only)
+    monkeypatch.setattr(rcl, "_crates_of", tags_only)
     rcl.check(DATA, HISTORY)
 
 
-def test_a_missing_tag_is_a_readable_error_not_a_traceback(monkeypatch) -> None:
-    def missing(ref: str) -> str:
-        return real(ref if not ref.startswith("v9") else "no-such-tag")
-
-    real = rcl.crates_tree
-    with pytest.raises(rcl.GitError, match="cannot resolve 'no-such-tag'.*fetch-depth: 0"):
-        missing("v9.9.9")
+def test_a_missing_tag_is_a_readable_error_not_a_traceback() -> None:
+    with pytest.raises(rcl.GitError, match="v9.9.9 is not a git tag.*fetch-depth: 0"):
+        rcl.tag_crates_tree("v9.9.9")
     data = copy.deepcopy(DATA)
     data["releases"]["v9.9.9"] = copy.deepcopy(data["releases"]["v0.15.1"])
     history = copy.deepcopy(HISTORY)
     row = copy.deepcopy(history["releases"][-1])
     row["version"] = "v9.9.9"
     history["releases"].append(row)
-    with pytest.raises(rcl.GitError, match="cannot resolve 'v9.9.9'"):
+    with pytest.raises(Exception, match="v9.9.9 is not a git tag"):
         rcl.check(data, history)
+
+
+def test_a_version_shaped_branch_is_not_a_release_tag(tmp_path) -> None:
+    """`git rev-parse v1.2.3:crates` resolves branches too; the tag namespace must be named."""
+    import subprocess
+
+    from tagged_gaze import UntaggedGazeError, tag_commit
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "-c",
+                        "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
+                       cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q", "-b", "main")
+    (tmp_path / "crates").mkdir()
+    (tmp_path / "crates" / "f").write_text("x")
+    git("add", "-A")
+    git("commit", "-q", "-m", "c")
+    git("branch", "v1.2.3")
+    assert subprocess.run(["git", "rev-parse", "v1.2.3:crates"], cwd=tmp_path,
+                          capture_output=True).returncode == 0  # the trap this guards against
+    with pytest.raises(UntaggedGazeError, match="not a git tag"):
+        tag_commit("v1.2.3", tmp_path)
+    git("tag", "-a", "-m", "release", "v1.2.4")
+    assert len(tag_commit("v1.2.4", tmp_path)) == 40
+
+
+def test_forged_counts_with_consistent_scores_fail_the_recount() -> None:
+    """P/R/F2 that follow from forged tp/fp/fn still contradict the record and evidence."""
+    data = copy.deepcopy(DATA)
+    char = data["releases"]["v0.15.1"]["char_level"]
+    char.update(tp=120000, fp=0, fn=2494)
+    char.update(precision=1.0, recall=120000 / 122494)
+    char["f2"] = 5 * 1.0 * char["recall"] / (4 * 1.0 + char["recall"])
+    with pytest.raises(ValueError, match="differ from the recount"):
+        rcl.check(data, HISTORY)
+
+
+def _copy_bench(tmp_path):
+    import shutil
+
+    shutil.copy(rcl.EVIDENCE, tmp_path / rcl.EVIDENCE.name)
+    for entry in HISTORY["releases"]:
+        observation = rcl.observation_of(entry)
+        if observation:
+            shutil.copy(rcl.BENCH_DIR / observation["file"], tmp_path / observation["file"])
+    return tmp_path
+
+
+def test_edited_evidence_is_refused_by_its_hash(tmp_path) -> None:
+    bench = _copy_bench(tmp_path)
+    evidence = rcl.load_evidence(bench / rcl.EVIDENCE.name)
+    uid = next(iter(evidence["documents"]))
+    evidence["documents"][uid]["gold"].append([0, 1])
+    rcl.write_evidence(bench / rcl.EVIDENCE.name, evidence)
+    with pytest.raises(ValueError, match="does not match its recorded hash"):
+        rcl.check(DATA, HISTORY, bench)
+
+
+def test_rehashed_forged_evidence_still_fails_the_recount(tmp_path) -> None:
+    """An attacker who also updates the stored evidence hash is caught by the byte counts."""
+    bench = _copy_bench(tmp_path)
+    evidence = rcl.load_evidence(bench / rcl.EVIDENCE.name)
+    for document in evidence["documents"].values():
+        document["gold"] = []  # nothing leaked, nothing missed
+    data = copy.deepcopy(DATA)
+    data["evidence_sha256"] = rcl.write_evidence(bench / rcl.EVIDENCE.name, evidence)
+    with pytest.raises(ValueError, match="differ"):
+        rcl.check(data, HISTORY, bench)
+
+
+def test_evidence_holds_offsets_only_no_document_text() -> None:
+    evidence = rcl.load_evidence(rcl.EVIDENCE)
+    assert set(evidence) == {"schema_version", "documents", "ignored"}
+    for document in evidence["documents"].values():
+        assert set(document) == {"gold", "cont", "size"}
+        assert all(isinstance(number, int) for pair in document["gold"] + document["cont"] for number in pair)
