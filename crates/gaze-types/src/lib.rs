@@ -650,6 +650,7 @@ impl ValidatorFailReason {
     /// Every variant, for closed-vocabulary checks (component ledger records).
     #[doc(hidden)]
     pub const ALL: &'static [Self] = &[
+        Self::RegexGuardRejected,
         Self::LuhnFailed,
         Self::IbanMod97Failed,
         Self::EmailRfcRejected,
@@ -675,7 +676,8 @@ impl ValidatorFailReason {
     #[allow(dead_code)]
     const fn all_is_exhaustive(value: Self) {
         match value {
-            Self::LuhnFailed
+            Self::RegexGuardRejected
+            | Self::LuhnFailed
             | Self::IbanMod97Failed
             | Self::EmailRfcRejected
             | Self::PhoneE164Rejected
