@@ -38,6 +38,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 import scorecard_record as record
 from render_benchmark_doc import begin_marker, end_marker
+from tagged_gaze import check_public
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -804,6 +805,25 @@ def load(root: Path = ROOT) -> tuple[dict[str, Any], Path, list[dict[str, Any]]]
     return index, record_path, rows
 
 
+def public_body(index: Mapping[str, Any]) -> str:
+    """What the benchmark page shows: a pointer, never the ledger's numbers.
+
+    The ledger classifies the leaked bytes of an unreleased main build. Public
+    pages show tagged releases only (`tagged_gaze.py`), so the table stays out of
+    the page; the rows, the record and every total remain committed evidence and
+    `check` still re-derives all of them.
+    """
+    return check_public(
+        "The leak ledger classifies every leaked gold byte of an unreleased build by root "
+        "cause. Public pages show tagged releases only, so its table is not shown here. "
+        f"The classified rows ([`leak-ledger.json`]({INDEX.name}) and "
+        f"[its row file]({index['rows']['file'].split('benchmarks/', 1)[-1]})) stay committed, and "
+        "`python3 scripts/bench/leak_ledger.py check` re-derives their totals from the "
+        "observation record under every scored-label contract.",
+        "leak-ledger block",
+    )
+
+
 def derive(root: Path = ROOT) -> tuple[dict[str, Any], str]:
     index, record_path, rows = load(root)
     _, expected = leaked_spans(record_path)
@@ -845,12 +865,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                   dataset=args.dataset, model_dir=args.model_dir, machine=args.machine,
                   main_revision=args.main_revision, main_binary=args.main_binary,
                   record_binary_sha256=args.record_binary_sha256)
-        totals, body = derive()
+        totals, _ = derive()
+        index = load()[0]
         original = DOC.read_text(encoding="utf-8")
-        rendered = apply(original, body)
+        rendered = apply(original, public_body(index))
         if args.command == "check":
             if rendered != original:
-                raise LedgerError("leak-ledger table differs from the committed ledger")
+                raise LedgerError("leak-ledger block differs from the committed ledger")
             print("leak ledger matches its record under contracts "
                   + ", ".join(f"v{version}" for version in sorted(totals)))
         else:
