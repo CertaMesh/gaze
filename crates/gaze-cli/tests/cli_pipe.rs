@@ -2587,14 +2587,18 @@ fn s1_rulepack_bundled_and_path_no_policy_tokenize_both_sources() {
 
     let logger = SqliteLogger::new(&audit_path).expect("audit log opens");
     let entries = logger.entries().expect("audit entries");
-    assert_eq!(entries.len(), 2, "both detections must be audited");
+    let winners = entries
+        .iter()
+        .filter(|entry| !entry.conflict_loser)
+        .collect::<Vec<_>>();
+    assert_eq!(winners.len(), 2, "both detections must be audited");
     assert!(
-        entries
+        winners
             .iter()
             .all(|entry| entry.action == gaze::Action::Tokenize),
-        "every audited detection must be tokenized, none preserved: {entries:?}"
+        "every winning detection must be tokenized, none preserved: {entries:?}"
     );
-    let path_entry = entries
+    let path_entry = winners
         .iter()
         .find(|entry| matches!(entry.class, PiiClass::Custom(ref name) if name == "class_alpha"))
         .expect("the path rulepack's custom:class_alpha detection must be audited");

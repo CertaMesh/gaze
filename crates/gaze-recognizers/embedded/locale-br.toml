@@ -3,6 +3,9 @@ rulepack_id = "gaze-locale-br"
 rulepack_version = "0.5.1"
 default_locales = ["pt-BR"]
 
+[locale.phone_labels]
+names = ["telefone", "celular", "telemóvel", "telemovel", "tel"]
+
 [locale.cues.cpf]
 names = ["CPF", "Cadastro de Pessoas Físicas", "Cadastro de Pessoas Fisicas"]
 window_chars = 64

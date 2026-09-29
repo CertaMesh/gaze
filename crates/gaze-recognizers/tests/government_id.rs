@@ -22,9 +22,9 @@
 
 use gaze::Context;
 use gaze::{
-    Action, CleanDocument, ConflictTier, DictionaryBundle, LocaleBasis, LocaleChain, LocaleTag,
-    PiiClass, Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec,
-    Rulepack, RulepackSource, Scope, Session,
+    Action, CleanDocument, DictionaryBundle, LocaleBasis, LocaleChain, LocaleTag, PiiClass,
+    Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
+    RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
 use gaze_types::ValidatorFailReason;
@@ -124,18 +124,17 @@ fn clean_with_winners(chain: &[LocaleTag], text: &str) -> (String, Vec<String>) 
 }
 
 #[test]
-fn steuer_id_validator_veto_precedes_tax_number_fallback() {
+fn failed_cued_steuer_id_is_tokenized_with_audit_reason() {
     let invalid = "Steuer-ID 48 954 371 208";
     let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], invalid);
-    assert_eq!(cleaned, invalid, "invalid Steuer-ID must remain raw");
+    assert!(!cleaned.contains("48 954 371 208"));
     assert_eq!(
         entries.len(),
         1,
-        "tax-number must not claim the vetoed shape"
+        "tax-number must not claim the Steuer-ID shape"
     );
     assert_eq!(entries[0].recognizer_id.as_deref(), Some("steuer_id.de"));
-    assert!(entries[0].conflict_loser);
-    assert_eq!(entries[0].decided_by, ConflictTier::ValidatorVeto);
+    assert!(!entries[0].conflict_loser);
     assert_eq!(
         entries[0].validator_fail_reason,
         Some(ValidatorFailReason::DeSteuerIdMod1110Failed)
@@ -150,6 +149,31 @@ fn steuer_id_validator_veto_precedes_tax_number_fallback() {
         .filter_map(|entry| entry.recognizer_id.as_deref())
         .collect::<Vec<_>>();
     assert_eq!(winners, vec!["steuer_id.de"]);
+
+    let repeated = "Steuer-ID 48 954 371 208; note 48 954 371 208";
+    let (cleaned, _) = clean_with_entries(&[LocaleTag::Global], repeated);
+    assert_eq!(cleaned.matches("48 954 371 208").count(), 1);
+}
+
+#[test]
+fn all_zero_ids_and_vehicle_identification_cue_stay_raw() {
+    for text in [
+        "Steuer-ID 00000000000",
+        "Steuer-ID 00 000 000 000",
+        "BSN 000000000",
+        "Fahrzeug-Identifikationsnummer 86095742718",
+        "Fahrzeugidentifikationsnummer 86095742718",
+    ] {
+        let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], text);
+        assert_eq!(cleaned, text, "{text:?}");
+        assert!(
+            entries.iter().all(|entry| entry.conflict_loser),
+            "{entries:?}"
+        );
+    }
+    let (cleaned, _) =
+        clean_with_entries(&[LocaleTag::Global], "Identifikationsnummer 86095742718");
+    assert!(!cleaned.contains("86095742718"));
 }
 
 fn clean_under(chain: &[LocaleTag], text: &str) -> String {

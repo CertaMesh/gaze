@@ -120,7 +120,7 @@ pub struct ContextSpec {
 pub struct ValidatorSpec {
     pub kind: String,
     /// What validator veto does when the validator fails: `veto` (default) or `record`.
-    /// `record` is accepted only for `luhn` and `iban_mod97`; see
+    /// `record` is accepted only for an explicit validator allowlist; see
     /// [`gaze_types::ValidatorKind::allows_recorded_failure`].
     pub on_fail: gaze_types::ValidatorOnFail,
 }
@@ -222,7 +222,7 @@ pub enum RulepackError {
     UnsupportedValidator { kind: String },
     #[error(
         "recognizer '{recognizer_id}': validator '{kind}' does not support on_fail = '{on_fail}'; \
-         only luhn and iban_mod97 may record a failure, every other validator vetoes"
+         only the explicit recorded-failure allowlist may keep a failed candidate"
     )]
     UnsupportedValidatorOnFail {
         recognizer_id: String,
@@ -638,9 +638,8 @@ impl From<RawLocaleData> for LocaleData {
     }
 }
 
-/// `on_fail = "record"` keeps a candidate whose validator failed. Only IBAN mod-97 and Luhn
-/// allow it (user ruling 2026-09-27); any other validator fails closed at load, so no rulepack
-/// can relax a tax, national-ID or other checksum by accident.
+/// `on_fail = "record"` keeps a candidate whose validator failed. Only the explicit
+/// validator allowlist accepts it; each rulepack recognizer must opt in.
 fn parse_validator_spec(
     recognizer_id: &str,
     raw: RawValidatorSpec,
@@ -654,10 +653,12 @@ fn parse_validator_spec(
         None => gaze_types::ValidatorOnFail::Veto,
         Some(value) => gaze_types::ValidatorOnFail::parse(value).ok_or_else(|| refuse(value))?,
     };
-    if on_fail == gaze_types::ValidatorOnFail::Record
-        && !gaze_types::ValidatorKind::parse(&raw.kind)
-            .is_ok_and(gaze_types::ValidatorKind::allows_recorded_failure)
-    {
+    // Phone kinds cannot parse without phone-parser, but the bundled rulepack
+    // must still load. Detector construction resolves them for its feature graph.
+    let recordable = gaze_types::ValidatorKind::parse(&raw.kind)
+        .map(gaze_types::ValidatorKind::allows_recorded_failure)
+        .unwrap_or_else(|_| matches!(raw.kind.as_str(), "e164_phone" | "e164_phone_national_us"));
+    if on_fail == gaze_types::ValidatorOnFail::Record && !recordable {
         return Err(refuse("record"));
     }
     Ok(ValidatorSpec {
@@ -1406,6 +1407,13 @@ window_chars = 48
         assert_eq!(bundle.window_chars, Some(64));
     }
 
+    #[cfg(not(feature = "bundled-recognizers"))]
+    #[test]
+    fn embedded_core_loads_without_phone_parser() {
+        let core = include_str!("../../gaze-recognizers/embedded/core.toml");
+        Rulepack::load(RulepackSource::Embedded(core)).expect("embedded core must load");
+    }
+
     #[cfg(feature = "bundled-recognizers")]
     #[test]
     fn embedded_core_activated_classes_match_rulepack_classes() {
@@ -2044,18 +2052,25 @@ kind = "{kind}"
     }
 
     #[test]
-    fn validator_on_fail_record_is_accepted_only_for_iban_and_luhn() {
-        for kind in ["iban_mod97", "luhn"] {
+    fn validator_on_fail_record_is_accepted_only_for_allowed_kinds() {
+        for kind in [
+            "iban_mod97",
+            "luhn",
+            "de_steuer_id_mod1110",
+            "bsn_mod11",
+            "cpf_mod11",
+            "e164_phone",
+            "e164_phone_national_us",
+        ] {
             let pack = Rulepack::parse(&validator_rulepack(kind, "on_fail = \"record\""))
                 .unwrap_or_else(|error| panic!("{kind} may record: {error}"));
             let validator = pack.recognizers[0].validator.as_ref().expect("validator");
             assert_eq!(validator.on_fail, gaze_types::ValidatorOnFail::Record);
         }
         for kind in [
-            "de_steuer_id_mod1110",
-            "bsn_mod11",
             "uk_nhs_mod11",
-            "cpf_mod11",
+            "cnpj_mod11",
+            "e164_phone_national_de",
             "fr_nir_mod97",
             "aadhaar_verhoeff",
             "email_rfc",
@@ -2063,7 +2078,7 @@ kind = "{kind}"
             "eth_eip55",
         ] {
             let error = Rulepack::parse(&validator_rulepack(kind, "on_fail = \"record\""))
-                .expect_err("only IBAN and Luhn may keep a failed candidate");
+                .expect_err("this validator must veto a failed candidate");
             assert!(
                 matches!(error, RulepackError::UnsupportedValidatorOnFail { .. }),
                 "{kind}: {error}"
