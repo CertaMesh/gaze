@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `fn contract(&self) -> AdapterContract<'_> { AdapterContract::legacy() }`
   to keep today's behavior. The bundled OpenAI and Gemini adapters now declare
   it explicitly; `PiiSurface` is unchanged. See UPGRADE.md.
+- **Custom rulepacks can no longer declare `benign_lookalikes`.** Only the
+  four audited bundled recognizers (`postal.de`, `postal.us`,
+  `phone.national.de`, `phone.national.us`) may carry it. A rulepack file that
+  declares it, including a copy of the bundled `core` pack, fails to load with
+  `RulepackError::IneligibleBenignLookalike`. Delete the `benign_lookalikes`
+  lines from a forked pack. See UPGRADE.md.
 - **`session_blob` / `SensitiveSnapshot` now use envelope version 6**,
   which records each manifest entry's evidence tier. Gaze v0.15 and older
   refuse a v6 blob with `InvalidSnapshotVersion(6)`. v5 and older blobs still
@@ -166,6 +172,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the sweep's value list passes its size cap or its matcher cannot be built.
 
 ### Changed
+
+- **Benign lookalikes no longer tokenize as postcodes or phone numbers.** The
+  bundled `postal.de` / `postal.us` rules skip a number that ends a
+  reference identifier opened by a label word (`SKU`, `ORDER`, `INVOICE`,
+  `BATCH`, `Rechnung`, ...) or sits next to a currency code or sign, and the
+  national phone rules skip the tail of a reference identifier and part of a
+  digit run longer than any phone number. A phone, postal or address cue on
+  the value's line, the line above or below it, or in its structured field
+  name always keeps the value protected. Each skip writes a loser audit row
+  with `decided_by = validator_veto` and a `benign_*` reason; a skip that
+  cannot be placed on the source text fails the document
+  (`Error::UnauditableVeto`). Contract: docs/explanation/detection/validator-veto.md.
+- **Loopback IP addresses no longer tokenize.** The bundled IPv4 and IPv6
+  rules reject `127.0.0.0/8`, `::1` and IPv4-mapped loopback with the new
+  `ipv4_loopback_range` / `ipv6_loopback_range` reasons: a loopback address
+  never leaves the host. Private and link-local addresses stay protected.
 
 - **The benchmark headline is scored-label contract v3** (solo todo #3696,
   after the gold-gap audit passed). Leaked bytes are unchanged from v2; false

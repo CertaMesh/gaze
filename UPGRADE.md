@@ -59,6 +59,33 @@ re-tokenize stored manifests.
    unless it returns `EvidenceKind::Rule` from `evidence()`. It also ranks
    lower in cross-class containment, so its spans no longer swallow an
    enclosed rule match of another class.
+5. **Rulepack files cannot declare `benign_lookalikes`.** Delete those lines
+   from any rulepack copied from the bundled `core` pack, or it fails to load.
+
+### Breaking: custom rulepacks cannot declare `benign_lookalikes`
+
+**Action required only if you load a rulepack file copied from the bundled
+`core` pack**, or wrote `benign_lookalikes` into your own. The key lets a
+weak postcode or phone rule skip values that sit inside an order number, an
+amount or a long product code. Only the four audited bundled rules
+(`postal.de`, `postal.us`, `phone.national.de`, `phone.national.us`) may use
+it, because a custom pattern cannot prove it has no cue or anchor. A rulepack
+file that declares it now fails to load with
+`RulepackError::IneligibleBenignLookalike` instead of silently weakening
+protection. Delete every `benign_lookalikes = [...]` line from the file; the
+empty `[recognizers.context]` table may stay. Your rules then protect exactly
+what they matched before.
+
+### Changed: benign lookalikes and loopback addresses stay raw
+
+**No action required.** The bundled postcode and national phone rules now
+skip numbers that end a labelled reference identifier, sit next to a currency
+code or sign, or form part of a digit run longer than any phone number. A
+phone, postal or address word on the same line, the line above or below, or in
+the structured field name keeps the value protected. Loopback IP addresses
+(`127.0.0.0/8`, `::1`) are no longer tokenized. Every skip writes a loser
+audit row with a `benign_*` or `*_loopback_range` reason, so an audit query
+can list them.
 
 ### Changed: `SafetyNetFallback::Redact` tokenizes a resolvable residual
 
