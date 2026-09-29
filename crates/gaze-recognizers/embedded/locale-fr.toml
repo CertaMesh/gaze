@@ -3,6 +3,9 @@ rulepack_id = "gaze-locale-fr"
 rulepack_version = "0.5.1"
 default_locales = ["fr-FR"]
 
+[locale.phone_labels]
+names = ["téléphone", "telephone", "tél", "tel", "portable"]
+
 [locale.cues.nir]
 names = ["Sécurité sociale", "Securite sociale", "n° SS", "NIR", "Numéro de sécurité sociale", "Numero de securite sociale"]
 window_chars = 64

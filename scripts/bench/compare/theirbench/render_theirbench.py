@@ -20,6 +20,7 @@ from typing import Any, Callable, Mapping
 REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO / "scripts/bench"))
 from markdown_table import table_header  # noqa: E402
+from tagged_gaze import TAG, check_public  # noqa: E402
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
 DOC = REPO / "docs/reference/benchmarks/README.md"
 BLOCK = "their-benchmarks"
@@ -29,7 +30,10 @@ TITLES = {
 }
 OWN_METRIC = {"presidio-research": ("f2", "F2, binary PII vs O, presidio-evaluator"),
               "piibench-commercial": ("f1", "span F1, exact span + type, PIIBench seqeval")}
+#: Untagged main-tree rows. They stay in their-benchmarks.json as evidence but are
+#: never published; a tagged run is stored as a `gaze-vX.Y.Z` row (tagged_gaze.py).
 GAZE_ROWS = ("gaze-full", "gaze-rules-ner", "gaze-rules-only")
+RELEASE_HISTORY = REPO / "docs/reference/benchmarks/release-history.json"
 HELD = "held (typed-metric review)"
 NOT_RUN = {
     "PIIBench full ten-source mix": "five sources carry non-commercial or custom-academic licences and "
@@ -130,6 +134,21 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
             "not_run": NOT_RUN, "benchmarks": benchmarks}
 
 
+def is_tagged_gaze_row(tool: str) -> bool:
+    return tool.startswith("gaze-") and TAG.fullmatch(tool[len("gaze-"):]) is not None
+
+
+def public_rows(rows: Mapping[str, Any]) -> list[str]:
+    """Tagged Gaze rows first, then every competitor row; untagged Gaze rows never."""
+    tagged = sorted(tool for tool in rows if is_tagged_gaze_row(tool))
+    other = sorted(tool for tool in rows if family(tool) != "gaze")
+    unknown = sorted(tool for tool in rows if family(tool) == "gaze" and tool not in tagged
+                     and tool not in GAZE_ROWS)
+    if unknown:
+        raise ValueError(f"Gaze rows must be main-tree evidence or a gaze-vX.Y.Z tag: {unknown}")
+    return [*tagged, *other]
+
+
 def pct(value: float) -> str:
     return f"{value * 100:.1f}%"
 
@@ -193,46 +212,13 @@ def cell(metric: Metric, name: str, entry: Mapping[str, Any], tool: str) -> str:
     return HELD if metric.held(name, entry, tool) else metric.display(metric.value(name, entry, tool))
 
 
-def not_best(name: str, entry: Mapping[str, Any]) -> list[str]:
-    """For every table column, each row that beats Gaze's full setup.
-
-    Derived from the data, never written by hand. Beside each row is its
-    false-positive bytes (its leaked bytes on the FP column). Rows with
-    identical values (Presidio's language configurations on an English-only
-    set) are named together. Held cells are never compared.
-    """
-    columns = metrics(name)
-    leaked, fp = columns[0], columns[1]
-    lines = []
-    for metric in columns:
-        if metric.held(name, entry, "gaze-full"):
-            continue
-        ours = metric.value(name, entry, "gaze-full")
-        side = leaked if metric is fp else fp
-        groups: dict[tuple[float, float], list[str]] = {}
-        for tool in entry["rows"]:
-            if family(tool) == "gaze" or metric.held(name, entry, tool):
-                continue
-            theirs = metric.value(name, entry, tool)
-            if (theirs < ours) if metric.lower_is_better else (theirs > ours):
-                groups.setdefault((theirs, side.value(name, entry, tool)), []).append(tool)
-        if not groups:
-            continue
-        ranked = sorted(groups.items(), key=lambda item: item[0][0], reverse=not metric.lower_is_better)
-        rivals = "; ".join(f"{' / '.join(sorted(tools))} {metric.display(value)} "
-                           f"({side.title} {side.display(other)})" for (value, other), tools in ranked)
-        lines.append(f"- {metric.title}: {rivals}; Gaze full {metric.display(ours)} "
-                     f"({side.title} {side.display(side.value(name, entry, 'gaze-full'))}).")
-    return lines or ["- Gaze full is best on every column that is not held."]
-
-
 def render(data: Mapping[str, Any]) -> str:
     lines = [
         "Report-only: these sets are never used to design or tune Gaze rules. Every gold "
         "label counts (no scored-label contract). Leaked and false-positive bytes use the "
         "same scorer code as the main comparison; each benchmark's own metric comes from "
-        "its own evaluator, fed the same spans. Lower leaked bytes is better. Chart bars are "
-        "configurations declared before measuring; the table lists every measured row. "
+        "its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every "
+        "measured competitor row and every tagged Gaze release; untagged builds are not shown. "
         "No latency is published here: the machine was shared during these runs, and "
         "per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the "
         "main comparison's configurations; Presidio's default rows keep score threshold 0.0, so "
@@ -242,7 +228,8 @@ def render(data: Mapping[str, Any]) -> str:
     ]
     for name, entry in data["benchmarks"].items():
         rows, metric, metric_label = entry["rows"], *OWN_METRIC[name]
-        gold = gold_bytes(rows["gaze-full"]["product_coverage"])
+        gold = gold_bytes(rows[public_rows(rows)[0]]["product_coverage"])
+        chart_rows(entry)  # every declared competitor configuration was measured
         lines += [f"#### {TITLES[name]}", ""]
         repro = entry["reproduction"]
         if name == "presidio-research":
@@ -265,34 +252,26 @@ def render(data: Mapping[str, Any]) -> str:
             lines.append(f"- Only these sources run: {used}. Excluded for their licences: {excluded}.")
             lines.append("- PIIBench's current code keeps 71 label types where its paper reports 48: its "
                          "normaliser maps only ai4privacy-style names. `MISC` and `FINANCIAL_ENTITY` are gold.")
-        lines += ["", "```mermaid", "xychart-beta horizontal",
-                  f'    title "Leaked PII bytes, {name} - lower is better"']
-        chart = chart_rows(entry)
-        labels = ", ".join(f'"{tool} ({pct(rows[tool]["product_coverage"]["leaked_bytes"] / gold)})"' for tool in chart)
-        top = max(rows[tool]["product_coverage"]["leaked_bytes"] for tool in chart)
-        lines += [f"    x-axis [{labels}]", f'    y-axis "Leaked PII bytes" 0 --> {top + max(1, top // 10)}',
-                  f"    bar [{', '.join(str(rows[t]['product_coverage']['leaked_bytes']) for t in chart)}]",
-                  "```", "",
-                  f"Gold PII bytes: {gold:,}. Common-intersection labels: "
+        lines += ["", f"Gold PII bytes: {gold:,}. Common-intersection labels: "
                   f"{', '.join(entry['common_intersection_labels']) or 'none'}.", "",
                   *table_header([("Tool", False), *((metric.title, True) for metric in metrics(name))])]
-        order = [*GAZE_ROWS, *sorted(tool for tool in rows if tool not in GAZE_ROWS)]
-        for tool in order:
-            if tool in rows:
-                lines.append(f"| {tool} | " + " | ".join(cell(metric, name, entry, tool)
-                                                        for metric in metrics(name)) + " |")
+        for tool in public_rows(rows):
+            lines.append(f"| {tool} | " + " | ".join(cell(metric, name, entry, tool)
+                                                    for metric in metrics(name)) + " |")
         rescored = entry["rescored_with"]
-        lines += ["", "Where Gaze full is not best:", "", *not_best(name, entry)]
+        if not any(is_tagged_gaze_row(tool) for tool in rows):
+            latest = json.loads(RELEASE_HISTORY.read_text(encoding="utf-8"))["releases"][-1]["version"]
+            lines += ["", f"Gaze {latest}: not yet measured on this set, so no Gaze row is shown."]
         lines += ["", f"Typed cells read \"{HELD}\" for tools whose labels pass through collision-family "
                   "or secret/password/token mappings, which the comparison's typed-scoring fix changed; "
                   "leaked and false-positive bytes do not depend on labels and are unaffected.",
                   "", f"Hardware: {entry['hardware']}. Measured with comparison code `{entry['comparison_revision']}`, "
                   f"typed metrics rescored with `{rescored['comparison_revision']}`; harness "
-                  f"`{rescored['harness_revision'][:8]}`. Gaze ran on crates tree `{entry['gaze_crates_tree'][:8]}`."
+                  f"`{rescored['harness_revision'][:8]}`."
                   + ("".join(f" The {kind} harness commit is kept as signed tag `{tag}`."
                              for kind, tag in sorted(entry.get("harness_tags", {}).items()))), ""]
     lines += ["Not run:", ""] + [f"- {name}: {reason}." for name, reason in data["not_run"].items()]
-    return "\n".join(lines)
+    return check_public("\n".join(lines), "their-benchmarks block")
 
 
 def apply(document: str, body: str) -> str:

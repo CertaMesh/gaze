@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Cued phone and government-ID values remain protected when validation fails.**
+  The new `phone.e164.spaced.cued` and `phone.national.us.cued` recognizers keep
+  labelled phone-shaped values that a regional parser rejects, using English
+  and loaded German, French, Dutch, and Brazilian phone-label buckets. Cued Steuer-ID,
+  BSN, and CPF rules now keep checksum-failed values. Each winner carries the
+  typed failure reason in audit metadata, restores exactly, and cannot seed
+  the repeat-value sweep. All-zero Steuer-ID/BSN placeholders and vehicle-ID
+  labels stay raw. Broad uncued phone scans and other validator-backed rules
+  retain their vetoes; `phone.national.de` has no separate cued relaxation.
+
 - **All-caps, lower-case and hyphenated copies of a header name no longer ship
   raw** (solo todo #3897). Three stages leaked. The repeat-value sweep matched
   a cue-found `Herr Tobias Brenner` only as a whole or as title-case parts, so
@@ -64,10 +74,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   epoch-millisecond timestamps as often. The winner's audit row carries
   `validator_fail_reason`, and a checksum-failed value is never swept to other
   copies. Rulepacks gain `[recognizers.validator] on_fail = "record"`, which
-  the loader accepts only for `iban_mod97` and `luhn`. `Candidate` gains
+  the loader originally accepted only for `iban_mod97` and `luhn`; the new
+  cued phone and government-ID rules above extend that explicit allowlist.
+  `Candidate` gains
   `validator_fail_reason`, and `Recognizer` gains `validator_on_fail()`
   (default `Veto`). See
-  [validator veto](docs/explanation/detection/validator-veto.md#recorded-failures-iban-and-payment-cards).
+  [validator veto](docs/explanation/detection/validator-veto.md#recorded-failures).
 - **Australian state plus postcode addresses are tokenized deterministically**
   (solo todo #3880). `postal.au` protects the state abbreviation and four-digit
   postcode together whenever `en-AU` is in the effective locale chain, so
@@ -154,6 +166,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the sweep's value list passes its size cap or its matcher cannot be built.
 
 ### Changed
+
+- **README and benchmark charts are static SVG panels** (solo todo #3932). One panel per benchmark with the value printed on every bar, light and dark variants, released Gaze versions and declared competitor configurations only; the mermaid `xychart-beta` charts (no labels on GitHub) and the README results table are gone. See `docs/reference/benchmarks/README.md#benchmark-panels`.
 
 - **The benchmark headline is scored-label contract v3** (solo todo #3696,
   after the gold-gap audit passed). Leaked bytes are unchanged from v2; false

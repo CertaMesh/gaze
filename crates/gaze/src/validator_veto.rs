@@ -68,10 +68,9 @@ pub fn apply(
                 }
                 kept.push(candidate);
             }
-            // An IBAN or card the recognizer found by shape and context stays a candidate when
-            // its checksum fails: a mistyped or masked number is still someone's financial data
-            // (user ruling 2026-09-27). The failure goes on its audit row, and it is `Learned`
-            // evidence, so the repeat-value sweep never spreads an unvalidated value.
+            // An opted-in recognizer can keep a failed candidate when its own shape and cue
+            // provide enough evidence. The failure goes on its audit row, and `Learned`
+            // evidence prevents the repeat-value sweep from spreading an unvalidated value.
             ValidatorOutcome::Fail { reason } if records => {
                 candidate.validator_fail_reason = Some(reason);
                 candidate.evidence = EvidenceKind::Learned;
@@ -166,6 +165,21 @@ mod tests {
                 "DE99 3704 0044 0532 0130 00",
                 ValidatorFailReason::IbanMod97Failed,
             ),
+            (
+                ValidatorKind::DeSteuerIdMod1110,
+                "86095742718",
+                ValidatorFailReason::DeSteuerIdMod1110Failed,
+            ),
+            (
+                ValidatorKind::BsnMod11,
+                "123456780",
+                ValidatorFailReason::BsnMod11Failed,
+            ),
+            (
+                ValidatorKind::CpfMod11,
+                "123.456.789-00",
+                ValidatorFailReason::CpfMod11Failed,
+            ),
         ] {
             let (kept, vetoed) = veto(kind, ValidatorOnFail::Record, text);
             assert!(vetoed.is_empty(), "{kind:?}");
@@ -186,13 +200,31 @@ mod tests {
         assert_eq!(kept[0].evidence, EvidenceKind::Rule);
     }
 
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn failed_phone_region_keeps_its_typed_reason() {
+        use gaze_types::Region;
+
+        let (kept, vetoed) = veto(
+            ValidatorKind::E164PhoneNational(Region::Us),
+            ValidatorOnFail::Record,
+            // Ofcom's reserved +44 7700 900xxx drama range.
+            "+44 7700 900123",
+        );
+        assert!(vetoed.is_empty());
+        assert_eq!(kept.len(), 1);
+        assert_eq!(
+            kept[0].validator_fail_reason,
+            Some(ValidatorFailReason::PhoneNationalRegionMismatch)
+        );
+        assert_eq!(kept[0].evidence, EvidenceKind::Learned);
+    }
+
     /// A recognizer can declare `Record` through the trait without going through the rulepack
-    /// loader; veto still honours it only for IBAN and Luhn.
+    /// loader; veto still honours it only for the allowed validators.
     #[test]
     fn record_is_ignored_for_every_other_validator() {
         for (kind, text) in [
-            (ValidatorKind::BsnMod11, "123456780"),
-            (ValidatorKind::DeSteuerIdMod1110, "86095742718"),
             (ValidatorKind::UkNhsMod11, "943 476 5918"),
             (ValidatorKind::EmailRfc, "alice@example"),
         ] {

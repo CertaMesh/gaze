@@ -78,6 +78,7 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         program: "cargo",
         args: &["test", "-p", "gaze-recognizers", "--no-default-features"],
     },
+    CORE_NO_PHONE_PARSER_LOAD_GUARD,
     MatrixCommand {
         label: "cargo test -p gaze-document --features mcp",
         program: "cargo",
@@ -206,6 +207,7 @@ const REQUIRED_PACKAGE_TARGET: &str = "gaze-recognizers";
 const REQUIRED_NO_DEFAULT_FEATURES: &str = "--no-default-features";
 const REQUIRED_NO_PHONE_PARSER_TEST_TARGET: &str = "no_phone_parser_fail_closed";
 const REQUIRED_NO_PHONE_PARSER_TEST_COUNT: &str = "running 2 tests";
+const REQUIRED_EMBEDDED_CORE_LOAD_RESULT: &str = "embedded_core_loads_without_phone_parser ... ok";
 const REQUIRED_SAFETY_NET_SANITY_TASK: &str = "safety-net-sanity";
 const REQUIRED_README_VERSION_CHECK_TASK: &str = "readme-version-check";
 const REQUIRED_TOKENBRIDGE_ENCRYPTED_INDEX_TASK: &str = "tokenbridge-encrypted-index";
@@ -225,8 +227,13 @@ const NO_PHONE_PARSER_FAIL_CLOSED_GUARD: MatrixCommand = MatrixCommand {
         REQUIRED_NO_PHONE_PARSER_TEST_TARGET,
     ],
 };
+const CORE_NO_PHONE_PARSER_LOAD_GUARD: MatrixCommand = MatrixCommand {
+    label: "cargo test -p gaze-pii --no-default-features --lib",
+    program: "cargo",
+    args: &["test", "-p", "gaze-pii", "--no-default-features", "--lib"],
+};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MatrixCommand {
     label: &'static str,
     program: &'static str,
@@ -246,7 +253,9 @@ pub fn run() -> Result<()> {
         FEATURE_MATRIX.len()
     );
     for command in FEATURE_MATRIX {
-        if command.args.contains(&"nym_no_feature") {
+        if *command == CORE_NO_PHONE_PARSER_LOAD_GUARD {
+            run_command_requiring_output(*command, REQUIRED_EMBEDDED_CORE_LOAD_RESULT)?;
+        } else if command.args.contains(&"nym_no_feature") {
             run_command_requiring_output(
                 *command,
                 "test policy_nym_refuses_when_binary_lacks_feature ... ok",
@@ -261,6 +270,13 @@ pub fn run() -> Result<()> {
 }
 
 fn ensure_matrix_contract() -> Result<()> {
+    if !FEATURE_MATRIX.contains(&CORE_NO_PHONE_PARSER_LOAD_GUARD) {
+        bail!(
+            "ci_feature_matrix: feature matrix must run {}",
+            CORE_NO_PHONE_PARSER_LOAD_GUARD.label
+        );
+    }
+
     if !FEATURE_MATRIX.iter().any(|command| {
         command.args.contains(&REQUIRED_PACKAGE_TARGET)
             && command.args.contains(&REQUIRED_NO_DEFAULT_FEATURES)

@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import leak_ledger as ledger
+from tagged_gaze import UntaggedGazeError, check_public
 
 
 COMPATIBLE = frozenset({
@@ -211,7 +212,11 @@ class CheckTests(unittest.TestCase):
         totals, body = ledger.derive()
         self.assertEqual(set(totals), {"1", "2", "3"})
         original = ledger.DOC.read_text(encoding="utf-8")
-        self.assertEqual(ledger.apply(original, body), original)
+        self.assertEqual(ledger.apply(original, ledger.public_body(self.index)), original)
+        # The full table still renders and re-derives; it is just not published.
+        self.assertIn("Main `", body)
+        with self.assertRaises(UntaggedGazeError):
+            check_public(body, "leak-ledger table")
 
     def test_rows_must_equal_the_record_leaks(self):
         ledger.validate_rows(self.rows, self.expected)

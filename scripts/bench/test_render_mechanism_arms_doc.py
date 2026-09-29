@@ -78,6 +78,20 @@ def _copy_pinned_files(ledger: dict, root: Path) -> None:
             shutil.copyfile(mech.ROOT / path, root / path)
 
 
+
+def _released(ledger):
+    """The ledger as if every measurement were of a tagged release.
+
+    The renderer shows tagged measurements only (tagged_gaze.py); these tests
+    exercise the table shapes, which need rows to be shown.
+    """
+    shown = copy.deepcopy(ledger)
+    for entry in shown["mechanisms"]:
+        for measurement in entry["measurements"]:
+            measurement["release"] = "v0.15.0"
+    return shown
+
+
 class SyntheticMechanism:
     """Four runner output directories plus policies, under one temp root."""
 
@@ -176,9 +190,9 @@ class MechanismArmsTest(unittest.TestCase):
         mech.check_evidence(self.ledger, self.fixture.root)
 
     def test_render_names_every_contract_and_marks_older_releases(self) -> None:
-        body = mech.render(self.ledger, ["v0.16.0", "v0.15.1"])
+        body = mech.render(_released(self.ledger), ["v0.16.0", "v0.15.1"])
         for version in ("v3", "v2", "v1"):
-            self.assertIn(f"| Synthetic drop | `", body)
+            self.assertIn("| Synthetic drop | v0.15.0 |", body)
             self.assertIn(f"| {version} |", body)
         self.assertIn("not available: mechanism added in v0.16", body)
         self.assertIn("not measured for this release", body)
@@ -300,7 +314,7 @@ class MechanismArmsTest(unittest.TestCase):
         ledger = copy.deepcopy(self.ledger)
         with mock.patch.object(mech, "required_contracts", lambda: (4, 3, 2, 1)):
             mech.validate(ledger, self.fixture.root)
-            self.assertIn("| v3 |", mech.render(ledger, ["v0.16.0"]))
+            self.assertIn("| v3 |", mech.render(_released(ledger), ["v0.16.0"]))
             with self.assertRaisesRegex(mech.MechanismError, "requires \\[4, 3, 2, 1\\]; run .*refresh"):
                 mech.check_evidence(ledger, self.fixture.root)
         row = ledger["mechanisms"][0]["measurements"][0]
@@ -344,12 +358,17 @@ class MechanismArmsTest(unittest.TestCase):
         ledger = copy.deepcopy(LEDGER)
         _copy_pinned_files(ledger, root)
         fixture.record(ledger)
-        body = mech.render(ledger, ["v0.15.1"], root)
+        body = mech.render(_released(ledger), ["v0.15.1"], root)
         titles = [entry["title"] for entry in ledger["mechanisms"]]
         expected = [entry["title"] for entry in LEDGER["mechanisms"]] + ["Synthetic drop"]
         self.assertEqual(titles, expected)
-        for title in titles:
-            self.assertEqual(body.count(f"| {title} | `"), 3, title)
+        for entry in ledger["mechanisms"]:
+            title = entry["title"]
+            self.assertEqual(
+                body.count(f"| {title} | v0.15.0 |"),
+                3 * len(entry["measurements"]),
+                title,
+            )
             self.assertIn(f"- **{title}** ships ", body)
         self.assertIn("| Synthetic drop | not available: mechanism added in v0.16 |", body)
 
@@ -425,7 +444,7 @@ class CommittedLedgerTest(unittest.TestCase):
         entry = next(item for item in LEDGER["mechanisms"] if item["id"] == "gliner-dob-judge")
         self.assertIn("opt-in", entry["shipped"])
         self.assertIn("3905", entry["shipped"])
-        body = mech.render(LEDGER, [])
+        body = mech.render(_released(LEDGER), [])
         self.assertIn("peak RSS +664 MiB", body)
         self.assertIn("p95 +22.5 ms", body)
 

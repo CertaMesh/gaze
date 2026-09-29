@@ -31,6 +31,7 @@ from typing import Any, Mapping, Sequence
 import agentic_layers as agentic
 import gaze_bench_score as score
 import scorecard_record as record
+from tagged_gaze import TAG, check_public
 import verify_record_scorecards as verify
 from render_benchmark_doc import (
     GOLD_GAP_CONTRACT,
@@ -629,54 +630,68 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT
     ]
     if not ledger["mechanisms"]:
         return "\n".join(lines + ["No mechanism has been measured on its own yet."])
-    lines += [
-        "| Mechanism | Measured at | Contract | Leaked bytes, without → with | FP bytes, without → with | Gate |",
-        "| --- | --- | --- | ---: | ---: | --- |",
+    shown = [
+        (entry, measurement)
+        for entry in ledger["mechanisms"]
+        for measurement in entry["measurements"]
+        if measurement["release"] and TAG.fullmatch(measurement["release"])
     ]
-    for entry in ledger["mechanisms"]:
-        for measurement in entry["measurements"]:
-            at = measurement["release"] or f"`{measurement['revision'][:12]}` (unreleased)"
-            for version in measured_contracts(measurement):
-                row = measurement["contracts"][str(version)]
-                base, candidate = row["base"], row["candidate"]
-                gate = measurement["gate"].get(f"v{version}", {}).get(
-                    "verdict", "not gated: re-scored from the v2 records"
-                )
-                lines.append(
-                    f"| {entry['title']} | {at} | v{version} | "
-                    f"{base['leaked']:,} → {candidate['leaked']:,} "
-                    f"({_signed(candidate['leaked'] - base['leaked'])}) | "
-                    f"{base['false_positive']:,} → {candidate['false_positive']:,} "
-                    f"({_signed(candidate['false_positive'] - base['false_positive'])}) | {gate} |"
-                )
-    lines += ["", "What moved, per label (contract v2; v1 adds only the credential labels):", ""]
-    for entry in ledger["mechanisms"]:
-        for measurement in entry["measurements"]:
-            row = measurement["contracts"]["2"]
-            leaked = ", ".join(
-                f"{label} {_signed(value)}" for label, value in row["leaked_by_label_delta"].items()
-            ) or "none"
-            fp = ", ".join(
-                f"`{label}` {_signed(value)}"
-                for label, value in row["false_positive_by_class_delta"].items()
-            ) or "none"
-            layers = "; ".join(
-                f"{layer} leaked {_signed(block['candidate']['leaked'] - block['base']['leaked'])}, "
-                f"FP {_signed(block['candidate']['false_positive'] - block['base']['false_positive'])}"
-                for layer, block in measurement["agentic_layers"].items()
-            ) or "not measured"
-            lines.append(
-                f"- **{entry['title']}** ships {entry['shipped']}. {_cost(entry, root)}"
-                f"Leaked bytes by gold label: {leaked}. "
-                f"FP bytes by predicted class: {fp}. Agentic layers: {layers}. "
-                f"Policy delta [`{Path(entry['policy_delta']['file']).name}`]"
-                f"({_link(entry['policy_delta']['file'])}); evidence "
-                f"[base]({_link(measurement['records']['base']['file'])}) and "
-                f"[candidate]({_link(measurement['records']['candidate']['file'])}) "
-                f"observation records. Attested, not re-derivable: `crates/` tree "
-                f"`{measurement['attested']['crates_tree'][:12]}`, binary "
-                f"`{measurement['attested']['binary_sha256'][:12]}`, {measurement['attested']['machine']}."
+    hidden = sum(len(entry["measurements"]) for entry in ledger["mechanisms"]) - len(shown)
+    if hidden:
+        lines += [
+            f"{hidden} measurement{'s' if hidden != 1 else ''} of unreleased builds "
+            "stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are "
+            "not shown here: public pages show tagged releases only.",
+        ]
+    if shown:
+        lines += [
+            "",
+            "| Mechanism | Measured at | Contract | Leaked bytes, without → with | FP bytes, without → with | Gate |",
+            "| --- | --- | --- | ---: | ---: | --- |",
+        ]
+    for entry, measurement in shown:
+        at = measurement["release"]
+        for version in measured_contracts(measurement):
+            row = measurement["contracts"][str(version)]
+            base, candidate = row["base"], row["candidate"]
+            gate = measurement["gate"].get(f"v{version}", {}).get(
+                "verdict", "not gated: re-scored from the v2 records"
             )
+            lines.append(
+                f"| {entry['title']} | {at} | v{version} | "
+                f"{base['leaked']:,} → {candidate['leaked']:,} "
+                f"({_signed(candidate['leaked'] - base['leaked'])}) | "
+                f"{base['false_positive']:,} → {candidate['false_positive']:,} "
+                f"({_signed(candidate['false_positive'] - base['false_positive'])}) | {gate} |"
+            )
+    if shown:
+        lines += ["", "What moved, per label (contract v2; v1 adds only the credential labels):", ""]
+    for entry, measurement in shown:
+        row = measurement["contracts"]["2"]
+        leaked = ", ".join(
+            f"{label} {_signed(value)}" for label, value in row["leaked_by_label_delta"].items()
+        ) or "none"
+        fp = ", ".join(
+            f"`{label}` {_signed(value)}"
+            for label, value in row["false_positive_by_class_delta"].items()
+        ) or "none"
+        layers = "; ".join(
+            f"{layer} leaked {_signed(block['candidate']['leaked'] - block['base']['leaked'])}, "
+            f"FP {_signed(block['candidate']['false_positive'] - block['base']['false_positive'])}"
+            for layer, block in measurement["agentic_layers"].items()
+        ) or "not measured"
+        lines.append(
+            f"- **{entry['title']}** ships {entry['shipped']}. {_cost(entry, root)}"
+            f"Leaked bytes by gold label: {leaked}. "
+            f"FP bytes by predicted class: {fp}. Agentic layers: {layers}. "
+            f"Policy delta [`{Path(entry['policy_delta']['file']).name}`]"
+            f"({_link(entry['policy_delta']['file'])}); evidence "
+            f"[base]({_link(measurement['records']['base']['file'])}) and "
+            f"[candidate]({_link(measurement['records']['candidate']['file'])}) "
+            f"observation records. Attested, not re-derivable: `crates/` tree "
+            f"`{measurement['attested']['crates_tree'][:12]}`, binary "
+            f"`{measurement['attested']['binary_sha256'][:12]}`, {measurement['attested']['machine']}."
+        )
     lines += [
         "",
         "Shipped releases, one column per release:",
@@ -689,7 +704,7 @@ def render(ledger: Mapping[str, Any], releases: Sequence[str], root: Path = ROOT
             f"| {entry['title']} | "
             + " | ".join(release_cell(entry, version) for version in releases) + " |"
         )
-    return "\n".join(lines)
+    return check_public("\n".join(lines), "mechanism-arms block")
 
 
 def apply(document: str, body: str) -> str:

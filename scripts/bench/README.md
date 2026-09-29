@@ -361,6 +361,16 @@ runs on every pull request in `.github/workflows/docs.yml`:
 python3 scripts/bench/render_benchmark_doc.py --check
 ```
 
+The same run writes the benchmark panels: `benchmark_charts.py` turns the
+release history, `comparison.json` and `their-benchmarks.json` into a light and
+a dark SVG under `docs/assets/benchmarks/` (README `<picture>`) and the
+model-card tables in the benchmark reference. `--check` fails when either SVG
+drifts. Only tagged Gaze releases are drawn: the comparison report's main-branch
+run and the third-party files' `gaze-full` row are never read, `GazeRow`
+refuses a version that is not `vX.Y.Z`, and a tagged third-party run enters
+through `gaze_releases` in `their-benchmarks.json` (until then its slot reads
+"pending").
+
 ## Policy-matrix enumerations (base binary vs head binary)
 
 Three model-free scripts drive two `gaze daemon` binaries over the #3708 IBAN

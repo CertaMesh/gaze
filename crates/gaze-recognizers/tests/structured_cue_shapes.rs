@@ -51,6 +51,31 @@ fn pipeline() -> Pipeline {
         .expect("pipeline")
 }
 
+fn pipeline_with_phone_locale(pack_name: &str, locale: LocaleTag) -> Pipeline {
+    let packs = ["core", pack_name].map(|name| {
+        Rulepack::load(RulepackSource::Embedded(
+            embedded(name).expect("embedded rulepack"),
+        ))
+        .expect("rulepack loads")
+    });
+    let mut policy = gaze::Policy::default();
+    policy.rules = vec![RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    let context = Context {
+        dictionaries: std::collections::HashMap::new(),
+        class_map: std::collections::HashMap::new(),
+        fields: serde_json::Map::new(),
+    };
+    let active = LocaleChain::merge_cli_policy_rulepack_default(
+        None,
+        None,
+        Some(&[locale, LocaleTag::Global]),
+    );
+    gaze_assembly::build_pipeline(&policy, &context, &packs, &active, None)
+        .expect("phone locale pipeline")
+}
+
 fn clean_and_restore(pipeline: &Pipeline, text: &str) -> String {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let (clean, _, _) = pipeline
@@ -69,6 +94,47 @@ fn clean_and_restore(pipeline: &Pipeline, text: &str) -> String {
         .expect("restore");
     assert_eq!(restored, text, "restore must be byte-exact");
     cleaned
+}
+
+#[test]
+fn localized_phone_labels_keep_parser_failed_international_values() {
+    // The digits remain in Ofcom's reserved 7700 900xxx range.
+    let number = "+44 7/7/0/0/9/0/0/1/2/3";
+    for (pack, locale, label) in [
+        ("locale-de", "de-DE", "Telefon"),
+        ("locale-de", "de-DE", "Handy"),
+        ("locale-de", "de-DE", "Tel."),
+        ("locale-fr", "fr-FR", "téléphone"),
+        ("locale-nl", "nl-NL", "telefoon"),
+        ("locale-br", "pt-BR", "telefone"),
+    ] {
+        let locale = LocaleTag::parse(locale).expect("locale");
+        let pipeline = pipeline_with_phone_locale(pack, locale.clone());
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let input = format!("{label}: {number}; phoneModel={number}; order={number}");
+        let (clean, _, _) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(input.clone()),
+                &[locale, LocaleTag::Global],
+                &DictionaryBundle::default(),
+            )
+            .expect("clean");
+        let CleanDocument::Text(cleaned) = clean else {
+            panic!("expected text");
+        };
+        assert_eq!(
+            cleaned.matches(number).count(),
+            2,
+            "{pack} {label}: {cleaned}"
+        );
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&session, &cleaned)
+                .expect("restore"),
+            input
+        );
+    }
 }
 
 /// Structured shapes a key/value pair takes in agent traffic. `{k}` is the key, `{v}` the value.
@@ -245,19 +311,27 @@ fn steuer_id_json_key_wins_the_whole_value_with_its_own_class() {
 }
 
 #[test]
-fn checksum_invalid_values_under_a_cue_key_stay_vetoed() {
-    // Validator-veto contract (docs/explanation/detection/validator-veto.md): a failing checksum
-    // is logged as a loser and the value is left as it was. The key shape does not change that.
+fn checksum_invalid_values_under_a_cue_key_follow_each_rule_policy() {
     let pipeline = pipeline();
-    for text in [
-        r#"{"bsn": "111222334"}"#,
-        r#"{"steuer_id": "86095742718"}"#,
-        r#"{"nhs_number": "9434765918"}"#,
-        r#"{"cpf": "111.444.777-36"}"#,
-        "bsn=111222334",
+    for (text, value, class) in [
+        (r#"{"bsn": "111222334"}"#, "111222334", "bsn"),
+        (
+            r#"{"steuer_id": "86095742718"}"#,
+            "86095742718",
+            "steuer_id",
+        ),
+        (r#"{"cpf": "111.444.777-36"}"#, "111.444.777-36", "cpf"),
+        ("bsn=111222334", "111222334", "bsn"),
     ] {
-        assert_eq!(clean_and_restore(&pipeline, text), text);
+        let cleaned = clean_and_restore(&pipeline, text);
+        assert!(
+            cleaned.contains(&format!(":Custom:{class}_")),
+            "{cleaned:?}"
+        );
+        assert!(!cleaned.contains(value), "{cleaned:?}");
     }
+    let nhs = r#"{"nhs_number": "9434765918"}"#;
+    assert_eq!(clean_and_restore(&pipeline, nhs), nhs);
 }
 
 #[test]

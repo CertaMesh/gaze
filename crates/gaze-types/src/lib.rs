@@ -741,12 +741,26 @@ impl ValidatorOnFail {
 }
 
 impl ValidatorKind {
-    /// Whether a checksum failure of this kind may keep its candidate
-    /// ([`ValidatorOnFail::Record`]). Only IBAN mod-97 and Luhn: a mistyped or masked IBAN or
-    /// card number is still someone's financial data (user ruling 2026-09-27). Every other
-    /// validator vetoes on failure.
+    /// Whether a failed validation may keep a candidate with its failure reason.
+    /// Rulepacks opt in per recognizer; broad scanners must still veto.
     pub fn allows_recorded_failure(self) -> bool {
-        matches!(self, Self::Luhn | Self::IbanMod97)
+        matches!(
+            self,
+            Self::Luhn
+                | Self::IbanMod97
+                | Self::DeSteuerIdMod1110
+                | Self::BsnMod11
+                | Self::CpfMod11
+        ) || {
+            #[cfg(feature = "phone-parser")]
+            {
+                matches!(self, Self::E164Phone | Self::E164PhoneNational(Region::Us))
+            }
+            #[cfg(not(feature = "phone-parser"))]
+            {
+                false
+            }
+        }
     }
 
     /// Parses a policy validator kind.
@@ -1448,6 +1462,17 @@ pub trait SafetyNet: Send + Sync {
         clean_text: &str,
         context: SafetyNetContext<'_>,
     ) -> Result<Vec<LeakSuspect>, SafetyNetError>;
+
+    /// Checks text and returns metadata for spans deliberately refused by the backend.
+    /// Existing implementations keep their suspect-only behavior.
+    fn check_with_telemetry(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
+        self.check(clean_text, context)
+            .map(|suspects| (suspects, Vec::new()))
+    }
 }
 
 /// Context passed to a privacy safety net.
@@ -1766,6 +1791,42 @@ pub enum LeakReportTelemetry {
         /// Optional structured field path of the suspect.
         field_path: Option<String>,
     },
+    /// A validated model span rejected by a narrow, versioned context guard.
+    ModelSpanRefused {
+        /// Safety-net backend identifier.
+        safety_net_id: String,
+        /// Typed refusal reason, without source text.
+        reason: SafetyNetRefusalReason,
+        /// Byte span in clean text.
+        span: Range<usize>,
+        /// Document kind checked.
+        document_kind: DocumentKind,
+        /// Optional structured field path.
+        field_path: Option<String>,
+    },
+}
+
+/// Closed reasons for refusing a validated safety-net model span.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SafetyNetRefusalReason {
+    /// Nym BUILDING_NUMBER on an ASCII-digit pagination/count field from key table v1.
+    NymPaginationKeyV1,
+}
+
+impl SafetyNetRefusalReason {
+    /// Stable metadata-only audit spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NymPaginationKeyV1 => "nym_pagination_key_v1",
+        }
+    }
+
+    /// Raw model label and mapped class for a refused span's audit row.
+    pub fn audit_labels(self) -> (&'static str, &'static str) {
+        match self {
+            Self::NymPaginationKeyV1 => ("BUILDING_NUMBER", "custom:building_number"),
+        }
+    }
 }
 
 /// Aggregate leak report statistics.

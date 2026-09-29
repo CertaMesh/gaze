@@ -171,10 +171,16 @@ def typed_hold(mappings: Mapping[str, Mapping[str, Sequence[str]]]) -> list[str]
                   if any(marker in label for label in table for marker in TYPED_HOLD_PATTERN))
 
 
+DERIVED_CELLS = ("typed_entities", "char_level")
+
+
 def rescore(report: dict, splits: Mapping[str, Sequence[score.Document]],
             composed: Mapping[str, Mapping[str, Sequence[str]]], common: frozenset[str],
             predictions_dir: Path) -> None:
-    """Recompute every row from stored predictions; only typed cells may change."""
+    """Recompute every row from stored predictions; only derived cells may change.
+
+    Typed-entity and character-level cells are derived from the same stored spans;
+    every byte, entity-coverage and document count must come back identical."""
     for name, result in report["rows"].items():
         mapping = composed[tool_family(name)]
         for split, documents in splits.items():
@@ -188,10 +194,11 @@ def rescore(report: dict, splits: Mapping[str, Sequence[score.Document]],
             fresh = cells.result()
             for view, values in fresh.items():
                 old = result[split][view]
-                moved = sorted(key for key in values if key != "typed_entities" and values[key] != old[key])
+                moved = sorted(key for key in values if key not in DERIVED_CELLS and values[key] != old[key])
                 if moved:
                     raise SystemExit(f"rescore moved non-typed metrics for {name}/{split}/{view}: {moved}")
-                old["typed_entities"] = values["typed_entities"]
+                for key in DERIVED_CELLS:
+                    old[key] = values[key]
 
 
 def latency(timers: Sequence[float]) -> dict[str, object]:

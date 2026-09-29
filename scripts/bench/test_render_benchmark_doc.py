@@ -19,6 +19,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import benchmark_charts as charts
+from tagged_gaze import check_public
 import render_benchmark_doc as render
 
 #: A real harness scorecard, trimmed to the fields the renderer reads.
@@ -863,9 +865,7 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         of the arm it names under the chart's own contract, read from release
         history or the same-run comparison, rounded to one decimal."""
         committed = render.load_history(render.DEFAULT_HISTORY)
-        comparison = json.loads(render.DEFAULT_COMPARISON.read_text(encoding="utf-8"))
         arms_by_contract = {}
-        comparison_rates = {}
         for version in render.shown_contracts(committed):
             view = render.contract_history(committed, version)
             arms = {}
@@ -878,12 +878,6 @@ class ShippedDefaultChartsTest(unittest.TestCase):
                     if arm != default:
                         arms[f"{label} {render.ARM_CHART_LABELS.get(arm, arm)}"] = block
             arms_by_contract[version] = arms
-            latest = view["releases"][-1]
-            gold = latest["arms"][render.shipped_default_arm(latest)]["gold_pii_utf8_bytes"]
-            comparison_rates[version] = {
-                label.rsplit(" (", 1)[0]: round(leaked / gold * 100, 1)
-                for label, leaked in render.readme_comparison_bars(view, comparison, version)
-            }
         for arms in arms_by_contract.values():
             for arm in arms.values():
                 self.assertEqual(
@@ -893,7 +887,6 @@ class ShippedDefaultChartsTest(unittest.TestCase):
         label_re = re.compile(r'^"(.+) \((\d+\.\d)%\)"$')
         title_re = re.compile(r"scored labels v(\d+)")
         for path, expected_axes in (
-            (render.DEFAULT_README, 3),  # one comparison chart per contract (v3, v2, v1)
             (render.DEFAULT_DOC, 6),  # comparison + leaked trend, per contract
         ):
             contract, labelled = None, []
@@ -921,33 +914,17 @@ class ShippedDefaultChartsTest(unittest.TestCase):
                         match = label_re.match(f'"{item}"')
                         self.assertIsNotNone(match, item)
                         base = match.group(1)
-                        rate = (
-                            round(arms_by_contract[contract][base]["leak_rate"] * 100, 1)
-                            if base in arms_by_contract[contract]
-                            else comparison_rates[contract][base]
-                        )
+                        rate = round(arms_by_contract[contract][base]["leak_rate"] * 100, 1)
                         self.assertEqual(float(match.group(2)), rate)
 
-    def test_root_readme_chart_matches_the_readme_table(self):
-        """The hand-written README table and the generated chart show one set of numbers."""
+    def test_root_readme_has_the_panel_picture_and_no_table_or_main_numbers(self):
         readme = render.DEFAULT_README.read_text(encoding="utf-8")
         section = readme.split("## How good is it", 1)[1].split("\n## ", 1)[0]
-        table = [
-            line
-            for line in section.splitlines()
-            if line.startswith("| ") and not line.startswith("| Setup")
-        ]
-        def column(index):
-            cells = [line.split("|")[index].strip().strip("*") for line in table]
-            return [int(c.split(" ")[0].replace(",", "")) for c in cells if c != "not measured"]
-
-        committed = render.load_history(render.DEFAULT_HISTORY)
-        # Column 3 is the v2 headline, column 6 the v1 comparison; each matches
-        # the generated chart for its own contract.
-        for index, version in ((3, 2), (6, 1)):
-            bars = render.comparison_bars(render.contract_history(committed, version))
-            self.assertEqual(column(index), [value for _, value in bars], version)
-        self.assertIn(render.begin_marker("readme-chart"), section)
+        self.assertFalse([l for l in section.splitlines() if l.startswith("| ")])
+        self.assertIn("<picture>", section)
+        self.assertIn("benchmark-panels-dark.svg", section)
+        self.assertNotIn("mermaid", section)
+        check_public(section, "README")
 
     def test_check_fails_when_the_readme_chart_drifts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -979,57 +956,108 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
     def setUp(self):
         self.history = render.load_history(render.DEFAULT_HISTORY)
         self.comparison = json.loads(render.DEFAULT_COMPARISON.read_text(encoding="utf-8"))
+        self.their = json.loads(
+            (render.BENCH_DIR / "their-benchmarks.json").read_text(encoding="utf-8")
+        )["benchmarks"]
+        self.declared = json.loads(render.CHART_CONFIGS.read_text(encoding="utf-8"))
 
-    def test_every_contract_uses_measured_gaze_and_declared_competitor_rows(self):
-        chart = render.render_readme_chart(self.history, self.comparison)
-        declared = json.loads(render.CHART_CONFIGS.read_text(encoding="utf-8"))
-        measured = [name for name in declared.values() if name in self.comparison["tools"]]
-        for version in (3, 2, 1):
-            view = render.contract_history(self.history, version)
-            bars = render.readme_comparison_bars(view, self.comparison, version)
-            self.assertEqual(len(bars), 1 + len(measured))
-            revision = self.comparison["gaze_main_revision"][:8]
-            self.assertIn(f"Gaze main {revision}, unreleased", bars[0][0])
-            gliner_index = measured.index("gliner") + 1
-            self.assertIn("GLiNER", bars[gliner_index][0])
-            self.assertEqual(
-                bars[0][1],
-                self.comparison["gaze"][f"v{version}"]["layers"]["C"]["leaked_bytes"],
-            )
-            self.assertEqual(
-                bars[gliner_index][1],
-                self.comparison["tools"]["gliner"]["contracts"][f"v{version}"]["C"]["leaked_bytes"],
-            )
-        self.assertIn("comparison.json", chart)
-        self.assertEqual(chart.count("'width': 1200"), 3)
+    def panels(self, comparison=None, their=None):
+        return render.chart_panels(
+            self.history, comparison or self.comparison, their or self.their
+        )
+
+    def test_panels_hold_tagged_gaze_and_declared_competitors(self):
+        own, *third = self.panels()
+        gaze = [bar.name for bar in own.bars if bar.gaze]
+        self.assertEqual(gaze, ["Gaze 0.14", "Gaze 0.15"])
+        competitors = [bar.name for bar in own.bars if not bar.gaze]
+        self.assertEqual(
+            competitors, [charts.SHORT_NAMES[key] for key in self.declared]
+        )
+        for panel in third:
+            self.assertEqual([b.name for b in panel.bars if b.gaze], ["Gaze 0.15"])
+            self.assertIsNone(next(b for b in panel.bars if b.gaze).protected)
+        gliner = next(b for b in own.bars if b.name == "GLiNER")
+        leaked = self.comparison["tools"]["gliner"]["contracts"]["v3"]["C"]["leaked_bytes"]
+        self.assertAlmostEqual(gliner.protected, 100 * (1 - leaked / 123621), places=6)
+
+    def test_untagged_gaze_measurements_never_reach_a_chart(self):
+        for version in ("main", "a2f6fefd", "v0.15.1-rc.1", "v0.15", "unreleased"):
+            with self.assertRaises(charts.ChartError, msg=version):
+                charts.GazeRow(version, 90.0, 1)
+        tampered = copy.deepcopy(self.their)
+        tampered["presidio-research"]["rows"]["gaze-v0.15.1-rc.1"] = {}
+        with self.assertRaisesRegex(render.RenderError, "release tag"):
+            self.panels(their=tampered)
+        # The untagged `gaze-full` row and the comparison's main run are never read.
+        moved = copy.deepcopy(self.their)
+        for bench in moved.values():
+            bench["rows"]["gaze-full"]["common_intersection"]["leaked_bytes"] = 1
+        changed = copy.deepcopy(self.comparison)
+        changed["gaze"]["v3"]["layers"]["C"]["leaked_bytes"] = 1
+        self.assertEqual(self.panels(changed, moved), self.panels())
+
+    def test_a_provisional_release_row_is_not_charted(self):
+        history = copy.deepcopy(self.history)
+        history["releases"][-1]["provisional"] = True
+        self.assertEqual(
+            [r.version for r in render.chart_gaze_rows(history)], ["v0.14.0", "v0.15.0"]
+        )
+
+    def test_a_tagged_third_party_run_replaces_the_pending_slot(self):
+        their = copy.deepcopy(self.their)
+        block = copy.deepcopy(their["presidio-research"]["rows"]["gaze-full"]["common_intersection"])
+        their["presidio-research"]["rows"]["gaze-v0.15.1"] = {"common_intersection": block}
+        panel = self.panels(their=their)[1]
+        bar = next(b for b in panel.bars if b.gaze)
+        gold = block["leaked_bytes"] + block["true_positive_bytes"]
+        self.assertAlmostEqual(bar.protected, 100 * (1 - block["leaked_bytes"] / gold))
+        self.assertNotIn("pending", charts.model_card_tables([panel]))
 
     def test_lower_leak_swept_row_is_not_selected(self):
         report = copy.deepcopy(self.comparison)
         report["tools"]["gliner-best"] = copy.deepcopy(report["tools"]["gliner"])
-        report["tools"]["gliner-best"]["provenance"]["configuration"] = (
-            "best-of-sweep, threshold 0.7"
-        )
         report["tools"]["gliner-best"]["contracts"]["v3"]["C"]["leaked_bytes"] = 19000
-        bars = render.readme_comparison_bars(
-            render.contract_history(self.history, 3), report, 3
-        )
-        self.assertNotIn("best-of-sweep, threshold 0.7", str(bars))
-        declared = json.loads(render.CHART_CONFIGS.read_text(encoding="utf-8"))
-        gliner_index = [name for name in declared.values() if name in report["tools"]].index("gliner") + 1
-        self.assertEqual(
-            bars[gliner_index][1], report["tools"]["gliner"]["contracts"]["v3"]["C"]["leaked_bytes"]
-        )
+        self.assertEqual(self.panels(report), self.panels())
 
-    def test_selected_bars_name_the_measured_configuration(self):
-        bars = render.readme_comparison_bars(
-            render.contract_history(self.history, 3), self.comparison, 3
-        )
-        labels = " ".join(label for label, _ in bars)
-        for configuration in (
-            "English transformer + spaCy lg", "DataFog Core 0.3.0, built-in",
-            "DataFog Python 4.8.1, spacy engine", "scrubadub 2.0.0 + spaCy",
-        ):
-            self.assertIn(configuration, labels)
+    def test_bar_names_keep_clear_space_at_every_panel_width(self):
+        """Every name is drawn at most slot - margin wide, whatever font renders it."""
+        panels = self.panels()
+        for panel, width in zip(panels, charts.panel_widths(panels)):
+            slot = charts.slot_width(width, len(panel.bars))
+            for bar in panel.bars:
+                drawn, forced = charts.name_fit(bar.name, slot)
+                self.assertLessEqual(drawn, slot - charts.NAME_MARGIN + 1e-9, bar.name)
+                natural = max(len(l) for l in charts.name_lines(bar.name)) \
+                    * charts.NAME_PX * charts.GLYPH_EM
+                if forced:  # a squeeze stays legible: at most 25 % narrower than a wide font
+                    self.assertGreaterEqual(forced / natural, 0.75, bar.name)
+        svg = charts.figure_svg("light", panels, "alt")
+        self.assertIn('textLength="', svg)  # scrubadub is squeezed, not overlapped
+
+    def test_panels_name_dataset_split_labels_and_notes(self):
+        own, presidio, piibench = self.panels()
+        self.assertIn("Kiji EN/DE holdout and A4 negatives", own.dataset)
+        self.assertIn("test + validation", own.dataset)
+        self.assertIn("2,910 docs", own.dataset)
+        self.assertIn("labels Gaze commits to detect", own.labels)
+        self.assertIn("common intersection", presidio.labels)
+        self.assertIn("1,500 docs, test split", presidio.dataset)
+        self.assertIn("5,000 docs, test split", piibench.dataset)
+        svg = charts.figure_svg("dark", [own, presidio, piibench], "alt")
+        self.assertIn("(own scale)", svg)
+        tables = charts.model_card_tables([own, presidio, piibench])
+        self.assertIn("skipped 0 of the own corpus's 2,910 documents", tables)
+        self.assertIn("Refused documents", tables)
+        self.assertIn("Gaze 0.15 0", tables)
+
+    def test_model_card_bolds_the_best_value_per_row(self):
+        tables = charts.model_card_tables(self.panels())
+        rows = [line for line in tables.splitlines() if line.startswith("| Own corpus")]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0].count("**"), 2)  # PII protected: one best, highest
+        self.assertIn("**89.2%**", rows[0])
+        self.assertIn("**6.8**", rows[1])  # false positives: lowest wins
 
     def test_comparison_mutation_fails_check(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1041,13 +1069,20 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             args = ["--doc", str(doc), "--readme", str(readme), "--comparison", str(report)]
             self.assertEqual(render.main(args), 0)
             self.assertEqual(render.main(args + ["--check"]), 0)
+            svgs = sorted((root / render.CHART_ASSETS).glob("*.svg"))
+            self.assertEqual([p.name for p in svgs],
+                             ["benchmark-panels-dark.svg", "benchmark-panels-light.svg"])
             changed = copy.deepcopy(self.comparison)
-            changed["gaze_main_revision"] = "a" * 40
+            changed["tools"]["gliner"]["contracts"]["v3"]["C"]["leaked_bytes"] += 1000
             report.write_text(json.dumps(changed), encoding="utf-8")
             self.assertEqual(render.main(args + ["--check"]), 1)
-            changed = copy.deepcopy(self.comparison)
-            changed["tools"]["gliner"]["contracts"]["v3"]["C"]["leaked_bytes"] += 1
-            report.write_text(json.dumps(changed), encoding="utf-8")
+            report.write_text(json.dumps(self.comparison), encoding="utf-8")
+            self.assertEqual(render.main(args + ["--check"]), 0)
+            # A hand-edited value on an SVG bar is drift too.
+            svgs[0].write_text(svgs[0].read_text(encoding="utf-8").replace("89.2%", "99.2%"),
+                               encoding="utf-8")
+            self.assertEqual(render.main(args + ["--check"]), 1)
+            svgs[0].unlink()
             self.assertEqual(render.main(args + ["--check"]), 1)
 
 
