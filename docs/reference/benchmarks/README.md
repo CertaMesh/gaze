@@ -1137,8 +1137,16 @@ model:
   `type` string longer than 64 bytes. Every such value is gold and gated.
   Layer D adds each cell's twin with no cue anywhere. See
   [Labelled lookalikes](#labelled-lookalikes) below. The v4 documents remain
-  byte identical within each partition; the generator and both partition
-  hashes are pinned at v5.
+  byte identical within each partition.
+- **Address blocks (generator v6):** layer A adds whole synthetic addresses
+  with a secondary unit or box (`Suite`, `Apt.`, `Unit`, `Flat`, `Floor`,
+  `PO Box`, `Wohnung`, `3. Etage`, `Postfach`), a house number after the
+  street name, US military lines (`PSC 5512, Box 7730, APO AP ...`) and a
+  state between city and ZIP, in prose, blocks, log fields, CSV columns and
+  tool JSON. Every part is gold. Layer D adds the same designator words with
+  no address anywhere. See [Address blocks](#address-blocks) below. The v5
+  documents remain byte identical within each partition; the generator and
+  both partition hashes are pinned at v6.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1256,6 +1264,44 @@ tags every space-grouped 16-digit run without a Luhn check. Append one to the
 policy and run `agentic_layers.py measure`. Each must lower layer A's leak and
 raise layer D's false-positive bytes on its counterweight (`ref_number_9` or
 `ref_number_16`), where the unmodified policy has none.
+
+#### Address blocks
+
+An address identifies a person as a unit. When a rule finds the street, city
+and postcode but not the unit designator between them, `Suite 312` or
+`Apt. 771` stays raw next to tokens, and the address is half protected. Layer
+A (`AddressCell` in `agentic_layers.py`) writes whole addresses and scores every
+part under the layer C labels: `BUILDINGNUM` for the house number and for a
+unit or box with its designator word, `STREET`, `CITY`, `STATE` and `ZIPCODE`.
+A military address maps its `PSC`, `CMR` or `Unit` line to `STREET`, its `Box`
+to `BUILDINGNUM`, `APO` / `FPO` / `DPO` to `CITY` and `AA` / `AE` / `AP` to
+`STATE`, as the postal service does. The separators between parts are not gold.
+
+| Layer A cells (gold, gated) | Layer D twins (no address anywhere) |
+| --- | --- |
+| US addresses with `Suite`, `Apt.`, `Unit`, `Floor` or `PO Box`, in prose, a multi-line block, a log field, CSV columns, a one-line JSON value and split JSON fields; a block with only the state between city and ZIP | `test Suite 4`, `Apartment 12` on a floor plan, `Unit 3` of a course, `Floor 20`, a `PO Box` form field, in prose, logs and JSON |
+| US military lines in prose and blocks | `PSC 311` as a steering group |
+| A GB address with `Flat` before the house number | `Flat 55` as a fee in a CSV |
+| German addresses with the house number after the street, `Wohnung` / `Whg.`, `3. Etage` / `Stock` / `OG` and `Postfach`, in prose, a block, CSV and JSON | `Wohnung 958` in a listing, `im 7. Stock`, a mail folder `Postfach 954` |
+| An address followed by a benign designator in the next sentence or line (`The regression Suite 810 is still red.`, `Postfach 123 der Buchhaltung`) | |
+
+The benign designator after an address is a recorded decoy: an address rule
+that grows past a sentence or line end pays for it in layer A false-positive
+bytes. The generator fails closed unless every A document carries each part its
+shape requires, a unit value carries its cell's designator word, every
+designator an A cell uses (as a unit or a decoy) has a layer D twin, every twin
+is used, and no D document carries a postcode shape. Values are synthetic:
+invented street and city names, US ZIPs in the unassigned `000xx` range, German
+PLZ in the unassigned `00xxx` range, GB postcodes in the unused `ZZ` area, and
+number ranges split between the partitions. Each A cell has 6 documents per
+partition and each twin 4: 19 A cells (+114 documents, +4.6 %) and 11 D twins
+(+44 documents, +4.8 %).
+
+The counterweights have their own end-to-end check:
+[`mutant-standalone-designator.toml`](../../../scripts/bench/fixtures/agentic/mutant-standalone-designator.toml)
+tags every designator and number with no address anchor. Appended to the
+policy, it must lower layer A's leak on the address cells and raise layer D's
+false-positive bytes on the `designator_*` twins.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split

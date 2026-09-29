@@ -1,0 +1,10 @@
+# Deliberately over-broad rule for the address counterweight check (todo 4013).
+# Appended to a policy, it tags every secondary-unit or box designator with its
+# number, with no address anchor: it must lower layer A's leak on the address
+# cells AND raise layer D's false-positive bytes on the `designator_*` twins.
+# Never ship this rule; an address rule must grow only from an address.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_standalone_designator"
+pattern = '\b(?:Suite|Ste\.?|STE|Apt\.?|Apartment|Unit|Flat|Floor|Fl\.|(?:PO|P\.O\.) Box|PSC|CMR|Wohnung|Whg\.|Postfach) #?\d+[A-C]?\b|\b\d\. (?:Etage|Stock|OG)\b'
+class = "custom:mutant_designator"
