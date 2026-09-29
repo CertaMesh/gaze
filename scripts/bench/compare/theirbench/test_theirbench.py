@@ -269,6 +269,33 @@ class HoldAndRescoreTest(unittest.TestCase):
             finally:
                 theirbench.tool_family = original
 
+    def test_rescore_adds_char_level_to_a_report_measured_without_it(self) -> None:
+        import theirbench
+        from loaders import score
+
+        # "Müller" is 7 bytes / 6 chars; stored predictions are in character offsets.
+        document = score.Document("d0", "Hi Müller", "en", "", "t", (score.Span(3, 10, "PERSON"),))
+        mapping = {"name": ("PERSON",)}
+        with tempfile.TemporaryDirectory() as root:
+            pred = Path(root)
+            (pred / "x.test.jsonl").write_text(json.dumps({"index": 0, "spans": [[3, 9, "name"]]}) + "\n",
+                                               encoding="utf-8")
+            cells = theirbench.Cells(mapping, frozenset({"PERSON"}))
+            cells.add(document, [score.Span(3, 10, "name")])
+            result = cells.result()
+            for view in result.values():
+                del view["char_level"]
+            report = {"rows": {"x": {"test": result}}}
+            original = theirbench.tool_family
+            theirbench.tool_family = lambda name: "fam"
+            try:
+                theirbench.rescore(report, {"test": [document]}, {"fam": mapping}, frozenset({"PERSON"}), pred)
+            finally:
+                theirbench.tool_family = original
+            char = report["rows"]["x"]["test"]["product_coverage"]["char_level"]
+            self.assertEqual((char["tp"], char["fp"], char["fn"]), (6, 0, 0))
+            self.assertEqual(char["f2"], 1.0)
+
     def test_measured_backend_code_is_unchanged(self) -> None:
         import backends
 

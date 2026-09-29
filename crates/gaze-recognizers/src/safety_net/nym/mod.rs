@@ -22,7 +22,8 @@ pub use gaze_types::nym::{
     NymOperatingPoint, NYM_SAFETY_NET_ID,
 };
 use gaze_types::{
-    LeakKind, LeakSuspect, LocaleTag, Manifest, SafetyNet, SafetyNetContext, SafetyNetError,
+    LeakKind, LeakReportTelemetry, LeakSuspect, LocaleTag, Manifest, SafetyNet, SafetyNetContext,
+    SafetyNetError, SafetyNetRefusalReason,
 };
 
 pub mod artifacts;
@@ -110,17 +111,36 @@ impl SafetyNet for NymSafetyNet {
         clean_text: &str,
         context: SafetyNetContext<'_>,
     ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        self.check_with_telemetry(clean_text, context)
+            .map(|(suspects, _)| suspects)
+    }
+
+    fn check_with_telemetry(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
         let backend = self.backend()?;
         let spans = backend.infer(clean_text)?;
         let mut suspects = Vec::with_capacity(spans.len());
+        let mut telemetry = Vec::new();
         for span in spans {
-            if let Some(suspect) =
-                span_to_suspect(span, clean_text, backend.operating_point(), context)?
-            {
-                suspects.push(suspect);
+            let range = span.start..span.end;
+            match span_to_disposition(span, clean_text, backend.operating_point(), context)? {
+                SpanDisposition::Suspect(suspect) => suspects.push(suspect),
+                SpanDisposition::Refused(reason) => {
+                    telemetry.push(LeakReportTelemetry::ModelSpanRefused {
+                        safety_net_id: NYM_SAFETY_NET_ID.to_string(),
+                        reason,
+                        span: range,
+                        document_kind: context.document_kind,
+                        field_path: context.field_path.map(str::to_string),
+                    });
+                }
+                SpanDisposition::Covered => {}
             }
         }
-        Ok(suspects)
+        Ok((suspects, telemetry))
     }
 
     fn check_with_neutral(
@@ -129,12 +149,21 @@ impl SafetyNet for NymSafetyNet {
         neutral_text: Option<&str>,
         context: SafetyNetContext<'_>,
     ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        self.check_with_neutral_and_telemetry(stable_text, neutral_text, context)
+            .map(|(suspects, _)| suspects)
+    }
+
+    fn check_with_neutral_and_telemetry(
+        &self,
+        stable_text: &str,
+        neutral_text: Option<&str>,
+        context: SafetyNetContext<'_>,
+    ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
         let Some(neutral_text) = neutral_text else {
-            return Ok(union_view_suspects(
-                stable_text,
-                context.manifest,
-                self.check(stable_text, context)?,
-                Vec::new(),
+            let (stable, telemetry) = self.check_with_telemetry(stable_text, context)?;
+            return Ok((
+                union_view_suspects(stable_text, context.manifest, stable, Vec::new()),
+                telemetry,
             ));
         };
         if stable_text.len() != neutral_text.len()
@@ -147,13 +176,16 @@ impl SafetyNet for NymSafetyNet {
                 message: "nym neutral view changed byte offsets".to_string(),
             });
         }
-        let stable = self.check(stable_text, context)?;
-        let neutral = self.check(neutral_text, context)?;
-        Ok(union_view_suspects(
-            stable_text,
-            context.manifest,
-            stable,
-            neutral,
+        let (stable, mut telemetry) = self.check_with_telemetry(stable_text, context)?;
+        let (neutral, neutral_telemetry) = self.check_with_telemetry(neutral_text, context)?;
+        for event in neutral_telemetry {
+            if !telemetry.contains(&event) {
+                telemetry.push(event);
+            }
+        }
+        Ok((
+            union_view_suspects(stable_text, context.manifest, stable, neutral),
+            telemetry,
         ))
     }
 }
@@ -316,13 +348,19 @@ pub mod test_support {
     }
 }
 
-/// Maps a decoded span to a suspect, or `None` when the manifest already covers it.
-fn span_to_suspect(
+enum SpanDisposition {
+    Suspect(LeakSuspect),
+    Refused(SafetyNetRefusalReason),
+    Covered,
+}
+
+/// Maps a validated span to a suspect, a typed refusal, or manifest coverage.
+fn span_to_disposition(
     span: NymSpan,
     clean_text: &str,
     operating_point: &NymOperatingPoint,
     context: SafetyNetContext<'_>,
-) -> Result<Option<LeakSuspect>, SafetyNetError> {
+) -> Result<SpanDisposition, SafetyNetError> {
     let invalid = |message: &str| SafetyNetError::InvalidOutput {
         message: message.to_string(),
     };
@@ -338,11 +376,16 @@ fn span_to_suspect(
     let threshold = operating_point
         .threshold(span.label)
         .ok_or_else(|| invalid("nym returned a label that is not enabled"))?;
+    if is_pagination_number(clean_text, &span, context.field_path) {
+        return Ok(SpanDisposition::Refused(
+            SafetyNetRefusalReason::NymPaginationKeyV1,
+        ));
+    }
     let range = span.start..span.end;
     let Some(kind) = context.manifest.diff_against(&range, &class) else {
-        return Ok(None);
+        return Ok(SpanDisposition::Covered);
     };
-    Ok(Some(LeakSuspect::new(
+    Ok(SpanDisposition::Suspect(LeakSuspect::new(
         range,
         class,
         NYM_SAFETY_NET_ID,
@@ -351,6 +394,94 @@ fn span_to_suspect(
         raw_label(span.label, threshold),
         context.field_path.map(str::to_string),
     )))
+}
+
+// V1 is deliberately finite: every member is metadata, even when its value is a single digit.
+// Compare after ASCII case-folding and removing snake/kebab separators, so camelCase also works.
+const PAGINATION_KEYS_V1: &[&str] = &[
+    "page",
+    "pagenumber",
+    "perpage",
+    "pagesize",
+    "limit",
+    "offset",
+    "total",
+    "count",
+    "index",
+    "cursor",
+    "currentpage",
+    "totalpages",
+    "totalcount",
+    "pagecount",
+];
+
+fn is_pagination_key(key: &str) -> bool {
+    if key.is_empty()
+        || !key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return false;
+    }
+    let normalized: String = key
+        .bytes()
+        .filter(|byte| !matches!(byte, b'_' | b'-'))
+        .map(|byte| char::from(byte.to_ascii_lowercase()))
+        .collect();
+    PAGINATION_KEYS_V1.contains(&normalized.as_str())
+}
+
+/// Numeric pagination/count metadata is not an address, regardless of its wrapper syntax.
+fn is_pagination_number(text: &str, span: &NymSpan, field_path: Option<&str>) -> bool {
+    if span.label != NymLabel::BuildingNumber {
+        return false;
+    }
+    let value = &text[span.start..span.end];
+    if !value.bytes().all(|byte| byte.is_ascii_digit())
+        || gaze_types::is_inside_word(text, span.start)
+        || gaze_types::is_inside_word(text, span.end)
+    {
+        return false;
+    }
+    if field_path.is_some_and(|path| {
+        let key = path.rsplit(['.', '[']).next().unwrap_or(path);
+        let key = key.trim_end_matches(']').trim_matches(['"', '\'']);
+        is_pagination_key(key)
+            && text[..span.start].trim().is_empty()
+            && text[span.end..].trim().is_empty()
+    }) {
+        return true;
+    }
+
+    let before = text[..span.start].trim_end();
+    let tail = &text[span.end..];
+    let after = tail.trim_start();
+    if let Some(prefix) = before.strip_suffix('=') {
+        let key_start = prefix.rfind(['?', '&']);
+        if let Some(index) = key_start {
+            return is_pagination_key(&prefix[index + 1..])
+                && matches!(after.chars().next(), None | Some('&' | '#'));
+        }
+    }
+    let Some(prefix) = before.strip_suffix(':') else {
+        return false;
+    };
+    let prefix = prefix.trim_end();
+    if let Some(quoted) = prefix.strip_suffix('"') {
+        if let Some(open) = quoted.rfind('"') {
+            let key = &quoted[open + 1..];
+            return is_pagination_key(key)
+                && matches!(
+                    quoted[..open].trim_end().chars().next_back(),
+                    Some('{' | ',')
+                )
+                && matches!(after.chars().next(), Some(',' | '}'));
+        }
+    }
+    let line = prefix.rsplit('\n').next().unwrap_or(prefix).trim_start();
+    let line = line.strip_prefix("- ").unwrap_or(line);
+    let yaml_tail = tail.trim_start_matches([' ', '\t']);
+    is_pagination_key(line) && matches!(yaml_tail.chars().next(), None | Some('\n' | '\r' | '#'))
 }
 
 /// `LABEL>=THRESHOLD`, the audit spelling of which rule fired.
@@ -376,6 +507,30 @@ mod tests {
             None,
             None,
         )
+    }
+
+    fn disposition_for(
+        text: &str,
+        value: &str,
+        label: NymLabel,
+        field_path: Option<&str>,
+    ) -> SpanDisposition {
+        let manifest = Manifest::default();
+        let start = text.rfind(value).unwrap();
+        let mut ctx = context(&manifest);
+        ctx.field_path = field_path;
+        span_to_disposition(
+            NymSpan {
+                start,
+                end: start + value.len(),
+                label,
+                score: 0.99,
+            },
+            text,
+            &NymOperatingPoint::op_b(),
+            ctx,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -654,6 +809,16 @@ mod tests {
                 findings,
             ))
         }
+
+        fn check_with_neutral_and_telemetry(
+            &self,
+            stable_text: &str,
+            neutral_text: Option<&str>,
+            context: SafetyNetContext<'_>,
+        ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
+            self.check_with_neutral(stable_text, neutral_text, context)
+                .map(|suspects| (suspects, Vec::new()))
+        }
     }
 
     #[test]
@@ -803,15 +968,149 @@ mod tests {
             label: NymLabel::LicensePlate,
             score: 0.97,
         };
-        let suspect = span_to_suspect(span, text, &NymOperatingPoint::op_b(), context(&manifest))
-            .unwrap()
-            .unwrap();
+        let SpanDisposition::Suspect(suspect) =
+            span_to_disposition(span, text, &NymOperatingPoint::op_b(), context(&manifest))
+                .unwrap()
+        else {
+            panic!("expected a suspect");
+        };
         assert_eq!(suspect.safety_net_id, "nym-small-int8");
         assert_eq!(suspect.raw_label, "LICENSE_PLATE>=0.5");
         assert_eq!(suspect.score, Some(0.97));
         assert_eq!(suspect.class, PiiClass::custom("license_plate").unwrap());
         assert_eq!(suspect.kind, LeakKind::Uncovered);
         assert_eq!(raw_label(NymLabel::DateOfBirth, 0.9), "DATE_OF_BIRTH>=0.9");
+    }
+
+    #[test]
+    fn nym_building_number_refuses_numeric_pagination_fields() {
+        // Keep this expectation independent of the production table: deleting a key must fail.
+        for key in [
+            "page",
+            "pagenumber",
+            "perpage",
+            "pagesize",
+            "limit",
+            "offset",
+            "total",
+            "count",
+            "index",
+            "cursor",
+            "currentpage",
+            "totalpages",
+            "totalcount",
+            "pagecount",
+        ] {
+            for text in [
+                format!("{{\"{key}\":2}}"),
+                format!("?{key}=2&house_number=7"),
+                format!("{key}: 2\n"),
+            ] {
+                assert!(
+                    matches!(
+                        disposition_for(&text, "2", NymLabel::BuildingNumber, None),
+                        SpanDisposition::Refused(SafetyNetRefusalReason::NymPaginationKeyV1)
+                    ),
+                    "{text}"
+                );
+            }
+        }
+        for (text, value) in [
+            (
+                "{\"operation\":\"fetch\",\"caseId\":\"1234567890\",\"page\":1}",
+                "1",
+            ),
+            ("{\"page\" : 12, \"house_number\": 1}", "12"),
+            ("{\"page\":\n  123}", "123"),
+            ("{\"Page_Number\":2}", "2"),
+            ("{\"page-size\":2}", "2"),
+            ("{\"pageSize\":2}", "2"),
+            ("?perPage=2&limit=20", "20"),
+            ("  total_count: 2\n", "2"),
+            ("  page_size: 2  # synthetic pagination metadata\n", "2"),
+        ] {
+            assert!(
+                matches!(
+                    disposition_for(text, value, NymLabel::BuildingNumber, None),
+                    SpanDisposition::Refused(_)
+                ),
+                "{text}"
+            );
+        }
+        assert!(matches!(
+            disposition_for("2", "2", NymLabel::BuildingNumber, Some("$.meta.pageSize")),
+            SpanDisposition::Refused(_)
+        ));
+    }
+
+    #[test]
+    fn nym_building_number_keeps_address_digits_and_non_json_values() {
+        let manifest = Manifest::default();
+        for (text, value) in [
+            ("{\"page\": 1, \"house_number\": 7}", "7"),
+            ("{\"address\": \"Main Street 1\"}", "1"),
+            ("{\"caseId\": \"1234567890\"}", "1234567890"),
+            ("{\"orderRef\": \"AB12-34\"}", "AB12-34"),
+            ("{\"trackingNumber\": \"TRK-92A4-8B12\"}", "TRK-92A4-8B12"),
+            ("page=1", "1"),
+            ("{\"page\": \"1\"}", "1"),
+            ("{\"house_number\": 12}", "12"),
+            ("{\"building\": \"5\"}", "5"),
+            ("Hausnummer: 12\n", "12"),
+            ("Main Street 12", "12"),
+            ("{\"page\":2,\"house_number\":7}", "7"),
+            ("{\"page\":2,\"building\":5}", "5"),
+            ("?house_number=7&page=2", "7"),
+            ("page: 2 nearby house 7", "7"),
+            ("{\"page\":2,\"name\":7}", "7"),
+            ("{\"homepage_phone\":2}", "2"),
+            ("{\"pagex\":2}", "2"),
+            ("{\"cursorlike_id\":2}", "2"),
+            ("{\"p!age\":2}", "2"),
+            ("x\"page\":2}", "2"),
+            ("{\"page\":2x}", "2"),
+            ("{\"page\":2 Main}", "2"),
+            ("?page=2 Main Street 5", "2"),
+            ("?page=x2&limit=3", "2"),
+            ("?page=2x&limit=3", "2"),
+            ("page: 2 Main Street\n", "2"),
+            ("page: ٢\n", "٢"),
+        ] {
+            let start = text.rfind(value).unwrap();
+            let span = NymSpan {
+                start,
+                end: start + value.len(),
+                label: NymLabel::BuildingNumber,
+                score: 0.99,
+            };
+            assert!(
+                matches!(
+                    span_to_disposition(span, text, &NymOperatingPoint::op_b(), context(&manifest))
+                        .unwrap(),
+                    SpanDisposition::Suspect(_)
+                ),
+                "{text}"
+            );
+        }
+        assert!(matches!(
+            disposition_for(
+                "2",
+                "2",
+                NymLabel::BuildingNumber,
+                Some("$.address.house_number")
+            ),
+            SpanDisposition::Suspect(_)
+        ));
+        assert!(matches!(
+            disposition_for("{\"page\":2}", "2", NymLabel::DateOfBirth, None),
+            SpanDisposition::Suspect(_)
+        ));
+        for text in ["2 Main Street", "Main Street 2"] {
+            assert!(matches!(
+                disposition_for(text, "2", NymLabel::BuildingNumber, Some("$.page")),
+                SpanDisposition::Suspect(_)
+            ));
+        }
     }
 
     #[test]
@@ -824,7 +1123,7 @@ mod tests {
             score: 0.99,
         };
         assert!(matches!(
-            span_to_suspect(
+            span_to_disposition(
                 span,
                 "12345",
                 &NymOperatingPoint::op_b(),
@@ -839,7 +1138,7 @@ mod tests {
             score: 0.99,
         };
         assert!(
-            span_to_suspect(span, "ü", &NymOperatingPoint::op_b(), context(&manifest)).is_err()
+            span_to_disposition(span, "ü", &NymOperatingPoint::op_b(), context(&manifest)).is_err()
         );
     }
 

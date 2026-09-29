@@ -31,7 +31,7 @@ use gaze::{
     PiiClass, Policy, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger,
     Result as GazeResult, Session, SessionSnapshotEntry,
 };
-use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
+use gaze_audit::SqliteLogger;
 
 const DEFAULT_PROCESS_IDLE_TIMEOUT_SECS: u64 = 1_800;
 const DEFAULT_SESSION_IDLE_TIMEOUT_SECS: u64 = 3_600;
@@ -469,17 +469,12 @@ impl DaemonLogger {
             return Ok(());
         };
         let created_at = chrono::Utc::now().timestamp_millis();
-        for suspect in &report.suspects {
-            let entry = LeakSuspectLogEntry::from_suspect(
-                suspect,
-                document_kind,
-                created_at,
-                Some(session.audit_session_id().to_string()),
-                report.replay_hash.clone(),
-            );
-            audit.log_leak_suspect(&entry)?;
-        }
-        Ok(())
+        audit.log_safety_net_report(
+            report,
+            document_kind,
+            created_at,
+            Some(session.audit_session_id().to_string()),
+        )
     }
 
     fn log_eviction(&self, session: &Session, reason: &str) -> Result<(), RedactionLogError> {

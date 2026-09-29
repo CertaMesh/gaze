@@ -36,7 +36,7 @@
       "harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
       "harness_tags": {
         "measured": "bench/theirbench-measured-a8293dc0",
-        "rescored": "bench/theirbench-rescored-b47f4ec1"
+        "rescored": "bench/theirbench-rescored-dab4a195"
       },
       "identity": {
         "documents": 5000,
@@ -11108,21 +11108,32 @@
         }
       },
       "rescored_with": {
-        "at": "2026-09-28T14:32:21.862172+00:00",
-        "comparison_revision": "b1446215",
+        "at": "2026-09-29T05:54:03.873123+00:00",
+        "comparison_revision": "2571ac37",
         "comparison_sha256": {
           "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
           "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
-          "comparison_metrics.py": "451b608228cdc0ed33057d86e0ea6c4401584834a9626e6b448db1a4c10f999d",
+          "comparison_metrics.py": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
           "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
           "label-map.json": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e"
         },
         "harness_dirty": false,
-        "harness_revision": "b47f4ec1614f8b569e0a5f90bdfff9a2d0065c4d"
+        "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931"
       },
       "rows": {
         "datafog-core": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.5292629021645606,
+              "f2": 0.425384488131107,
+              "f5": 0.3847252501563625,
+              "fn": 52026,
+              "fp": 3778,
+              "precision": 0.8925147230362173,
+              "recall": 0.37616461023777836,
+              "tp": 31371,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9037999037999038,
             "documents": 5000,
             "false_positive_bytes": 3778,
@@ -11152,6 +11163,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.26089565086963046,
+              "f2": 0.18298947145014788,
+              "f5": 0.1576421484008542,
+              "fn": 222141,
+              "fp": 4529,
+              "precision": 0.8983047041652633,
+              "recall": 0.15260903233681866,
+              "tp": 40006,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9988502443230813,
             "documents": 5000,
             "false_positive_bytes": 4529,
@@ -11178,6 +11200,17 @@
         },
         "datafog-gliner": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.7281470506993446,
+              "f2": 0.7081368457298594,
+              "f5": 0.6978110161882989,
+              "fn": 25403,
+              "fp": 17901,
+              "precision": 0.7641346597272548,
+              "recall": 0.6953967169082821,
+              "tp": 57994,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.6652236652236653,
             "documents": 5000,
             "false_positive_bytes": 17966,
@@ -11207,6 +11240,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.6185663515942773,
+              "f2": 0.5882723689486982,
+              "f5": 0.5731576911835474,
+              "fn": 112809,
+              "fp": 71367,
+              "precision": 0.676640764821821,
+              "recall": 0.5696727408667656,
+              "tp": 149338,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7559643575740155,
             "documents": 5000,
             "false_positive_bytes": 71574,
@@ -11233,6 +11277,17 @@
         },
         "datafog-regex": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.5415968732551647,
+              "f2": 0.43889861367737476,
+              "f5": 0.3982371171680748,
+              "fn": 50902,
+              "fp": 4105,
+              "precision": 0.8878415300546448,
+              "recall": 0.3896423132726597,
+              "tp": 32495,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8980278980278981,
             "documents": 5000,
             "false_positive_bytes": 4105,
@@ -11262,6 +11317,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.2580624121524007,
+              "f2": 0.180984008489772,
+              "f5": 0.1559093608876526,
+              "fn": 222581,
+              "fp": 4926,
+              "precision": 0.8892834666906411,
+              "recall": 0.15093058474825194,
+              "tp": 39566,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9988502443230813,
             "documents": 5000,
             "false_positive_bytes": 4926,
@@ -11288,6 +11354,17 @@
         },
         "datafog-spacy": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.5357231198488162,
+              "f2": 0.598513471389188,
+              "f5": 0.6388309299140613,
+              "fn": 29252,
+              "fp": 64596,
+              "precision": 0.4559924541649472,
+              "recall": 0.6492439776011127,
+              "tp": 54145,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7243867243867244,
             "documents": 5000,
             "false_positive_bytes": 64787,
@@ -11317,6 +11394,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.47044389988640856,
+              "f2": 0.521631361493976,
+              "f5": 0.5540947996743725,
+              "fn": 114708,
+              "fp": 217222,
+              "precision": 0.40431798300339217,
+              "recall": 0.562428713660656,
+              "tp": 147439,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8197757976430009,
             "documents": 5000,
             "false_positive_bytes": 219413,
@@ -11343,6 +11431,17 @@
         },
         "gaze-full": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.7012252591894438,
+              "f2": 0.6442201704976388,
+              "f5": 0.6172030639740834,
+              "fn": 32433,
+              "fp": 10996,
+              "precision": 0.8225306649451258,
+              "recall": 0.6111011187452786,
+              "tp": 50964,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7162097162097162,
             "documents": 5000,
             "false_positive_bytes": 11058,
@@ -11372,6 +11471,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.6700292134638943,
+              "f2": 0.6240121466566773,
+              "f5": 0.6017584541749008,
+              "fn": 105726,
+              "fp": 48340,
+              "precision": 0.7639198870878732,
+              "recall": 0.5966919323890794,
+              "tp": 156421,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7950560505892498,
             "documents": 5000,
             "false_positive_bytes": 48477,
@@ -11398,6 +11508,17 @@
         },
         "gaze-rules-ner": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.6650480555116582,
+              "f2": 0.5943940113763305,
+              "f5": 0.5622312263691748,
+              "fn": 37105,
+              "fp": 9525,
+              "precision": 0.8293530644785638,
+              "recall": 0.5550799189419283,
+              "tp": 46292,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7421837421837422,
             "documents": 5000,
             "false_positive_bytes": 9587,
@@ -11427,6 +11548,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.6499343896705901,
+              "f2": 0.596746060096997,
+              "f5": 0.5715598270364408,
+              "fn": 113805,
+              "fp": 45994,
+              "precision": 0.76332743289972,
+              "recall": 0.5658733458708282,
+              "tp": 148342,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7962058062661684,
             "documents": 5000,
             "false_positive_bytes": 46131,
@@ -11453,6 +11585,17 @@
         },
         "gaze-rules-only": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.42677517504307344,
+              "f2": 0.3240126131692397,
+              "f5": 0.2868243057569159,
+              "fn": 60113,
+              "fp": 2435,
+              "precision": 0.9053229130215016,
+              "recall": 0.27919469525282686,
+              "tp": 23284,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9629629629629629,
             "documents": 5000,
             "false_positive_bytes": 2435,
@@ -11482,6 +11625,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.3128128513561384,
+              "f2": 0.2284947204331657,
+              "f5": 0.19953408040279544,
+              "fn": 211372,
+              "fp": 11713,
+              "precision": 0.8125560107540648,
+              "recall": 0.19368903706698914,
+              "tp": 50775,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9994251221615407,
             "documents": 5000,
             "false_positive_bytes": 11715,
@@ -11508,6 +11662,17 @@
         },
         "gliner": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.5614082773065578,
+              "f2": 0.4678240247282029,
+              "f5": 0.42929121698923683,
+              "fn": 48284,
+              "fp": 6579,
+              "precision": 0.8421999424349995,
+              "recall": 0.42103432977205413,
+              "tp": 35113,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9028379028379029,
             "documents": 5000,
             "false_positive_bytes": 6623,
@@ -11537,6 +11702,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.5598277657248815,
+              "f2": 0.5319196736495674,
+              "f5": 0.5180146278335116,
+              "fn": 127191,
+              "fp": 85031,
+              "precision": 0.6134726142908444,
+              "recall": 0.5148103926422961,
+              "tp": 134956,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8114400689853406,
             "documents": 5000,
             "false_positive_bytes": 85245,
@@ -11563,6 +11739,17 @@
         },
         "gliner-high-recall": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.5763206836660979,
+              "f2": 0.4929623757273614,
+              "f5": 0.4573433725048671,
+              "fn": 45901,
+              "fp": 9229,
+              "precision": 0.8024826110219369,
+              "recall": 0.4496084991066825,
+              "tp": 37496,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8874458874458875,
             "documents": 5000,
             "false_positive_bytes": 9278,
@@ -11592,6 +11779,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.562192540332099,
+              "f2": 0.5655548480146385,
+              "f5": 0.5673820335199659,
+              "fn": 113295,
+              "fp": 118542,
+              "precision": 0.5566766643978549,
+              "recall": 0.5678188192121214,
+              "tp": 148852,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.775222765162403,
             "documents": 5000,
             "false_positive_bytes": 118822,
@@ -11618,6 +11816,17 @@
         },
         "opf": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.6019895567328581,
+              "f2": 0.5176780919617385,
+              "f5": 0.4813755999986872,
+              "fn": 43911,
+              "fp": 8302,
+              "precision": 0.826274378505064,
+              "recall": 0.473470268714702,
+              "tp": 39486,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.873015873015873,
             "documents": 5000,
             "false_positive_bytes": 8333,
@@ -11647,6 +11856,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.5031041154430766,
+              "f2": 0.39978228625454293,
+              "f5": 0.3599751095565515,
+              "fn": 169966,
+              "fp": 12121,
+              "precision": 0.8837893808364173,
+              "recall": 0.3516385844583383,
+              "tp": 92181,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9695314745616557,
             "documents": 5000,
             "false_positive_bytes": 12174,
@@ -11673,6 +11893,17 @@
         },
         "presidio-all": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.500296632707336,
+              "f2": 0.5486752864472908,
+              "f5": 0.578813648810044,
+              "fn": 34486,
+              "fp": 63220,
+              "precision": 0.43619516458428087,
+              "recall": 0.5864839262803219,
+              "tp": 48911,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7522847522847523,
             "documents": 5000,
             "false_positive_bytes": 63387,
@@ -11702,6 +11933,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.520840644595739,
+              "f2": 0.598820798450624,
+              "f5": 0.6513299441457793,
+              "fn": 87762,
+              "fp": 233097,
+              "precision": 0.4279575539533035,
+              "recall": 0.6652183698459262,
+              "tp": 174385,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8074159241161253,
             "documents": 5000,
             "false_positive_bytes": 235332,
@@ -11728,6 +11970,17 @@
         },
         "presidio-en": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.500296632707336,
+              "f2": 0.5486752864472908,
+              "f5": 0.578813648810044,
+              "fn": 34486,
+              "fp": 63220,
+              "precision": 0.43619516458428087,
+              "recall": 0.5864839262803219,
+              "tp": 48911,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7522847522847523,
             "documents": 5000,
             "false_positive_bytes": 63387,
@@ -11757,6 +12010,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.520840644595739,
+              "f2": 0.598820798450624,
+              "f5": 0.6513299441457793,
+              "fn": 87762,
+              "fp": 233097,
+              "precision": 0.4279575539533035,
+              "recall": 0.6652183698459262,
+              "tp": 174385,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8074159241161253,
             "documents": 5000,
             "false_positive_bytes": 235332,
@@ -11783,6 +12047,17 @@
         },
         "presidio-en-de": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.500296632707336,
+              "f2": 0.5486752864472908,
+              "f5": 0.578813648810044,
+              "fn": 34486,
+              "fp": 63220,
+              "precision": 0.43619516458428087,
+              "recall": 0.5864839262803219,
+              "tp": 48911,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7522847522847523,
             "documents": 5000,
             "false_positive_bytes": 63387,
@@ -11812,6 +12087,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.520840644595739,
+              "f2": 0.598820798450624,
+              "f5": 0.6513299441457793,
+              "fn": 87762,
+              "fp": 233097,
+              "precision": 0.4279575539533035,
+              "recall": 0.6652183698459262,
+              "tp": 174385,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8074159241161253,
             "documents": 5000,
             "false_positive_bytes": 235332,
@@ -11838,6 +12124,17 @@
         },
         "presidio-strong": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.6995499599657639,
+              "f2": 0.6413342546960389,
+              "f5": 0.613828524359813,
+              "fn": 32723,
+              "fp": 10805,
+              "precision": 0.8242489305291237,
+              "recall": 0.6076237754355672,
+              "tp": 50674,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.6955266955266955,
             "documents": 5000,
             "false_positive_bytes": 10864,
@@ -11867,6 +12164,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.6647197663719647,
+              "f2": 0.6652086583731006,
+              "f5": 0.6654722059014461,
+              "fn": 87679,
+              "fp": 88322,
+              "precision": 0.6639065413448,
+              "recall": 0.6655349860955876,
+              "tp": 174468,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7016384018396091,
             "documents": 5000,
             "false_positive_bytes": 88715,
@@ -11893,6 +12201,17 @@
         },
         "presidio-strong-high-recall": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.6997702798722397,
+              "f2": 0.6417689485005694,
+              "f5": 0.6143498656176347,
+              "fn": 32678,
+              "fp": 10843,
+              "precision": 0.8238686202527533,
+              "recall": 0.6081633631905224,
+              "tp": 50719,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.6955266955266955,
             "documents": 5000,
             "false_positive_bytes": 10902,
@@ -11922,6 +12241,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.6672523189384519,
+              "f2": 0.6728010184804429,
+              "f5": 0.675827175479168,
+              "fn": 84791,
+              "fp": 92098,
+              "precision": 0.6582051110764732,
+              "recall": 0.6765517057223619,
+              "tp": 177356,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7010635240011498,
             "documents": 5000,
             "false_positive_bytes": 92491,
@@ -11948,6 +12278,17 @@
         },
         "scrubadub-base": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.3382586372454879,
+              "f2": 0.2450113414090601,
+              "f5": 0.21334330994786996,
+              "fn": 66136,
+              "fp": 1400,
+              "precision": 0.9249772252290874,
+              "recall": 0.20697387196182118,
+              "tp": 17261,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9807599807599807,
             "documents": 5000,
             "false_positive_bytes": 1400,
@@ -11977,6 +12318,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.25377889721335406,
+              "f2": 0.18006913722354673,
+              "f5": 0.15571587866657843,
+              "fn": 222600,
+              "fp": 9971,
+              "precision": 0.7986388787915506,
+              "recall": 0.15085810632965474,
+              "tp": 39547,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9997125610807703,
             "documents": 5000,
             "false_positive_bytes": 9971,
@@ -12003,6 +12355,17 @@
         },
         "scrubadub-spacy": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.320347608702122,
+              "f2": 0.23000393169114006,
+              "f5": 0.19968121099864866,
+              "fn": 67251,
+              "fp": 1260,
+              "precision": 0.9276111685625646,
+              "recall": 0.19360408647793087,
+              "tp": 16146,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9817219817219818,
             "documents": 5000,
             "false_positive_bytes": 1260,
@@ -12032,6 +12395,17 @@
             "samples": 5000
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.431578986104569,
+              "f2": 0.4409220341837797,
+              "f5": 0.446122437752889,
+              "fn": 144868,
+              "fp": 164062,
+              "precision": 0.41685712356179866,
+              "recall": 0.44737876077162814,
+              "tp": 117279,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9062949123311297,
             "documents": 5000,
             "false_positive_bytes": 166114,
@@ -12103,7 +12477,7 @@
       "harness_revision": "a8293dc0bc3de251063848cfd3f7596e620ecb8b",
       "harness_tags": {
         "measured": "bench/theirbench-measured-a8293dc0",
-        "rescored": "bench/theirbench-rescored-b47f4ec1"
+        "rescored": "bench/theirbench-rescored-dab4a195"
       },
       "identity": {
         "commit": "6db3769a3388b4075b93ab2229c5e0b9c30137f7",
@@ -14128,21 +14502,32 @@
         }
       },
       "rescored_with": {
-        "at": "2026-09-28T14:32:17.858834+00:00",
-        "comparison_revision": "b1446215",
+        "at": "2026-09-29T05:53:57.328435+00:00",
+        "comparison_revision": "2571ac37",
         "comparison_sha256": {
           "chart-configs.json": "3d986092b7970db18c48a9e5ec645b83f98ea3204f016939ffdd3ba91c102d55",
           "compare.py": "e02418ca4094e97caf5621ba816e4d7bd8cdbd286690c3637039604162de67ef",
-          "comparison_metrics.py": "451b608228cdc0ed33057d86e0ea6c4401584834a9626e6b448db1a4c10f999d",
+          "comparison_metrics.py": "8795877792892ec05a1ae5014b195b0c7b280bc68d85f369aceaf1f2e3ab190f",
           "cpu_contention.py": "7916c3e39ba3d2ebd67b47f5406958df2713e52a8e506f17fe053db0788ae600",
           "label-map.json": "2e88a1839a6ae271da78aed35616930d6feff32de029b2cc58a1aae5d66acc8e"
         },
         "harness_dirty": false,
-        "harness_revision": "b47f4ec1614f8b569e0a5f90bdfff9a2d0065c4d"
+        "harness_revision": "dab4a1956ad0b787ea8d135311648afb659e4931"
       },
       "rows": {
         "datafog-core": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.36016121660364814,
+              "f2": 0.26025028222804025,
+              "f5": 0.2264281365352581,
+              "fn": 15399,
+              "fp": 0,
+              "precision": 1.0,
+              "recall": 0.21963208837987128,
+              "tp": 4334,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8320839580209896,
             "documents": 1500,
             "false_positive_bytes": 0,
@@ -14172,6 +14557,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.2165199046046597,
+              "f2": 0.1472836293980745,
+              "f5": 0.12564899436582808,
+              "fn": 34166,
+              "fp": 0,
+              "precision": 1.0,
+              "recall": 0.12140303957620799,
+              "tp": 4721,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.9019466474405191,
             "documents": 1500,
             "false_positive_bytes": 0,
@@ -14198,6 +14594,17 @@
         },
         "datafog-gliner": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.7989422502772328,
+              "f2": 0.7443730925737537,
+              "f5": 0.7179677687558597,
+              "fn": 5684,
+              "fp": 1387,
+              "precision": 0.9101451153148484,
+              "recall": 0.7119545938275984,
+              "tp": 14049,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.4032983508245877,
             "documents": 1500,
             "false_positive_bytes": 1387,
@@ -14227,6 +14634,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.7983928788842142,
+              "f2": 0.7741811923476509,
+              "f5": 0.761742597613802,
+              "fn": 9378,
+              "fp": 5525,
+              "precision": 0.842296055260604,
+              "recall": 0.7588397150718749,
+              "tp": 29509,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.3439077144917087,
             "documents": 1500,
             "false_positive_bytes": 5525,
@@ -14253,6 +14671,17 @@
         },
         "datafog-regex": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.3455185713087952,
+              "f2": 0.24809459020143765,
+              "f5": 0.2153922234775232,
+              "fn": 15612,
+              "fp": 0,
+              "precision": 1.0,
+              "recall": 0.20883798712816096,
+              "tp": 4121,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8275862068965517,
             "documents": 1500,
             "false_positive_bytes": 0,
@@ -14282,6 +14711,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.2071048203047558,
+              "f2": 0.14033991502124468,
+              "f5": 0.11958221174668543,
+              "fn": 34395,
+              "fp": 0,
+              "precision": 1.0,
+              "recall": 0.11551418211741714,
+              "tp": 4492,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.905551550108147,
             "documents": 1500,
             "false_positive_bytes": 0,
@@ -14308,6 +14748,17 @@
         },
         "datafog-spacy": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.46854345165238676,
+              "f2": 0.3815180991867325,
+              "f5": 0.34683096137494607,
+              "fn": 13034,
+              "fp": 2163,
+              "precision": 0.7559241706161137,
+              "recall": 0.3394820858460447,
+              "tp": 6699,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7181409295352323,
             "documents": 1500,
             "false_positive_bytes": 2163,
@@ -14337,6 +14788,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.7057048903369837,
+              "f2": 0.6392828837692327,
+              "f5": 0.6084463305661767,
+              "fn": 15495,
+              "fp": 4015,
+              "precision": 0.8535045791221221,
+              "recall": 0.6015377889783218,
+              "tp": 23392,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.5313626532083634,
             "documents": 1500,
             "false_positive_bytes": 4015,
@@ -14363,6 +14825,17 @@
         },
         "gaze-full": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.7357133925221957,
+              "f2": 0.645212585127266,
+              "f5": 0.6051307409312077,
+              "fn": 7966,
+              "fp": 488,
+              "precision": 0.9601795185638515,
+              "recall": 0.5963107484923732,
+              "tp": 11767,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7076461769115442,
             "documents": 1500,
             "false_positive_bytes": 488,
@@ -14392,6 +14865,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.8454312063451085,
+              "f2": 0.7906526311271352,
+              "f5": 0.7639976032167144,
+              "fn": 9414,
+              "fp": 1363,
+              "precision": 0.9557984174341678,
+              "recall": 0.7579139558207113,
+              "tp": 29473,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.4844989185291997,
             "documents": 1500,
             "false_positive_bytes": 1363,
@@ -14418,6 +14902,17 @@
         },
         "gaze-rules-ner": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.7088761174968071,
+              "f2": 0.613186181906561,
+              "f5": 0.5716362455239725,
+              "fn": 8632,
+              "fp": 486,
+              "precision": 0.9580564425649435,
+              "recall": 0.5625601783813916,
+              "tp": 11101,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7076461769115442,
             "documents": 1500,
             "false_positive_bytes": 486,
@@ -14447,6 +14942,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.8320371445153801,
+              "f2": 0.772492873731686,
+              "f5": 0.7438296241897889,
+              "fn": 10215,
+              "fp": 1361,
+              "precision": 0.9546831818333167,
+              "recall": 0.7373158124823206,
+              "tp": 28672,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.48666186012977647,
             "documents": 1500,
             "false_positive_bytes": 1361,
@@ -14473,6 +14979,17 @@
         },
         "gaze-rules-only": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.4423835832675611,
+              "f2": 0.33150380297850696,
+              "f5": 0.29208389119158523,
+              "fn": 14128,
+              "fp": 2,
+              "precision": 0.9996433030140895,
+              "recall": 0.28404196016824607,
+              "tp": 5605,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7136431784107946,
             "documents": 1500,
             "false_positive_bytes": 2,
@@ -14502,6 +15019,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.3244221365330346,
+              "f2": 0.23086545418869034,
+              "f5": 0.19983484891942402,
+              "fn": 31357,
+              "fp": 4,
+              "precision": 0.9994690735333156,
+              "recall": 0.1936379767017255,
+              "tp": 7530,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8356164383561644,
             "documents": 1500,
             "false_positive_bytes": 4,
@@ -14528,6 +15056,17 @@
         },
         "gliner": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.729866400299663,
+              "f2": 0.6407080615991669,
+              "f5": 0.6011652835681569,
+              "fn": 8042,
+              "fp": 612,
+              "precision": 0.950256035113387,
+              "recall": 0.5924593320833123,
+              "tp": 11691,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.487256371814093,
             "documents": 1500,
             "false_positive_bytes": 612,
@@ -14557,6 +15096,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.7410006759380438,
+              "f2": 0.6918053213315144,
+              "f5": 0.6679277757446244,
+              "fn": 13125,
+              "fp": 4884,
+              "precision": 0.8406317300789663,
+              "recall": 0.662483606346594,
+              "tp": 25762,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.44700793078586876,
             "documents": 1500,
             "false_positive_bytes": 4884,
@@ -14583,6 +15133,17 @@
         },
         "gliner-high-recall": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.8369289513159689,
+              "f2": 0.8002482683802054,
+              "f5": 0.781798191891537,
+              "fn": 4390,
+              "fp": 1589,
+              "precision": 0.9061540278762107,
+              "recall": 0.7775300258450312,
+              "tp": 15343,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.3403298350824588,
             "documents": 1500,
             "false_positive_bytes": 1589,
@@ -14612,6 +15173,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.8037047168705302,
+              "f2": 0.7974285005273279,
+              "f5": 0.7940894307735716,
+              "fn": 8038,
+              "fp": 7031,
+              "precision": 0.8143875395987329,
+              "recall": 0.7932985316429655,
+              "tp": 30849,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.3482335976928623,
             "documents": 1500,
             "false_positive_bytes": 7031,
@@ -14638,6 +15210,17 @@
         },
         "opf": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.8165946514072172,
+              "f2": 0.7482530952049737,
+              "f5": 0.715987586739235,
+              "fn": 5748,
+              "fp": 534,
+              "precision": 0.9632206074798539,
+              "recall": 0.7087112957989156,
+              "tp": 13985,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.4947526236881559,
             "documents": 1500,
             "false_positive_bytes": 534,
@@ -14667,6 +15250,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.7531054921495681,
+              "f2": 0.6631704026163677,
+              "f5": 0.6231032863661353,
+              "fn": 15000,
+              "fp": 662,
+              "precision": 0.9730335247871603,
+              "recall": 0.6142669786818217,
+              "tp": 23887,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.578226387887527,
             "documents": 1500,
             "false_positive_bytes": 667,
@@ -14693,6 +15287,17 @@
         },
         "presidio-all": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.41248662147698895,
+              "f2": 0.3313691547535797,
+              "f5": 0.29963996794398967,
+              "fn": 13952,
+              "fp": 2516,
+              "precision": 0.696757864288297,
+              "recall": 0.2929610297471241,
+              "tp": 5781,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.6446776611694153,
             "documents": 1500,
             "false_positive_bytes": 2516,
@@ -14722,6 +15327,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.7246010149297639,
+              "f2": 0.6669789759864824,
+              "f5": 0.6395917996390594,
+              "fn": 14256,
+              "fp": 4467,
+              "precision": 0.846484294453227,
+              "recall": 0.6333993365392033,
+              "tp": 24631,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.43691420331651043,
             "documents": 1500,
             "false_positive_bytes": 4467,
@@ -14748,6 +15364,17 @@
         },
         "presidio-en": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.41248662147698895,
+              "f2": 0.3313691547535797,
+              "f5": 0.29963996794398967,
+              "fn": 13952,
+              "fp": 2516,
+              "precision": 0.696757864288297,
+              "recall": 0.2929610297471241,
+              "tp": 5781,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.6446776611694153,
             "documents": 1500,
             "false_positive_bytes": 2516,
@@ -14777,6 +15404,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.7246010149297639,
+              "f2": 0.6669789759864824,
+              "f5": 0.6395917996390594,
+              "fn": 14256,
+              "fp": 4467,
+              "precision": 0.846484294453227,
+              "recall": 0.6333993365392033,
+              "tp": 24631,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.43691420331651043,
             "documents": 1500,
             "false_positive_bytes": 4467,
@@ -14803,6 +15441,17 @@
         },
         "presidio-en-de": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.41248662147698895,
+              "f2": 0.3313691547535797,
+              "f5": 0.29963996794398967,
+              "fn": 13952,
+              "fp": 2516,
+              "precision": 0.696757864288297,
+              "recall": 0.2929610297471241,
+              "tp": 5781,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.6446776611694153,
             "documents": 1500,
             "false_positive_bytes": 2516,
@@ -14832,6 +15481,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.7246010149297639,
+              "f2": 0.6669789759864824,
+              "f5": 0.6395917996390594,
+              "fn": 14256,
+              "fp": 4467,
+              "precision": 0.846484294453227,
+              "recall": 0.6333993365392033,
+              "tp": 24631,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.43691420331651043,
             "documents": 1500,
             "false_positive_bytes": 4467,
@@ -14858,6 +15518,17 @@
         },
         "presidio-strong": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.5534240625452439,
+              "f2": 0.44024324230941986,
+              "f5": 0.3965723634332229,
+              "fn": 12088,
+              "fp": 250,
+              "precision": 0.9683343888537049,
+              "recall": 0.38742208483251406,
+              "tp": 7645,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7391304347826086,
             "documents": 1500,
             "false_positive_bytes": 250,
@@ -14887,6 +15558,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.7765355016698127,
+              "f2": 0.7206342875314639,
+              "f5": 0.6937429028157236,
+              "fn": 12147,
+              "fp": 3243,
+              "precision": 0.8918387086015409,
+              "recall": 0.6876333993365392,
+              "tp": 26740,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.505407354001442,
             "documents": 1500,
             "false_positive_bytes": 3243,
@@ -14913,6 +15595,17 @@
         },
         "presidio-strong-high-recall": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.5534240625452439,
+              "f2": 0.44024324230941986,
+              "f5": 0.3965723634332229,
+              "fn": 12088,
+              "fp": 250,
+              "precision": 0.9683343888537049,
+              "recall": 0.38742208483251406,
+              "tp": 7645,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7391304347826086,
             "documents": 1500,
             "false_positive_bytes": 250,
@@ -14942,6 +15635,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.7822819567887853,
+              "f2": 0.7281174672865013,
+              "f5": 0.7019470654365212,
+              "fn": 11822,
+              "fp": 3243,
+              "precision": 0.892998548238089,
+              "recall": 0.6959909481317664,
+              "tp": 27065,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.494592645998558,
             "documents": 1500,
             "false_positive_bytes": 3243,
@@ -14968,6 +15672,17 @@
         },
         "scrubadub-base": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.2855777999739436,
+              "f2": 0.1999367596623939,
+              "f5": 0.1721400107527098,
+              "fn": 16445,
+              "fp": 6,
+              "precision": 0.9981785063752276,
+              "recall": 0.16662443622358486,
+              "tp": 3288,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.7916041979010495,
             "documents": 1500,
             "false_positive_bytes": 6,
@@ -14997,6 +15712,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.20790231540145146,
+              "f2": 0.1409418614821386,
+              "f5": 0.12011143726841494,
+              "fn": 34375,
+              "fp": 6,
+              "precision": 0.99867197875166,
+              "recall": 0.11602849281250803,
+              "tp": 4512,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8731074260994953,
             "documents": 1500,
             "false_positive_bytes": 6,
@@ -15023,6 +15749,17 @@
         },
         "scrubadub-spacy": {
           "common_intersection": {
+            "char_level": {
+              "f1": 0.26019126525935393,
+              "f2": 0.18024178776407376,
+              "f5": 0.15465369557288886,
+              "fn": 16781,
+              "fp": 6,
+              "precision": 0.9979716024340771,
+              "recall": 0.14959712157299954,
+              "tp": 2952,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.8095952023988006,
             "documents": 1500,
             "false_positive_bytes": 6,
@@ -15052,6 +15789,17 @@
             "samples": 1500
           },
           "product_coverage": {
+            "char_level": {
+              "f1": 0.6353725319444676,
+              "f2": 0.5377776769818682,
+              "f5": 0.49669637794926697,
+              "fn": 19917,
+              "fp": 1856,
+              "precision": 0.9108806299817536,
+              "recall": 0.48782369429372285,
+              "tp": 18970,
+              "unit": "unicode_code_point"
+            },
             "document_leak_rate": 0.6373467916366258,
             "documents": 1500,
             "false_positive_bytes": 1856,

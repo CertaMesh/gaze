@@ -3,8 +3,8 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use gaze_types::{
-    Action, AmbiguityRecord, ConflictTier, DocumentKind, FallbackReason, LeakKind, LeakSuspect,
-    PiiClass, RedactionEntry, ValidatorFailReason,
+    Action, AmbiguityRecord, ConflictTier, DocumentKind, FallbackReason, LeakKind, LeakReport,
+    LeakReportTelemetry, LeakSuspect, PiiClass, RedactionEntry, ValidatorFailReason,
 };
 use rusqlite::{params, params_from_iter, Connection, OpenFlags};
 use serde::de::DeserializeOwned;
@@ -99,6 +99,43 @@ pub struct LeakSuspectLogEntry {
 }
 
 impl LeakSuspectLogEntry {
+    /// Metadata-only row for a model span refused by a typed context guard.
+    pub fn from_model_refusal(
+        event: &LeakReportTelemetry,
+        created_at: i64,
+        session_id: Option<String>,
+    ) -> Option<Self> {
+        let LeakReportTelemetry::ModelSpanRefused {
+            safety_net_id,
+            reason,
+            span,
+            document_kind,
+            field_path,
+        } = event
+        else {
+            return None;
+        };
+        let (raw_label, mapped_class) = reason.audit_labels();
+        Some(Self {
+            safety_net_id: safety_net_id.clone(),
+            raw_label: raw_label.to_string(),
+            mapped_class: mapped_class.to_string(),
+            leak_kind: "refused".to_string(),
+            span_len: span.end.saturating_sub(span.start) as i64,
+            document_kind: document_kind_to_db(document_kind).to_string(),
+            field_path: field_path.clone(),
+            score: None,
+            created_at,
+            session_id,
+            pipeline_class: None,
+            safety_net_replay_hash: None,
+            backend_id: Some(safety_net_id.clone()),
+            backend_version: None,
+            decoding_params_hash: None,
+            telemetry_kind: Some(reason.as_str().to_string()),
+        })
+    }
+
     pub fn from_suspect(
         suspect: &LeakSuspect,
         document_kind: DocumentKind,
@@ -259,6 +296,34 @@ impl SqliteLogger {
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    /// Writes suspects and typed model refusals to the same metadata-only audit stream.
+    pub fn log_safety_net_report(
+        &self,
+        report: &LeakReport,
+        document_kind: DocumentKind,
+        created_at: i64,
+        session_id: Option<String>,
+    ) -> Result<()> {
+        for suspect in &report.suspects {
+            let entry = LeakSuspectLogEntry::from_suspect(
+                suspect,
+                document_kind,
+                created_at,
+                session_id.clone(),
+                report.replay_hash.clone(),
+            );
+            self.log_leak_suspect(&entry)?;
+        }
+        for event in &report.telemetry {
+            if let Some(entry) =
+                LeakSuspectLogEntry::from_model_refusal(event, created_at, session_id.clone())
+            {
+                self.log_leak_suspect(&entry)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn log(&self, entry: &RedactionEntry) -> Result<()> {
