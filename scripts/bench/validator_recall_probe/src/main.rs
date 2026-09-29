@@ -118,6 +118,11 @@ impl Probe {
         let mut shape_only_rulepack = validator_rulepack.clone();
         for recognizer in &mut shape_only_rulepack.recognizers {
             recognizer.validator = None;
+            // A benign-lookalike grant covers only the audited rule with its validator; the
+            // shape-only arm is a different rule, so it measures without the veto.
+            if let Some(context) = recognizer.context.as_mut() {
+                context.benign_lookalikes.clear();
+            }
         }
 
         Ok(Self {
