@@ -177,6 +177,24 @@ def test_repeated_split_name_variants_keep_one_full_name_record() -> None:
     assert arm.full_name_gold_spans(separated) == []
 
 
+def test_middle_name_gold_joins_full_name_without_losing_single_slots() -> None:
+    item = score.Document(
+        uid="middle-name", text="Alice Beth Smith", language="en", region="US",
+        source_dataset="synthetic",
+        spans=(
+            score.Span(0, 5, "FIRSTNAME"), score.Span(6, 10, "MIDDLENAME"),
+            score.Span(11, 16, "SURNAME"),
+        ),
+        negative_category=None,
+    )
+    raw, eligible = arm.record_for_document(item, POLICY)
+    assert [fields["name"] for fields in json.loads(raw)["record"].values()] == [
+        "Alice", "Beth", "Smith", "Alice Beth Smith",
+    ]
+    assert eligible == {"FIRSTNAME": 5, "MIDDLENAME": 4, "SURNAME": 5}
+    assert arm.name_multi_positive_spans([item], {item.uid: raw})["exact"] == 1
+
+
 def test_layer_k_supplies_positive_full_name_targets_under_both_contracts() -> None:
     root = Path(__file__).resolve().parents[2]
     pairs = cells.generate()

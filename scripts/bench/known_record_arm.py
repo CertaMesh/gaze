@@ -33,6 +33,8 @@ LABEL_CLASS = {
     "EMAIL": "Email",
     "GIVENNAME": "Name",
     "FIRSTNAME": "Name",
+    "MIDDLENAME": "Name",
+    "MIDDLE": "Name",
     "SURNAME": "Name",
     "PHONENUMBER": "custom:phone",
     "TELEPHONENUM": "custom:phone",
@@ -127,20 +129,33 @@ def safe_record_value(value: str, class_name: str) -> bool:
 
 
 def full_name_gold_spans(document: score.Document) -> list[tuple[int, int]]:
-    """Join adjacent given/surname gold so split labels can measure full names."""
+    """Join adjacent given/middle/surname gold on the same line."""
     encoded = document.text.encode("utf-8")
     names = sorted(
-        (span for span in document.spans if span.label in {"GIVENNAME", "FIRSTNAME", "SURNAME"}),
+        (span for span in document.spans if span.label in {"GIVENNAME", "FIRSTNAME", "MIDDLENAME", "MIDDLE", "SURNAME"}),
         key=lambda span: span.start,
     )
-    return [
-        (first.start, last.end)
-        for first, last in zip(names, names[1:])
-        if first.label in {"GIVENNAME", "FIRSTNAME"} and last.label == "SURNAME"
-        if first.end < last.start
-        if (gap := encoded[first.end:last.start].decode("utf-8")).isspace()
-        if "\n" not in gap and "\r" not in gap
-    ]
+
+    def adjacent(left: score.Span, right: score.Span) -> bool:
+        if left.end >= right.start:
+            return False
+        gap = encoded[left.end:right.start].decode("utf-8")
+        return gap.isspace() and "\n" not in gap and "\r" not in gap
+
+    full_names = []
+    for index, first in enumerate(names):
+        if first.label not in {"GIVENNAME", "FIRSTNAME"}:
+            continue
+        previous = first
+        next_index = index + 1
+        while next_index < len(names) and names[next_index].label in {"MIDDLENAME", "MIDDLE"}:
+            if not adjacent(previous, names[next_index]):
+                break
+            previous = names[next_index]
+            next_index += 1
+        if next_index < len(names) and names[next_index].label == "SURNAME" and adjacent(previous, names[next_index]):
+            full_names.append((first.start, names[next_index].end))
+    return full_names
 
 
 def record_for_document(document: score.Document, policy: dict) -> tuple[str | None, Counter[str]]:
