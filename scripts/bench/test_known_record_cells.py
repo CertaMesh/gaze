@@ -16,7 +16,7 @@ import known_record_cells as cells
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A generator change must bump GENERATOR_VERSION and this hash together.
-PINNED_CORPUS_SHA256 = "16b778ba98598090bd138d27b90fbfae4aa58b90a4be857ca8225604e8c9019c"
+PINNED_CORPUS_SHA256 = "9e1bb24c206a90b7978423ab9adaaa2bac11a7241b75ea5a0c9a59a85dffad45"
 PAIRS = 84
 
 
@@ -32,6 +32,12 @@ def recorder_kind(text: str, raw: str) -> str:
     if text.casefold() == canonical.casefold():
         return "case_folded"
     return "whitespace_case_folded"
+
+
+def is_drama_number(value: str) -> bool:
+    """BNetzA Mitteilung 148/2021: +49 171 39200 00 to 99."""
+    digits = "".join(ch for ch in value if ch.isdigit())
+    return len(digits) == 12 and digits.startswith("4917139200")
 
 
 def target_text(cell: cells.Cell, target: cells.Target) -> str:
@@ -213,7 +219,7 @@ class KnownRecordCellTests(unittest.TestCase):
             for field in cell.record:
                 compact = field.raw.replace(" ", "")
                 if field.class_name == "custom:phone":
-                    self.assertTrue(field.raw.startswith("+49 1555 01"), field.raw)
+                    self.assertTrue(is_drama_number(field.raw), field.raw)
                 if field.class_name == "custom:iban":
                     self.assertTrue(agentic.iban_valid(compact), field.raw)
                 if field.class_name in validators:
@@ -245,10 +251,20 @@ class KnownRecordCellTests(unittest.TestCase):
                 elif cls == "custom:national_id":
                     self.assertTrue(compact.startswith(cells.NHS_TEST_PREFIX), field.raw)
                 elif cls == "custom:phone":
-                    self.assertTrue(field.raw.startswith("+49 1555 01"), field.raw)
+                    self.assertTrue(is_drama_number(field.raw), field.raw)
                 seen.setdefault(cls, set()).add(compact)
         for cls in ("custom:credit_card", "custom:iban", "custom:steuer_id", "custom:national_id", "custom:phone"):
             self.assertIn(cls, seen)
+
+    def test_phone_records_and_lures_are_bnetza_drama_numbers(self) -> None:
+        phones = [cell for cell in self.all_cells if cell.record[0].class_name == "custom:phone"]
+        self.assertEqual(len(phones), 8)
+        for cell in phones:
+            self.assertTrue(is_drama_number(cell.record[0].raw), cell.uid)
+            for target in cell.targets:
+                self.assertTrue(is_drama_number(target_text(cell, target)), cell.uid)
+        self.assertFalse(is_drama_number("+49 1555 0112233"))
+        self.assertFalse(is_drama_number("+49 171 3920100"))
 
     def test_every_identifier_lure_fails_its_checksum(self) -> None:
         checks = {

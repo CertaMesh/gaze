@@ -15,7 +15,7 @@ record matcher checks each cell before it can reach a scorecard: every positive
 target is matched by exactly one record slot, and no two slots overlap in any
 document. The Rust matcher is the source of truth; the oracle run confirms the
 model. No rule is tuned on these cells, so there is one partition. Every value
-is synthetic; phones use the reserved `+49 1555` range (CONTRIBUTING.md).
+comes from a documented test, example or drama-number set (see below).
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from unittest.mock import patch
 import agentic_layers as agentic
 import gaze_bench_score as score
 
-GENERATOR_VERSION = 4
+GENERATOR_VERSION = 5
 SEED = 2026092901
 LAYER = "K"
 SOURCE_POSITIVE = "known-record-kind-cells"
@@ -353,6 +353,24 @@ TEST_BSNS = ("999990019", "999990032", "999990044", "999990056")
 # agentic_layers.steuer_id_valid rejects that prefix by design, so these
 # values are test IdNrs with a correct check digit, not issued-form ones.
 STEUER_TEST_PREFIX = "0"
+# BNetzA Mitteilung 148/2021 (Amtsblatt 07/21), "Rufnummern für Medienproduktionen
+# (Drama Numbers)": (0)171 39200 00 bis 99, provided by a mobile network operator
+# for media use and never assigned to a subscriber:
+# https://www.bundesnetzagentur.de/DE/Fachthemen/Telekommunikation/Nummerierung/_DL/mittlg148_2021.pdf?__blob=publicationFile&v=1
+DRAMA_MOBILE_PREFIX = ("+49", "171", "39200")
+DRAMA_MOBILE_SUFFIXES = range(100)
+
+
+def _drama_phone(rng: agentic.Rng) -> list[str]:
+    head, network, block = DRAMA_MOBILE_PREFIX
+    return [head, network, f"{block}{rng.below(len(DRAMA_MOBILE_SUFFIXES)):02d}"]
+
+
+def _last_digit_bump(value: str) -> str:
+    """Stays inside a 100-number drama block: only the final digit changes."""
+    return value[:-1] + str((int(value[-1]) + 1) % 10)
+
+
 # The NHS reserves numbers starting with 9 for testing; none is issued to a
 # patient: https://service-manual.nhs.uk/design-system/patterns/ask-for-nhs-numbers
 NHS_TEST_PREFIX = "9"
@@ -382,7 +400,7 @@ def _identifier(variant: str, rng: agentic.Rng) -> tuple[str, list[str], str]:
     if variant.startswith("iban"):
         return "custom:iban", _groups(_pick(rng, EXAMPLE_IBANS)), "IBAN"
     if variant.startswith("phone"):
-        return "custom:phone", ["+49", "1555", "01" + rng.digits(5)], "PHONENUMBER"
+        return "custom:phone", _drama_phone(rng), "PHONENUMBER"
     # National identifiers in their official printed grouping.
     if variant.startswith("steuer_id"):
         value = _steuer_test_id(rng)
@@ -468,7 +486,9 @@ def _identifier_variant(variant: str, language: str, rng: agentic.Rng) -> tuple[
         text_sep = IDENTIFIER_SEPARATORS[variant]
         expect = True
     rendered = text_sep.join(groups)
-    lure = text_sep.join(_digit_bump(spaced, rng).split(" "))
+    # A phone lure is another drama number; any other one-digit-off lure fails its checksum.
+    bumped = _last_digit_bump(spaced) if class_name == "custom:phone" else _digit_bump(spaced, rng)
+    lure = text_sep.join(bumped.split(" "))
     sentences = UNCUED_SENTENCES if variant in UNCUED_VARIANTS else IDENTIFIER_SENTENCES
     lead, tail, lure_lead, lure_tail = sentences[language]
     kind = matcher_kind(rendered, class_name, record_raw)
