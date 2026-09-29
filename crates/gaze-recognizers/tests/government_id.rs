@@ -1,7 +1,8 @@
 //! Regression fixtures for the government-ID cluster recognizers (solo todo #2318 follow-on).
 //!
-//! EVERY positive fixture encodes a structural shape MEASURED in the Dataiku EN/DE holdout. The
-//! measured distribution driving these rules:
+//! The original government-ID fixtures cover structural shapes measured in the Dataiku EN/DE
+//! holdout. The later labelled-identifier fixtures use synthetic shapes beyond that corpus.
+//! The measured distribution that drove the original rules:
 //!
 //! | class            | gold spans / bytes | cue adjacency        | chosen coverage      |
 //! |------------------|--------------------|----------------------|----------------------|
@@ -10,8 +11,8 @@
 //! | DRIVERLICENSENUM | 216 / 2,160        | 92.1%                | 71 spans / 682 B     |
 //! | TAXNUM           | 212 / 2,495        | 92.9%                | 34 spans / 418 B     |
 //!
-//! Every chosen variant measures ZERO matches across all 1,024 A4 negative documents and zero
-//! non-gold matches in the holdout.
+//! The original chosen variants measured zero matches across all 1,024 A4 negative documents and
+//! zero non-gold matches in the holdout. Later fallbacks require their own benchmark gate.
 //!
 //! Locale basis (the #414 mixed model): `ssn.de_cue` is `format` (same class and national
 //! identifier shape as `ssn.us`, German cue vocabulary, DACH provenance); the three bilingual
