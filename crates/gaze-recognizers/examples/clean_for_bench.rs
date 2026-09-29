@@ -244,7 +244,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let request: Request = serde_json::from_str(&line)?;
-        match handle_request_with_policy(config, full, request, policy_run.as_ref())? {
+        match handle_request_with_policy(
+            config,
+            full,
+            request,
+            policy_run.as_ref(),
+            std::env::var_os("GAZE_BENCH_KNOWN_RECORD_ARM").is_some(),
+        )? {
             Outcome::Success(mut response) => {
                 response.audit_rows = audit_rows.as_ref().map(AuditRows::drain);
                 serde_json::to_writer(&mut stdout, &response)?;
@@ -297,7 +303,7 @@ fn handle_request(
     full: &Pipeline,
     request: Request,
 ) -> Result<Outcome, Box<dyn std::error::Error>> {
-    handle_request_with_policy(config, full, request, None)
+    handle_request_with_policy(config, full, request, None, false)
 }
 
 fn handle_request_with_policy(
@@ -305,11 +311,12 @@ fn handle_request_with_policy(
     full: &Pipeline,
     request: Request,
     policy_run: Option<&PolicyRun>,
+    known_record_arm: bool,
 ) -> Result<Outcome, Box<dyn std::error::Error>> {
     let record_dictionaries = if let Some(raw) = request.context_json.as_deref() {
         let policy_run = policy_run.ok_or("record context requires policy-file config")?;
         let context = Context::from_json_str(raw)?;
-        if std::env::var_os("GAZE_BENCH_KNOWN_RECORD_ARM").is_none()
+        if !known_record_arm
             || context.dictionaries.is_empty()
             || context
                 .dictionaries
@@ -859,6 +866,13 @@ fn record_registry_context(policy: &gaze::Policy) -> Context {
         if !gaze_assembly::class_has_reversible_action(&policy.rules, &class) {
             continue;
         }
+        // A missing request-local match policy must never inherit a placeholder default.
+        let group = match &class {
+            PiiClass::Name => "name_single".to_string(),
+            PiiClass::Location => "address_part".to_string(),
+            _ => class.to_canonical_str(),
+        };
+        context.record_match_kinds.insert(group, BTreeSet::new());
         for slot in 0..32 {
             let name = record_dictionary_name(&class, slot);
             context.dictionaries.insert(
@@ -1327,9 +1341,129 @@ mod tests {
     use gaze::RawDocument;
 
     #[test]
+    fn record_requests_match_product_manifest_and_trace_for_every_kind_switch() {
+        let mut policy = gaze::Policy::default();
+        policy.rules = vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }];
+        let locales = LocaleChain::from_tags(vec![LocaleTag::EnUs]);
+        let registered = gaze_assembly::build_pipeline(
+            &policy,
+            &record_registry_context(&policy),
+            &[],
+            &locales,
+            None,
+        )
+        .unwrap();
+        let run = PolicyRun {
+            pipeline: registered,
+            locale_chain: locales.clone(),
+            dictionaries: DictionaryBundle::default(),
+        };
+        let cases = [
+            (
+                r#"{"record":{"name":"Maren Okafor"}}"#,
+                "name_multi",
+                "exact",
+                "Maren Okafor",
+                "Maren Okafor",
+            ),
+            (
+                r#"{"record":{"name":"Maren Okafor"}}"#,
+                "name_multi",
+                "case_folded",
+                "MAREN OKAFOR",
+                "MAREN OKAFOR",
+            ),
+            (
+                r#"{"record":{"value":"12 345 678 901"},"field_map":{"/value":"custom:steuer_id"}}"#,
+                "custom:steuer_id",
+                "whitespace_flexible",
+                "12  345 678 901",
+                "12  345 678 901",
+            ),
+            (
+                r#"{"record":{"name":"Maren Okafor"}}"#,
+                "name_multi",
+                "whitespace_case_folded",
+                "MAREN  OKAFOR",
+                "MAREN  OKAFOR",
+            ),
+            (
+                r#"{"record":{"first_name":"Will","full_name":"Will Smith"}}"#,
+                "name_single",
+                "corroborated_single",
+                "Will you send it? Will Smith called. Hi Will,",
+                "Hi Will,",
+            ),
+        ];
+        for (record, group, kind, raw, surface) in cases {
+            for enabled in [false, true] {
+                let mut envelope: serde_json::Value = serde_json::from_str(record).unwrap();
+                envelope["record_match_kinds"] =
+                    serde_json::json!({group: if enabled { vec![kind] } else { vec![] }});
+                let context_json = envelope.to_string();
+                let context = Context::from_json_str(&context_json).unwrap();
+                let product =
+                    gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+                let request = || Request {
+                    fixture_id: "record-parity".into(),
+                    locale_chain: vec!["en-US".into()],
+                    text: raw.into(),
+                    context_json: Some(context_json.clone()),
+                    session_hex: Some("00000001".into()),
+                };
+                let product_response = match handle_request_with_policy(
+                    BenchConfig::PolicyFile,
+                    &product,
+                    request(),
+                    Some(&run),
+                    true,
+                )
+                .unwrap()
+                {
+                    Outcome::Success(response) => response,
+                    Outcome::PipelineError { reason, .. } => panic!("product failed: {reason:?}"),
+                };
+                let bench_response = match handle_request_with_policy(
+                    BenchConfig::PolicyFile,
+                    &run.pipeline,
+                    request(),
+                    Some(&run),
+                    true,
+                )
+                .unwrap()
+                {
+                    Outcome::Success(response) => response,
+                    Outcome::PipelineError { reason, .. } => panic!("bench failed: {reason:?}"),
+                };
+                assert_eq!(
+                    bench_response.clean_text, product_response.clean_text,
+                    "{kind} enabled={enabled}"
+                );
+                assert_eq!(
+                    serde_json::to_value(&bench_response.manifest_spans).unwrap(),
+                    serde_json::to_value(&product_response.manifest_spans).unwrap(),
+                    "manifest {kind} enabled={enabled}"
+                );
+                assert_eq!(
+                    serde_json::to_value(&bench_response.final_protection_trace).unwrap(),
+                    serde_json::to_value(&product_response.final_protection_trace).unwrap(),
+                    "trace {kind} enabled={enabled}"
+                );
+                assert_eq!(
+                    bench_response.clean_text.contains(surface),
+                    !enabled,
+                    "{kind} enabled={enabled}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn known_record_registry_matches_per_document_context() {
         let context = Context::from_json_str(
-            r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"}}"#,
+            r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"},"record_match_kinds":{"name_multi":["exact","case_folded"],"email":["exact"]}}"#,
         )
         .unwrap();
         let mut policy = gaze::Policy::default();

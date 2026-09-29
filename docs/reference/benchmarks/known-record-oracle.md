@@ -6,6 +6,15 @@ as if an adopter already knew the customer or order record. Real apps may know
 less. The ordinary no-record benchmark continues to use its existing request
 shape and is measured separately under both scored-label contracts.
 
+**Historical diagnostic only:** the runs below used a benchmark producer that
+registered placeholder record slots once. It did not apply each request's
+`record_match_kinds`, and it gave multi-token names single-name defaults.
+These numbers do not measure the shipped product configuration and cannot
+support a merge decision. A fresh current-main v5 run with layer K will replace
+them. Gaze normalizes NBSP and NNBSP to ordinary spaces before detection, so
+those characters in text are exact matches after normalization, not evidence
+for `whitespace_flexible`.
+
 The preregistered prediction was that record context would protect 90–100% of
 baseline leaked bytes within eligible exact-value gold spans. Round 2 at
 measured source commit `7d72b6d1` protects **99.16%** overall: 6,513 eligible

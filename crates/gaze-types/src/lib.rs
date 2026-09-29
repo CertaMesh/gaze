@@ -6,7 +6,7 @@ pub mod payment_card;
 pub mod redaction_marker;
 
 use std::cell::Cell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::ops::Range;
 
@@ -3482,12 +3482,13 @@ pub struct DictionaryBundle {
     entries: HashMap<String, DictionaryEntry>,
 }
 
-/// Value-only dictionary entry; compiled automatons live outside `gaze-types`.
+/// Request-local dictionary entry; compiled automatons live outside `gaze-types`.
 #[derive(Debug, Clone)]
 pub struct DictionaryEntry {
     terms: Vec<String>,
     case_sensitive: bool,
     source: DictionarySource,
+    record_allowed_kinds: Option<BTreeSet<RecordMatchKind>>,
 }
 
 /// Source of a dictionary entry.
@@ -3651,7 +3652,19 @@ impl DictionaryEntry {
             terms,
             case_sensitive,
             source,
+            record_allowed_kinds: None,
         })
+    }
+
+    /// Carries the caller's record match policy with the request-local terms.
+    pub fn with_record_allowed_kinds(mut self, kinds: BTreeSet<RecordMatchKind>) -> Self {
+        self.record_allowed_kinds = Some(kinds);
+        self
+    }
+
+    /// `None` means this is an ordinary dictionary with no record policy.
+    pub fn record_allowed_kinds(&self) -> Option<&BTreeSet<RecordMatchKind>> {
+        self.record_allowed_kinds.as_ref()
     }
 
     /// Returns whether matching is case-sensitive.

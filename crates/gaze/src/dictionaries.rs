@@ -1,4 +1,4 @@
-use crate::context::Context;
+use crate::context::{Context, RECORD_DICTIONARY_PREFIX};
 pub use gaze_types::{
     DictionaryBundle, DictionaryEntry, DictionaryLoadError, DictionarySource, DictionaryStats,
     RulepackDict,
@@ -16,16 +16,21 @@ impl DictionaryBundleExt for DictionaryBundle {
 
 pub fn dictionary_bundle_from_context(ctx: &Context) -> DictionaryBundle {
     let entries = ctx.dictionaries.iter().map(|(name, dictionary)| {
-        (
-            name.clone(),
-            DictionaryEntry::new(
-                name,
-                dictionary.terms.clone(),
-                dictionary.case_sensitive,
-                DictionarySource::Cli,
-            )
-            .expect("Context validates dictionary terms before bundle construction"),
+        let mut entry = DictionaryEntry::new(
+            name,
+            dictionary.terms.clone(),
+            dictionary.case_sensitive,
+            DictionarySource::Cli,
         )
+        .expect("Context validates dictionary terms before bundle construction");
+        if name.starts_with(RECORD_DICTIONARY_PREFIX) {
+            if let Some(class) = ctx.class_map.get(name) {
+                entry = entry.with_record_allowed_kinds(
+                    ctx.record_allowed_match_kinds(class, &dictionary.terms[0]),
+                );
+            }
+        }
+        (name.clone(), entry)
     });
     DictionaryBundle::from_entries(entries)
 }

@@ -275,7 +275,10 @@ impl Recognizer for DictionaryRecognizer {
                 } else {
                     record_match_kind(matched, term)
                 };
-                self.record_allowed_kinds.contains(&kind)
+                entry
+                    .record_allowed_kinds()
+                    .unwrap_or(&self.record_allowed_kinds)
+                    .contains(&kind)
                     && (!corroborate_single_name
                         || corroborated_record_name(
                             input,
