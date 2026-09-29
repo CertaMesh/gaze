@@ -52,6 +52,7 @@ const CASES: &[(&str, &str, &str)] = &[
     ("nino", "National Insurance Number AB123456C", "AB123456C"),
     ("pan", "PAN card ABCPA1234F", "ABCPA1234F"),
     ("postal_code", "Mailing code Z1Z 9Z9", "Z1Z 9Z9"),
+    ("age", "Age: 42", "42"),
     (
         "url",
         "Site https://example.invalid/orders",
