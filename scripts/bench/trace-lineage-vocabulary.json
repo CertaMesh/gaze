@@ -69,6 +69,8 @@
     "bsn_mod11_failed",
     "cpf_mod11_failed",
     "cnpj_mod11_failed",
-    "uk_nhs_mod11_failed"
+    "uk_nhs_mod11_failed",
+    "ipv4_loopback_range",
+    "ipv6_loopback_range"
   ]
 }
