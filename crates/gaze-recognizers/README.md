@@ -71,7 +71,7 @@ normalizers can flow from TOML rulepacks into the registry.
 Optional rulepack-only `context.reject_match_regex` checks the full regex match.
 A guard match rejects that candidate; an invalid guard fails pipeline assembly.
 `RegexDetector::with_benign_lookalikes` attaches a benign-lookalike veto only
-when the rule is exactly one of the four audited bundled rules
+when the rule is exactly one of the two audited bundled phone rules
 (`BenignLookalikeGrant::audited`); any other rule is refused. See
 [benign lookalikes](../../docs/explanation/detection/validator-veto.md#benign-lookalikes).
 

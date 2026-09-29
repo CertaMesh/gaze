@@ -381,9 +381,9 @@ emitted. This guard sees text outside `capture_groups`; an invalid guard
 regex fails pipeline assembly. It is unavailable in
 `[[policy.custom_recognizers]]`.
 
-`[recognizers.context]` also has `benign_lookalikes`, but only the four
-audited bundled rules may use it (`postal.de`, `postal.us`,
-`phone.national.de`, `phone.national.us`). A rulepack file that declares it,
+`[recognizers.context]` also has `benign_lookalikes`, but only the two
+audited bundled phone rules may use it (`phone.national.de`,
+`phone.national.us`, `digit_run_fragment` only). A rulepack file that declares it,
 including a copy of the bundled `core` pack, fails to load with
 `RulepackError::IneligibleBenignLookalike`; delete those lines from a forked
 pack. See [benign lookalikes](../explanation/detection/validator-veto.md#benign-lookalikes).

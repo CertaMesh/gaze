@@ -26,7 +26,7 @@ How Gaze decides what is PII and what wins when recognizers disagree — the tru
 axis in practice.
 
 - **[Feedback loop](detection/feedback-loop.md)** — the coverage feedback loop behind detection completeness.
-- **[Validator veto](detection/validator-veto.md)** — how validator-backed recognizer failures, benign lookalikes (order-number tails, amounts, long product codes) and loopback addresses are rejected before conflict resolution, with a typed audit row each.
+- **[Validator veto](detection/validator-veto.md)** — how validator-backed recognizer failures, benign lookalikes (phone fragments of over-long digit runs) and loopback addresses are rejected before conflict resolution, with a typed audit row each.
 - **[Repeat-value sweep](detection/manifest-sweep.md)** — how every copy of a rule-found value is tokenized across a document and session.
 - **[Collision family](detection/collision-family.md)** — cross-class recognizer rivalries and how family policy resolves them.
 - **[Anchor resolution](detection/anchor-resolution.md)** — mandatory-anchor resolution and the fail-closed family token.

@@ -66,26 +66,26 @@ re-tokenize stored manifests.
 
 **Action required only if you load a rulepack file copied from the bundled
 `core` pack**, or wrote `benign_lookalikes` into your own. The key lets a
-weak postcode or phone rule skip values that sit inside an order number, an
-amount or a long product code. Only the four audited bundled rules
-(`postal.de`, `postal.us`, `phone.national.de`, `phone.national.us`) may use
-it, because a custom pattern cannot prove it has no cue or anchor. A rulepack
+weak phone rule skip a candidate inside a digit run too long to be a phone
+number. Only the two audited bundled rules (`phone.national.de`,
+`phone.national.us`) may use it, because a custom pattern cannot prove it has no cue or anchor. A rulepack
 file that declares it now fails to load with
 `RulepackError::IneligibleBenignLookalike` instead of silently weakening
 protection. Delete every `benign_lookalikes = [...]` line from the file; the
 empty `[recognizers.context]` table may stay. Your rules then protect exactly
 what they matched before.
 
-### Changed: benign lookalikes and loopback addresses stay raw
+### Changed: over-long digit runs and loopback addresses stay raw
 
-**No action required.** The bundled postcode and national phone rules now
-skip numbers that end a labelled reference identifier, sit next to a currency
-code or sign, or form part of a digit run longer than any phone number. A
-phone, postal or address word anywhere in the document or structured record,
-or any letter outside Latin script, keeps every value in it protected. Loopback IP addresses
-(`127.0.0.0/8`, `::1`) are no longer tokenized. Every skip writes a loser
-audit row with a `benign_*` or `*_loopback_range` reason, so an audit query
-can list them.
+**No action required.** The bundled national phone rules now skip a
+candidate that is a strict part of one digit run longer than any phone
+number (part of a 16-digit product code), unless a phone, postal or address
+word appears anywhere in the document or structured record, or any letter
+outside Latin script. Loopback IP addresses (`127.0.0.0/8`, `::1`) are no
+longer tokenized. Every skip writes a loser audit row with a `benign_*` or
+`*_loopback_range` reason, so an audit query can list them.
+Reference-number tails and amounts that look like postcodes are still
+tokenized.
 
 ### Changed: `SafetyNetFallback::Redact` tokenizes a resolvable residual
 

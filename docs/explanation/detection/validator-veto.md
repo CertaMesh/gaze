@@ -84,21 +84,40 @@ the byte-coverage safeguard retains prior arbitration.
 
 ## Benign lookalikes
 
-Some weak rules match a shape, not a meaning. `postal.us` matches any five
-digits, so the tail of `SKU-DEMO-73821` and the `22186` in `EUR 22186,12`
-both look like postcodes. An audited bundled rule can declare the benign
-structures that veto it:
+Some weak rules match a shape, not a meaning. A benign-lookalike veto drops
+such a candidate only when **the value itself** proves it is not PII,
+never because no label was found:
+
+- **Loopback IP addresses** (`127.0.0.0/8`, `::1`, IPv4-mapped loopback)
+  never leave the host, so they identify no person or device. The bundled
+  IP validators reject them with `ipv4_loopback_range` /
+  `ipv6_loopback_range`. Link-local addresses stay protected, because their
+  interface ID can be derived from a MAC address.
+- **`digit_run_fragment`:** a phone candidate that is a strict part of one
+  same-separator digit run holding more than 15 digits cannot be a phone
+  number, because no E.164 number is longer. The part of a 16-digit
+  product code such as `0593-9506-3395-7573` that looks like a phone
+  number is dropped with `benign_digit_run_fragment`. Any other
+  recognizer that claims the run (card, IBAN, account) is untouched. The
+  bundled `phone.national.de` and `phone.national.us` declare it:
 
 ```toml
 [recognizers.context]
-benign_lookalikes = ["joined_identifier", "currency_amount"]
+benign_lookalikes = ["digit_run_fragment"]
 ```
 
-| Structure | Vetoes the candidate when |
-| --- | --- |
-| `joined_identifier` | It is the last hyphen segment of a token whose first segment is a reference label (`SKU`, `ORDER`, `INVOICE`, `BATCH`, `Rechnung`, ...) |
-| `currency_amount` | `EUR`, `USD`, `CHF`, `GBP`, `€`, `$` or `£` sits directly before it, or after it (past two decimals) |
-| `digit_run_fragment` | It is a strict part of one same-separator digit run holding more than 15 digits, longer than any E.164 number |
+**Reference numbers and amounts are not vetoed.** The tail of
+`ORDER-2026-90210` or the `22186` in `EUR 22186,12` looks like a postcode,
+and nothing in the value says it is not one. Only a missing label could
+call it benign, and a missing label proves nothing: a finite cue list
+misses labels in markup (`Ph<b>one</b>`), zero-width or decomposed
+characters, other languages (`Kod pocztowy`, `Puhelinnumero`), typos
+(`Phne`) and encodings (`%70%68%6F%6E%65`, base64). Earlier drafts of this
+veto skipped those shapes and each review found a labelled value that
+leaked. They now tokenize like any other postcode- or phone-shaped value.
+The path for tenant-specific reference formats is an adopter-declared
+benign pattern in policy: a positive signal from the data owner, not an
+inference from absent labels (todo 4005).
 
 The check runs in this stage, before conflict resolution, because a
 benign candidate that *won* a conflict could not help: residual admission
@@ -106,66 +125,47 @@ re-protects every byte a protective candidate claimed, even inside a
 `preserve` winner. These rules keep a real value protected:
 
 - **Only the declaring rule's candidate goes.** Any other candidate over the
-  same bytes (a cued phone, an IBAN, a card) is untouched and still
-  protects them.
-- **Any cue anywhere, or any non-Latin letter, disables the veto.** A
-  bounded window cannot prove that a labelled value is benign, so there is
-  none. Validator veto scans the whole input with
-  `gaze_types::benign_lookalike::CueEvidence`, and for a
-  `RawDocument::Structured` value it also merges the evidence of the whole
-  record: every key and every string value at every depth, including array
-  elements and nested metadata, with no length cap. If that document or
-  record contains a phone, postal or address cue word anywhere, before or
-  after the value and across blank lines, or any letter outside Latin
-  script (Cyrillic, Greek, CJK, Arabic, Hebrew, Devanagari, ...), no
-  benign-lookalike veto runs in it. A cue of either family blocks both:
-  a record that labels a phone may also hold a postcode. Cue words are
-  case- and accent-folded (`Téléphone` reads `telephone`) and split at
-  non-letters and at camelCase, and cover English, German, French, Spanish,
-  Italian, Dutch and Portuguese: a word starting with a stem such as `tel`,
-  `phone`, `fax`, `mobil`, `movil`, `portable`, `handy`, `ruf`, `call`,
-  `zip`, `plz`, `post`, `codigo`, `codice`, `contact`, `kontakt`, `addr`,
-  `adres`, `anschrift`, `street`, `strasse`, `indirizzo`, `direccion`,
-  `endereco`, `city`, `ort`, `billing`, `shipping` or `delivery`, or one of
-  the whole words `cap`, `cp`, `cep`, `gsm`, `rue`, `rua`. A drift test
-  requires every `[locale.phone_labels]` entry of the bundled locale packs
-  to be a phone cue. Matching by stem errs toward protection. The veto
-  therefore only ever runs on documents that carry no such word at all.
-- **Only the audited bundled rules are eligible, by exact tuple.** A
-  pattern cannot prove it is uncued (a one-capture rule such as
-  `ORDER-(\d{5})\s+Beverly` is anchored by a city no stem list knows), and
-  an id string can be borrowed. So a veto needs a
-  `gaze_types::benign_lookalike::BenignLookalikeGrant`. Its only
+  same bytes is untouched and still protects them.
+- **A cue anywhere, or any non-Latin letter, still keeps the veto off.** As
+  extra caution on top of the value-level proof, validator veto scans the
+  whole input with `gaze_types::benign_lookalike::CueEvidence`, and for a
+  `RawDocument::Structured` value the whole record (every key and every
+  string value at every depth, no length cap). A phone, postal or address
+  cue word anywhere, or any letter outside Latin script, disables the
+  veto for that document. Before splitting words the scan removes
+  markup-like tags (`<b>`, `</span>`) and reads zero-width characters, soft
+  hyphens and combining marks as nothing, so `Ph<b>one</b>`, `Ph​one` and a
+  decomposed `Tél` count. Encoded text (percent-encoding, base64) is not
+  decoded. Cue words are case- and accent-folded, split at non-letters and
+  camelCase, and cover English, German, French, Spanish, Italian, Dutch and
+  Portuguese stems; the list is shared with the benchmark generator
+  (`scripts/bench/lookalike_cue_vocabulary.json`, exact-equality test), and
+  every bundled `[locale.phone_labels]` entry must be a phone cue. This
+  block never makes a veto safe on its own; the value-level proof does.
+- **Only the audited bundled rules are eligible, by exact tuple.** A veto
+  needs a `gaze_types::benign_lookalike::BenignLookalikeGrant`. Its only
   constructor, `BenignLookalikeGrant::audited`, mints it when the rule's
   whole tuple (id, class, pattern, capture groups, validator and failure
-  mode, locales, locale basis, structures) hashes to one of four compiled-in
-  fingerprints: `postal.de`, `postal.us`, `phone.national.de` and
-  `phone.national.us`, exactly as bundled. This is exact-tuple eligibility,
-  not authenticated provenance: a caller that builds an identical rule gets
-  a grant, and that rule is then exactly the audited one. Validator veto
-  also checks that the recognizer presenting the grant has that identity and
-  that the vetoed span is a match of the audited pattern in the input. So a
-  rule that reuses an audited id with another pattern (even through
-  `Rulepack::parse_bundled`) fails to build, and a custom `Recognizer` that
-  borrows a real grant vetoes nothing the audited rule would not. The
-  rulepack loader also refuses the key in rulepack files and for other ids
-  with `RulepackError::IneligibleBenignLookalike`. A custom pack forked from
+  mode, locales, locale basis, structures) hashes to one of two compiled-in
+  fingerprints: `phone.national.de` and `phone.national.us`, exactly as
+  bundled. This is exact-tuple eligibility, not authenticated provenance: a
+  caller that builds an identical rule gets a grant, and that rule is then
+  exactly the audited one. Validator veto also checks that the recognizer
+  presenting the grant has that identity and that the vetoed span is a
+  match of the audited pattern in the input. So a rule that reuses an
+  audited id with another pattern (even through `Rulepack::parse_bundled`)
+  fails to build, and a custom `Recognizer` that borrows a real grant
+  vetoes nothing the audited rule would not. The rulepack loader also
+  refuses the key in rulepack files and for other ids with
+  `RulepackError::IneligibleBenignLookalike`. A custom pack forked from
   `core` must drop its `benign_lookalikes` lines.
 - **Every veto is audited.** Each vetoed candidate writes one loser row
-  with its `Benign*` reason; a veto that cannot be placed on the source
-  text fails the document (`Error::UnauditableVeto`) rather than dropping
-  its row.
+  with its reason; a veto that cannot be placed on the source text fails
+  the document (`Error::UnauditableVeto`) rather than dropping its row.
 
-The bundled `postal.de` and `postal.us` declare `joined_identifier` and
-`currency_amount`; `phone.national.de` and `phone.national.us` declare
-`joined_identifier` and `digit_run_fragment`. A test pins this set;
-extending it needs a leak-direction review.
-
-Separately, the bundled IP validators reject loopback addresses
-(`127.0.0.0/8`, `::1`, and IPv4-mapped loopback): a loopback address never
-leaves the host, so it identifies no person or device. Link-local addresses
-stay protected, because their interface ID can be derived from a MAC
-address.
+A test pins the bundled opt-in set (`phone.national.de` and
+`phone.national.us`, `digit_run_fragment` only); extending it needs a
+leak-direction review.
 
 ## Audit shape
 
@@ -216,8 +216,6 @@ compatibility.
 - `UkNhsMod11Failed`
 - `Ipv4LoopbackRange`
 - `Ipv6LoopbackRange`
-- `BenignJoinedIdentifier`
-- `BenignCurrencyAmount`
 - `BenignDigitRunFragment`
 
 Phone reasons are always present in the type. They are emitted only when the

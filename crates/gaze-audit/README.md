@@ -105,7 +105,7 @@ logger.log_leak_suspect(entry)?;
 - `validator_fail_reason` — JSON-encoded closed `ValidatorFailReason` enum
   (one variant per validator failure, such as `LuhnFailed`, `IbanMod97Failed`,
   `EmailRfcRejected`, `PhoneE164Rejected`, plus the benign-lookalike and
-  loopback reasons such as `BenignJoinedIdentifier` and `Ipv4LoopbackRange`;
+  loopback reasons such as `BenignDigitRunFragment` and `Ipv4LoopbackRange`;
   full list in
   [validator veto](../../docs/explanation/detection/validator-veto.md#type-ownership))
   for validator-veto losers. The older spellings `email_rfc_failed` and

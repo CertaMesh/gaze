@@ -206,17 +206,16 @@ Any other validator with `on_fail = "record"`, and any value other than `veto`
 or `record`, fails rulepack loading with
 `RulepackError::UnsupportedValidatorOnFail`.
 
-Four bundled recognizers also carry a benign-lookalike veto in the same
-stage: `postal.de` and `postal.us` (`joined_identifier`, `currency_amount`)
-and `phone.national.de` and `phone.national.us` (`joined_identifier`,
-`digit_run_fragment`). A candidate inside such a structure (the tail of
-`SKU-DEMO-73821`, the number in `EUR 22186,12`, part of a 16-digit product
-code) is dropped with a `benign_*` reason, unless the document or
-structured record contains a phone, postal or address cue word anywhere, or
-any letter outside Latin script. Only
-these four rules, with their exact bundled tuple, can hold the grant that
-permits it; a
-rulepack file that declares `benign_lookalikes` fails to load. See
+Two bundled recognizers also carry a benign-lookalike veto in the same
+stage: `phone.national.de` and `phone.national.us` declare
+`digit_run_fragment`. A phone candidate that is a strict part of one digit
+run longer than any E.164 number (part of a 16-digit product code) is
+dropped with `benign_digit_run_fragment`, unless the document or structured
+record contains a phone, postal or address cue word anywhere, or any letter
+outside Latin script. Only these two rules, with their exact bundled tuple,
+can hold the grant that permits it; a rulepack file that declares
+`benign_lookalikes` fails to load. Reference-number tails and currency
+amounts are **not** vetoed: only a missing label could call them benign. See
 [benign lookalikes](../explanation/detection/validator-veto.md#benign-lookalikes).
 
 ### `NormalizerKind`

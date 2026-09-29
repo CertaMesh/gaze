@@ -29,9 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to keep today's behavior. The bundled OpenAI and Gemini adapters now declare
   it explicitly; `PiiSurface` is unchanged. See UPGRADE.md.
 - **Custom rulepacks can no longer declare `benign_lookalikes`.** Only the
-  four audited bundled recognizers (`postal.de`, `postal.us`,
-  `phone.national.de`, `phone.national.us`) may carry it. A rulepack file that
-  declares it, including a copy of the bundled `core` pack, fails to load with
+  two audited bundled recognizers (`phone.national.de`,
+  `phone.national.us`) may carry it. A rulepack file that declares it,
+  including a copy of the bundled `core` pack, fails to load with
   `RulepackError::IneligibleBenignLookalike`. Delete the `benign_lookalikes`
   lines from a forked pack. See UPGRADE.md.
 - **`session_blob` / `SensitiveSnapshot` now use envelope version 6**,
@@ -173,18 +173,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Benign lookalikes no longer tokenize as postcodes or phone numbers.** The
-  bundled `postal.de` / `postal.us` rules skip a number that ends a
-  reference identifier opened by a label word (`SKU`, `ORDER`, `INVOICE`,
-  `BATCH`, `Rechnung`, ...) or sits next to a currency code or sign, and the
-  national phone rules skip the tail of a reference identifier and part of a
-  digit run longer than any phone number. A phone, postal or address cue
-  word (seven languages, case- and accent-folded) anywhere in the document
-  or structured record, or any letter outside Latin script, disables the
-  skip for the whole document. Each skip writes a loser audit row
-  with `decided_by = validator_veto` and a `benign_*` reason; a skip that
-  cannot be placed on the source text fails the document
-  (`Error::UnauditableVeto`). Contract: docs/explanation/detection/validator-veto.md.
+- **A phone inside an over-long digit run no longer tokenizes.** The bundled
+  national phone rules skip a candidate that is a strict part of one digit
+  run longer than any E.164 number (part of a 16-digit product code), unless
+  a phone, postal or address cue word appears anywhere in the document or
+  structured record, or any letter outside Latin script. Each skip writes a
+  loser audit row with `decided_by = validator_veto` and
+  `benign_digit_run_fragment`; a skip that cannot be placed on the source
+  text fails the document (`Error::UnauditableVeto`). Reference-number tails
+  and currency amounts are deliberately still tokenized: only a missing
+  label could call them benign. Contract:
+  docs/explanation/detection/validator-veto.md.
 - **Loopback IP addresses no longer tokenize.** The bundled IPv4 and IPv6
   rules reject `127.0.0.0/8`, `::1` and IPv4-mapped loopback with the new
   `ipv4_loopback_range` / `ipv6_loopback_range` reasons: a loopback address
