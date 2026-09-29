@@ -38,7 +38,7 @@ pub use dob_judge::{
 };
 pub use error::{RecognizerError, Result};
 pub use gaze_types::benign_lookalike::{
-    has_cue as benign_lookalike_has_cue, BenignLookalike, BenignLookalikeGrant,
+    BenignLookalike, BenignLookalikeGrant, CueEvidence,
 };
 #[cfg(feature = "phone-parser")]
 pub use gaze_types::Region;

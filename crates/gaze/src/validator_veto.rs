@@ -16,8 +16,12 @@ pub fn apply(
     registry: &RecognizerRegistry,
     input: &str,
     source_spans: Option<&[(usize, usize)]>,
-    context: Option<&gaze_types::benign_lookalike::VetoContext>,
+    record_cues: Option<gaze_types::benign_lookalike::CueEvidence>,
 ) -> (Vec<Candidate>, Vec<VetoedCandidate>) {
+    // A cue anywhere in the document (and, for a structured leaf, anywhere in its record) or any
+    // non-Latin letter keeps every benign lookalike veto of that family off.
+    let cues = gaze_types::benign_lookalike::CueEvidence::scan(input)
+        .merge(record_cues.unwrap_or_default());
     let mut kept = Vec::with_capacity(candidates.len());
     let mut vetoed = Vec::new();
     let mut patterns: std::collections::HashMap<String, Option<regex::Regex>> =
@@ -33,14 +37,15 @@ pub fn apply(
         // by a recognizer with the audited identity, and the span must be a match of the
         // audited pattern, so neither a spoofed id nor a borrowed grant vetoes anything else.
         // Only this candidate goes; another candidate over the same bytes still protects them.
-        if let Some(grant) = recognizer
-            .benign_lookalike_grant()
-            .filter(|grant| grant.binds(&**recognizer) && candidate.recognizer_id == grant.id())
-        {
+        if let Some(grant) = recognizer.benign_lookalike_grant().filter(|grant| {
+            grant.binds(&**recognizer)
+                && candidate.recognizer_id == grant.id()
+                && !cues.blocks(recognizer.supported_class())
+        }) {
             if let Some(structure) = grant
                 .structures()
                 .iter()
-                .find(|structure| structure.matches(input, candidate.span.clone(), context))
+                .find(|structure| structure.matches(input, candidate.span.clone()))
                 .filter(|_| audited_match(&mut patterns, grant, input, candidate.span.clone()))
             {
                 vetoed.push(VetoedCandidate {

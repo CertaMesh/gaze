@@ -934,7 +934,7 @@ fn structured_benign_lookalikes_still_leave_raw_with_one_row_each() {
 }
 
 /// Drift guard: every phone label a bundled locale pack ships (`[locale.phone_labels]`) must be
-/// a benign-lookalike cue, so a label the locale packs know can never be waved through.
+/// a benign-lookalike phone cue, so a label the locale packs know can never be waved through.
 #[test]
 fn every_bundled_phone_label_is_a_benign_lookalike_cue() {
     let mut checked = 0;
@@ -957,7 +957,7 @@ fn every_bundled_phone_label_is_a_benign_lookalike_cue() {
         if let Some(bucket) = locale.buckets.get("phone_labels") {
             for label in &bucket.names {
                 assert!(
-                    gaze_recognizers::benign_lookalike_has_cue(label),
+                    gaze_recognizers::CueEvidence::scan(label).phone(),
                     "{name} phone label {label:?} is not a cue"
                 );
                 checked += 1;
@@ -966,4 +966,79 @@ fn every_bundled_phone_label_is_a_benign_lookalike_cue() {
     }
     // de, fr, nl and br ship phone labels today; an empty scan would prove nothing.
     assert!(checked >= 15, "only {checked} phone labels checked");
+}
+
+/// Review 10848 round 2, and the brief's extras: labels far away, past a blank line, below the
+/// value, in nested metadata, in a long type string, in a sibling array element, in another
+/// script, or at the very end of a long document all keep the value protected with no veto row.
+#[test]
+fn a_cue_anywhere_in_the_document_or_record_keeps_the_value_protected() {
+    let seven_notes = format!(
+        "ZIP for delivery:\n{}ORDER-90210",
+        "Record note, please keep it.\n".repeat(7)
+    );
+    let long_tail = format!(
+        "ORDER-90210\n{}\nZIP",
+        "Record note, please keep it. ".repeat(200)
+    );
+    for (input, value) in [
+        (seven_notes.as_str(), "90210"),
+        ("ZIP for delivery:\n\nORDER-90210", "90210"),
+        ("ORDER-90210\n\nZIP for delivery:", "90210"),
+        (long_tail.as_str(), "90210"),
+        ("Телефон: ORDER-212-555-0187", "555-0187"),
+        ("電話番号: ORDER-212-555-0187", "555-0187"),
+        ("Bestellung ORDER-90210 заказ", "90210"),
+    ] {
+        assert_protected("en-US", input, value);
+    }
+    let structured: [Probe; 3] = [
+        (
+            "555-0187",
+            "nested meta.type",
+            vec![(
+                "entry",
+                object(&[
+                    ("meta", object(&[("type", string("phone"))])),
+                    ("value", string("ORDER-212-555-0187")),
+                ]),
+            )],
+        ),
+        (
+            "555-0187",
+            "long type string",
+            vec![(
+                "entry",
+                object(&[
+                    (
+                        "type",
+                        string(
+                            "phone number for customer contact and delivery coordination, \
+                             stored in the order record",
+                        ),
+                    ),
+                    ("value", string("ORDER-212-555-0187")),
+                ]),
+            )],
+        ),
+        (
+            "90210",
+            "sibling array element",
+            vec![(
+                "items",
+                gaze::Value::Array(vec![
+                    object(&[("note", string("ZIP"))]),
+                    object(&[("ref", string("ORDER-90210"))]),
+                ]),
+            )],
+        ),
+    ];
+    for (value, name, root) in structured {
+        let (leaves, vetoes) = clean_structured("en-US", &root);
+        assert!(
+            leaves.iter().all(|leaf| !leaf.contains(value)),
+            "{name}: {leaves:?}"
+        );
+        assert!(vetoes.is_empty(), "{name}: {vetoes:?}");
+    }
 }

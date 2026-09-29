@@ -984,7 +984,7 @@ impl Pipeline {
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
-        veto_context: Option<&gaze_types::benign_lookalike::VetoContext>,
+        record_cues: Option<gaze_types::benign_lookalike::CueEvidence>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
@@ -994,7 +994,7 @@ impl Pipeline {
                 target,
                 text,
                 field_name,
-                veto_context,
+                record_cues,
                 document_kind,
                 locale_chain,
                 dictionaries,
@@ -1008,7 +1008,7 @@ impl Pipeline {
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
-        veto_context: Option<&gaze_types::benign_lookalike::VetoContext>,
+        record_cues: Option<gaze_types::benign_lookalike::CueEvidence>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
@@ -1019,7 +1019,7 @@ impl Pipeline {
             target,
             text,
             field_name,
-            veto_context,
+            record_cues,
             document_kind,
             locale_chain,
             dictionaries,
@@ -1033,7 +1033,7 @@ impl Pipeline {
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
-        veto_context: Option<&gaze_types::benign_lookalike::VetoContext>,
+        record_cues: Option<gaze_types::benign_lookalike::CueEvidence>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
@@ -1043,7 +1043,7 @@ impl Pipeline {
         let spans = &normalized.spans;
         let ctx = DetectContext::new(locale_chain, dictionaries)
             .with_source_spans(spans)
-            .with_veto_context(veto_context);
+            .with_record_cues(record_cues);
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
@@ -5076,10 +5076,11 @@ fn walk_structured(
     op: LeafOp,
 ) -> Result<BTreeMap<String, Value>> {
     let mut clean = BTreeMap::new();
-    let root = gaze_types::benign_lookalike::VetoContext::new();
+    // Every key and string value of the whole record, scanned once: a cue anywhere in it keeps
+    // every benign lookalike veto of that family off in every leaf.
+    let record = record_cue_evidence(fields);
     for (key, value) in fields {
         let path = op.root_path(key);
-        let veto = child_veto_context(&root, key, fields);
         // A field error aborts the whole document rather than yielding a partially protected
         // one: the caller asked for a protected document, not a best-effort one.
         if let Some(value) = walk_structured_value(
@@ -5088,7 +5089,7 @@ fn walk_structured(
             value,
             key,
             &path,
-            &veto,
+            record,
             locale_chain,
             dictionaries,
             report,
@@ -5100,27 +5101,34 @@ fn walk_structured(
     Ok(clean)
 }
 
-/// The benign-lookalike context of `fields[key]`: everything its parent carried, plus its own key,
-/// its sibling keys and its short sibling string values, so `shippingAddress.code` and
-/// `{"type": "phone", "value": ...}` both reach the veto.
-fn child_veto_context(
-    parent: &gaze_types::benign_lookalike::VetoContext,
-    key: &str,
+/// Cue evidence of a whole structured record: every key and every string value, at every
+/// depth, including array elements. No length cap and no path scoping: a label anywhere in the
+/// record may be the one that names a value.
+fn record_cue_evidence(
     fields: &BTreeMap<String, Value>,
-) -> gaze_types::benign_lookalike::VetoContext {
-    let mut context = parent.clone().with_label(key);
-    for (sibling, value) in fields {
-        if sibling == key {
-            continue;
-        }
-        context = context.with_label(sibling.as_str());
-        if let Value::String(text) = value {
-            if text.len() <= gaze_types::benign_lookalike::SIBLING_LABEL_MAX_BYTES {
-                context = context.with_label(text.as_str());
+) -> gaze_types::benign_lookalike::CueEvidence {
+    fn visit(value: &Value, evidence: &mut gaze_types::benign_lookalike::CueEvidence) {
+        match value {
+            Value::String(text) => {
+                *evidence = evidence.merge(gaze_types::benign_lookalike::CueEvidence::scan(text));
             }
+            Value::Array(values) => values.iter().for_each(|value| visit(value, evidence)),
+            Value::Object(fields) => {
+                for (key, value) in fields {
+                    *evidence =
+                        evidence.merge(gaze_types::benign_lookalike::CueEvidence::scan(key));
+                    visit(value, evidence);
+                }
+            }
+            _ => {}
         }
     }
-    context
+    let mut evidence = gaze_types::benign_lookalike::CueEvidence::default();
+    for (key, value) in fields {
+        evidence = evidence.merge(gaze_types::benign_lookalike::CueEvidence::scan(key));
+        visit(value, &mut evidence);
+    }
+    evidence
 }
 
 /// Walks one structured value under `op`.
@@ -5134,7 +5142,7 @@ fn walk_structured_value(
     value: &Value,
     field_name: &str,
     field_path: &str,
-    veto: &gaze_types::benign_lookalike::VetoContext,
+    record: gaze_types::benign_lookalike::CueEvidence,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
     report: &mut LeakReport,
@@ -5146,7 +5154,7 @@ fn walk_structured_value(
                 target,
                 text,
                 Some(field_name),
-                Some(veto),
+                Some(record),
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
@@ -5159,7 +5167,7 @@ fn walk_structured_value(
                     target,
                     text,
                     Some(field_name),
-                    Some(veto),
+                    Some(record),
                     DocumentKind::Structured,
                     locale_chain,
                     dictionaries,
@@ -5208,7 +5216,7 @@ fn walk_structured_value(
                     child,
                     field_name,
                     &format!("{field_path}[{idx}]"),
-                    veto,
+                    record,
                     locale_chain,
                     dictionaries,
                     report,
@@ -5222,14 +5230,13 @@ fn walk_structured_value(
         Value::Object(fields) => {
             let mut clean = BTreeMap::new();
             for (key, child) in fields {
-                let child_veto = child_veto_context(veto, key, fields);
                 if let Some(child) = walk_structured_value(
                     pipeline,
                     target,
                     child,
                     key,
                     &format!("{field_path}.{key}"),
-                    &child_veto,
+                    record,
                     locale_chain,
                     dictionaries,
                     report,

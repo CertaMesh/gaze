@@ -1231,7 +1231,7 @@ impl RecognizerRegistry {
             self,
             input,
             ctx.source_spans,
-            ctx.veto_context,
+            ctx.record_cues,
         );
         Ok((crate::resolver::CandidatePool::new(candidates), vetoed))
     }

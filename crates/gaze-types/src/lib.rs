@@ -4448,10 +4448,10 @@ pub struct DetectContext<'a> {
     /// Raw candidates found by ordinary recognizers, available only to a recognizer that
     /// requests the post-floor pass. They have not passed validator veto or conflict resolution.
     pub prior_candidates: Option<&'a [Candidate]>,
-    /// The structured context the input came from, if any: path keys, sibling keys and short
-    /// sibling values. Validator veto reads it so a PII cue there (`shippingAddress`,
-    /// `{"type": "phone"}`) keeps a benign lookalike veto off.
-    pub veto_context: Option<&'a benign_lookalike::VetoContext>,
+    /// Cue evidence of the whole structured record the input came from, if any. Validator veto
+    /// merges it with a scan of the input itself, so a cue anywhere in the record (any key, any
+    /// string value) keeps a benign lookalike veto off.
+    pub record_cues: Option<benign_lookalike::CueEvidence>,
 }
 
 impl<'a> DetectContext<'a> {
@@ -4464,16 +4464,14 @@ impl<'a> DetectContext<'a> {
             degraded: Cell::new(false),
             source_spans: None,
             prior_candidates: None,
-            veto_context: None,
+            record_cues: None,
         }
     }
 
-    /// Records the structured context the input came from; see [`DetectContext::veto_context`].
-    pub fn with_veto_context(
-        mut self,
-        veto_context: Option<&'a benign_lookalike::VetoContext>,
-    ) -> Self {
-        self.veto_context = veto_context;
+    /// Records the cue evidence of the structured record the input came from; see
+    /// [`DetectContext::record_cues`].
+    pub fn with_record_cues(mut self, record_cues: Option<benign_lookalike::CueEvidence>) -> Self {
+        self.record_cues = record_cues;
         self
     }
 
