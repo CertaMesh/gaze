@@ -87,11 +87,11 @@ fn document_case() -> impl Strategy<Value = String> {
         prop::collection::vec(unicode_fragment(), 0..4),
     )
         .prop_map(|(marker, before, connector, after)| {
-            // todo #4009: angle fragments stay behind context words, away from token edges.
+            // Angle fragments touch the marker token and the labelled value directly.
             format!(
-                "{marker} context {} Tax number{connector} AB123456 context {}",
-                before.join(" "),
-                after.join(" ")
+                "{marker}{} Tax number{connector} AB123456{}",
+                before.concat(),
+                after.concat()
             )
         });
     let adjacent_case = (
