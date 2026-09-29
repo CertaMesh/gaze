@@ -295,6 +295,9 @@ fn uppercase_field_label_before(
     value_start: usize,
     span_start: usize,
 ) -> Option<usize> {
+    if value_start <= span_start || value_start > input.len() {
+        return None;
+    }
     let bytes = input.as_bytes();
     let mut at = value_start;
     while at > span_start && bytes[at - 1] == b' ' {
@@ -361,6 +364,13 @@ mod tests {
             labelled_cross_class_boundary_floor("tax_number.labelled", 20, 5, true),
             5
         );
+    }
+
+    #[test]
+    fn uppercase_field_label_requires_a_boundary_inside_the_capture() {
+        assert_eq!(uppercase_field_label_before("ABC: 123", 0, 5), None);
+        assert_eq!(uppercase_field_label_before("ABC: 123", 4, 5), None);
+        assert_eq!(uppercase_field_label_before("ABC: 123", 9, 0), None);
     }
 
     struct StubRecognizer {
@@ -1383,7 +1393,10 @@ impl RecognizerRegistry {
             let next = boundaries
                 .iter()
                 .filter_map(|(start, class, validated)| {
-                    if *start >= candidate.span.end || class == &candidate.class {
+                    if *start <= candidate.span.start
+                        || *start >= candidate.span.end
+                        || class == &candidate.class
+                    {
                         return None;
                     }
                     let floor = labelled_cross_class_boundary_floor(
