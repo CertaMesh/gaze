@@ -37,8 +37,8 @@ layer C character F2; the defaults stay in the detail tables.
   and the comparison's resolver. A model-free test proves the replay equals
   `AnalyzerEngine.analyze`. `tune.py measure` also replays the comparison's
   `presidio-all` configuration and requires every committed byte count, and runs
-  each chosen configuration live over every document, requiring output identical
-  to the replay.
+  each chosen configuration live on a fixed sample of about one document in eight
+  (every layer, both halves), requiring output identical to the replay.
 - **Objectives.** `leak-first` is `compare.py`'s own threshold rule (fewest
   validation v3 leaked bytes, then fewest false-positive bytes, over C/A/D/R).
   Because a free search can satisfy that rule by redacting nearly everything,

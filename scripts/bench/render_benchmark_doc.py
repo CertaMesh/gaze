@@ -1590,7 +1590,7 @@ def attach_presidio_tuned(comparison: Mapping[str, Any], comparison_path: Path) 
 
     The tuned report must name these exact comparison bytes, reproduce the
     comparison's presidio-all row from its own records, and have run each chosen
-    configuration live with output identical to the replay it scores.
+    configuration live on its fixed sample with output identical to the replay.
     """
     path = comparison_path.parent / TUNED_PRESIDIO_NAME
     if not path.exists():

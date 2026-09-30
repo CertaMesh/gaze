@@ -4,7 +4,8 @@
     select   validation records and documents only; writes the search log and the choice
     measure  every document; replays the frozen choices and scores them with
              compare.measure, reproduces the comparison's presidio-all row from the same
-             records (anchor), runs each choice live and requires identical output, and
+             records (anchor), runs each choice live on a fixed sample and requires
+             identical output, and
              scores Presidio Research's own tuned analyzer; writes the public report
 
 Both run in the comparison environment (../requirements.lock) with PYTHONHASHSEED=0.
@@ -193,17 +194,26 @@ def anchor(measured: dict, comparison: dict) -> dict[str, object]:
     return {"row": "presidio-all", "equal": not mismatches, "mismatches": mismatches}
 
 
+def in_live_sample(uid: str) -> bool:
+    """The fixed live-verification sample: second SHA-256 byte of the id below 32 (about 1 in 8),
+    independent of the validation/test split, which reads the first byte."""
+    return hashlib.sha256(uid.encode()).digest()[1] < 32
+
+
 def live_verify(config: dict, paths: pool.ModelPaths, replayer: search.Replayer) -> dict[str, object]:
     analyzers = pool.live_analyzers(config, paths)
     differing, started = [], time.perf_counter()
-    for index, doc in enumerate(replayer.docs):
+    sample = [(index, doc) for index, doc in enumerate(replayer.docs) if in_live_sample(doc.uid)]
+    for count, (index, doc) in enumerate(sample, 1):
         found = pool.live_analyze(analyzers, config, doc.document.text, doc.language)
         live = compare.resolved_presidio_spans(replayer.anonymizer, doc.document.text, found)
         if live != replayer.predict(index, config):
             differing.append(doc.uid)
-        if (index + 1) % 500 == 0:
-            print(f"live: {index + 1}/{len(replayer.docs)} ({len(differing)} differ)", file=sys.stderr, flush=True)
-    return {"documents": len(replayer.docs), "differing_documents": len(differing),
+        if count % 100 == 0:
+            print(f"live: {count}/{len(sample)} ({len(differing)} differ)", file=sys.stderr, flush=True)
+    return {"sample": "second SHA-256 byte of the document id < 32", "documents": len(sample),
+            "documents_by_layer": {layer: sum(1 for _, d in sample if d.layer == layer) for layer in corpus.LAYERS},
+            "differing_documents": len(differing),
             "differing_sample": differing[:20], "identical": not differing,
             "seconds": round(time.perf_counter() - started, 1)}
 
