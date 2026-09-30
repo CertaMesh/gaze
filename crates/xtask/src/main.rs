@@ -47,7 +47,10 @@ enum Command {
     BundleTokenizationDrift(bundle_tokenization_drift::Args),
     LocaleCueBundleCoherence,
     CoverageCorpus(coverage_corpus::Args),
-    CiFeatureMatrix,
+    CiFeatureMatrix {
+        #[arg(long, value_enum, default_value_t = ci_feature_matrix::Partition::Full)]
+        partition: ci_feature_matrix::Partition,
+    },
     SafetyNetSanity,
     TokenbridgeEncryptedIndex,
     TokenbridgeNoRawIndex(tokenbridge_no_raw_index::Args),
@@ -74,7 +77,7 @@ fn main() -> Result<()> {
         Command::BundleTokenizationDrift(args) => bundle_tokenization_drift::run(args),
         Command::LocaleCueBundleCoherence => locale_cue_bundle_coherence::run(),
         Command::CoverageCorpus(args) => coverage_corpus::run(args),
-        Command::CiFeatureMatrix => ci_feature_matrix::run(),
+        Command::CiFeatureMatrix { partition } => ci_feature_matrix::run(partition),
         Command::SafetyNetSanity => safety_net_sanity::run(),
         Command::TokenbridgeEncryptedIndex => tokenbridge_encrypted_index::run(),
         Command::TokenbridgeNoRawIndex(args) => tokenbridge_no_raw_index::run(args),

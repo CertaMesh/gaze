@@ -6,7 +6,7 @@ pub mod payment_card;
 pub mod redaction_marker;
 
 use std::cell::Cell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::ops::Range;
 
@@ -28,6 +28,18 @@ pub enum EvidenceKind {
     Learned,
     /// A deterministic rule decided.
     Rule,
+}
+
+/// Matching variants available to a caller-known record. Unmeasured variants
+/// require an explicit adopter opt-in in the context envelope.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordMatchKind {
+    Exact,
+    WhitespaceFlexible,
+    CaseFolded,
+    WhitespaceCaseFolded,
+    CorroboratedSingle,
 }
 
 /// Shared detector contract for text-only PII detection.
@@ -3638,12 +3650,13 @@ pub struct DictionaryBundle {
     entries: HashMap<String, DictionaryEntry>,
 }
 
-/// Value-only dictionary entry; compiled automatons live outside `gaze-types`.
+/// Request-local dictionary entry; compiled automatons live outside `gaze-types`.
 #[derive(Debug, Clone)]
 pub struct DictionaryEntry {
     terms: Vec<String>,
     case_sensitive: bool,
     source: DictionarySource,
+    record_allowed_kinds: Option<BTreeSet<RecordMatchKind>>,
 }
 
 /// Source of a dictionary entry.
@@ -3762,6 +3775,13 @@ impl DictionaryBundle {
         self.entries.get(name)
     }
 
+    /// Borrows all entries for record-name corroboration within one request.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &DictionaryEntry)> {
+        self.entries
+            .iter()
+            .map(|(name, entry)| (name.as_str(), entry))
+    }
+
     /// Returns sorted dictionary stats.
     pub fn stats(&self) -> Vec<DictionaryStats> {
         let mut stats = self
@@ -3800,7 +3820,19 @@ impl DictionaryEntry {
             terms,
             case_sensitive,
             source,
+            record_allowed_kinds: None,
         })
+    }
+
+    /// Carries the caller's record match policy with the request-local terms.
+    pub fn with_record_allowed_kinds(mut self, kinds: BTreeSet<RecordMatchKind>) -> Self {
+        self.record_allowed_kinds = Some(kinds);
+        self
+    }
+
+    /// `None` means this is an ordinary dictionary with no record policy.
+    pub fn record_allowed_kinds(&self) -> Option<&BTreeSet<RecordMatchKind>> {
+        self.record_allowed_kinds.as_ref()
     }
 
     /// Returns whether matching is case-sensitive.

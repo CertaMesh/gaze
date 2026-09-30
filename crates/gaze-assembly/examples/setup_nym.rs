@@ -13,6 +13,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         dictionaries: HashMap::new(),
         class_map: HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     let mut rulepacks = Vec::new();
     for name in &policy.rulepacks.bundled {

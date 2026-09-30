@@ -32,6 +32,8 @@ fn empty_context() -> Context {
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     }
 }
 
@@ -608,6 +610,8 @@ fn build_pipeline_context_only_still_succeeds() {
             PiiClass::custom("song").expect("valid custom class"),
         )]),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let pipeline = build_pipeline(&policy, &context, &[], &active_locales, None)
@@ -1030,6 +1034,8 @@ fn context_with_alpha_override() -> Context {
             PiiClass::custom("bar").expect("valid custom class"),
         )]),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     }
 }
 
@@ -2228,6 +2234,8 @@ fn tenant_tie_policy(rules: Vec<RuleSpec>) -> (gaze::Policy, Context) {
         dictionaries,
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     (policy, context)
 }
@@ -3289,4 +3297,69 @@ fn collision_family_members_agree_between_registry_and_assembly() {
         from_registry.contains_key("payment-card-or-iban"),
         "the bundled anchored family is in the comparison: {from_registry:?}"
     );
+}
+
+/// The bundled locale packs supply the address words, and only
+/// `[address_blocks] enabled = true` lets a postcode winner grow over them.
+#[test]
+fn address_blocks_grow_from_a_bundled_postcode_only_when_the_policy_enables_them() {
+    let rulepacks = [embedded_rulepack("core"), embedded_rulepack("locale-en")];
+    let mut policy = policy();
+    policy.locale = Some(vec![LocaleTag::EnUs]);
+    policy.rules = vec![RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    let input = "Mail it to Brinmoor, IL 00068 or PO Box 417, 00071.";
+    let clean = |policy: &gaze::Policy| {
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+        let pipeline = build_pipeline(policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(
+            pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(input.to_string()),
+                    active_locales.as_slice(),
+                    &gaze::DictionaryBundle::default(),
+                )
+                .expect("clean"),
+        );
+        assert_eq!(session.restore_strict_text(&clean).expect("restore"), input);
+        clean
+    };
+
+    let off = clean(&policy);
+    assert!(!off.contains("00068"), "the postcode rule fires: {off}");
+    assert!(off.contains(", IL ") && off.contains("PO Box 417"), "{off}");
+
+    policy.address_blocks = true;
+    let on = clean(&policy);
+    assert!(!on.contains(" IL ") && !on.contains("PO Box 417"), "{on}");
+    assert!(
+        on.contains("Brinmoor"),
+        "a city with no NER stays as it was: {on}"
+    );
+    // Without NER an untagged city between a unit and its postcode ends the
+    // chain: growth crosses only known address pieces.
+    let untagged = "PO Box 417, Brinmoor, IL 00068";
+    assert!(!clean_untagged(&policy, &rulepacks, untagged).contains(" IL "));
+    assert!(clean_untagged(&policy, &rulepacks, untagged).contains("PO Box 417"));
+}
+
+fn clean_untagged(policy: &gaze::Policy, rulepacks: &[Rulepack], input: &str) -> String {
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = build_pipeline(policy, &empty_context(), rulepacks, &active_locales, None)
+        .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    clean_text(
+        pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(input.to_string()),
+                active_locales.as_slice(),
+                &gaze::DictionaryBundle::default(),
+            )
+            .expect("clean"),
+    )
 }

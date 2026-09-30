@@ -46,6 +46,23 @@ re-tokenize stored manifests.
 
 ### TL;DR
 
+**Typed `Context` literals:** add both `record_match_kinds: Default::default()`
+and `record_value_rejections: Default::default()`.
+Full names now match by default with measured exact, case-folded and combined
+whitespace/case kinds. If your caller-known records rely on exact single names,
+address parts, email or other off-by-default kinds, specify them in
+`record_match_kinds` in the context JSON; ordinary detectors still run.
+Exact single names and address parts were disabled after benign counterweights
+outweighed their gains; a same-case single-name copy may now be raw unless
+another detector finds it. Exact declared phone and credit-card values remain on
+despite measured benign matches, by user decision.
+
+**Context JSON callers:** files over 4 MiB now fail with a typed size error.
+Duplicate keys now fail instead of silently keeping the last value. JSON parse
+errors are generic and no longer include source text; use a local JSON
+validator when you need line-level diagnostics. These changes also apply when
+the new `record`/`field_map` envelope is absent.
+
 1. **Custom `gaze-proxy` adapters must declare a contract.** Add a
    `contract()` method to every `ProviderAdapter` you implement.
 2. **`session_blob` moves to envelope version 6.** Blobs written by v0.16

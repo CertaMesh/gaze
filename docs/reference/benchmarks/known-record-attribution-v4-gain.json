@@ -1,0 +1,634 @@
+{
+  "dataset_sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+  "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+  "rows": [
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 43,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 14,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 364,
+              "non_decoy_false_positive_added_bytes": 14
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 29,
+              "false_positive_added_bytes": 29,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 364
+        },
+        "v2": {
+          "false_positive_bytes_rise": 43,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 14,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 364,
+              "non_decoy_false_positive_added_bytes": 14
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 29,
+              "false_positive_added_bytes": 29,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 364
+        }
+      },
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "address_part"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 130,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 352,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 248,
+              "non_decoy_false_positive_added_bytes": 8
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 122,
+              "false_positive_added_bytes": 122,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 600
+        },
+        "v2": {
+          "false_positive_bytes_rise": 130,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 352,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 248,
+              "non_decoy_false_positive_added_bytes": 8
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 122,
+              "false_positive_added_bytes": 122,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 600
+        }
+      },
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:credit_card"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 22,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 196,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 22,
+              "false_positive_added_bytes": 22,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 196
+        },
+        "v2": {
+          "false_positive_bytes_rise": 22,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 196,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 22,
+              "false_positive_added_bytes": 22,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 196
+        }
+      },
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:iban"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 588,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 588
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 588,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 588
+        }
+      },
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:national_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 21,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 21
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 21,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 21
+        }
+      },
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:passport"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 69,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 1560,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 658,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 69,
+              "false_positive_added_bytes": 69,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 2218
+        },
+        "v2": {
+          "false_positive_bytes_rise": 69,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 1560,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 658,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 69,
+              "false_positive_added_bytes": 69,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 2218
+        }
+      },
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:phone"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 719,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 1309,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 140,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 2168
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 719,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 1309,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 140,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 2168
+        }
+      },
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:steuer_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 19,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 19
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 19,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 19
+        }
+      },
+      "default_gain_pass": true,
+      "match_kind": "case_folded",
+      "record_class": "name_single"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 154,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 87,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 196,
+              "non_decoy_false_positive_added_bytes": 87
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 67,
+              "false_positive_added_bytes": 67,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 196
+        },
+        "v2": {
+          "false_positive_bytes_rise": 154,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 87,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 196,
+              "non_decoy_false_positive_added_bytes": 87
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 67,
+              "false_positive_added_bytes": 67,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 196
+        }
+      },
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "name_single"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": -97,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 96,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 1,
+              "gold_lost_bytes": 27,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": -27
+        },
+        "v2": {
+          "false_positive_bytes_rise": -97,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 96,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 1,
+              "gold_lost_bytes": 16,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0
+            }
+          },
+          "leaked_gold_bytes_fall": -16
+        }
+      },
+      "default_gain_pass": null,
+      "match_kind": "baseline_removed",
+      "record_class": "unattributed"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 14,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 19,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 14,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 88,
+              "non_decoy_false_positive_added_bytes": 14
+            }
+          },
+          "leaked_gold_bytes_fall": 107
+        },
+        "v2": {
+          "false_positive_bytes_rise": 14,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 19,
+              "non_decoy_false_positive_added_bytes": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 14,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 88,
+              "non_decoy_false_positive_added_bytes": 14
+            }
+          },
+          "leaked_gold_bytes_fall": 107
+        }
+      },
+      "default_gain_pass": null,
+      "match_kind": "no_unique_record_source",
+      "record_class": "unattributed"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 1,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 1,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 13,
+              "non_decoy_false_positive_added_bytes": 1
+            }
+          },
+          "leaked_gold_bytes_fall": 13
+        },
+        "v2": {
+          "false_positive_bytes_rise": 1,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 1,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 13,
+              "non_decoy_false_positive_added_bytes": 1
+            }
+          },
+          "leaked_gold_bytes_fall": 13
+        }
+      },
+      "default_gain_pass": null,
+      "match_kind": "trace_gap",
+      "record_class": "unattributed"
+    }
+  ],
+  "rule": "leaked gold bytes fall > false-positive bytes rise under both contracts",
+  "schema_version": 1,
+  "source_commit": "23c948446d0880cafbf43adb4ceb4d3f4a4bde2e",
+  "unmeasured_match_kinds": [
+    "corroborated_single",
+    "whitespace_case_folded",
+    "whitespace_flexible"
+  ]
+}

@@ -342,6 +342,8 @@ fn pipeline_builder_from_policy(
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     gaze_assembly::build_pipeline_builder(
         policy,
@@ -356,6 +358,9 @@ fn pipeline_builder_from_policy(
 fn map_build_error(err: gaze_assembly::BuildError) -> CliError {
     match err {
         gaze_assembly::BuildError::NoRecognizers => map_policy_error(PolicyError::NoDetectors),
+        err @ gaze_assembly::BuildError::RecordPolicy => {
+            CliError::PolicyConfigDetail(err.to_string())
+        }
         gaze_assembly::BuildError::Policy(err) => map_policy_error(err),
         gaze_assembly::BuildError::Rulepack(err) => map_pipeline_error(gaze::Error::Rulepack(err)),
         gaze_assembly::BuildError::Pipeline(err) => map_pipeline_error(err),

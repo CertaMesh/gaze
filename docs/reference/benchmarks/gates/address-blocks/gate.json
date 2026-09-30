@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "comment": "Gain-gate evidence for address-block growth: fresh main vs candidate, each on its own gaze setup policy. One v2 record per side rescores every scored-label contract.",
+  "base": {
+    "revision": "767de0a73bfd8d9fad59c8c8e8011dc5cbd844c6",
+    "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+    "record": {
+      "file": "docs/reference/benchmarks/gates/address-blocks/main-767de0a73bfd-base.jsonl.gz",
+      "sha256": "3ce891347439d21f8bd883ee41c9d65a642123bd07c2e516ac9d0aa4c5fa9458"
+    }
+  },
+  "candidate": {
+    "revision": "0c9de6e9c7883be7f49ded5a5a0a63e5dba701c7",
+    "policy_sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc",
+    "record": {
+      "file": "docs/reference/benchmarks/mechanisms/address-blocks-0c9de6e9c788-candidate.jsonl.gz",
+      "sha256": "07598ebbf4e0255fc43ec6e3aff9c1b332cdf77cf3b48b3661a12543bc5b8b74"
+    }
+  },
+  "policy_delta": {
+    "file": "scripts/bench/mechanisms/address-blocks.toml",
+    "sha256": "548ae9985239c2a98f24d7eb395636c456861a0154a74ffca1678649a16cbd2d"
+  },
+  "sampling_seed": 20260710,
+  "generator_version": 6,
+  "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+  "replay": "scorecard_record.rescore(record, mechanism_arms._contract(v), agentic_layers.load_contract(root)) for each side, then agentic_layers.layer_totals(..., 'policy-file') and agentic_layers.decide(base, candidate), for v in (2, 1)",
+  "results": {
+    "2": {
+      "verdict": "pass",
+      "layers": {
+        "C": {
+          "leaked": [
+            7475,
+            7364
+          ],
+          "false_positive": [
+            27445,
+            27528
+          ]
+        },
+        "A": {
+          "leaked": [
+            4530,
+            4068
+          ],
+          "false_positive": [
+            1139,
+            1139
+          ]
+        },
+        "D": {
+          "leaked": [
+            0,
+            0
+          ],
+          "false_positive": [
+            2992,
+            2992
+          ]
+        },
+        "R": {
+          "leaked": [
+            234,
+            234
+          ],
+          "false_positive": [
+            419,
+            419
+          ]
+        }
+      }
+    },
+    "1": {
+      "verdict": "pass",
+      "layers": {
+        "C": {
+          "leaked": [
+            13423,
+            13312
+          ],
+          "false_positive": [
+            27445,
+            27528
+          ]
+        },
+        "A": {
+          "leaked": [
+            4530,
+            4068
+          ],
+          "false_positive": [
+            1139,
+            1139
+          ]
+        },
+        "D": {
+          "leaked": [
+            0,
+            0
+          ],
+          "false_positive": [
+            2992,
+            2992
+          ]
+        },
+        "R": {
+          "leaked": [
+            234,
+            234
+          ],
+          "false_positive": [
+            419,
+            419
+          ]
+        }
+      }
+    }
+  }
+}

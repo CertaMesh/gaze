@@ -66,6 +66,7 @@ or heuristic emitter cannot start spreading its values by accident.
 | `gaze index` field-label detector, TokenBridge synthetic-corpus detector | `Rule` |
 | NER (`ner`), GLiNER birth-date judge (`dob.gliner`) | `Learned` |
 | House numbers licensed by a NER street (`address.house_number.street_corroborated`) | `Learned` |
+| Address-block pieces grown from an address winner (`address.block.*`) | `Learned` |
 | An adopter `Recognizer` / `Detector` that declares nothing | `Learned` |
 | A swept copy of a rule value | `Rule` |
 | A collision-family tie | `Rule` only if both sides are `Rule` |

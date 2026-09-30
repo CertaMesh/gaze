@@ -578,6 +578,8 @@ active = [{active}]
 model_dir = "{model_dir}"
 threshold = 0.3
 {safety_net}{dob_judge}
+[address_blocks]
+enabled = true
 
 [policy.rulepacks]
 bundled = [{bundled}]

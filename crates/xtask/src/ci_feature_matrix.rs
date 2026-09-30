@@ -240,19 +240,57 @@ struct MatrixCommand {
     args: &'static [&'static str],
 }
 
-pub fn run() -> Result<()> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Partition {
+    Full,
+    CiGates,
+    CiDefault,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CiOwner {
+    Test,
+    FeatureGates,
+    DefaultWorkspace,
+}
+
+fn ci_owner(command: &MatrixCommand) -> CiOwner {
+    match command.args {
+        ["fmt", "--all", "--", "--check"]
+        | ["clippy", "--workspace", "--all-features", "--all-targets", "--", "-D", "warnings"]
+        | ["test", "-p", "gaze-document", "--features", "mcp"]
+        | ["test", "-p", "gaze-cli", "--features", "mcp"]
+        | ["test", "--workspace", "--all-features"] => CiOwner::Test,
+        ["test", "--workspace", "--lib", "--bins", "--tests"] => CiOwner::DefaultWorkspace,
+        _ => CiOwner::FeatureGates,
+    }
+}
+
+fn partition_commands(partition: Partition) -> impl Iterator<Item = &'static MatrixCommand> {
+    FEATURE_MATRIX
+        .iter()
+        .filter(move |command| match partition {
+            Partition::Full => true,
+            Partition::CiGates => ci_owner(command) == CiOwner::FeatureGates,
+            Partition::CiDefault => ci_owner(command) == CiOwner::DefaultWorkspace,
+        })
+}
+
+pub fn run(partition: Partition) -> Result<()> {
     ensure_matrix_contract()?;
 
-    run_command_requiring_output(
-        NO_PHONE_PARSER_FAIL_CLOSED_GUARD,
-        REQUIRED_NO_PHONE_PARSER_TEST_COUNT,
-    )?;
+    if partition != Partition::CiDefault {
+        run_command_requiring_output(
+            NO_PHONE_PARSER_FAIL_CLOSED_GUARD,
+            REQUIRED_NO_PHONE_PARSER_TEST_COUNT,
+        )?;
+    }
 
     println!(
         "ci_feature_matrix: running {} feature-matrix commands",
-        FEATURE_MATRIX.len()
+        partition_commands(partition).count()
     );
-    for command in FEATURE_MATRIX {
+    for command in partition_commands(partition) {
         if *command == CORE_NO_PHONE_PARSER_LOAD_GUARD {
             run_command_requiring_output(*command, REQUIRED_EMBEDDED_CORE_LOAD_RESULT)?;
         } else if command.args.contains(&"nym_no_feature") {

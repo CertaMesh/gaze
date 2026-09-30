@@ -35,6 +35,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
 import compare  # noqa: E402
+import pii_tracer  # noqa: E402
 import backends  # noqa: E402
 from cpu_contention import ForeignCpuSampler  # noqa: E402
 import loaders  # noqa: E402
@@ -42,8 +43,10 @@ from comparison_metrics import ComparisonMetrics  # noqa: E402
 import tagged_gaze  # noqa: E402
 
 score = loaders.score
-BENCHMARKS = ("presidio-research", "piibench-commercial")
+BENCHMARKS = ("presidio-research", "piibench-commercial", "pii-trace")
 GAZE_ROWS = ("gaze-rules-only", "gaze-rules-ner", "gaze-full")
+# compare.TOOLS plus the tool whose adapter lives beside the pinned comparison.
+ROSTER = (*compare.TOOLS, pii_tracer.TOOL)
 VENDOR_TUNED = HERE / "vendor-tuned.json"
 
 
@@ -195,7 +198,7 @@ def validate_vendor_tuned_args(args: argparse.Namespace) -> None:
 
 def identity_sha256(benchmark: str, identity: Mapping[str, object]) -> str:
     """The dataset digest a benchmark's identity pins (what own scorers must have read)."""
-    return identity["sha256"] if benchmark == "presidio-research" else identity["test_5k_sha256"]
+    return identity["test_5k_sha256"] if benchmark == "piibench-commercial" else identity["sha256"]
 
 
 def measure_vendor_tuned(
@@ -247,7 +250,7 @@ def measure_vendor_tuned(
 
 
 def tool_family(name: str) -> str:
-    for family in ("presidio", "gliner", "datafog-core", "scrubadub", "opf"):
+    for family in ("presidio", "gliner", "datafog-core", "scrubadub", "opf", "pii-tracer"):
         if name.startswith(family):
             return family
     if name.startswith("datafog-"):
@@ -262,6 +265,8 @@ def load_benchmark(args: argparse.Namespace) -> tuple[dict[str, list[score.Docum
     if args.benchmark == "presidio-research":
         documents, identity = loaders.load_presidio_research(args.presidio_research_checkout)
         return {"test": documents}, identity
+    if args.benchmark == "pii-trace":
+        return loaders.load_pii_trace(args.pii_trace_data)
     splits, identity = loaders.load_piibench_commercial(args.piibench_data)
     return splits, identity
 
@@ -412,7 +417,8 @@ def main() -> int:
     parser.add_argument("--benchmark", choices=BENCHMARKS, required=True)
     parser.add_argument("--presidio-research-checkout", type=Path)
     parser.add_argument("--piibench-data", type=Path, help="piibench_commercial.py --output-dir")
-    parser.add_argument("--tool", action="append", choices=[*compare.TOOLS, *GAZE_ROWS])
+    parser.add_argument("--pii-trace-data", type=Path, help="data/train.parquet of perplexity-ai/PII-TRACE")
+    parser.add_argument("--tool", action="append", choices=[*ROSTER, *GAZE_ROWS])
     parser.add_argument("--vendor-tuned", action="store_true",
                         help="score the vendor's own tuned setup for this benchmark (vendor-tuned.json) as its row")
     parser.add_argument("--tuned-raw", type=Path, help="tuned_presidio.py --output")
@@ -439,7 +445,7 @@ def main() -> int:
     splits, identity = load_benchmark(args)
     if args.preflight:
         splits = {split: preflight_sample(documents, args.preflight) for split, documents in splits.items()}
-    mappings = compare.load_mapping()
+    mappings = {**compare.load_mapping(), pii_tracer.TOOL: pii_tracer.load_label_map()}
     release = None
     if args.gaze_release_tag:
         validate_tagged_args(args)
@@ -455,12 +461,12 @@ def main() -> int:
         tuned = vendor_tuned_entry(args.benchmark)
         selected = [tuned["row"]]
     else:
-        selected = args.tool or [*GAZE_ROWS, *compare.TOOLS]
+        selected = args.tool or [*GAZE_ROWS, *ROSTER]
     # The whole roster, not just --tool: the common intersection must not depend
     # on which subset one invocation runs (runs resume into one report).
     composed = {
         family: loaders.compose_mapping(family, mappings[family], args.benchmark)
-        for family in sorted({tool_family(name) for name in (*GAZE_ROWS, *compare.TOOLS)})
+        for family in sorted({tool_family(name) for name in (*GAZE_ROWS, *ROSTER)})
     }
     common = common_intersection(composed)
     args.predictions_dir.mkdir(parents=True, exist_ok=True)
@@ -544,7 +550,9 @@ def main() -> int:
                     with ForeignCpuSampler() as watch:
                         report["rows"][name] = measure_tool(name, backend.predict, splits, mapping, common,
                                                             args.predictions_dir)
-                    report["provenance"][name] = {**provenance, "cpu": watch.result()}
+                    # The merge ties this row's own-scorer result to these exact predictions.
+                    report["provenance"][name] = {**provenance, "cpu": watch.result(), "prediction_sha256":
+                                                  sha256_file(args.predictions_dir / f"{name}.test.jsonl")}
                 finally:
                     if hasattr(backend, "close"):
                         backend.close()

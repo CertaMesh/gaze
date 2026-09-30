@@ -287,6 +287,10 @@ const PUBLIC_COMPARISON_SOURCE_URLS: &[&str] = &[
     "https://github.com/urchade/GLiNER/blob/v0.2.29/docs/usage.md",
     "https://github.com/urchade/GLiNER/blob/v0.2.29/eval.py",
     "https://huggingface.co/urchade/gliner_multi_pii-v1/tree/1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+    "https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/README.md",
+    "https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/LICENSE",
+    "https://huggingface.co/datasets/perplexity-ai/PII-TRACE/blob/1c3eb67bbd43e8571b4433a9d3d76271f9970eb9/README.md",
+    "https://arxiv.org/abs/2609.22200v1",
 ];
 
 const PUBLIC_CRATE_SLUGS: &[&str] = &[

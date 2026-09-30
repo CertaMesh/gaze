@@ -27,6 +27,18 @@ PRESIDIO_RESEARCH = {
     "documents": 1500,
     "licence": "MIT code; Fake Name Generator identities CC-BY-SA-3.0-US",
 }
+PII_TRACE = {
+    "repository": "perplexity-ai/PII-TRACE",
+    "revision": "1c3eb67bbd43e8571b4433a9d3d76271f9970eb9",
+    "file": "data/train.parquet",
+    "sha256": "1f37039ca2a9c7a93d7b755e1603d5192424c61e61fcbf2ce9405f26705fd670",
+    "conversations": 500,
+    "messages": 4500,
+    "gold_spans": 2653,
+    "licence": "MIT",
+    "scope": "the only published part of PII-TRACE: 500 English conversations; the paper's "
+             "13,148-conversation, 13-language set (1,922-document test split) is not public",
+}
 
 
 def sha256(path: Path) -> str:
@@ -80,6 +92,13 @@ def compose_mapping(
     """
     maps = maps or load_label_maps()
     gold = maps["gold"][benchmark]
+    identity = maps.get("native_gold", {}).get(benchmark, {}).get(tool)
+    if identity is not None:
+        # The tool's own labels ARE this benchmark's labels (its author trained on that taxonomy),
+        # so the canonical detour would wrongly drop classes such as other_pii.
+        if set(identity) != set(tool_map) or any(set(v) - set(gold) for v in identity.values()):
+            raise ValueError(f"{tool}: native_gold must name exactly the tool's labels and known {benchmark} labels")
+        return {label: tuple(sorted(natives)) for label, natives in identity.items()}
     extension = maps["tool_extension"].get(tool, {})
     known = set(maps["extension_labels"])
     unknown = sorted({label for labels in gold.values() for label in labels}
@@ -143,3 +162,46 @@ def load_piibench_commercial(data: Path) -> tuple[dict[str, list[score.Document]
                 "excluded": manifest["excluded"], "published_full_mix": manifest["published_full_mix"],
                 "test_5k_sha256": manifest["files"]["test_5k.jsonl"], "documents": len(documents)}
     return {"test": documents}, identity
+
+
+def pii_trace_messages(path: Path) -> list[tuple[str, str, list[tuple[int, int, str]]]]:
+    """(uid, text, character-offset gold spans) per message: user then assistant, in file order."""
+    import pyarrow.parquet as pq
+
+    digest = sha256(path)
+    if digest != PII_TRACE["sha256"]:
+        raise ValueError(f"{path.name}: SHA-256 {digest} differs from its pin")
+    messages = []
+    for row in pq.read_table(path).to_pylist():
+        by_message: dict[tuple[int, str], list[dict]] = {}
+        for span in row["spans"]:
+            by_message.setdefault((span["turn"], span["source"]), []).append(span)
+        for turn in row["turns"]:
+            for source in ("user", "assistant"):
+                text = turn[source]
+                spans = []
+                for span in by_message.pop((turn["turn"], source), []):
+                    start, end = span["start"], span["end"]
+                    if not 0 <= start < end <= len(text) or text[start:end] != span["text"]:
+                        raise ValueError(f"{row['id']}: gold span does not match its text")
+                    spans.append((start, end, span["label"]))
+                messages.append((f"pii-trace/{row['id']}/{turn['turn']}/{source}", text, spans))
+        if by_message:
+            raise ValueError(f"{row['id']}: gold spans point at a message that does not exist")
+    if (len(messages), sum(len(spans) for _, _, spans in messages)) != (PII_TRACE["messages"], PII_TRACE["gold_spans"]):
+        raise ValueError("PII-TRACE message or span count differs from its pin")
+    return messages
+
+
+def load_pii_trace(path: Path) -> tuple[dict[str, list[score.Document]], dict[str, object]]:
+    """One document per message, user and assistant, keyed like the dataset's own span identity
+    (conversation, turn, source). All 2,653 gold spans sit in user messages; assistant messages
+    carry none, so a detection there is a false positive under the dataset's exact-span protocol."""
+    documents = []
+    for uid, text, spans in pii_trace_messages(path):
+        offsets = score.char_to_byte_offsets(text)
+        documents.append(score.Document(
+            uid=uid, text=text, language="en", region="", source_dataset="pii-trace",
+            spans=tuple(score.Span(offsets[start], offsets[end], label) for start, end, label in spans),
+        ))
+    return {"test": documents}, {**PII_TRACE, "sha256": sha256(path), "documents": len(documents)}

@@ -175,6 +175,115 @@ Input:  "Reference ORD-12345 is shipped."
 Output: "Reference <{session_hex}:Custom:order_id_1> is shipped."
 ```
 
+#### Caller-known record context
+
+`gaze clean --context-json context.json` also accepts a caller-known record.
+Version 1 of the key alias table infers classes for common field names:
+
+```json
+{
+  "record": {"customer": {"full_name": "[customer name]", "e_mail": "[customer email]"}}
+}
+```
+
+Replace the bracketed values with the trusted app's actual record values before
+calling Gaze; do not send this raw context to the agent.
+
+The version 1 alias table normalizes ASCII case and snake, camel and kebab
+separators. It recognizes EN/DE/FR/NL/PT keys: `email`, `e_mail`, `mail`,
+`courriel`, `emailadres`, `correioEletronico`; `phone`, `tel`, `telefon`,
+`mobile`, `handy`, `telephone`, `telefono`, `telefoon`, `telemovel`, `celular`;
+`name`, `full_name`, `first_name`, `firstname`, `vorname`, `last_name`,
+`surname`, `nachname`, `nom`, `prenom`, `achternaam`, `voornaam`, `nome`,
+`sobrenome`; `iban`; `dob`, `date_of_birth`, `birthdate`, `geburtsdatum`,
+`date_de_naissance`, `geboortedatum`, `data_de_nascimento`; and `address`,
+`street`, `strasse`, `city`, `stadt`, `zip`, `postcode`, `plz`, `adresse`, `rue`,
+`ville`, `code_postal`, `adres`, `straat`, `plaats`, `endereco`, `rua`, `cidade`,
+`cep`. Email aliases map to `Email`, phone aliases to `custom:phone`, name aliases
+to `Name`, IBAN to `custom:iban`, birth-date aliases to `custom:birth_date`, postal
+aliases (`zip`, `postcode`, `plz`, `code_postal`, `cep`) to
+`custom:postal_code`, and other address aliases to `Location`. `field_map`
+overrides any inference, maps unknown keys to a built-in or
+`custom:<name>` class, or sets a leaf to `"ignore"`. Unknown unmapped keys,
+mapping paths without a leaf, arrays, nulls and duplicate JSON keys fail closed.
+Record errors name the field path, never its value.
+
+Values are trimmed and whitespace runs, including nonbreaking spaces, collapse
+to one space. Defaults are selected per class and match kind using the
+[known-record oracle](benchmarks/known-record-oracle.md). Gaze's separate repeat-value
+sweep can still protect later copies under its own rules. The manifest restores
+the exact source bytes. Values with fewer than
+three letters or digit-only values shorter than four digits are skipped
+individually; other values in the record remain active. A structurally valid
+IBAN with a passing mod-97 checksum is accepted even when its country code is
+its only two letters. The Rust `Context::record_value_rejections` report gives
+each refused field's safe path and typed reason, without its value. It lists
+refusals only; accepted values in off-by-default groups are inert and do not
+appear there. `gaze clean` also prints a path-only warning for each refusal.
+Single-token names in the [version 1 common-word dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
+such as `Will`, `Grace`, `May` and `Mark`, are accepted. Their default
+`corroborated_single` match requires corroboration at
+each occurrence: a person span from NER, another record name
+in the same phrase, or a full record name elsewhere in the document plus a
+name-position cue. Other single-token names match changed-case copies by default;
+same-case exact copies require an explicit opt-in or another detector. The
+dictionary is matched with Unicode folding and Aho–Corasick; no common name is
+silently discarded. The current default Nym operating point has no person
+label, so model corroboration currently comes from the NER candidate layer.
+
+The default record matcher enables `exact` and `whitespace_flexible` for
+credit cards, IBANs, national IDs and Steuer IDs; `exact` for passports and
+phones; `exact`, `case_folded` and `whitespace_case_folded` for multi-token
+names; and `case_folded` plus `corroborated_single` for single-token names.
+Whitespace-flexible matching collapses whitespace runs; it does not add or
+remove separators, so pass the value in the form the document uses.
+Address parts, single-name `exact`, multi-name `whitespace_flexible`, email,
+and other unlisted pairs are off. Disabling exact address parts and single
+names leaves 337 and 123 additional leaked gold bytes, respectively, in the
+all-on oracle comparison; use an explicit opt-in when that precision trade-off
+fits your data. Exact caller-known phone and credit-card values remain on by
+user decision despite 69 and 99 added layer D benign bytes, respectively.
+These are record-value matches, not a change to ordinary phone or card rules.
+The adopter can replace a class group's allowed kinds in the same context JSON:
+
+```json
+{
+  "record": {"customer": {"city": "[customer city]"}},
+  "record_match_kinds": {
+    "address_part": ["exact"]
+  }
+}
+```
+
+Keys are `name_single`, `name_multi`, `address_part`, or a canonical class name
+such as `email` or `custom:phone`. Each list replaces that group's defaults;
+an empty list disables it. Allowed kinds are `exact`, `case_folded`,
+`whitespace_flexible`, `whitespace_case_folded`, and `corroborated_single`.
+The last kind applies to common-word single-token names. Enabling an
+off-by-default kind is an explicit precision choice; some measured kinds lost
+more benign bytes than leaked bytes, while unmeasured kinds have unknown gain.
+Case-folded kinds apply only to names; whitespace kinds require a
+multi-token value. Incompatible combinations fail with a path-only error.
+A record field whose class is off supplies no extra record detection;
+ordinary recognizers still run.
+
+`Name` values can also match full Unicode
+case folds, including `ß`/`SS`, when the kind is enabled, while preserving the original matched bytes for restore. Record matching
+does not match reversed name order, email case changes, fragments or fuzzy
+spellings. Each record dictionary uses the existing class action and manifest
+path; its class must resolve to `tokenize` or `format_preserve`. A nonreversible
+column action in the policy rejects record context, even if a default action is
+reversible. Record values stay out of errors; failures name only the field path
+(keys limited to `[A-Za-z0-9_-]`). Audit source IDs contain no record values.
+Do not put the context JSON in a
+command argument or log it in your app.
+
+The context JSON is limited to 4 MiB; the encoded record to 64 KiB; nesting to
+four object levels; 32 string leaves; and each value to 256 UTF-8 bytes. The
+internal `record-v2-` dictionary prefix is reserved. Existing `dictionaries`,
+`class_map` and `fields` remain available in the same envelope. Record context
+is call-scoped in `gaze clean`; the daemon still refuses per-document context.
+
 ### Class naming rules
 
 - Built-in class names (`Email`, `Name`, `Location`, `Organization`) live in the
@@ -890,6 +999,19 @@ keyword filter bypassed, the judge emitted 7/13 birth-date spans (EN 5/7, DE
 second person in a list often remain raw unless another recognizer catches
 them.
 
+### `[address_blocks]` (optional)
+
+```toml
+[address_blocks]
+enabled = true
+```
+
+Grows protection from an address winner over the unit designators, boxes,
+state codes and military post offices written beside it; see
+[Address blocks](#address-blocks). `gaze setup` writes this block.
+A policy without it, or with `enabled = false`, grows nothing. `enabled` is
+required and no other key is accepted.
+
 ### `[safety_net]` and `[safety_net.nym]`
 
 `backend = "nym"` activates the opt-in Nym-small safety net for CLI commands
@@ -1328,6 +1450,52 @@ locale pack that ships these buckets, nothing changes. A custom rulepack can
 add entries for a tenant's street vocabulary; measure both directions before
 broadening a list, because the NER span is the only evidence that the words
 form a street.
+
+### Address blocks
+
+Once resolution has protected part of an address, the pieces written right
+beside it join the protection, so an address is never left half tokenized
+(`[LOCATION_1] Suite 312, [LOCATION_2]`). Growth starts only from a settled
+winner of class `location` (NER, or a house number), `custom:postal_code` or
+`custom:building_number`, and steps outward one piece at a time. Between two
+pieces only one to four bytes of spaces and commas with at most one comma and
+one line feed may stand; a full stop, colon, semicolon, tab, pipe, quote,
+carriage return or blank line ends the block, so JSON fields and the next
+sentence never join. The line break is LF only: CRLF text does not grow across
+lines. A piece never starts or ends against a letter, digit, hyphen, en dash,
+slash, underscore or `@` (`LA` in `K-LA` is not a state). At most five pieces
+join each side of an anchor (a military `PSC N, Box N` pair counts as two),
+never over another selection. A postcode never grows a unit to its right:
+`Ticket 48213 unit 3` stays raw even when the postcode rule takes `48213`,
+because an address writes the unit before its postcode. The pieces come from
+four locale buckets:
+
+- `address_unit_designators` (`locale-en`, `locale-de`): a word, then one
+  space or `#`, then a unit number of one to five digits and one optional
+  letter (`Suite 312`, `Apt. 4B`, `Unit #3`, `PO Box 417`, `PSC 806`,
+  `Wohnung 7`, `Postfach 505`). Case-insensitive; a trailing dot marks an
+  abbreviation. `Box N` joins only right after a `PSC`, `CMR` or `Unit` line.
+- `address_unit_designators_number_before` (`locale-de`): a one- or two-digit
+  ordinal, a full stop, a space and the word (`3. Etage`, `2. OG`).
+- `address_region_codes` (`locale-en`): exact-case US state codes and the
+  military `AA` / `AE` / `AP`, only directly in front of a protected postcode
+  (`IL 00068`), so `Paris, OR maybe` and `IN 2027` stay raw.
+- `address_military_post_offices` (`locale-en`): exact-case `APO`, `FPO`,
+  `DPO`.
+
+Each piece is its own `location` token, so every piece restores exactly and
+the winner it grew from keeps its class; the separators stay raw. The
+recognizer id is the closed reason the piece joined, one of
+`address.block.unit`, `address.block.unit_number_before`,
+`address.block.military_box`, `address.block.region_code` and
+`address.block.military_post_office` (`gaze::AddressGrowth`), and the trace
+sources add the anchor's recognizer id. Pieces are `Learned` evidence, so the
+repeat-value sweep never copies `Suite 312` to a second, unanchored
+occurrence. A designator with no protected address beside it is never
+tokenized (`test Suite 4`). Policy pipelines grow only under
+`[address_blocks] enabled = true`, which `gaze setup` writes. Adopters building a
+pipeline by hand register the words with
+`PipelineBuilder::register_address_vocabulary`; without them nothing grows.
 
 ## Known spec drift
 

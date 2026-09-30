@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+mod address_block;
 mod anchor_resolver;
 mod conflict;
 mod context;
@@ -24,8 +25,14 @@ pub mod token_shape;
 mod types;
 mod validator_veto;
 
+pub use address_block::{
+    AddressGrowth, AddressVocabulary, ADDRESS_MILITARY_BOX_RECOGNIZER_ID,
+    ADDRESS_MILITARY_POST_OFFICE_RECOGNIZER_ID, ADDRESS_REGION_CODE_RECOGNIZER_ID,
+    ADDRESS_UNIT_NUMBER_BEFORE_RECOGNIZER_ID, ADDRESS_UNIT_RECOGNIZER_ID,
+};
 pub use context::{
-    Context, Context as TypedContext, ContextDictionary, ContextError, ContextFieldsRef,
+    record_dictionary_name, Context, Context as TypedContext, ContextDictionary, ContextError,
+    ContextFieldsRef, RecordValueRejection, RecordValueRejectionReason, RECORD_DICTIONARY_PREFIX,
 };
 pub use detector::{Detection, Detector, PiiClass, BUILTIN_CLASS_NAMES};
 pub use dictionaries::{
@@ -45,11 +52,12 @@ pub use gaze_types::{
     DerivedFamilyAction, DocumentExtension, DocumentExtensionBuilder, DocumentExtensionError,
     EmittedTokenSpan, EmptyCustomClassName, ExtractionDensityPolicy, FallbackReason, LeakKind,
     LeakReport, LeakReportStats, LeakReportTelemetry, LeakSuspect, LocaleBasis, LosingCandidate,
-    Manifest, OpenAiPrivateLabel, RedactionLogError, RedactionLogger, RestoreDecision,
-    RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet, SafetyNetContext, SafetyNetError,
-    SafetyNetPiiClass, SafetyNetRefusalReason, SafetyTier, TextOrigin, NER_RECOGNIZER_ID,
-    RESERVED_BUNDLED_FAMILIES, RESTORE_PHASE_FRESH_PII_SCAN, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
-    RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
+    Manifest, OpenAiPrivateLabel, RecordMatchKind, RedactionLogError, RedactionLogger,
+    RestoreDecision, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet, SafetyNetContext,
+    SafetyNetError, SafetyNetPiiClass, SafetyNetRefusalReason, SafetyTier, TextOrigin,
+    NER_RECOGNIZER_ID, RESERVED_BUNDLED_FAMILIES, RESTORE_PHASE_FRESH_PII_SCAN,
+    RESTORE_PHASE_MANIFEST_BYPASS_SCAN, RESTORE_PHASE_MANIFEST_LOOKUP,
+    RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
 };
 pub use house_number::{StreetNumberOrder, HOUSE_NUMBER_RECOGNIZER_ID};
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
@@ -71,7 +79,9 @@ pub use registry::{
     Recognizer, RecognizerRegistry, RecognizerRegistryBuilder, ValidationResult, Validator,
 };
 pub use resolver::{resolve_candidates, resolve_candidates_with_policy};
-pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};
+pub use rule::{
+    first_matching_action, Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext,
+};
 pub use rulepack::{
     recognizer_composition_validator, AnchoredBoundary, ContextSpec, CuePosition, LocaleBucket,
     LocaleCueBundle, LocaleData, NameShape, NormalizerSpec, RawMatch, RecognizerSpec, Rulepack,

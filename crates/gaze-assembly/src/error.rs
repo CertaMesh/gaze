@@ -4,6 +4,10 @@ use thiserror::Error;
 pub enum BuildError {
     #[error("no effective recognizers configured")]
     NoRecognizers,
+    #[error(
+        "record context requires a reversible class action and an unused reserved dictionary name"
+    )]
+    RecordPolicy,
     #[error("policy error: {0}")]
     Policy(#[from] gaze::PolicyError),
     #[error("rulepack error: {0}")]

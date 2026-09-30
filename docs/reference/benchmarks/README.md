@@ -5,7 +5,8 @@ measured numbers as a table and as charts, the methodology behind them, and the
 commands to reproduce them.
 
 [Competitor comparison](competitors.md) scores Presidio, GLiNER-PII, and OPF
-on the same documents and byte scorer as Gaze.
+on the same documents and byte scorer as Gaze. Perplexity PII-Tracer is scored
+the same way on [its own page](competitors-pii-tracer.md).
 
 Everything under [Current release](#current-release), [Charts](#charts), and
 [Release history](#release-history) is **generated** from
@@ -658,7 +659,7 @@ guard version.
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v3 headline counts false-positive bytes after gold-gap credit.
 
-5 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
+6 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
@@ -667,6 +668,7 @@ Shipped releases, one column per release:
 | GLiNER date-of-birth judge | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
 | Nym safety net | not measured for this release | not measured for this release | not available: mechanism added in v0.15 |
 | Davlan NER | not measured for this release | not measured for this release | not available: setup default added in v0.15 |
+| Address-block growth | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 | not available: mechanism added in v0.16 |
 
 <!-- END GENERATED: mechanism-arms -->
 
@@ -767,7 +769,25 @@ in [`scripts/bench/compare/theirbench/`](../../../scripts/bench/compare/theirben
 
 <!-- BEGIN GENERATED: their-benchmarks -->
 
-Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Both sets are English only, so Presidio's three language configurations give identical rows.
+Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Every set here is English only, so Presidio's three language configurations give identical rows.
+
+#### PII-TRACE public subset (500 English conversations, 4,500 messages)
+
+- Perplexity publishes no number for this subset: its paper reports the 1,922-document, 13-language test split, which is not public, so no vendor figure is reproduced. The bar here is PII-Tracer, the vendor's own tuned model: character F1 0.974, exact typed micro F1 0.726.
+- All 2,653 gold spans sit in user messages; assistant messages have none, so a detection there is a false positive. The paper says PII-Tracer's training data shares production traffic with PII-TRACE and the subset carries no split label, so overlap with its training data cannot be ruled out; treat that row as an upper bound, not a clean holdout.
+- Gaze and the other tools are not yet measured on this set; the table holds only the vendor's own model until they are.
+
+Gold PII bytes: 55,580. Common-intersection labels: account_number, private_address, private_date, private_email, private_phone, private_url.
+
+| Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (character F1, label-agnostic, the paper's metric) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| pii-tracer | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
+
+Gaze v0.15.1: not yet measured on this set, so no Gaze row is shown.
+
+Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
+
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `2571ac37`, typed metrics rescored with `2571ac37`; harness `abcfeafc`.
 
 #### PIIBench-commercial (four permissively licensed PIIBench sources, test_5k)
 
@@ -787,6 +807,7 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | gliner | 127,361 | 85,245 | 81.1% | 0.253 | 0.243 | 48,389 | 0.181 |
 | gliner-high-recall | 113,436 | 118,822 | 77.5% | 0.235 | 0.241 | 45,994 | 0.176 |
 | opf | 170,336 | 12,174 | 97.0% | held (typed-metric review) | held (typed-metric review) | 44,064 | held (typed-metric review) |
+| pii-tracer | 128,632 | 22,988 | 95.2% | held (typed-metric review) | held (typed-metric review) | 33,519 | held (typed-metric review) |
 | presidio-all | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
 | presidio-en | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
 | presidio-en-de | 87,936 | 235,332 | 80.7% | 0.208 | 0.239 | 34,630 | 0.157 |
@@ -794,6 +815,8 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 | presidio-strong-high-recall | 84,965 | 92,491 | 70.1% | 0.294 | 0.315 | 32,770 | 0.242 |
 | scrubadub-base | 223,156 | 9,971 | 100.0% | held (typed-metric review) | held (typed-metric review) | 66,342 | held (typed-metric review) |
 | scrubadub-spacy | 145,119 | 166,114 | 90.6% | held (typed-metric review) | held (typed-metric review) | 67,457 | held (typed-metric review) |
+
+pii-tracer was measured separately on the same documents, with harness `bfd35ce6` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
 
 Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `923d5735`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
 
@@ -818,6 +841,7 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | gliner | 13,326 | 4,884 | 44.7% | 0.528 | 0.489 | 8,173 | 0.615 |
 | gliner-high-recall | 8,158 | 7,031 | 34.8% | 0.517 | 0.504 | 4,482 | 0.676 |
 | opf | 15,305 | 667 | 57.8% | held (typed-metric review) | held (typed-metric review) | 5,905 | 0.551 |
+| pii-tracer | 6,510 | 5,277 | 38.4% | held (typed-metric review) | held (typed-metric review) | 773 | 0.640 |
 | presidio-all | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
 | presidio-en | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
 | presidio-en-de | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
@@ -826,6 +850,8 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | presidio-tuned-presidio-research | 2,857 | 4,918 | 22.3% | 0.068 | 0.072 | 2,469 | 0.857 |
 | scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
 | scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
+
+pii-tracer was measured separately on the same documents, with harness `7b09e385` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
 
 Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `0e665110`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
 
@@ -837,6 +863,7 @@ Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, 
 
 Not run:
 
+- PII-TRACE full set (13,148 conversations, 13 languages, 1,922-document test split): not public; only the 500-conversation English subset is, and it is what runs here.
 - PIIBench full ten-source mix: five sources carry non-commercial or custom-academic licences and WikiANN's licence is unknown; not downloaded or run.
 - ai4privacy/pii-masking-300k (OPF's published set): custom licence; commercial use requires a licence from ai4privacy; not downloaded or run.
 
@@ -1152,8 +1179,17 @@ model:
   state between city and ZIP, in prose, blocks, log fields, CSV columns and
   tool JSON. Every part is gold. Layer D adds the same designator words with
   no address anywhere. See [Address blocks](#address-blocks) below. The v5
-  documents remain byte identical within each partition; the generator and
-  both partition hashes are pinned at v6.
+  documents remain byte identical within each partition.
+- **Phone shapes (generator v7):** layer A adds whole phone numbers in shapes
+  the `+CC` and US/German national rules miss: French dotted groups
+  (`04.65.71.xx.xx`), national digit groups with no `+` behind a phone label
+  (`Phone: 0NN NNN NNN`, `Mobile: 0N NN NN NN`), a parenthesised trunk zero
+  (`+44 (0)20 7946 0xxx`) and the `00` / `001` international prefixes, in
+  prose, log fields, CSV columns and tool JSON. The whole number is gold,
+  prefix included. Layer D adds each shape's benign neighbours with no phone
+  label anywhere. See [Phone shapes](#phone-shapes) below. The v6 documents
+  remain byte identical within each partition; the generator and both
+  partition hashes are pinned at v7.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1316,6 +1352,72 @@ tags every designator and number with no address anchor. Appended to the
 policy, it must lower layer A's leak on the address cells and raise layer D's
 false-positive bytes on the `designator_*` twins. A rule for one spelling
 alone (`\bSte\.? #?\d+[A-C]?\b`) must raise them too.
+
+#### Phone shapes
+
+A phone number written in a shape no rule knows leaks whole, and one whose
+tail another rule claims leaks in part: in `02.61.91.xx.xx` the IPv4 rule
+tokenizes `61.91.xx.xx` as an address and `02.` stays raw. Layer A
+(`PhoneCell` in `agentic_layers.py`) writes each number whole and scores it
+as `TELEPHONENUM`, including the `00` or `001` prefix and the `(0)` trunk.
+
+| Layer A cells (gold, gated) | Layer D twins (no phone label anywhere) |
+| --- | --- |
+| French dotted groups whose last four groups parse as IPv4, after a label, in a log field, a CSV column and a bare signature line | firmware and part numbers written exactly as `0X.XX.XX.XX.XX`, five-group dotted versions whose first four groups parse as IPv4, dotted dates, OIDs |
+| National groups `0NN NNN NNN` and `0N NN NN NN` behind `Phone:`, `Mobile:`, a log key, a CSV header or a JSON key | the same digit groups behind an order, invoice or ticket label, spaced amounts, rows of two-digit scores |
+| `+CC (0)` trunk zero in prose and JSON | a signed score with a parenthesised zero (`+12 (0)`) |
+| `00CC` prefix in prose and CSV | tickets written exactly as `00CC N NNNN NNNN` behind a spare country code, `00CC-NNNN-NNNN` part and SKU codes |
+| `001` prefix before a NANPA number in prose and a log field | item codes written exactly as `001 NNN NNN NNNN` or `001-NNN-NNN-NNNN` whose exchange starts with 0 or 1, `001-123-456-789` document numbers |
+
+National digit groups are gold only behind a phone label: the same digits
+alone are an order or ticket number, and layer D writes them so. The
+generator fails closed unless every A value fully matches its shape, every
+national value follows a phone label, every shape A scores has a layer D
+twin, every twin is used, no twin carries a phone label, and no twin value
+has a phone reading. A twin may share a phone's exact written shape (the
+narrow rule below must pay for it), but not its meaning: dotted pairs need a
+firmware, build, part or model context, a `00` code a spare E.164 country
+code (28 or 89), a `001` code an area or exchange starting with 0 or 1, which
+NANP never assigns, and no twin writes `+CC (0)`, which has no benign use.
+
+Values come from documented fictional ranges: ARCEP's numbers reserved for
+fiction (`02 61 91`, `04 65 71`, `01 99 00`), the Bundesnetzagentur
+media-production numbers (Berlin `030 23125`, Frankfurt `069 90009`, München
+`089 99998`), Ofcom's drama range `020 7946 0xxx` and NANPA `555-01xx`. The
+national groups have no documented range, so they are synthesized
+non-reachable: the Spanish nine-digit and Danish eight-digit plans never
+start with 0, and every generated value does. Benign dotted twins also draw
+from the ARCEP fiction blocks, because any `0X.XX.XX.XX.XX` could be a real
+French number. Each A cell has 6 documents per partition and each twin 4: 15
+A cells (+90 documents, +3.5 %) and 17 D twins (+68 documents, +7.1 %).
+
+Each shape has an over-broad rule with no label, country code or
+numbering-plan check (`PHONE_BROAD_PATTERNS`). Every A value of the shape
+matches it, and so does every twin of the shape, so shipping it costs layer D
+false-positive bytes; a test checks this shape by shape. Each shape except
+`(0)` also has a narrow rule (`PHONE_NARROW_PATTERNS`): its exact group widths
+and separators with no label, plan or context check, the rule a detector would
+actually write. Every A value of the shape matches it and so does at least one
+same-shape twin; a test pins how many layer D documents each one reaches.
+The patterns are committed as
+[`mutant-broad-phone-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-broad-phone-shapes.toml)
+and
+[`mutant-narrow-phone-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-narrow-phone-shapes.toml).
+Appended to the setup policy without its NER and Nym sections, on generator
+v7 at `767de0a7`, the broad mutant lowered the phone cells' layer A leak from
+704 to 168 bytes and raised the phone twins' layer D false positives from 241
+to 874 bytes, every twin paying. The narrow mutant lowered the leak to 198
+bytes and raised the twins' false positives to 578 bytes, every same-shape
+twin paying (firmware 44 to 56, part numbers 33 to 56, `00` tickets 9 to 67,
+`001` item codes 16 to 64 hyphenated and 0 to 64 spaced). Rules only (`rule-floor-extended`), main leaked 874
+of 1,290 phone gold bytes and already put 188 false-positive bytes on the
+twins, mostly through the IPv4 rule on dotted runs. Under the full
+`gaze setup` policy (NER and Nym), main leaked 671 of those 1,290 bytes and
+put 274 false-positive bytes on the twins.
+
+The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
+do not include these cells yet; the note under that table says, row by row,
+where each one's v7 re-measure stands.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split
@@ -1522,6 +1624,21 @@ committed ledger. Do not edit the rows by hand.
 These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v4-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v4, test corpus `387a35ac1551…`, setup policy `f909a23aecac…`.
 
 <!-- END GENERATED: agentic-adjacency-v4 -->
+
+**Re-measure status on generator v7.** Every row above was measured on
+generator v4 and stays bound to that corpus by hash; none has been re-measured
+on the v5 to v7 cells yet (labelled lookalikes, address blocks, phone shapes).
+Nothing blocks any of them: each tag builds its own `clean_for_bench` and ships
+a layer-A-capable arm. The re-measure runs as one queued bench job after the
+v7 harness merges, `agentic_layers.py measure` with each release's own binary
+and arm, then `render_agentic_adjacency_doc.py --record`:
+
+- `v0.15.1` `policy-file`: not yet re-measured on v7; queued.
+- `v0.15.0` `policy-file`: not yet re-measured on v7; queued.
+- `v0.14.0` `full-stack-kiji-resolve`: not yet re-measured on v7; queued, with
+  `--manifest-actions tokenize --split-composite-source-ids`.
+- `v0.14.0` `pass2-ner`: not yet re-measured on v7; queued, with the same
+  v0.14.0 flags.
 
 ### Hardware spec template
 

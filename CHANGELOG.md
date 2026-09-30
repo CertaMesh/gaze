@@ -7,7 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Dashboard purge acknowledgements.** `DashboardControl::wait_for_epoch` waits for
+  completed browser purges without polling. Inspection control threads can use
+  `begin_logical_blocking` to acquire the registration lock after a purge acknowledgement;
+  the existing producer API stays nonblocking. Lifecycle tests now synchronize browser
+  workers and await every accepted purge, including disable and child-reap checks.
+
+- **Address-block growth.** When a postcode, a NER street
+  or city, or a house number is already protected, the unit designator, box,
+  state code or military post office written right beside it now joins the
+  protection as its own `location` token: `Suite 312`, `Apt. 4B`,
+  `PO Box 417`, `Wohnung 7`, `3. Etage`, `Postfach 505`, `IL` in
+  `Brinmoor, IL 00068`, and `PSC 806, Box 9504, FPO AA`. Growth crosses only
+  spaces, one comma and one line feed, never a sentence end or a JSON field
+  boundary; a postcode never grows a unit to its right, a state code needs a
+  protected postcode after it, and a designator with no protected address
+  beside it stays raw.
+  Words come from new `locale-en` / `locale-de` buckets; each piece's
+  recognizer id (`address.block.*`, `gaze::AddressGrowth`) records why it
+  joined. It runs under the new `[address_blocks] enabled = true` policy
+  section, which `gaze setup` writes; a policy without it grows nothing. See
+  the policy reference, "Address blocks".
+
 ### Breaking
+
+- **Typed `Context` literals gain `record_match_kinds` and `record_value_rejections`.** Add
+  both fields with `Default::default()` to direct Rust struct literals.
+  Caller-known record matching now defaults to selected class and match-kind
+  pairs from the v5 oracle; callers who need off-by-default variants must opt in through the
+  context JSON. See the policy reference and UPGRADE.md.
+
+- **Context JSON is size-bounded and duplicate-key strict.** Files larger than
+  4 MiB and JSON objects with duplicate keys now fail closed. Parse errors are
+  generic to avoid echoing raw context into logs. See UPGRADE.md.
 
 - **Repeat-value sweep evidence is declared per emitter, and the default is
   `Learned`**. `Recognizer` and `Detector` gain
@@ -177,6 +211,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Caller-known records accept checksum-valid two-letter-country IBANs.**
+  Unsafe short values are skipped individually; the Rust context reports each
+  safe field path and a typed reason. Duplicate class/value fields share one
+  record source.
+- **Caller-known record defaults follow the v5 class and match-kind oracle.**
+  Full names use exact, case-folded and combined whitespace/case matching;
+  single names use case-folded and corroborated matching. Credit cards, IBANs,
+  national IDs and Steuer IDs use exact and flexible-whitespace matching;
+  whitespace-flexible matching collapses whitespace runs but does not add or
+  remove separators, so pass values in the form the document uses.
+  passports and phones use exact matching. Address parts and exact single
+  names are off by default, leaving 337 and 123 more leaked gold bytes than
+  the all-on arm but avoiding their measured benign counterweights. Exact
+  declared phones and credit cards remain on by user decision despite 69 and
+  99 added layer D benign bytes. Callers may override a group through
+  `record_match_kinds` in the call-scoped context JSON. The final shipped-default
+  oracle cuts leaked bytes by 6,064 with 258 added false-positive bytes under
+  both scored-label contracts; no-record scorecards match main exactly.
 - **Loopback IP addresses no longer tokenize.** The bundled IPv4 and IPv6
   rules reject `127.0.0.0/8`, `::1` and IPv4-mapped or IPv4-compatible
   loopback with the new
@@ -246,6 +298,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still fails. The release preflight and the tag-push scrub steps in both
   release workflows now include `UPGRADE.md`, and a workspace test keeps it
   clean on every PR.
+
+### Fixed
+
+- **Dashboard purge fails closed on a broken notification channel.** Browser
+  purge requests return 503 instead of falsely reporting acceptance when delivery
+  fails. The child clears captured data, invalidates sessions and response leases,
+  and stops so the supervisor permanently disables dashboard capture.
 
 ## [0.15.1] - 2026-09-26
 

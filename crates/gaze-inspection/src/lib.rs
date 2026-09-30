@@ -910,6 +910,34 @@ impl InstalledInspectionProducerV1 {
             InspectionDropCodeV1::QueueContended => InspectionBeginLogicalErrorV1::Contended,
             _ => InspectionBeginLogicalErrorV1::Disabled,
         })?;
+        self.logical_from_inner(inner)
+    }
+
+    /// Mints a logical emitter after acquiring the registration lock.
+    ///
+    /// Use on a control thread after a purge acknowledgement, never on the nonblocking
+    /// capture path. Purging, disabled, and closed registrations still return an error.
+    pub fn begin_logical_blocking(
+        &self,
+    ) -> Result<InspectionLogicalEmitterV1, InspectionBeginLogicalErrorV1> {
+        if !self.state.producer_open.load(Ordering::Acquire) {
+            return Err(InspectionBeginLogicalErrorV1::Closed);
+        }
+        let inner = self.state.inner.lock().map_err(|poisoned| {
+            let mut inner = poisoned.into_inner();
+            inner.lifecycle = LifecycleStateV1::Disabled;
+            inner.closed = true;
+            inner.queue.clear();
+            self.state.changed.notify_all();
+            InspectionBeginLogicalErrorV1::Disabled
+        })?;
+        self.logical_from_inner(inner)
+    }
+
+    fn logical_from_inner(
+        &self,
+        inner: MutexGuard<'_, RuntimeInner>,
+    ) -> Result<InspectionLogicalEmitterV1, InspectionBeginLogicalErrorV1> {
         match inner.lifecycle {
             LifecycleStateV1::Running(_) if !inner.closed => {}
             LifecycleStateV1::Purging { .. } => return Err(InspectionBeginLogicalErrorV1::Purging),
@@ -1501,44 +1529,16 @@ mod tests {
     fn begin_logical_for_test(
         producer: &InstalledInspectionProducerV1,
     ) -> InspectionLogicalEmitterV1 {
-        const DEADLINE: Duration = Duration::from_secs(60);
-        let started = Instant::now();
-        loop {
-            match producer.begin_logical() {
-                Ok(logical) => return logical,
-                Err(InspectionBeginLogicalErrorV1::Contended) if started.elapsed() < DEADLINE => {
-                    std::thread::yield_now();
-                }
-                Err(InspectionBeginLogicalErrorV1::Contended) => {
-                    panic!(
-                        "begin_logical remained contended beyond the {DEADLINE:?} test setup deadline"
-                    )
-                }
-                Err(error) => panic!("begin_logical failed during test setup: {error:?}"),
-            }
-        }
+        producer
+            .begin_logical_blocking()
+            .expect("logical test setup")
     }
 
     fn expect_begin_logical_err_for_test(
         producer: &InstalledInspectionProducerV1,
         expected: InspectionBeginLogicalErrorV1,
     ) {
-        const DEADLINE: Duration = Duration::from_secs(60);
-        let started = Instant::now();
-        loop {
-            match producer.begin_logical() {
-                Ok(_) => {
-                    panic!("begin_logical unexpectedly returned Ok while expecting {expected:?}")
-                }
-                Err(error) if error == expected => return,
-                Err(InspectionBeginLogicalErrorV1::Contended) if started.elapsed() < DEADLINE => {
-                    std::thread::yield_now();
-                }
-                Err(error) => panic!(
-                    "begin_logical settled to {error:?} while expecting {expected:?} within the {DEADLINE:?} test deadline"
-                ),
-            }
-        }
+        assert_eq!(producer.begin_logical_blocking().err(), Some(expected));
     }
 
     fn admit_for_test<F>(mut attempt: F) -> InspectionAdmissionOutcomeV1
@@ -2157,6 +2157,59 @@ mod tests {
             Err(InspectionBeginLogicalErrorV1::Contended)
         ));
         drop(locked);
+    }
+
+    #[test]
+    fn blocking_logical_begin_preserves_purge_and_disable_contract() {
+        let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::ProviderVisible);
+        let (producer, mut consumer) = install_inspection_v1(
+            PendingInspectionProducerV1::new(descriptor),
+            PendingInspectionConsumerV1::new(
+                descriptor,
+                Arc::new(RecordingSink::default()),
+                InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+            ),
+        )
+        .unwrap();
+        let guard = consumer.begin_purge().unwrap();
+        assert!(matches!(
+            producer.begin_logical_blocking(),
+            Err(InspectionBeginLogicalErrorV1::Purging)
+        ));
+        guard.complete().unwrap();
+        assert!(producer.begin_logical_blocking().is_ok());
+        consumer.disable();
+        assert!(matches!(
+            producer.begin_logical_blocking(),
+            Err(InspectionBeginLogicalErrorV1::Disabled)
+        ));
+        producer.state.producer_open.store(false, Ordering::Release);
+        assert!(matches!(
+            producer.begin_logical_blocking(),
+            Err(InspectionBeginLogicalErrorV1::Closed)
+        ));
+    }
+
+    #[test]
+    fn blocking_logical_begin_fails_closed_on_poison() {
+        let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::ProviderVisible);
+        let (producer, _consumer) = install_inspection_v1(
+            PendingInspectionProducerV1::new(descriptor),
+            PendingInspectionConsumerV1::new(
+                descriptor,
+                Arc::new(RecordingSink::default()),
+                InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+            ),
+        )
+        .unwrap();
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            let _inner = producer.state.inner.lock().unwrap();
+            panic!("synthetic registration poison");
+        }));
+        assert!(matches!(
+            producer.begin_logical_blocking(),
+            Err(InspectionBeginLogicalErrorV1::Disabled)
+        ));
     }
 
     #[test]

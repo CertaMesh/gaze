@@ -241,6 +241,14 @@ pub(crate) fn prepare_clean_pipeline(
         .map(TypedContext::load)
         .transpose()
         .map_err(map_context_error)?;
+    if let Some(context) = &context {
+        for rejection in &context.record_value_rejections {
+            eprintln!(
+                "warning: record value at {} skipped: unsafe short match",
+                rejection.path
+            );
+        }
+    }
     let mut resolved = resolve_pipeline(
         options.policy,
         &clean_overrides,

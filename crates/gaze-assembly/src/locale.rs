@@ -155,3 +155,48 @@ pub(crate) fn register_street_lexicons(
         }
     }
 }
+
+/// Locale buckets holding the address words an address winner may grow over:
+/// unit designators, number-first designators, state codes and military post
+/// offices.
+const ADDRESS_VOCABULARY_BUCKETS: [(&str, gaze::AddressVocabulary); 4] = [
+    (
+        "address_unit_designators",
+        gaze::AddressVocabulary::UnitDesignators,
+    ),
+    (
+        "address_unit_designators_number_before",
+        gaze::AddressVocabulary::UnitDesignatorsNumberBefore,
+    ),
+    ("address_region_codes", gaze::AddressVocabulary::RegionCodes),
+    (
+        "address_military_post_offices",
+        gaze::AddressVocabulary::MilitaryPostOffices,
+    ),
+];
+
+pub(crate) fn register_address_vocabularies(
+    builder: &mut AssemblyBuilder,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+) {
+    for active_locale in active_locales.as_slice() {
+        for rulepack in rulepacks {
+            if !rulepack.default_locales.contains(active_locale) {
+                continue;
+            }
+            let Some(locale) = rulepack.locale.as_ref() else {
+                continue;
+            };
+            for (bucket, vocabulary) in ADDRESS_VOCABULARY_BUCKETS {
+                if let Some(names) = locale.buckets.get(bucket) {
+                    builder.register_address_vocabulary(
+                        active_locale.clone(),
+                        vocabulary,
+                        names.names.clone(),
+                    );
+                }
+            }
+        }
+    }
+}
