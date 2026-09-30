@@ -471,7 +471,7 @@ def main() -> None:
             "shipping_defaults" if args.shipping_defaults else "probe_all"
         ),
         "name_multi_measurement_kinds": [] if args.shipping_defaults else list(NAME_MULTI_KINDS),
-        "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown (Solo scratchpad 10781)",
+        "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown",
         "layers": {},
     }
     for layer, all_documents in layers.items():

@@ -1107,7 +1107,7 @@
   },
   "name_multi_measurement_kinds": [],
   "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
-  "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown (Solo scratchpad 10781)",
+  "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown",
   "record_match_kinds_mode": "baseline_only",
   "source_commit": "d9ba943d76c00e984e4c88f8a440a38c6e4f86bc"
 }

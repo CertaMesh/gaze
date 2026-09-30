@@ -18,6 +18,50 @@ fn policy(action: Action) -> Policy {
 }
 
 #[test]
+fn non_name_record_defaults_clean_and_restore_through_product_pipeline() {
+    let context = Context::from_json_str(
+        r#"{"record":{"card":"4111 1111 1111 1111","phone":"+1-212-555-0104","passport":"SYN-PASS-123456","national_id":"SYN-ID-12345","steuer_id":"12 345 678 901"},"field_map":{"/card":"custom:credit_card","/phone":"custom:phone","/passport":"custom:passport","/national_id":"custom:national_id","/steuer_id":"custom:steuer_id"}}"#,
+    ).unwrap();
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let pipeline = build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None)
+        .expect("record pipeline");
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "Card 4111 1111 1111 1111; phone +1-212-555-0104; passport SYN-PASS-123456; national ID SYN-ID-12345; Steuer-ID 12 345 678 901.";
+    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let CleanDocument::Text(clean) = pipeline
+        .pseudonymize_with_detect_context(
+            &session,
+            RawDocument::Text(raw.into()),
+            locales.as_slice(),
+            &bundle,
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    for value in [
+        "4111 1111 1111 1111",
+        "+1-212-555-0104",
+        "SYN-PASS-123456",
+        "SYN-ID-12345",
+        "12 345 678 901",
+    ] {
+        assert!(
+            !clean.contains(value),
+            "record value stayed raw: {value}; clean={clean}"
+        );
+    }
+    assert_eq!(
+        pipeline
+            .restore_with_telemetry(&session, &clean)
+            .unwrap()
+            .0
+            .text,
+        raw,
+    );
+}
+
+#[test]
 fn valid_de_iban_record_survives_short_name_and_restores() {
     let iban = "DE36000000000000000000";
     let context =

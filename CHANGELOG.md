@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
-- **Typed `Context` literals gain `record_match_kinds`.** Add
-  `record_match_kinds: Default::default()` to direct Rust struct literals.
+- **Typed `Context` literals gain `record_match_kinds` and `record_value_rejections`.** Add
+  both fields with `Default::default()` to direct Rust struct literals.
   Caller-known record matching now defaults to selected class and match-kind
   pairs from the v5 oracle; callers who need off-by-default variants must opt in through the
   context JSON. See the policy reference and UPGRADE.md.
@@ -195,6 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Full names use exact, case-folded and combined whitespace/case matching;
   single names use case-folded and corroborated matching. Credit cards, IBANs,
   national IDs and Steuer IDs use exact and flexible-whitespace matching;
+  whitespace-flexible matching collapses whitespace runs but does not add or
+  remove separators, so pass values in the form the document uses.
   passports and phones use exact matching. Address parts and exact single
   names are off by default, leaving 337 and 123 more leaked gold bytes than
   the all-on arm but avoiding their measured benign counterweights. Exact

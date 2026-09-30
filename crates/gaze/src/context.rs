@@ -552,7 +552,7 @@ fn inferred_record_class(key: &str) -> Option<PiiClass> {
         }
         "iban" => "custom:iban",
         "dob" | "dateofbirth" | "birthdate" | "geburtsdatum" | "datedenaissance"
-        | "geboortedatum" | "datadenascimento" => "custom:date",
+        | "geboortedatum" | "datadenascimento" => "custom:birth_date",
         "zip" | "postcode" | "plz" | "codepostal" | "cep" => "custom:postal_code",
         "address" | "street" | "strasse" | "city" | "stadt" | "adresse" | "rue" | "ville"
         | "adres" | "straat" | "plaats" | "endereco" | "rua" | "cidade" => "Location",
@@ -910,8 +910,9 @@ mod tests {
             ("E_MAIL", PiiClass::Email),
             ("firstName", PiiClass::Name),
             ("NachName", PiiClass::Name),
-            ("date-de-naissance", PiiClass::Custom("date".into())),
-            ("geboorte_datum", PiiClass::Custom("date".into())),
+            ("date-de-naissance", PiiClass::Custom("birth_date".into())),
+            ("geboorte_datum", PiiClass::Custom("birth_date".into())),
+            ("DOB", PiiClass::Custom("birth_date".into())),
             ("correioEletronico", PiiClass::Email),
             ("Strasse", PiiClass::Location),
             ("plz", PiiClass::Custom("postal_code".into())),

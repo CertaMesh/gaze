@@ -128,10 +128,10 @@ to merged main `d2c7c0f4`. Both sides generated setup policy SHA-256
 host, and separate worktrees and build targets. Other CPU and benchmark work
 overlapped this run, so its latency is not an isolated measurement.
 
-The round-1 prototype at `1703143b` protected 99.40% of 8,147 eligible
+The round-1 arm at `1703143b` protected 99.40% of 8,147 eligible
 leaked bytes. Round 2 starts from #712's stronger baseline, leaving 6,513
 eligible leaked bytes, so these percentages should not be compared as a
-like-for-like change in recall. The first full prototype at `d6636bc6`
+like-for-like change in recall. The first full arm at `d6636bc6`
 protected 95.37% overall but missed the prediction's lower bound in A
 (89.38%, with 342 residual `TAXNUM` bytes). The round-1 parser refused
 noncanonical spacing, weak values, and common-word single-token names.

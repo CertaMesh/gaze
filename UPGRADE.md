@@ -46,7 +46,8 @@ re-tokenize stored manifests.
 
 ### TL;DR
 
-**Typed `Context` literals:** add `record_match_kinds: Default::default()`.
+**Typed `Context` literals:** add both `record_match_kinds: Default::default()`
+and `record_value_rejections: Default::default()`.
 Full names now match by default with measured exact, case-folded and combined
 whitespace/case kinds. If your caller-known records rely on exact single names,
 address parts, email or other off-by-default kinds, specify them in

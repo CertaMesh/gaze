@@ -32,6 +32,8 @@ and combined whitespace/case variants of full names; and case-folded or
 corroborated single names. Address parts, exact single names, flexible-
 whitespace full names, email and other unlisted pairs are off. The adopter
 can replace a group's defaults with `record_match_kinds` in the context JSON.
+Whitespace-flexible matching collapses whitespace runs; it does not add or
+remove separators, so pass the value in the form the document uses.
 The recognizer can match text whitespace runs of up to 32 characters and full
 Unicode name case folds when enabled. The original source bytes are kept in
 the manifest for exact restore.
@@ -42,8 +44,9 @@ Unlisted names such as `Maren` match changed-case copies by default.
 Same-case exact copies require opt-in or another detector. Unsafe short values
 are skipped individually and reported by path and typed reason in the Rust
 context. A valid IBAN passes even when its country code is its only two letters.
-Apps should inspect `record_value_rejections` so a skipped value is never
-mistaken for protected data. This mode does not infer name order, email case
+Apps should inspect `record_value_rejections` for refused values. The list
+contains refusals only; accepted values in off-by-default groups are inert and
+do not appear there. This mode does not infer name order, email case
 changes, abbreviations, fragments or typos.
 Homonyms with corroborating context remain a false-positive risk. The oracle
 found that turning exact address parts and single names off leaves 337 and
@@ -58,7 +61,7 @@ The current default Nym operating point has no person label; model
 corroboration currently uses NER person spans.
 The app must keep its context file private and avoid logging it.
 
-The [policy reference](../../reference/policy.md#caller-known-record-context-prototype)
+The [policy reference](../../reference/policy.md#caller-known-record-context)
 defines the JSON shape, limits and error behavior. The separate
 [known-record oracle arm](../../reference/benchmarks/known-record-oracle.md)
 assumes an adopter already knows gold values; its result is an upper bound,
