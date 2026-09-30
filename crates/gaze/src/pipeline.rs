@@ -5513,12 +5513,19 @@ fn address_block_pieces(
         .filter(|selection| is_address_anchor(&selection.class))
         .filter_map(|selection| {
             let member = &evidence.originals[*selection.members.first()?];
-            Some((selection_span(selection)?, member))
+            Some((selection_span(selection)?, member, &selection.class))
         })
         .collect::<Vec<_>>();
     let spans = anchors
         .iter()
-        .map(|(span, _)| span.clone())
+        .map(|(span, _, class)| crate::address_block::Anchor {
+            span: span.clone(),
+            kind: if class.as_custom_name() == Some("postal_code") {
+                crate::address_block::AnchorKind::Postcode
+            } else {
+                crate::address_block::AnchorKind::Place
+            },
+        })
         .collect::<Vec<_>>();
     grammar
         .grow(text, &spans, &claimed, locale_chain)

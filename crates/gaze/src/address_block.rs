@@ -103,6 +103,24 @@ pub(crate) struct AddressGrammar {
     by_locale: HashMap<LocaleTag, HashMap<AddressVocabulary, Vec<String>>>,
 }
 
+/// What an address winner is, as far as growth cares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AnchorKind {
+    /// A postcode: pieces join it only from the left (`Suite 4, 00068` in a
+    /// German block, `IL 00068`), because an address puts the unit and the
+    /// state before the postcode and a German postcode is followed by the city.
+    Postcode,
+    /// A street, city, house number or building number.
+    Place,
+}
+
+/// An address winner growth starts from, in normalized-text byte offsets.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Anchor {
+    pub(crate) span: Range<usize>,
+    pub(crate) kind: AnchorKind,
+}
+
 /// One grown piece in normalized-text byte offsets.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GrownPiece {
@@ -157,17 +175,28 @@ impl AddressGrammar {
             .map(String::as_str)
     }
 
-    /// Pieces grown outward from each anchor (`anchors[i]` is an address
-    /// winner's span). A piece never overlaps `claimed` (every settled
-    /// selection) nor another grown piece, and growth stops at anything that
-    /// is not an address separator followed by a known piece.
+    /// Pieces grown outward from each anchor. A piece never overlaps
+    /// `claimed` (every settled selection) nor another grown piece, and growth
+    /// stops at anything that is not an address separator followed by a known
+    /// piece. At most [`MAX_PIECES_PER_SIDE`] pieces join each side of an anchor.
     pub(crate) fn grow(
         &self,
         text: &str,
-        anchors: &[Range<usize>],
+        anchors: &[Anchor],
         claimed: &[Range<usize>],
         chain: &[LocaleTag],
     ) -> Vec<GrownPiece> {
+        let postcodes = anchors
+            .iter()
+            .filter(|anchor| anchor.kind == AnchorKind::Postcode)
+            .map(|anchor| anchor.span.clone())
+            .collect::<Vec<_>>();
+        let scan = Scan {
+            grammar: self,
+            text,
+            chain,
+            postcodes: &postcodes,
+        };
         let mut found: Vec<GrownPiece> = Vec::new();
         let taken = |span: &Range<usize>, found: &[GrownPiece]| {
             claimed
@@ -175,15 +204,15 @@ impl AddressGrammar {
                 .chain(found.iter().map(|piece| &piece.span))
                 .any(|other| overlaps(span, other))
         };
-        for (anchor, span) in anchors.iter().enumerate() {
+        for (index, anchor) in anchors.iter().enumerate() {
             // Rightward.
-            let mut edge = span.end;
+            let mut edge = anchor.span.end;
             let mut previous: Option<(AddressGrowth, Range<usize>)> = None;
             for _ in 0..MAX_PIECES_PER_SIDE {
                 let Some(start) = separator_end(text, edge) else {
                     break;
                 };
-                let Some((end, growth)) = self.piece_at(text, start, chain) else {
+                let Some((end, growth)) = scan.piece_at(start) else {
                     break;
                 };
                 let growth = match (growth, &previous) {
@@ -195,6 +224,18 @@ impl AddressGrammar {
                     (PieceKind::Box, _) => break,
                     (PieceKind::Grown(growth), _) => growth,
                 };
+                // `Ticket 48213 unit 3`: a unit after a postcode is not its
+                // address's unit, so a postcode never grows one rightward.
+                if anchor.kind == AnchorKind::Postcode
+                    && matches!(
+                        growth,
+                        AddressGrowth::Unit
+                            | AddressGrowth::UnitNumberBefore
+                            | AddressGrowth::MilitaryBox
+                    )
+                {
+                    break;
+                }
                 let piece = start..end;
                 if taken(&piece, &found) {
                     break;
@@ -202,30 +243,28 @@ impl AddressGrammar {
                 found.push(GrownPiece {
                     span: piece.clone(),
                     growth,
-                    anchor,
+                    anchor: index,
                 });
                 previous = Some((growth, piece));
                 edge = end;
             }
-            // Leftward.
-            let mut edge = span.start;
-            for _ in 0..MAX_PIECES_PER_SIDE {
-                let Some(end) = separator_start(text, edge) else {
-                    break;
-                };
-                let Some((start, kind)) = self.piece_ending_at(text, end, chain) else {
+            // Leftward. The cap counts pieces: `Box N` joins together with
+            // the military line before it, two pieces at once.
+            let mut edge = anchor.span.start;
+            let mut grown = 0;
+            while let Some(end) = separator_start(text, edge) {
+                let Some((start, kind)) = scan.piece_ending_at(end) else {
                     break;
                 };
                 let piece = start..end;
                 let pieces = match kind {
                     PieceKind::Grown(growth) => vec![(piece, growth)],
-                    // `Box N` joins leftward only together with the military line before it.
                     PieceKind::Box => {
                         let Some(unit_end) = separator_start(text, start) else {
                             break;
                         };
                         let Some((unit_start, PieceKind::Grown(AddressGrowth::Unit))) =
-                            self.piece_ending_at(text, unit_end, chain)
+                            scan.piece_ending_at(unit_end)
                         else {
                             break;
                         };
@@ -238,28 +277,37 @@ impl AddressGrammar {
                         ]
                     }
                 };
-                if pieces.iter().any(|(piece, _)| taken(piece, &found)) {
+                if grown + pieces.len() > MAX_PIECES_PER_SIDE
+                    || pieces.iter().any(|(piece, _)| taken(piece, &found))
+                {
                     break;
                 }
+                grown += pieces.len();
                 edge = pieces.last().map(|(piece, _)| piece.start).unwrap_or(edge);
                 found.extend(pieces.into_iter().map(|(span, growth)| GrownPiece {
                     span,
                     growth,
-                    anchor,
+                    anchor: index,
                 }));
             }
         }
         found.sort_by_key(|piece| (piece.span.start, piece.span.end));
         found
     }
+}
 
+/// One growth pass: the grammar, the text and the postcode winners in it.
+struct Scan<'a> {
+    grammar: &'a AddressGrammar,
+    text: &'a str,
+    chain: &'a [LocaleTag],
+    postcodes: &'a [Range<usize>],
+}
+
+impl Scan<'_> {
     /// The piece starting exactly at `start`: its end and kind.
-    fn piece_at(
-        &self,
-        text: &str,
-        start: usize,
-        chain: &[LocaleTag],
-    ) -> Option<(usize, PieceKind)> {
+    fn piece_at(&self, start: usize) -> Option<(usize, PieceKind)> {
+        let (text, chain, grammar) = (self.text, self.chain, self.grammar);
         if !starts_word(text, start) {
             return None;
         }
@@ -267,14 +315,14 @@ impl AddressGrammar {
         if let Some(len) = box_len(rest) {
             return Some((start + len, PieceKind::Box));
         }
-        let designator = self
+        let designator = grammar
             .words(chain, AddressVocabulary::UnitDesignators)
             .filter_map(|word| designator_len(rest, word))
             .max();
         if let Some(len) = designator {
             return Some((start + len, PieceKind::Grown(AddressGrowth::Unit)));
         }
-        if let Some(len) = self
+        if let Some(len) = grammar
             .words(chain, AddressVocabulary::UnitDesignatorsNumberBefore)
             .filter_map(|word| number_before_len(rest, word))
             .max()
@@ -284,14 +332,14 @@ impl AddressGrammar {
                 PieceKind::Grown(AddressGrowth::UnitNumberBefore),
             ));
         }
-        // A state code is an address part only in front of its postcode
-        // (`IL 00068`); `Paris, OR maybe` is prose.
-        if let Some(word) = self
+        // A state code is an address part only in front of a protected
+        // postcode (`IL 00068`); `Paris, OR maybe` and `IN 2027` are prose.
+        if let Some(word) = grammar
             .words(chain, AddressVocabulary::RegionCodes)
             .find(|word| {
                 exact_word(rest, word)
                     && separator_end(text, start + word.len())
-                        .is_some_and(|next| text[next..].starts_with(|c: char| c.is_ascii_digit()))
+                        .is_some_and(|next| self.postcodes.iter().any(|code| code.start == next))
             })
         {
             return Some((
@@ -299,7 +347,8 @@ impl AddressGrammar {
                 PieceKind::Grown(AddressGrowth::RegionCode),
             ));
         }
-        self.words(chain, AddressVocabulary::MilitaryPostOffices)
+        grammar
+            .words(chain, AddressVocabulary::MilitaryPostOffices)
             .find(|word| exact_word(rest, word))
             .map(|word| {
                 (
@@ -310,12 +359,8 @@ impl AddressGrammar {
     }
 
     /// The longest piece ending exactly at `end`.
-    fn piece_ending_at(
-        &self,
-        text: &str,
-        end: usize,
-        chain: &[LocaleTag],
-    ) -> Option<(usize, PieceKind)> {
+    fn piece_ending_at(&self, end: usize) -> Option<(usize, PieceKind)> {
+        let text = self.text;
         let floor = end.saturating_sub(MAX_PIECE_BYTES);
         text[..end]
             .char_indices()
@@ -323,7 +368,7 @@ impl AddressGrammar {
             .take_while(|(index, _)| *index >= floor)
             .map(|(index, _)| index)
             .filter_map(|start| {
-                let (piece_end, kind) = self.piece_at(text, start, chain)?;
+                let (piece_end, kind) = self.piece_at(start)?;
                 (piece_end == end).then_some((start, kind))
             })
             .last()
@@ -514,15 +559,26 @@ mod tests {
 
     /// Grown pieces for the given anchor substrings (all other anchors claimed too).
     fn grown(text: &str, anchors: &[&str]) -> Vec<(String, AddressGrowth)> {
-        let spans = anchors
+        // An all-digit anchor stands for a postcode winner, any other for a
+        // street, city or house number.
+        let anchors = anchors
             .iter()
             .map(|anchor| {
                 let start = text.find(anchor).expect("anchor in text");
-                start..start + anchor.len()
+                let kind = if anchor.bytes().all(|b| b.is_ascii_digit()) {
+                    AnchorKind::Postcode
+                } else {
+                    AnchorKind::Place
+                };
+                Anchor {
+                    span: start..start + anchor.len(),
+                    kind,
+                }
             })
             .collect::<Vec<_>>();
+        let spans = anchors.iter().map(|a| a.span.clone()).collect::<Vec<_>>();
         grammar()
-            .grow(text, &spans, &spans, CHAIN)
+            .grow(text, &anchors, &spans, CHAIN)
             .into_iter()
             .map(|piece| (text[piece.span].to_string(), piece.growth))
             .collect()
@@ -682,17 +738,82 @@ mod tests {
         let text = "Drusk Lane Suite 4, IL 00068";
         let street = 0..10;
         let suite = 11..18;
-        let claimed = [street, suite];
-        let found = grammar().grow(text, &claimed[..1], &claimed, CHAIN);
+        let anchor = [Anchor {
+            span: street.clone(),
+            kind: AnchorKind::Place,
+        }];
+        let found = grammar().grow(text, &anchor, &[street, suite], CHAIN);
         assert!(found.is_empty());
     }
 
     #[test]
     fn inactive_locales_contribute_no_words() {
         let text = "Pellinorallee 7a, Wohnung 4";
-        let anchor = [Range { start: 0, end: 16 }];
-        let found = grammar().grow(text, &anchor, &anchor, &[LocaleTag::EnUs]);
+        let anchor = [Anchor {
+            span: 0..16,
+            kind: AnchorKind::Place,
+        }];
+        let found = grammar().grow(
+            text,
+            &anchor,
+            std::slice::from_ref(&anchor[0].span),
+            &[LocaleTag::EnUs],
+        );
         assert!(found.is_empty());
+    }
+
+    #[test]
+    fn a_postcode_never_grows_a_unit_rightward() {
+        // A five-digit ticket or invoice number taken as a postcode must not
+        // pull the next unit-shaped words in with it.
+        assert!(grown("Ticket 48213 unit 3 failed again", &["48213"]).is_empty());
+        assert!(grown("Invoice 20931, Floor 2 printer is broken", &["20931"]).is_empty());
+        assert!(grown("00068, 3. Etage", &["00068"]).is_empty());
+        // From a street the same unit joins, and a unit before a postcode joins
+        // it from the left.
+        assert_eq!(
+            grown(
+                "Hauptstraße 12, 3. Etage, 10115 Berlin",
+                &["Hauptstraße 12", "10115"]
+            ),
+            [("3. Etage".to_string(), UnitNumberBefore)]
+        );
+        assert_eq!(
+            grown("PO Box 417, 00071", &["00071"]),
+            [("PO Box 417".to_string(), Unit)]
+        );
+    }
+
+    #[test]
+    fn a_state_code_needs_a_protected_postcode_after_it() {
+        assert!(grown("MEETING IN BERLIN IN 2027", &["BERLIN"]).is_empty());
+        // The digits after `IL` are not a protected postcode here.
+        assert!(grown("Brinmoor, IL 12 visitors", &["Brinmoor"]).is_empty());
+        assert_eq!(
+            grown("Brinmoor, IL 00068", &["Brinmoor", "00068"]),
+            [("IL".to_string(), RegionCode)]
+        );
+    }
+
+    #[test]
+    fn a_side_grows_at_most_five_pieces_even_two_at_a_time() {
+        let found = grown(
+            "PSC 1, Box 2 PSC 3, Box 4 PSC 5, Box 6 PSC 7 00090",
+            &["00090"],
+        );
+        assert_eq!(found.len(), MAX_PIECES_PER_SIDE);
+        assert_eq!(
+            found
+                .iter()
+                .map(|(piece, _)| piece.as_str())
+                .collect::<Vec<_>>(),
+            ["PSC 3", "Box 4", "PSC 5", "Box 6", "PSC 7"]
+        );
+        let right = grown(
+            "Drusk Lane Suite 1, Suite 2, Suite 3, Suite 4, Suite 5, Suite 6",
+            &["Drusk Lane"],
+        );
+        assert_eq!(right.len(), MAX_PIECES_PER_SIDE);
     }
 
     #[test]
