@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "917ad7cb4e9aa3edeaebb5d679f7356b950b6746ca796ec13ed45fad2950c482",
-    "test": "c09a3cc92e1b83acaea0458416cb61ae24297c695b73e37399413c6908f4fd85",
+    "dev": "60c3fe121db4ce07b0dfbc2397c1a48a0c1773a5c94eff324fdde597a6aa8ae6",
+    "test": "ddd234551bcae00ab0f97026fd4b5b6d3d4b4b23cf08b8fa15926e87f598bd5c",
 }
 # v7: everything before the cued grammar and short-identifier cells.
 V7_CORPUS_SHA256 = {
@@ -1134,12 +1134,12 @@ class CueCellTests(unittest.TestCase):
     # partition. A narrow rule with no D cost would ship its false positives
     # unmeasured.
     NARROW_D_COST = {
-        # dev grouped: also 21 `ref_number_16` references; three digits: also
-        # the Swedish-shape near twin (`ticket 900 00` after a zip word).
-        "dev": {"age_turned": 4, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
+        # dev grouped: also 21 `ref_number_16` references; three digits: the
+        # three-digit near twin and the Swedish-shape one (`ticket 900 00`).
+        "dev": {"age_turned": 4, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
                 "card_short_compact": 8, "card_short_grouped": 29, "zip_se": 4, "zip_pl": 4, "zip_six": 4,
                 "zip_br": 4, "zip_three": 8},
-        "test": {"age_turned": 4, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
+        "test": {"age_turned": 4, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
                  "card_short_compact": 8, "card_short_grouped": 8, "zip_se": 4, "zip_pl": 4, "zip_six": 4,
                  "zip_br": 4, "zip_three": 8},
     }

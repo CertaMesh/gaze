@@ -2743,16 +2743,17 @@ CUE_BROAD_PATTERNS: dict[CueShape, str] = {
 # The rule a detector would plausibly write for each shape: a person word
 # somewhere before the age wording, any few words between the date-of-birth
 # question and the date, the issuer prefix and card length with no cue, a
-# postal word anywhere within 40 non-digit characters. Every A value of the
-# shape matches it, and so does at least one layer D twin, so each pays false
-# positives. `at the age of` has no narrow rule: a person word does not tell a
-# person's age from their tortoise's. The committed narrow mutant policy
-# carries the same patterns.
+# postal word anywhere within 40 non-digit characters, `at the age of` or `im
+# Alter von` before a person-range age with no subject check. Every A value of
+# the shape matches it, and so does at least one layer D twin, so each pays
+# false positives. The committed narrow mutant policy carries the same
+# patterns.
 CUE_NARROW_PATTERNS: dict[CueShape, str] = {
     CueShape.AGE_TURNED: (
         rf"(?i)\b{PERSON_WORDS}\b[^.\n]{{0,40}}?\b(?:turned|turns)\s+\d{{1,3}}\b"
         rf"|\b{PERSON_WORDS}\b[^.\n]{{0,40}}?\b\d{{1,3}}\s+geworden\b"
     ),
+    CueShape.AGE_AT_THE_AGE_OF: rf"(?i)\b(?:at the age of|im alter von) {_AGE_VALUE}\b",
     CueShape.AGE_YO: rf"(?i)\b{PERSON_WORDS}\b[^.\n]{{0,40}}?\b\d{{1,3}}\s?y/o\b|\b\d{{1,3}}\s?y/o\s+(?:fe)?male\b",
     CueShape.AGE_YEAR_OLD_GENDER: r"(?i)\b\d{1,3}[- ]years?[- ]old[- ](?:fe)?male\b",
     CueShape.DOB_SENTENCE_BREAK: (
@@ -3053,6 +3054,9 @@ CUE_TWINS = (
     _cue_twin("age_twin_at_the_age_of_object", C_.AGE_AT_THE_AGE_OF, "prose", "en", "US",
               "The oak was felled at the age of {X}.",
               "The whisky was bottled at the age of {X}.", _age),
+    _cue_twin("age_twin_at_the_age_of_clause", C_.AGE_AT_THE_AGE_OF, "prose", "en", "US",
+              "The firm, at the age of {X}, was sold to a rival.",
+              "The bridge, at the age of {X}, still carries the morning traffic.", _age),
     _cue_twin("age_twin_at_the_age_of_object_de", C_.AGE_AT_THE_AGE_OF, "prose", "de", "DE",
               "Die Eiche wurde im Alter von {X} Jahren gefällt.",
               "Der Wein wurde im Alter von {X} Jahren abgefüllt.", _age),
@@ -3108,8 +3112,6 @@ CUE_TWINS = (
               "Part {X} is back in stock.", "Invoice {X} was paid.", _zip_br),
     _cue_twin("zip_twin_br_near_csv", C_.ZIP_BR, "csv", "en", "BR",
               "postcode_checked,part\nyes,{X}\n", "zip_verified,sku\nno,{X}\n", _zip_br, near_cue=True),
-    _cue_twin("zip_twin_three_room", C_.ZIP_THREE, "prose", "en", "IS",
-              "Room {X} is booked for Friday.", "Gate {X} opens at noon.", _zip_three),
     _cue_twin("zip_twin_three_near", C_.ZIP_THREE, "prose", "en", "IS",
               "ZIP upload finished in {X} seconds.",
               "The zip archive holds {X} files.", _zip_three, near_cue=True),
