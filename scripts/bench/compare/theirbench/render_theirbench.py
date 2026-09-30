@@ -22,6 +22,8 @@ sys.path.insert(0, str(REPO / "scripts/bench"))
 from markdown_table import table_header  # noqa: E402
 from tagged_gaze import (  # noqa: E402
     RELEASE_PINS, TAG, check_model_receipt, check_own_input, check_own_score, check_public, tag_commit)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pii_trace_repro  # noqa: E402
 VENDOR_TUNED = Path(__file__).with_name("vendor-tuned.json")
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
 DOC = REPO / "docs/reference/benchmarks/README.md"
@@ -29,9 +31,11 @@ BLOCK = "their-benchmarks"
 TITLES = {
     "presidio-research": "Presidio Research synthetic set (synth_dataset_v2, 1,500 documents)",
     "piibench-commercial": "PIIBench-commercial (four permissively licensed PIIBench sources, test_5k)",
+    "pii-trace": "PII-TRACE public subset (500 English conversations, 4,500 messages)",
 }
 OWN_METRIC = {"presidio-research": ("f2", "F2, binary PII vs O, presidio-evaluator"),
-              "piibench-commercial": ("f1", "span F1, exact span + type, PIIBench seqeval")}
+              "piibench-commercial": ("f1", "span F1, exact span + type, PIIBench seqeval"),
+              "pii-trace": ("char_f1", "character F1, label-agnostic, the paper's metric")}
 #: Untagged main-tree rows. They stay in their-benchmarks.json as evidence but are
 #: never published; a tagged run is stored as a `gaze-vX.Y.Z` row (tagged_gaze.py).
 GAZE_ROWS = ("gaze-full", "gaze-rules-ner", "gaze-rules-only")
@@ -40,6 +44,8 @@ HELD = "held (typed-metric review)"
 NOT_RUN = {
     "PIIBench full ten-source mix": "five sources carry non-commercial or custom-academic licences and "
                                     "WikiANN's licence is unknown; not downloaded or run",
+    "PII-TRACE full set (13,148 conversations, 13 languages, 1,922-document test split)":
+        "not public; only the 500-conversation English subset is, and it is what runs here",
     "ai4privacy/pii-masking-300k (OPF's published set)": "custom licence; commercial use requires a "
                                                          "licence from ai4privacy; not downloaded or run",
 }
@@ -108,11 +114,18 @@ def assemble(reports: list[Path], own: list[str], reproductions: list[str],
         result = json.loads(path.read_text(encoding="utf-8"))
         if result.get("smoke_limit"):
             raise ValueError(f"{path}: smoke results are never published")
-        benchmarks[name]["reproduction"] = (
-            {"published": result["published"], "reproduced": result["reproduced"], "versions": result["versions"]}
-            if name == "presidio-research"
-            else {"published_full_mix": result["published_full_mix"], "reproduced_commercial": result["overall"],
-                  "versions": result["versions"]})
+        if name == "presidio-research":
+            reproduction = {"published": result["published"], "reproduced": result["reproduced"],
+                            "versions": result["versions"]}
+        elif name == "pii-trace":
+            # Perplexity publishes no number for the public subset, so nothing can be reproduced;
+            # the vendor's own tuned model is measured here and is the bar.
+            reproduction = {"published": None, "vendor_system": result["system"],
+                            "vendor_result": result["overall"], "versions": result["versions"]}
+        else:
+            reproduction = {"published_full_mix": result["published_full_mix"],
+                            "reproduced_commercial": result["overall"], "versions": result["versions"]}
+        benchmarks[name]["reproduction"] = reproduction
     for path in historical:
         result = json.loads(path.read_text(encoding="utf-8"))
         if result.get("smoke_limit") or not result.get("reproduction_run"):
@@ -158,14 +171,51 @@ def add_tool(data: dict[str, Any], report_path: Path, own_path: Path, tool: str)
     own = json.loads(own_path.read_text(encoding="utf-8"))
     if own.get("smoke_limit") or own["system"] != tool:
         raise ValueError(f"{own_path}: not a full own-scorer result for {tool}")
+    check_own_result(report["benchmark"], entry, tool, own, measured_predictions(report, tool))
     entry["rows"][tool] = report["rows"][tool]["test"]
-    entry["provenance"][tool] = report["provenance"][tool]
+    entry["provenance"][tool] = {**report["provenance"][tool], "own_scorer_input": own["input"]}
     entry["own_metric"][tool] = own.get("scored") or own["overall"]
     entry["typed_hold"] = sorted(set(entry["typed_hold"]) | set(report["typed_hold"]))
     entry.setdefault("rows_measured_separately", {})[tool] = {
         "harness_revision": report["harness_revision"], "gaze_crates_tree": report["gaze_crates_tree"],
         "comparison_revision": report["comparison_revision"], "label_maps_sha256": report["label_maps_sha256"],
         "rescored_with": report["rescored_with"]}
+
+
+def add_benchmark(data: dict[str, Any], report_path: Path, own_path: Path, tool: str) -> None:
+    """Add a benchmark that only one tool has been measured on (the vendor's own tuned model).
+
+    Other tools and Gaze rows join later through add_tool once they are measured on the same
+    documents. Same guards as assemble: clean, rescored, no preflight, no smoke; and the own-scorer
+    result must have read this row's predictions on the pinned dataset (check_own_result).
+    """
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    name = report["benchmark"]
+    if name in data["benchmarks"]:
+        raise ValueError(f"{name} is already assembled; use add-tool")
+    if report.get("preflight"):
+        raise ValueError(f"{report_path}: preflight results are never published")
+    if "rescored_with" not in report or report["rescored_with"]["harness_dirty"] or report["harness_dirty"]:
+        raise ValueError(f"{report_path}: publish only a clean measurement rescored on a clean harness")
+    if set(report["rows"]) != {tool}:
+        raise ValueError(f"{report_path}: expected exactly the {tool} row, found {sorted(report['rows'])}")
+    own = json.loads(own_path.read_text(encoding="utf-8"))
+    if own.get("smoke_limit") or own["system"] != tool:
+        raise ValueError(f"{own_path}: not a full own-scorer result for {tool}")
+    entry = {key: report[key] for key in (
+        "identity", "harness_revision", "gaze_crates_tree", "label_maps_sha256", "mapping_sha256",
+        "hardware", "common_intersection_labels", "splits", "provenance", "comparison_revision",
+        "comparison_sha256", "typed_hold", "rescored_with")}
+    check_own_result(name, entry, tool, own, measured_predictions(report, tool))
+    entry["provenance"][tool] = {**report["provenance"][tool], "own_scorer_input": own["input"]}
+    entry["rows"] = {tool: report["rows"][tool]["test"]}
+    entry["own_metric"] = {tool: own["scored"]}
+    entry["reproduction"] = {"published": None, "vendor_system": tool, "vendor_result": own["overall"],
+                             "versions": own["versions"]}
+    entry["chart_rows"] = [tool]
+    data["benchmarks"][name] = entry
+    # Sets that stay unmeasured are listed by the renderer's constant; keep earlier entries.
+    data["not_run"] = {**data["not_run"], **NOT_RUN}
 
 
 def is_tagged_gaze_row(tool: str) -> bool:
@@ -324,17 +374,32 @@ def _check_release(row: str, release: Mapping[str, Any], resolve: Callable[[str]
         raise ValueError(f"{row}: no clean earlier run reproduces these predictions")
 
 
+def measured_predictions(report: Mapping[str, Any], tool: str) -> str:
+    """The digest theirbench.py recorded for the predictions this row was measured from."""
+    digest = report["provenance"][tool].get("prediction_sha256")
+    if not digest:
+        raise ValueError(f"{tool}: the report records no prediction digest to tie an own-scorer result to")
+    return digest
+
+
 def check_own_result(name: str, entry: Mapping[str, Any], row: str, own: Mapping[str, Any],
                      prediction_sha256: str) -> None:
-    """The one check both merge paths run on a vendor evaluator's result: it read this row's
+    """The one check every merge path runs on a vendor evaluator's result: it read this row's
     predictions on the pinned dataset, and its published score is what its counts give."""
     check_own_input(own, prediction_sha256, dataset_sha256(name, entry), row)
-    check_own_score(own, entry["splits"]["test"]["documents"], row)
+    documents = entry["splits"]["test"]["documents"]
+    if name == "pii-trace":
+        pii_trace_repro.check_result(own, documents, row)
+    else:
+        check_own_score(own, documents, row)
+
+
+#: The identity field holding the digest of the file each benchmark's own scorer reads.
+DATASET_DIGEST = {"presidio-research": "sha256", "piibench-commercial": "test_5k_sha256", "pii-trace": "sha256"}
 
 
 def dataset_sha256(name: str, entry: Mapping[str, Any]) -> str:
-    """The dataset digest the committed identity pins (Presidio Research file, PIIBench test_5k)."""
-    return entry["identity"]["sha256"] if name == "presidio-research" else entry["identity"]["test_5k_sha256"]
+    return entry["identity"][DATASET_DIGEST[name]]
 
 
 def pct(value: float) -> str:
@@ -410,7 +475,7 @@ def render(data: Mapping[str, Any]) -> str:
         "No latency is published here: the machine was shared during these runs, and "
         "per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the "
         "main comparison's configurations; Presidio's default rows keep score threshold 0.0, so "
-        "they differ from the notebook's vanilla configuration (threshold 0.4). Both sets are "
+        "they differ from the notebook's vanilla configuration (threshold 0.4). Every set here is "
         "English only, so Presidio's three language configurations give identical rows.",
         "",
     ]
@@ -430,6 +495,19 @@ def render(data: Mapping[str, Any]) -> str:
                     f"reproduced {old['f2']} with the evaluator at `{old['evaluator_commit'][:8]}`, the "
                     f"version that produced the published number; {repro['reproduced'][config]['f2']} with "
                     f"the pinned evaluator, which scores every row below.")
+        elif name == "pii-trace":
+            vendor = repro["vendor_result"]
+            lines.append("- Perplexity publishes no number for this subset: its paper reports the 1,922-document, "
+                         "13-language test split, which is not public, so no vendor figure is reproduced. The bar "
+                         f"here is PII-Tracer, the vendor's own tuned model: character F1 {vendor['char_f1']:.3f}, "
+                         f"exact typed micro F1 {vendor['exact_typed_micro_f1']:.3f}.")
+            lines.append("- All 2,653 gold spans sit in user messages; assistant messages have none, so a detection "
+                         "there is a false positive. The paper says PII-Tracer's training data shares production "
+                         "traffic with PII-TRACE and the subset carries no split label, so overlap with its training "
+                         "data cannot be ruled out; treat that row as an upper bound, not a clean holdout.")
+            if set(rows) == {repro["vendor_system"]}:
+                lines.append("- Gaze and the other tools are not yet measured on this set; the table holds only "
+                             "the vendor's own model until they are.")
         else:
             published = repro["published_full_mix"]
             lines.append(f"- Published Presidio span F1 {published['f1']} is on the full ten-source mix "
@@ -510,6 +588,10 @@ def main(argv: list[str] | None = None) -> int:
     tuned_cmd.add_argument("--report", type=Path, required=True)
     tuned_cmd.add_argument("--own", type=Path, required=True, help="presidio_research_repro.py --tuned result")
     tuned_cmd.add_argument("--data", type=Path, default=DATA)
+    first = sub.add_parser("add-benchmark")
+    first.add_argument("--report", type=Path, required=True)
+    first.add_argument("--own", type=Path, required=True)
+    first.add_argument("--tool", required=True)
     show = sub.add_parser("render")
     show.add_argument("--check", action="store_true")
     show.add_argument("--data", type=Path, default=DATA)
@@ -519,6 +601,11 @@ def main(argv: list[str] | None = None) -> int:
         DATA.write_text(json.dumps(assemble(args.report, args.own, args.reproduction, args.historical,
                                        dict(item.split("=", 1) for item in args.harness_tag)), indent=2,
                                    sort_keys=True) + "\n", encoding="utf-8")
+        return 0
+    if args.command == "add-benchmark":
+        data = json.loads(DATA.read_text(encoding="utf-8"))
+        add_benchmark(data, args.report, args.own, args.tool)
+        DATA.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return 0
     if args.command == "add-tool":
         data = json.loads(DATA.read_text(encoding="utf-8"))
