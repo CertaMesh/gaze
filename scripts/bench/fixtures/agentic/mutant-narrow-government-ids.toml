@@ -1,0 +1,121 @@
+# Deliberately incorrect mutation probe. Never ship these recognizers.
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_tax_nine"
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d{8}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_tax_eleven"
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d{10}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_tax_grouped"
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d \d{3} \d{3} \d{3}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_tax_slash"
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d/\d{3}/\d{5}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_tax_slash_long"
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d{2}/\d{4}/\d{5}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_tax_prefix"
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\bZZ0\d{8}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_tax_suffix"
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d{6}ZZ\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_tax_dotted"
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\bZZ0\d{2}\.\d{3}\.\d{3}Z\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_ssn_us"
+pattern = '(?i)(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)[^\d\n]{0,100}?\b000[-. ]\d{2}[-. ]\d{4}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_ssn_triple"
+pattern = '(?i)(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)[^\d\n]{0,100}?\b000[- ]\d{3}[- ]\d{3}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_ssn_swiss_dot"
+pattern = '(?i)(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)[^\d\n]{0,100}?\b000\.\d{4}\.\d{4}\.\d{2}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_ssn_swiss_dash"
+pattern = '(?i)(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)[^\d\n]{0,100}?\b000-\d{4}-\d{4}-\d{2}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_ssn_mixed"
+pattern = '(?i)(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)[^\d\n]{0,100}?\bZZ0\d{5}Z\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_ssn_tail"
+pattern = '(?i)(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)[^\d\n]{0,100}?\b\d{4}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_card_grouped"
+pattern = '(?i)(?:identity card number|ID card number|identification card|Personalausweisnummer)[^\d\n]{0,100}?\b000\d{3}-\d{2}-\d{4}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_card_prefix"
+pattern = '(?i)(?:identity card number|ID card number|identification card|Personalausweisnummer)[^\d\n]{0,100}?\bZZ0\d{6}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_card_suffix"
+pattern = '(?i)(?:identity card number|ID card number|identification card|Personalausweisnummer)[^\d\n]{0,100}?\b000\d{4}Z\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_national_compact"
+pattern = '(?i)(?:national identification number|national ID number|national identity number|nationale Identifikationsnummer)[^\d\n]{0,100}?\b000\d{6,9}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_national_grouped"
+pattern = '(?i)(?:national identification number|national ID number|national identity number|nationale Identifikationsnummer)[^\d\n]{0,100}?\b00 \d{3} \d{3} \d\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_national_embedded"
+pattern = '(?i)(?:national identification number|national ID number|national identity number|nationale Identifikationsnummer)[^\d\n]{0,100}?\b000\d{3}Z\d{4}\b'
+class = "custom:mutant_government_id"
