@@ -416,7 +416,9 @@ pub(crate) fn register_context_dictionaries(
     {
         return Err(BuildError::RecordPolicy);
     }
-    for name in context.dictionaries.keys() {
+    let mut names: Vec<_> = context.dictionaries.keys().collect();
+    names.sort();
+    for name in names {
         if name.starts_with(RECORD_DICTIONARY_PREFIX) {
             let class = context
                 .class_map

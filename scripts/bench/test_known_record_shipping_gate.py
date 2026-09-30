@@ -1,6 +1,8 @@
 """The shipping gate rejects regressions hidden by a net-positive total."""
 
 import copy
+import json
+from pathlib import Path
 
 import known_record_shipping_gate as shipping
 
@@ -24,8 +26,10 @@ def arm(contract: str) -> dict:
         "dataset_sha256": "data", "kind_cells_manifest": {"pairs": 1},
         "layers": {
             layer: {
-                "documents": 1, "baseline": score(10, 0), "with_record": score(0, 1),
-                "attribution": {"schema_version": 1, "rows": []},
+                "documents": 1, "baseline": score(10, 0), "with_record": score(0, 0),
+                "attribution": {"schema_version": 1, "rows": [], "totals": {
+                    "false_positive_added_bytes": 0, "false_positive_removed_bytes": 0,
+                }},
             }
             for layer in shipping.LAYERS
         },
@@ -69,7 +73,7 @@ def test_shipping_gate_rejects_false_positive_cost_above_gain() -> None:
     v2, v1 = arm("v2"), arm("v1")
     main_v2, main_v1 = main_arm(v2), main_arm(v1)
     for value in (v2, v1):
-        value["layers"]["C"]["with_record"]["metrics"]["utf8_bytes"]["false_positive"] = 47
+        value["layers"]["C"]["with_record"]["metrics"]["utf8_bytes"]["false_positive"] = 51
     result = shipping.gate(v2, v1, main_v2, main_v1)
     assert result["contracts"]["v2"]["total_false_positive_bytes_rise"] > result["contracts"]["v2"]["total_leaked_bytes_fall"]
     assert not result["pass"]
@@ -79,6 +83,8 @@ def test_shipping_gate_reports_class_kind_and_decoy_cost() -> None:
     v2, v1 = arm("v2"), arm("v1")
     main_v2, main_v1 = main_arm(v2), main_arm(v1)
     for value in (v2, v1):
+        value["layers"]["D"]["with_record"]["metrics"]["utf8_bytes"]["false_positive"] = 1
+        value["layers"]["D"]["attribution"]["totals"]["false_positive_added_bytes"] = 1
         value["layers"]["D"]["attribution"]["rows"] = [{
             "record_class": "custom:phone", "match_kind": "exact",
             "population": "decoy", "gold_recovered_bytes": 0,
@@ -90,6 +96,47 @@ def test_shipping_gate_reports_class_kind_and_decoy_cost() -> None:
     assert (row["record_class"], row["match_kind"]) == ("custom:phone", "exact")
     assert row["contracts"]["v2"]["layers"]["D"]["decoy_false_positive_bytes_added"] == 1
     assert row["contracts"]["v2"]["layers"]["C"] == shipping.empty_attribution()
+
+
+def test_shipping_gate_vetoes_non_exempt_layer_d_fp_even_with_net_gain() -> None:
+    root = Path(__file__).resolve().parents[2] / "docs/reference/benchmarks"
+    originals = [
+        json.loads((root / f"known-record-shipping-{name}.json").read_text())
+        for name in ("v2", "v1", "main-v2", "main-v1")
+    ]
+    assert shipping.gate(*originals)["pass"]
+    for record_class, match_kind in [
+        ("name_multi", "case_folded"),
+        ("trace_gap", "unattributed"),
+    ]:
+        arms = copy.deepcopy(originals)
+        layer = arms[0]["layers"]["D"]
+        layer["with_record"]["metrics"]["utf8_bytes"]["false_positive"] += 1
+        layer["attribution"]["totals"]["false_positive_added_bytes"] += 1
+        layer["attribution"]["rows"].append({
+            "record_class": record_class, "match_kind": match_kind,
+            "population": "decoy", "gold_recovered_bytes": 0,
+            "gold_lost_bytes": 0, "false_positive_added_bytes": 1,
+            "false_positive_removed_bytes": 0,
+        })
+        assert not shipping.gate(*arms)["contracts"]["v2"]["layers"]["D"]["pass"]
+
+
+def test_shipping_gate_keeps_only_declared_layer_d_fp_exemptions() -> None:
+    for record_class, match_kind in shipping.D_FP_EXEMPTIONS:
+        v2, v1 = arm("v2"), arm("v1")
+        main_v2, main_v1 = main_arm(v2), main_arm(v1)
+        for value in (v2, v1):
+            layer = value["layers"]["D"]
+            layer["with_record"]["metrics"]["utf8_bytes"]["false_positive"] = 1
+            layer["attribution"]["totals"]["false_positive_added_bytes"] = 1
+            layer["attribution"]["rows"] = [{
+                "record_class": record_class, "match_kind": match_kind,
+                "population": "decoy", "gold_recovered_bytes": 0,
+                "gold_lost_bytes": 0, "false_positive_added_bytes": 1,
+                "false_positive_removed_bytes": 0,
+            }]
+        assert shipping.gate(v2, v1, main_v2, main_v1)["pass"]
 
 
 def test_shipping_gate_requires_exact_no_record_main_parity() -> None:

@@ -8,9 +8,9 @@ use gaze::{
     record_dictionary_name, Action, Candidate, CleanDocument, Context, ContextDictionary,
     DetectContext, DictionaryBundle, EmittedTokenSpan, FallbackReason,
     GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis, LocaleChain, LocaleTag,
-    NerPolicy, PiiClass, Pipeline, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec,
-    Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
-    Scope, Session, RECORD_DICTIONARY_PREFIX,
+    NerPolicy, PiiClass, Pipeline, RecordMatchKind, RedactionEntry, RedactionLogError,
+    RedactionLogger, RuleSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback,
+    SafetyNetMode, SafetyNetPolicy, Scope, Session, RECORD_DICTIONARY_PREFIX,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -1465,29 +1465,124 @@ mod tests {
     use gaze::RawDocument;
 
     #[test]
-    fn record_requests_match_product_manifest_and_trace_for_every_kind_switch() {
-        fn stable_trace(response: &Response) -> serde_json::Value {
-            let mut trace = serde_json::to_value(&response.final_protection_trace).unwrap();
-            for item in trace.as_array_mut().unwrap() {
-                for contribution in item["provenance"]["contributions"].as_array_mut().unwrap() {
-                    if let Some(original) = contribution["original"].as_u64() {
-                        let event = response
-                            .candidate_events
-                            .iter()
-                            .find(|event| event.original == Some(original as usize))
-                            .expect("trace pool index must join to a candidate event");
-                        assert_eq!(contribution["recognizer_id"], event.recognizer_id);
-                        assert_eq!(contribution["raw_start"], event.raw_start);
-                        assert_eq!(contribution["raw_end"], event.raw_end);
-                    }
-                    // Product and benchmark pipelines can enumerate the same candidates
-                    // in different orders; the pool index is local to each response.
-                    contribution.as_object_mut().unwrap().remove("original");
-                }
-            }
-            trace
+    fn record_shipping_defaults_match_direct_product_without_overrides() {
+        use RecordMatchKind::{
+            CaseFolded, CorroboratedSingle, Exact, WhitespaceCaseFolded, WhitespaceFlexible,
+        };
+
+        let context_json = r#"{"record":{"name":"Maren Okafor"}}"#;
+        let context = Context::from_json_str(context_json).unwrap();
+        let expected = [
+            (
+                PiiClass::Name,
+                "Maren Okafor",
+                vec![Exact, CaseFolded, WhitespaceCaseFolded],
+            ),
+            (
+                PiiClass::Name,
+                "Maren",
+                vec![CaseFolded, CorroboratedSingle],
+            ),
+            (PiiClass::Location, "Synthetic Avenue", vec![]),
+            (PiiClass::Email, "alice@example.invalid", vec![]),
+            (PiiClass::Custom("phone".into()), "+1-555-0104", vec![Exact]),
+            (PiiClass::Custom("passport".into()), "P-123456", vec![Exact]),
+            (
+                PiiClass::Custom("credit_card".into()),
+                "4111 1111 1111 1111",
+                vec![Exact, WhitespaceFlexible],
+            ),
+            (
+                PiiClass::Custom("iban".into()),
+                "DE89 3704 0044 0532 0130 00",
+                vec![Exact, WhitespaceFlexible],
+            ),
+            (
+                PiiClass::Custom("national_id".into()),
+                "Synthetic Value",
+                vec![Exact, WhitespaceFlexible],
+            ),
+            (
+                PiiClass::Custom("steuer_id".into()),
+                "12 345 678 901",
+                vec![Exact, WhitespaceFlexible],
+            ),
+        ];
+        for (class, term, kinds) in expected {
+            assert_eq!(
+                context.record_allowed_match_kinds(&class, term),
+                kinds.into_iter().collect(),
+                "shipping defaults for {class:?} {term}"
+            );
         }
 
+        let mut policy = gaze::Policy::default();
+        policy.rules = vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }];
+        let locales = LocaleChain::from_tags(vec![LocaleTag::EnUs]);
+        let product =
+            gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+        let session =
+            Session::new_with_session_hex_for_tests(Scope::Ephemeral, 1_u32.to_be_bytes()).unwrap();
+        let dictionaries = gaze::dictionary_bundle_from_context(&context);
+        let (CleanDocument::Text(product_text), manifest, _, trace, _) = product
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                &session,
+                "Maren Okafor",
+                locales.as_slice(),
+                &dictionaries,
+                safety_net_policy(BenchConfig::PolicyFile),
+            )
+            .unwrap()
+        else {
+            panic!("text expected")
+        };
+        assert!(!product_text.contains("Maren Okafor"));
+
+        let registered = gaze_assembly::build_pipeline(
+            &policy,
+            &record_registry_context(&policy),
+            &[],
+            &locales,
+            None,
+        )
+        .unwrap();
+        let run = PolicyRun {
+            pipeline: registered,
+            locale_chain: locales,
+            dictionaries: DictionaryBundle::default(),
+        };
+        let request = Request {
+            fixture_id: "record-default-parity".into(),
+            locale_chain: vec!["en-US".into()],
+            text: "Maren Okafor".into(),
+            context_json: Some(context_json.into()),
+            session_hex: Some("00000001".into()),
+        };
+        let Outcome::Success(bench) = handle_request_with_policy(
+            BenchConfig::PolicyFile,
+            &run.pipeline,
+            request,
+            Some(&run),
+            true,
+        )
+        .unwrap() else {
+            panic!("benchmark failed")
+        };
+        assert_eq!(bench.clean_text, product_text);
+        assert_eq!(
+            serde_json::to_value(&bench.manifest_spans).unwrap(),
+            serde_json::to_value(serialize_manifest(manifest)).unwrap(),
+        );
+        assert_eq!(
+            serde_json::to_value(&bench.final_protection_trace).unwrap(),
+            serde_json::to_value(serialize_final_protection_trace(trace)).unwrap(),
+        );
+    }
+
+    #[test]
+    fn record_requests_match_product_manifest_and_trace_for_every_kind_switch() {
         let mut policy = gaze::Policy::default();
         policy.rules = vec![RuleSpec::Default {
             action: Action::Tokenize,
@@ -1593,8 +1688,8 @@ mod tests {
                     "manifest {kind} enabled={enabled}"
                 );
                 assert_eq!(
-                    stable_trace(&bench_response),
-                    stable_trace(&product_response),
+                    serde_json::to_value(&bench_response.final_protection_trace).unwrap(),
+                    serde_json::to_value(&product_response.final_protection_trace).unwrap(),
                     "trace {kind} enabled={enabled}"
                 );
                 assert_eq!(

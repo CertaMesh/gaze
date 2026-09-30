@@ -9,6 +9,29 @@ from collections import defaultdict
 from pathlib import Path
 
 LAYERS = ("C", "A", "D", "R", "K")
+D_FP_EXEMPTIONS = frozenset({
+    ("custom:credit_card", "exact"),
+    ("custom:phone", "exact"),
+    ("custom:iban", "exact"),
+})
+
+
+def layer_d_false_positive_pass(layer_arm: dict, fp_rise: int) -> bool:
+    attribution = layer_arm["attribution"]
+    rows = attribution["rows"]
+    added = sum(row["false_positive_added_bytes"] for row in rows)
+    removed = sum(row["false_positive_removed_bytes"] for row in rows)
+    totals = attribution["totals"]
+    return (
+        added - removed == fp_rise
+        and totals["false_positive_added_bytes"] == added
+        and totals["false_positive_removed_bytes"] == removed
+        and all(
+            row["false_positive_added_bytes"] == 0
+            or (row["record_class"], row["match_kind"]) in D_FP_EXEMPTIONS
+            for row in rows
+        )
+    )
 
 
 def empty_attribution() -> dict[str, int]:
@@ -136,7 +159,7 @@ def gate(v2: dict, v1: dict, main_v2: dict, main_v1: dict) -> dict:
                 base_contract["manifest_valid_documents"]
                 - record_contract["manifest_valid_documents"]
             )
-            passed = main_baseline_match and all(
+            passed = main_baseline_match and (layer != "D" or layer_d_false_positive_pass(layer_arm, fp_rise)) and all(
                 value <= 0
                 for value in (-leaked_fall, refused_rise, incomplete_rise, restore_fall, manifest_fall)
             )
