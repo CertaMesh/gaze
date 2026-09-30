@@ -116,6 +116,7 @@ def pool_meta(pool_dir: Path) -> dict[str, object]:
 def select(args: argparse.Namespace) -> None:
     """The whole selection. Reads `<pass>.validation.jsonl` and validation documents only."""
     require_hash_seed()
+    state = git_state()  # before this command writes anything into the tree
     comparison = corpus.read_comparison()
     metas = pool_meta(args.pool)
     for name, meta in metas.items():
@@ -162,7 +163,7 @@ def select(args: argparse.Namespace) -> None:
                         "recorded_at_revision": meta["harness_revision"]} for name, meta in metas.items()},
         "code_sha256": code_digests(),
         "python_hash_seed": os.environ["PYTHONHASHSEED"],
-        **git_state(),
+        **state,
     }
     SELECTION.write_text(json.dumps(selection, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -249,6 +250,7 @@ def produce_splits() -> tuple[str, str]:
 
 def measure(args: argparse.Namespace) -> None:
     require_hash_seed()
+    state = git_state()  # before this command writes anything into the tree
     comparison = corpus.read_comparison()
     selection = json.loads(SELECTION.read_text(encoding="utf-8"))
     if selection["code_sha256"]["space.py"] != sha256(HERE / "space.py"):
@@ -331,7 +333,7 @@ def measure(args: argparse.Namespace) -> None:
         "comparison_metrics_sha256": sha256(HERE.parent / "comparison_metrics.py"),
         "scorer_sha256": sha256(REPO / "scripts/bench/gaze_bench_score.py"),
         "python_hash_seed": os.environ["PYTHONHASHSEED"],
-        **git_state(),
+        **state,
     }
     REPORT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
