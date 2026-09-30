@@ -398,8 +398,49 @@ def _fp(cell: dict[str, object]) -> int:
     return cell["false_positive_bytes"] if after is None else after
 
 
+def _pct(item: dict[str, object] | None) -> str:
+    if item is None:
+        return "n/a"
+    if item["of"] == 0:
+        return "no gold"
+    return f"{item['count']:,} of {item['of']:,} ({item['percent']:.1f} %)"
+
+
+def _overlap_callout(overlap: dict[str, object]) -> list[str]:
+    """The dependence between the halves, stated next to the tuned test-half rows."""
+    coverage = overlap["layer_a_pattern_coverage"]
+    lines = [
+        "**The split holds out document ids, not values.** The tuned-here rows were fitted on the validation "
+        "half, and the test half repeats much of it. No test document is identical to a validation document, "
+        "but most share a template, a generator group or exact gold values with one:", "",
+        *table_header([("Layer", False), ("Test docs", True), ("Share a template", True),
+                       ("Share a generator group", True), ("Reuse a gold value", True),
+                       ("Gold spans repeating a value", True)]),
+    ]
+    for layer in ("C", "A", "D", "R"):
+        cell = overlap["layers"][layer]
+        lines.append(
+            f"| {layer_display_name(layer)} | {cell['test_documents']:,} | "
+            f"{_pct(cell.get('share_a_validation_template'))} | {_pct(cell.get('share_a_validation_group'))} | "
+            f"{_pct(cell['reuse_a_validation_gold_value'])} | "
+            f"{_pct(cell['gold_spans_repeating_a_validation_value'])} |")
+    lines.extend([
+        "",
+        f"The tuned F2 choice's custom pattern recognizers alone, with every NER model off, cover "
+        f"{_pct(coverage['covered_by_custom_patterns_only'])} of {layer_display_name('A')} test gold bytes; "
+        f"the full choice leaks {coverage['leaked_by_full_choice']:,} bytes there. These counts measure how "
+        "far the test half depends on the validation half, not how much of any result is memorization. They "
+        f"weigh most on the generated layers; {layer_display_name('C')} has no templates of that kind, and its "
+        "comparison with Gaze below stands as measured. Templates and groups exist only in the generated "
+        "layers (n/a above). Computed by "
+        "[`overlap.py`](../../../scripts/bench/compare/tuned_presidio/overlap.py) into "
+        "[`presidio-tuned-overlap.json`](presidio-tuned-overlap.json)."])
+    return lines
+
+
 def render_tuned(tuned: dict[str, object], report: dict[str, object], history_path: Path) -> list[str]:
     selection = json.loads((history_path.parent / "presidio-tuned-selection.json").read_text(encoding="utf-8"))
+    overlap = json.loads((history_path.parent / "presidio-tuned-overlap.json").read_text(encoding="utf-8"))
     rows = tuned["rows"]
     authors = tuned["provenance"]["presidio-tuned-presidio-research"]
     coverage = authors["coverage"]
@@ -424,24 +465,30 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
         f"predefined recognizer, {len(TUNED_CUSTOM)} custom pattern and deny-list recognizers for this "
         "corpus's classes, per recognizer and entity thresholds, the context enhancer and an allow list learned "
         "from validation false positives. Selection read the validation half only "
-        f"({validation_docs:,} documents; a guard test fails if it opens a test-half record) and evaluated "
+        f"({validation_docs:,} documents; a guard test runs the real loader with every test-half file "
+        "unreadable) and evaluated "
         f"{budget['candidates_evaluated']:,} candidate configurations by coordinate descent. Two objectives: "
         "the comparison's own rule (fewest validation v3 leaked bytes, then fewest false-positive bytes) and "
         "the panels' headline (highest validation v3 character F2). The custom recognizers were written "
-        "after reading validation-half gold examples; no test-half text, gold or output was read before the "
-        "choice was frozen. The NER models' training data is not fully published, so overlap with this "
+        "after reading validation-half gold examples; the search never received test-half text, gold or "
+        "output. The committed choice was made by an earlier loader that built the whole corpus in memory "
+        "and dropped the test half before the search; rerunning selection through per-half files, with the "
+        "test-half file never opened, reproduces every choice and validation score. The NER models' training data is not fully published, so overlap with this "
         "synthetic corpus's style cannot be ruled out for them (nor for the NER model in Gaze's own setup). "
-        "Both halves are synthetic and share their generators: the agentic layers are built from the same "
-        "templates and cue phrases in both halves, and the main layer from one generated dataset. Tuning on "
-        "validation therefore learns those templates, and the test half measures fit to this corpus, not "
-        "robustness to unseen phrasing. Gaze's rules were developed against the same corpus.",
+        "Both halves are synthetic and share their generators, and the split holds out document ids only, "
+        "not templates or values: "
+        f"{_pct(overlap['layers']['A']['reuse_a_validation_gold_value'])} of the "
+        f"{layer_display_name('A')} test documents reuse a validation gold value (every layer is counted "
+        "beside the test-half table below). Tuning on validation therefore "
+        "learns those templates and values, and the test half measures fit to this corpus, not robustness "
+        "to unseen phrasing or values. Gaze's rules were developed against the same corpus.",
         f"- **Budget:** Gaze's rules received {budget['gaze_rulepack_commits']} rulepack commits "
         f"({budget['first']} to {budget['last']}), made with the whole corpus visible, test half included. "
         "The tuned Presidio search is at least as generous in iterations: "
         f"{budget['candidates_evaluated']:,} measured candidate configurations against "
         f"{budget['gaze_rulepack_commits']} rulepack commits, on top of a hand-written recognizer for the "
         "classes Gaze commits to. It saw the "
-        "validation half only, so its test-half numbers are held out while Gaze's are not.",
+        "validation half only, so its test-half documents are held out, by id, while Gaze's are not.",
         "",
         "Validation choice (v3, C/A/D/R summed):", "",
         *table_header([("Objective", False), ("Start", False), ("Leaked B", True), ("FP B", True),
@@ -464,7 +511,8 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
             f"of {len(config['allow_list']):,} texts. Full configuration in "
             "[`presidio-tuned-selection.json`](presidio-tuned-selection.json).")
     lines.extend([
-        "", "Test half (product coverage):", "",
+        "", *_overlap_callout(overlap), "",
+        "Test half (product coverage):", "",
         *table_header([("Contract", False), ("Layer", False), ("Configuration", False), ("Leaked B", True),
                        ("FP B", True), ("Char F2", True), ("Entity F2", True)]),
     ])

@@ -25,10 +25,21 @@ layer C character F2; the defaults stay in the detail tables.
   recording or a selection made under a different space.
 - **Validation only.** The split is the comparison's own (SHA-256 first byte of
   the document id below 128). Each recording pass writes the halves to separate
-  files. `tune.py select` opens `*.validation.jsonl` and validation documents
-  only; `test_select_never_opens_the_test_half` runs the whole selection with
-  every test-half file unreadable, and `corpus.require_validation` refuses any
-  test-half id that reaches the search.
+  files, and so does `tune.py split` for the corpus text and gold
+  (`validation.pickle`, `test.pickle`). `tune.py select` opens
+  `*.validation.jsonl` and `validation.pickle` only;
+  `test_select_never_opens_the_test_half` runs the whole selection, through the
+  real loader, with every test-half file unreadable, and
+  `corpus.require_validation` refuses any test-half id that reaches the search.
+  The committed selection was made by an earlier loader that built the whole
+  corpus in memory and dropped the test half before the search; rerunning
+  `select` through the split files reproduces its choices and every validation
+  score exactly.
+- **The split holds out document ids, not values.** Both halves come from the
+  same generators, so the test half shares templates, generator groups and
+  exact gold values with the validation half the custom recognizers were
+  written from. [`overlap.py`](overlap.py) measures that dependence and the
+  results page shows it beside the tuned rows.
 - **Same documents and contracts as the comparison.** `corpus.load_measured`
   rebuilds exactly the corpus `comparison.json` measured (its agentic layers come
   from an older generator) and refuses on any identity mismatch.

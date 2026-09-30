@@ -56,7 +56,8 @@ class BlankSpacyEngine:
 class ReplayEqualsEngineTest(unittest.TestCase):
     """The recorded pass replayed offline must equal AnalyzerEngine.analyze."""
 
-    TEXT = ("Call 030 1234567 or mail jane.doe@example.org; account DE89 3704 0044 0532 0130 00, "
+    # 030 23125678: a Bundesnetzagentur drama number (Mitteilung 148/2021), never assigned.
+    TEXT = ("Call 030 23125678 or mail jane.doe@example.org; account DE89 3704 0044 0532 0130 00, "
             "ref 1234 5678, id AB123456, see jane.doe@example.org")
 
     def recognizers(self) -> list[tuple[str, object]]:
@@ -129,12 +130,14 @@ class SplitGuardTest(unittest.TestCase):
                 search.read_pool(Path(tmp), ["base"], "validation")
 
     def test_select_never_opens_the_test_half(self) -> None:
-        """Runs the whole selection over a synthetic corpus whose test-half records are
-        unreadable (directories) and whose layers mix both halves."""
-        text_hit = "Mail anna@example.org or call +49 30 1234567 today."
+        """Runs the whole selection, through the real split files and loader, over a
+        corpus whose layers mix both halves; every test-half file is unreadable."""
+        # +49 30 23125678: a Bundesnetzagentur drama number (Mitteilung 148/2021), never assigned.
+        phone_value = "+49 30 23125678"
+        text_hit = f"Mail anna@example.org or call {phone_value} today."
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            pool_dir = root / "pool"
+            pool_dir, halves = root / "pool", root / "halves"
             pool_dir.mkdir()
             layers = {layer: [] for layer in corpus.LAYERS}
             rows = []
@@ -142,14 +145,19 @@ class SplitGuardTest(unittest.TestCase):
                 for split in ("validation", "test"):
                     uid = uid_in(split, f"sel{n}")
                     layers["C"].append(document(uid, text_hit, [("anna@example.org", "EMAIL"),
-                                                                ("+49 30 1234567", "PHONENUMBER")]))
+                                                                (phone_value, "PHONENUMBER")]))
                     if split == "validation":
                         start = text_hit.index("anna@")
-                        phone = text_hit.index("+49")
+                        phone = text_hit.index(phone_value)
                         rows.append({"uid": uid, "layer": "C", "r": [
                             [start, start + 16, "EMAIL_ADDRESS", "EmailRecognizer", 1.0, 1.0, 1.0],
-                            [phone, phone + 14, "PHONE_NUMBER", "CustomPhoneRecognizer", 0.5, 0.5, 0.5],
+                            [phone, phone + len(phone_value), "PHONE_NUMBER", "CustomPhoneRecognizer",
+                             0.5, 0.5, 0.5],
                             [0, 4, "PERSON", pool.SPACY_UNIT, 0.85, 0.85, 0.85]]})
+            meta = corpus.write_halves(layers, halves)
+            self.assertEqual(meta["halves"]["test"]["documents"]["C"], 4)
+            test_file = halves / "test.pickle"
+            test_file.chmod(0)  # opening it raises
             space_sha = hashlib.sha256((Path(tune.HERE) / "space.py").read_bytes()).hexdigest()
             for name in tune.POOL_PASSES:
                 body = "".join(json.dumps(row) + "\n" for row in rows) if name == "base" else ""
@@ -160,23 +168,23 @@ class SplitGuardTest(unittest.TestCase):
                     "harness_revision": "x",
                     "sha256": {"validation": hashlib.sha256(body.encode()).hexdigest(), "test": "unread"},
                 }), encoding="utf-8")
-            comparison = {"corpus": {}, "contracts": {}}
             patches = [
-                mock.patch.object(corpus, "read_comparison", return_value=comparison),
-                mock.patch.object(corpus, "load_measured", return_value=layers),
-                mock.patch.object(corpus, "measured_agentic_contract", lambda _c: contextlib.nullcontext()),
                 mock.patch.object(tune, "SEARCH_LOG", root / "log.jsonl.gz"),
                 mock.patch.object(tune, "SELECTION", root / "selection.json"),
                 mock.patch.object(tune, "git_state", lambda: {"harness_revision": "x", "harness_dirty": False}),
                 mock.patch.dict(space.SEARCH, {"max_rounds": 2}),
                 mock.patch.dict("os.environ", {"PYTHONHASHSEED": "0"}),
             ]
-            with contextlib.ExitStack() as stack:
-                for patch in patches:
-                    stack.enter_context(patch)
-                tune.select(argparse.Namespace(dataset=root / "unused.parquet", pool=pool_dir))
+            try:
+                with contextlib.ExitStack() as stack:
+                    for patch in patches:
+                        stack.enter_context(patch)
+                    tune.select(argparse.Namespace(halves=halves, pool=pool_dir))
+            finally:
+                test_file.chmod(0o600)
             selection = json.loads((root / "selection.json").read_text(encoding="utf-8"))
             self.assertEqual(selection["validation_documents"], {"C": 4, "A": 0, "D": 0, "R": 0})
+            self.assertEqual(selection["validation_corpus_sha256"], meta["halves"]["validation"]["sha256"])
             for objective in space.OBJECTIVES:
                 choice = selection["choices"][objective]
                 final = choice["finals"][choice["start"]]
@@ -185,6 +193,20 @@ class SplitGuardTest(unittest.TestCase):
             # The spaCy PERSON false positive (4 bytes per document) is searched away.
             self.assertEqual(selection["choices"]["leak-first"]["finals"]["everything"]["validation"]
                              ["false_positive_bytes"], 0)
+
+    def test_validation_loader_refuses_a_test_document_in_the_validation_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            halves = Path(tmp)
+            layers = {"C": [document(uid_in("validation", "v"), "x", [])]}
+            corpus.write_halves(layers, halves)
+            leaked = {"C": [document(uid_in("test", "t"), "x", [])]}
+            payload = corpus.pickle.dumps(leaked, protocol=5)
+            (halves / "validation.pickle").write_bytes(payload)
+            meta = json.loads((halves / corpus.HALVES_META).read_text(encoding="utf-8"))
+            meta["halves"]["validation"]["sha256"] = hashlib.sha256(payload).hexdigest()
+            (halves / corpus.HALVES_META).write_text(json.dumps(meta), encoding="utf-8")
+            with self.assertRaises(corpus.SplitGuardError):
+                corpus.load_validation(halves)
 
 
 class DeclarationTest(unittest.TestCase):

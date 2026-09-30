@@ -27,7 +27,8 @@ for pass in base dslim davlan openmed gliner; do
 done
 "$TUNED_VENDOR_PYTHON" "$here/produce.py" authors --dataset "$dataset" --out "$TUNED_OUT/authors" \
     --checkout "$TUNED_PRESIDIO_RESEARCH" --openmed "$TUNED_OPENMED"
-"$TUNED_COMPARE_PYTHON" "$here/tune.py" select --dataset "$dataset" --pool "$TUNED_OUT/pool"
+"$TUNED_COMPARE_PYTHON" "$here/tune.py" split --dataset "$dataset" --halves "$TUNED_OUT/halves"
+"$TUNED_COMPARE_PYTHON" "$here/tune.py" select --halves "$TUNED_OUT/halves" --pool "$TUNED_OUT/pool"
 "$TUNED_COMPARE_PYTHON" "$here/tune.py" measure --dataset "$dataset" --pool "$TUNED_OUT/pool" \
     --authors "$TUNED_OUT/authors" "${spacy[@]}" "${models[@]}"
 python3 scripts/bench/compare/render.py docs/reference/benchmarks/comparison.json \

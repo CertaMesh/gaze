@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Select tuned Presidio configurations on the validation half, then measure them.
 
-    select   validation records and documents only; writes the search log and the choice
+    split    loads and verifies the whole corpus once; writes one file per half
+    select   validation records and the validation-half file only; writes the search
+             log and the choice
     measure  every document; replays the frozen choices and scores them with
              compare.measure, reproduces the comparison's presidio-all row from the same
              records (anchor), runs each choice live on a fixed sample and requires
@@ -113,8 +115,15 @@ def pool_meta(pool_dir: Path) -> dict[str, object]:
 # select
 
 
+def split(args: argparse.Namespace) -> None:
+    """Before selection: the verified corpus, written as one file per half."""
+    require_hash_seed()
+    meta = corpus.write_halves(corpus.load_measured(args.dataset, corpus.read_comparison()), args.halves)
+    print(json.dumps(meta["halves"], sort_keys=True), file=sys.stderr)
+
+
 def select(args: argparse.Namespace) -> None:
-    """The whole selection. Reads `<pass>.validation.jsonl` and validation documents only."""
+    """The whole selection. Reads `<pass>.validation.jsonl` and `validation.pickle` only."""
     require_hash_seed()
     state = git_state()  # before this command writes anything into the tree
     comparison = corpus.read_comparison()
@@ -122,7 +131,7 @@ def select(args: argparse.Namespace) -> None:
     for name, meta in metas.items():
         if sha256(args.pool / f"{name}.validation.jsonl") != meta["sha256"]["validation"]:
             raise SystemExit(f"{name}.validation.jsonl differs from its metadata")
-    layers = corpus.validation_only(corpus.load_measured(args.dataset, comparison))
+    layers, corpus_sha256 = corpus.load_validation(args.halves)
     with corpus.measured_agentic_contract(comparison):
         applied_contracts = contracts()
     found = search.read_pool(args.pool, POOL_PASSES, "validation")
@@ -153,6 +162,7 @@ def select(args: argparse.Namespace) -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "split": "validation only: SHA-256 first byte of the document id < 128 (comparison_metrics.split_for_id)",
         "validation_documents": {layer: len(documents) for layer, documents in layers.items()},
+        "validation_corpus_sha256": corpus_sha256,
         "objectives": space.OBJECTIVES,
         "starts": list(space.STARTS),
         "choices": choices,
@@ -400,10 +410,14 @@ def chart_choice(rows: dict) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
+    split_cmd = sub.add_parser("split")
     select_cmd = sub.add_parser("select")
     measure_cmd = sub.add_parser("measure")
-    for command in (select_cmd, measure_cmd):
+    for command in (split_cmd, select_cmd):
+        command.add_argument("--halves", type=Path, required=True, help="directory of the per-half corpus files")
+    for command in (split_cmd, measure_cmd):
         command.add_argument("--dataset", type=Path, required=True)
+    for command in (select_cmd, measure_cmd):
         command.add_argument("--pool", type=Path, required=True, help="produce.py pool output directory")
     measure_cmd.add_argument("--authors", type=Path, required=True, help="produce.py authors output directory")
     for language in space.LANGUAGES:
@@ -413,7 +427,7 @@ def main() -> int:
     measure_cmd.add_argument("--skip-live", action="store_true", help="development only; never published")
     measure_cmd.add_argument("--allow-anchor-mismatch", action="store_true", help="development only")
     args = parser.parse_args()
-    (select if args.command == "select" else measure)(args)
+    {"split": split, "select": select, "measure": measure}[args.command](args)
     return 0
 
 

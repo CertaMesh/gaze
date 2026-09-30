@@ -5,6 +5,12 @@ same documents under the same contracts. That report measured the agentic
 layers on an older generator; `load_measured` rebuilds that generator's
 documents and contract from committed inputs and refuses unless every recorded
 identity matches.
+
+Selection must never read test-half text or gold, so the corpus reaches it
+through files split by half: `write_halves` (its own step, before selection)
+loads and verifies everything once and writes `validation.pickle` and
+`test.pickle`; `load_validation`, selection's only corpus input, opens the
+validation file alone.
 """
 
 from __future__ import annotations
@@ -13,6 +19,7 @@ import contextlib
 import functools
 import hashlib
 import json
+import pickle
 import sys
 from pathlib import Path
 from typing import Iterator, Mapping, Sequence
@@ -88,6 +95,48 @@ def require_validation(uids: Sequence[str]) -> None:
     for uid in uids:
         if split_for_id(uid) != "validation":
             raise SplitGuardError(f"selection touched test-half document {uid}")
+
+
+HALVES = ("validation", "test")
+HALVES_META = "halves.meta.json"
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def write_halves(layers: Mapping[str, Sequence], out: Path, comparison_path: Path = COMPARISON) -> dict[str, object]:
+    """Write each half of `layers` to its own file, with their digests.
+
+    `layers` is `load_measured`'s output; this is the only place both halves are
+    held together before selection. The pickles are local run artefacts, never
+    committed, and `load_validation` checks the digest before unpickling.
+    """
+    out.mkdir(parents=True, exist_ok=True)
+    meta: dict[str, object] = {"comparison_sha256": _sha256(comparison_path.read_bytes()), "halves": {}}
+    for half in HALVES:
+        part = {layer: [d for d in documents if split_for_id(d.uid) == half] for layer, documents in layers.items()}
+        payload = pickle.dumps(part, protocol=5)
+        (out / f"{half}.pickle").write_bytes(payload)
+        meta["halves"][half] = {"sha256": _sha256(payload),
+                                "documents": {layer: len(documents) for layer, documents in part.items()}}
+    (out / HALVES_META).write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return meta
+
+
+def load_validation(halves: Path, comparison_path: Path = COMPARISON) -> tuple[dict[str, tuple], str]:
+    """The validation half and its file digest; never opens the test-half file."""
+    meta = json.loads((halves / HALVES_META).read_text(encoding="utf-8"))
+    if meta["comparison_sha256"] != _sha256(comparison_path.read_bytes()):
+        raise ValueError("the split halves were written for a different comparison report")
+    payload = (halves / "validation.pickle").read_bytes()
+    digest = _sha256(payload)
+    if digest != meta["halves"]["validation"]["sha256"]:
+        raise ValueError("validation.pickle differs from the split metadata")
+    layers = pickle.loads(payload)
+    for documents in layers.values():
+        require_validation([document.uid for document in documents])
+    return {layer: tuple(documents) for layer, documents in layers.items()}, digest
 
 
 def read_comparison(path: Path = COMPARISON) -> dict[str, object]:
