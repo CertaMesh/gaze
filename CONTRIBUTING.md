@@ -151,6 +151,8 @@ The fresh producer proof continues to build offline in its own scratch checkout.
 To reproduce one shard after installing cargo-nextest 0.9.146:
 
 ```bash
+export RUSTC="$(rustup which --toolchain 1.96.0 rustc)"
+export RUSTDOC="$(rustup which --toolchain 1.96.0 rustdoc)"
 python3 scripts/ci/test_shards.py collect --output target/shard-evidence/cli
 cargo nextest run --workspace --all-features --profile ci --no-fail-fast \
   -E "$(python3 scripts/ci/test_shards.py filter cli)"
