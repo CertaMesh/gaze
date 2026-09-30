@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -21,10 +22,11 @@ pa = pytest.importorskip("pyarrow")
 
 ROWS = [{
     "id": "c1",
-    "turns": [{"turn": 0, "user": "Mail é@x.io or call 5551234.", "assistant": "Noted, é@x.io."},
+    # 555-0100 to 555-0199 is the NANPA block reserved for fictional use.
+    "turns": [{"turn": 0, "user": "Mail é@x.io or call 555-0123.", "assistant": "Noted, é@x.io."},
               {"turn": 1, "user": "Nothing here.", "assistant": "OK."}],
     "spans": [{"label": "private_email", "turn": 0, "source": "user", "start": 5, "end": 11, "text": "é@x.io"},
-              {"label": "private_phone", "turn": 0, "source": "user", "start": 20, "end": 27, "text": "5551234"}],
+              {"label": "private_phone", "turn": 0, "source": "user", "start": 20, "end": 28, "text": "555-0123"}],
 }]
 
 
@@ -75,7 +77,7 @@ def scored(parquet: Path, predictions: list[list[list[object]]]) -> dict:
 
 
 def test_perfect_prediction_scores_one_everywhere(parquet: Path) -> None:
-    result = scored(parquet, [[[5, 11, "EMAIL"], [20, 27, "PHONE"]], [], [], []])
+    result = scored(parquet, [[[5, 11, "EMAIL"], [20, 28, "PHONE"]], [], [], []])
     assert result["char_level_label_agnostic"]["f1"] == 1.0
     assert result["exact_typed_micro"]["f1"] == 1.0 and result["exact_untyped_micro"]["f1"] == 1.0
     assert result["exact_typed_f1_by_label"]["private_email"] == 1.0
@@ -83,7 +85,7 @@ def test_perfect_prediction_scores_one_everywhere(parquet: Path) -> None:
 
 
 def test_wrong_type_is_an_untyped_hit_and_a_typed_miss(parquet: Path) -> None:
-    result = scored(parquet, [[[5, 11, "PHONE"], [20, 27, "PHONE"]], [], [], []])
+    result = scored(parquet, [[[5, 11, "PHONE"], [20, 28, "PHONE"]], [], [], []])
     assert result["exact_untyped_micro"]["tp"] == 2 and result["exact_typed_micro"]["tp"] == 1
     assert result["exact_typed_f1_by_label"]["private_phone"] < 1.0  # the wrong-type span is its false positive
 
@@ -91,7 +93,7 @@ def test_wrong_type_is_an_untyped_hit_and_a_typed_miss(parquet: Path) -> None:
 def test_assistant_detections_are_false_positives_and_partial_overlap_is_char_credit_only(parquet: Path) -> None:
     result = scored(parquet, [[[5, 9, "EMAIL"]], [[7, 13, "EMAIL"]], [], []])
     char = result["char_level_label_agnostic"]
-    assert char["tp_chars"] == 4 and char["predicted_chars"] == 10 and char["gold_chars"] == 13
+    assert char["tp_chars"] == 4 and char["predicted_chars"] == 10 and char["gold_chars"] == 14
     assert result["exact_typed_micro"]["tp"] == 0 and result["exact_typed_micro"]["predicted"] == 2
 
 
@@ -148,10 +150,10 @@ def test_render_states_no_vendor_number_and_names_the_subset() -> None:
     assert entry["reproduction"]["published"] is None
 
 
-REAL = Path("/Users/krishankoenig/Workspace/EmpireTwo/gaze/target/pii-tracer-3942/piitrace/train.parquet")
+REAL = Path(os.environ.get("GAZE_PII_TRACE_PARQUET", "/nonexistent/train.parquet"))
 
 
-@pytest.mark.skipif(not REAL.exists(), reason="the pinned parquet is downloaded on the bench host only")
+@pytest.mark.skipif(not REAL.exists(), reason="set GAZE_PII_TRACE_PARQUET to the pinned parquet (bench host only)")
 def test_real_subset_matches_its_pin() -> None:
     splits, identity = loaders.load_pii_trace(REAL)
     assert len(splits["test"]) == 4500 and sum(len(d.spans) for d in splits["test"]) == 2653
@@ -165,3 +167,66 @@ def test_native_identity_map_must_match_the_tools_labels() -> None:
 
     with pytest.raises(ValueError, match="native_gold"):
         loaders.compose_mapping("pii-tracer", pii_tracer.load_label_map(), "pii-trace", broken)
+
+
+def tagged_trace() -> tuple[dict, dict, dict, dict]:
+    """A committed PII-TRACE entry and a tagged Gaze report + own-scorer result that fit it."""
+    from test_add_tool import DATASET, PREDICTIONS, own_pii_trace
+    from test_theirbench import release_provenance, row, synthetic
+
+    data = synthetic()
+    entry = data["benchmarks"].pop("presidio-research")
+    data["benchmarks"]["pii-trace"] = entry
+    entry.update(identity={"messages": 3, "sha256": DATASET}, splits={"test": {"documents": 3}},
+                 label_maps_sha256="a" * 64, mapping_sha256="b" * 64, typed_hold=["gaze", "opf"])
+    entry["rescored_with"]["comparison_sha256"] = {"compare.py": "c" * 64}
+    del entry["rows"]["gaze-v0.15.1"]
+    report = {
+        "schema_version": 1, "benchmark": "pii-trace", "preflight": None, "harness_dirty": False,
+        "harness_revision": "d" * 40, "hardware": "hw", "generated_at": "2026-09-30T00:00:00+00:00",
+        "identity": entry["identity"], "splits": entry["splits"],
+        "common_intersection_labels": entry["common_intersection_labels"],
+        "label_maps_sha256": entry["label_maps_sha256"], "mapping_sha256": entry["mapping_sha256"],
+        "typed_hold": entry["typed_hold"], "comparison_sha256": {"compare.py": "c" * 64},
+        "rows": {"gaze-v0.15.1": {"test": row(12)}},
+        "provenance": {"gaze-v0.15.1": {"release": {**release_provenance(), "prediction_sha256": PREDICTIONS}}},
+    }
+    report["provenance"]["gaze-v0.15.1"]["release"]["reproduces"]["prediction_sha256"] = PREDICTIONS
+    return data, entry, report, own_pii_trace("gaze-v0.15.1")
+
+
+def test_a_tagged_gaze_row_joins_pii_trace_through_the_validated_path() -> None:
+    from test_theirbench import RESOLVE
+
+    data, entry, report, own = tagged_trace()
+    assert render.add_tagged(data, report, own, RESOLVE) == "gaze-v0.15.1"
+    assert entry["own_metric"]["gaze-v0.15.1"] == own["scored"]
+    assert entry["provenance"]["gaze-v0.15.1"]["own_scorer_input"]["messages"] == 3
+
+
+@pytest.mark.parametrize("edit,match", [
+    (lambda r, o: o["input"].update(dataset_sha256="0" * 64), "own scorer used dataset"),
+    (lambda r, o: o["input"].update(prediction_sha256="0" * 64), "own scorer read predictions"),
+    (lambda r, o: o["input"].update(messages=2), "scored 2 messages"),
+    (lambda r, o: o["overall"].update(char_f1=1.0), "not what the receipt's counts give"),
+    (lambda r, o: o["scored"]["exact_typed_micro"].update(f1=1.0), "not what the receipt's counts give"),
+    (lambda r, o: o["input"].pop("counts"), "no input receipt with counts"),
+    (lambda r, o: r.update(identity={"messages": 3, "sha256": "0" * 64}), "identity differs"),
+], ids=["dataset", "predictions", "messages", "overall", "typed", "no-counts", "identity"])
+def test_a_tagged_pii_trace_row_is_refused_on_any_mismatch(edit, match: str) -> None:
+    from test_theirbench import RESOLVE
+
+    data, _entry, report, own = tagged_trace()
+    edit(report, own)
+    with pytest.raises(ValueError, match=match):
+        render.add_tagged(data, report, own, RESOLVE)
+
+
+def test_scorer_receipt_counts_rebuild_the_published_scores(parquet: Path) -> None:
+    counts = scorer.count_messages(loaders.pii_trace_messages(parquet),
+                                   [[[5, 11, "EMAIL"], [20, 28, "NAME"]], [[7, 13, "EMAIL"]], [], []], COMPOSED)
+    overall, scored = scorer.published(scorer.scores_from_counts(counts))
+    own = {"overall": overall, "scored": scored, "input": {"messages": 4, "counts": counts}}
+    scorer.check_result(own, 4, "fixture")  # the producer's own output always verifies
+    assert counts["char"] == {"tp": 14, "predicted": 20, "gold": 14}
+    assert counts["exact_typed"]["tp"] == 1 and counts["exact_untyped"]["tp"] == 2

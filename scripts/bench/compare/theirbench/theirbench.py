@@ -198,7 +198,7 @@ def validate_vendor_tuned_args(args: argparse.Namespace) -> None:
 
 def identity_sha256(benchmark: str, identity: Mapping[str, object]) -> str:
     """The dataset digest a benchmark's identity pins (what own scorers must have read)."""
-    return identity["sha256"] if benchmark == "presidio-research" else identity["test_5k_sha256"]
+    return identity["test_5k_sha256"] if benchmark == "piibench-commercial" else identity["sha256"]
 
 
 def measure_vendor_tuned(
@@ -550,7 +550,9 @@ def main() -> int:
                     with ForeignCpuSampler() as watch:
                         report["rows"][name] = measure_tool(name, backend.predict, splits, mapping, common,
                                                             args.predictions_dir)
-                    report["provenance"][name] = {**provenance, "cpu": watch.result()}
+                    # The merge ties this row's own-scorer result to these exact predictions.
+                    report["provenance"][name] = {**provenance, "cpu": watch.result(), "prediction_sha256":
+                                                  sha256_file(args.predictions_dir / f"{name}.test.jsonl")}
                 finally:
                     if hasattr(backend, "close"):
                         backend.close()

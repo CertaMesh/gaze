@@ -22,6 +22,8 @@ sys.path.insert(0, str(REPO / "scripts/bench"))
 from markdown_table import table_header  # noqa: E402
 from tagged_gaze import (  # noqa: E402
     RELEASE_PINS, TAG, check_model_receipt, check_own_input, check_own_score, check_public, tag_commit)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pii_trace_repro  # noqa: E402
 VENDOR_TUNED = Path(__file__).with_name("vendor-tuned.json")
 DATA = REPO / "docs/reference/benchmarks/their-benchmarks.json"
 DOC = REPO / "docs/reference/benchmarks/README.md"
@@ -169,8 +171,9 @@ def add_tool(data: dict[str, Any], report_path: Path, own_path: Path, tool: str)
     own = json.loads(own_path.read_text(encoding="utf-8"))
     if own.get("smoke_limit") or own["system"] != tool:
         raise ValueError(f"{own_path}: not a full own-scorer result for {tool}")
+    check_own_result(report["benchmark"], entry, tool, own, measured_predictions(report, tool))
     entry["rows"][tool] = report["rows"][tool]["test"]
-    entry["provenance"][tool] = report["provenance"][tool]
+    entry["provenance"][tool] = {**report["provenance"][tool], "own_scorer_input": own["input"]}
     entry["own_metric"][tool] = own.get("scored") or own["overall"]
     entry["typed_hold"] = sorted(set(entry["typed_hold"]) | set(report["typed_hold"]))
     entry.setdefault("rows_measured_separately", {})[tool] = {
@@ -183,7 +186,8 @@ def add_benchmark(data: dict[str, Any], report_path: Path, own_path: Path, tool:
     """Add a benchmark that only one tool has been measured on (the vendor's own tuned model).
 
     Other tools and Gaze rows join later through add_tool once they are measured on the same
-    documents. Same guards as assemble: clean, rescored, no preflight, no smoke.
+    documents. Same guards as assemble: clean, rescored, no preflight, no smoke; and the own-scorer
+    result must have read this row's predictions on the pinned dataset (check_own_result).
     """
     report = json.loads(report_path.read_text(encoding="utf-8"))
     name = report["benchmark"]
@@ -202,9 +206,10 @@ def add_benchmark(data: dict[str, Any], report_path: Path, own_path: Path, tool:
         "identity", "harness_revision", "gaze_crates_tree", "label_maps_sha256", "mapping_sha256",
         "hardware", "common_intersection_labels", "splits", "provenance", "comparison_revision",
         "comparison_sha256", "typed_hold", "rescored_with")}
-    scored = own.get("scored") or own["overall"]
+    check_own_result(name, entry, tool, own, measured_predictions(report, tool))
+    entry["provenance"][tool] = {**report["provenance"][tool], "own_scorer_input": own["input"]}
     entry["rows"] = {tool: report["rows"][tool]["test"]}
-    entry["own_metric"] = {tool: scored}
+    entry["own_metric"] = {tool: own["scored"]}
     entry["reproduction"] = {"published": None, "vendor_system": tool, "vendor_result": own["overall"],
                              "versions": own["versions"]}
     entry["chart_rows"] = [tool]
@@ -369,17 +374,32 @@ def _check_release(row: str, release: Mapping[str, Any], resolve: Callable[[str]
         raise ValueError(f"{row}: no clean earlier run reproduces these predictions")
 
 
+def measured_predictions(report: Mapping[str, Any], tool: str) -> str:
+    """The digest theirbench.py recorded for the predictions this row was measured from."""
+    digest = report["provenance"][tool].get("prediction_sha256")
+    if not digest:
+        raise ValueError(f"{tool}: the report records no prediction digest to tie an own-scorer result to")
+    return digest
+
+
 def check_own_result(name: str, entry: Mapping[str, Any], row: str, own: Mapping[str, Any],
                      prediction_sha256: str) -> None:
-    """The one check both merge paths run on a vendor evaluator's result: it read this row's
+    """The one check every merge path runs on a vendor evaluator's result: it read this row's
     predictions on the pinned dataset, and its published score is what its counts give."""
     check_own_input(own, prediction_sha256, dataset_sha256(name, entry), row)
-    check_own_score(own, entry["splits"]["test"]["documents"], row)
+    documents = entry["splits"]["test"]["documents"]
+    if name == "pii-trace":
+        pii_trace_repro.check_result(own, documents, row)
+    else:
+        check_own_score(own, documents, row)
+
+
+#: The identity field holding the digest of the file each benchmark's own scorer reads.
+DATASET_DIGEST = {"presidio-research": "sha256", "piibench-commercial": "test_5k_sha256", "pii-trace": "sha256"}
 
 
 def dataset_sha256(name: str, entry: Mapping[str, Any]) -> str:
-    """The dataset digest the committed identity pins (Presidio Research file, PIIBench test_5k)."""
-    return entry["identity"]["sha256"] if name == "presidio-research" else entry["identity"]["test_5k_sha256"]
+    return entry["identity"][DATASET_DIGEST[name]]
 
 
 def pct(value: float) -> str:
@@ -485,6 +505,9 @@ def render(data: Mapping[str, Any]) -> str:
                          "there is a false positive. The paper says PII-Tracer's training data shares production "
                          "traffic with PII-TRACE and the subset carries no split label, so overlap with its training "
                          "data cannot be ruled out; treat that row as an upper bound, not a clean holdout.")
+            if set(rows) == {repro["vendor_system"]}:
+                lines.append("- Gaze and the other tools are not yet measured on this set; the table holds only "
+                             "the vendor's own model until they are.")
         else:
             published = repro["published_full_mix"]
             lines.append(f"- Published Presidio span F1 {published['f1']} is on the full ten-source mix "

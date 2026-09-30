@@ -25,7 +25,7 @@ import platform
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -64,11 +64,12 @@ def overlap(left: Sequence[tuple[int, int]], right: Sequence[tuple[int, int]]) -
     return total
 
 
-def score_messages(
+def count_messages(
     messages: Sequence[tuple[str, str, Sequence[tuple[int, int, str]]]],
     predictions: Sequence[Sequence[Sequence[object]]],
     composed: Mapping[str, Sequence[str]],
 ) -> dict[str, object]:
+    """The raw counts every published PII-TRACE metric derives from (see scores_from_counts)."""
     if len(messages) != len(predictions):
         raise ValueError("predictions must cover every message in order")
     char_tp = char_pred = char_gold = 0
@@ -108,19 +109,76 @@ def score_messages(
         for start, end, label in gold:
             if (start, end, label) not in matched_gold:
                 per_label[label]["fn"] += 1
-    macro = {label: prf(v["tp"], v["fp"], v["fn"])["f1"] for label, v in per_label.items()}
     return {
         "messages": len(messages),
-        "char_level_label_agnostic": {**prf(char_tp, char_pred - char_tp, char_gold - char_tp),
-                                      "f2": prf(char_tp, char_pred - char_tp, char_gold - char_tp, 2)["f2"],
-                                      "tp_chars": char_tp, "predicted_chars": char_pred, "gold_chars": char_gold},
-        "exact_typed_micro": {**prf(typed_tp, typed_pred - typed_tp, typed_gold - typed_tp),
-                              "tp": typed_tp, "predicted": typed_pred, "gold": typed_gold},
+        "char": {"tp": char_tp, "predicted": char_pred, "gold": char_gold},
+        "exact_typed": {"tp": typed_tp, "predicted": typed_pred, "gold": typed_gold},
+        "exact_untyped": {"tp": untyped_tp, "predicted": untyped_pred, "gold": typed_gold},
+        "by_label": {label: {key: v[key] for key in ("tp", "fp", "fn")} for label, v in per_label.items()},
+    }
+
+
+def scores_from_counts(counts: Mapping[str, Any]) -> dict[str, object]:
+    """Every published metric, from the counts alone; the merge recomputes it the same way."""
+    char, typed, untyped = counts["char"], counts["exact_typed"], counts["exact_untyped"]
+    for name, part in (("char", char), ("exact_typed", typed), ("exact_untyped", untyped)):
+        if not 0 <= part["tp"] <= min(part["predicted"], part["gold"]):
+            raise ValueError(f"{name} counts are inconsistent: {part}")
+    if typed["gold"] != untyped["gold"] or set(counts["by_label"]) != set(LABELS):
+        raise ValueError("exact-span counts do not describe one gold set over the dataset's labels")
+    macro = {label: prf(v["tp"], v["fp"], v["fn"])["f1"] for label, v in counts["by_label"].items()}
+    char_fp, char_fn = char["predicted"] - char["tp"], char["gold"] - char["tp"]
+    return {
+        "messages": counts["messages"],
+        "char_level_label_agnostic": {**prf(char["tp"], char_fp, char_fn),
+                                      "f2": prf(char["tp"], char_fp, char_fn, 2)["f2"],
+                                      "tp_chars": char["tp"], "predicted_chars": char["predicted"],
+                                      "gold_chars": char["gold"]},
+        "exact_typed_micro": {**prf(typed["tp"], typed["predicted"] - typed["tp"], typed["gold"] - typed["tp"]),
+                              "tp": typed["tp"], "predicted": typed["predicted"], "gold": typed["gold"]},
         "exact_typed_macro_f1": round(sum(macro.values()) / len(macro), 4),
         "exact_typed_f1_by_label": macro,
-        "exact_untyped_micro": {**prf(untyped_tp, untyped_pred - untyped_tp, typed_gold - untyped_tp),
-                                "tp": untyped_tp, "predicted": untyped_pred, "gold": typed_gold},
+        "exact_untyped_micro": {**prf(untyped["tp"], untyped["predicted"] - untyped["tp"],
+                                      untyped["gold"] - untyped["tp"]),
+                                "tp": untyped["tp"], "predicted": untyped["predicted"], "gold": untyped["gold"]},
     }
+
+
+def score_messages(
+    messages: Sequence[tuple[str, str, Sequence[tuple[int, int, str]]]],
+    predictions: Sequence[Sequence[Sequence[object]]],
+    composed: Mapping[str, Sequence[str]],
+) -> dict[str, object]:
+    return scores_from_counts(count_messages(messages, predictions, composed))
+
+
+def published(scored: Mapping[str, Any]) -> tuple[dict[str, object], dict[str, object]]:
+    """(overall, scored) exactly as a result file carries them."""
+    overall = {"char_f1": scored["char_level_label_agnostic"]["f1"],
+               "char_f2": scored["char_level_label_agnostic"]["f2"],
+               "exact_typed_micro_f1": scored["exact_typed_micro"]["f1"],
+               "exact_typed_macro_f1": scored["exact_typed_macro_f1"],
+               "exact_untyped_micro_f1": scored["exact_untyped_micro"]["f1"]}
+    return overall, {**scored, "char_f1": scored["char_level_label_agnostic"]["f1"]}
+
+
+def check_result(own: Mapping[str, Any], messages: int, where: str) -> None:
+    """A result's published scores must be exactly what its receipt's counts give, over every
+    message of the pinned subset. The digests in the same receipt are checked by the caller
+    (tagged_gaze.check_own_input), which knows the measured row's predictions."""
+    receipt = own.get("input")
+    if not receipt or not receipt.get("counts"):
+        raise ValueError(f"{where}: the own-scorer result records no input receipt with counts")
+    if receipt.get("messages") != messages or receipt["counts"].get("messages") != messages:
+        raise ValueError(f"{where}: the own scorer scored {receipt.get('messages')} messages, the split has {messages}")
+    try:
+        overall, scored = published(scores_from_counts(receipt["counts"]))
+    except (KeyError, TypeError) as error:
+        raise ValueError(f"{where}: the receipt's counts are incomplete ({error!r})") from error
+    except ValueError as error:
+        raise ValueError(f"{where}: {error}") from error
+    if own.get("scored") != scored or own.get("overall") != overall:
+        raise ValueError(f"{where}: the published scores are not what the receipt's counts give")
 
 
 def main() -> int:
@@ -140,18 +198,17 @@ def main() -> int:
     if args.max_messages:
         messages, predictions = messages[:args.max_messages], predictions[:args.max_messages]
     composed = json.loads(args.labels.read_text(encoding="utf-8"))
-    scored = score_messages(messages, predictions, composed)
+    counts = count_messages(messages, predictions, composed)
+    overall, scored = published(scores_from_counts(counts))
     report = {
         "benchmark": "PII-TRACE public subset", "dataset": loaders.PII_TRACE, "system": args.system,
         "smoke_limit": args.max_messages,
         "scorer": "dataset card exact typed/untyped span P/R/F1 and the paper's label-agnostic character P/R/F1, "
                   "implemented from their definitions (no vendor scorer is published)",
-        "overall": {"char_f1": scored["char_level_label_agnostic"]["f1"],
-                    "char_f2": scored["char_level_label_agnostic"]["f2"],
-                    "exact_typed_micro_f1": scored["exact_typed_micro"]["f1"],
-                    "exact_typed_macro_f1": scored["exact_typed_macro_f1"],
-                    "exact_untyped_micro_f1": scored["exact_untyped_micro"]["f1"]},
-        "scored": {**scored, "char_f1": scored["char_level_label_agnostic"]["f1"]},
+        "overall": overall, "scored": scored,
+        # The receipt the merge compares with the measured row and recomputes the scores from.
+        "input": {"prediction_sha256": loaders.sha256(args.predictions),
+                  "dataset_sha256": loaders.sha256(args.data), "messages": len(messages), "counts": counts},
         "versions": {"python": platform.python_version()}, "hardware": platform.platform(),
     }
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
