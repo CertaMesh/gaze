@@ -317,22 +317,22 @@ fn inspection_loop(
                 continue;
             }
             Err(_) => {
-                fatal_ingress(&state, &stop, &control);
+                fatal_child(&state, &stop, &control);
                 return;
             }
         }
         let length = u32::from_be_bytes(length) as usize;
         if length == 0 || length > frame_cap {
-            fatal_ingress(&state, &stop, &control);
+            fatal_child(&state, &stop, &control);
             return;
         }
         let mut bytes = Zeroizing::new(vec![0_u8; length]);
         if stream.read_exact(bytes.as_mut()).is_err() {
-            fatal_ingress(&state, &stop, &control);
+            fatal_child(&state, &stop, &control);
             return;
         }
         let Ok(frame) = DecodedInspectionFrame::decode(bytes.as_ref(), frame_cap) else {
-            fatal_ingress(&state, &stop, &control);
+            fatal_child(&state, &stop, &control);
             return;
         };
         let _ = state
@@ -343,7 +343,7 @@ fn inspection_loop(
     }
 }
 
-fn fatal_ingress(state: &Arc<Mutex<ChildState>>, stop: &AtomicBool, control: &UnixStream) {
+fn fatal_child(state: &Arc<Mutex<ChildState>>, stop: &AtomicBool, control: &UnixStream) {
     state
         .lock()
         .unwrap_or_else(|poison| poison.into_inner())
@@ -439,18 +439,29 @@ struct ConnectionBudget {
     max_followers: usize,
 }
 
+#[derive(Clone)]
+struct ChildShutdown {
+    stop: Arc<AtomicBool>,
+    control: Arc<UnixStream>,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn server_loop(
     listener: TcpListener,
     authority: SocketAddrV4,
     state: Arc<Mutex<ChildState>>,
     stop: Arc<AtomicBool>,
-    mut control: UnixStream,
+    control: UnixStream,
     purge_request: UnixStream,
     active_responses: Arc<AtomicUsize>,
     limits: ServerLimits,
 ) {
     let active_connections = Arc::new(AtomicUsize::new(0));
+    let control = Arc::new(control);
+    let shutdown = ChildShutdown {
+        stop: stop.clone(),
+        control: control.clone(),
+    };
     let budget = ConnectionBudget {
         active_responses,
         active_followers: Arc::new(AtomicUsize::new(0)),
@@ -480,6 +491,7 @@ fn server_loop(
                     Ok(purge_request) => purge_request,
                     Err(_) => break,
                 };
+                let worker_shutdown = shutdown.clone();
                 match thread::Builder::new()
                     .name("gaze-dashboard-http-connection".to_owned())
                     .spawn(move || {
@@ -490,6 +502,7 @@ fn server_loop(
                             worker_purge_request,
                             budget,
                             connection_slot,
+                            worker_shutdown,
                         );
                     }) {
                     Ok(worker) => workers.push(worker),
@@ -512,7 +525,7 @@ fn server_loop(
             .purge_all(InspectionEpochV1::new(u64::MAX));
         let _ = control.shutdown(Shutdown::Both);
     }
-    let _ = control.flush();
+    let _ = (&*control).flush();
 }
 
 fn reap_finished_workers(workers: &mut Vec<thread::JoinHandle<()>>) -> bool {
@@ -537,6 +550,7 @@ fn handle_connection(
     mut purge_request: UnixStream,
     budget: ConnectionBudget,
     _connection_slot: CountedSlot,
+    shutdown: ChildShutdown,
 ) {
     let _ = stream.set_read_timeout(Some(Duration::from_millis(150)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
@@ -612,9 +626,19 @@ fn handle_connection(
                     let _ = write_json(&mut stream, 200, &body);
                 }
                 ValidatedDashboardRequestV1::Purge => {
-                    let _ = purge_request.write_all(&[CHILD_PURGE_REQUEST]);
-                    let _ = purge_request.flush();
-                    let _ = write_constant(&mut stream, 202, b"purge requested\n");
+                    if purge_request
+                        .write_all(&[CHILD_PURGE_REQUEST])
+                        .and_then(|()| purge_request.flush())
+                        .is_err()
+                    {
+                        // A dashboard that cannot request a purge must not retain capture.
+                        fatal_child(&state, &shutdown.stop, &shutdown.control);
+                        let error = DashboardError::new(DashboardErrorCode::PurgeFailed);
+                        eprintln!("{error}");
+                        let _ = write_constant(&mut stream, 503, b"dashboard_purge_failed\n");
+                    } else {
+                        let _ = write_constant(&mut stream, 202, b"purge requested\n");
+                    }
                 }
                 ValidatedDashboardRequestV1::ProviderVisible
                 | ValidatedDashboardRequestV1::RevealOwnerRaw
@@ -955,6 +979,7 @@ fn response_header(status: u16, content_type: &str, length: usize) -> String {
         404 => "Not Found",
         422 => "Unprocessable Content",
         429 => "Too Many Requests",
+        503 => "Service Unavailable",
         _ => "Internal Server Error",
     };
     format!(
@@ -975,6 +1000,107 @@ mod tests {
         Oversize,
         Partial,
         Decode,
+    }
+
+    #[test]
+    fn browser_purge_broken_notification_returns_503_and_stops_capture() {
+        assert_browser_purge_notification(false);
+    }
+
+    #[test]
+    fn browser_purge_delivered_notification_returns_202_and_preserves_capture() {
+        assert_browser_purge_notification(true);
+    }
+
+    fn assert_browser_purge_notification(notification_open: bool) {
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        use base64::Engine;
+
+        let secret = PairingSecret::generate().unwrap();
+        let mut authorization = b"GazeDashboardV1 ".to_vec();
+        authorization.extend_from_slice(secret.canonical_token().as_ref());
+        let authorization = CanonicalAuthorizationV1::parse(&authorization).unwrap();
+        let mut auth = AuthRegistry::new(&secret, 4);
+        let bootstrap = auth.pair(&authorization).unwrap().encode_for_one_response();
+        let page = &bootstrap[6..38];
+        let csrf = &bootstrap[38..70];
+        let now = Instant::now();
+        let (store, lease, _body) = response_fixture(now, b"<Email_1>".to_vec());
+        let state = Arc::new(Mutex::new(ChildState {
+            store,
+            auth,
+            reveals: RevealRegistry::new(Duration::from_secs(30)),
+        }));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (control, mut supervisor_control) = UnixStream::pair().unwrap();
+        let (notification, notification_peer) = UnixStream::pair().unwrap();
+        let mut notification_peer = if notification_open {
+            Some(notification_peer)
+        } else {
+            drop(notification_peer);
+            None
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let SocketAddr::V4(authority) = listener.local_addr().unwrap() else {
+            panic!("IPv4 fixture listener");
+        };
+        let mut browser = TcpStream::connect(authority).unwrap();
+        let (connection, _) = listener.accept().unwrap();
+        let request = format!(
+            "POST /api/v1/purge HTTP/1.1\r\nHost: {authority}\r\nOrigin: http://{authority}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nX-Gaze-Page-Session: {}\r\nX-Gaze-Csrf: {}\r\n\r\n{{}}",
+            URL_SAFE_NO_PAD.encode(page),
+            URL_SAFE_NO_PAD.encode(csrf),
+        );
+        browser.write_all(request.as_bytes()).unwrap();
+        let connections = Arc::new(AtomicUsize::new(1));
+        handle_connection(
+            connection,
+            authority,
+            state.clone(),
+            notification,
+            ConnectionBudget {
+                active_responses: Arc::new(AtomicUsize::new(0)),
+                active_followers: Arc::new(AtomicUsize::new(0)),
+                max_responses: 4,
+                max_followers: 4,
+            },
+            CountedSlot {
+                active: connections.clone(),
+            },
+            ChildShutdown {
+                stop: stop.clone(),
+                control: Arc::new(control.try_clone().unwrap()),
+            },
+        );
+        let mut response = Vec::new();
+        browser.read_to_end(&mut response).unwrap();
+        assert_eq!(connections.load(Ordering::Acquire), 0);
+        let mut child = state.lock().unwrap();
+        if notification_open {
+            assert!(response.starts_with(b"HTTP/1.1 202 Accepted\r\n"));
+            assert!(response.ends_with(b"purge requested\n"));
+            let mut byte = [0];
+            notification_peer
+                .as_mut()
+                .unwrap()
+                .read_exact(&mut byte)
+                .unwrap();
+            assert_eq!(byte, [CHILD_PURGE_REQUEST]);
+            assert!(!stop.load(Ordering::Acquire));
+            assert!(child.store.lease_valid(&lease, 0, now));
+            assert!(child.auth.validate_session(page, csrf));
+        } else {
+            assert!(response.starts_with(b"HTTP/1.1 503 Service Unavailable\r\n"));
+            assert!(!response.starts_with(b"HTTP/1.1 202 "));
+            assert!(response.ends_with(b"dashboard_purge_failed\n"));
+            assert!(stop.load(Ordering::Acquire));
+            assert_eq!(child.store.epoch(), InspectionEpochV1::new(u64::MAX));
+            assert_eq!(child.store.retained_bytes(), 0);
+            assert_eq!(child.store.logical_len(), 0);
+            assert!(!child.store.lease_valid(&lease, 0, now));
+            assert!(!child.auth.validate_session(page, csrf));
+            assert_eq!(supervisor_control.read(&mut [0]).unwrap(), 0);
+        }
     }
 
     #[test]

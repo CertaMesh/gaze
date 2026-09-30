@@ -299,6 +299,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release workflows now include `UPGRADE.md`, and a workspace test keeps it
   clean on every PR.
 
+### Fixed
+
+- **Dashboard purge fails closed on a broken notification channel.** Browser
+  purge requests return 503 instead of falsely reporting acceptance when delivery
+  fails. The child clears captured data, invalidates sessions and response leases,
+  and stops so the supervisor permanently disables dashboard capture.
+
 ## [0.15.1] - 2026-09-26
 
 v0.15.1 closes the v0.15.0 known limitation for payment cards next to other
