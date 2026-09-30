@@ -3,49 +3,49 @@
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "mutant_narrow_tax_nine"
-pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|tax identification number|taxpayer identification number|TIN)[^\d\n]{0,100}?\b0\d{8}\b'
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d{8}\b'
 class = "custom:mutant_government_id"
 
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "mutant_narrow_tax_eleven"
-pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|tax identification number|taxpayer identification number|TIN)[^\d\n]{0,100}?\b0\d{10}\b'
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d{10}\b'
 class = "custom:mutant_government_id"
 
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "mutant_narrow_tax_grouped"
-pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|tax identification number|taxpayer identification number|TIN)[^\d\n]{0,100}?\b0\d \d{3} \d{3} \d{3}\b'
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d \d{3} \d{3} \d{3}\b'
 class = "custom:mutant_government_id"
 
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "mutant_narrow_tax_slash"
-pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|tax identification number|taxpayer identification number|TIN)[^\d\n]{0,100}?\b0\d/\d{3}/\d{5}\b'
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d/\d{3}/\d{5}\b'
 class = "custom:mutant_government_id"
 
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "mutant_narrow_tax_slash_long"
-pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|tax identification number|taxpayer identification number|TIN)[^\d\n]{0,100}?\b0\d{2}/\d{4}/\d{5}\b'
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d{2}/\d{4}/\d{5}\b'
 class = "custom:mutant_government_id"
 
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "mutant_narrow_tax_prefix"
-pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|tax identification number|taxpayer identification number|TIN)[^\d\n]{0,100}?\bZZ0\d{8}\b'
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\bZZ0\d{8}\b'
 class = "custom:mutant_government_id"
 
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "mutant_narrow_tax_suffix"
-pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|tax identification number|taxpayer identification number|TIN)[^\d\n]{0,100}?\b0\d{6}ZZ\b'
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\b0\d{6}ZZ\b'
 class = "custom:mutant_government_id"
 
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "mutant_narrow_tax_dotted"
-pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|tax identification number|taxpayer identification number|TIN)[^\d\n]{0,100}?\bZZ0\d{2}\.\d{3}\.\d{3}Z\b'
+pattern = '(?i)(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)[^\d\n]{0,100}?\bZZ0\d{2}\.\d{3}\.\d{3}Z\b'
 class = "custom:mutant_government_id"
 
 [[policy.custom_recognizers]]

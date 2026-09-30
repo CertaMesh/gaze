@@ -53,7 +53,7 @@ PATTERNS = dict(zip(Shape, (
     r"00 \d{3} \d{3} \d", r"000\d{3}Z\d{4}",
 )))
 CUES = {
-    "TAXNUM": r"(?:Steuer-ID|Steueridentifikationsnummer|tax identification number|taxpayer identification number|TIN)",
+    "TAXNUM": r"(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)",
     "SSN": r"(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)",
     "IDCARDNUM": r"(?:identity card number|ID card number|identification card|Personalausweisnummer)",
     "NATIONALID": r"(?:national identification number|national ID number|national identity number|nationale Identifikationsnummer)",
@@ -107,14 +107,29 @@ def _cells() -> tuple[tuple[Cell, ...], tuple[Cell, ...]]:
             "card": ("identity card number", "ID card number"),
             "national": ("national identification number", "national ID number"),
         }[stem]
-        if shape == Shape.TAX_GROUPED:
-            cues = ("Steueridentifikationsnummer", "taxpayer identification number")
+        if stem == "tax":
+            cues = {
+                Shape.TAX_NINE: ("TIN", "tax identification number"),
+                Shape.TAX_ELEVEN: ("Steueridentifikationsnummer", "taxpayer identification number"),
+                Shape.TAX_GROUPED: ("Steuer-ID", "steuerliche Identifikationsnummer"),
+                Shape.TAX_SLASH: ("Steuernummer", "tax number"),
+                Shape.TAX_SLASH_LONG: ("Steuer-ID", "TIN"),
+                Shape.TAX_PREFIX: ("tax ID", "Steueridentifikationsnummer"),
+                Shape.TAX_SUFFIX: ("tax identification number", "taxpayer identification number"),
+                Shape.TAX_DOTTED: ("Steuer-ID", "tax identification number"),
+            }[shape]
         if shape in (Shape.SSN_SWISS_DOT, Shape.SSN_SWISS_DASH, Shape.SSN_MIXED):
             cues = ("Sozialversicherungsnummer", "social insurance number")
+        if shape == Shape.SSN_SWISS_DOT:
+            cues = ("AHV number", "Sozialversicherungsnummer")
+        if shape == Shape.CARD_PREFIX:
+            cues = ("Personalausweisnummer", "identification card")
         relation = list(Relation)[index % 5]
         if shape == Shape.SSN_TAIL:
             relation = Relation.PARTIAL
         surface = ("prose", "log_kv", "tool_json", "tool_result")[index % 4]
+        if shape == Shape.SSN_US:
+            surface, relation = "prose", Relation.PARENTHETICAL
         # Line relations stay prose: embedded newlines would break JSON strings.
         if relation == Relation.LINE:
             surface = "prose"

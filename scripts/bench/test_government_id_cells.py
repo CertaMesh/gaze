@@ -71,7 +71,7 @@ class GovernmentCellsTests(unittest.TestCase):
         records = g.records(a, 'dev')
         for cell in (g.CELLS[0], g.TWINS[0]):
             row = next(r for r in records if r.family == cell.family)
-            new_text = (row.text.replace('Steuer-ID', 'Reference') if cell.gold
+            new_text = (re.sub(g.CUES[cell.shape.label], 'Reference', row.text, count=1, flags=re.I) if cell.gold
                         else row.text.replace('Invoice reference', 'Steuer-ID'))
             delta = len(new_text.encode()) - len(row.text.encode())
             span = (row.gold or row.decoys)[0]
@@ -95,6 +95,14 @@ class GovernmentCellsTests(unittest.TestCase):
                     self.assertEqual(row.validity, a.INVALID)
                 if row.family.startswith('gov_ssn_') and row.family not in ('gov_ssn_tail', 'gov_ssn_mixed'):
                     self.assertTrue(v.startswith('000'))
+
+    def test_cued_invalid_tax_credit_and_counterweights_are_versioned(self):
+        for surface in ('gov_prose', 'gov_log_kv', 'gov_tool_json', 'gov_tool_result'):
+            self.assertTrue(a.invalid_twin_credited('TAXNUM', surface))
+        self.assertFalse(a.invalid_twin_credited('TAXNUM', 'prose_nocue'))
+        added = set(a.guard_families(9)) - set(a.guard_families(8))
+        self.assertEqual(added, {'gov_twin_tax_eleven', 'gov_near_tax_eleven',
+                                 'gov_twin_tax_grouped', 'gov_near_tax_grouped'})
 
 
 if __name__ == '__main__':
