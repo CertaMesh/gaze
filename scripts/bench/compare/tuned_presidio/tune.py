@@ -287,6 +287,8 @@ def measure(args: argparse.Namespace) -> None:
             "producer": {key: authors_meta[key] for key in (
                 "analyzer_kwargs", "openmed", "presidio_research_commit", "versions", "sha256", "documents")},
             "language": "every document analyzed with language=\"en\", the only language the setup supports",
+            # Scored gold only: labels a contract excludes never count as missed.
+            "coverage": authors_coverage(mapping, {span.label for doc in docs for span in doc.document.spans}),
         }
     report = {
         "schema_version": 1,
@@ -302,6 +304,8 @@ def measure(args: argparse.Namespace) -> None:
         "rows": report_rows,
         "provenance": provenance,
         "chart": chart_choice(report_rows),
+        "budget": {**budget(), "candidates_evaluated": selection["candidates_evaluated"],
+                   "validation_documents": selection["validation_documents"]},
         "code_sha256": code_digests(),
         "compare_sha256": sha256(Path(compare.__file__)),
         "comparison_metrics_sha256": sha256(HERE.parent / "comparison_metrics.py"),
@@ -310,6 +314,37 @@ def measure(args: argparse.Namespace) -> None:
         **git_state(),
     }
     REPORT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def authors_coverage(mapping: dict[str, tuple[str, ...]], gold_labels: set[str]) -> dict[str, object]:
+    """Where Presidio Research's tuned setup and this corpus's labels do not meet."""
+    sys.path.insert(0, str(HERE.parent / "theirbench"))
+    import presidio_research_repro as repro
+    from presidio_analyzer import RecognizerRegistry
+
+    registry = RecognizerRegistry()
+    registry.load_predefined_recognizers()
+    removed = set(repro.NOTEBOOK5_REMOVED)
+    entities = set(repro.OPENMED_MAPPING.values()) | {"TITLE", "DATE_TIME", "AGE"}
+    for recognizer in registry.recognizers:
+        if type(recognizer).__name__ not in removed and recognizer.supported_language == "en":
+            entities.update(recognizer.supported_entities)
+    covered = {label for entity in entities for label in mapping[entity]}
+    return {
+        "entities": sorted(entities),
+        "entities_without_a_corpus_label": sorted(e for e in entities if not mapping[e]),
+        "corpus_labels_without_an_entity": sorted(gold_labels - covered),
+    }
+
+
+def budget() -> dict[str, object]:
+    """Effort Gaze's rules received, in the terms the repository can count."""
+    log = subprocess.check_output(
+        ["git", "log", "--no-merges", "--format=%h %ad", "--date=short", "--",
+         "crates/gaze-recognizers/embedded"], cwd=REPO, text=True).split("\n")
+    commits = [line for line in log if line.strip()]
+    return {"gaze_rulepack_commits": len(commits), "first": commits[-1].split()[1],
+            "last": commits[0].split()[1], "path": "crates/gaze-recognizers/embedded"}
 
 
 def chart_choice(rows: dict) -> dict[str, object]:

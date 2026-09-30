@@ -194,10 +194,14 @@ class Search:
         docs = replayer.docs
         self.by_unit: dict[str, set[int]] = {}
         self.by_threshold: dict[str, set[int]] = {}
+        self.scores: dict[str, tuple[set[float], ...]] = {}
         for index, doc in enumerate(docs):
             for found in doc.results:
+                key = pool.threshold_key(found.unit, found.entity)
                 self.by_unit.setdefault(found.unit, set()).add(index)
-                self.by_threshold.setdefault(pool.threshold_key(found.unit, found.entity), set()).add(index)
+                self.by_threshold.setdefault(key, set()).add(index)
+                for mode, value in zip(self.scores.setdefault(key, tuple(set() for _ in MODES)), found.scores):
+                    mode.add(value)
         self.all_docs = set(range(len(docs)))
         self.evaluations = 0
 
@@ -288,9 +292,12 @@ class Search:
             if not any(pool.unit_active(self.config, unit, self.replayer.docs[i].language) for i in docs):
                 continue
             current = self.config["thresholds"].get(key, 0.0)
+            scores = self.scores[key][MODES.index(self.config["context"])]
+            # A value no recorded score separates from the current one keeps every result as is.
+            values = [value for value in space.THRESHOLD_GRID if value != current and any(
+                min(value, current) <= score < max(value, current) for score in scores)]
             yield (f"threshold[{key}]", docs,
-                   [(value, variant(thresholds={**self.config["thresholds"], key: value}))
-                    for value in space.THRESHOLD_GRID if value != current])
+                   [(value, variant(thresholds={**self.config["thresholds"], key: value})) for value in values])
         yield ("allow_list", self.all_docs, self.allow_alternatives(self.config))
 
     def allow_alternatives(self, config: Mapping[str, object]) -> list[tuple[object, dict[str, object]]]:

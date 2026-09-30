@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -14,6 +15,9 @@ import compare  # noqa: E402
 from layer_display import layer_display_name  # noqa: E402
 from markdown_table import table_header  # noqa: E402
 from tagged_gaze import check_public  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).with_name("tuned_presidio")))
+from space import CUSTOM_RECOGNIZERS as TUNED_CUSTOM  # noqa: E402
 
 #: Gaze is not listed: the comparison run measured an unreleased build, and public
 #: pages show tagged releases only (tagged_gaze.py).
@@ -144,7 +148,8 @@ def agentic_corpus_note(report: dict[str, object]) -> str:
     )
 
 
-def render(report: dict[str, object], source: str) -> str:
+def render(report: dict[str, object], source: str, tuned: dict[str, object] | None = None,
+           history_path: Path | None = None) -> str:
     gaze = report["gaze"]
     tools = report["tools"]
     versions = ("v3", "v2", "v1")
@@ -328,11 +333,174 @@ def render(report: dict[str, object], source: str) -> str:
                         )
         lines.extend(["", "Threshold choice uses validation only: " + "; ".join(
             f"{group} → {selected}" for group, selected in report.get("selected_threshold_rows", {}).items()) + "."])
+    if tuned is not None:
+        lines.extend(render_tuned(tuned, report, history_path or REPO / "docs/reference/benchmarks/release-history.json"))
     skipped = report.get("skipped", {})
     if skipped:
         lines.extend(["", "**Skipped:** " + "; ".join(f"{name}: {reason}" for name, reason in skipped.items()) + "."])
     lines.append("")
     return check_public("\n".join(lines), "competitors.md")
+
+
+TUNED_NAME = "presidio-tuned.json"
+TUNED_CODE = ("space.py", "pool.py", "search.py", "corpus.py", "produce.py", "tune.py")
+TUNED_LABELS = {
+    "presidio-tuned-presidio-research": "Presidio (tuned by its authors)",
+    "presidio-tuned-own-leak-first": "Presidio (tuned here, leak-first)",
+    "presidio-tuned-own-f2": "Presidio (tuned here, F2)",
+}
+TUNED_BASELINES = ("presidio-all", "presidio-strong", "presidio-strong-high-recall")
+
+
+def validate_tuned(tuned: dict[str, object], report_path: Path) -> None:
+    """Reject a tuned report whose inputs or code changed, or whose replay is unproven."""
+    here = Path(__file__).parent
+    expected = {
+        "comparison report": (tuned["comparison_sha256"], digest_file(report_path)),
+        "comparison adapter": (tuned["compare_sha256"], digest_file(Path(compare.__file__))),
+        "comparison metrics": (tuned["comparison_metrics_sha256"], digest_file(here / "comparison_metrics.py")),
+        "scorer": (tuned["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
+        "selection": (tuned["selection_sha256"], digest_file(report_path.parent / "presidio-tuned-selection.json")),
+        **{f"tuned_presidio/{name}": (tuned["code_sha256"][name], digest_file(here / "tuned_presidio" / name))
+           for name in TUNED_CODE},
+    }
+    for name, (recorded, current) in expected.items():
+        if recorded != current:
+            raise ValueError(f"{name} changed; rerun tuned_presidio/tune.py measure")
+    if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:
+        raise ValueError("tuned Presidio needs a clean harness and the reproduced presidio-all anchor")
+    for name, provenance in tuned["provenance"].items():
+        live = provenance.get("live_verification", {"identical": True})
+        if not (live or {}).get("identical"):
+            raise ValueError(f"{name} was not verified live against its replay")
+
+
+def _gaze_release_c(history_path: Path) -> tuple[str, dict[str, dict[str, float]]]:
+    """Latest tagged Gaze release on layer C: leaked and false-positive bytes per contract, v3 F2."""
+    import render_benchmark_doc as history_doc
+
+    history = history_doc.load_history(history_path)
+    entry = [e for e in history["releases"] if not e.get("provisional")][-1]
+    arm = history_doc.shipped_default_arm(entry)
+    cells = {}
+    for version in (3, 2, 1):
+        view = history_doc.contract_view(entry, version)
+        if view is not None:
+            cells[f"v{version}"] = {"leaked": view["arms"][arm]["surviving_pii_utf8_bytes"],
+                                    "fp": view["arms"][arm]["false_positive_utf8_bytes"]}
+    char = json.loads((history_path.parent / "release-char-level.json").read_text(encoding="utf-8"))
+    cells["v3"]["f2"] = char["releases"][entry["version"]]["char_level"]["f2"]
+    return entry["version"], cells
+
+
+def _fp(cell: dict[str, object]) -> int:
+    after = cell.get("false_positive_bytes_after_gold_gap")
+    return cell["false_positive_bytes"] if after is None else after
+
+
+def render_tuned(tuned: dict[str, object], report: dict[str, object], history_path: Path) -> list[str]:
+    selection = json.loads((history_path.parent / "presidio-tuned-selection.json").read_text(encoding="utf-8"))
+    rows = tuned["rows"]
+    authors = tuned["provenance"]["presidio-tuned-presidio-research"]
+    coverage = authors["coverage"]
+    budget = tuned["budget"]
+    validation_docs = sum(budget["validation_documents"].values())
+    lines = [
+        "", "## Tuned Presidio", "",
+        "Three more Presidio rows on the same documents, contracts and scorer as above. "
+        "Every number in this section names its split; test-half numbers are the comparison.",
+        "",
+        f"- **Tuned by its authors:** Presidio Research's own tuned setup for its corpus ({authors['setup']}; "
+        f"[notebook]({authors['source']})), applied unchanged. It supports English only, so every document "
+        "is analyzed as English. Its entities without a label in this corpus: "
+        f"{', '.join(coverage['entities_without_a_corpus_label'])}. Scored labels here that none of its "
+        f"entities maps to: {', '.join(coverage['corpus_labels_without_an_entity'])}. Labels affect only the "
+        "typed metrics; leaked and false-positive bytes ignore them.",
+        "- **Tuned for this corpus:** a search over a space declared in code before any run "
+        "([`space.py`](../../../scripts/bench/compare/tuned_presidio/space.py)): the NLP-engine NER "
+        "(spaCy large, `dslim/bert-base-NER` or none), extra NER recognizers Presidio ships (the multilingual "
+        "Davlan model Gaze itself installs, the OpenMed PII model Presidio Research chose, GLiNER), every "
+        f"predefined recognizer, {len(TUNED_CUSTOM)} custom pattern and deny-list recognizers for this "
+        "corpus's classes, per recognizer and entity thresholds, the context enhancer and an allow list learned "
+        "from validation false positives. Selection read the validation half only "
+        f"({validation_docs:,} documents; a guard test fails if it opens a test-half record) and evaluated "
+        f"{budget['candidates_evaluated']:,} candidate configurations by coordinate descent. Two objectives: "
+        "the comparison's own rule (fewest validation v3 leaked bytes, then fewest false-positive bytes) and "
+        "the panels' headline (highest validation v3 character F2).",
+        f"- **Budget:** Gaze's rules received {budget['gaze_rulepack_commits']} rulepack commits "
+        f"({budget['first']} to {budget['last']}), made with the whole corpus visible, test half included. "
+        "The tuned Presidio search is at least as generous in iterations: "
+        f"{budget['candidates_evaluated']:,} measured candidates against {budget['gaze_rulepack_commits']} "
+        "measured rule changes, over a hand-written recognizer for every class Gaze commits to. It saw the "
+        "validation half only, so its test-half numbers are held out while Gaze's are not.",
+        "",
+        "Validation choice (v3, C/A/D/R summed):", "",
+        *table_header([("Objective", False), ("Start", False), ("Leaked B", True), ("FP B", True),
+                       ("Char F2", True), ("Chosen", False)]),
+    ]
+    for objective, choice in selection["choices"].items():
+        for start, final in choice["finals"].items():
+            value = final["validation"]
+            lines.append(f"| {objective} | {start} | {value['leaked_bytes']:,} | {value['false_positive_bytes']:,} | "
+                         f"{value['char_f2']:.3f} | {'yes' if start == choice['start'] else ''} |")
+    lines.extend(["", "Chosen configurations:", ""])
+    for objective, choice in selection["choices"].items():
+        config = choice["finals"][choice["start"]]["config"]
+        units = sorted(unit for unit, scope in config["scope"].items() if scope != "off")
+        extras = ", ".join(f"{key} {scope}" for key, scope in config["extra"].items())
+        raised = sum(1 for value in config["thresholds"].values() if value > 0)
+        lines.append(
+            f"- **{objective}:** NLP-engine NER {config['artifact_ner']}; extra NER {extras}; context "
+            f"{config['context']}; {len(units)} pattern recognizers on; {raised} raised thresholds; allow list "
+            f"of {len(config['allow_list']):,} texts. Full configuration in "
+            "[`presidio-tuned-selection.json`](presidio-tuned-selection.json).")
+    lines.extend([
+        "", "Test half (product coverage):", "",
+        *table_header([("Contract", False), ("Layer", False), ("Configuration", False), ("Leaked B", True),
+                       ("FP B", True), ("Char F2", True), ("Entity F2", True)]),
+    ])
+    names = [*TUNED_LABELS, *TUNED_BASELINES]
+    for version in ("v3", "v2", "v1"):
+        for layer in report["corpus"]["layers"]:
+            for name in names:
+                source = rows[name] if name in rows else report["tools"][name]
+                test = source["contracts"][version][layer]["metrics"]["product_coverage"]["test"]
+                lines.append(
+                    f"| {version} | {layer_display_name(layer)} | {TUNED_LABELS.get(name, name)} | "
+                    f"{test['leaked_bytes']:,} | {test['false_positive_bytes']:,} | "
+                    f"{test['char_level']['f2']:.3f} | {test['typed_entities']['f2']:.3f} |")
+    version, gaze = _gaze_release_c(history_path)
+    lines.extend([
+        "", f"Against the latest Gaze release ({version}) on all of {layer_display_name('C')}, the only layer "
+        "that release was measured on in this corpus's form. The tuned-here rows include the validation half "
+        "they were selected on, which can only flatter them. False positives are after v3's gold-gap credit.", "",
+        *table_header([("Contract", False), ("Configuration", False), ("Leaked B", True), ("FP B", True),
+                       ("Char F2", True)]),
+    ])
+    wins = []
+    for contract, cell in gaze.items():
+        lines.append(f"| {contract} | Gaze {version} | {cell['leaked']:,} | {cell['fp']:,} | "
+                     + (f"{cell['f2']:.3f} |" if "f2" in cell else "n/a |"))
+        for name, label in TUNED_LABELS.items():
+            full = rows[name]["contracts"][contract]["C"]
+            f2 = full["metrics"]["product_coverage"]["full"]["char_level"]["f2"]
+            lines.append(f"| {contract} | {label} | {full['leaked_bytes']:,} | {_fp(full):,} | "
+                         + (f"{f2:.3f} |" if contract == "v3" else "n/a |"))
+            if full["leaked_bytes"] < cell["leaked"]:
+                wins.append(f"{label} leaks fewer {contract} bytes")
+            if _fp(full) < cell["fp"]:
+                wins.append(f"{label} has fewer {contract} false-positive bytes")
+            if contract == "v3" and f2 > cell["f2"]:
+                wins.append(f"{label} has the higher v3 character F2")
+    lines.extend(["", "Where tuned Presidio beats Gaze " + version + " here: "
+                  + ("; ".join(wins) if wins else "nowhere") + ".", "",
+                  f"The panels' Presidio bar is **{TUNED_LABELS[tuned['chart']['row']]}**, the highest "
+                  "test-half v3 layer C character F2 of the three: "
+                  + ", ".join(f"{TUNED_LABELS[n]} {v:.3f}" for n, v in tuned["chart"]["test_f2"].items())
+                  + ". The default rows above stay unchanged.",
+                  "", f"Aggregate source: [`{TUNED_NAME}`]({TUNED_NAME}); reproduce with "
+                  "[`tuned_presidio/README.md`](../../../scripts/bench/compare/tuned_presidio/README.md)."])
+    return lines
 
 
 def main() -> None:
@@ -343,7 +511,12 @@ def main() -> None:
     args = parser.parse_args()
     report = json.loads(args.report.read_text(encoding="utf-8"))
     validate_current(report)
-    page = render(report, args.report.name)
+    tuned_path = args.report.with_name(TUNED_NAME)
+    tuned = None
+    if tuned_path.exists():
+        tuned = json.loads(tuned_path.read_text(encoding="utf-8"))
+        validate_tuned(tuned, args.report)
+    page = render(report, args.report.name, tuned, args.report.with_name("release-history.json"))
     if args.check:
         if args.page.read_text(encoding="utf-8") != page:
             raise ValueError("competitor page is stale; rerender it")

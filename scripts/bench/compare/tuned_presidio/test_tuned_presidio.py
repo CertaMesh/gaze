@@ -230,5 +230,33 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(result["mismatches"], ["v2/A/leaked_bytes: 6 != 5"])
 
 
+class ChartBarTest(unittest.TestCase):
+    def test_own_panel_presidio_bar_becomes_the_chosen_tuned_row(self) -> None:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+        import benchmark_charts as charts
+
+        def cell(f2: float, leaked: int) -> dict:
+            return {"false_positive_bytes_after_gold_gap": 10, "false_positive_bytes": 12, "skipped_documents": 0,
+                    "metrics": {"product_coverage": {"full": {
+                        "char_level": {"f2": f2}, "leaked_bytes": leaked, "false_positive_bytes": 12,
+                        "total_bytes": 1000}}}}
+        comparison = {
+            "corpus": {"layers": {"C": {"documents": 4}}},
+            "heldout_split": {"layers": {"C": {"validation": {}, "test": {}}}},
+            "tools": {"presidio-strong": {"contracts": {"v3": {"C": cell(0.5, 90)}}},
+                      "gliner": {"contracts": {"v3": {"C": cell(0.6, 80)}}}},
+            "presidio_tuned": {"chart": {"row": "presidio-tuned-own-f2"},
+                               "rows": {"presidio-tuned-own-f2": {"contracts": {"v3": {"C": cell(0.7, 40)}}}}},
+        }
+        panel = charts.own_panel([], comparison, {"presidio": "presidio-strong", "gliner": "gliner"}, "C")
+        presidio, gliner = panel.bars
+        self.assertEqual((presidio.name, presidio.column, presidio.f2, presidio.leaked),
+                         ("Presidio (tuned)", "Presidio", 0.7, 40))
+        self.assertEqual((gliner.name, gliner.f2), ("GLiNER", 0.6))
+        self.assertIn("validation half", panel.caption)
+        del comparison["presidio_tuned"]
+        self.assertEqual(charts.own_panel([], comparison, {"presidio": "presidio-strong"}, "C").bars[0].f2, 0.5)
+
+
 if __name__ == "__main__":
     unittest.main()

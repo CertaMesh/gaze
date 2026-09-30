@@ -42,6 +42,8 @@ BENCH_DIR = REPO_ROOT / "docs" / "reference" / "benchmarks"
 DEFAULT_DOC = BENCH_DIR / "README.md"
 DEFAULT_HISTORY = BENCH_DIR / "release-history.json"
 DEFAULT_COMPARISON = BENCH_DIR / "comparison.json"
+#: Tuned Presidio rows beside the comparison (scripts/bench/compare/tuned_presidio).
+TUNED_PRESIDIO_NAME = "presidio-tuned.json"
 DEFAULT_README = REPO_ROOT / "README.md"
 CHART_ASSETS = Path("docs") / "assets" / "benchmarks"
 RELEASE_CHAR_LEVEL = BENCH_DIR / "release-char-level.json"
@@ -1583,6 +1585,29 @@ def chart_panels(
         raise RenderError(f"benchmark panels: {error}") from error
 
 
+def attach_presidio_tuned(comparison: Mapping[str, Any], comparison_path: Path) -> Mapping[str, Any]:
+    """The comparison plus `presidio-tuned.json` when it sits beside it and is sound.
+
+    The tuned report must name these exact comparison bytes, reproduce the
+    comparison's presidio-all row from its own records, and have run each chosen
+    configuration live with output identical to the replay it scores.
+    """
+    path = comparison_path.parent / TUNED_PRESIDIO_NAME
+    if not path.exists():
+        return comparison
+    tuned = json.loads(path.read_text(encoding="utf-8"))
+    if tuned["comparison_sha256"] != _sha256(comparison_path):
+        raise RenderError(f"{TUNED_PRESIDIO_NAME} was measured beside a different comparison.json")
+    if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:
+        raise RenderError(f"{TUNED_PRESIDIO_NAME} needs a clean harness and a reproduced presidio-all anchor")
+    for name, provenance in tuned["provenance"].items():
+        if "live_verification" in provenance and not (provenance["live_verification"] or {}).get("identical"):
+            raise RenderError(f"{TUNED_PRESIDIO_NAME}: {name} was not verified live")
+    if tuned["chart"]["row"] not in tuned["rows"] or tuned["chart"]["row"] not in charts.TUNED_CAPTIONS:
+        raise RenderError(f"{TUNED_PRESIDIO_NAME}: unknown chart row {tuned['chart']['row']}")
+    return {**comparison, "presidio_tuned": tuned}
+
+
 def chart_files(
     history: Mapping[str, Any], comparison: Mapping[str, Any], their: Mapping[str, Any]
 ) -> dict[str, str]:
@@ -1698,6 +1723,10 @@ def _source_lines(
         "[`chart-configs.json`](../../../scripts/bench/compare/chart-configs.json), chosen "
         "before results were reviewed; full versions and settings are in "
         "[`competitors.md`](competitors.md)."
+        + (" On the own corpus the Presidio bar is instead the best tuned Presidio row from "
+           "[`presidio-tuned.json`](presidio-tuned.json) (selection and every tuned number in "
+           "[`competitors.md`](competitors.md#tuned-presidio))."
+           if comparison.get("presidio_tuned") else "")
     )
     lines.append(f"- **Metric:** {charts.METRIC_DEFINITION}")
     lines.append(f"- **False positives:** {charts.FP_NOTE}")
@@ -2294,6 +2323,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             comparison_path = DEFAULT_COMPARISON
         comparison = (json.loads(comparison_path.read_text(encoding="utf-8"))
                       if comparison_path else None)
+        if comparison is not None:
+            comparison = attach_presidio_tuned(comparison, comparison_path)
         if comparison is not None:
             targets[0] = (args.doc, BLOCK_NAMES + PANEL_BLOCK_NAMES)
         outputs = []
