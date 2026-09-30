@@ -438,6 +438,8 @@ def main() -> None:
     repo_sha = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=repo, text=True
     ).strip()
+    with args.binary.open("rb") as binary_file:
+        binary_sha256 = hashlib.file_digest(binary_file, "sha256").hexdigest()
     known_pool: dict[str, list[str]] = {}
     common_words = common_name_words(repo)
     for document in [*layers["C"], *layers["A"]]:
@@ -459,6 +461,7 @@ def main() -> None:
         "full": args.max_documents is None,
         "source_commit": repo_sha,
         "binary_source_commit": args.binary_source_commit or repo_sha,
+        "binary_sha256": binary_sha256,
         "policy_sha256": hashlib.sha256(policy_path.read_bytes()).hexdigest(),
         "dataset_sha256": dataiku.DATASET_SHA256,
         "agentic_manifest": agentic.manifest(agentic.PUBLISHED_PARTITION, agentic.generate(agentic.PUBLISHED_PARTITION)),

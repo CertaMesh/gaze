@@ -19,7 +19,8 @@ def arm(contract: str) -> dict:
     return {
         "contract": contract, "full": True,
         "record_match_kinds_mode": "shipping_defaults",
-        "source_commit": "source", "binary_source_commit": "source", "policy_sha256": "policy",
+        "source_commit": "source", "binary_source_commit": "source",
+        "binary_sha256": "candidate-binary", "policy_sha256": "policy",
         "dataset_sha256": "data", "kind_cells_manifest": {"pairs": 1},
         "layers": {
             layer: {
@@ -35,6 +36,7 @@ def main_arm(candidate: dict) -> dict:
     value = copy.deepcopy(candidate)
     value["record_match_kinds_mode"] = "baseline_only"
     value["binary_source_commit"] = "main"
+    value["binary_sha256"] = "main-binary"
     for layer in value["layers"].values():
         del layer["with_record"]
     return value
@@ -97,3 +99,15 @@ def test_shipping_gate_requires_exact_no_record_main_parity() -> None:
     result = shipping.gate(v2, v1, main_v2, main_v1)
     assert not result["contracts"]["v2"]["layers"]["K"]["no_record_matches_main"]
     assert not result["pass"]
+
+
+def test_shipping_gate_rejects_binary_change_between_contracts() -> None:
+    v2, v1 = arm("v2"), arm("v1")
+    main_v2, main_v1 = main_arm(v2), main_arm(v1)
+    main_v1["binary_sha256"] = "different"
+    try:
+        shipping.gate(v2, v1, main_v2, main_v1)
+    except ValueError as error:
+        assert "main binary differs" in str(error)
+    else:
+        raise AssertionError("mixed main binaries passed the shipping gate")

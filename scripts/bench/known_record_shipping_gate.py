@@ -85,8 +85,12 @@ def gate(v2: dict, v1: dict, main_v2: dict, main_v1: dict) -> dict:
     for key in ("source_commit", "policy_sha256", "dataset_sha256", "kind_cells_manifest"):
         if v2.get(key) != v1.get(key):
             raise ValueError(f"oracle arms differ in {key}")
+    if not v2.get("binary_sha256") or v2["binary_sha256"] != v1.get("binary_sha256"):
+        raise ValueError("candidate binary differs across contracts")
     if not main_v2.get("binary_source_commit") or main_v2["binary_source_commit"] != main_v1.get("binary_source_commit"):
         raise ValueError("main binary commit differs across contracts")
+    if not main_v2.get("binary_sha256") or main_v2["binary_sha256"] != main_v1.get("binary_sha256"):
+        raise ValueError("main binary differs across contracts")
 
     results = {}
     for contract, arm in arms.items():
@@ -166,7 +170,9 @@ def gate(v2: dict, v1: dict, main_v2: dict, main_v1: dict) -> dict:
     return {
         "schema_version": 1,
         "source_commit": v2["source_commit"],
+        "candidate_binary_sha256": v2["binary_sha256"],
         "main_binary_source_commit": main_v2["binary_source_commit"],
+        "main_binary_sha256": main_v2["binary_sha256"],
         "policy_sha256": v2["policy_sha256"],
         "dataset_sha256": v2["dataset_sha256"],
         "class_kind_rows": class_kind_rows(arms),
