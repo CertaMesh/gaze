@@ -13,6 +13,7 @@ here=scripts/bench/compare/theirbench
 : "${THEIRBENCH_PIIBENCH:?set THEIRBENCH_PIIBENCH to the pii-bench checkout}"
 : "${THEIRBENCH_PIIBENCH_DATA:?set THEIRBENCH_PIIBENCH_DATA to piibench_commercial.py --output-dir}"
 : "${THEIRBENCH_OPENMED:?set THEIRBENCH_OPENMED to the pinned OpenMed snapshot}"
+: "${THEIRBENCH_PII_TRACE:?set THEIRBENCH_PII_TRACE to data/train.parquet of perplexity-ai/PII-TRACE at the pinned revision}"
 out="${THEIRBENCH_OUT:-target/bench-data/theirbench}"
 mkdir -p "$out"
 
@@ -39,7 +40,19 @@ PYTHONPATH="$THEIRBENCH_PR_CUSTOM_CHECKOUT" "$THEIRBENCH_VENDOR_PYTHON" "$here/p
     --piibench-data "$THEIRBENCH_PIIBENCH_DATA" \
     --predictions-dir "$out/pred-piibench-commercial" --output "$out/piibench-commercial.json" "$@"
 
+"$THEIRBENCH_COMPARE_PYTHON" "$here/theirbench.py" --benchmark pii-trace \
+    --pii-trace-data "$THEIRBENCH_PII_TRACE" \
+    --predictions-dir "$out/pred-pii-trace" --output "$out/pii-trace.json" "$@"
+
 own=()
+for prediction in "$out"/pred-pii-trace/*.test.jsonl; do
+    system="$(basename "$prediction" .test.jsonl)"
+    family="$("$THEIRBENCH_COMPARE_PYTHON" -c 'import sys; sys.path.insert(0, sys.argv[1]); import theirbench; print(theirbench.tool_family(sys.argv[2]))' "$here" "$system")"
+    "$THEIRBENCH_COMPARE_PYTHON" "$here/pii_trace_repro.py" --data "$THEIRBENCH_PII_TRACE" \
+        --predictions "$prediction" --labels "$out/pred-pii-trace/labels.$family.json" \
+        --system "$system" --output "$out/own-pii-trace-$system.json"
+    own+=(--own "pii-trace=$out/own-pii-trace-$system.json")
+done
 for prediction in "$out"/pred-presidio-research/*.test.jsonl; do
     system="$(basename "$prediction" .test.jsonl)"
     family="$("$THEIRBENCH_COMPARE_PYTHON" -c 'import sys; sys.path.insert(0, sys.argv[1]); import theirbench; print(theirbench.tool_family(sys.argv[2]))' "$here" "$system")"
@@ -59,8 +72,10 @@ for prediction in "$out"/pred-piibench-commercial/*.test.jsonl; do
 done
 
 "$THEIRBENCH_COMPARE_PYTHON" "$here/render_theirbench.py" assemble \
-    --report "$out/presidio-research.json" --report "$out/piibench-commercial.json" "${own[@]}" \
+    --report "$out/presidio-research.json" --report "$out/piibench-commercial.json" \
+    --report "$out/pii-trace.json" "${own[@]}" \
     --reproduction "presidio-research=$out/presidio-research-repro.json" \
     --reproduction "piibench-commercial=$out/piibench-repro.json" \
+    --reproduction "pii-trace=$out/own-pii-trace-pii-tracer.json" \
     --historical "$out/historical-vanilla.json" --historical "$out/historical-custom.json"
 "$THEIRBENCH_COMPARE_PYTHON" "$here/render_theirbench.py" render

@@ -768,7 +768,25 @@ in [`scripts/bench/compare/theirbench/`](../../../scripts/bench/compare/theirben
 
 <!-- BEGIN GENERATED: their-benchmarks -->
 
-Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Both sets are English only, so Presidio's three language configurations give identical rows.
+Report-only: these sets are never used to design or tune Gaze rules. Every gold label counts (no scored-label contract). Leaked and false-positive bytes use the same scorer code as the main comparison; each benchmark's own metric comes from its own evaluator, fed the same spans. Lower leaked bytes is better. The table lists every measured competitor row and every tagged Gaze release; untagged builds are not shown. No latency is published here: the machine was shared during these runs, and per-row foreign-CPU samples are kept in their-benchmarks.json. Competitor rows use the main comparison's configurations; Presidio's default rows keep score threshold 0.0, so they differ from the notebook's vanilla configuration (threshold 0.4). Every set here is English only, so Presidio's three language configurations give identical rows.
+
+#### PII-TRACE public subset (500 English conversations, 4,500 messages)
+
+- Perplexity publishes no number for this subset: its paper reports the 1,922-document, 13-language test split, which is not public, so no vendor figure is reproduced. The bar here is PII-Tracer, the vendor's own tuned model: character F1 0.974, exact typed micro F1 0.726.
+- All 2,653 gold spans sit in user messages; assistant messages have none, so a detection there is a false positive. The paper says PII-Tracer's training data shares production traffic with PII-TRACE and the subset carries no split label, so overlap with its training data cannot be ruled out; treat that row as an upper bound, not a clean holdout.
+- Gaze and the other tools are not yet measured on this set; the table holds only the vendor's own model until they are.
+
+Gold PII bytes: 55,580. Common-intersection labels: account_number, private_address, private_date, private_email, private_phone, private_url.
+
+| Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (character F1, label-agnostic, the paper's metric) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| pii-tracer | 1,083 | 1,871 | 8.7% | held (typed-metric review) | held (typed-metric review) | 702 | 0.974 |
+
+Gaze v0.15.1: not yet measured on this set, so no Gaze row is shown.
+
+Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
+
+Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `2571ac37`, typed metrics rescored with `2571ac37`; harness `abcfeafc`.
 
 #### PIIBench-commercial (four permissively licensed PIIBench sources, test_5k)
 
@@ -844,6 +862,7 @@ Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, 
 
 Not run:
 
+- PII-TRACE full set (13,148 conversations, 13 languages, 1,922-document test split): not public; only the 500-conversation English subset is, and it is what runs here.
 - PIIBench full ten-source mix: five sources carry non-commercial or custom-academic licences and WikiANN's licence is unknown; not downloaded or run.
 - ai4privacy/pii-masking-300k (OPF's published set): custom licence; commercial use requires a licence from ai4privacy; not downloaded or run.
 
@@ -1168,8 +1187,20 @@ model:
   prose, log fields, CSV columns and tool JSON. The whole number is gold,
   prefix included. Layer D adds each shape's benign neighbours with no phone
   label anywhere. See [Phone shapes](#phone-shapes) below. The v6 documents
-  remain byte identical within each partition; the generator and both
-  partition hashes are pinned at v7.
+  remain byte identical within each partition.
+- **Cued ages, birth dates, short cards and postcodes (generator v8):** layer A
+  adds values that only their wording makes personal: a person's age after
+  `turned`, `at the age of` or `im Alter von`, before `geworden`, `y/o` or
+  `year old female`; a date of birth given one sentence after the question
+  (`date of birth? It's ...`); a 12- to 15-digit Maestro-length card number
+  right after a card label; and postcodes in short or foreign shapes
+  (`NNN NN`, `NN-NNN`, six digits, `NNNNN-NNN`, three digits) right after a
+  postal label, in prose, log fields, CSV columns and tool JSON. The value
+  alone is gold. Layer D adds the same wording and digit shapes where the text
+  says they are not personal. See [Cued ages, birth dates, short cards and
+  postcodes](#cued-ages-birth-dates-short-cards-and-postcodes) below. The v7
+  documents remain byte identical within each partition; the generator and
+  both partition hashes are pinned at v8.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1399,6 +1430,82 @@ The past-release rows in [Measured adjacency layer history](#measured-adjacency-
 do not include these cells yet; the note under that table says, row by row,
 where each one's v7 re-measure stands.
 
+#### Cued ages, birth dates, short cards and postcodes
+
+Some values are personal only because of the words around them. `47` is an
+age in `I just turned 47` and nothing in `the bridge turned 47`; `3/11/1987`
+is a birth date when it answers `date of birth?` one sentence earlier; a
+12-digit number is a Maestro card after `card number` and an order number
+after `Order`; `53-320` is a Polish postcode after `PLZ` and an error code
+after `error`. The shipped rules miss all of these: `age.cue` needs a labelled
+field, a copula or a person noun right before the number, `birth_date.cue`
+stops at the sentence break, `card.cued` accepts 16 to 19 digits (14 to 15
+starting with 3), and `postal.cued_four_digit` takes four digits only. Layer A
+(`CueCell` in `agentic_layers.py`) scores the number, date, card or postcode
+alone under `AGE`, `DATEOFBIRTH`, `CREDITCARDNUMBER` or `ZIPCODE`.
+
+| Layer A cells (gold, gated) | Layer D twins (not personal) |
+| --- | --- |
+| A person's age after `turned` or before `geworden`, in prose and a log note | an object's age after `turned` or before `geworden`, a person who turned 45 or 90 degrees |
+| after `at the age of` or `im Alter von`, in prose and a JSON note | a felled oak's, a bottled whisky's or a wine's age, a firm or a bridge `, at the age of N,` |
+| before `y/o`, in prose and a CSV note | `My 12 y/o laptop` |
+| before `year old female` / `year old male`, in prose and a JSON note | a year-old codebase or building, a year-old female cat or male horse |
+| a date given as the answer one sentence after a date-of-birth question (`It's`, `It is`, `Es ist der`, `Das ist der`), in prose and a log transcript | a date after an unrelated sentence that follows the question (`Last login was ...`, `The form closes ...`) |
+| 12 to 15 digits with a Maestro issuer prefix, compact or grouped 4-4-4, right after a card label, a card log key, a card JSON key or under a card column | the same digits after an order, tracking, transaction or reference label, 13-digit millisecond timestamps, a card terminal or reader serial |
+| `NNN NN`, `NN-NNN`, six digits, `NNNNN-NNN` and three digits right after `ZIP`, `postcode`, `PLZ`, `Postleitzahl`, `CEP`, a postal JSON key or under a postal column | the same shapes after batch, seat, room, gate, error, part, invoice or build labels, and one clause after a postal word (`Postcode lookup failed for batch ...`, `ZIP upload finished in ... seconds`) |
+
+The generator fails closed unless every layer A value reads as personal under
+`cue_reading`, a reference reading written into the harness (a person word in
+the sentence and no unit or object noun after the age; the sentence-break
+copula; a card or postal label directly before the value or as its CSV
+column's header), and no layer D value does. A near-cue twin must carry its
+card or postal word, and every other card or postal twin none; the three-digit shape has only its near-cue twin, since
+three-digit room, seat and version numbers already fill layer D. Card cells
+alternate Luhn-valid and Luhn-failing values; contract v2 credits the failing
+ones as it does every card, and the card twins join the card credit guard, so
+a false-positive rise on them fails the gate outright. That guard applies to
+scorecards measured on generator v8 or later. Ages are split between the
+partitions (19 to 56 dev, 57 to 94 test) but cannot avoid the dev partition's
+one- and two-digit house numbers. Each A cell has 6 documents per partition
+and each twin 4: 25 A cells (+150 documents, +5.6 %) and 25 D twins (+100
+documents, +9.7 %).
+
+Each shape has an over-broad rule (`CUE_BROAD_PATTERNS`: the wording or the
+digit shape alone) and a narrow one (`CUE_NARROW_PATTERNS`: a person word
+anywhere before `turned` or `y/o`, `at the age of` before a person-range age
+with no subject check, `year old female` with no check for an animal, any three
+words between the date-of-birth question and the date, the card issuer prefix
+and length with no cue, a postal word within 40 non-digit characters). Every A
+value of a shape matches both, every twin of the shape matches its broad rule,
+and every narrow rule reaches at least one same-shape twin; tests check this
+and pin how many layer D documents each narrow rule reaches. Extending `card.cued`'s
+32-character window to these lengths would reach the card-terminal twins; a
+test pins that too. The patterns are committed as
+[`mutant-broad-cued-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-broad-cued-shapes.toml)
+and
+[`mutant-narrow-cued-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-narrow-cued-shapes.toml).
+Appended to the setup policy without its NER and Nym sections (`d675b3bb`), on
+generator v8 at `9ccc898c`, the broad mutant lowered the new cells' layer A
+leak from 861 to 0 bytes and raised their twins' layer D false positives from
+40 to 1,279 bytes; the narrow mutant also lowered the leak to 0 and raised the
+false positives to 1,341 bytes. Every shape's twins paid under both, the
+narrow rules included (`at the age of` 0 to 188, `turned` 0 to 48, `y/o` 0 to
+36, `year old female` 0 to 64, the sentence-break date 0 to 146, compact and
+grouped cards 0 to 103 and 0 to 112, the five postcode shapes to 84 to 156
+each, from 0 or, for the Brazilian shape, 40).
+Rules only (`rule-floor-extended`), main leaked 891 of the 1,003 new gold bytes
+and put no false positives on the twins; with the setup policy's rules it
+leaked 861 and put 40 on the Brazilian-shape twins (the five-digit US and
+German rules take their first five digits). Under the full `gaze setup` policy
+(NER and Nym), main leaked 781 of those 1,003 bytes and put 88 false-positive
+bytes on the twins. Every age, sentence-break date, grouped card, Luhn-failing
+or 12-digit compact card and short postcode leaked; the Luhn-valid 13- to
+15-digit cards were already protected by `card.structural`.
+
+The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
+do not include these cells yet; the note under that table says, row by row,
+where each one's v8 re-measure stands.
+
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split
 into a `dev` and a `test` partition before anything is generated. Machine keys
@@ -1605,19 +1712,20 @@ These are layers A, D and R only, measured by the current harness against each r
 
 <!-- END GENERATED: agentic-adjacency-v4 -->
 
-**Re-measure status on generator v7.** Every row above was measured on
+**Re-measure status on generator v8.** Every row above was measured on
 generator v4 and stays bound to that corpus by hash; none has been re-measured
-on the v5 to v7 cells yet (labelled lookalikes, address blocks, phone shapes).
-Nothing blocks any of them: each tag builds its own `clean_for_bench` and ships
-a layer-A-capable arm. The re-measure runs as one queued bench job after the
-v7 harness merges, `agentic_layers.py measure` with each release's own binary
-and arm, then `render_agentic_adjacency_doc.py --record`:
+on the v5 to v8 cells yet (labelled lookalikes, address blocks, phone shapes,
+cued ages, birth dates, short cards and postcodes). Nothing blocks any of
+them: each tag builds its own `clean_for_bench` and ships a layer-A-capable
+arm. The re-measure runs as one queued bench job, `agentic_layers.py measure`
+with each release's own binary and arm, then
+`render_agentic_adjacency_doc.py --record`:
 
-- `v0.15.1` `policy-file`: not yet re-measured on v7; queued.
-- `v0.15.0` `policy-file`: not yet re-measured on v7; queued.
-- `v0.14.0` `full-stack-kiji-resolve`: not yet re-measured on v7; queued, with
+- `v0.15.1` `policy-file`: not yet re-measured on v8; queued.
+- `v0.15.0` `policy-file`: not yet re-measured on v8; queued.
+- `v0.14.0` `full-stack-kiji-resolve`: not yet re-measured on v8; queued, with
   `--manifest-actions tokenize --split-composite-source-ids`.
-- `v0.14.0` `pass2-ner`: not yet re-measured on v7; queued, with the same
+- `v0.14.0` `pass2-ner`: not yet re-measured on v8; queued, with the same
   v0.14.0 flags.
 
 ### Hardware spec template

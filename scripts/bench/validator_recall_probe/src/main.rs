@@ -304,6 +304,8 @@ fn empty_context() -> Context {
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: std::collections::HashMap::new(),
+        record_value_rejections: Vec::new(),
     }
 }
 
