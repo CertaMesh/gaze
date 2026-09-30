@@ -464,16 +464,17 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
         "Davlan model Gaze itself installs, the OpenMed PII model Presidio Research chose, GLiNER), every "
         f"predefined recognizer, {len(TUNED_CUSTOM)} custom pattern and deny-list recognizers for this "
         "corpus's classes, per recognizer and entity thresholds, the context enhancer and an allow list learned "
-        "from validation false positives. Selection read the validation half only "
-        f"({validation_docs:,} documents; a guard test runs the real loader with every test-half file "
-        "unreadable) and evaluated "
+        "from validation false positives. The search scored only the validation half "
+        f"({validation_docs:,} documents) and evaluated "
         f"{budget['candidates_evaluated']:,} candidate configurations by coordinate descent. Two objectives: "
         "the comparison's own rule (fewest validation v3 leaked bytes, then fewest false-positive bytes) and "
         "the panels' headline (highest validation v3 character F2). The custom recognizers were written "
         "after reading validation-half gold examples; the search never received test-half text, gold or "
         "output. The committed choice was made by an earlier loader that built the whole corpus in memory "
         "and dropped the test half before the search; rerunning selection through per-half files, with the "
-        "test-half file never opened, reproduces every choice and validation score. The NER models' training data is not fully published, so overlap with this "
+        "test-half file never opened, reproduces every choice and validation score. A guard test runs "
+        "the current real loader with every test-half file unreadable. The NER models' training data "
+        "is not fully published, so overlap with this "
         "synthetic corpus's style cannot be ruled out for them (nor for the NER model in Gaze's own setup). "
         "Both halves are synthetic and share their generators, and the split holds out document ids only, "
         "not templates or values: "
@@ -488,7 +489,7 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
         f"{budget['candidates_evaluated']:,} measured candidate configurations against "
         f"{budget['gaze_rulepack_commits']} rulepack commits, on top of a hand-written recognizer for the "
         "classes Gaze commits to. It saw the "
-        "validation half only, so its test-half documents are held out, by id, while Gaze's are not.",
+        "validation half only during scoring, so its test-half documents are held out, by id, while Gaze's are not.",
         "",
         "Validation choice (v3, C/A/D/R summed):", "",
         *table_header([("Objective", False), ("Start", False), ("Leaked B", True), ("FP B", True),
