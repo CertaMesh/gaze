@@ -138,16 +138,26 @@ fn first_match<E>(
     probe: &impl Fn(&RuleEntry, &PiiClass) -> Result<Option<Action>, E>,
     class: &PiiClass,
 ) -> Result<FirstMatch, E> {
-    for rule in rules {
-        if let Some(action) = probe(rule, class)? {
-            return Ok(if rule.is_default() {
-                FirstMatch::Default(action)
-            } else {
-                FirstMatch::Explicit(action)
-            });
+    Ok(
+        match first_matching_action(rules, |rule| probe(rule, class))? {
+            Some((index, action)) if rules[index].is_default() => FirstMatch::Default(action),
+            Some((_, action)) => FirstMatch::Explicit(action),
+            None => FirstMatch::NoRule,
+        },
+    )
+}
+
+/// First matching action and its rule index, shared by runtime and policy preflight.
+pub fn first_matching_action<R, E>(
+    rules: &[R],
+    probe: impl Fn(&R) -> Result<Option<Action>, E>,
+) -> Result<Option<(usize, Action)>, E> {
+    for (index, rule) in rules.iter().enumerate() {
+        if let Some(action) = probe(rule)? {
+            return Ok(Some((index, action)));
         }
     }
-    Ok(FirstMatch::NoRule)
+    Ok(None)
 }
 
 /// A policy action together with how it was chosen.

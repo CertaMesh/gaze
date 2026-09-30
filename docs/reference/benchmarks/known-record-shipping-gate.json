@@ -1,0 +1,1334 @@
+{
+  "candidate_binary_sha256": "d9913ab545a79f712b0100fc675f46bc92ed9d574719524a9589777cf7138b89",
+  "class_kind_rows": [
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 352
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 8,
+              "leaked_gold_bytes_fall": 248
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 99,
+              "false_positive_bytes_rise": 99,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 107,
+          "total_leaked_gold_bytes_fall": 600
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 352
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 8,
+              "leaked_gold_bytes_fall": 248
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 99,
+              "false_positive_bytes_rise": 99,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 107,
+          "total_leaked_gold_bytes_fall": 600
+        }
+      },
+      "match_kind": "exact",
+      "record_class": "custom:credit_card"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 88
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 88
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 88
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 88
+        }
+      },
+      "match_kind": "whitespace_flexible",
+      "record_class": "custom:credit_card"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 196
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 22,
+              "false_positive_bytes_rise": 22,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 22,
+          "total_leaked_gold_bytes_fall": 196
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 196
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 22,
+              "false_positive_bytes_rise": 22,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 22,
+          "total_leaked_gold_bytes_fall": 196
+        }
+      },
+      "match_kind": "exact",
+      "record_class": "custom:iban"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 68
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 68
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 68
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 68
+        }
+      },
+      "match_kind": "whitespace_flexible",
+      "record_class": "custom:iban"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 490
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 490
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 490
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 490
+        }
+      },
+      "match_kind": "exact",
+      "record_class": "custom:national_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 84
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 84
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 84
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 84
+        }
+      },
+      "match_kind": "whitespace_flexible",
+      "record_class": "custom:national_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 21
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 21
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 21
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 21
+        }
+      },
+      "match_kind": "exact",
+      "record_class": "custom:passport"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 1560
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 658
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 69,
+              "false_positive_bytes_rise": 69,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 69,
+          "total_leaked_gold_bytes_fall": 2218
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 1560
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 658
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 69,
+              "false_positive_bytes_rise": 69,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 69,
+          "total_leaked_gold_bytes_fall": 2218
+        }
+      },
+      "match_kind": "exact",
+      "record_class": "custom:phone"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 719
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 990
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 68
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 228
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 2005
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 719
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 990
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 68
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 228
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 2005
+        }
+      },
+      "match_kind": "exact",
+      "record_class": "custom:steuer_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 68
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 68
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 68
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 68
+        }
+      },
+      "match_kind": "whitespace_flexible",
+      "record_class": "custom:steuer_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 8,
+              "leaked_gold_bytes_fall": 46
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 8,
+          "total_leaked_gold_bytes_fall": 46
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 8,
+              "leaked_gold_bytes_fall": 46
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 8,
+          "total_leaked_gold_bytes_fall": 46
+        }
+      },
+      "match_kind": "case_folded",
+      "record_class": "name_multi"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 51,
+              "leaked_gold_bytes_fall": 113
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 51,
+          "total_leaked_gold_bytes_fall": 113
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 51,
+              "leaked_gold_bytes_fall": 113
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 51,
+          "total_leaked_gold_bytes_fall": 113
+        }
+      },
+      "match_kind": "exact",
+      "record_class": "name_multi"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 8,
+              "leaked_gold_bytes_fall": 37
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 8,
+          "total_leaked_gold_bytes_fall": 37
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 8,
+              "leaked_gold_bytes_fall": 37
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 8,
+          "total_leaked_gold_bytes_fall": 37
+        }
+      },
+      "match_kind": "whitespace_case_folded",
+      "record_class": "name_multi"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 30
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 30
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 30
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 30
+        }
+      },
+      "match_kind": "case_folded",
+      "record_class": "name_single"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 9
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 9
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 9
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 0,
+          "total_leaked_gold_bytes_fall": 9
+        }
+      },
+      "match_kind": "corroborated_single",
+      "record_class": "name_single"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": -96,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": -2,
+              "leaked_gold_bytes_fall": -9
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": -20,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": -118,
+          "total_leaked_gold_bytes_fall": -9
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": -96,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": -2,
+              "leaked_gold_bytes_fall": -9
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": -20,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": -118,
+          "total_leaked_gold_bytes_fall": -9
+        }
+      },
+      "match_kind": "baseline_removed",
+      "record_class": "unattributed"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 27,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 84,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 111,
+          "total_leaked_gold_bytes_fall": 0
+        },
+        "v2": {
+          "layers": {
+            "A": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "C": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 27,
+              "leaked_gold_bytes_fall": 0
+            },
+            "D": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "K": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 0,
+              "leaked_gold_bytes_fall": 0
+            },
+            "R": {
+              "decoy_false_positive_bytes_added": 0,
+              "false_positive_bytes_rise": 84,
+              "leaked_gold_bytes_fall": 0
+            }
+          },
+          "total_false_positive_bytes_rise": 111,
+          "total_leaked_gold_bytes_fall": 0
+        }
+      },
+      "match_kind": "trace_gap",
+      "record_class": "unattributed"
+    }
+  ],
+  "contracts": {
+    "v1": {
+      "layers": {
+        "A": {
+          "baseline_false_positive_bytes": 1139,
+          "baseline_leaked_bytes": 4922,
+          "documents": 2586,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": -96,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 2631,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 1043,
+          "with_record_leaked_bytes": 2291
+        },
+        "C": {
+          "baseline_false_positive_bytes": 27445,
+          "baseline_leaked_bytes": 13423,
+          "documents": 2910,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": 84,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 2737,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 27529,
+          "with_record_leaked_bytes": 10686
+        },
+        "D": {
+          "baseline_false_positive_bytes": 6414,
+          "baseline_leaked_bytes": 0,
+          "documents": 1252,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": 190,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 0,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 6604,
+          "with_record_leaked_bytes": 0
+        },
+        "K": {
+          "baseline_false_positive_bytes": 947,
+          "baseline_leaked_bytes": 484,
+          "documents": 168,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": -4,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 468,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 943,
+          "with_record_leaked_bytes": 16
+        },
+        "R": {
+          "baseline_false_positive_bytes": 419,
+          "baseline_leaked_bytes": 234,
+          "documents": 100,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": 84,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 228,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 503,
+          "with_record_leaked_bytes": 6
+        }
+      },
+      "pass": true,
+      "total_false_positive_bytes_rise": 258,
+      "total_leaked_bytes_fall": 6064
+    },
+    "v2": {
+      "layers": {
+        "A": {
+          "baseline_false_positive_bytes": 1139,
+          "baseline_leaked_bytes": 4922,
+          "documents": 2586,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": -96,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 2631,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 1043,
+          "with_record_leaked_bytes": 2291
+        },
+        "C": {
+          "baseline_false_positive_bytes": 27445,
+          "baseline_leaked_bytes": 7475,
+          "documents": 2910,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": 84,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 2737,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 27529,
+          "with_record_leaked_bytes": 4738
+        },
+        "D": {
+          "baseline_false_positive_bytes": 6414,
+          "baseline_leaked_bytes": 0,
+          "documents": 1252,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": 190,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 0,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 6604,
+          "with_record_leaked_bytes": 0
+        },
+        "K": {
+          "baseline_false_positive_bytes": 947,
+          "baseline_leaked_bytes": 484,
+          "documents": 168,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": -4,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 468,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 943,
+          "with_record_leaked_bytes": 16
+        },
+        "R": {
+          "baseline_false_positive_bytes": 419,
+          "baseline_leaked_bytes": 234,
+          "documents": 100,
+          "exact_restore_documents_fall": 0,
+          "false_positive_bytes_rise": 84,
+          "incomplete_documents_rise": 0,
+          "leaked_bytes_fall": 228,
+          "no_record_matches_main": true,
+          "pass": true,
+          "refused_documents_rise": 0,
+          "valid_manifest_documents_fall": 0,
+          "with_record_false_positive_bytes": 503,
+          "with_record_leaked_bytes": 6
+        }
+      },
+      "pass": true,
+      "total_false_positive_bytes_rise": 258,
+      "total_leaked_bytes_fall": 6064
+    }
+  },
+  "dataset_sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+  "main_binary_sha256": "ffd258b309a8f3d0335f595ca09c5be5e2464f8441355f03e18829caaf9ad971",
+  "main_binary_source_commit": "767de0a73bfd8d9fad59c8c8e8011dc5cbd844c6",
+  "pass": true,
+  "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+  "schema_version": 1,
+  "source_commit": "d9ba943d76c00e984e4c88f8a440a38c6e4f86bc"
+}

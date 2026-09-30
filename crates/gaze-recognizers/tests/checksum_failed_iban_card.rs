@@ -271,6 +271,8 @@ fn pipeline(logger: MemoryLogger) -> Pipeline {
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     };
     let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(LOCALES));
     gaze_assembly::build_pipeline(&policy, &context, &rulepacks, &chain, None)

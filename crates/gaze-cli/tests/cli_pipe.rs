@@ -3491,6 +3491,87 @@ fn context_json_standalone_dictionary_detects_without_policy_entry() {
     );
 }
 
+#[test]
+fn unsafe_record_value_warns_by_path_while_valid_iban_still_cleans() {
+    let dir = tempdir().unwrap();
+    let context_path = dir.path().join("context.json");
+    let iban = "DE36000000000000000000";
+    fs::write(
+        &context_path,
+        format!(r#"{{"record":{{"iban":"{iban}","name":"A"}}}}"#),
+    )
+    .unwrap();
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("clean")
+        .arg(format!("--context-json={}", context_path.display()))
+        .write_stdin(format!("IBAN {iban}"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("/name skipped: unsafe short match"));
+    assert!(!stderr.contains(iban));
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(!response["clean_text"].as_str().unwrap().contains(iban));
+}
+
+#[test]
+fn record_context_errors_and_unmatched_values_do_not_echo_context() {
+    let dir = tempdir().unwrap();
+    let context_path = dir.path().join("context.json");
+    let marker = "private-marker-7391";
+    fs::write(
+        &context_path,
+        format!(r#"{{"record":{{"name":"{marker}"}},"field_map":{{"/wrong":"Name"}}}}"#),
+    )
+    .unwrap();
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("clean")
+        .arg(format!("--context-json={}", context_path.display()))
+        .write_stdin("unrelated text")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains(marker));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains(marker));
+
+    fs::write(
+        &context_path,
+        format!(r#"{{"record":{{"name":"{marker}"}},"field_map":{{"/name":"Name"}}}}"#),
+    )
+    .unwrap();
+    let response = clean_json_with_args(
+        &[&format!("--context-json={}", context_path.display())],
+        "unrelated text",
+    );
+    assert!(!response.to_string().contains(marker));
+}
+
+#[test]
+fn record_context_cli_round_trips_name_case_and_email_exact() {
+    let dir = tempdir().unwrap();
+    let context_path = dir.path().join("context.json");
+    fs::write(
+        &context_path,
+        r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"},"record_match_kinds":{"name_multi":["case_folded"],"email":["exact"]}}"#,
+    )
+    .unwrap();
+    let input = "ALICE SMITH sent alice@example.invalid";
+    let response = clean_json_with_args(
+        &[&format!("--context-json={}", context_path.display())],
+        input,
+    );
+    let clean = response["clean_text"].as_str().unwrap();
+    assert!(!clean.contains("ALICE SMITH"));
+    assert!(!clean.contains("alice@example.invalid"));
+    assert_eq!(
+        restore_success_text(response["session_blob"].as_str().unwrap(), clean),
+        input
+    );
+}
+
 // Synthetic values only: a Luhn-valid test card, the mod-97-valid example IBAN,
 // a private IPv4 and a reserved-domain email.
 const POLICY_LESS_CORE_INPUT: &str = "Card 4111 1111 1111 1111 ok, IBAN AT61 1904 3002 3457 3201 \
