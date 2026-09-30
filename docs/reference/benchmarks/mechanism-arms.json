@@ -900,15 +900,15 @@
           "release": null,
           "records": {
             "base": {
-              "file": "docs/reference/benchmarks/mechanisms/address-blocks-c479c881243f-base.jsonl.gz",
-              "sha256": "9493a843c61a195d332c7c8786b416e5347e2ae880bd6d7b3dbd79c60eef60a3"
+              "file": "docs/reference/benchmarks/mechanisms/address-blocks-0c9de6e9c788-base.jsonl.gz",
+              "sha256": "5e9a7c4424e39664eb26eaaf975ed396aba7742315b7709578a16598df249351"
             },
             "candidate": {
-              "file": "docs/reference/benchmarks/mechanisms/address-blocks-c479c881243f-candidate.jsonl.gz",
-              "sha256": "b2b28032ae1cbceefc80ca69a7bf1df752a58f4f40c425bdd94d0b7f8e9c85d1"
+              "file": "docs/reference/benchmarks/mechanisms/address-blocks-0c9de6e9c788-candidate.jsonl.gz",
+              "sha256": "07598ebbf4e0255fc43ec6e3aff9c1b332cdf77cf3b48b3661a12543bc5b8b74"
             }
           },
-          "revision": "c479c881243f4b0dc50bf8e227c8412fcc6566de",
+          "revision": "0c9de6e9c7883be7f49ded5a5a0a63e5dba701c7",
           "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
           "sampling_seed": 20260710,
           "base_policy_sha256": "e3b3a2abe9e2fc7825fb27b8453cb7a898db581442ac279a1b380cd411084ace",
@@ -1024,8 +1024,8 @@
             }
           },
           "attested": {
-            "binary_sha256": "53f091cd17fbdc406e3ec198daa597e84db05ad634a99ed4236fe46bc4837911",
-            "crates_tree": "4e46f1da3c2a1af58582dd6958b809b1b839c0f9",
+            "binary_sha256": "adc71b10dcc244de4b5b8744bdc253407c84c0fdb0be6b342277c029e602de11",
+            "crates_tree": "58201944ffbeeb8ee374732b978fc6b3b8068950",
             "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
             "note": "Recorded at record time from --binary, git and --machine; the observation records do not carry them, so check cannot re-derive them."
           }
