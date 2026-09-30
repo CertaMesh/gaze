@@ -1,0 +1,53 @@
+"""The shipping gate rejects regressions hidden by a net-positive total."""
+
+import known_record_shipping_gate as shipping
+
+
+def arm(contract: str) -> dict:
+    def score(leaked: int, fp: int) -> dict:
+        return {
+            "metrics": {"utf8_bytes": {"leaked": leaked, "false_positive": fp}},
+            "pipeline_availability": {"attempted_documents": 1, "failed_closed_documents": 0},
+            "pipeline_contract": {"restore_exact_documents": 1, "manifest_valid_documents": 1},
+        }
+
+    return {
+        "contract": contract, "full": True,
+        "record_match_kinds_mode": "shipping_defaults",
+        "source_commit": "source", "policy_sha256": "policy",
+        "dataset_sha256": "data", "kind_cells_manifest": {"pairs": 1},
+        "layers": {
+            layer: {"documents": 1, "baseline": score(10, 0), "with_record": score(0, 1)}
+            for layer in shipping.LAYERS
+        },
+    }
+
+
+def test_shipping_gate_needs_two_full_product_default_arms() -> None:
+    v2, v1 = arm("v2"), arm("v1")
+    assert shipping.gate(v2, v1)["pass"]
+    v1["record_match_kinds_mode"] = "probe_all"
+    try:
+        shipping.gate(v2, v1)
+    except ValueError as error:
+        assert "product defaults" in str(error)
+    else:
+        raise AssertionError("probe-all arm passed the shipping gate")
+
+
+def test_shipping_gate_vetoes_layer_leak_and_restore_regressions() -> None:
+    v2, v1 = arm("v2"), arm("v1")
+    v1["layers"]["D"]["with_record"]["metrics"]["utf8_bytes"]["leaked"] = 11
+    assert not shipping.gate(v2, v1)["pass"]
+    v1 = arm("v1")
+    v1["layers"]["C"]["with_record"]["pipeline_contract"]["restore_exact_documents"] = 0
+    assert not shipping.gate(v2, v1)["pass"]
+
+
+def test_shipping_gate_rejects_false_positive_cost_above_gain() -> None:
+    v2, v1 = arm("v2"), arm("v1")
+    for value in (v2, v1):
+        value["layers"]["C"]["with_record"]["metrics"]["utf8_bytes"]["false_positive"] = 47
+    result = shipping.gate(v2, v1)
+    assert result["contracts"]["v2"]["total_false_positive_bytes_rise"] > result["contracts"]["v2"]["total_leaked_bytes_fall"]
+    assert not result["pass"]

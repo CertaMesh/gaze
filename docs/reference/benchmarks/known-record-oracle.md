@@ -6,6 +6,49 @@ as if an adopter already knew the customer or order record. Real apps may know
 less. The ordinary no-record benchmark continues to use its existing request
 shape and is measured separately under both scored-label contracts.
 
+## v5 attribution, before the shipping-default gate
+
+The full v5 producer and layer K measured each class and match kind at source
+`52049550`, with the oracle kinds deliberately enabled. Both scored-label
+contracts used policy SHA-256 `f909a23a`, corpus SHA-256 `916c6379`, and the
+same machine. These are **all-on attribution results**, not the final product
+defaults. The committed aggregate scorecards are
+[`v2`](known-record-attribution-v5-v2.json),
+[`v1`](known-record-attribution-v5-v1.json), and the
+[class × kind gain table](known-record-attribution-v5-gain.json). No raw record
+values or document text are stored in these files.
+
+| Layer | v2 leaked bytes, no record → all-on | v1 leaked bytes, no record → all-on | False-positive byte change |
+| --- | ---: | ---: | ---: |
+| C | 7,475 → 4,297 | 13,423 → 10,251 | +142 |
+| A | 4,119 → 1,488 | 4,119 → 1,488 | −96 |
+| D | 0 → 0 | 0 → 0 | +264 |
+| R | 234 → 6 | 234 → 6 | +98 |
+| K | 484 → 0 | 484 → 0 | +23 |
+
+Total leaked bytes fall by 6,521 under v2 and 6,515 under v1. Total false
+positives rise by 431 bytes. Eligible leaked bytes fall from 6,117 to 86.
+No document is refused; all 6,854 documents restore exactly and have valid
+manifests in each arm and contract. The name-multi rows had 1,399 exact,
+24 case-folded, 14 combined whitespace/case, and five flexible-whitespace
+positive inputs. Exact, case-folded and combined whitespace/case full names
+show positive net gains under both contracts; flexible whitespace recovers no
+gold bytes. The 14 and 24 positive counts limit confidence in the two variant
+estimates.
+
+The defaults turn exact address parts and exact single names off because their
+layer D benign counterweights rise by 29 and 45 bytes. The all-on arm recovered
+337 and 123 gold bytes from those kinds, respectively, so turning them off
+leaves those leaks for ordinary detectors or an explicit adopter opt-in.
+Exact declared phone and credit-card values remain on by user decision, despite
+69 and 99 added layer D benign bytes. This exception applies only to the
+caller-known-record oracle; ordinary recognizer rules keep the usual D veto.
+The final gate reruns both contracts with the **product's default kinds** and
+compares each layer's leaks, false positives, refusals, exact restores and
+manifest validity. Its aggregate results will be linked here before merge.
+
+## Earlier runs
+
 **Historical diagnostic only:** the runs below used a benchmark producer that
 registered placeholder record slots once. It did not apply each request's
 `record_match_kinds`, and it gave multi-token names single-name defaults.

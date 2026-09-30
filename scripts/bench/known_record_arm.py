@@ -233,9 +233,14 @@ def enable_name_multi_measurement(context: str | None) -> str | None:
     return json.dumps(parsed, ensure_ascii=False)
 
 
-def kind_contexts_for_measurement(pairs: Sequence[kind_cells.Pair]) -> dict[str, str]:
+def kind_contexts_for_measurement(
+    pairs: Sequence[kind_cells.Pair], *, shipping_defaults: bool = False
+) -> dict[str, str]:
     return {
-        cell.uid: kind_cells.arm_context(cell, probes_on=True)
+        cell.uid: (
+            cell.context_json()
+            if shipping_defaults else kind_cells.arm_context(cell, probes_on=True)
+        )
         for cell in kind_cells.cells(pairs)
     }
 
@@ -420,6 +425,7 @@ def main() -> None:
     parser.add_argument("--contract", required=True, choices=("v1", "v2"))
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--max-documents", type=int, help="development sample only; never publish as full arm")
+    parser.add_argument("--shipping-defaults", action="store_true", help="measure product defaults without oracle kind overrides")
     args = parser.parse_args()
     repo = args.repo.resolve()
     policy_path = args.policy.resolve()
@@ -440,7 +446,9 @@ def main() -> None:
     # not derived from gold like the primary oracle records.
     kind_pairs = kind_cells.generate()
     layers["K"], _ = kind_cells.documents(repo, args.contract, kind_pairs)
-    kind_contexts = kind_contexts_for_measurement(kind_pairs)
+    kind_contexts = kind_contexts_for_measurement(
+        kind_pairs, shipping_defaults=args.shipping_defaults
+    )
     output: dict[str, object] = {
         "arm": "known-record oracle (caller already knows the selected gold values)",
         "contract": args.contract,
@@ -450,7 +458,8 @@ def main() -> None:
         "dataset_sha256": dataiku.DATASET_SHA256,
         "agentic_manifest": agentic.manifest(agentic.PUBLISHED_PARTITION, agentic.generate(agentic.PUBLISHED_PARTITION)),
         "kind_cells_manifest": kind_cells.manifest(kind_pairs),
-        "name_multi_measurement_kinds": list(NAME_MULTI_KINDS),
+        "record_match_kinds_mode": "shipping_defaults" if args.shipping_defaults else "probe_all",
+        "name_multi_measurement_kinds": [] if args.shipping_defaults else list(NAME_MULTI_KINDS),
         "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown (Solo scratchpad 10781)",
         "layers": {},
     }
@@ -469,7 +478,8 @@ def main() -> None:
         selected_ids = {document.uid for document in documents}
         contexts.update({uid: context for uid, context in counterweight_contexts.items() if uid in selected_ids})
         contexts.update({uid: context for uid, context in kind_contexts.items() if uid in selected_ids})
-        contexts = {uid: enable_name_multi_measurement(context) for uid, context in contexts.items()}
+        if not args.shipping_defaults:
+            contexts = {uid: enable_name_multi_measurement(context) for uid, context in contexts.items()}
         name_multi_inputs = name_multi_positive_spans(
             documents, contexts, kind_pairs=kind_pairs if layer == "K" else ()
         )

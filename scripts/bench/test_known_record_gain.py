@@ -45,6 +45,29 @@ def test_both_contracts_must_outweigh_false_positives() -> None:
     assert result["contracts"]["v2"]["layers"]["D"]["decoy_false_positive_added_bytes"] == 9
 
 
+def test_layer_d_decoy_veto_has_narrow_declared_value_exceptions() -> None:
+    for record_class, match_kind, vetoed in (
+        ("address_part", "exact", True),
+        ("custom:credit_card", "exact", False),
+        ("custom:credit_card", "whitespace_flexible", True),
+        ("custom:phone", "exact", False),
+        ("custom:iban", "exact", False),
+    ):
+        v2, v1 = arm("v2", gold=100, fp=0), arm("v1", gold=100, fp=0)
+        for source in (v2, v1):
+            source["layers"]["C"]["attribution"]["rows"][0]["record_class"] = record_class
+            source["layers"]["C"]["attribution"]["rows"][0]["match_kind"] = match_kind
+            source["layers"]["D"]["attribution"]["rows"] = [{
+                "record_class": record_class, "match_kind": match_kind, "population": "decoy",
+                "gold_recovered_bytes": 0, "gold_lost_bytes": 0,
+                "false_positive_added_bytes": 1, "false_positive_removed_bytes": 0,
+            }]
+        result = next(row for row in gain.table(v2, v1)["rows"] if row["record_class"] == record_class)
+        assert result["contracts"]["v2"]["gain_pass"] is True
+        assert result["d_counterweight_veto"] is vetoed
+        assert result["default_gain_pass"] is not vetoed
+
+
 def test_mismatched_measurement_basis_fails() -> None:
     v2, v1 = arm("v2", gold=1, fp=0), arm("v1", gold=1, fp=0)
     v1["dataset_sha256"] = "other"

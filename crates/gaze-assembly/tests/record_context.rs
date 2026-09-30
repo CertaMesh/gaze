@@ -275,6 +275,40 @@ fn record_whitespace_flex_has_a_bounded_gap() {
 }
 
 #[test]
+fn measured_full_name_defaults_keep_whitespace_only_variant_off() {
+    let context = Context::from_json_str(r#"{"record":{"full_name":"Maren Okafor"}}"#).unwrap();
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let pipeline =
+        build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "Maren Okafor; MAREN OKAFOR; MAREN  OKAFOR; Maren  Okafor.";
+    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let CleanDocument::Text(clean) = pipeline
+        .pseudonymize_with_detect_context(
+            &session,
+            RawDocument::Text(raw.into()),
+            locales.as_slice(),
+            &bundle,
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert!(!clean.contains("Maren Okafor"));
+    assert!(!clean.contains("MAREN OKAFOR"));
+    assert!(!clean.contains("MAREN  OKAFOR"));
+    assert!(clean.contains("Maren  Okafor"));
+    assert_eq!(
+        pipeline
+            .restore_with_telemetry(&session, &clean)
+            .unwrap()
+            .0
+            .text,
+        raw
+    );
+}
+
+#[test]
 fn single_token_record_names_need_corroboration() {
     let context = Context::from_json_str(
         r#"{"record":{"first_name":"Will","last_name":"Smith","full_name":"Will Smith"},"record_match_kinds":{"name_single":["exact","case_folded","corroborated_single"],"name_multi":["exact"]}}"#,
@@ -311,14 +345,40 @@ fn single_token_record_names_need_corroboration() {
 }
 
 #[test]
-fn common_may_stays_raw_and_unlisted_maren_tokenizes() {
-    let context =
+fn unlisted_single_name_exact_requires_opt_in() {
+    let default_context =
         Context::from_json_str(r#"{"record":{"first_name":"Maren","last_name":"May"}}"#).unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let raw = "May 2026. Maren called.";
+    let default_pipeline = build_pipeline(
+        &policy(Action::Tokenize),
+        &default_context,
+        &[],
+        &locales,
+        None,
+    )
+    .unwrap();
+    let default_session = Session::new(Scope::Ephemeral).unwrap();
+    let default_bundle = gaze::dictionary_bundle_from_context(&default_context);
+    let CleanDocument::Text(default_clean) = default_pipeline
+        .pseudonymize_with_detect_context(
+            &default_session,
+            RawDocument::Text(raw.into()),
+            locales.as_slice(),
+            &default_bundle,
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert!(default_clean.contains("Maren"));
+
+    let context = Context::from_json_str(
+        r#"{"record":{"first_name":"Maren","last_name":"May"},"record_match_kinds":{"name_single":["exact"]}}"#,
+    ).unwrap();
     let pipeline =
         build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
     let session = Session::new(Scope::Ephemeral).unwrap();
-    let raw = "May 2026. Maren called.";
     let bundle = gaze::dictionary_bundle_from_context(&context);
     let CleanDocument::Text(clean) = pipeline
         .pseudonymize_with_detect_context(
@@ -341,6 +401,45 @@ fn common_may_stays_raw_and_unlisted_maren_tokenizes() {
             .text,
         raw
     );
+}
+
+#[test]
+fn address_part_exact_requires_opt_in() {
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let raw = "The fictional city is Exampleville.";
+    for (context_json, should_match) in [
+        (r#"{"record":{"city":"Exampleville"}}"#, false),
+        (
+            r#"{"record":{"city":"Exampleville"},"record_match_kinds":{"address_part":["exact"]}}"#,
+            true,
+        ),
+    ] {
+        let context = Context::from_json_str(context_json).unwrap();
+        let pipeline =
+            build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let bundle = gaze::dictionary_bundle_from_context(&context);
+        let CleanDocument::Text(clean) = pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(raw.into()),
+                locales.as_slice(),
+                &bundle,
+            )
+            .unwrap()
+        else {
+            panic!("expected text")
+        };
+        assert_eq!(clean.contains("Exampleville"), !should_match);
+        assert_eq!(
+            pipeline
+                .restore_with_telemetry(&session, &clean)
+                .unwrap()
+                .0
+                .text,
+            raw
+        );
+    }
 }
 
 #[test]

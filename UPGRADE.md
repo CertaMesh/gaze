@@ -47,10 +47,14 @@ re-tokenize stored manifests.
 ### TL;DR
 
 **Typed `Context` literals:** add `record_match_kinds: Default::default()`.
-If your caller-known records rely on full-name, email, whitespace-flexible, or
-common-word name matching, specify the needed kinds in `record_match_kinds` in
-the context JSON. These unmeasured combinations are off by default until the
-oracle prices their benign lookalikes; ordinary detectors still run.
+Full names now match by default with measured exact, case-folded and combined
+whitespace/case kinds. If your caller-known records rely on exact single names,
+address parts, email or other off-by-default kinds, specify them in
+`record_match_kinds` in the context JSON; ordinary detectors still run.
+Exact single names and address parts were disabled after benign counterweights
+outweighed their gains; a same-case single-name copy may now be raw unless
+another detector finds it. Exact declared phone and credit-card values remain on
+despite measured benign matches, by user decision.
 
 **Context JSON callers:** files over 4 MiB now fail with a typed size error.
 Duplicate keys now fail instead of silently keeping the last value. JSON parse

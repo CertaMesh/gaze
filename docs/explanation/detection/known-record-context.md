@@ -26,29 +26,32 @@ matching value raw in that column. Audit source IDs describe a class and slot,
 never the supplied value.
 
 This mode trims record values and collapses whitespace runs. By default it
-matches only class and match-kind pairs that passed the round-3 byte trade-off
-check: exact address parts, credit cards, IBANs, national IDs, passports,
-phones, Steuer IDs, and unlisted single-token names, plus case-folded unlisted
-single-token names. Full names, email, other unmeasured classes, flexible
-whitespace, and combined whitespace/case matches are off by default. The
-adopter can enable these kinds with `record_match_kinds` in the context JSON.
+matches exact and flexible-whitespace variants of credit cards, IBANs,
+national IDs and Steuer IDs; exact passports and phones; exact, case-folded
+and combined whitespace/case variants of full names; and case-folded or
+corroborated single names. Address parts, exact single names, flexible-
+whitespace full names, email and other unlisted pairs are off. The adopter
+can replace a group's defaults with `record_match_kinds` in the context JSON.
 The recognizer can match text whitespace runs of up to 32 characters and full
 Unicode name case folds when enabled. The original source bytes are kept in
 the manifest for exact restore.
 Single-token names in the [version 1 common-word dictionary](../../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
-including `Will`, are off by default. Adopters can enable
-`record_match_kinds.name_single = ["exact", "case_folded", "corroborated_single"]`;
-then those common names require person-model evidence, an adjacent record name,
+including `Will`, require person-model evidence, an adjacent record name,
 or a full record name elsewhere in the document with a name-position cue.
-Unlisted names such as `Maren` match everywhere by default. Unsafe short values
+Unlisted names such as `Maren` match changed-case copies by default.
+Same-case exact copies require opt-in or another detector. Unsafe short values
 are skipped individually and reported by path and typed reason in the Rust
 context. A valid IBAN passes even when its country code is its only two letters.
 Apps should inspect `record_value_rejections` so a skipped value is never
 mistaken for protected data. This mode does not infer name order, email case
 changes, abbreviations, fragments or typos.
-Homonyms with corroborating context remain a false-positive risk.
-The unmeasured kinds stay off because their gain against benign lookalikes is
-unknown; enabling them explicitly accepts that precision risk. A record field
+Homonyms with corroborating context remain a false-positive risk. The oracle
+found that turning exact address parts and single names off leaves 337 and
+123 additional leaked gold bytes compared with its all-on arm. Exact declared
+phone and credit-card values stay on despite 69 and 99 added layer D benign
+bytes. The combined-whitespace/case full-name kind had only 14 positive
+inputs, and case-folded full names had 24, so their precision estimates are
+thin. Unmeasured kinds stay off because their gain is unknown. A record field
 whose group is off adds no record-context detection. Ordinary detectors still
 run on the document.
 The current default Nym operating point has no person label; model

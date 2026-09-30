@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Typed `Context` literals gain `record_match_kinds`.** Add
   `record_match_kinds: Default::default()` to direct Rust struct literals.
-  Caller-known record matching now defaults to measured class and match-kind
-  pairs only; callers who need unmeasured variants must opt in through the
+  Caller-known record matching now defaults to selected class and match-kind
+  pairs from the v5 oracle; callers who need off-by-default variants must opt in through the
   context JSON. See the policy reference and UPGRADE.md.
 
 - **Context JSON is size-bounded and duplicate-key strict.** Files larger than
@@ -192,13 +192,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Unsafe short values are skipped individually; the Rust context reports each
   safe field path and a typed reason. Duplicate class/value fields share one
   record source.
-- **Caller-known record matching uses provisional defaults.** The earlier
-  attribution measured a benchmark configuration that differed from the
-  product, so the final v5 and layer K oracle still decides shipping defaults.
-  Exact address parts, card, IBAN, national ID, passport, phone, Steuer ID,
-  and unlisted single-token names are provisionally on. Multi-token names,
-  flexible whitespace, combined whitespace and case folding, and common-word
-  corroboration remain off until measured. Adopters can opt into them through
+- **Caller-known record defaults follow the v5 class and match-kind oracle.**
+  Full names use exact, case-folded and combined whitespace/case matching;
+  single names use case-folded and corroborated matching. Credit cards, IBANs,
+  national IDs and Steuer IDs use exact and flexible-whitespace matching;
+  passports and phones use exact matching. Address parts and exact single
+  names are off by default, leaving 337 and 123 more leaked gold bytes than
+  the all-on arm but avoiding their measured benign counterweights. Exact
+  declared phones and credit cards remain on by user decision despite 69 and
+  99 added layer D benign bytes. Callers may override a group through
   `record_match_kinds` in the call-scoped context JSON.
 - **Loopback IP addresses no longer tokenize.** The bundled IPv4 and IPv6
   rules reject `127.0.0.0/8`, `::1` and IPv4-mapped or IPv4-compatible

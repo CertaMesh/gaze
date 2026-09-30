@@ -181,13 +181,25 @@ impl Context {
             return override_kinds.clone();
         }
         match group.as_str() {
-            "name_single" => [RecordMatchKind::Exact, RecordMatchKind::CaseFolded]
-                .into_iter()
-                .collect(),
-            "address_part" | "custom:credit_card" | "custom:iban" | "custom:national_id"
-            | "custom:passport" | "custom:phone" | "custom:steuer_id" => {
-                [RecordMatchKind::Exact].into_iter().collect()
+            "name_single" => [
+                RecordMatchKind::CaseFolded,
+                RecordMatchKind::CorroboratedSingle,
+            ]
+            .into_iter()
+            .collect(),
+            "name_multi" => [
+                RecordMatchKind::Exact,
+                RecordMatchKind::CaseFolded,
+                RecordMatchKind::WhitespaceCaseFolded,
+            ]
+            .into_iter()
+            .collect(),
+            "custom:credit_card" | "custom:iban" | "custom:national_id" | "custom:steuer_id" => {
+                [RecordMatchKind::Exact, RecordMatchKind::WhitespaceFlexible]
+                    .into_iter()
+                    .collect()
             }
+            "custom:passport" | "custom:phone" => [RecordMatchKind::Exact].into_iter().collect(),
             _ => BTreeSet::new(),
         }
     }
@@ -674,13 +686,23 @@ mod tests {
         ).unwrap();
         assert_eq!(
             context.record_allowed_match_kinds(&PiiClass::Name, "Maren"),
-            [RecordMatchKind::Exact, RecordMatchKind::CaseFolded]
-                .into_iter()
-                .collect(),
+            [
+                RecordMatchKind::CaseFolded,
+                RecordMatchKind::CorroboratedSingle
+            ]
+            .into_iter()
+            .collect(),
         );
-        assert!(context
-            .record_allowed_match_kinds(&PiiClass::Name, "Maren Okafor")
-            .is_empty());
+        assert_eq!(
+            context.record_allowed_match_kinds(&PiiClass::Name, "Maren Okafor"),
+            [
+                RecordMatchKind::Exact,
+                RecordMatchKind::CaseFolded,
+                RecordMatchKind::WhitespaceCaseFolded,
+            ]
+            .into_iter()
+            .collect(),
+        );
         assert!(context
             .record_allowed_match_kinds(&PiiClass::Email, "alice@example.invalid")
             .is_empty());
@@ -688,17 +710,23 @@ mod tests {
             context.record_allowed_match_kinds(&PiiClass::Custom("phone".into()), "+1-555-0104"),
             [RecordMatchKind::Exact].into_iter().collect(),
         );
-        for class in [
-            PiiClass::Location,
-            PiiClass::Custom("credit_card".into()),
-            PiiClass::Custom("iban".into()),
-            PiiClass::Custom("national_id".into()),
-            PiiClass::Custom("passport".into()),
-            PiiClass::Custom("steuer_id".into()),
-        ] {
+        assert!(context
+            .record_allowed_match_kinds(&PiiClass::Location, "Synthetic Value")
+            .is_empty());
+        assert_eq!(
+            context.record_allowed_match_kinds(
+                &PiiClass::Custom("passport".into()),
+                "Synthetic Value"
+            ),
+            [RecordMatchKind::Exact].into_iter().collect(),
+        );
+        for class in ["credit_card", "iban", "national_id", "steuer_id"] {
             assert_eq!(
-                context.record_allowed_match_kinds(&class, "Synthetic Value"),
-                [RecordMatchKind::Exact].into_iter().collect(),
+                context
+                    .record_allowed_match_kinds(&PiiClass::Custom(class.into()), "Synthetic Value"),
+                [RecordMatchKind::Exact, RecordMatchKind::WhitespaceFlexible]
+                    .into_iter()
+                    .collect(),
             );
         }
 

@@ -209,6 +209,14 @@ def test_layer_k_supplies_positive_full_name_targets_under_both_contracts() -> N
         assert all(counts[kind] > 0 for kind in arm.NAME_MULTI_KINDS)
 
 
+def test_shipping_layer_k_uses_product_defaults_without_oracle_overrides() -> None:
+    pairs = cells.generate()
+    shipping = arm.kind_contexts_for_measurement(pairs, shipping_defaults=True)
+    for cell in cells.cells(pairs):
+        assert json.loads(shipping[cell.uid]) == json.loads(cell.context_json())
+        assert "record_match_kinds" not in json.loads(shipping[cell.uid])
+
+
 def test_negative_receives_paired_record_and_counterweights() -> None:
     positive = document("positive", "Alice Smith", "GIVENNAME")
     negative = document("negative", "The catalog is open.", None)

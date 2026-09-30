@@ -109,12 +109,22 @@ def table(v2: dict, v1: dict) -> dict:
                 "layers": by_layer,
             }
         gain_results = [contract_rows[contract]["gain_pass"] for contract in CONTRACTS]
+        d_exempt = record_class == "custom:iban" or (
+            match_kind == "exact" and record_class in {"custom:phone", "custom:credit_card"}
+        )
+        d_counterweight_veto = not d_exempt and any(
+            contract_rows[contract]["layers"].get("D", empty_layer_row())[
+                "decoy_false_positive_added_bytes"
+            ] > 0
+            for contract in CONTRACTS
+        )
         output_rows.append({
             "record_class": record_class,
             "match_kind": match_kind,
+            "d_counterweight_veto": d_counterweight_veto,
             "default_gain_pass": (
                 None if record_class == "unattributed" or None in gain_results
-                else all(gain_results)
+                else all(gain_results) and not d_counterweight_veto
             ),
             "contracts": contract_rows,
         })
@@ -137,7 +147,7 @@ def table(v2: dict, v1: dict) -> dict:
         "source_commit": v2["source_commit"],
         "policy_sha256": v2["policy_sha256"],
         "dataset_sha256": v2["dataset_sha256"],
-        "rule": "leaked gold bytes fall > false-positive bytes rise under both contracts",
+        "rule": "leaked gold bytes fall > false-positive bytes rise under both contracts; layer-D decoy false-positive rise vetoes a default except IBAN and caller-known exact phone/card values",
         "unmeasured_match_kinds": sorted(set(MATCH_KINDS) - observed_kinds),
         "unmeasured_name_multi_kinds": unmeasured_name_multi,
         "rows": output_rows,
