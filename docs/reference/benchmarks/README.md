@@ -1705,16 +1705,25 @@ they are re-measured.
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.15.1` `policy-file` | 18,064 / 48,508 | 1,196 | 3,454 | 374 / 5,142 | 403 |
-| `v0.15.0` `policy-file` | 18,237 / 48,508 | 1,196 | 3,454 | 374 / 5,142 | 403 |
-| `v0.14.0` `full-stack-kiji-resolve` | 26,765 / 48,508 | 3,673 | 2,473 | 525 / 5,142 | 190 |
-| `v0.14.0` `pass2-ner` | 27,185 / 48,508 | 886 | 2,328 | 550 / 5,142 | 140 |
+| `v0.15.1` `policy-file` | 20,400 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
+| `v0.15.0` `policy-file` | 20,573 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
+| `v0.14.0` `full-stack-kiji-resolve` | 29,695 / 56,510 | 5,308 | 3,893 | 525 / 5,142 | 190 |
+| `v0.14.0` `pass2-ner` | 30,320 / 56,510 | 988 | 3,229 | 550 / 5,142 | 140 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v4-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v4, test corpus `387a35ac1551…`, setup policy `f909a23aecac…`.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v8-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v8, test corpus `ddd234551bca…`, setup policy `f909a23aecac…`.
 
 <!-- END GENERATED: agentic-adjacency -->
 
-@@STATUS@@
+**How these rows were measured.** Each release's `clean_for_bench` was
+rebuilt at its tag with Rust 1.96.0 (`--release -p gaze-recognizers --example
+clean_for_bench`, feature `safety-net-nym` for v0.15.x and `safety-net-kiji`
+for v0.14.0). The v0.15.0 binary is byte-identical to the one in the v4 ledger;
+the v0.15.1 and v0.14.0 rebuilds come from the same source revisions but differ
+in binary SHA-256, and the v8 ledger records the new digests. The v0.14.0
+`full-stack-kiji-resolve` arm also needs `GAZE_KIJI_DISTILBERT_MODEL_DIR`
+exported (v0.14.0's own harness set it; today's harness does not, and the arm
+fails closed without it). Layer R did not change between v4 and v8, and every
+row reproduces its v4 layer R numbers exactly.
 
 ### Hardware spec template
 
