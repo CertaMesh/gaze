@@ -127,6 +127,39 @@ opening or pushing to a PR. The command list above is the local set.
 Relevant PRs also run the workspace, MSRV, cargo-deny, and active xtask gates in
 GitHub Actions.
 
+The required `test` check aggregates three owners: `test-support` (the existing
+feature-specific suites, all-feature doctests, pinned live models, and fresh
+producer binding), `workspace-shards` (the all-feature lib/bin/integration suite),
+and `test-coverage` (once-only execution proof). A failed, skipped, cancelled, or
+missing owner fails the required check. The existing `xtask gates` aggregator
+still requires `test`, the default-feature workspace suite, and feature gates.
+
+Workspace shards use pinned cargo-nextest with no retries. Every test binary,
+including empty platform/feature-gated binaries, has one explicit assignment in
+`scripts/ci/test-shards.json`. Adding a binary requires updating that roster;
+`python3 -m unittest discover -s scripts/ci` checks it against Cargo metadata.
+Each CI shard independently compares the original Cargo/libtest binary and test
+lists with nextest, including ignored flags. The proof job checks each selected
+test against JUnit results and publishes all timings plus the top 20. Ignored
+child helpers remain ignored; parent tests can still execute them directly.
+
+`.config/nextest.toml` carries process-level scheduling locks for nested builds
+and loopback probes whose in-process mutexes cannot coordinate nextest processes.
+Shards use separate runners and fresh target trees, including mutated checkouts;
+only registry/git/native dependencies are shared in one cache with one writer.
+The fresh producer proof continues to build offline in its own scratch checkout.
+To reproduce one shard after installing cargo-nextest 0.9.146:
+
+```bash
+python3 scripts/ci/test_shards.py collect --output target/shard-evidence/cli
+cargo nextest run --workspace --all-features --profile ci --no-fail-fast \
+  -E "$(python3 scripts/ci/test_shards.py filter cli)"
+cargo test --workspace --all-features --doc --no-fail-fast
+```
+
+The unqualified local `cargo test` and `ci-feature-matrix` commands remain the
+complete local verification path. CI timing artifacts expire after 14 days.
+
 ### Trybuild compiler and blessing ritual
 
 The three root trybuild drivers verify the compiler Cargo will actually invoke,
