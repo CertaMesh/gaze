@@ -11,12 +11,16 @@ from pathlib import Path
 LAYERS = ("C", "A", "D", "R", "K")
 
 
-def class_kind_rows(arms: dict[str, dict]) -> list[dict]:
-    metrics = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {
+def empty_attribution() -> dict[str, int]:
+    return {
         "leaked_gold_bytes_fall": 0,
         "false_positive_bytes_rise": 0,
         "decoy_false_positive_bytes_added": 0,
-    })))
+    }
+
+
+def class_kind_rows(arms: dict[str, dict]) -> list[dict]:
+    metrics = defaultdict(lambda: defaultdict(lambda: defaultdict(empty_attribution)))
     for contract, arm in arms.items():
         for layer in LAYERS:
             attribution = arm["layers"][layer].get("attribution")
@@ -38,7 +42,10 @@ def class_kind_rows(arms: dict[str, dict]) -> list[dict]:
             "match_kind": match_kind,
             "contracts": {
                 contract: {
-                    "layers": by_contract.get(contract, {}),
+                    "layers": {
+                        layer: by_contract.get(contract, {}).get(layer, empty_attribution())
+                        for layer in LAYERS
+                    },
                     "total_leaked_gold_bytes_fall": sum(
                         row["leaked_gold_bytes_fall"]
                         for row in by_contract.get(contract, {}).values()
@@ -113,6 +120,10 @@ def gate(v2: dict, v1: dict, main_v2: dict, main_v1: dict) -> dict:
                 record_availability["failed_closed_documents"]
                 - base_availability["failed_closed_documents"]
             )
+            incomplete_rise = (
+                base_availability["completed_documents"]
+                - record_availability["completed_documents"]
+            )
             restore_fall = (
                 base_contract["restore_exact_documents"]
                 - record_contract["restore_exact_documents"]
@@ -123,7 +134,7 @@ def gate(v2: dict, v1: dict, main_v2: dict, main_v1: dict) -> dict:
             )
             passed = main_baseline_match and all(
                 value <= 0
-                for value in (-leaked_fall, refused_rise, restore_fall, manifest_fall)
+                for value in (-leaked_fall, refused_rise, incomplete_rise, restore_fall, manifest_fall)
             )
             layer_results[layer] = {
                 "documents": documents,
@@ -135,6 +146,7 @@ def gate(v2: dict, v1: dict, main_v2: dict, main_v1: dict) -> dict:
                 "with_record_false_positive_bytes": record_bytes["false_positive"],
                 "false_positive_bytes_rise": fp_rise,
                 "refused_documents_rise": refused_rise,
+                "incomplete_documents_rise": incomplete_rise,
                 "exact_restore_documents_fall": restore_fall,
                 "valid_manifest_documents_fall": manifest_fall,
                 "pass": passed,

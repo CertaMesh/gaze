@@ -9,7 +9,10 @@ def arm(contract: str) -> dict:
     def score(leaked: int, fp: int) -> dict:
         return {
             "metrics": {"utf8_bytes": {"leaked": leaked, "false_positive": fp}},
-            "pipeline_availability": {"attempted_documents": 1, "failed_closed_documents": 0},
+            "pipeline_availability": {
+                "attempted_documents": 1, "completed_documents": 1,
+                "failed_closed_documents": 0,
+            },
             "pipeline_contract": {"restore_exact_documents": 1, "manifest_valid_documents": 1},
         }
 
@@ -84,6 +87,7 @@ def test_shipping_gate_reports_class_kind_and_decoy_cost() -> None:
     row = result["class_kind_rows"][0]
     assert (row["record_class"], row["match_kind"]) == ("custom:phone", "exact")
     assert row["contracts"]["v2"]["layers"]["D"]["decoy_false_positive_bytes_added"] == 1
+    assert row["contracts"]["v2"]["layers"]["C"] == shipping.empty_attribution()
 
 
 def test_shipping_gate_requires_exact_no_record_main_parity() -> None:
