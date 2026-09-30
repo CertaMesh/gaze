@@ -64,6 +64,8 @@ PATTERNS = {
     Shape.NATIONAL_GROUPED: r"00 \d{3} \d{3} \d",
     Shape.NATIONAL_EMBEDDED: r"000\d{3}Z\d{4}",
 }
+INVALID_TAX_SHAPES = frozenset((Shape.TAX_ELEVEN, Shape.TAX_GROUPED))
+
 CUES = {
     "TAXNUM": r"(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)",
     "SSN": r"(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)",
@@ -171,6 +173,7 @@ def _cells() -> tuple[tuple[Cell, ...], tuple[Cell, ...]]:
 
 
 CELLS, TWINS = _cells()
+TAX_GUARD_FAMILIES = tuple(twin.family for twin in TWINS if twin.shape in INVALID_TAX_SHAPES)
 DOCS = {"A": 4, "D": 2}
 FAMILY_LABELS = {cell.family: cell.shape.label for cell in CELLS}
 
@@ -218,7 +221,7 @@ def records(api: ModuleType, partition: str) -> list["Record"]:
             v = value(cell.shape, rng, partition, index)
             text, gold, decoys = api._fill_with_decoys(cell.templates[partition],
                 {"V": (v, cell.shape.label if cell.gold else api.DECOY_PREFIX + "benign")})
-            validity = api.INVALID if cell.gold and cell.shape in (Shape.TAX_ELEVEN, Shape.TAX_GROUPED) else api.UNCHECKED if cell.gold else api.BENIGN
+            validity = api.INVALID if cell.gold and cell.shape in INVALID_TAX_SHAPES else api.UNCHECKED if cell.gold else api.BENIGN
             out.append(api.Record(uid=f"agentic-{partition}-{layer}-{cell.family}-{index:03d}-{cell.surface}",
                 partition=partition, layer=layer, family=cell.family, surface=cell.surface, validity=validity,
                 group=f"{partition}-{layer}-{cell.family}-{index:03d}", template=f"government/{cell.family}/{partition}",
@@ -249,7 +252,7 @@ def check(api: ModuleType, records: list["Record"]) -> None:
             raise api.LayerError(f"{record.uid}: incomplete government value")
         if reading(cell, record.text, start) != cell.gold:
             raise api.LayerError(f"{record.uid}: government cue ownership disagrees with gold")
-        if cell.shape in (Shape.TAX_ELEVEN, Shape.TAX_GROUPED) and api.steuer_id_valid(span.value):
+        if cell.shape in INVALID_TAX_SHAPES and api.steuer_id_valid(span.value):
             raise api.LayerError(f"{record.uid}: synthetic Steuer-ID must fail checksum")
         if not cell.gold and bool(re.search(CUES[cell.shape.label], record.text, re.I)) != cell.near_cue:
             raise api.LayerError(f"{record.uid}: wrong near-cue counterweight")

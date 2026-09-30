@@ -3138,9 +3138,8 @@ CREDIT_GUARD_SINCE: dict[str, int] = {
 }
 
 
-CREDIT_GUARD_FAMILIES["TAXNUM"] = (*CREDIT_GUARD_FAMILIES["TAXNUM"],
-    "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped")
-CREDIT_GUARD_SINCE.update({family: 9 for family in CREDIT_GUARD_FAMILIES["TAXNUM"] if family.startswith("gov_")})
+CREDIT_GUARD_FAMILIES["TAXNUM"] += government_ids.TAX_GUARD_FAMILIES
+CREDIT_GUARD_SINCE.update({family: 9 for family in government_ids.TAX_GUARD_FAMILIES})
 
 
 def guard_families(generator_version: int) -> list[str]:
