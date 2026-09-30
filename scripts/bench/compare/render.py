@@ -411,7 +411,8 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
         "Every number in this section names its split; test-half numbers are the comparison.",
         "",
         f"- **Tuned by its authors:** Presidio Research's own tuned setup for its corpus ({authors['setup']}; "
-        f"[notebook]({authors['source']})), applied unchanged. It supports English only, so every document "
+        f"`notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb` at presidio-research `{authors['commit'][:8]}`), "
+        "applied unchanged. It supports English only, so every document "
         "is analyzed as English. Its entities without a label in this corpus: "
         f"{', '.join(coverage['entities_without_a_corpus_label'])}. Scored labels here that none of its "
         f"entities maps to: {', '.join(coverage['corpus_labels_without_an_entity'])}. Labels affect only the "
