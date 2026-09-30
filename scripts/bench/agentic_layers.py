@@ -2907,9 +2907,13 @@ def _grouped(number: str) -> str:
     return f"{number[:4]} {number[4:8]} {number[8:]}"
 
 
+CARD_COMPACT_LENGTHS = (12, 12, 13, 14, 15, 15)
+
+
 def _card_compact(rng: Rng, partition: str, index: int) -> str:
-    """12 to 15 digits; Luhn-valid and Luhn-failing values in turn."""
-    return _short_card(rng, partition, 12 + index % 4, (index // 2) % 2 == 0)
+    """12 to 15 digits, Luhn-valid and Luhn-failing in turn: both at 12 and 15."""
+    length = CARD_COMPACT_LENGTHS[index % len(CARD_COMPACT_LENGTHS)]
+    return _short_card(rng, partition, length, index % 2 == 0)
 
 
 def _card_grouped(rng: Rng, partition: str, index: int) -> str:

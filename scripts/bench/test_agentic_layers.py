@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "578bbc75d7ba405d3d0d3f84d22343b906d1c9a98a17b92970fd77725cec22f8",
-    "test": "485076ee00e0a7d4cb7585ef40502b9bb6ef1396d2a9a8f479e741656e1f2077",
+    "dev": "917ad7cb4e9aa3edeaebb5d679f7356b950b6746ca796ec13ed45fad2950c482",
+    "test": "c09a3cc92e1b83acaea0458416cb61ae24297c695b73e37399413c6908f4fd85",
 }
 # v7: everything before the cued grammar and short-identifier cells.
 V7_CORPUS_SHA256 = {
@@ -1078,8 +1078,10 @@ class CueCellTests(unittest.TestCase):
         for records in self.cells.values():
             cards = [r for r in records if r.layer == "A" and r.gold[0].label == "CREDITCARDNUMBER"]
             self.assertEqual({r.validity for r in cards}, {agentic.VALID, agentic.INVALID})
-            twelve = {r.validity for r in cards if len(r.gold[0].value.replace(" ", "")) == 12}
-            self.assertEqual(twelve, {agentic.VALID, agentic.INVALID})
+            compact = [r for r in cards if " " not in r.gold[0].value]
+            for length in (12, 15):
+                validities = {r.validity for r in compact if len(r.gold[0].value) == length}
+                self.assertEqual(validities, {agentic.VALID, agentic.INVALID}, length)
             self.assertEqual({len(r.gold[0].value.replace(" ", "")) for r in cards}, {12, 13, 14, 15})
             for record in cards:
                 digits = record.gold[0].value.replace(" ", "")
