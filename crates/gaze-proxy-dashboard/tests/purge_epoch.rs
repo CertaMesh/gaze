@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use gaze_inspection::{
-    install_inspection_v1, InspectionQueueLimitsV1, InspectionSink, InspectionSinkErrorV1,
-    PendingInspectionConsumerV1, PendingInspectionProducerV1,
+    install_inspection_v1, InspectionBeginLogicalErrorV1, InspectionQueueLimitsV1, InspectionSink,
+    InspectionSinkErrorV1, PendingInspectionConsumerV1, PendingInspectionProducerV1,
 };
 use gaze_types::inspection::{CaptureDomainsV1, DashboardCaptureDescriptorV1};
 
@@ -29,9 +29,12 @@ fn registration_purge_guard_closes_then_reopens_only_at_its_returned_epoch() {
     let (producer, mut activated) =
         install_inspection_v1(pending_producer, pending_consumer).unwrap();
     let guard = activated.begin_purge().unwrap();
-    assert!(producer.begin_logical().is_err());
+    assert!(matches!(
+        producer.begin_logical_blocking(),
+        Err(InspectionBeginLogicalErrorV1::Purging)
+    ));
     let expected = guard.next_epoch();
     let completed = guard.complete().unwrap();
     assert_eq!(completed, expected);
-    assert!(producer.begin_logical().is_ok());
+    assert!(producer.begin_logical_blocking().is_ok());
 }

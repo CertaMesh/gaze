@@ -63,3 +63,10 @@ timing.
 See the dashboard [trust boundary](../../docs/explanation/dashboard/trust-boundary.md), [local
 operation guide](../../docs/how-to/dashboard/run-local-dashboard.md), and [browser security
 reference](../../docs/reference/dashboard/browser-security.md).
+
+## Awaiting browser purges
+
+An HTTP purge response acknowledges the notification, not its completion. After the requests
+finish, `DashboardControl::wait_for_epoch(minimum)` waits on lifecycle notifications for the
+child-acknowledged running epoch. It fails on disable, stop, or the five-second control deadline.
+The returned epoch is a snapshot; further browser requests can start another purge.
