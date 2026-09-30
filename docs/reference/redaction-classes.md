@@ -19,7 +19,7 @@ compatibility name for the same embedded `core.toml` bytes
 (`crates/gaze-recognizers/src/lib.rs:45-55`,
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
-The shared payload currently contains exactly 50 recognizer specs
+The shared payload currently contains exactly 54 recognizer specs
 (`crates/gaze-recognizers/src/lib.rs`, `embedded()`).
 
 The opt-in `secrets` bundle (`crates/gaze-recognizers/embedded/secrets.toml`)
@@ -159,7 +159,7 @@ fallback. Grouped runs
 can extend beyond four groups or 40 bytes with a typed audit reason; the
 [labelled-identifier explanation](../explanation/detection/labelled-identifiers.md)
 describes its stop and audit rules. The `redaction_classes_doc` test pins these
-rows and the 50-spec inventory to the loaded rulepack. The
+rows and the 54-spec inventory to the loaded rulepack. The
 `bundle-tokenization-drift --verify-ack` gate separately checks the bundled
 output against its committed corpus snapshot.
 
