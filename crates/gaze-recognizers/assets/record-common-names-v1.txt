@@ -1,0 +1,50 @@
+# v1: case-folded single-token person names that also occur as ordinary words.
+# EN
+bill
+can
+chase
+faith
+grace
+hope
+lee
+mark
+may
+pat
+rose
+will
+# DE
+alter
+die
+der
+den
+ganz
+ist
+liebe
+mal
+sie
+und
+war
+# FR
+ami
+ange
+elle
+jean
+marie
+rose
+vie
+# NL
+ben
+jan
+lies
+maan
+mark
+roos
+wil
+# PT
+amor
+clara
+flor
+joao
+luz
+rosa
+viva

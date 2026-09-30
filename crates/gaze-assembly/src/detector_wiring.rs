@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use gaze::{
-    Context, DetectorKind, LocaleBasis, LocaleChain, LocaleTag, PiiClass, PolicyError, RawMatch,
-    Rulepack, RulepackError, SafetyTier,
+    Action, Context, DetectorKind, LocaleBasis, LocaleChain, LocaleTag, PiiClass, PolicyError,
+    RawMatch, RuleSpec, Rulepack, RulepackError, SafetyTier, RECORD_DICTIONARY_PREFIX,
 };
 use gaze_recognizers::{
     AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -10,7 +10,9 @@ use gaze_recognizers::{
 };
 
 use crate::{
-    class_map::{class_for_dictionary, class_has_tokenize_or_stricter_action},
+    class_map::{
+        class_for_dictionary, class_has_reversible_action, class_has_tokenize_or_stricter_action,
+    },
     registration::AssemblyBuilder,
     template::lower_regex_pattern,
     BuildError,
@@ -404,7 +406,30 @@ pub(crate) fn register_context_dictionaries(
     context: &Context,
     registered_dictionaries: &BTreeSet<String>,
 ) -> Result<(), BuildError> {
-    for name in context.dictionaries.keys() {
+    if context
+        .dictionaries
+        .keys()
+        .any(|name| name.starts_with(RECORD_DICTIONARY_PREFIX))
+        && policy.rules.iter().any(|rule| {
+            matches!(rule, RuleSpec::Column { action, .. } if !matches!(action, Action::Tokenize | Action::FormatPreserve))
+        })
+    {
+        return Err(BuildError::RecordPolicy);
+    }
+    let mut names: Vec<_> = context.dictionaries.keys().collect();
+    names.sort();
+    for name in names {
+        if name.starts_with(RECORD_DICTIONARY_PREFIX) {
+            let class = context
+                .class_map
+                .get(name)
+                .ok_or(BuildError::RecordPolicy)?;
+            if registered_dictionaries.contains(name)
+                || !class_has_reversible_action(&policy.rules, class)
+            {
+                return Err(BuildError::RecordPolicy);
+            }
+        }
         if registered_dictionaries.contains(name) {
             continue;
         }
@@ -420,13 +445,27 @@ pub(crate) fn register_context_dictionaries(
                 PiiClass::custom(name).map_err(gaze::Error::from)?,
             )?,
         };
-        builder.recognizer(DictionaryRecognizer::new(
+        let recognizer = DictionaryRecognizer::new(
             format!("context/{name}"),
-            class,
+            class.clone(),
             name,
             context.dictionaries[name].case_sensitive,
             "counter",
-        ));
+        );
+        builder.recognizer(if name.starts_with(RECORD_DICTIONARY_PREFIX) {
+            let allowed =
+                context.record_allowed_match_kinds(&class, &context.dictionaries[name].terms[0]);
+            let recognizer = recognizer
+                .with_cache_capacity(1)
+                .with_record_allowed_kinds(allowed);
+            if class == PiiClass::Name {
+                recognizer.with_unicode_case_insensitive()
+            } else {
+                recognizer
+            }
+        } else {
+            recognizer
+        });
     }
 
     Ok(())

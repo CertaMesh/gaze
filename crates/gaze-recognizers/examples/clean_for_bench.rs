@@ -5,11 +5,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use gaze::{
-    Action, Candidate, CleanDocument, Context, DetectContext, DictionaryBundle, EmittedTokenSpan,
-    FallbackReason, GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis,
-    LocaleChain, LocaleTag, NerPolicy, PiiClass, Pipeline, RedactionEntry, RedactionLogError,
-    RedactionLogger, RuleSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback,
-    SafetyNetMode, SafetyNetPolicy, Scope, Session,
+    record_dictionary_name, Action, Candidate, CleanDocument, Context, ContextDictionary,
+    DetectContext, DictionaryBundle, EmittedTokenSpan, FallbackReason,
+    GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis, LocaleChain, LocaleTag,
+    NerPolicy, PiiClass, Pipeline, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec,
+    Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    Scope, Session, RECORD_DICTIONARY_PREFIX,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -111,6 +112,9 @@ struct Request {
     fixture_id: String,
     locale_chain: Vec<String>,
     text: String,
+    /// Synthetic caller-known record for the separate oracle benchmark arm.
+    #[serde(default)]
+    context_json: Option<String>,
     /// Used only by CLI equivalence checks; scored requests keep fixture-derived sessions.
     #[serde(default)]
     session_hex: Option<String>,
@@ -280,7 +284,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let request: Request = serde_json::from_str(&line)?;
-        match handle_request_with_policy(config, full, request, policy_run.as_ref())? {
+        match handle_request_with_policy(
+            config,
+            full,
+            request,
+            policy_run.as_ref(),
+            std::env::var_os("GAZE_BENCH_KNOWN_RECORD_ARM").is_some(),
+        )? {
             Outcome::Success(mut response) => {
                 response.audit_rows = audit_rows.as_ref().map(AuditRows::drain);
                 serde_json::to_writer(&mut stdout, &response)?;
@@ -333,7 +343,7 @@ fn handle_request(
     full: &Pipeline,
     request: Request,
 ) -> Result<Outcome, Box<dyn std::error::Error>> {
-    handle_request_with_policy(config, full, request, None)
+    handle_request_with_policy(config, full, request, None, false)
 }
 
 fn handle_request_with_policy(
@@ -341,7 +351,27 @@ fn handle_request_with_policy(
     full: &Pipeline,
     request: Request,
     policy_run: Option<&PolicyRun>,
+    known_record_arm: bool,
 ) -> Result<Outcome, Box<dyn std::error::Error>> {
+    let record_dictionaries = if let Some(raw) = request.context_json.as_deref() {
+        let policy_run = policy_run.ok_or("record context requires policy-file config")?;
+        let context = Context::from_json_str(raw)?;
+        if !known_record_arm
+            || context.dictionaries.is_empty()
+            || context
+                .dictionaries
+                .keys()
+                .any(|name| !name.starts_with(RECORD_DICTIONARY_PREFIX))
+        {
+            return Err("record context requires the known-record benchmark arm".into());
+        }
+        Some(DictionaryBundle::merge(
+            policy_run.dictionaries.clone(),
+            gaze::dictionary_bundle_from_context(&context),
+        ))
+    } else {
+        None
+    };
     let request_locales = request
         .locale_chain
         .iter()
@@ -351,8 +381,9 @@ fn handle_request_with_policy(
         .map(|run| run.locale_chain.as_slice())
         .unwrap_or(&request_locales);
     let empty_dictionaries = DictionaryBundle::default();
-    let dictionaries = policy_run
-        .map(|run| &run.dictionaries)
+    let dictionaries = record_dictionaries
+        .as_ref()
+        .or_else(|| policy_run.map(|run| &run.dictionaries))
         .unwrap_or(&empty_dictionaries);
     let session_hex = match request.session_hex.as_deref() {
         Some(value) if value.len() == 8 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) => {
@@ -844,9 +875,14 @@ fn build_policy_run() -> Result<PolicyRun, Box<dyn std::error::Error>> {
         std::env::var_os("GAZE_BENCH_POLICY").ok_or("policy-file requires GAZE_BENCH_POLICY")?;
     let policy = gaze::Policy::load_for_cli(std::path::Path::new(&path))?;
     let inputs = gaze_assembly::resolve_policy_inputs(&policy, None, None, None)?;
+    let context = if std::env::var_os("GAZE_BENCH_KNOWN_RECORD_ARM").is_some() {
+        record_registry_context(&policy)
+    } else {
+        empty_context()
+    };
     let pipeline = gaze_assembly::build_pipeline(
         &policy,
-        &empty_context(),
+        &context,
         &inputs.rulepacks,
         &inputs.locale_chain,
         Some(inputs.ner_threshold),
@@ -856,6 +892,45 @@ fn build_policy_run() -> Result<PolicyRun, Box<dyn std::error::Error>> {
         locale_chain: inputs.locale_chain,
         dictionaries: inputs.dictionaries,
     })
+}
+
+fn record_registry_context(policy: &gaze::Policy) -> Context {
+    let classes = [
+        PiiClass::Email,
+        PiiClass::Name,
+        PiiClass::Location,
+        PiiClass::Custom("phone".into()),
+        PiiClass::Custom("iban".into()),
+        PiiClass::Custom("credit_card".into()),
+        PiiClass::Custom("passport".into()),
+        PiiClass::Custom("national_id".into()),
+        PiiClass::Custom("steuer_id".into()),
+    ];
+    let mut context = empty_context();
+    for class in classes {
+        if !gaze_assembly::class_has_reversible_action(&policy.rules, &class) {
+            continue;
+        }
+        // A missing request-local match policy must never inherit a placeholder default.
+        let group = match &class {
+            PiiClass::Name => "name_single".to_string(),
+            PiiClass::Location => "address_part".to_string(),
+            _ => class.to_canonical_str(),
+        };
+        context.record_match_kinds.insert(group, BTreeSet::new());
+        for slot in 0..32 {
+            let name = record_dictionary_name(&class, slot);
+            context.dictionaries.insert(
+                name.clone(),
+                ContextDictionary {
+                    terms: vec!["record-slot-never-matches".into()],
+                    case_sensitive: true,
+                },
+            );
+            context.class_map.insert(name, class.clone());
+        }
+    }
+    context
 }
 
 fn ner_settings_from_env() -> Result<NerSettings, BenchmarkBuildError> {
@@ -983,6 +1058,8 @@ fn empty_context() -> Context {
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
+        record_match_kinds: Default::default(),
+        record_value_rejections: Default::default(),
     }
 }
 
@@ -1385,7 +1462,293 @@ fn manifest_integrity(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gaze::RawDocument;
+    use gaze::{RawDocument, RecordMatchKind};
+
+    #[test]
+    fn record_shipping_defaults_match_direct_product_without_overrides() {
+        use RecordMatchKind::{
+            CaseFolded, CorroboratedSingle, Exact, WhitespaceCaseFolded, WhitespaceFlexible,
+        };
+
+        let context_json = r#"{"record":{"name":"Maren Okafor"}}"#;
+        let context = Context::from_json_str(context_json).unwrap();
+        let expected = [
+            (
+                PiiClass::Name,
+                "Maren Okafor",
+                vec![Exact, CaseFolded, WhitespaceCaseFolded],
+            ),
+            (
+                PiiClass::Name,
+                "Maren",
+                vec![CaseFolded, CorroboratedSingle],
+            ),
+            (PiiClass::Location, "Synthetic Avenue", vec![]),
+            (PiiClass::Email, "alice@example.invalid", vec![]),
+            (PiiClass::Custom("phone".into()), "+1-555-0104", vec![Exact]),
+            (PiiClass::Custom("passport".into()), "P-123456", vec![Exact]),
+            (
+                PiiClass::Custom("credit_card".into()),
+                "4111 1111 1111 1111",
+                vec![Exact, WhitespaceFlexible],
+            ),
+            (
+                PiiClass::Custom("iban".into()),
+                "DE89 3704 0044 0532 0130 00",
+                vec![Exact, WhitespaceFlexible],
+            ),
+            (
+                PiiClass::Custom("national_id".into()),
+                "Synthetic Value",
+                vec![Exact, WhitespaceFlexible],
+            ),
+            (
+                PiiClass::Custom("steuer_id".into()),
+                "12 345 678 901",
+                vec![Exact, WhitespaceFlexible],
+            ),
+        ];
+        for (class, term, kinds) in expected {
+            assert_eq!(
+                context.record_allowed_match_kinds(&class, term),
+                kinds.into_iter().collect(),
+                "shipping defaults for {class:?} {term}"
+            );
+        }
+
+        let mut policy = gaze::Policy::default();
+        policy.rules = vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }];
+        let locales = LocaleChain::from_tags(vec![LocaleTag::EnUs]);
+        let product =
+            gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+        let session =
+            Session::new_with_session_hex_for_tests(Scope::Ephemeral, 1_u32.to_be_bytes()).unwrap();
+        let dictionaries = gaze::dictionary_bundle_from_context(&context);
+        let (CleanDocument::Text(product_text), manifest, _, trace, _) = product
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                &session,
+                "Maren Okafor",
+                locales.as_slice(),
+                &dictionaries,
+                safety_net_policy(BenchConfig::PolicyFile),
+            )
+            .unwrap()
+        else {
+            panic!("text expected")
+        };
+        assert!(!product_text.contains("Maren Okafor"));
+
+        let registered = gaze_assembly::build_pipeline(
+            &policy,
+            &record_registry_context(&policy),
+            &[],
+            &locales,
+            None,
+        )
+        .unwrap();
+        let run = PolicyRun {
+            pipeline: registered,
+            locale_chain: locales,
+            dictionaries: DictionaryBundle::default(),
+        };
+        let request = Request {
+            fixture_id: "record-default-parity".into(),
+            locale_chain: vec!["en-US".into()],
+            text: "Maren Okafor".into(),
+            context_json: Some(context_json.into()),
+            session_hex: Some("00000001".into()),
+        };
+        let Outcome::Success(bench) = handle_request_with_policy(
+            BenchConfig::PolicyFile,
+            &run.pipeline,
+            request,
+            Some(&run),
+            true,
+        )
+        .unwrap() else {
+            panic!("benchmark failed")
+        };
+        assert_eq!(bench.clean_text, product_text);
+        assert_eq!(
+            serde_json::to_value(&bench.manifest_spans).unwrap(),
+            serde_json::to_value(serialize_manifest(manifest)).unwrap(),
+        );
+        assert_eq!(
+            serde_json::to_value(&bench.final_protection_trace).unwrap(),
+            serde_json::to_value(serialize_final_protection_trace(trace)).unwrap(),
+        );
+    }
+
+    #[test]
+    fn record_requests_match_product_manifest_and_trace_for_every_kind_switch() {
+        let mut policy = gaze::Policy::default();
+        policy.rules = vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }];
+        let locales = LocaleChain::from_tags(vec![LocaleTag::EnUs]);
+        let registered = gaze_assembly::build_pipeline(
+            &policy,
+            &record_registry_context(&policy),
+            &[],
+            &locales,
+            None,
+        )
+        .unwrap();
+        let run = PolicyRun {
+            pipeline: registered,
+            locale_chain: locales.clone(),
+            dictionaries: DictionaryBundle::default(),
+        };
+        let cases = [
+            (
+                r#"{"record":{"name":"Maren Okafor"}}"#,
+                "name_multi",
+                "exact",
+                "Maren Okafor",
+                "Maren Okafor",
+            ),
+            (
+                r#"{"record":{"name":"Maren Okafor"}}"#,
+                "name_multi",
+                "case_folded",
+                "MAREN OKAFOR",
+                "MAREN OKAFOR",
+            ),
+            (
+                r#"{"record":{"value":"12 345 678 901"},"field_map":{"/value":"custom:steuer_id"}}"#,
+                "custom:steuer_id",
+                "whitespace_flexible",
+                "12  345 678 901",
+                "12  345 678 901",
+            ),
+            (
+                r#"{"record":{"name":"Maren Okafor"}}"#,
+                "name_multi",
+                "whitespace_case_folded",
+                "MAREN  OKAFOR",
+                "MAREN  OKAFOR",
+            ),
+            (
+                r#"{"record":{"first_name":"Will","full_name":"Will Smith"}}"#,
+                "name_single",
+                "corroborated_single",
+                "Will you send it? Will Smith called. Hi Will,",
+                "Hi Will,",
+            ),
+        ];
+        for (record, group, kind, raw, surface) in cases {
+            for enabled in [false, true] {
+                let mut envelope: serde_json::Value = serde_json::from_str(record).unwrap();
+                envelope["record_match_kinds"] =
+                    serde_json::json!({group: if enabled { vec![kind] } else { vec![] }});
+                let context_json = envelope.to_string();
+                let context = Context::from_json_str(&context_json).unwrap();
+                let product =
+                    gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+                let request = || Request {
+                    fixture_id: "record-parity".into(),
+                    locale_chain: vec!["en-US".into()],
+                    text: raw.into(),
+                    context_json: Some(context_json.clone()),
+                    session_hex: Some("00000001".into()),
+                };
+                let product_response = match handle_request_with_policy(
+                    BenchConfig::PolicyFile,
+                    &product,
+                    request(),
+                    Some(&run),
+                    true,
+                )
+                .unwrap()
+                {
+                    Outcome::Success(response) => response,
+                    Outcome::PipelineError { reason, .. } => panic!("product failed: {reason:?}"),
+                };
+                let bench_response = match handle_request_with_policy(
+                    BenchConfig::PolicyFile,
+                    &run.pipeline,
+                    request(),
+                    Some(&run),
+                    true,
+                )
+                .unwrap()
+                {
+                    Outcome::Success(response) => response,
+                    Outcome::PipelineError { reason, .. } => panic!("bench failed: {reason:?}"),
+                };
+                assert_eq!(
+                    bench_response.clean_text, product_response.clean_text,
+                    "{kind} enabled={enabled}"
+                );
+                assert_eq!(
+                    serde_json::to_value(&bench_response.manifest_spans).unwrap(),
+                    serde_json::to_value(&product_response.manifest_spans).unwrap(),
+                    "manifest {kind} enabled={enabled}"
+                );
+                assert_eq!(
+                    serde_json::to_value(&bench_response.final_protection_trace).unwrap(),
+                    serde_json::to_value(&product_response.final_protection_trace).unwrap(),
+                    "trace {kind} enabled={enabled}"
+                );
+                assert_eq!(
+                    bench_response.clean_text.contains(surface),
+                    !enabled,
+                    "{kind} enabled={enabled}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn known_record_registry_matches_per_document_context() {
+        let context = Context::from_json_str(
+            r#"{"record":{"name":"Alice Smith","email":"alice@example.invalid"},"field_map":{"/name":"Name","/email":"Email"},"record_match_kinds":{"name_multi":["exact","case_folded"],"email":["exact"]}}"#,
+        )
+        .unwrap();
+        let mut policy = gaze::Policy::default();
+        policy.rules = vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }];
+        let locales = LocaleChain::from_tags(vec![LocaleTag::EnUs]);
+        let dynamic =
+            gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+        let registered = gaze_assembly::build_pipeline(
+            &policy,
+            &record_registry_context(&policy),
+            &[],
+            &locales,
+            None,
+        )
+        .unwrap();
+        let dictionaries = gaze::dictionary_bundle_from_context(&context);
+        for pipeline in [&dynamic, &registered] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let raw = "ALICE SMITH emailed alice@example.invalid";
+            let cleaned = pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(raw.into()),
+                    locales.as_slice(),
+                    &dictionaries,
+                )
+                .unwrap();
+            let CleanDocument::Text(text) = cleaned else {
+                panic!("text expected")
+            };
+            assert!(text.contains(":Name_1>"));
+            assert!(text.contains(":Email_1>"));
+            assert_eq!(
+                pipeline
+                    .restore_with_telemetry(&session, &text)
+                    .unwrap()
+                    .0
+                    .text,
+                raw
+            );
+        }
+    }
 
     const PRODUCER_DETERMINISM_CHILD: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_CHILD";
     const PRODUCER_DETERMINISM_BEGIN: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_BEGIN";
@@ -1398,6 +1761,7 @@ mod tests {
             fixture_id: fixture_id.to_string(),
             locale_chain: vec![locale.to_string()],
             text: text.to_string(),
+            context_json: None,
             session_hex: None,
         };
 
@@ -1415,6 +1779,7 @@ mod tests {
             fixture_id: "synthetic-prefix".to_string(),
             locale_chain: vec!["en-US".to_string()],
             text: "alice@example.invalid".to_string(),
+            context_json: None,
             session_hex: Some("deadbeef".to_string()),
         };
         let Outcome::Success(response) =
@@ -1975,12 +2340,14 @@ mod tests {
                 fixture_id: "producer-determinism-en-1".to_string(),
                 locale_chain: vec!["en-US".to_string()],
                 text: "Dr. Schmidt from Example Labs reviews GAZE-1001 in Berlin. Contact alice@example.invalid or +1-555-0101. This synthetic paragraph repeats Example Labs, Dr. Schmidt, Berlin, and GAZE-1001 so the full producer exercises deterministic recognition, Pass 2 NER and manifest restoration across a document longer than three hundred bytes.".to_string(),
+                context_json: None,
                 session_hex: None,
             },
             Request {
                 fixture_id: "producer-determinism-de-2".to_string(),
                 locale_chain: vec!["de-DE".to_string()],
                 text: "Dr. Schmidt prueft fuer Example Labs den synthetischen Vorgang GAZE-1002 in Berlin. Der Testkontakt lautet alice@example.invalid und die Testnummer +49 1555 0112233. Dieser erfundene Absatz wiederholt Example Labs, Dr. Schmidt, Berlin und GAZE-1002, damit der vollstaendige Produzent Erkennung, Pass 2 NER und Manifest-Wiederherstellung ueber mehr als dreihundert Bytes ausfuehrt.".to_string(),
+                context_json: None,
                 session_hex: None,
             },
         ] {

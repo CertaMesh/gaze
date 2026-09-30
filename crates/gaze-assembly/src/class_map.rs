@@ -1,4 +1,4 @@
-use gaze::{Action, Context, PiiClass, RuleSpec, RulepackError};
+use gaze::{first_matching_action, Action, Context, PiiClass, RuleSpec, RulepackError};
 
 pub(crate) fn class_for_dictionary(
     policy: &gaze::Policy,
@@ -31,27 +31,38 @@ pub(crate) fn class_has_tokenize_or_stricter_action(
     rules: &[RuleSpec],
     class: &PiiClass,
 ) -> Result<bool, RulepackError> {
-    for rule in rules {
-        let action = match rule {
+    let found = first_matching_action(rules, |rule| match rule {
+        RuleSpec::Class {
+            class: rule_class,
+            action,
+        } if rule_class == class => Ok(Some(*action)),
+        RuleSpec::Class { .. } | RuleSpec::Column { .. } => Ok(None),
+        RuleSpec::Default { action } => Ok(Some(*action)),
+        _ => Err(RulepackError::UnsupportedRuleSpec {
+            variant: format!("{:?}", rule),
+        }),
+    })?;
+    Ok(found.is_some_and(|(_, action)| {
+        matches!(
+            action,
+            Action::Tokenize | Action::Redact | Action::FormatPreserve | Action::Generalize
+        )
+    }))
+}
+
+/// The first matching rule must keep record-supplied values restorable.
+pub fn class_has_reversible_action(rules: &[RuleSpec], class: &PiiClass) -> bool {
+    first_matching_action(rules, |rule| {
+        Ok::<_, std::convert::Infallible>(match rule {
             RuleSpec::Class {
-                class: rule_class,
+                class: named,
                 action,
-            } if rule_class == class => Some(action),
-            RuleSpec::Class { .. } => None,
-            RuleSpec::Column { .. } => None,
-            RuleSpec::Default { action } => Some(action),
-            _ => {
-                return Err(RulepackError::UnsupportedRuleSpec {
-                    variant: format!("{:?}", rule),
-                })
-            }
-        };
-        if let Some(action) = action {
-            return Ok(matches!(
-                action,
-                Action::Tokenize | Action::Redact | Action::FormatPreserve | Action::Generalize
-            ));
-        }
-    }
-    Ok(false)
+            } if named == class => Some(*action),
+            RuleSpec::Default { action } => Some(*action),
+            _ => None,
+        })
+    })
+    .ok()
+    .flatten()
+    .is_some_and(|(_, action)| matches!(action, Action::Tokenize | Action::FormatPreserve))
 }

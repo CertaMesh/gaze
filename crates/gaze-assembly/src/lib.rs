@@ -41,6 +41,7 @@ use gaze::{
 };
 
 mod class_map;
+pub use class_map::class_has_reversible_action;
 pub mod defaults;
 mod detector_wiring;
 mod error;

@@ -1,13 +1,16 @@
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use gaze_types::{
     Candidate, ConflictTier, DetectContext, DictionaryEntry, LocaleBasis, LocaleTag, PiiClass,
-    Recognizer,
+    Recognizer, RecordMatchKind,
 };
+use unicode_casefold::UnicodeCaseFold;
+
+const MAX_RECORD_MATCH_WHITESPACE_RUN: usize = 32;
 
 /// Lookup-based [`Recognizer`] for tenant-specific PII.
 ///
@@ -29,6 +32,11 @@ pub struct DictionaryRecognizer {
     score: f32,
     priority: i32,
     compiled_dictionaries: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
+    compiled_unicode: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
+    unicode_case_insensitive: bool,
+    record_matching: bool,
+    record_allowed_kinds: BTreeSet<RecordMatchKind>,
+    cache_capacity: usize,
 }
 
 impl DictionaryRecognizer {
@@ -73,6 +81,11 @@ impl DictionaryRecognizer {
             score,
             priority,
             compiled_dictionaries: Mutex::new(HashMap::new()),
+            compiled_unicode: Mutex::new(HashMap::new()),
+            unicode_case_insensitive: false,
+            record_matching: false,
+            record_allowed_kinds: BTreeSet::new(),
+            cache_capacity: usize::MAX,
         }
     }
 
@@ -82,6 +95,38 @@ impl DictionaryRecognizer {
 
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
+    }
+
+    /// Limit retained automata when one registered slot receives changing values.
+    pub fn with_cache_capacity(mut self, capacity: usize) -> Self {
+        self.cache_capacity = capacity.max(1);
+        self
+    }
+
+    /// Record names need Unicode case matching while preserving source byte offsets.
+    pub fn with_unicode_case_insensitive(mut self) -> Self {
+        self.unicode_case_insensitive = true;
+        self
+    }
+
+    pub fn with_record_matching(mut self) -> Self {
+        self.record_matching = true;
+        self.record_allowed_kinds = [
+            RecordMatchKind::Exact,
+            RecordMatchKind::WhitespaceFlexible,
+            RecordMatchKind::CaseFolded,
+            RecordMatchKind::WhitespaceCaseFolded,
+            RecordMatchKind::CorroboratedSingle,
+        ]
+        .into_iter()
+        .collect();
+        self
+    }
+
+    pub fn with_record_allowed_kinds(mut self, allowed: BTreeSet<RecordMatchKind>) -> Self {
+        self.record_matching = true;
+        self.record_allowed_kinds = allowed;
+        self
     }
 
     /// Overrides how the recognizer's locale metadata affects eligibility.
@@ -96,14 +141,52 @@ impl DictionaryRecognizer {
             .compiled_dictionaries
             .lock()
             .expect("dictionary automaton cache poisoned");
-        Arc::clone(compiled.entry(key).or_insert_with(|| {
-            Arc::new(
-                AhoCorasickBuilder::new()
-                    .ascii_case_insensitive(!entry.case_sensitive())
-                    .build(entry.terms())
-                    .expect("DictionaryEntry validates terms before automaton construction"),
-            )
-        }))
+        if let Some(existing) = compiled.get(&key) {
+            return Arc::clone(existing);
+        }
+        if compiled.len() >= self.cache_capacity {
+            compiled.clear();
+        }
+        let automaton = Arc::new(
+            AhoCorasickBuilder::new()
+                .ascii_case_insensitive(!entry.case_sensitive())
+                .build(entry.terms())
+                .expect("DictionaryEntry validates terms before automaton construction"),
+        );
+        compiled.insert(key, Arc::clone(&automaton));
+        automaton
+    }
+
+    fn unicode_automaton_for(&self, entry: &DictionaryEntry) -> Arc<AhoCorasick> {
+        let key = DictionaryCacheKey::from_entry(entry);
+        let mut compiled = self
+            .compiled_unicode
+            .lock()
+            .expect("dictionary Unicode cache poisoned");
+        if let Some(existing) = compiled.get(&key) {
+            return Arc::clone(existing);
+        }
+        if compiled.len() >= self.cache_capacity {
+            compiled.clear();
+        }
+        let folded_terms = entry
+            .terms()
+            .iter()
+            .map(|term| {
+                if self.unicode_case_insensitive {
+                    term.as_str().case_fold().collect::<String>()
+                } else {
+                    term.clone()
+                }
+            })
+            .collect::<Vec<_>>();
+        let automaton = Arc::new(
+            AhoCorasickBuilder::new()
+                .build(folded_terms)
+                .expect("DictionaryEntry validates terms before automaton construction"),
+        );
+        compiled.insert(key, Arc::clone(&automaton));
+        automaton
     }
 }
 
@@ -146,25 +229,76 @@ impl Recognizer for DictionaryRecognizer {
         let Some(entry) = ctx.dictionaries.get(&self.dictionary_name) else {
             return Ok(Vec::new());
         };
-        let automaton = self.automaton_for(entry);
+        let corroborate_single_name = self.record_matching
+            && self.class == PiiClass::Name
+            && entry.terms().len() == 1
+            && !entry.terms()[0].chars().any(char::is_whitespace)
+            && record_name_is_common(&entry.terms()[0]);
+        let mut normalized_text = None;
+        let matches = if self.unicode_case_insensitive || self.record_matching {
+            let (folded, starts, ends) = fold_with_original_offsets(
+                input,
+                self.unicode_case_insensitive,
+                self.record_matching,
+            );
+            let hits = self
+                .unicode_automaton_for(entry)
+                .find_iter(&folded)
+                .filter_map(|hit| {
+                    Some((
+                        *starts.get(&hit.start())?,
+                        *ends.get(&hit.end())?,
+                        hit.pattern().as_usize(),
+                    ))
+                })
+                .collect::<Vec<_>>();
+            normalized_text = Some(folded);
+            hits
+        } else {
+            self.automaton_for(entry)
+                .find_iter(input)
+                .map(|hit| (hit.start(), hit.end(), hit.pattern().as_usize()))
+                .collect::<Vec<_>>()
+        };
 
-        Ok(automaton
-            .find_iter(input)
-            .filter(|m| is_token_boundary_match(input, m.start(), m.end()))
-            .map(|m| {
+        Ok(matches
+            .into_iter()
+            .filter(|(start, end, _)| is_token_boundary_match(input, *start, *end))
+            .filter(|(start, end, index)| {
+                if !self.record_matching {
+                    return true;
+                }
+                let matched = &input[*start..*end];
+                let term = &entry.terms()[*index];
+                let kind = if corroborate_single_name {
+                    RecordMatchKind::CorroboratedSingle
+                } else {
+                    record_match_kind(matched, term)
+                };
+                entry
+                    .record_allowed_kinds()
+                    .unwrap_or(&self.record_allowed_kinds)
+                    .contains(&kind)
+                    && (!corroborate_single_name
+                        || corroborated_record_name(
+                            input,
+                            normalized_text.as_deref().unwrap_or(input),
+                            *start,
+                            *end,
+                            ctx,
+                            &self.dictionary_name,
+                        ))
+            })
+            .map(|(start, end, index)| {
                 Candidate::new(
-                    m.start()..m.end(),
+                    start..end,
                     self.class.clone(),
                     self.id.clone(),
                     self.score,
                     self.priority,
-                    Some(input[m.start()..m.end()].to_string()),
+                    Some(input[start..end].to_string()),
                     self.token_family.clone(),
-                    format!(
-                        "dictionary:{}[#{}]",
-                        self.dictionary_name,
-                        m.pattern().as_usize()
-                    ),
+                    format!("dictionary:{}[#{}]", self.dictionary_name, index),
                     ConflictTier::None,
                     Vec::new(),
                 )
@@ -188,6 +322,173 @@ impl Recognizer for DictionaryRecognizer {
     fn detect_is_locale_invariant(&self) -> bool {
         true
     }
+
+    fn requires_prior_candidates(&self) -> bool {
+        self.record_matching && self.class == PiiClass::Name
+    }
+}
+
+fn record_match_kind(matched: &str, term: &str) -> RecordMatchKind {
+    if matched == term {
+        return RecordMatchKind::Exact;
+    }
+    let collapsed = matched.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed == term {
+        return RecordMatchKind::WhitespaceFlexible;
+    }
+    if matched.case_fold().collect::<String>() == term.case_fold().collect::<String>() {
+        RecordMatchKind::CaseFolded
+    } else {
+        RecordMatchKind::WhitespaceCaseFolded
+    }
+}
+
+/// A versioned common-word dictionary, compiled once through Aho–Corasick.
+/// Full-span checks prevent a substring such as `may` from gating `Mayer`.
+fn record_name_is_common(name: &str) -> bool {
+    static COMMON: OnceLock<AhoCorasick> = OnceLock::new();
+    let dictionary = COMMON.get_or_init(|| {
+        let terms = include_str!("../assets/record-common-names-v1.txt")
+            .lines()
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(|line| line.case_fold().collect::<String>())
+            .collect::<BTreeSet<_>>();
+        AhoCorasickBuilder::new()
+            .build(terms)
+            .expect("static common-word dictionary")
+    });
+    let folded = name.case_fold().collect::<String>();
+    dictionary
+        .find_overlapping_iter(&folded)
+        .any(|hit| hit.start() == 0 && hit.end() == folded.len())
+}
+
+// Full Unicode folds can expand one character (for example, ß -> ss).
+// Only complete original-character boundaries may become token spans.
+fn fold_with_original_offsets(
+    input: &str,
+    case_fold: bool,
+    collapse_whitespace: bool,
+) -> (String, HashMap<usize, usize>, HashMap<usize, usize>) {
+    let mut folded = String::with_capacity(input.len());
+    let mut starts = HashMap::new();
+    let mut ends = HashMap::new();
+    let mut whitespace_count = 0;
+    for (start, ch) in input.char_indices() {
+        if collapse_whitespace && ch.is_whitespace() {
+            whitespace_count += 1;
+            if whitespace_count == 1 || whitespace_count == MAX_RECORD_MATCH_WHITESPACE_RUN + 1 {
+                starts.insert(folded.len(), start);
+                folded.push(' ');
+            }
+            ends.insert(folded.len(), start + ch.len_utf8());
+            continue;
+        }
+        whitespace_count = 0;
+        starts.insert(folded.len(), start);
+        if case_fold {
+            for mapped in ch.case_fold() {
+                folded.push(mapped);
+            }
+        } else {
+            folded.push(ch);
+        }
+        ends.insert(folded.len(), start + ch.len_utf8());
+    }
+    (folded, starts, ends)
+}
+
+fn corroborated_record_name(
+    input: &str,
+    normalized_input: &str,
+    start: usize,
+    end: usize,
+    ctx: &DetectContext<'_>,
+    own_name: &str,
+) -> bool {
+    let matched = &input[start..end];
+    let Some(first) = matched.chars().next() else {
+        return false;
+    };
+    // A single-token dictionary hit must keep the record's capitalization.
+    let Some(own) = ctx
+        .dictionaries
+        .get(own_name)
+        .and_then(|entry| entry.terms().first())
+    else {
+        return false;
+    };
+    if first != own.chars().next().unwrap_or_default() {
+        return false;
+    }
+    if ctx.prior_candidates.is_some_and(|prior| {
+        prior.iter().any(|candidate| {
+            candidate.class == PiiClass::Name
+                && candidate.recognizer_id == gaze_types::NER_RECOGNIZER_ID
+                && candidate.span.start <= start
+                && candidate.span.end >= end
+        })
+    }) {
+        return true;
+    }
+    let own_prefix = own_name
+        .rsplit_once('-')
+        .map(|(prefix, _)| prefix)
+        .unwrap_or(own_name);
+    ctx.dictionaries
+        .iter()
+        .filter(|(name, _)| *name != own_name && name.starts_with(own_prefix))
+        .any(|(_, entry)| {
+            entry.terms().iter().any(|term| {
+                if term.split_whitespace().count() > 1 {
+                    let folded_own = own.case_fold().collect::<String>();
+                    let contains_own = term
+                        .split_whitespace()
+                        .any(|piece| piece.case_fold().collect::<String>() == folded_own);
+                    let folded_term = term.case_fold().collect::<String>();
+                    return contains_own
+                        && normalized_input
+                            .match_indices(&folded_term)
+                            .any(|(span_start, _)| {
+                                is_token_boundary_match(
+                                    normalized_input,
+                                    span_start,
+                                    span_start + folded_term.len(),
+                                )
+                            })
+                        && name_position(input, start, end);
+                }
+                input.match_indices(term).any(|(peer_start, _)| {
+                    let peer_end = peer_start + term.len();
+                    if !is_token_boundary_match(input, peer_start, peer_end) {
+                        return false;
+                    }
+                    let between = if peer_end <= start {
+                        &input[peer_end..start]
+                    } else if end <= peer_start {
+                        &input[end..peer_start]
+                    } else {
+                        return false;
+                    };
+                    between.len() <= 16
+                        && between
+                            .chars()
+                            .all(|ch| ch.is_whitespace() || matches!(ch, ',' | '-' | '’' | '\''))
+                })
+            })
+        })
+}
+
+fn name_position(input: &str, start: usize, end: usize) -> bool {
+    let prefix = input[..start].trim_end();
+    let greeting = ["Hi", "Hello", "Dear", "Hallo", "Bonjour", "Olá"]
+        .iter()
+        .any(|word| prefix.rsplit(|ch: char| !ch.is_alphabetic()).next() == Some(*word));
+    greeting
+        && input[end..]
+            .chars()
+            .next()
+            .is_some_and(|ch| matches!(ch, ',' | '!' | ':'))
 }
 
 fn is_token_boundary_match(input: &str, start: usize, end: usize) -> bool {
@@ -227,6 +528,249 @@ mod tests {
     use super::*;
 
     #[test]
+    fn full_fold_does_not_create_partial_original_character_spans() {
+        let (folded, starts, ends) = fold_with_original_offsets("AßB", true, false);
+        assert_eq!(folded, "assb");
+        assert_eq!(starts.get(&1), Some(&1));
+        assert!(!starts.contains_key(&2));
+        assert!(!ends.contains_key(&2));
+        assert_eq!(ends.get(&3), Some(&3));
+    }
+
+    #[test]
+    fn record_name_full_fold_detects_original_bytes() {
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([(
+                "record-name".into(),
+                ContextDictionary {
+                    terms: vec!["JÖRG STRASSE".into()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "context/record-name",
+            PiiClass::Name,
+            "record-name",
+            true,
+            "counter",
+        )
+        .with_unicode_case_insensitive();
+        let raw = "Jörg Straße";
+        let hits = recognizer.detect(raw, &detect_context).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].span, 0..raw.len());
+        assert_eq!(hits[0].canonical_form.as_deref(), Some(raw));
+    }
+
+    #[test]
+    fn record_match_kinds_are_enforced_on_original_spans() {
+        let context = TypedContext {
+            dictionaries: HashMap::from([(
+                "record-name".into(),
+                ContextDictionary {
+                    terms: vec!["Maren Okafor".into()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let bundle = dictionary_bundle_from_context(&context);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "context/record-name",
+            PiiClass::Name,
+            "record-name",
+            true,
+            "counter",
+        )
+        .with_record_matching()
+        .with_unicode_case_insensitive()
+        .with_record_allowed_kinds([RecordMatchKind::Exact].into_iter().collect());
+        assert_eq!(
+            recognizer
+                .detect("Maren Okafor", &detect_context)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(recognizer
+            .detect("Maren  Okafor", &detect_context)
+            .unwrap()
+            .is_empty());
+        assert!(recognizer
+            .detect("MAREN OKAFOR", &detect_context)
+            .unwrap()
+            .is_empty());
+        let recognizer = recognizer.with_record_allowed_kinds(
+            [RecordMatchKind::WhitespaceCaseFolded]
+                .into_iter()
+                .collect(),
+        );
+        assert_eq!(
+            recognizer
+                .detect("MAREN\u{a0}OKAFOR", &detect_context)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(recognizer
+            .detect("Maren Okafor", &detect_context)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn single_name_requires_person_evidence_or_neighbor() {
+        let first = gaze::record_dictionary_name(&PiiClass::Name, 0);
+        let last = gaze::record_dictionary_name(&PiiClass::Name, 1);
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([
+                (
+                    first.clone(),
+                    ContextDictionary {
+                        terms: vec!["Will".into()],
+                        case_sensitive: true,
+                    },
+                ),
+                (
+                    last,
+                    ContextDictionary {
+                        terms: vec!["Smith".into()],
+                        case_sensitive: true,
+                    },
+                ),
+            ]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let recognizer = DictionaryRecognizer::new(
+            "context/record-first",
+            PiiClass::Name,
+            &first,
+            true,
+            "counter",
+        )
+        .with_record_matching()
+        .with_unicode_case_insensitive();
+        let no_prior = DetectContext::new(&[LocaleTag::Global], &bundle);
+        assert!(recognizer
+            .detect("Will you send it?", &no_prior)
+            .unwrap()
+            .is_empty());
+        assert!(recognizer
+            .detect("Will Smithson called", &no_prior)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            recognizer.detect("Will Smith called", &no_prior).unwrap()[0].span,
+            0..4
+        );
+        let person = Candidate::new(
+            0..4,
+            PiiClass::Name,
+            gaze_types::NER_RECOGNIZER_ID,
+            0.9,
+            0,
+            None,
+            "counter",
+            "ner",
+            ConflictTier::None,
+            Vec::new(),
+        );
+        let flagged = DetectContext::new(&[LocaleTag::Global], &bundle)
+            .with_prior_candidates(std::slice::from_ref(&person));
+        assert_eq!(recognizer.detect("Will called", &flagged).unwrap().len(), 1);
+        assert!(recognizer
+            .detect("will called", &flagged)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn single_name_homonyms_stay_raw_without_corroboration() {
+        for name in ["Grace", "Lee", "May"] {
+            let key = gaze::record_dictionary_name(&PiiClass::Name, 0);
+            let ctx = TypedContext {
+                dictionaries: HashMap::from([(
+                    key.clone(),
+                    ContextDictionary {
+                        terms: vec![name.into()],
+                        case_sensitive: true,
+                    },
+                )]),
+                class_map: HashMap::new(),
+                fields: Map::new(),
+                record_match_kinds: Default::default(),
+                record_value_rejections: Default::default(),
+            };
+            let bundle = dictionary_bundle_from_context(&ctx);
+            let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+            let recognizer =
+                DictionaryRecognizer::new("context/name", PiiClass::Name, &key, true, "counter")
+                    .with_record_matching()
+                    .with_unicode_case_insensitive();
+            assert!(recognizer
+                .detect(
+                    &format!("The fictional product is {name}."),
+                    &detect_context
+                )
+                .unwrap()
+                .is_empty());
+            if name == "May" {
+                assert!(recognizer
+                    .detect("May 2026", &detect_context)
+                    .unwrap()
+                    .is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn uncommon_single_record_name_matches_without_corroboration() {
+        assert!(record_name_is_common("Will"));
+        assert!(record_name_is_common("GRACE"));
+        assert!(!record_name_is_common("Maren"));
+        assert!(!record_name_is_common("Okafor"));
+        let key = gaze::record_dictionary_name(&PiiClass::Name, 0);
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([(
+                key.clone(),
+                ContextDictionary {
+                    terms: vec!["Maren".into()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer =
+            DictionaryRecognizer::new("context/name", PiiClass::Name, &key, true, "counter")
+                .with_record_matching()
+                .with_unicode_case_insensitive();
+        assert_eq!(
+            recognizer.detect("Maren called", &detect_context).unwrap()[0].span,
+            0..5
+        );
+    }
+
+    #[test]
     fn recognizer_detects_dictionary_hits_from_context_bundle() {
         let ctx = TypedContext {
             dictionaries: HashMap::from([(
@@ -238,6 +782,8 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -258,6 +804,37 @@ mod tests {
     }
 
     #[test]
+    fn changing_record_slot_keeps_only_the_current_automaton() {
+        let recognizer = DictionaryRecognizer::new(
+            "context/record-slot",
+            PiiClass::Name,
+            "record-slot",
+            true,
+            "counter",
+        )
+        .with_cache_capacity(1);
+        for value in ["Alice Smith", "Bob Schmidt"] {
+            let context = TypedContext {
+                dictionaries: HashMap::from([(
+                    "record-slot".to_string(),
+                    ContextDictionary {
+                        terms: vec![value.to_string()],
+                        case_sensitive: true,
+                    },
+                )]),
+                class_map: HashMap::new(),
+                fields: Map::new(),
+                record_match_kinds: Default::default(),
+                record_value_rejections: Default::default(),
+            };
+            let bundle = dictionary_bundle_from_context(&context);
+            let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+            assert_eq!(recognizer.detect(value, &detect_context).unwrap().len(), 1);
+            assert_eq!(recognizer.compiled_dictionaries.lock().unwrap().len(), 1);
+        }
+    }
+
+    #[test]
     fn recognizer_locale_gates_dictionary_hits() {
         let ctx = TypedContext {
             dictionaries: HashMap::from([(
@@ -269,6 +846,8 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::EnUs], &bundle);
@@ -306,6 +885,8 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -354,6 +935,8 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -386,6 +969,8 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
@@ -415,6 +1000,8 @@ mod tests {
             )]),
             class_map: HashMap::new(),
             fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);

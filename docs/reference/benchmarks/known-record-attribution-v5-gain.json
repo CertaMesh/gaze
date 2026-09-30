@@ -1,0 +1,1451 @@
+{
+  "dataset_sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+  "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+  "rows": [
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 40,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 11,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 337,
+              "non_decoy_false_positive_added_bytes": 11,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 29,
+              "false_positive_added_bytes": 29,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 337,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 40,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 11,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 337,
+              "non_decoy_false_positive_added_bytes": 11,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 29,
+              "false_positive_added_bytes": 29,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 337,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": true,
+      "default_gain_pass": false,
+      "match_kind": "exact",
+      "record_class": "address_part"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 8,
+          "gain_pass": false,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 8,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 0,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 8,
+          "gain_pass": false,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 8,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 0,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": false,
+      "match_kind": "whitespace_flexible",
+      "record_class": "address_part"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 107,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 352,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 248,
+              "non_decoy_false_positive_added_bytes": 8,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 99,
+              "false_positive_added_bytes": 99,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 600,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 107,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 352,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 248,
+              "non_decoy_false_positive_added_bytes": 8,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 99,
+              "false_positive_added_bytes": 99,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 600,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:credit_card"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 88,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 88,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 88,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 88,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "whitespace_flexible",
+      "record_class": "custom:credit_card"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 22,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 196,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 22,
+              "false_positive_added_bytes": 22,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 196,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 22,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 196,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 22,
+              "false_positive_added_bytes": 22,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 196,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:iban"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 68,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 68,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 68,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 68,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "whitespace_flexible",
+      "record_class": "custom:iban"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 490,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 490,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 490,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 490,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:national_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 84,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 84,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 84,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 84,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "whitespace_flexible",
+      "record_class": "custom:national_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 21,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 21,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 21,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 21,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:passport"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 69,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 1560,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 658,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 69,
+              "false_positive_added_bytes": 69,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 2218,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 69,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 1560,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 658,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 69,
+              "false_positive_added_bytes": 69,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 2218,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:phone"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 719,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 990,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 68,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 228,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 2005,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 719,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 990,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 68,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 228,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 2005,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "custom:steuer_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 68,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 68,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 68,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 68,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "whitespace_flexible",
+      "record_class": "custom:steuer_id"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 8,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 46,
+              "non_decoy_false_positive_added_bytes": 8,
+              "positive_spans": 4
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 20
+            }
+          },
+          "leaked_gold_bytes_fall": 46,
+          "positive_spans": 24
+        },
+        "v2": {
+          "false_positive_bytes_rise": 8,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 46,
+              "non_decoy_false_positive_added_bytes": 8,
+              "positive_spans": 4
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 20
+            }
+          },
+          "leaked_gold_bytes_fall": 46,
+          "positive_spans": 24
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "case_folded",
+      "record_class": "name_multi"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 51,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 70
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 51,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 113,
+              "non_decoy_false_positive_added_bytes": 51,
+              "positive_spans": 1237
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 12
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 80
+            }
+          },
+          "leaked_gold_bytes_fall": 113,
+          "positive_spans": 1399
+        },
+        "v2": {
+          "false_positive_bytes_rise": 51,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 70
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 51,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 113,
+              "non_decoy_false_positive_added_bytes": 51,
+              "positive_spans": 1237
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 12
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 80
+            }
+          },
+          "leaked_gold_bytes_fall": 113,
+          "positive_spans": 1399
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "exact",
+      "record_class": "name_multi"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 8,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 37,
+              "non_decoy_false_positive_added_bytes": 8,
+              "positive_spans": 14
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 37,
+          "positive_spans": 14
+        },
+        "v2": {
+          "false_positive_bytes_rise": 8,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 8,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 37,
+              "non_decoy_false_positive_added_bytes": 8,
+              "positive_spans": 14
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 37,
+          "positive_spans": 14
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "whitespace_case_folded",
+      "record_class": "name_multi"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": false,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 3
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 2
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 0,
+          "positive_spans": 5
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": false,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 3
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 2
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 0,
+          "positive_spans": 5
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": false,
+      "match_kind": "whitespace_flexible",
+      "record_class": "name_multi"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 30,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 30,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 30,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 30,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "case_folded",
+      "record_class": "name_single"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 9,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 9,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 0,
+          "gain_pass": true,
+          "layers": {
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 9,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 9,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": true,
+      "match_kind": "corroborated_single",
+      "record_class": "name_single"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 152,
+          "gain_pass": false,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 74,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 107,
+              "non_decoy_false_positive_added_bytes": 74,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 45,
+              "false_positive_added_bytes": 45,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 19,
+              "false_positive_added_bytes": 19,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 16,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 14,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 14,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 123,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 152,
+          "gain_pass": false,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 74,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 107,
+              "non_decoy_false_positive_added_bytes": 74,
+              "positive_spans": 0
+            },
+            "D": {
+              "decoy_false_positive_added_bytes": 45,
+              "false_positive_added_bytes": 45,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 19,
+              "false_positive_added_bytes": 19,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 16,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 14,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 14,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 123,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": true,
+      "default_gain_pass": false,
+      "match_kind": "exact",
+      "record_class": "name_single"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": -118,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 96,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 2,
+              "gold_lost_bytes": 23,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 20,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": -23,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": -118,
+          "gain_pass": true,
+          "layers": {
+            "A": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 96,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 2,
+              "gold_lost_bytes": 17,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "K": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 20,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": -17,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": null,
+      "match_kind": "baseline_removed",
+      "record_class": "unattributed"
+    },
+    {
+      "contracts": {
+        "v1": {
+          "false_positive_bytes_rise": 84,
+          "gain_pass": false,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 5,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 84,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 84,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 5,
+          "positive_spans": 0
+        },
+        "v2": {
+          "false_positive_bytes_rise": 84,
+          "gain_pass": false,
+          "layers": {
+            "C": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 0,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 5,
+              "non_decoy_false_positive_added_bytes": 0,
+              "positive_spans": 0
+            },
+            "R": {
+              "decoy_false_positive_added_bytes": 0,
+              "false_positive_added_bytes": 84,
+              "false_positive_removed_bytes": 0,
+              "gold_lost_bytes": 0,
+              "gold_recovered_bytes": 0,
+              "non_decoy_false_positive_added_bytes": 84,
+              "positive_spans": 0
+            }
+          },
+          "leaked_gold_bytes_fall": 5,
+          "positive_spans": 0
+        }
+      },
+      "d_counterweight_veto": false,
+      "default_gain_pass": null,
+      "match_kind": "trace_gap",
+      "record_class": "unattributed"
+    }
+  ],
+  "rule": "leaked gold bytes fall > false-positive bytes rise under both contracts; layer-D decoy false-positive rise vetoes a default except IBAN and caller-known exact phone/card values",
+  "schema_version": 1,
+  "source_commit": "5204955032334044f6fb1ceb336d3e8cdaa8a581",
+  "unmeasured_match_kinds": [],
+  "unmeasured_name_multi_kinds": []
+}

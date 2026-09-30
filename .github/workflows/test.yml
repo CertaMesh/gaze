@@ -246,8 +246,8 @@ jobs:
         run: uv sync --project scripts/bench --locked --group comparison-test
       - name: Run benchmark scorer and comparator tests
         run: uv run --project scripts/bench --group comparison-test python -m unittest discover -s scripts/bench
-      - name: Run competitor adapter contract tests
-        run: uv run --project scripts/bench --group comparison-test python -m pytest -q scripts/bench/compare/
+      - name: Run competitor adapter and known-record tests
+        run: uv run --project scripts/bench --group comparison-test python -m pytest -q scripts/bench/compare/ scripts/bench/test_known_record_*.py
       - name: Build model-free equivalence binaries
         run: |
           cargo build --locked -p gaze-cli --bin gaze
