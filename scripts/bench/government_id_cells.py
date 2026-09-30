@@ -42,16 +42,28 @@ class Shape(str, Enum):
         return {"tax": "TAXNUM", "ssn": "SSN", "card": "IDCARDNUM", "national": "NATIONALID"}[self.value.split("_")[0]]
 
 
-PATTERNS = dict(zip(Shape, (
-    r"0\d{8}", r"0\d{10}", r"0\d \d{3} \d{3} \d{3}",
-    r"0\d/\d{3}/\d{5}", r"0\d{2}/\d{4}/\d{5}",
-    r"ZZ0\d{8}", r"0\d{6}ZZ", r"ZZ0\d{2}\.\d{3}\.\d{3}Z",
-    r"000[-. ]\d{2}[-. ]\d{4}", r"000[- ]\d{3}[- ]\d{3}",
-    r"000\.\d{4}\.\d{4}\.\d{2}", r"000-\d{4}-\d{4}-\d{2}",
-    r"ZZ0\d{5}Z", r"\d{4}", r"000\d{3}-\d{2}-\d{4}",
-    r"ZZ0\d{6}", r"000\d{4}Z", r"000\d{6,9}",
-    r"00 \d{3} \d{3} \d", r"000\d{3}Z\d{4}",
-)))
+PATTERNS = {
+    Shape.TAX_NINE: r"0\d{8}",
+    Shape.TAX_ELEVEN: r"0\d{10}",
+    Shape.TAX_GROUPED: r"0\d \d{3} \d{3} \d{3}",
+    Shape.TAX_SLASH: r"0\d/\d{3}/\d{5}",
+    Shape.TAX_SLASH_LONG: r"0\d{2}/\d{4}/\d{5}",
+    Shape.TAX_PREFIX: r"ZZ0\d{8}",
+    Shape.TAX_SUFFIX: r"0\d{6}ZZ",
+    Shape.TAX_DOTTED: r"ZZ0\d{2}\.\d{3}\.\d{3}Z",
+    Shape.SSN_US: r"000[-. ]\d{2}[-. ]\d{4}",
+    Shape.SSN_TRIPLE: r"000[- ]\d{3}[- ]\d{3}",
+    Shape.SSN_SWISS_DOT: r"000\.\d{4}\.\d{4}\.\d{2}",
+    Shape.SSN_SWISS_DASH: r"000-\d{4}-\d{4}-\d{2}",
+    Shape.SSN_MIXED: r"ZZ0\d{5}Z",
+    Shape.SSN_TAIL: r"\d{4}",
+    Shape.CARD_GROUPED: r"000\d{3}-\d{2}-\d{4}",
+    Shape.CARD_PREFIX: r"ZZ0\d{6}",
+    Shape.CARD_SUFFIX: r"000\d{4}Z",
+    Shape.NATIONAL_COMPACT: r"000\d{6,9}",
+    Shape.NATIONAL_GROUPED: r"00 \d{3} \d{3} \d",
+    Shape.NATIONAL_EMBEDDED: r"000\d{3}Z\d{4}",
+}
 CUES = {
     "TAXNUM": r"(?:Steuer-ID|Steueridentifikationsnummer|steuerliche Identifikationsnummer|Steuernummer|tax identification number|taxpayer identification number|tax number|tax ID|TIN)",
     "SSN": r"(?:social security number|SSN|social insurance number|Sozialversicherungsnummer|AHV number)",
