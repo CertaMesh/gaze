@@ -61,6 +61,16 @@ def predefined_units() -> dict[str, tuple[str, ...]]:
     return units
 
 
+@lru_cache(maxsize=None)
+def default_registry_classes() -> frozenset[str]:
+    """The predefined classes Presidio's default registry loads for LANGUAGES."""
+    from presidio_analyzer import RecognizerRegistry
+
+    default = RecognizerRegistry(supported_languages=list(space.LANGUAGES))
+    default.load_predefined_recognizers(languages=list(space.LANGUAGES))
+    return frozenset(type(recognizer).__name__ for recognizer in default.recognizers)
+
+
 def _fresh_id(recognizer: object, suffix: str) -> object:
     recognizer._id = f"{recognizer.name}_{suffix}"
     return recognizer
@@ -192,9 +202,17 @@ def base_recognizers(language: str) -> list[tuple[str, object]]:
     from presidio_analyzer import predefined_recognizers as predefined
     from presidio_analyzer.predefined_recognizers import SpacyRecognizer
 
+    from presidio_analyzer import PatternRecognizer, RecognizerRegistry
+
     result = []
+    registry_flags = RecognizerRegistry().global_regex_flags
     for name in predefined_units():
-        result.append((name, _fresh_id(getattr(predefined, name)(supported_language=language), language)))
+        recognizer = getattr(predefined, name)(supported_language=language)
+        if name in default_registry_classes() and isinstance(recognizer, PatternRecognizer):
+            # RecognizerRegistry.load_predefined_recognizers gives the classes it loads the
+            # registry's flags (IGNORECASE added); a class added directly keeps its own.
+            recognizer.global_regex_flags = registry_flags
+        result.append((name, _fresh_id(recognizer, language)))
     for spec in space.CUSTOM_RECOGNIZERS:
         result.append((spec["name"], _fresh_id(custom_recognizer(spec, language), language)))
     result.append((space.PHONE_WIDE["name"], _fresh_id(phone_wide(language), language)))
