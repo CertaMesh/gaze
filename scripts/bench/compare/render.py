@@ -426,7 +426,10 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
         f"({validation_docs:,} documents; a guard test fails if it opens a test-half record) and evaluated "
         f"{budget['candidates_evaluated']:,} candidate configurations by coordinate descent. Two objectives: "
         "the comparison's own rule (fewest validation v3 leaked bytes, then fewest false-positive bytes) and "
-        "the panels' headline (highest validation v3 character F2).",
+        "the panels' headline (highest validation v3 character F2). The custom recognizers were written "
+        "after reading validation-half gold examples; no test-half text, gold or output was read before the "
+        "choice was frozen. The NER models' training data is not fully published, so overlap with this "
+        "synthetic corpus's style cannot be ruled out for them (nor for the NER model in Gaze's own setup).",
         f"- **Budget:** Gaze's rules received {budget['gaze_rulepack_commits']} rulepack commits "
         f"({budget['first']} to {budget['last']}), made with the whole corpus visible, test half included. "
         "The tuned Presidio search is at least as generous in iterations: "
