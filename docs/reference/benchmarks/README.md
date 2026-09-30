@@ -1598,6 +1598,32 @@ Two options exist for v0.14.0 only, and the output records both:
 
 Both options are off by default.
 
+### CRLF blocks and German registration plates
+
+Generator v8 adds 36 layer A documents and 28 layer D documents per
+partition, under a new `block_` surface prefix. US suite, German Wohnung and
+military address blocks write CRLF between gold parts. Cued German plates in
+prose, log fields and JSON score the whole district, letter series and serial
+number as `LICENSEPLATE`. Every earlier generator v7 document stays byte
+identical, and its scored-label contract is frozen by version.
+
+The benign twins carry test-suite and storage-box labels, bare CR and blank
+lines before unassigned fixture postcodes, and identically shaped build or
+batch references. Near-cue references include a plate word in an unrelated
+clause. Typed cells check complete address gold, CRLF between parts,
+whole-plate gold after an immediate label, and a benign counterweight paid
+by both broad and narrow shape rules. Generation fails if these guards drift.
+
+A model-free preview on the existing main binary (`9ccc898c`, binary SHA-256
+`d2297df2f9ea6df68bafcc03d8f642ccb90857a4a5da207045a7b5e7f14cfc99`),
+with the setup policy minus NER and Nym, leaks 726 of 864 new gold bytes.
+Both deliberately bad fixtures under `scripts/bench/fixtures/agentic/`
+raise layer D twin false positives from 92 to 306 bytes. The broad mutant
+leaks 369 bytes with 12 layer A false-positive bytes; the narrow mutant leaks
+399 with zero layer A false-positive bytes. All 64 documents restore exactly
+and none is refused. This preview verifies corpus sensitivity; the detection
+change still requires the full v2 and v1 gain gate.
+
 ### Measured adjacency layer history
 
 The release rows below use generator v4's test partition and the setup policy.
@@ -1624,19 +1650,20 @@ These are layers A, D and R only, measured by the current harness against each r
 
 <!-- END GENERATED: agentic-adjacency-v4 -->
 
-**Re-measure status on generator v7.** Every row above was measured on
+**Re-measure status on generator v8.** Every row above was measured on
 generator v4 and stays bound to that corpus by hash; none has been re-measured
-on the v5 to v7 cells yet (labelled lookalikes, address blocks, phone shapes).
+on the v5 to v8 cells yet (labelled lookalikes, address blocks, phone shapes,
+CRLF blocks and German plates).
 Nothing blocks any of them: each tag builds its own `clean_for_bench` and ships
 a layer-A-capable arm. The re-measure runs as one queued bench job after the
-v7 harness merges, `agentic_layers.py measure` with each release's own binary
+v8 harness is ready, `agentic_layers.py measure` with each release's own binary
 and arm, then `render_agentic_adjacency_doc.py --record`:
 
-- `v0.15.1` `policy-file`: not yet re-measured on v7; queued.
-- `v0.15.0` `policy-file`: not yet re-measured on v7; queued.
-- `v0.14.0` `full-stack-kiji-resolve`: not yet re-measured on v7; queued, with
+- `v0.15.1` `policy-file`: not yet re-measured on v8; queued.
+- `v0.15.0` `policy-file`: not yet re-measured on v8; queued.
+- `v0.14.0` `full-stack-kiji-resolve`: not yet re-measured on v8; queued, with
   `--manifest-actions tokenize --split-composite-source-ids`.
-- `v0.14.0` `pass2-ner`: not yet re-measured on v7; queued, with the same
+- `v0.14.0` `pass2-ner`: not yet re-measured on v8; queued, with the same
   v0.14.0 flags.
 
 ### Hardware spec template
