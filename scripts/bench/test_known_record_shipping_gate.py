@@ -19,7 +19,10 @@ def arm(contract: str) -> dict:
         "source_commit": "source", "binary_source_commit": "source", "policy_sha256": "policy",
         "dataset_sha256": "data", "kind_cells_manifest": {"pairs": 1},
         "layers": {
-            layer: {"documents": 1, "baseline": score(10, 0), "with_record": score(0, 1)}
+            layer: {
+                "documents": 1, "baseline": score(10, 0), "with_record": score(0, 1),
+                "attribution": {"schema_version": 1, "rows": []},
+            }
             for layer in shipping.LAYERS
         },
     }
@@ -65,6 +68,22 @@ def test_shipping_gate_rejects_false_positive_cost_above_gain() -> None:
     result = shipping.gate(v2, v1, main_v2, main_v1)
     assert result["contracts"]["v2"]["total_false_positive_bytes_rise"] > result["contracts"]["v2"]["total_leaked_bytes_fall"]
     assert not result["pass"]
+
+
+def test_shipping_gate_reports_class_kind_and_decoy_cost() -> None:
+    v2, v1 = arm("v2"), arm("v1")
+    main_v2, main_v1 = main_arm(v2), main_arm(v1)
+    for value in (v2, v1):
+        value["layers"]["D"]["attribution"]["rows"] = [{
+            "record_class": "custom:phone", "match_kind": "exact",
+            "population": "decoy", "gold_recovered_bytes": 0,
+            "gold_lost_bytes": 0, "false_positive_added_bytes": 1,
+            "false_positive_removed_bytes": 0,
+        }]
+    result = shipping.gate(v2, v1, main_v2, main_v1)
+    row = result["class_kind_rows"][0]
+    assert (row["record_class"], row["match_kind"]) == ("custom:phone", "exact")
+    assert row["contracts"]["v2"]["layers"]["D"]["decoy_false_positive_bytes_added"] == 1
 
 
 def test_shipping_gate_requires_exact_no_record_main_parity() -> None:

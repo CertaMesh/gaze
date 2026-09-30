@@ -5,9 +5,54 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 from pathlib import Path
 
 LAYERS = ("C", "A", "D", "R", "K")
+
+
+def class_kind_rows(arms: dict[str, dict]) -> list[dict]:
+    metrics = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {
+        "leaked_gold_bytes_fall": 0,
+        "false_positive_bytes_rise": 0,
+        "decoy_false_positive_bytes_added": 0,
+    })))
+    for contract, arm in arms.items():
+        for layer in LAYERS:
+            attribution = arm["layers"][layer].get("attribution")
+            if not isinstance(attribution, dict) or attribution.get("schema_version") != 1:
+                raise ValueError(f"{contract} {layer}: missing class-kind attribution")
+            for item in attribution["rows"]:
+                row = metrics[(item["record_class"], item["match_kind"])][contract][layer]
+                row["leaked_gold_bytes_fall"] += (
+                    item["gold_recovered_bytes"] - item["gold_lost_bytes"]
+                )
+                row["false_positive_bytes_rise"] += (
+                    item["false_positive_added_bytes"] - item["false_positive_removed_bytes"]
+                )
+                if item["population"] == "decoy":
+                    row["decoy_false_positive_bytes_added"] += item["false_positive_added_bytes"]
+    return [
+        {
+            "record_class": record_class,
+            "match_kind": match_kind,
+            "contracts": {
+                contract: {
+                    "layers": by_contract.get(contract, {}),
+                    "total_leaked_gold_bytes_fall": sum(
+                        row["leaked_gold_bytes_fall"]
+                        for row in by_contract.get(contract, {}).values()
+                    ),
+                    "total_false_positive_bytes_rise": sum(
+                        row["false_positive_bytes_rise"]
+                        for row in by_contract.get(contract, {}).values()
+                    ),
+                }
+                for contract in ("v2", "v1")
+            },
+        }
+        for (record_class, match_kind), by_contract in sorted(metrics.items())
+    ]
 
 
 def gate(v2: dict, v1: dict, main_v2: dict, main_v1: dict) -> dict:
@@ -112,6 +157,7 @@ def gate(v2: dict, v1: dict, main_v2: dict, main_v1: dict) -> dict:
         "main_binary_source_commit": main_v2["binary_source_commit"],
         "policy_sha256": v2["policy_sha256"],
         "dataset_sha256": v2["dataset_sha256"],
+        "class_kind_rows": class_kind_rows(arms),
         "contracts": results,
         "pass": all(result["pass"] for result in results.values()),
     }
