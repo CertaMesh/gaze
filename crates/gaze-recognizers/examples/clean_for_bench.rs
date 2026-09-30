@@ -8,9 +8,9 @@ use gaze::{
     record_dictionary_name, Action, Candidate, CleanDocument, Context, ContextDictionary,
     DetectContext, DictionaryBundle, EmittedTokenSpan, FallbackReason,
     GazeLocalProtectionTraceItem, LeakKind, LeakReportStats, LocaleBasis, LocaleChain, LocaleTag,
-    NerPolicy, PiiClass, Pipeline, RecordMatchKind, RedactionEntry, RedactionLogError,
-    RedactionLogger, RuleSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback,
-    SafetyNetMode, SafetyNetPolicy, Scope, Session, RECORD_DICTIONARY_PREFIX,
+    NerPolicy, PiiClass, Pipeline, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec,
+    Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    Scope, Session, RECORD_DICTIONARY_PREFIX,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -1462,7 +1462,7 @@ fn manifest_integrity(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gaze::RawDocument;
+    use gaze::{RawDocument, RecordMatchKind};
 
     #[test]
     fn record_shipping_defaults_match_direct_product_without_overrides() {
