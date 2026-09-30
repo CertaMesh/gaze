@@ -10,6 +10,23 @@ default_locales = ["en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
 [locale.street_types_number_before]
 names = ["street", "st.", "road", "rd.", "avenue", "ave.", "drive", "dr.", "lane", "ln.", "boulevard", "blvd.", "court", "ct.", "crescent", "close", "way", "place", "pl.", "terrace", "parkway", "square", "sq.", "highway", "hwy.", "grove", "gardens", "mews"]
 
+# Address words an already protected address part (postcode, NER street or
+# city, house number) may grow over when written right beside it.
+# Unit designators are followed by a unit number (`Suite 312`, `Apt. 4B`,
+# `PO Box 417`, the military `PSC 806`); a trailing dot marks an abbreviation.
+# A designator with no protected address beside it is never tokenized.
+[locale.address_unit_designators]
+names = ["suite", "ste", "ste.", "apartment", "apt", "apt.", "unit", "flat", "floor", "fl.", "po box", "p.o. box", "psc", "cmr"]
+
+# Exact-case state codes between a city and its ZIP (`IL 00068`), and the
+# military state codes of APO/FPO/DPO mail. Grown only in front of a number.
+[locale.address_region_codes]
+names = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "PR", "AA", "AE", "AP"]
+
+# Military post offices, exact case (`APO AE 09012`).
+[locale.address_military_post_offices]
+names = ["APO", "FPO", "DPO"]
+
 [locale.email_headers]
 names = ["From", "To", "Cc", "Bcc", "Reply-To", "Sender"]
 

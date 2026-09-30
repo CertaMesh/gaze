@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+mod address_block;
 mod anchor_resolver;
 mod conflict;
 mod context;
@@ -24,6 +25,11 @@ pub mod token_shape;
 mod types;
 mod validator_veto;
 
+pub use address_block::{
+    AddressGrowth, AddressVocabulary, ADDRESS_MILITARY_BOX_RECOGNIZER_ID,
+    ADDRESS_MILITARY_POST_OFFICE_RECOGNIZER_ID, ADDRESS_REGION_CODE_RECOGNIZER_ID,
+    ADDRESS_UNIT_NUMBER_BEFORE_RECOGNIZER_ID, ADDRESS_UNIT_RECOGNIZER_ID,
+};
 pub use context::{
     record_dictionary_name, Context, Context as TypedContext, ContextDictionary, ContextError,
     ContextFieldsRef, RecordValueRejection, RecordValueRejectionReason, RECORD_DICTIONARY_PREFIX,

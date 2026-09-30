@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Address-block growth.** When a postcode, a NER street
+  or city, or a house number is already protected, the unit designator, box,
+  state code or military post office written right beside it now joins the
+  protection as its own `location` token: `Suite 312`, `Apt. 4B`,
+  `PO Box 417`, `Wohnung 7`, `3. Etage`, `Postfach 505`, `IL` in
+  `Brinmoor, IL 00068`, and `PSC 806, Box 9504, FPO AA`. Growth crosses only
+  spaces, one comma and one line feed, never a sentence end or a JSON field
+  boundary; a postcode never grows a unit to its right, a state code needs a
+  protected postcode after it, and a designator with no protected address
+  beside it stays raw.
+  Words come from new `locale-en` / `locale-de` buckets; each piece's
+  recognizer id (`address.block.*`, `gaze::AddressGrowth`) records why it
+  joined. It runs under the new `[address_blocks] enabled = true` policy
+  section, which `gaze setup` writes; a policy without it grows nothing. See
+  the policy reference, "Address blocks".
+
 ### Breaking
 
 - **Typed `Context` literals gain `record_match_kinds` and `record_value_rejections`.** Add
