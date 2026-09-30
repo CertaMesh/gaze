@@ -1,5 +1,5 @@
 {
-  "_comment": "Reviewed mapping for competitors' own benchmarks. Leak/FP bytes are class-agnostic; these tables only drive the typed-entity metrics and the common-intersection view. `gold` maps each benchmark's native gold label to canonical labels (the 25 main-corpus labels plus the `extension_labels`). `tool_extension` adds canonical labels that a tool label covers but that the main corpus never annotates, so compare/label-map.json maps it to nothing or to a narrower label. The composed tool-label -> native-gold-label table is derived from both, never written by hand.",
+  "_comment": "Reviewed mapping for competitors' own benchmarks. Leak/FP bytes are class-agnostic; these tables only drive the typed-entity metrics and the common-intersection view. `gold` maps each benchmark's native gold label to canonical labels (the 25 main-corpus labels plus the `extension_labels`). `tool_extension` adds canonical labels that a tool label covers but that the main corpus never annotates, so compare/label-map.json maps it to nothing or to a narrower label. The composed tool-label -> native-gold-label table is derived from both, never written by hand. `gold['pii-trace']` follows the dataset card and the paper's Table 6: account_number covers only the named national ID, SSN, IBAN, card, sort code and generic id-number types; other_pii is a residual bucket with no stated class and maps to nothing. `native_gold` is the identity map for a tool whose native labels are the benchmark's own labels (PII-Tracer on PII-TRACE); it replaces the canonical composition for that pair only.",
   "extension_labels": [
     "IPADDRESS",
     "DATE",
@@ -278,6 +278,52 @@
         "IBAN"
       ],
       "LOCAL_LATLNG": []
+    },
+    "pii-trace": {
+      "private_person": [
+        "FIRSTNAME",
+        "SURNAME",
+        "USERNAME"
+      ],
+      "private_date": [
+        "DATE",
+        "DATEOFBIRTH"
+      ],
+      "private_url": [
+        "URL",
+        "DOMAIN",
+        "IPADDRESS"
+      ],
+      "private_address": [
+        "BUILDINGNUM",
+        "CITY",
+        "COUNTRY",
+        "LOCATION",
+        "REGION",
+        "STATE",
+        "STREET",
+        "ZIP"
+      ],
+      "account_number": [
+        "ACCOUNTNUM",
+        "CREDITCARDNUMBER",
+        "IBAN",
+        "IDCARDNUM",
+        "NATIONALID",
+        "ROUTING",
+        "SSN"
+      ],
+      "private_email": [
+        "EMAIL"
+      ],
+      "private_phone": [
+        "PHONENUMBER"
+      ],
+      "secret": [
+        "PASSWORD",
+        "SECRET"
+      ],
+      "other_pii": []
     }
   },
   "tool_extension": {
@@ -425,6 +471,39 @@
       "account_number": [
         "ACCOUNTNUM"
       ]
+    }
+  },
+  "native_gold": {
+    "pii-trace": {
+      "pii-tracer": {
+        "private_person": [
+          "private_person"
+        ],
+        "private_date": [
+          "private_date"
+        ],
+        "private_url": [
+          "private_url"
+        ],
+        "private_address": [
+          "private_address"
+        ],
+        "account_number": [
+          "account_number"
+        ],
+        "private_email": [
+          "private_email"
+        ],
+        "private_phone": [
+          "private_phone"
+        ],
+        "other_pii": [
+          "other_pii"
+        ],
+        "custom:secret": [
+          "secret"
+        ]
+      }
     }
   }
 }
