@@ -386,19 +386,18 @@ fn separator_start(text: &str, edge: usize) -> Option<usize> {
     is_separator(&text[edge - len..edge]).then_some(edge - len)
 }
 
+/// A letter, digit or joiner glues two runs into one token (`K-LA`,
+/// `A/B`, `id_7`), so a piece may not start or end against one.
+fn is_joined(ch: char) -> bool {
+    ch.is_alphanumeric() || matches!(ch, '-' | '\u{2013}' | '/' | '_' | '@')
+}
+
 fn starts_word(text: &str, start: usize) -> bool {
-    text.is_char_boundary(start)
-        && !text[..start]
-            .chars()
-            .next_back()
-            .is_some_and(char::is_alphanumeric)
+    text.is_char_boundary(start) && !text[..start].chars().next_back().is_some_and(is_joined)
 }
 
 fn ends_word(rest: &str, len: usize) -> bool {
-    !rest[len..]
-        .chars()
-        .next()
-        .is_some_and(char::is_alphanumeric)
+    !rest[len..].chars().next().is_some_and(is_joined)
 }
 
 fn exact_word(rest: &str, word: &str) -> bool {
@@ -671,6 +670,10 @@ mod tests {
             &["Brinmoor", "Calder Rise"]
         )
         .is_empty());
+        // A code inside a hyphen- or slash-joined token is not a state.
+        assert!(grown("die Nummer K-LA 45321 trägt", &["45321"]).is_empty());
+        assert!(grown("Ref A/IL 00068", &["00068"]).is_empty());
+        assert!(grown("Drusk Lane Suite 4-6", &["Drusk Lane"]).is_empty());
     }
 
     #[test]
