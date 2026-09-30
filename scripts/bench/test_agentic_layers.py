@@ -29,6 +29,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
+    "dev": "c8bf7f20299847d8ab37d2e0fe16990a0c320d6cc9171ac9225b63ec316ffc70",
+    "test": "9a1ad4c8f8962325ed060e812286f25353327d8ed79779e34adb1d95485d2c0a",
+}
+# v6: everything before the phone-shape cells.
+V6_CORPUS_SHA256 = {
     "dev": "e1b6bc315cb52d41aaf93fd48cf9719d67e665317fc927cc9c6a5e33a3e57af7",
     "test": "9e6597c4b38a6adf6fe5b034da3a4ca585819e044d3437aafc02bcb721607d4a",
 }
@@ -122,6 +127,10 @@ class GeneratorTests(unittest.TestCase):
 
     def test_previous_partition_documents_are_byte_identical(self) -> None:
         for partition, records in self.corpora.items():
+            v6 = agentic.records_as_of(6, records)
+            self.assertEqual(
+                hashlib.sha256(agentic.corpus_bytes(v6)).hexdigest(), V6_CORPUS_SHA256[partition]
+            )
             v5 = agentic.records_as_of(5, records)
             self.assertEqual(
                 hashlib.sha256(agentic.corpus_bytes(v5)).hexdigest(), V5_CORPUS_SHA256[partition]
@@ -428,7 +437,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith("address_"):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -774,6 +783,157 @@ class AddressCellTests(unittest.TestCase):
             self.generate_with(DESIGNATOR_FORMS=forms)
 
 
+class PhoneShapeCellTests(unittest.TestCase):
+    """Layer A phones are whole numbers in shapes the `+CC` and US/DE national
+    rules miss; each shape's over-broad rule pays in its layer D twins."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.cells = {
+            partition: [r for r in agentic.generate(partition) if r.surface.startswith("tel_")]
+            for partition in agentic.PARTITIONS
+        }
+
+    def test_every_cell_and_twin_is_generated_in_both_partitions(self) -> None:
+        for partition, records in self.cells.items():
+            for layer, cells in (("A", agentic.PHONE_CELLS), ("D", agentic.PHONE_TWINS)):
+                for cell in cells:
+                    matching = [r for r in records if r.layer == layer and r.family == cell.family]
+                    self.assertEqual(len(matching), agentic.DOCS_PER_PHONE_CELL[layer], (partition, cell.family))
+            for layer in ("A", "D"):
+                self.assertEqual({r.surface for r in records if r.layer == layer}, set(agentic.PHONE_SURFACES))
+            self.assertEqual({c.shape for c in agentic.PHONE_CELLS}, set(agentic.PhoneShape))
+
+    def test_growth_stays_within_ten_percent_per_layer(self) -> None:
+        records = agentic.generate("test")
+        for layer in ("A", "D"):
+            new = sum(1 for r in self.cells["test"] if r.layer == layer)
+            old = sum(1 for r in records if r.layer == layer) - new
+            self.assertLessEqual(new * 10, old, layer)
+
+    def test_every_value_region_of_a_multi_block_shape_is_generated(self) -> None:
+        for partition, records in self.cells.items():
+            for cell in agentic.PHONE_CELLS:
+                regions = {r.region for r in records if r.family == cell.family}
+                expected = {region for region, _ in agentic.PHONE_VALUES[cell.shape][partition]}
+                self.assertEqual(regions, expected, (partition, cell.family))
+
+    def test_values_come_from_documented_fictional_blocks(self) -> None:
+        blocks = (
+            r"0(?:2\.61\.91|4\.65\.71)(?:\.\d\d){2}",  # ARCEP fiction, dotted
+            r"(?:\+33 \(0\)|0033 )1 99 00 \d\d \d\d",  # ARCEP fiction
+            r"(?:\+49 \(0\)|0049 )(?:30 23125 ?|69 90009 |89 99998 )\d{3}",  # BNetzA media numbers
+            r"(?:\+44 \(0\)|0044 )20 7946 0\d{3}",  # Ofcom drama numbers
+            r"001[- ]\d{3}[- ]555[- ]01\d\d",  # NANPA fictitious
+            r"0\d\d \d{3} \d{3}|0\d(?: \d\d){3}",  # synthesized: leading 0 never used
+        )
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "A"):
+                (gold,) = record.gold
+                self.assertTrue(any(re.fullmatch(block, gold.value) for block in blocks), gold.value)
+
+    def test_the_whole_number_is_gold_prefix_and_trunk_included(self) -> None:
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "A"):
+                (gold,) = record.gold
+                encoded = record.text.encode("utf-8")
+                self.assertEqual(encoded[gold.start : gold.end].decode("utf-8"), gold.value)
+                before = encoded[: gold.start].decode("utf-8")
+                after = encoded[gold.end :].decode("utf-8")
+                self.assertNotRegex(before, r"[\d+]$", record.uid)
+                self.assertNotRegex(after, r"^[\d)]", record.uid)
+
+    def test_dotted_values_carry_an_ipv4_shaped_tail(self) -> None:
+        # The layer that exposes an IPv4 rule claiming the last four groups.
+        for records in self.cells.values():
+            for record in (r for r in records if r.family.startswith("phone_dotted")):
+                (gold,) = record.gold
+                tail = gold.value.split(".", 1)[1]
+                self.assertEqual(str(ipaddress.IPv4Address(tail)), tail, record.uid)
+
+    def test_structured_cells_parse(self) -> None:
+        for records in self.cells.values():
+            for record in records:
+                if record.surface == "tel_tool_json":
+                    json.loads(record.text)
+                if record.surface == "tel_csv":
+                    rows = list(csv.reader(io.StringIO(record.text)))
+                    self.assertEqual({len(row) for row in rows}, {len(rows[0])}, record.uid)
+
+    def test_templates_split_by_partition(self) -> None:
+        for cell in (*agentic.PHONE_CELLS, *agentic.PHONE_TWINS):
+            self.assertNotEqual(cell.templates["dev"], cell.templates["test"], cell.family)
+        values = {p: {g.value for r in rs for g in r.gold} for p, rs in self.cells.items()}
+        self.assertFalse(values["dev"] & values["test"])
+
+    def test_each_broad_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
+        # The model-free half of the mutant check, shape by shape.
+        for shape in agentic.PhoneShape:
+            rule = re.compile(agentic.PHONE_BROAD_PATTERNS[shape])
+            families = {c.family for c in agentic.PHONE_CELLS if c.shape is shape}
+            twins = {t.family for t in agentic.PHONE_TWINS if t.shape is shape}
+            for records in self.cells.values():
+                catches = [r for r in records if r.family in families and rule.search(r.text)]
+                costs = [r for r in records if r.family in twins and rule.search(r.text)]
+                self.assertEqual(len(catches), agentic.DOCS_PER_PHONE_CELL["A"] * len(families), shape)
+                self.assertEqual(len(costs), agentic.DOCS_PER_PHONE_CELL["D"] * len(twins), shape)
+
+    def test_mutant_policy_carries_the_broad_patterns(self) -> None:
+        text = (REPO_ROOT / "scripts/bench/fixtures/agentic/mutant-broad-phone-shapes.toml").read_text()
+        patterns = re.findall(r"^pattern = '(.*)'$", text, flags=re.MULTILINE)
+        self.assertEqual(sorted(patterns), sorted(agentic.PHONE_BROAD_PATTERNS.values()))
+
+    def generate_with(self, **patches) -> None:
+        with contextlib.ExitStack() as stack:
+            for name, value in patches.items():
+                stack.enter_context(mock.patch.object(agentic, name, value))
+            agentic.generate("test")
+
+    def test_a_shape_without_a_twin_fails_generation(self) -> None:
+        twins = tuple(t for t in agentic.PHONE_TWINS if t.shape is not agentic.PhoneShape.PREFIX_00)
+        with self.assertRaisesRegex(agentic.LayerError, r"no layer D counterweight: \['prefix_00'\]"):
+            self.generate_with(PHONE_TWINS=twins)
+
+    def test_a_twin_no_cell_uses_fails_generation(self) -> None:
+        cells = tuple(c for c in agentic.PHONE_CELLS if c.shape is not agentic.PhoneShape.PREFIX_001)
+        with self.assertRaisesRegex(agentic.LayerError, "no layer A cell uses"):
+            self.generate_with(PHONE_CELLS=cells)
+
+    def test_a_national_phone_without_a_label_fails_generation(self) -> None:
+        cells = list(agentic.PHONE_CELLS)
+        index = next(i for i, c in enumerate(cells) if c.family == "phone_national_3x3_prose")
+        cells[index] = dataclasses.replace(cells[index], templates={**cells[index].templates, "test": "Noted {V}."})
+        with self.assertRaisesRegex(agentic.LayerError, "no phone label before it"):
+            self.generate_with(PHONE_CELLS=tuple(cells))
+
+    def test_a_twin_with_a_phone_label_fails_generation(self) -> None:
+        twins = list(agentic.PHONE_TWINS)
+        twins[0] = dataclasses.replace(twins[0], templates={**twins[0].templates, "test": "Call about {X} today."})
+        with self.assertRaisesRegex(agentic.LayerError, "carries a phone label"):
+            self.generate_with(PHONE_TWINS=tuple(twins))
+
+    def test_a_twin_value_in_a_phone_shape_fails_generation(self) -> None:
+        twins = list(agentic.PHONE_TWINS)
+        index = next(i for i, t in enumerate(twins) if t.shape is agentic.PhoneShape.PREFIX_001)
+        twins[index] = dataclasses.replace(twins[index], make=lambda rng, partition: "001-212-555-0142")
+        with self.assertRaisesRegex(agentic.LayerError, "itself a phone shape"):
+            self.generate_with(PHONE_TWINS=tuple(twins))
+
+    def test_a_value_outside_its_shape_fails_generation(self) -> None:
+        values = {**agentic.PHONE_VALUES,
+                  agentic.PhoneShape.DOTTED: {"dev": (("FR", lambda rng: "02 61 91 23 45"),),
+                                              "test": (("FR", lambda rng: "04 65 71 23 45"),)}}
+        with self.assertRaisesRegex(agentic.LayerError, "is not a dotted phone"):
+            self.generate_with(PHONE_VALUES=values)
+
+    def test_a_twin_the_broad_rule_misses_fails_generation(self) -> None:
+        twins = list(agentic.PHONE_TWINS)
+        index = next(i for i, t in enumerate(twins) if t.shape is agentic.PhoneShape.TRUNK_PARENS)
+        twins[index] = dataclasses.replace(twins[index], make=lambda rng, partition: "+12")
+        with self.assertRaisesRegex(agentic.LayerError, "broad pattern misses the decoy"):
+            self.generate_with(PHONE_TWINS=tuple(twins))
+
+
 class PartitionTests(unittest.TestCase):
     def test_vocabularies_are_split_before_generation(self) -> None:
         pools = [
@@ -858,16 +1018,17 @@ class ContractTests(unittest.TestCase):
                 agentic.apply_contract(self.documents(), contract)
 
     def test_an_older_generator_loads_its_own_committed_contract(self) -> None:
-        # A record measured on v4 or v5 is rescored under the contract that
+        # A record measured on v4, v5 or v6 is rescored under the contract that
         # ruled on exactly the labels that generator emitted.
         for version in (4, 5):
             contract = agentic.load_contract(REPO_ROOT, version=version)
             self.assertNotIn("STREET", contract.scored_labels)
+        self.assertIn("STREET", agentic.load_contract(REPO_ROOT, version=6).scored_labels)
         self.assertIn("STREET", agentic.load_contract(REPO_ROOT).scored_labels)
         with self.assertRaisesRegex(agentic.LayerError, "no committed scored-label contract"):
             agentic.load_contract(REPO_ROOT, version=3)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 6"):
-            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=5)
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 7"):
+            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=6)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

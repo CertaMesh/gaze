@@ -1,0 +1,36 @@
+# Deliberately over-broad rules for the phone-shape counterweight check.
+# Appended to a policy, each tags one phone shape with no phone label, no
+# country code and no numbering-plan check: together they must lower layer A's
+# leak on the `phone_*` cells AND raise layer D's false-positive bytes on the
+# `phone_twin_*` cells. The patterns equal PHONE_BROAD_PATTERNS in
+# agentic_layers.py (a test pins them). Never ship these rules.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_phone_dotted"
+pattern = '\b\d{1,2}(?:\.\d{1,4}){2,6}\b'
+class = "custom:mutant_phone"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_phone_national_3x3"
+pattern = '\b\d{2,3} \d{3} \d{3}\b'
+class = "custom:mutant_phone"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_phone_national_2x4"
+pattern = '\b\d{2}(?: \d{2}){3}\b'
+class = "custom:mutant_phone"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_phone_trunk_parens"
+pattern = '\+\d{1,3} ?\(0\)'
+class = "custom:mutant_phone"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_phone_prefix_00"
+pattern = '\b00\d{2}[ -]\d{1,4}[ -]\d{2,5}'
+class = "custom:mutant_phone"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_phone_prefix_001"
+pattern = '\b001[- ]\d{3}[- ]\d{3}[- ]\d{3,4}\b'
+class = "custom:mutant_phone"
