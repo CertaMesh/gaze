@@ -229,8 +229,8 @@ def live_verify(config: dict, paths: pool.ModelPaths, replayer: search.Replayer)
     for count, (index, doc) in enumerate(sample, 1):
         live, replayed = live_spans(doc), replayer.predict(index, config)
         if live != replayed:
-            differing[doc.uid] = {"index": index, "live_only": [list(s) for s in live if s not in replayed],
-                                  "replay_only": [list(s) for s in replayed if s not in live]}
+            differing[doc.uid] = {"index": index, "live_only": [[s.start, s.end, s.label] for s in live if s not in replayed],
+                                  "replay_only": [[s.start, s.end, s.label] for s in replayed if s not in live]}
         if count % 100 == 0:
             print(f"live: {count}/{len(sample)} ({len(differing)} differ)", file=sys.stderr, flush=True)
     persistent = [uid for uid, item in differing.items()

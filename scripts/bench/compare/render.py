@@ -429,7 +429,11 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
         "the panels' headline (highest validation v3 character F2). The custom recognizers were written "
         "after reading validation-half gold examples; no test-half text, gold or output was read before the "
         "choice was frozen. The NER models' training data is not fully published, so overlap with this "
-        "synthetic corpus's style cannot be ruled out for them (nor for the NER model in Gaze's own setup).",
+        "synthetic corpus's style cannot be ruled out for them (nor for the NER model in Gaze's own setup). "
+        "Both halves are synthetic and share their generators: the agentic layers are built from the same "
+        "templates and cue phrases in both halves, and the main layer from one generated dataset. Tuning on "
+        "validation therefore learns those templates, and the test half measures fit to this corpus, not "
+        "robustness to unseen phrasing. Gaze's rules were developed against the same corpus.",
         f"- **Budget:** Gaze's rules received {budget['gaze_rulepack_commits']} rulepack commits "
         f"({budget['first']} to {budget['last']}), made with the whole corpus visible, test half included. "
         "The tuned Presidio search is at least as generous in iterations: "
