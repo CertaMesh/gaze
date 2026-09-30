@@ -15,8 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   protection as its own `location` token: `Suite 312`, `Apt. 4B`,
   `PO Box 417`, `Wohnung 7`, `3. Etage`, `Postfach 505`, `IL` in
   `Brinmoor, IL 00068`, and `PSC 806, Box 9504, FPO AA`. Growth crosses only
-  spaces, one comma and one line break, never a sentence end or a JSON field
-  boundary, and a designator with no protected address beside it stays raw.
+  spaces, one comma and one line feed, never a sentence end or a JSON field
+  boundary; a postcode never grows a unit to its right, a state code needs a
+  protected postcode after it, and a designator with no protected address
+  beside it stays raw.
   Words come from new `locale-en` / `locale-de` buckets; each piece's
   recognizer id (`address.block.*`, `gaze::AddressGrowth`) records why it
   joined. It runs under the new `[address_blocks] enabled = true` policy

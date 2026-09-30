@@ -1350,10 +1350,16 @@ beside it join the protection, so an address is never left half tokenized
 winner of class `location` (NER, or a house number), `custom:postal_code` or
 `custom:building_number`, and steps outward one piece at a time. Between two
 pieces only one to four bytes of spaces and commas with at most one comma and
-one line break may stand; a full stop, colon, semicolon, tab, pipe, quote or
-blank line ends the block, so JSON fields and the next sentence never join. A
-chain grows at most five pieces per side and never over another selection.
-The pieces come from four locale buckets:
+one line feed may stand; a full stop, colon, semicolon, tab, pipe, quote,
+carriage return or blank line ends the block, so JSON fields and the next
+sentence never join. The line break is LF only: CRLF text does not grow across
+lines. A piece never starts or ends against a letter, digit, hyphen, en dash,
+slash, underscore or `@` (`LA` in `K-LA` is not a state). At most five pieces
+join each side of an anchor (a military `PSC N, Box N` pair counts as two),
+never over another selection. A postcode never grows a unit to its right:
+`Ticket 48213 unit 3` stays raw even when the postcode rule takes `48213`,
+because an address writes the unit before its postcode. The pieces come from
+four locale buckets:
 
 - `address_unit_designators` (`locale-en`, `locale-de`): a word, then one
   space or `#`, then a unit number of one to five digits and one optional
@@ -1363,8 +1369,8 @@ The pieces come from four locale buckets:
 - `address_unit_designators_number_before` (`locale-de`): a one- or two-digit
   ordinal, a full stop, a space and the word (`3. Etage`, `2. OG`).
 - `address_region_codes` (`locale-en`): exact-case US state codes and the
-  military `AA` / `AE` / `AP`, only when a number follows (`IL 00068`), so
-  `Paris, OR maybe` stays raw.
+  military `AA` / `AE` / `AP`, only directly in front of a protected postcode
+  (`IL 00068`), so `Paris, OR maybe` and `IN 2027` stay raw.
 - `address_military_post_offices` (`locale-en`): exact-case `APO`, `FPO`,
   `DPO`.
 
