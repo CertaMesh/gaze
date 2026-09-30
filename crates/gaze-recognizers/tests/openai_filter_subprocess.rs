@@ -795,7 +795,7 @@ printf '%s\n' 'alice@example.invalid'
     assert!(!error.to_string().contains("alice@example.invalid"));
 }
 
-// Whole-text input contract (todo 3677). Piped stdin makes the pinned `opf` analyse every
+// Whole-text input contract. Piped stdin makes the pinned `opf` analyse every
 // non-blank line as its own input. These fixtures pass `--no-print-color-coded-text` in the
 // configured args, as an adopter or the bench would, so the colour section cannot mask the
 // silent case: without the fix, leading blank lines come back as ONE valid output whose offsets

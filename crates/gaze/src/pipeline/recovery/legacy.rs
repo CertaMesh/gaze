@@ -75,7 +75,7 @@ fn resolve_candidates_inner(
 }
 
 /// A resolved candidate plus whether collision policy settled its family.
-/// `decided_by` is only the last rung's audit label (todo #3709).
+/// `decided_by` is only the last rung's audit label.
 struct Slot {
     candidate: Candidate,
     settled: bool,
@@ -248,7 +248,7 @@ fn arbitrate(
 
     // Containment-precedence rung: a candidate that wholly contains a
     // candidate of another class wins the whole span as one token, unless it
-    // is less certain than what it would swallow (todo #3740). It sits after
+    // is less certain than what it would swallow. It sits after
     // collision-family policy and the anchor rung so those keep deciding what
     // they decide today, and before the structured-containment rung, which it
     // generalises: that rung still catches a custom container the guard
@@ -267,7 +267,7 @@ fn arbitrate(
     // custom-class structured span never evicts its container. Without it the
     // base ladder's class priority (Email/Name/Organization/Location above
     // every `Custom`) let an NER sub-token split a URL, IBAN or credential
-    // around a mid-word token and leave the rest raw (todo #3025).
+    // around a mid-word token and leave the rest raw.
     if let Some(container_is_candidate) = structured_containment(existing, candidate, overlap) {
         return if container_is_candidate {
             Arbitration::CandidateWins(ConflictTier::StructuredContainment)

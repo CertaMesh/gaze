@@ -1,4 +1,4 @@
-//! Cue-anchored dates of birth in prose, tool-call JSON and `key=value` logs (solo todo #3651).
+//! Cue-anchored dates of birth in prose, tool-call JSON and `key=value` logs.
 //!
 //! `birth_date.cue` used to accept only a line-start field record (`DOB: 1990-02-03`) and
 //! `born on` / `geboren am`, with three numeric date shapes. On v0.15.1 these shipped raw through

@@ -1,4 +1,4 @@
-//! Fail-closed integrity contract for safety-net RESOLVE (solo todo #2410).
+//! Fail-closed integrity contract for safety-net RESOLVE.
 //!
 //! `SafetyNetMode::Resolve` used to have exactly one post-condition: re-run the nets and take the
 //! fallback if the follow-up still counted uncovered/partial-bleed suspects. Every other guarantee
@@ -189,7 +189,7 @@ fn expect_fallback(outcome: CleanOutcome, expected: FallbackReason, context: &st
 ///
 /// Applied in sequence they tokenize over a token emitted moments earlier: the second suspect's
 /// raw fragment survives in the clean text and the manifest can no longer restore the document.
-/// This is the shipped-main leak from todo #2410.
+/// This is the shipped-main leak.
 #[test]
 fn overlapping_resolutions_fail_closed_with_a_typed_overlap_conflict() {
     let raw = format!("{EMAIL} and {OTHER}");
@@ -218,7 +218,7 @@ fn overlapping_resolutions_fail_closed_with_a_typed_overlap_conflict() {
 /// gone, and unflagged text is left alone. The suspects here therefore span both emails, so
 /// "no fixture bytes survive" is a consequence of redacting what was flagged.
 ///
-/// They did not before solo todo #2484. Each span used to be re-anchored to a document that the
+/// They did not before that fix. Each span used to be re-anchored to a document that the
 /// previous deletion had already shrunk, so an overlap deleted an arbitrary run of UNFLAGGED text
 /// past the flagged region — and once that arithmetic ran off the end, panicked. The trailing
 /// " tail" is the regression guard: it is not flagged, so it must survive.

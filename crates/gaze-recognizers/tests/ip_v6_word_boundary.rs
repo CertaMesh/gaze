@@ -4,7 +4,7 @@
 //! `CleanOverrides::apply_to`, `::defa` in `Policy::default()`, `d::f` in `std::fs::read`, and a
 //! bare `::` wherever a path has no hex on either side. The `ipv6_parse` validator accepts every
 //! one of them, because they really are RFC 4291 addresses; only context separates them from an
-//! address. Before todo 3710 the rule's guard class excluded hex digits alone, so any
+//! address. Before the fix the rule's guard class excluded hex digits alone, so any
 //! non-hex identifier character (`s`, `y`, `p`, `>`) satisfied it and the candidate fired
 //! mid-identifier, mangling code-heavy agentic text: PR bodies, stack traces, tool-call JSON.
 //!
@@ -232,14 +232,14 @@ fn explicit_dictionary_can_protect_documentation_addresses() {
     assert_eq!(session.restore_strict_text(&clean).expect("restore"), input);
 }
 
-// ============================================== the defect: `::` paths must not fire (todo 3710)
+// ============================================== the defect: `::` paths must not fire
 
 // drift-ack: the drift corpus gained a Rust scope-separator line so the bundled no-policy gate
 // can see this boundary too. Only `fixtures_sha256` moved in both snapshots; detections stayed
 // at 12 for `core` and 2 for `secrets`, because the new line tokenizes nothing.
 #[test]
 fn rust_paths_from_the_report_survive_verbatim() {
-    // Every one of these was mangled in a real PR body this cycle (todo 3710, comment 2127).
+    // Every one of these was mangled in a real PR body this cycle.
     for path in [
         "CleanOverrides::apply_to",
         "gaze_assembly::CorePipelineConfig",
@@ -483,7 +483,7 @@ fn cue_words_followed_by_scope_separators_are_untouched() {
 
 /// The URL recognizer owns `http://[::1]:8080/` and the policy preserves URLs by default, but
 /// the bracketed literal is an address the policy tokenizes: protection beats preservation, so
-/// the literal leaves as an `ip_address` fragment inside the otherwise raw URL (todo #3740).
+/// the literal leaves as an `ip_address` fragment inside the otherwise raw URL.
 /// The rule fired on `::1` before as well; the preserved URL used to shield it.
 #[test]
 fn an_address_inside_a_preserved_url_is_still_protected() {

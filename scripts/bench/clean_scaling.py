@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure how `gaze clean` time grows with input size (todo 3895).
+"""Measure how `gaze clean` time grows with input size.
 
 Two synthetic line shapes (no real PII), picked with `--shape`:
 

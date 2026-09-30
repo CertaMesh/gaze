@@ -1,8 +1,8 @@
-//! Regression fixtures for the `url.anchored` core recognizer (solo todo #2254).
+//! Regression fixtures for the `url.anchored` core recognizer.
 //!
 //! EVERY positive fixture here encodes a structural shape that was MEASURED in the Dataiku EN/DE
 //! holdout, not a phrasing invented alongside the implementation. The previous attempt at this
-//! bucket (todo #2412) shipped 962 green tests for cue phrasings — "my profile is <url>" — that
+//! bucket shipped 962 green tests for cue phrasings — "my profile is <url>" — that
 //! occur in 5 of 276 gold spans, and produced a zero real-corpus delta. The measured distribution
 //! of the 232 gold URL spans this rule covers is:
 //!
@@ -321,7 +321,7 @@ fn interior_punctuation_is_kept_when_the_url_continues() {
 
 // ---------------------------------------------------------------- reference hosts (16 of 232)
 //
-// PRECISION OBLIGATION (todo #2254 item 3). This rule DOES tokenize documentation, repository,
+// PRECISION OBLIGATION. This rule DOES tokenize documentation, repository,
 // and example URLs. That is deliberate, and it is what the corpus asks for: of the 232 gold URL
 // spans this rule covers, 16 are themselves documentation/repository/reference-host shaped, and
 // ZERO of the 9 non-gold anchored matches are. The benchmark's labelling policy treats a

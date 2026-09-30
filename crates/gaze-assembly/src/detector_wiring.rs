@@ -51,7 +51,7 @@ pub(crate) fn register_policy_detectors(
                 // not find this rule by the id its collision membership is
                 // filed under, `family_member_classes` saw no member, and a
                 // family token over policy regex rules derived its action from
-                // the default alone (solo todo 3757). The wrapper emitted every
+                // the default alone. The wrapper emitted every
                 // candidate at score 1.0 and outside the per-locale claiming
                 // step; the same score and the format basis keep the conflict
                 // ladder and the candidate pool as they were.

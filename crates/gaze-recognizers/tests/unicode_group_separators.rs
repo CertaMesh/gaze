@@ -1,4 +1,4 @@
-//! Unicode space separators between identifier groups (solo todo #3819).
+//! Unicode space separators between identifier groups.
 //!
 //! Text copied from PDFs and banking UIs writes IBANs, cards and tax IDs with NO-BREAK SPACE
 //! (U+00A0), NARROW NO-BREAK SPACE (U+202F) or THIN SPACE (U+2009) between groups. Before the fix
@@ -168,7 +168,7 @@ fn national_ids_with_unicode_group_separators_are_tokenized() {
 
 #[test]
 fn checksum_invalid_iban_and_card_with_unicode_separators_are_still_tokenized() {
-    // Solo todo 3906: an IBAN- or card-shaped value is tokenized even when mod-97 or Luhn fails
+    // An IBAN- or card-shaped value is tokenized even when mod-97 or Luhn fails
     // (the failure is recorded on the audit row, not a veto). The IBAN resolves through its
     // family token here, as a valid one does with the core pack alone; `iban` accepts both.
     assert_grouped_value_tokenized(

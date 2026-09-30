@@ -1,4 +1,4 @@
-//! The bundled `secrets` rulepack is opt-in (todo #3646). Credentials are not PII,
+//! The bundled `secrets` rulepack is opt-in. Credentials are not PII,
 //! so `security_token.anchored` and `password.field` must stay inert under every
 //! default activation and fire only when `secrets` is loaded by name.
 //!

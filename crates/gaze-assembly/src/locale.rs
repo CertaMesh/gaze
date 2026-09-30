@@ -118,7 +118,7 @@ pub(crate) fn register_anchor_cue_bundles(
 }
 
 /// Locale buckets holding the street words that license an adjacent house
-/// number, with the side each locale writes the number on (todo 3670).
+/// number, with the side each locale writes the number on.
 const STREET_LEXICON_BUCKETS: [(&str, gaze::StreetNumberOrder); 2] = [
     (
         "street_suffixes_number_after",

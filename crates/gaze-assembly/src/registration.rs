@@ -7,7 +7,7 @@ use gaze::{CollisionMembership, LocaleTag, PipelineBuilder, Recognizer, Rule, St
 /// rulepack metadata. Every registration path in this crate goes through this
 /// type, so the guard cannot drift from what actually got registered — a drift
 /// that previously let a zero-recognizer pipeline build and preserve every
-/// byte (audit 7201 S10-F1).
+/// byte.
 #[derive(Default)]
 pub(crate) struct AssemblyBuilder {
     inner: PipelineBuilder,

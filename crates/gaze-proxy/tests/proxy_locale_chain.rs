@@ -1,6 +1,6 @@
 //! Locale-chain contract for the legacy (non-codec) proxy request path.
 //!
-//! Solo todo #2403. Before the fix, `redact_surfaces` called [`gaze::Pipeline::redact`], which
+//! Before the fix, `redact_surfaces` called [`gaze::Pipeline::redact`], which
 //! pins `[LocaleTag::Global]`, and the outbound residual re-scan pinned the same chain
 //! deliberately. Consequence: every recognizer declaring `locales = [...]` — `postal.de`,
 //! `postal.us`, the national phone recognizers — was inert on proxied traffic no matter what
@@ -115,7 +115,7 @@ fn calibration_postal_de_is_locale_gated_at_the_pipeline() {
 // (2) ACTIVATION — the configured chain reaches the proxy primary pass
 // ---------------------------------------------------------------------------
 
-/// REGRESSION (todo #2403): a configured `de-DE` chain makes `postal.de` fire on the proxy
+/// REGRESSION: a configured `de-DE` chain makes `postal.de` fire on the proxy
 /// path. Before the fix this position egressed the raw postal code because
 /// `redact_surfaces` pinned `[LocaleTag::Global]`.
 #[tokio::test]
@@ -152,7 +152,7 @@ async fn regression_configured_locale_activates_gated_recognizer_on_proxy_path()
 ///
 /// This is deliberately NOT a leak the fix closes. Widening the no-configuration default would
 /// activate `postal.us` / `postal.de` for every adopter at once and is coupled to the open
-/// values-vs-bounds numeric-carrier decision (Solo todo #2400).
+/// values-vs-bounds numeric-carrier decision.
 #[tokio::test]
 async fn unconfigured_locale_default_is_unchanged() {
     let (pipeline, _chain) = assembled(&[LocaleTag::DeDe]);

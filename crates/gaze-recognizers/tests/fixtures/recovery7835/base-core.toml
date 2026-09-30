@@ -753,7 +753,7 @@ priority = 70
 # and 6,385 of 7,209 leaked URL bytes (88.6%), while matching NOTHING in all 1,024 documents of
 # the committed A4 negative corpus. Bare-host URLs (`example.invalid/path`, no scheme, no `www.`)
 # are the remaining 12.3% and are deliberately NOT matched: 97 of the A4 negative documents
-# contain bare-host shapes, so no bare-host rule can clear the negative gate. See todo #2254.
+# contain bare-host shapes, so no bare-host rule can clear the negative gate.
 #
 # Trailing-boundary rule: the match runs to the next whitespace and then gives back a run of
 # sentence and markup punctuation, so `.`, `,`, `;`, `:`, `!`, `?`, `)`, `]`, `}`, `>`, `"`, `'`
@@ -792,7 +792,7 @@ license = "Apache-2.0"
 
 # SECURITYTOKEN detection. Measured over the EN/DE holdout, the label carries 219 gold spans and
 # 4,342 bytes, and the deterministic rule floor covered NONE of it before this change
-# (fully_covered 0 AND overlapped 0). See todo #2318.
+# (fully_covered 0 AND overlapped 0).
 #
 # Why nothing unanchored: the committed A4 negative corpus is purpose-built to punish naive
 # high-entropy rules. Across its 1,024 documents, an unanchored base64url run of >=20 chars
@@ -812,12 +812,12 @@ license = "Apache-2.0"
 # a `+`-joined composite (`a+b`). The benchmark scorer's source-ID grammar admits only
 # `[._:/-]` as separators, so that composite fails closed with "expected a metadata-only stable
 # identifier" — measured at 40 trace items across 40 documents. A single recognizer emits one
-# stable id per detection and sidesteps the whole question. See todo #2416.
+# stable id per detection and sidesteps the whole question.
 #
 # `locales = ["global"]` with the German cues carried as literal pattern alternatives rather than
 # `[locale.cues.*]` bundle lookups, so this fires on every locale chain including the one a default
 # adopter gets. A locale-gated credential rule that silently never fires is the failure mode behind
-# todo #2403.
+# the locale-chain fix.
 [[recognizers]]
 id = "security_token.anchored"
 safety_tier = "safe_default"
@@ -879,7 +879,7 @@ origin = "project-authored"
 license = "Apache-2.0"
 
 # ---------------------------------------------------------------------------------------------
-# Government-ID cluster (solo todo #2318 follow-on). Four fixed-format, cue-adjacent classes that
+# Government-ID cluster. Four fixed-format, cue-adjacent classes that
 # the deterministic rule floor could see but did not. Measured over the EN/DE holdout:
 #
 #   class              gold spans / bytes   cue adjacency   covered before
@@ -888,7 +888,7 @@ license = "Apache-2.0"
 #   DRIVERLICENSENUM   216 / 2,160          92.1%           none
 #   TAXNUM             212 / 2,495          92.9%           0 via steuer_id.de (0%)
 #
-# SHARED CONNECTOR GRAMMAR (solo todo #3025 slice G). The cue->value connector of these five
+# SHARED CONNECTOR GRAMMAR. The cue->value connector of these five
 # recognizers (the four above plus `ssn.us`) is one byte-identical fragment: up to four
 # closed-vocabulary tokens (numbers?/nummern?/no/nr/id/is/ist/lautet/mit/der/hat/with/the/... plus
 # `no.`/`nr.`) with Unicode-aware, UNBOUNDED whitespace (`\s`) and one optional separator. The
@@ -928,7 +928,7 @@ license = "Apache-2.0"
 # The measured gap is large: `ssn.us` matches only 38 of 217 gold SSN spans (17.5%), because 113
 # of 217 sit in GERMAN documents cued by "sozialversicherung" (101 occurrences) — a word its
 # vocabulary lacks entirely — and because its pattern has no `d3.d4.d4.d2` alternative (33 spans).
-# A US SSN inside a German document is still a US SSN, which is the argument of todo #2417; #414
+# A US SSN inside a German document is still a US SSN, which is the argument of the locale-gating decision; #414
 # answered the LOCALE half of that argument by moving `ssn.us` to `locale_basis = "format"`, so it
 # now runs under every chain. It did not answer the VOCABULARY half: an English-cued rule cannot
 # see a German-cued number, whatever the chain. This arm is the vocabulary half.
@@ -987,7 +987,7 @@ license = "Apache-2.0"
 # production and capped at ~1% recall here. Simultaneously, the A4 negative corpus contains 64
 # tax-shaped INVALID identifiers in its `invalid_identifiers` category, which a broad cue rule
 # falsely matches and which a checksum would have rejected. The corpus thus penalises having a
-# validator and penalises not having one. See todo #2418.
+# validator and penalises not having one.
 #
 # The resolution is neither horn of that dilemma: REQUIRING INTERNAL SEPARATORS excludes A4's
 # bare-digit invalids without invoking the checksum. Measured, the broad form covers 36.3% but

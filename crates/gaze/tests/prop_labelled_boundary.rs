@@ -87,7 +87,7 @@ fn document_case() -> impl Strategy<Value = String> {
         prop::collection::vec(unicode_fragment(), 0..4),
     )
         .prop_map(|(marker, before, connector, after)| {
-            // todo #4009: angle fragments stay behind context words, away from token edges.
+            // Angle fragments stay behind context words, away from token edges.
             format!(
                 "{marker} context {} Tax number{connector} AB123456 context {}",
                 before.join(" "),

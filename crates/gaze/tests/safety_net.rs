@@ -2348,7 +2348,7 @@ fn structured_walk_has_nested_parity_across_every_leaf_op() {
         ]
     );
     // Documented divergence, preserved rather than silently unified: `scan_safety_nets_structured`
-    // reports bare-key roots where the cleaning path reports JSONPath-style ones (todo #2958).
+    // reports bare-key roots where the cleaning path reports JSONPath-style ones.
     assert_eq!(
         scanned_paths,
         cleaned_paths

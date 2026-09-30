@@ -1,5 +1,4 @@
-//! Cue-anchored identifiers in structured text: tool-call JSON, `key=value` and `key: value` logs
-//! (solo todo #3818).
+//! Cue-anchored identifiers in structured text: tool-call JSON, `key=value` and `key: value` logs.
 //!
 //! Every cue rule was written for prose (`BSN: 111222333`). In a tool call the cue is a JSON key,
 //! so a quote sits between the cue and the value (`"bsn": "111222333"`), keys are snake / camel /

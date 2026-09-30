@@ -1,5 +1,4 @@
-//! Declared evidence also ranks cross-class containment (todo 3884, review
-//! 10735 F1). A container from an emitter that declares nothing is `Learned`,
+//! Declared evidence also ranks cross-class containment (review F1). A container from an emitter that declares nothing is `Learned`,
 //! so it no longer swallows an enclosed rule candidate of another class: the
 //! tokens split around the rule span. Declaring `Rule` keeps the v0.15
 //! behaviour of one container token. Either way no raw byte ships. Synthetic

@@ -325,7 +325,7 @@ mod tests {
         );
     }
 
-    /// Ruling 3746 #1: members disagreeing between two protective actions take
+    /// Ruling #1: members disagreeing between two protective actions take
     /// the stricter one, in either declaration order.
     #[test]
     fn members_disagreeing_between_protective_actions_take_the_stricter() {
@@ -365,7 +365,7 @@ mod tests {
         assert!(resolved.derived.is_some());
     }
 
-    /// Ruling 3746 #2: the derivation never lands below the family's own
+    /// Ruling #2: the derivation never lands below the family's own
     /// default, so an all-preserve policy under a tokenize default stays tokenized.
     #[test]
     fn family_never_lands_below_its_own_default() {
@@ -385,7 +385,7 @@ mod tests {
         );
     }
 
-    /// Review 3746 finding 3: only a member whose EXPLICIT rule produced the
+    /// Review finding 3: only a member whose EXPLICIT rule produced the
     /// derived action is credited. `credit_card` reaches `tokenize` through the
     /// same default here and names no rule, so it is never the credit.
     #[test]

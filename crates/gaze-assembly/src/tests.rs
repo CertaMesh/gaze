@@ -235,7 +235,7 @@ pattern = '''alice@example\.invalid'''
     assert!(text.contains(":Email_"), "{text}");
 }
 
-// S10-F1 (audit 7201): the guard and registration must agree on ONE locale
+// S10-F1 : the guard and registration must agree on ONE locale
 // predicate — the detect-time `LocaleChain::intersects` (empty list ⇒ matches).
 // A rulepack that omits both `default_locales` and per-recognizer `locales`
 // yields an empty locale list; the runtime would run it everywhere, so assembly
@@ -275,7 +275,7 @@ pattern = '''alice@example\.invalid'''
     assert!(text.contains(":Email_"), "{text}");
 }
 
-// S10-F1 (audit 7201): an anchored_match recognizer whose optional builtin cue
+// S10-F1 : an anchored_match recognizer whose optional builtin cue
 // bucket is absent under the active locale chain is skipped at registration.
 // The guard must see that skip; otherwise an anchored-only rulepack builds a
 // zero-recognizer pipeline that preserves every byte (silent fail-open).
@@ -724,7 +724,7 @@ fn core_pipeline_config_core_extended_alias_tokenizes_synthetic_phone() {
     assert!(text.contains(":Custom:phone_"), "{text}");
 }
 
-// S10-F2 (audit 7201): the auto-activate locale set is derived from the loaded
+// S10-F2 : the auto-activate locale set is derived from the loaded
 // rulepacks, not spelled out. This adopter path rulepack declares a
 // document-basis `locale_gated` recognizer for `es-ES` under `global` defaults;
 // `core-extended` (auto-activate) must put `es-ES` on the chain so it activates.
@@ -1982,7 +1982,7 @@ fn uncovered_family_classes_respects_explicit_family_rule() {
 
 #[test]
 fn uncovered_family_classes_flags_a_member_rule_shadowed_by_default() {
-    // Review 3746 finding 6: a member rule pasted AFTER the default rule is
+    // Review finding 6: a member rule pasted AFTER the default rule is
     // dead too, and the family token then falls to the default. The old notice
     // fired for this shape; the reworked one must keep doing so.
     let mut policy = iban_preserve_default_policy();
@@ -2029,7 +2029,7 @@ fn uncovered_family_classes_ignores_family_rule_shadowed_by_default() {
 }
 
 // ---------------------------------------------------------------------------
-// todo 3746: a collision-family token derives its action from its member
+// A collision-family token derives its action from its member
 // classes' rules (strictest wins, never laxer than the family's own default)
 // unless the policy names the family class explicitly. Product path:
 // `build_pipeline` on the bundled `core` + `locale-de` packs under de-DE.
@@ -2045,12 +2045,12 @@ const NO_CUE_IBAN: &str = "Überweisung DE89 3704 0044 0532 0130 00";
 const NO_CUE_LUHN_BBAN_IBAN: &str = "Überweisung DE24 9635 8749 2586 6121 02";
 /// No cue and a trailing number: a Luhn-valid card run crosses the IBAN's end
 /// into the number, the collision falls to the family fallback, and on main
-/// the WHOLE IBAN shipped raw under a member-only policy (todo 3746, comment 2115).
+/// the WHOLE IBAN shipped raw under a member-only policy.
 const TRAILING_NUMBER_IBANS: [&str; 3] = [
     "Bitte überweisen auf FO14 5878 0013 4155 73 1234",
     "Bitte überweisen auf GL07 3135 5673 6936 21 1234",
     // Its digit run holds no Luhn-valid card layout window. `SA77 … 7425` did
-    // (`4281 2318 7317 7425`), which since todo 3843 makes it the Luhn-valid BBAN
+    // (`4281 2318 7317 7425`), which since the card-tail fix makes it the Luhn-valid BBAN
     // case: the settled narrow IBAN token.
     "Bitte überweisen auf SA50 3476 4281 2318 7317 7426 1234",
 ];
@@ -2061,7 +2061,7 @@ const FAMILY_TOKEN_MARKER: &str = ":Custom:family:payment-card-or-iban_";
 /// class.
 const PHONE_WIN_IBAN: &str = "Bitte überweisen auf AD56 7551 0585 4139 9502 9893 BIC";
 /// No cue, a German phone shape straddling the IBAN's last group and a
-/// trailing number (todo 3769): a PARTIAL overlap, which containment
+/// trailing number: a PARTIAL overlap, which containment
 /// precedence leaves to today's rungs, so the phone still wins its sub-run on
 /// rule priority and the IBAN's remainder still reaches residual coverage on
 /// its standalone view, the family class.
@@ -2197,7 +2197,7 @@ fn all_members_preserve_under_a_tokenize_default_still_tokenizes_the_family_toke
 
 /// Two policy dictionary recognizers in one tenant family with equal
 /// precedence. Dictionary detectors register as `dict/<name>` on both the
-/// recognizer and the collision side; the regex analogue is the todo 3757
+/// recognizer and the collision side; the regex analogue is the policy-regex
 /// section below.
 fn tenant_tie_policy(rules: Vec<RuleSpec>) -> (gaze::Policy, Context) {
     let mut policy = gaze::Policy::default();
@@ -2307,7 +2307,7 @@ fn precedence_tie_family_token_honours_an_explicit_family_rule() {
     );
 }
 
-/// Ruling 3746 #1 (c): the derived action and the member it came from are
+/// Ruling #1 (c): the derived action and the member it came from are
 /// visible on the family token's audit row.
 #[test]
 fn derived_family_action_is_recorded_on_the_audit_row() {
@@ -2419,7 +2419,7 @@ fn longest_common_run(a: &str, b: &str) -> usize {
     best
 }
 
-/// Ruling 3746 #1 (a) and (b): every protective action executes on a family
+/// Ruling #1 (a) and (b): every protective action executes on a family
 /// token, and the number of original bytes that reach the output is measured,
 /// not argued. The session hex is stripped from the replacement first so a
 /// chance digit overlap with the random prefix cannot skew the measurement.
@@ -2563,7 +2563,7 @@ fn clean_payment_logged(policy: &gaze::Policy, input: &str) -> (String, MemoryLo
 /// The phone-shape document must leave the process as one replacement over
 /// the whole IBAN (`replacement` names its shape: the family token marker or
 /// the one-way `[REDACTED]`), with no phone token and no IBAN group readable.
-/// Since containment precedence (todo #3740) the validated IBAN wins the
+/// Since containment precedence the validated IBAN wins the
 /// whole span over the validated phone shape inside it (equal tiers go to
 /// the container); the phone is a loser row that names that rung, and its
 /// old sub-run win is exactly what this fixture must no longer exhibit.
@@ -2600,7 +2600,7 @@ fn assert_phone_shape_iban_fully_covered(clean: &str, logger: &MemoryLogger, rep
     );
 }
 
-/// Review 3746 finding 7: one member (`custom:credit_card`) set to `redact`
+/// Review finding 7: one member (`custom:credit_card`) set to `redact`
 /// makes the losing IBAN's standalone view, the family class, derive `redact`.
 /// Residual coverage used to admit a loser only when its previewed action was
 /// exactly `tokenize`, so raising the family action silently dropped every
@@ -2625,7 +2625,7 @@ fn a_redacting_member_keeps_the_losing_iban_evidence_covered() {
 }
 
 /// The #624 regression class on the shape that still reaches residual
-/// coverage under containment precedence (ORCH-RULING 3740 #1): the phone
+/// coverage under containment precedence (ruling #1): the phone
 /// wins its straddling sub-run, and the losing IBAN's remaining bytes are
 /// covered under the claimant's own derived action. With
 /// `custom:credit_card = redact` the family view derives `redact`, so the
@@ -2670,7 +2670,7 @@ fn a_redacting_member_keeps_a_partially_overlapped_iban_covered() {
 
     // Same shape under a `redact` default with every member tokenized: the
     // family class takes the default, so the remainder is the same one-way
-    // marker (review 3746 finding 7's hole, on a letter that still reaches
+    // marker (review finding 7's hole, on a letter that still reaches
     // residual coverage).
     let redact_default = payment_family_policy(
         &[
@@ -2699,7 +2699,7 @@ fn a_redacting_member_keeps_a_partially_overlapped_iban_covered() {
     assert_no_group_survives(&clean, PARTIAL_PHONE_IBAN, "Bitte überweisen auf ", "");
 }
 
-/// Review 3746 finding 4: under an active protection trace (the MCP and proxy
+/// Review finding 4: under an active protection trace (the MCP and proxy
 /// chokepoints) only `tokenize` and `preserve` are executable, so a family
 /// token that derives `redact` fails closed with `UnsupportedActionVariant`.
 /// That is the same failure an explicit `redact` rule on a member class
@@ -2761,7 +2761,7 @@ fn a_derived_redact_fails_under_a_protection_trace_like_an_explicit_one() {
 /// The pre-existing hole behind finding 7: an explicit `default = redact`
 /// reached the same `tokenize`-only residual gate, where the family class took
 /// the default, so the losing IBAN's bytes shipped raw there too. Since
-/// containment precedence (todo #3740) this whole-IBAN letter no longer
+/// containment precedence this whole-IBAN letter no longer
 /// reaches residual coverage: the family token itself derives `redact` and the
 /// span leaves as one `[REDACTED]`. The residual arm of the same derivation is
 /// pinned on the partial-overlap letter in
@@ -2783,7 +2783,7 @@ fn a_redact_default_keeps_the_losing_iban_evidence_covered() {
 }
 
 // ---------------------------------------------------------------------------
-// todo 3757: policy regex custom recognizers bind their collision metadata
+// Policy regex custom recognizers bind their collision metadata
 // through the registry. Product path: `build_pipeline` on a policy whose
 // custom recognizers are regex rules, the `[[policy.custom_recognizers]]`
 // shape from docs/reference/policy.md, with no bundled pack except where an
@@ -3246,7 +3246,7 @@ fn registry_anchored_family_members(
         .collect()
 }
 
-/// Todo 3761's validation: the registry (which decides the runtime action)
+/// Validation: the registry (which decides the runtime action)
 /// and `mandatory_anchor_families` (which decides the load-time notice) must
 /// agree on which classes belong to every anchored family, for the same
 /// rulepacks and policy, policy regex members included.
