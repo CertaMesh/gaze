@@ -55,7 +55,7 @@ def main():
     with tempfile.TemporaryDirectory() as directory:
         for arm in ('base', 'broad', 'narrow'):
             policy = Path(directory) / (arm + '.toml')
-            text = '[policy]\n[policy.rulepacks]\nbundled = ["core"]\n'
+            text = '[session]\nscope = "ephemeral"\n[policy.rulepacks]\nbundled = ["core"]\n'
             if arm != 'base':
                 text += (root / f'fixtures/agentic/mutant-{arm}-government-ids.toml').read_text()
             policy.write_text(text)
