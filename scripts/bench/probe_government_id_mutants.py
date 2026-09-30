@@ -58,6 +58,7 @@ def main():
             text = '[session]\nscope = "ephemeral"\n[policy.rulepacks]\nbundled = ["core"]\n'
             if arm != 'base':
                 text += (root / f'fixtures/agentic/mutant-{arm}-government-ids.toml').read_text()
+            text += '\n[[rule]]\nkind = "default"\naction = "tokenize"\n'
             policy.write_text(text)
             arms[arm] = probe(binary, policy, rows)
     failures = []
