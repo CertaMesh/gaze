@@ -6,6 +6,64 @@ use std::fs;
 use std::process::Command;
 
 #[test]
+fn cli_preserves_full_local_matrix_and_rejects_unknown_partitions() {
+    use super::Partition;
+    use crate::{Cli, Command as XtaskCommand};
+    use clap::Parser;
+
+    let cli = Cli::try_parse_from(["xtask", "ci-feature-matrix"]).unwrap();
+    assert!(matches!(
+        cli.command,
+        XtaskCommand::CiFeatureMatrix {
+            partition: Partition::Full
+        }
+    ));
+    assert!(
+        Cli::try_parse_from(["xtask", "ci-feature-matrix", "--partition", "skip-all"]).is_err()
+    );
+}
+
+#[test]
+fn ci_partitions_preserve_every_local_command_with_one_owner() {
+    use super::{ci_owner, partition_commands, CiOwner, Partition};
+
+    let full: Vec<_> = partition_commands(Partition::Full).collect();
+    assert_eq!(full, FEATURE_MATRIX.iter().collect::<Vec<_>>());
+    let defaults: Vec<_> = partition_commands(Partition::CiDefault).collect();
+    assert_eq!(defaults.len(), 1);
+    assert_eq!(
+        defaults[0].args,
+        ["test", "--workspace", "--lib", "--bins", "--tests"]
+    );
+    let test_owned: Vec<_> = FEATURE_MATRIX
+        .iter()
+        .filter(|command| ci_owner(command) == CiOwner::Test)
+        .map(|command| command.label)
+        .collect();
+    assert_eq!(
+        test_owned,
+        [
+            "cargo fmt --all -- --check",
+            "cargo clippy --workspace --all-features --all-targets -- -D warnings",
+            "cargo test -p gaze-document --features mcp",
+            "cargo test -p gaze-cli --features mcp",
+            "cargo test --workspace --all-features",
+        ]
+    );
+    let gates: Vec<_> = partition_commands(Partition::CiGates).collect();
+    assert!(gates.contains(&&CORE_NO_PHONE_PARSER_LOAD_GUARD));
+    assert!(gates
+        .iter()
+        .any(|command| command.args.contains(&"nym_no_feature")));
+    for command in full {
+        let owner_count = usize::from(gates.contains(&command))
+            + usize::from(defaults.contains(&command))
+            + usize::from(ci_owner(command) == CiOwner::Test);
+        assert_eq!(owner_count, 1, "coverage owner for {}", command.label);
+    }
+}
+
+#[test]
 fn matrix_roster_requires_the_no_phone_parser_core_load() {
     assert!(FEATURE_MATRIX.contains(&CORE_NO_PHONE_PARSER_LOAD_GUARD));
     assert_eq!(

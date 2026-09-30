@@ -29,6 +29,23 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../../crates/xtask/src/ma
 The canonical active-gate roster is the "Active xtask gates" line in
 [`CLAUDE.md`](../../../CLAUDE.md).
 
+### CI coverage ownership
+
+The unqualified `ci-feature-matrix` command still runs the complete local
+matrix. CI runs its work in parallel:
+
+- `test` owns formatting, all-feature Clippy, document and CLI MCP tests,
+  and the all-feature workspace suite.
+- `xtask feature gates` runs `ci-feature-matrix --partition ci-gates`,
+  retaining all other feature configurations and gate commands.
+- `workspace default features` runs
+  `ci-feature-matrix --partition ci-default`, retaining the distinct
+  default-feature workspace suite and the matrix's sanitized build environment.
+
+The required `xtask gates` check waits for all three owners. Failure,
+skipping, or cancellation of any owner fails that check. The required
+`test` and `Check DCO sign-off` names also remain unchanged.
+
 ## Current gates
 
 | Gate | Command | Current behavior |
