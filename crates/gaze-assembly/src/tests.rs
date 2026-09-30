@@ -3291,7 +3291,7 @@ fn collision_family_members_agree_between_registry_and_assembly() {
     );
 }
 
-/// Todo 4013: the bundled locale packs supply the address words, and only
+/// The bundled locale packs supply the address words, and only
 /// `[address_blocks] enabled = true` lets a postcode winner grow over them.
 #[test]
 fn address_blocks_grow_from_a_bundled_postcode_only_when_the_policy_enables_them() {

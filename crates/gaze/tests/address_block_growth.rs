@@ -1,4 +1,4 @@
-//! Address-block growth through the whole pipeline (todo 4013).
+//! Address-block growth through the whole pipeline.
 //!
 //! Stubs stand in for the address winners: a NER stub reports words as
 //! locations under the recognizer id `ner`, and a postcode stub reports digit

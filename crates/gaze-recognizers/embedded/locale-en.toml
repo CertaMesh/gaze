@@ -11,7 +11,7 @@ default_locales = ["en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
 names = ["street", "st.", "road", "rd.", "avenue", "ave.", "drive", "dr.", "lane", "ln.", "boulevard", "blvd.", "court", "ct.", "crescent", "close", "way", "place", "pl.", "terrace", "parkway", "square", "sq.", "highway", "hwy.", "grove", "gardens", "mews"]
 
 # Address words an already protected address part (postcode, NER street or
-# city, house number) may grow over when written right beside it (todo 4013).
+# city, house number) may grow over when written right beside it.
 # Unit designators are followed by a unit number (`Suite 312`, `Apt. 4B`,
 # `PO Box 417`, the military `PSC 806`); a trailing dot marks an abbreviation.
 # A designator with no protected address beside it is never tokenized.

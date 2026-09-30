@@ -1,4 +1,4 @@
-//! Address-block growth (todo 4013).
+//! Address-block growth.
 //!
 //! An address is personal data as a unit. When resolution has already
 //! protected part of one (a postcode, a NER street or city, a house number),

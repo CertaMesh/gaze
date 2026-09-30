@@ -1,4 +1,4 @@
-# Address-block growth (todo 4013): the one section `gaze setup` adds to the
+# Address-block growth: the one section `gaze setup` adds to the
 # setup policy for it. The benchmark candidate policy is the base policy plus
 # exactly this; scripts/bench/mechanism_arms.py refuses any other difference.
 [address_blocks]

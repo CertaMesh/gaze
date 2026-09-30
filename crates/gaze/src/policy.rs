@@ -54,8 +54,8 @@ pub struct Policy {
     /// Optional local date-of-birth judge. Absent means disabled.
     pub dob_judge: Option<DobJudgePolicy>,
     /// `[address_blocks] enabled = true`: grow protection from an address
-    /// winner over the unit, box, state and post-office words beside it
-    /// (todo 4013). Absent means disabled; `gaze setup` enables it.
+    /// winner over the unit, box, state and post-office words beside it.
+    /// Absent means disabled; `gaze setup` enables it.
     pub address_blocks: bool,
     pub rulepacks: RulepackPolicy,
     pub locale: Option<Vec<LocaleTag>>,

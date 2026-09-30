@@ -1117,7 +1117,7 @@ impl Pipeline {
         // Address blocks grow from the settled address winners, house numbers
         // included, so they are found last and the pool is resolved once more.
         // A grown piece never overlaps a selection and is learned-tier evidence,
-        // so the sweep never propagates it (todo 4013).
+        // so the sweep never propagates it.
         let address_pieces = address_block_pieces(
             &whole.evidence,
             &normalized.text,
@@ -4830,7 +4830,7 @@ impl PipelineBuilder {
 
     /// Registers the address words of `locale` (unit designators, state codes,
     /// military post offices) that let an address winner grow over the pieces
-    /// written beside it (todo 4013). Without them no address block grows.
+    /// written beside it. Without them no address block grows.
     pub fn register_address_vocabulary(
         mut self,
         locale: crate::LocaleTag,
@@ -5476,7 +5476,7 @@ fn is_address_anchor(class: &crate::PiiClass) -> bool {
         )
 }
 
-/// Address pieces grown from the settled address winners (todo 4013).
+/// Address pieces grown from the settled address winners.
 ///
 /// Reads the selections in normalized coordinates. Only a selection whose
 /// settled class is an address class starts growth; every selection is

@@ -1547,7 +1547,7 @@ impl RecognizerRegistryBuilder {
     }
 
     /// Registers the address words of `locale` that let an address winner grow
-    /// over the unit, box, state or post office written beside it (todo 4013).
+    /// over the unit, box, state or post office written beside it.
     pub fn register_address_vocabulary(
         mut self,
         locale: LocaleTag,

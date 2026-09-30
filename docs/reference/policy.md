@@ -899,7 +899,7 @@ enabled = true
 
 Grows protection from an address winner over the unit designators, boxes,
 state codes and military post offices written beside it; see
-[Address blocks](#address-blocks-todo-4013). `gaze setup` writes this block.
+[Address blocks](#address-blocks). `gaze setup` writes this block.
 A policy without it, or with `enabled = false`, grows nothing. `enabled` is
 required and no other key is accepted.
 
@@ -1342,7 +1342,7 @@ add entries for a tenant's street vocabulary; measure both directions before
 broadening a list, because the NER span is the only evidence that the words
 form a street.
 
-### Address blocks (todo 4013)
+### Address blocks
 
 Once resolution has protected part of an address, the pieces written right
 beside it join the protection, so an address is never left half tokenized

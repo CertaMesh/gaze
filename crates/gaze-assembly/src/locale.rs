@@ -158,7 +158,7 @@ pub(crate) fn register_street_lexicons(
 
 /// Locale buckets holding the address words an address winner may grow over:
 /// unit designators, number-first designators, state codes and military post
-/// offices (todo 4013).
+/// offices.
 const ADDRESS_VOCABULARY_BUCKETS: [(&str, gaze::AddressVocabulary); 4] = [
     (
         "address_unit_designators",

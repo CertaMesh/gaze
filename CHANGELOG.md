@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Address-block growth** (solo todo #4013). When a postcode, a NER street
+- **Address-block growth.** When a postcode, a NER street
   or city, or a house number is already protected, the unit designator, box,
   state code or military post office written right beside it now joins the
   protection as its own `location` token: `Suite 312`, `Apt. 4B`,
