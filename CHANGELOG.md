@@ -403,6 +403,21 @@ pipeline.
 
 ### Fixed
 
+- **Strict restore round-trips a literal `<` or `>` beside a token.** The
+  strict token scanner rejected any token whose neighbouring byte was `<` or
+  `>` as a "nested wrapper", so an email address in a mail header's angle
+  brackets, a card number followed by `><`, HTML, or generics cleaned fine but
+  strict restore failed with `UnknownToken`. Tokens are already matched by
+  their exact grammar, so the veto is gone and neighbouring angle brackets
+  restore as literal text. It failed closed (no raw bytes shipped), but broke
+  exact restore on 580 of 20,000 seeded fragment documents under the `core`
+  pack; now 0 (`crates/gaze-assembly/tests/angle_adjacent_restore.rs`,
+  `GAZE_ANGLE_PROBE_DOCS=20000`). In the session strict APIs
+  (`Session::restore_strict_text` and its variants, `validate_token_shapes`)
+  and the `gaze_read_file` path gate, unowned or malformed tokens inside angle
+  brackets still fail closed. `gaze::token_shape::validate_restore_shapes` and
+  the `gaze_read_file` path gate now accept `<<{owned token}>>`; an unowned
+  token there is still rejected before any filesystem access.
 - **The safety net's `Redact` fallback tokenizes a residual it can resolve
   instead of redacting it**. A token's class name in the
   re-scan text can make Nym flag the plain value beside it, so each resolve
