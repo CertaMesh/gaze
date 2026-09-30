@@ -1466,6 +1466,28 @@ mod tests {
 
     #[test]
     fn record_requests_match_product_manifest_and_trace_for_every_kind_switch() {
+        fn stable_trace(response: &Response) -> serde_json::Value {
+            let mut trace = serde_json::to_value(&response.final_protection_trace).unwrap();
+            for item in trace.as_array_mut().unwrap() {
+                for contribution in item["provenance"]["contributions"].as_array_mut().unwrap() {
+                    if let Some(original) = contribution["original"].as_u64() {
+                        let event = response
+                            .candidate_events
+                            .iter()
+                            .find(|event| event.original == Some(original as usize))
+                            .expect("trace pool index must join to a candidate event");
+                        assert_eq!(contribution["recognizer_id"], event.recognizer_id);
+                        assert_eq!(contribution["raw_start"], event.raw_start);
+                        assert_eq!(contribution["raw_end"], event.raw_end);
+                    }
+                    // Product and benchmark pipelines can enumerate the same candidates
+                    // in different orders; the pool index is local to each response.
+                    contribution.as_object_mut().unwrap().remove("original");
+                }
+            }
+            trace
+        }
+
         let mut policy = gaze::Policy::default();
         policy.rules = vec![RuleSpec::Default {
             action: Action::Tokenize,
@@ -1571,8 +1593,8 @@ mod tests {
                     "manifest {kind} enabled={enabled}"
                 );
                 assert_eq!(
-                    serde_json::to_value(&bench_response.final_protection_trace).unwrap(),
-                    serde_json::to_value(&product_response.final_protection_trace).unwrap(),
+                    stable_trace(&bench_response),
+                    stable_trace(&product_response),
                     "trace {kind} enabled={enabled}"
                 );
                 assert_eq!(
