@@ -426,7 +426,11 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--max-documents", type=int, help="development sample only; never publish as full arm")
     parser.add_argument("--shipping-defaults", action="store_true", help="measure product defaults without oracle kind overrides")
+    parser.add_argument("--baseline-only", action="store_true", help="score no-record requests with a separate binary")
+    parser.add_argument("--binary-source-commit", help="source commit of --binary when it differs from --repo")
     args = parser.parse_args()
+    if args.baseline_only and not args.binary_source_commit:
+        parser.error("--baseline-only requires --binary-source-commit")
     repo = args.repo.resolve()
     policy_path = args.policy.resolve()
     policy = tomllib.loads(policy_path.read_text(encoding="utf-8"))
@@ -454,11 +458,15 @@ def main() -> None:
         "contract": args.contract,
         "full": args.max_documents is None,
         "source_commit": repo_sha,
+        "binary_source_commit": args.binary_source_commit or repo_sha,
         "policy_sha256": hashlib.sha256(policy_path.read_bytes()).hexdigest(),
         "dataset_sha256": dataiku.DATASET_SHA256,
         "agentic_manifest": agentic.manifest(agentic.PUBLISHED_PARTITION, agentic.generate(agentic.PUBLISHED_PARTITION)),
         "kind_cells_manifest": kind_cells.manifest(kind_pairs),
-        "record_match_kinds_mode": "shipping_defaults" if args.shipping_defaults else "probe_all",
+        "record_match_kinds_mode": (
+            "baseline_only" if args.baseline_only else
+            "shipping_defaults" if args.shipping_defaults else "probe_all"
+        ),
         "name_multi_measurement_kinds": [] if args.shipping_defaults else list(NAME_MULTI_KINDS),
         "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown (Solo scratchpad 10781)",
         "layers": {},
@@ -532,6 +540,13 @@ def main() -> None:
         baseline = score.run_config(
             **kwargs, base_environment=clean_environment, record_document=baseline_observer
         )
+        baseline_result = {
+            key: baseline[key]
+            for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")
+        }
+        if args.baseline_only:
+            output["layers"][layer] = {"documents": len(documents), "baseline": baseline_result}
+            continue
         with_record = run_with_record_context(
             contexts,
             **kwargs,
@@ -560,10 +575,7 @@ def main() -> None:
                 - sum(record_eligible_leaks.values()),
             ),
             **({"kind_cells": kind_tally.result()} if layer == "K" else {}),
-            "baseline": {
-                key: baseline[key]
-                for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")
-            },
+            "baseline": baseline_result,
             "with_record": {
                 key: with_record[key]
                 for key in ("metrics", "pipeline_contract", "pipeline_availability", "per_label_recall")

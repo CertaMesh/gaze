@@ -10,8 +10,9 @@ from pathlib import Path
 LAYERS = ("C", "A", "D", "R", "K")
 
 
-def gate(v2: dict, v1: dict) -> dict:
+def gate(v2: dict, v1: dict, main_v2: dict, main_v1: dict) -> dict:
     arms = {"v2": v2, "v1": v1}
+    main_arms = {"v2": main_v2, "v1": main_v1}
     for contract, arm in arms.items():
         if arm.get("contract") != contract or arm.get("full") is not True:
             raise ValueError(f"{contract}: expected a full {contract} arm")
@@ -19,9 +20,21 @@ def gate(v2: dict, v1: dict) -> dict:
             raise ValueError(f"{contract}: product defaults were not measured")
         if set(arm.get("layers", {})) != set(LAYERS):
             raise ValueError(f"{contract}: missing oracle layer")
+        main_arm = main_arms[contract]
+        if main_arm.get("contract") != contract or main_arm.get("full") is not True:
+            raise ValueError(f"main {contract}: expected a full {contract} arm")
+        if main_arm.get("record_match_kinds_mode") != "baseline_only":
+            raise ValueError(f"main {contract}: no-record baseline was not measured")
+        if set(main_arm.get("layers", {})) != set(LAYERS):
+            raise ValueError(f"main {contract}: missing oracle layer")
+        for key in ("source_commit", "policy_sha256", "dataset_sha256", "kind_cells_manifest"):
+            if arm.get(key) != main_arm.get(key):
+                raise ValueError(f"{contract}: main and candidate differ in {key}")
     for key in ("source_commit", "policy_sha256", "dataset_sha256", "kind_cells_manifest"):
         if v2.get(key) != v1.get(key):
             raise ValueError(f"oracle arms differ in {key}")
+    if not main_v2.get("binary_source_commit") or main_v2["binary_source_commit"] != main_v1.get("binary_source_commit"):
+        raise ValueError("main binary commit differs across contracts")
 
     results = {}
     for contract, arm in arms.items():
@@ -32,6 +45,11 @@ def gate(v2: dict, v1: dict) -> dict:
                 raise ValueError(f"{contract} {layer}: missing scored documents")
             base = layer_arm["baseline"]
             record = layer_arm["with_record"]
+            main_layer = main_arms[contract]["layers"][layer]
+            main_baseline_match = (
+                main_layer.get("documents") == layer_arm["documents"]
+                and main_layer.get("baseline") == base
+            )
             base_bytes = base["metrics"]["utf8_bytes"]
             record_bytes = record["metrics"]["utf8_bytes"]
             base_availability = base["pipeline_availability"]
@@ -58,9 +76,13 @@ def gate(v2: dict, v1: dict) -> dict:
                 base_contract["manifest_valid_documents"]
                 - record_contract["manifest_valid_documents"]
             )
-            passed = all(value <= 0 for value in (-leaked_fall, refused_rise, restore_fall, manifest_fall))
+            passed = main_baseline_match and all(
+                value <= 0
+                for value in (-leaked_fall, refused_rise, restore_fall, manifest_fall)
+            )
             layer_results[layer] = {
                 "documents": documents,
+                "no_record_matches_main": main_baseline_match,
                 "baseline_leaked_bytes": base_bytes["leaked"],
                 "with_record_leaked_bytes": record_bytes["leaked"],
                 "leaked_bytes_fall": leaked_fall,
@@ -87,6 +109,7 @@ def gate(v2: dict, v1: dict) -> dict:
     return {
         "schema_version": 1,
         "source_commit": v2["source_commit"],
+        "main_binary_source_commit": main_v2["binary_source_commit"],
         "policy_sha256": v2["policy_sha256"],
         "dataset_sha256": v2["dataset_sha256"],
         "contracts": results,
@@ -98,15 +121,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--v2", type=Path, required=True)
     parser.add_argument("--v1", type=Path, required=True)
+    parser.add_argument("--main-v2", type=Path, required=True)
+    parser.add_argument("--main-v1", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    result = gate(json.loads(args.v2.read_text()), json.loads(args.v1.read_text()))
+    result = gate(
+        json.loads(args.v2.read_text()), json.loads(args.v1.read_text()),
+        json.loads(args.main_v2.read_text()), json.loads(args.main_v1.read_text()),
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     for contract, data in result["contracts"].items():
         print(f"{contract}: leaked fall {data['total_leaked_bytes_fall']}; FP rise {data['total_false_positive_bytes_rise']}; pass {data['pass']}")
         for layer, row in data["layers"].items():
-            print(f"  {layer}: leaked {row['baseline_leaked_bytes']} -> {row['with_record_leaked_bytes']}; FP {row['baseline_false_positive_bytes']} -> {row['with_record_false_positive_bytes']}; refused rise {row['refused_documents_rise']}; pass {row['pass']}")
+            print(f"  {layer}: no-record main parity {row['no_record_matches_main']}; leaked {row['baseline_leaked_bytes']} -> {row['with_record_leaked_bytes']}; FP {row['baseline_false_positive_bytes']} -> {row['with_record_false_positive_bytes']}; refused rise {row['refused_documents_rise']}; pass {row['pass']}")
     if not result["pass"]:
         raise SystemExit(1)
 
