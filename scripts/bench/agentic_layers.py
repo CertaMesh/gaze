@@ -2700,6 +2700,10 @@ BLOCK_TWINS = (
         "dev": "Run test {V}\r\nResult pending.",
         "test": "Regression {V}\r\nStatus green.",
     }, benign=True),
+    BlockCell("block_twin_unit_crlf", BlockShape.UNIT, {
+        "dev": "Test {V}\r\n00018",
+        "test": "Regression {V}\r\n00078",
+    }, benign=True),
     BlockCell("block_twin_unit_blank", BlockShape.UNIT, {
         "dev": "Test {V}\r\n\r\n00018",
         "test": "Regression {V}\r\n\r\n00078",
@@ -2710,6 +2714,10 @@ BLOCK_TWINS = (
     BlockCell("block_twin_military", BlockShape.MILITARY, {
         "dev": "Storage inventory:\r\n{V}\r\nCables only.",
         "test": "Packing list:\r\n{V}\r\nAdapters only.",
+    }, benign=True),
+    BlockCell("block_twin_military_crlf", BlockShape.MILITARY, {
+        "dev": "Storage Unit 4\r\n{V}\r\n00018",
+        "test": "Inventory Unit 6\r\n{V}\r\n00078",
     }, benign=True),
     BlockCell("block_twin_military_blank", BlockShape.MILITARY, {
         "dev": "Inventory {V}\r\n\r\n00018",

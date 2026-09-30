@@ -1600,16 +1600,16 @@ Both options are off by default.
 
 ### CRLF blocks and German registration plates
 
-Generator v8 adds 36 layer A documents and 28 layer D documents per
+Generator v8 adds 36 layer A documents and 36 layer D documents per
 partition, under a new `block_` surface prefix. US suite, German Wohnung and
 military address blocks write CRLF between gold parts. Cued German plates in
 prose, log fields and JSON score the whole district, letter series and serial
 number as `LICENSEPLATE`. Every earlier generator v7 document stays byte
 identical, and its scored-label contract is frozen by version.
 
-The benign twins carry test-suite and storage-box labels, bare CR and blank
-lines before unassigned fixture postcodes, and identically shaped build or
-batch references. Near-cue references include a plate word in an unrelated
+The benign twins carry test-suite and storage-box labels before fixture
+postcodes, including CRLF joins, bare CR and blank lines. They also carry
+identically shaped build or batch references. Near-cue references include a plate word in an unrelated
 clause. Typed cells check complete address gold, CRLF between parts,
 whole-plate gold after an immediate label, and a benign counterweight paid
 by both broad and narrow shape rules. Generation fails if these guards drift.
@@ -1618,9 +1618,9 @@ A model-free preview on the existing main binary (`9ccc898c`, binary SHA-256
 `d2297df2f9ea6df68bafcc03d8f642ccb90857a4a5da207045a7b5e7f14cfc99`),
 with the setup policy minus NER and Nym, with address blocks enabled, leaks 684 of 864 new gold bytes.
 Both deliberately bad fixtures under `scripts/bench/fixtures/agentic/`
-raise layer D twin false positives from 92 to 306 bytes. The broad mutant
+raise layer D twin false positives from 132 to 437 bytes. The broad mutant
 leaks 357 bytes with 12 layer A false-positive bytes; the narrow mutant leaks
-357 with zero layer A false-positive bytes. All 64 documents restore exactly
+357 with zero layer A false-positive bytes. All 72 documents restore exactly
 and none is refused. This preview verifies corpus sensitivity; the detection
 change still requires the full v2 and v1 gain gate.
 

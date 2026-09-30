@@ -35,8 +35,8 @@ PINNED_CORPUS_SHA256 = {
 # v7: everything before the CRLF and plate cells.
 V7_CORPUS_SHA256 = dict(PINNED_CORPUS_SHA256)
 PINNED_CORPUS_SHA256 = {
-    "dev": "90b85d541d74793577e609b31b20826ea8fc8b55fc9c7fe37dfb46e839d2b440",
-    "test": "d122f907322f3eb9f9cec19ed172d9cefc7315934d3c2c877a86c2d4216309a4",
+    "dev": "47297895c8d750d2740fe8e5a3fb86f029ff437b19dc08b8ae89f1297c80409f",
+    "test": "a8838cdd81ed7aa14ea8bc376fafedf971f083474432169c9e51d465de21e57d",
 }
 # v6: everything before the phone-shape cells.
 V6_CORPUS_SHA256 = {
@@ -1054,7 +1054,7 @@ class BlockCellTests(unittest.TestCase):
         for partition in agentic.PARTITIONS:
             records = [r for r in agentic.generate(partition) if r.surface.startswith("block_")]
             self.assertEqual(sum(r.layer == "A" for r in records), 36)
-            self.assertEqual(sum(r.layer == "D" for r in records), 28)
+            self.assertEqual(sum(r.layer == "D" for r in records), 36)
             for cell in (*agentic.BLOCK_CELLS, *agentic.BLOCK_TWINS):
                 matching = [r for r in records if r.family == cell.family]
                 self.assertEqual(len(matching), 4 if cell.benign else 6)
