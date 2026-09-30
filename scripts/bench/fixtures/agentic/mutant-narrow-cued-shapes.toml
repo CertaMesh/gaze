@@ -1,15 +1,21 @@
 # Deliberately narrow rules for the cued-shape counterweight check. Each is
 # the rule a detector would plausibly write for one shape: a person word before
-# the age wording, a few words between the date-of-birth question and the
-# date, the card issuer prefix and length with no cue, a postal word within 40
-# non-digit characters. Appended to a policy, they must lower layer A's leak on
-# the `cue_` cells AND raise layer D's false-positive bytes on the same-shape
-# twins. The patterns equal CUE_NARROW_PATTERNS in agentic_layers.py (a test
-# pins them). Never ship these rules.
+# the age wording, `at the age of` before an age with no subject, a few words
+# between the date-of-birth question and the date, the card issuer prefix and
+# length with no cue, a postal word within 40 non-digit characters. Appended to
+# a policy, they must lower layer A's leak on the `cue_` cells AND raise layer
+# D's false-positive bytes on the same-shape twins. The patterns equal
+# CUE_NARROW_PATTERNS in agentic_layers.py (a test pins them). Never ship these
+# rules.
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "mutant_narrow_age_turned"
 pattern = '(?i)\b(?:i|me|my|he|she|his|her|we|they|patient|customer|client|mother|father|mom|dad|son|daughter|wife|husband|grandmother|grandfather|woman|man|female|male|ich|er|sie|mein|meine|meiner|meinem|mutter|vater|tochter|sohn|oma|opa)\b[^.\n]{0,40}?\b(?:turned|turns)\s+\d{1,3}\b|\b(?:i|me|my|he|she|his|her|we|they|patient|customer|client|mother|father|mom|dad|son|daughter|wife|husband|grandmother|grandfather|woman|man|female|male|ich|er|sie|mein|meine|meiner|meinem|mutter|vater|tochter|sohn|oma|opa)\b[^.\n]{0,40}?\b\d{1,3}\s+geworden\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_age_at_the_age_of"
+pattern = '(?i)\b(?:at the age of|im alter von) (?:[1-9]\d?|1[01]\d)\b'
 class = "custom:mutant_cue"
 [[policy.custom_recognizers]]
 kind = "regex"
