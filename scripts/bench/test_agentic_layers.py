@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "bee5a2876b3a232ad4812529ca20dc6b7fa834617a6ac87f4d2a453625c6f94e",
-    "test": "fcb8f3f95b301259f6fe0a5a3d8804e5a277ce74ccf9c6f0ca286cd09f0a554f",
+    "dev": "f7d45efdb7ac5bafeaa432ec1cb413e1137a1b78454fb3422a3bdcf1887c5168",
+    "test": "ac9ff6e7b47824ec22c5201e6ff900618d3408eaa823f709d85381334d6aba69",
 }
 # v6: everything before the phone-shape cells.
 V6_CORPUS_SHA256 = {
@@ -888,8 +888,8 @@ class PhoneShapeCellTests(unittest.TestCase):
     # narrow rule matches, per partition. A narrow rule with no D cost here
     # would ship its false positives unmeasured.
     NARROW_D_COST = {
-        "dev": {"dotted": 8, "national_3x3": 17, "national_2x4": 8, "prefix_00": 4, "prefix_001": 4},
-        "test": {"dotted": 8, "national_3x3": 21, "national_2x4": 8, "prefix_00": 4, "prefix_001": 4},
+        "dev": {"dotted": 8, "national_3x3": 21, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
+        "test": {"dotted": 8, "national_3x3": 25, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
     }
 
     def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
@@ -907,16 +907,20 @@ class PhoneShapeCellTests(unittest.TestCase):
 
     def test_review_shape_rules_pay_in_layer_d(self) -> None:
         # Shape-specific rules that once matched every A positive and no D
-        # document: each must now cost D false positives.
+        # document: each must now cost D false positives in both partitions.
         rules = {
             "dotted": r"\b0\d(?:\.\d{2}){4}\b",
             "prefix_00": r"\b00\d{2} \d{1,2}(?: \d{2,8}){1,4}\b",
             "prefix_001": r"\b001 \d{3} \d{3} \d{4}\b",
         }
-        layer_d = [r for r in agentic.generate("test") if r.layer == "D"]
-        for shape, pattern in rules.items():
-            with self.subTest(shape=shape):
-                self.assertTrue(any(re.search(pattern, r.text) for r in layer_d))
+        expected = {
+            "dev": {"dotted": 8, "prefix_00": 4, "prefix_001": 4},
+            "test": {"dotted": 8, "prefix_00": 4, "prefix_001": 8},
+        }
+        for partition in agentic.PARTITIONS:
+            layer_d = [r for r in agentic.generate(partition) if r.layer == "D"]
+            costs = {shape: sum(1 for r in layer_d if re.search(pattern, r.text)) for shape, pattern in rules.items()}
+            self.assertEqual(costs, expected[partition], partition)
 
     def test_same_shape_twins_have_no_phone_reading(self) -> None:
         self.assertEqual(agentic.phone_reading("02.61.91.23.45", "Firmware "), None)

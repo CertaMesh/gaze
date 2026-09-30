@@ -2425,11 +2425,18 @@ def _ticket_00(rng: Rng, partition: str) -> str:
     return f"00{UNASSIGNED_COUNTRY_CODES[partition]} {rng.between(1, 99)} {rng.digits(4)} {rng.digits(4)}"
 
 
-def _item_001(rng: Rng, partition: str) -> str:
-    """Grouped like a `001` NANP phone; an exchange starting 0 or 1 is never assigned."""
-    separator = {"dev": "-", "test": " "}[partition]
+def _item_001(rng: Rng, partition: str, separator: str | None = None) -> str:
+    """Grouped like a `001` NANP phone; an exchange starting 0 or 1 is never assigned.
+
+    Written with each partition's own positive separator unless `separator` is given."""
+    separator = separator or {"dev": "-", "test": " "}[partition]
     groups = (str(rng.between(200, 999)), f"{rng.between(0, 1)}{rng.digits(2)}", rng.digits(4))
     return separator.join(("001", *groups))
+
+
+def _item_001_spaced(rng: Rng, partition: str) -> str:
+    """A space-separated `001` item code in both partitions."""
+    return _item_001(rng, partition, " ")
 
 
 def phone_reading(value: str, before: str) -> PhoneShape | None:
@@ -2549,6 +2556,9 @@ PHONE_TWINS = (
     _phone_twin("phone_twin_item_001", P_.PREFIX_001, "log_kv", "en", "US",
                 'svc=warehouse op=pick item="{X}" result=ok', 'level=info event=rma.open case="{X}" status=new',
                 _item_001),
+    _phone_twin("phone_twin_item_001_spaced", P_.PREFIX_001, "csv", "en", "US",
+                "sku,bin\n{X},A4\n", "item,shelf\n{X},C2\n",
+                _item_001_spaced),
 )
 del P_
 

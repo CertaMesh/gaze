@@ -1339,7 +1339,7 @@ as `TELEPHONENUM`, including the `00` or `001` prefix and the `(0)` trunk.
 | National groups `0NN NNN NNN` and `0N NN NN NN` behind `Phone:`, `Mobile:`, a log key, a CSV header or a JSON key | the same digit groups behind an order, invoice or ticket label, spaced amounts, rows of two-digit scores |
 | `+CC (0)` trunk zero in prose and JSON | a signed score with a parenthesised zero (`+12 (0)`) |
 | `00CC` prefix in prose and CSV | tickets written exactly as `00CC N NNNN NNNN` behind a spare country code, `00CC-NNNN-NNNN` part and SKU codes |
-| `001` prefix before a NANPA number in prose and a log field | item codes written exactly as `001 NNN NNN NNNN` whose exchange starts with 0 or 1, `001-123-456-789` document numbers |
+| `001` prefix before a NANPA number in prose and a log field | item codes written exactly as `001 NNN NNN NNNN` or `001-NNN-NNN-NNNN` whose exchange starts with 0 or 1, `001-123-456-789` document numbers |
 
 National digit groups are gold only behind a phone label: the same digits
 alone are an order or ticket number, and layer D writes them so. The
@@ -1361,7 +1361,7 @@ non-reachable: the Spanish nine-digit and Danish eight-digit plans never
 start with 0, and every generated value does. Benign dotted twins also draw
 from the ARCEP fiction blocks, because any `0X.XX.XX.XX.XX` could be a real
 French number. Each A cell has 6 documents per partition and each twin 4: 15
-A cells (+90 documents, +3.5 %) and 16 D twins (+64 documents, +6.6 %).
+A cells (+90 documents, +3.5 %) and 17 D twins (+68 documents, +7.1 %).
 
 Each shape has an over-broad rule with no label, country code or
 numbering-plan check (`PHONE_BROAD_PATTERNS`). Every A value of the shape
@@ -1378,14 +1378,14 @@ and
 Appended to the setup policy without its NER and Nym sections, on generator
 v7 at `767de0a7`, the broad mutant lowered the phone cells' layer A leak from
 704 to 168 bytes and raised the phone twins' layer D false positives from 241
-to 810 bytes, every twin paying. The narrow mutant lowered the leak to 198
-bytes and raised the twins' false positives to 514 bytes, every same-shape
+to 874 bytes, every twin paying. The narrow mutant lowered the leak to 198
+bytes and raised the twins' false positives to 578 bytes, every same-shape
 twin paying (firmware 44 to 56, part numbers 33 to 56, `00` tickets 9 to 67,
-`001` item codes 16 to 64). Rules only (`rule-floor-extended`), main leaked 874
+`001` item codes 16 to 64 hyphenated and 0 to 64 spaced). Rules only (`rule-floor-extended`), main leaked 874
 of 1,290 phone gold bytes and already put 188 false-positive bytes on the
 twins, mostly through the IPv4 rule on dotted runs. Under the full
 `gaze setup` policy (NER and Nym), main leaked 671 of those 1,290 bytes and
-put 272 false-positive bytes on the twins.
+put 274 false-positive bytes on the twins.
 
 The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
 do not include these cells yet; the note under that table says, row by row,
