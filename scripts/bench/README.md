@@ -281,6 +281,15 @@ The hash depends on the checkout path and toolchain; a rustup 1.96 build
 differs. Compare the proof's `binary_sha256` field rather than expecting a
 byte-identical build elsewhere.
 
+For a shipping decision, `known_record_arm.py --shipping-defaults` scores the
+product's default match kinds without per-request overrides. Run it under v2
+and v1, and use `--baseline-only --binary-source-commit <main-sha>` with main's
+own producer and setup policy to score the same documents without a record.
+`known_record_shipping_gate.py` requires all five layers, compares the full
+no-record baseline scorecards to main, and reports per-class, per-match-kind
+attribution. The committed [shipping result](../../docs/reference/benchmarks/known-record-oracle.md#shipping-default-gate)
+shows the exact commands' aggregate outputs.
+
 Regression and release readiness are deliberately independent. Regression uses
 integer counts with zero tolerance and fails closed on missing, empty, invalid,
 or population-mismatched candidates. Release readiness requires every candidate

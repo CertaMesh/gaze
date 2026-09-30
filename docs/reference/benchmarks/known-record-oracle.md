@@ -6,7 +6,46 @@ as if an adopter already knew the customer or order record. Real apps may know
 less. The ordinary no-record benchmark continues to use its existing request
 shape and is measured separately under both scored-label contracts.
 
-## v5 attribution, before the shipping-default gate
+## Shipping-default gate
+
+The final run used #718 source `d9ba943d` with main `767de0a7`, each side's
+own `gaze setup` policy (identical SHA-256 `f909a23a`), corpus SHA-256
+`916c6379`, and all five layers under both scored-label contracts. Its
+caller-known records supplied **no match-kind overrides**, so this is the
+product's shipped configuration. The
+[gate](known-record-shipping-gate.json), [v2 arm](known-record-shipping-v2.json),
+[v1 arm](known-record-shipping-v1.json), and main's no-record
+[v2](known-record-shipping-main-v2.json) and
+[v1](known-record-shipping-main-v1.json) scorecards contain only aggregate
+counts. The gate includes every observed class × match-kind row by layer.
+
+| Layer | v2 leaked bytes, no record → shipped defaults | v1 leaked bytes, no record → shipped defaults | False-positive byte change |
+| --- | ---: | ---: | ---: |
+| C | 7,475 → 4,738 | 13,423 → 10,686 | +84 |
+| A | 4,922 → 2,291 | 4,922 → 2,291 | −96 |
+| D | 0 → 0 | 0 → 0 | +190 |
+| R | 234 → 6 | 234 → 6 | +84 |
+| K | 484 → 16 | 484 → 16 | −4 |
+
+**Gate PASS under v2 and v1:** leaked bytes fall by 6,064 and false positives
+rise by 258. No layer's leaks or refusals rise. All 7,016 documents in each
+arm and contract restore exactly and have valid manifests. Without a record,
+the candidate's full baseline scorecard equals main's byte for byte in every
+layer under both contracts. The layer D +190 benign bytes are exactly
+credit-card/exact +99, phone/exact +69, and IBAN/exact +22, all explicit
+counterweights. Phone and card are narrow user-approved exceptions to the
+usual layer D veto; IBAN was already exempt.
+
+Eligible leaked bytes fall from 6,774 to 1,203 (82.24%). The preregistered
+90–100% prediction applied to eligible exact-value spans with record matching
+enabled and is **not met by the shipped defaults**. Turning exact address
+parts and exact single names off leaves some record values exposed unless an
+ordinary detector finds them or an adopter opts in. This is a deliberate
+precision choice after the layer D audit, with follow-up work to measure
+narrower versions. These results are an upper bound for an adopter who
+already knows the selected record values, not context-free performance.
+
+## v5 all-on attribution
 
 The full v5 producer and layer K measured each class and match kind at source
 `52049550`, with the oracle kinds deliberately enabled. Both scored-label
@@ -43,9 +82,8 @@ leaves those leaks for ordinary detectors or an explicit adopter opt-in.
 Exact declared phone and credit-card values remain on by user decision, despite
 69 and 99 added layer D benign bytes. This exception applies only to the
 caller-known-record oracle; ordinary recognizer rules keep the usual D veto.
-The final gate reruns both contracts with the **product's default kinds** and
-compares each layer's leaks, false positives, refusals, exact restores and
-manifest validity. Its aggregate results will be linked here before merge.
+The shipping-default gate above reruns both contracts with the product's
+default kinds and main no-record baselines.
 
 ## Earlier runs
 

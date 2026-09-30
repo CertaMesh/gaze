@@ -1,0 +1,1091 @@
+{
+  "agentic_manifest": {
+    "corpus_sha256": "9e6597c4b38a6adf6fe5b034da3a4ca585819e044d3437aafc02bcb721607d4a",
+    "docs_per_family": 10,
+    "documents": 3650,
+    "documents_by_layer": {
+      "A": 2586,
+      "D": 964,
+      "R": 100
+    },
+    "generator": "scripts/bench/agentic_layers.py",
+    "generator_version": 6,
+    "partition": "test",
+    "seed": 2026092602,
+    "synthetic_only": true
+  },
+  "arm": "known-record oracle (caller already knows the selected gold values)",
+  "binary_sha256": "ffd258b309a8f3d0335f595ca09c5be5e2464f8441355f03e18829caaf9ad971",
+  "binary_source_commit": "767de0a73bfd8d9fad59c8c8e8011dc5cbd844c6",
+  "contract": "v2",
+  "dataset_sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+  "full": true,
+  "kind_cells_manifest": {
+    "corpus_sha256": "9e1bb24c206a90b7978423ab9adaaa2bac11a7241b75ea5a0c9a59a85dffad45",
+    "generator": "scripts/bench/known_record_cells.py",
+    "generator_version": 5,
+    "pairs": 84,
+    "pairs_by_bucket": {
+      "control_case_folded_after_space_folding": 4,
+      "control_exact_after_space_folding": 8,
+      "control_exact_canonical_record": 4,
+      "control_exact_unlisted_name": 4,
+      "control_unmatched_compact_record": 4,
+      "corroborated_single": 16,
+      "whitespace_case_folded": 14,
+      "whitespace_flexible": 30
+    },
+    "seed": 2026092901,
+    "synthetic_only": true
+  },
+  "layers": {
+    "A": {
+      "baseline": {
+        "metrics": {
+          "documents": 2586,
+          "documents_with_false_positives": 259,
+          "documents_without_leaks": 2216,
+          "entities": {
+            "exact_boundary": 2884,
+            "exact_boundary_recall": 0.8069390039171797,
+            "full_coverage_recall": 0.8617795187465025,
+            "fully_covered": 3080,
+            "gold": 3574,
+            "overlap_recall": 0.876329043088976,
+            "overlapped": 3132
+          },
+          "prediction_spans": {
+            "overlap_precision": 0.9356094639113507,
+            "overlapped_gold": 3124,
+            "total": 3339
+          },
+          "utf8_bytes": {
+            "f1": 0.9420836876857365,
+            "f2": 0.922084383955227,
+            "false_positive": 1139,
+            "false_positive_rate": 0.008204101330375344,
+            "leak_rate": 0.09078333364073998,
+            "leaked": 4922,
+            "pii": 54217,
+            "precision": 0.9774160288694135,
+            "predicted": 50434,
+            "recall": 0.90921666635926,
+            "true_positive": 49295
+          },
+          "zero_leak_document_rate": 0.8569218870843001
+        },
+        "per_label_recall": {
+          "BSN": {
+            "byte_recall": 0.7142857142857143,
+            "covered_utf8_bytes": 900,
+            "entities": 140,
+            "full_coverage_recall": 0.7142857142857143,
+            "fully_covered": 100,
+            "leaked_utf8_bytes": 360,
+            "overlap_recall": 0.7142857142857143,
+            "overlapped": 100,
+            "utf8_bytes": 1260
+          },
+          "BUILDINGNUM": {
+            "byte_recall": 0.4835847382431233,
+            "covered_utf8_bytes": 545,
+            "entities": 180,
+            "full_coverage_recall": 0.5333333333333333,
+            "fully_covered": 96,
+            "leaked_utf8_bytes": 582,
+            "overlap_recall": 0.7111111111111111,
+            "overlapped": 128,
+            "utf8_bytes": 1127
+          },
+          "CITY": {
+            "byte_recall": 0.9597197898423818,
+            "covered_utf8_bytes": 1096,
+            "entities": 114,
+            "full_coverage_recall": 0.8947368421052632,
+            "fully_covered": 102,
+            "leaked_utf8_bytes": 46,
+            "overlap_recall": 0.8947368421052632,
+            "overlapped": 102,
+            "utf8_bytes": 1142
+          },
+          "CPF": {
+            "byte_recall": 0.7663265306122449,
+            "covered_utf8_bytes": 1502,
+            "entities": 140,
+            "full_coverage_recall": 0.7428571428571429,
+            "fully_covered": 104,
+            "leaked_utf8_bytes": 458,
+            "overlap_recall": 0.7714285714285715,
+            "overlapped": 108,
+            "utf8_bytes": 1960
+          },
+          "CREDITCARDNUMBER": {
+            "byte_recall": 0.8760563380281691,
+            "covered_utf8_bytes": 2488,
+            "entities": 140,
+            "full_coverage_recall": 0.8571428571428571,
+            "fully_covered": 120,
+            "leaked_utf8_bytes": 352,
+            "overlap_recall": 0.8714285714285714,
+            "overlapped": 122,
+            "utf8_bytes": 2840
+          },
+          "DATEOFBIRTH": {
+            "byte_recall": 0.9230769230769231,
+            "covered_utf8_bytes": 1200,
+            "entities": 130,
+            "full_coverage_recall": 0.9230769230769231,
+            "fully_covered": 120,
+            "leaked_utf8_bytes": 100,
+            "overlap_recall": 0.9230769230769231,
+            "overlapped": 120,
+            "utf8_bytes": 1300
+          },
+          "EMAIL": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 2539,
+            "entities": 100,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 100,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 100,
+            "utf8_bytes": 2539
+          },
+          "GIVENNAME": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 385,
+            "entities": 70,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 70,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 70,
+            "utf8_bytes": 385
+          },
+          "IBAN": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 23140,
+            "entities": 840,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 840,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 840,
+            "utf8_bytes": 23140
+          },
+          "IPADDRESS": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 3690,
+            "entities": 360,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 360,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 360,
+            "utf8_bytes": 3690
+          },
+          "NHSNUMBER": {
+            "byte_recall": 0.6833333333333333,
+            "covered_utf8_bytes": 1230,
+            "entities": 140,
+            "full_coverage_recall": 0.6785714285714286,
+            "fully_covered": 95,
+            "leaked_utf8_bytes": 570,
+            "overlap_recall": 0.6785714285714286,
+            "overlapped": 95,
+            "utf8_bytes": 1800
+          },
+          "STATE": {
+            "byte_recall": 0.18055555555555555,
+            "covered_utf8_bytes": 26,
+            "entities": 72,
+            "full_coverage_recall": 0.18055555555555555,
+            "fully_covered": 13,
+            "leaked_utf8_bytes": 118,
+            "overlap_recall": 0.18055555555555555,
+            "overlapped": 13,
+            "utf8_bytes": 144
+          },
+          "STREET": {
+            "byte_recall": 0.9550473186119873,
+            "covered_utf8_bytes": 1211,
+            "entities": 102,
+            "full_coverage_recall": 0.9215686274509803,
+            "fully_covered": 94,
+            "leaked_utf8_bytes": 57,
+            "overlap_recall": 0.9607843137254902,
+            "overlapped": 98,
+            "utf8_bytes": 1268
+          },
+          "SURNAME": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 714,
+            "entities": 70,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 70,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 70,
+            "utf8_bytes": 714
+          },
+          "TAXNUM": {
+            "byte_recall": 0.664018691588785,
+            "covered_utf8_bytes": 1421,
+            "entities": 140,
+            "full_coverage_recall": 0.5714285714285714,
+            "fully_covered": 80,
+            "leaked_utf8_bytes": 719,
+            "overlap_recall": 0.6428571428571429,
+            "overlapped": 90,
+            "utf8_bytes": 2140
+          },
+          "TELEPHONENUM": {
+            "byte_recall": 0.7685459940652819,
+            "covered_utf8_bytes": 5180,
+            "entities": 470,
+            "full_coverage_recall": 0.7446808510638298,
+            "fully_covered": 350,
+            "leaked_utf8_bytes": 1560,
+            "overlap_recall": 0.7446808510638298,
+            "overlapped": 350,
+            "utf8_bytes": 6740
+          },
+          "ZIPCODE": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 2028,
+            "entities": 366,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 366,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 366,
+            "utf8_bytes": 2028
+          }
+        },
+        "pipeline_availability": {
+          "attempted_documents": 2586,
+          "completed_documents": 2586,
+          "completion_rate": 1.0,
+          "error_stages": {},
+          "errors": {},
+          "failed_closed_documents": 0
+        },
+        "pipeline_contract": {
+          "documents": 2586,
+          "documents_with_redact": 0,
+          "final_protection_trace_items": 3339,
+          "initial_actionable_suspects": 134,
+          "initial_class_mismatches": 0,
+          "initial_safety_net_suspects": 134,
+          "manifest_integrity_errors": {
+            "invalid_clean_bounds": 0,
+            "invalid_raw_bounds": 0,
+            "non_monotonic_raw_spans": 0,
+            "overlapping_clean_spans": 0,
+            "raw_value_mismatches": 0,
+            "token_restore_failures": 0
+          },
+          "manifest_spans": 3339,
+          "manifest_valid_document_rate": 1.0,
+          "manifest_valid_documents": 2586,
+          "post_policy_scanned_documents": 2586,
+          "post_policy_suspects": 0,
+          "post_policy_zero_suspect_documents": 2586,
+          "post_policy_zero_suspect_rate": 1.0,
+          "redact_actions": 0,
+          "restore_exact_documents": 2586,
+          "restore_exact_rate": 1.0,
+          "restore_success_decision_rate": 1.0,
+          "restore_success_decisions": 2586,
+          "strict_acceptance_rate": 0.9613302397525135,
+          "strict_would_reject_documents": 100,
+          "tokenize_actions": 3339
+        }
+      },
+      "documents": 2586
+    },
+    "C": {
+      "baseline": {
+        "metrics": {
+          "documents": 2910,
+          "documents_with_false_positives": 1975,
+          "documents_without_leaks": 2051,
+          "entities": {
+            "exact_boundary": 10041,
+            "exact_boundary_recall": 0.7025608732157851,
+            "full_coverage_recall": 0.920864819479429,
+            "fully_covered": 13161,
+            "gold": 14292,
+            "overlap_recall": 0.9307304785894207,
+            "overlapped": 13302
+          },
+          "prediction_spans": {
+            "overlap_precision": 0.7843020956899961,
+            "overlapped_gold": 11901,
+            "total": 15174
+          },
+          "utf8_bytes": {
+            "f1": 0.8693172462314567,
+            "f2": 0.9101281197351407,
+            "false_positive": 27445,
+            "false_positive_rate": 0.03311641847955277,
+            "leak_rate": 0.06046707274653984,
+            "leaked": 7475,
+            "pii": 123621,
+            "precision": 0.8088668509864825,
+            "predicted": 143591,
+            "recall": 0.9395329272534602,
+            "true_positive": 116146
+          },
+          "zero_leak_document_rate": 0.7048109965635739
+        },
+        "per_label_recall": {
+          "AGE": {
+            "byte_recall": 0.17142857142857143,
+            "covered_utf8_bytes": 72,
+            "entities": 210,
+            "full_coverage_recall": 0.17142857142857143,
+            "fully_covered": 36,
+            "leaked_utf8_bytes": 348,
+            "overlap_recall": 0.17142857142857143,
+            "overlapped": 36,
+            "utf8_bytes": 420
+          },
+          "BUILDINGNUM": {
+            "byte_recall": 0.9171114599686028,
+            "covered_utf8_bytes": 2921,
+            "entities": 1437,
+            "full_coverage_recall": 0.918580375782881,
+            "fully_covered": 1320,
+            "leaked_utf8_bytes": 264,
+            "overlap_recall": 0.9199721642310369,
+            "overlapped": 1322,
+            "utf8_bytes": 3185
+          },
+          "CITY": {
+            "byte_recall": 0.9937435721631813,
+            "covered_utf8_bytes": 11595,
+            "entities": 1571,
+            "full_coverage_recall": 0.9910884786760026,
+            "fully_covered": 1557,
+            "leaked_utf8_bytes": 73,
+            "overlap_recall": 0.9942711648631445,
+            "overlapped": 1562,
+            "utf8_bytes": 11668
+          },
+          "COMPANYNAME": {
+            "byte_recall": 0.9809039943938332,
+            "covered_utf8_bytes": 5599,
+            "entities": 419,
+            "full_coverage_recall": 0.9737470167064439,
+            "fully_covered": 408,
+            "leaked_utf8_bytes": 109,
+            "overlap_recall": 0.9880668257756563,
+            "overlapped": 414,
+            "utf8_bytes": 5708
+          },
+          "COUNTRY": {
+            "byte_recall": 0.9716671637339696,
+            "covered_utf8_bytes": 3258,
+            "entities": 365,
+            "full_coverage_recall": 0.9616438356164384,
+            "fully_covered": 351,
+            "leaked_utf8_bytes": 95,
+            "overlap_recall": 0.9671232876712329,
+            "overlapped": 353,
+            "utf8_bytes": 3353
+          },
+          "CREDITCARDNUMBER": {
+            "byte_recall": 0.8741755454084221,
+            "covered_utf8_bytes": 1723,
+            "entities": 126,
+            "full_coverage_recall": 0.746031746031746,
+            "fully_covered": 94,
+            "leaked_utf8_bytes": 248,
+            "overlap_recall": 0.746031746031746,
+            "overlapped": 94,
+            "utf8_bytes": 1971
+          },
+          "DATEOFBIRTH": {
+            "byte_recall": 0.7546138072453862,
+            "covered_utf8_bytes": 2208,
+            "entities": 280,
+            "full_coverage_recall": 0.7642857142857142,
+            "fully_covered": 214,
+            "leaked_utf8_bytes": 718,
+            "overlap_recall": 0.7785714285714286,
+            "overlapped": 218,
+            "utf8_bytes": 2926
+          },
+          "DRIVERLICENSENUM": {
+            "byte_recall": 0.7518518518518519,
+            "covered_utf8_bytes": 1624,
+            "entities": 216,
+            "full_coverage_recall": 0.7638888888888888,
+            "fully_covered": 165,
+            "leaked_utf8_bytes": 536,
+            "overlap_recall": 0.7685185185185185,
+            "overlapped": 166,
+            "utf8_bytes": 2160
+          },
+          "EMAIL": {
+            "byte_recall": 0.9978423801953213,
+            "covered_utf8_bytes": 8787,
+            "entities": 375,
+            "full_coverage_recall": 0.9946666666666667,
+            "fully_covered": 373,
+            "leaked_utf8_bytes": 19,
+            "overlap_recall": 1.0,
+            "overlapped": 375,
+            "utf8_bytes": 8806
+          },
+          "FIRSTNAME": {
+            "byte_recall": 0.9873895343064244,
+            "covered_utf8_bytes": 9944,
+            "entities": 2001,
+            "full_coverage_recall": 0.9835082458770614,
+            "fully_covered": 1968,
+            "leaked_utf8_bytes": 127,
+            "overlap_recall": 0.9835082458770614,
+            "overlapped": 1968,
+            "utf8_bytes": 10071
+          },
+          "IBAN": {
+            "byte_recall": 0.9553142618500731,
+            "covered_utf8_bytes": 4575,
+            "entities": 207,
+            "full_coverage_recall": 0.9371980676328503,
+            "fully_covered": 194,
+            "leaked_utf8_bytes": 214,
+            "overlap_recall": 0.9420289855072463,
+            "overlapped": 195,
+            "utf8_bytes": 4789
+          },
+          "IDCARDNUM": {
+            "byte_recall": 0.8175745118191161,
+            "covered_utf8_bytes": 1591,
+            "entities": 188,
+            "full_coverage_recall": 0.8191489361702128,
+            "fully_covered": 154,
+            "leaked_utf8_bytes": 355,
+            "overlap_recall": 0.8297872340425532,
+            "overlapped": 156,
+            "utf8_bytes": 1946
+          },
+          "LICENSEPLATENUM": {
+            "byte_recall": 0.9388327721661055,
+            "covered_utf8_bytes": 1673,
+            "entities": 215,
+            "full_coverage_recall": 0.8186046511627907,
+            "fully_covered": 176,
+            "leaked_utf8_bytes": 109,
+            "overlap_recall": 0.9767441860465116,
+            "overlapped": 210,
+            "utf8_bytes": 1782
+          },
+          "NATIONALID": {
+            "byte_recall": 0.8198704103671707,
+            "covered_utf8_bytes": 1898,
+            "entities": 200,
+            "full_coverage_recall": 0.825,
+            "fully_covered": 165,
+            "leaked_utf8_bytes": 417,
+            "overlap_recall": 0.825,
+            "overlapped": 165,
+            "utf8_bytes": 2315
+          },
+          "ORGANIZATION": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 69,
+            "entities": 3,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 3,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 3,
+            "utf8_bytes": 69
+          },
+          "PASSPORTID": {
+            "byte_recall": 0.9413810233482365,
+            "covered_utf8_bytes": 1895,
+            "entities": 224,
+            "full_coverage_recall": 0.9419642857142857,
+            "fully_covered": 211,
+            "leaked_utf8_bytes": 118,
+            "overlap_recall": 0.9419642857142857,
+            "overlapped": 211,
+            "utf8_bytes": 2013
+          },
+          "PHONENUMBER": {
+            "byte_recall": 0.867231638418079,
+            "covered_utf8_bytes": 4298,
+            "entities": 359,
+            "full_coverage_recall": 0.8579387186629527,
+            "fully_covered": 308,
+            "leaked_utf8_bytes": 658,
+            "overlap_recall": 0.8662952646239555,
+            "overlapped": 311,
+            "utf8_bytes": 4956
+          },
+          "REGION": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 10,
+            "entities": 1,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 1,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 1,
+            "utf8_bytes": 10
+          },
+          "SSN": {
+            "byte_recall": 0.8117787504974134,
+            "covered_utf8_bytes": 2040,
+            "entities": 217,
+            "full_coverage_recall": 0.7972350230414746,
+            "fully_covered": 173,
+            "leaked_utf8_bytes": 473,
+            "overlap_recall": 0.7972350230414746,
+            "overlapped": 173,
+            "utf8_bytes": 2513
+          },
+          "STATE": {
+            "byte_recall": 0.9839379673220714,
+            "covered_utf8_bytes": 7106,
+            "entities": 913,
+            "full_coverage_recall": 0.9441401971522454,
+            "fully_covered": 862,
+            "leaked_utf8_bytes": 116,
+            "overlap_recall": 0.9452354874041621,
+            "overlapped": 863,
+            "utf8_bytes": 7222
+          },
+          "STREET": {
+            "byte_recall": 0.9859333685880487,
+            "covered_utf8_bytes": 18644,
+            "entities": 1384,
+            "full_coverage_recall": 0.9682080924855492,
+            "fully_covered": 1340,
+            "leaked_utf8_bytes": 266,
+            "overlap_recall": 0.9898843930635838,
+            "overlapped": 1370,
+            "utf8_bytes": 18910
+          },
+          "SURNAME": {
+            "byte_recall": 0.9898439663927615,
+            "covered_utf8_bytes": 10721,
+            "entities": 1697,
+            "full_coverage_recall": 0.985268120212139,
+            "fully_covered": 1672,
+            "leaked_utf8_bytes": 110,
+            "overlap_recall": 0.985268120212139,
+            "overlapped": 1672,
+            "utf8_bytes": 10831
+          },
+          "TAXNUM": {
+            "byte_recall": 0.5250501002004008,
+            "covered_utf8_bytes": 1310,
+            "entities": 212,
+            "full_coverage_recall": 0.49528301886792453,
+            "fully_covered": 105,
+            "leaked_utf8_bytes": 1185,
+            "overlap_recall": 0.5613207547169812,
+            "overlapped": 119,
+            "utf8_bytes": 2495
+          },
+          "TITLE": {
+            "byte_recall": 0.0,
+            "covered_utf8_bytes": 0,
+            "entities": 5,
+            "full_coverage_recall": 0.0,
+            "fully_covered": 0,
+            "leaked_utf8_bytes": 15,
+            "overlap_recall": 0.0,
+            "overlapped": 0,
+            "utf8_bytes": 15
+          },
+          "URL": {
+            "byte_recall": 0.9361908725204605,
+            "covered_utf8_bytes": 6749,
+            "entities": 276,
+            "full_coverage_recall": 0.8442028985507246,
+            "fully_covered": 233,
+            "leaked_utf8_bytes": 460,
+            "overlap_recall": 0.9420289855072463,
+            "overlapped": 260,
+            "utf8_bytes": 7209
+          },
+          "USERNAME": {
+            "byte_recall": 0.941972920696325,
+            "covered_utf8_bytes": 974,
+            "entities": 101,
+            "full_coverage_recall": 0.9108910891089109,
+            "fully_covered": 92,
+            "leaked_utf8_bytes": 60,
+            "overlap_recall": 0.9603960396039604,
+            "overlapped": 97,
+            "utf8_bytes": 1034
+          },
+          "ZIP": {
+            "byte_recall": 0.9255024893970127,
+            "covered_utf8_bytes": 5019,
+            "entities": 1090,
+            "full_coverage_recall": 0.9045871559633027,
+            "fully_covered": 986,
+            "leaked_utf8_bytes": 404,
+            "overlap_recall": 0.9064220183486239,
+            "overlapped": 988,
+            "utf8_bytes": 5423
+          }
+        },
+        "pipeline_availability": {
+          "attempted_documents": 2910,
+          "completed_documents": 2910,
+          "completion_rate": 1.0,
+          "error_stages": {},
+          "errors": {},
+          "failed_closed_documents": 0
+        },
+        "pipeline_contract": {
+          "documents": 2910,
+          "documents_with_redact": 0,
+          "final_protection_trace_items": 15238,
+          "initial_actionable_suspects": 672,
+          "initial_class_mismatches": 0,
+          "initial_safety_net_suspects": 672,
+          "manifest_integrity_errors": {
+            "invalid_clean_bounds": 0,
+            "invalid_raw_bounds": 0,
+            "non_monotonic_raw_spans": 0,
+            "overlapping_clean_spans": 0,
+            "raw_value_mismatches": 0,
+            "token_restore_failures": 0
+          },
+          "manifest_spans": 15238,
+          "manifest_valid_document_rate": 1.0,
+          "manifest_valid_documents": 2910,
+          "post_policy_scanned_documents": 2910,
+          "post_policy_suspects": 0,
+          "post_policy_zero_suspect_documents": 2910,
+          "post_policy_zero_suspect_rate": 1.0,
+          "redact_actions": 0,
+          "restore_exact_documents": 2910,
+          "restore_exact_rate": 1.0,
+          "restore_success_decision_rate": 1.0,
+          "restore_success_decisions": 2910,
+          "strict_acceptance_rate": 0.8030927835051547,
+          "strict_would_reject_documents": 573,
+          "tokenize_actions": 15238
+        }
+      },
+      "documents": 2910
+    },
+    "D": {
+      "baseline": {
+        "metrics": {
+          "documents": 1252,
+          "documents_with_false_positives": 499,
+          "documents_without_leaks": 1252,
+          "entities": {
+            "exact_boundary": 0,
+            "exact_boundary_recall": 1.0,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 0,
+            "gold": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 0
+          },
+          "prediction_spans": {
+            "overlap_precision": 0.0,
+            "overlapped_gold": 0,
+            "total": 624
+          },
+          "utf8_bytes": {
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive": 6414,
+            "false_positive_rate": 0.08271219663167668,
+            "leak_rate": 0.0,
+            "leaked": 0,
+            "pii": 0,
+            "precision": 0.0,
+            "predicted": 6414,
+            "recall": 1.0,
+            "true_positive": 0
+          },
+          "zero_leak_document_rate": 1.0
+        },
+        "per_label_recall": {},
+        "pipeline_availability": {
+          "attempted_documents": 1252,
+          "completed_documents": 1252,
+          "completion_rate": 1.0,
+          "error_stages": {},
+          "errors": {},
+          "failed_closed_documents": 0
+        },
+        "pipeline_contract": {
+          "documents": 1252,
+          "documents_with_redact": 0,
+          "final_protection_trace_items": 624,
+          "initial_actionable_suspects": 181,
+          "initial_class_mismatches": 0,
+          "initial_safety_net_suspects": 181,
+          "manifest_integrity_errors": {
+            "invalid_clean_bounds": 0,
+            "invalid_raw_bounds": 0,
+            "non_monotonic_raw_spans": 0,
+            "overlapping_clean_spans": 0,
+            "raw_value_mismatches": 0,
+            "token_restore_failures": 0
+          },
+          "manifest_spans": 624,
+          "manifest_valid_document_rate": 1.0,
+          "manifest_valid_documents": 1252,
+          "post_policy_scanned_documents": 1252,
+          "post_policy_suspects": 0,
+          "post_policy_zero_suspect_documents": 1252,
+          "post_policy_zero_suspect_rate": 1.0,
+          "redact_actions": 0,
+          "restore_exact_documents": 1252,
+          "restore_exact_rate": 1.0,
+          "restore_success_decision_rate": 1.0,
+          "restore_success_decisions": 1252,
+          "strict_acceptance_rate": 0.8993610223642172,
+          "strict_would_reject_documents": 126,
+          "tokenize_actions": 624
+        }
+      },
+      "documents": 1252
+    },
+    "K": {
+      "baseline": {
+        "metrics": {
+          "documents": 168,
+          "documents_with_false_positives": 98,
+          "documents_without_leaks": 134,
+          "entities": {
+            "exact_boundary": 38,
+            "exact_boundary_recall": 0.27941176470588236,
+            "full_coverage_recall": 0.6985294117647058,
+            "fully_covered": 95,
+            "gold": 136,
+            "overlap_recall": 0.7132352941176471,
+            "overlapped": 97
+          },
+          "prediction_spans": {
+            "overlap_precision": 0.43452380952380953,
+            "overlapped_gold": 73,
+            "total": 168
+          },
+          "utf8_bytes": {
+            "f1": 0.533724340175953,
+            "f2": 0.5868443680137576,
+            "false_positive": 947,
+            "false_positive_rate": 0.06765252178882697,
+            "leak_rate": 0.37145049884881043,
+            "leaked": 484,
+            "pii": 1303,
+            "precision": 0.4637599093997735,
+            "predicted": 1766,
+            "recall": 0.6285495011511896,
+            "true_positive": 819
+          },
+          "zero_leak_document_rate": 0.7976190476190477
+        },
+        "per_label_recall": {
+          "BUILDINGNUM": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 8,
+            "entities": 4,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 4,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 4,
+            "utf8_bytes": 8
+          },
+          "CREDITCARDNUMBER": {
+            "byte_recall": 0.5319148936170213,
+            "covered_utf8_bytes": 100,
+            "entities": 8,
+            "full_coverage_recall": 0.5,
+            "fully_covered": 4,
+            "leaked_utf8_bytes": 88,
+            "overlap_recall": 0.5,
+            "overlapped": 4,
+            "utf8_bytes": 188
+          },
+          "FIRSTNAME": {
+            "byte_recall": 0.7521008403361344,
+            "covered_utf8_bytes": 179,
+            "entities": 52,
+            "full_coverage_recall": 0.7692307692307693,
+            "fully_covered": 40,
+            "leaked_utf8_bytes": 59,
+            "overlap_recall": 0.7692307692307693,
+            "overlapped": 40,
+            "utf8_bytes": 238
+          },
+          "IBAN": {
+            "byte_recall": 0.6894977168949772,
+            "covered_utf8_bytes": 151,
+            "entities": 8,
+            "full_coverage_recall": 0.5,
+            "fully_covered": 4,
+            "leaked_utf8_bytes": 68,
+            "overlap_recall": 0.75,
+            "overlapped": 6,
+            "utf8_bytes": 219
+          },
+          "NATIONALID": {
+            "byte_recall": 0.27586206896551724,
+            "covered_utf8_bytes": 32,
+            "entities": 8,
+            "full_coverage_recall": 0.25,
+            "fully_covered": 2,
+            "leaked_utf8_bytes": 84,
+            "overlap_recall": 0.25,
+            "overlapped": 2,
+            "utf8_bytes": 116
+          },
+          "PHONENUMBER": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 68,
+            "entities": 4,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 4,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 4,
+            "utf8_bytes": 68
+          },
+          "STREET": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 34,
+            "entities": 4,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 4,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 4,
+            "utf8_bytes": 34
+          },
+          "SURNAME": {
+            "byte_recall": 0.8344594594594594,
+            "covered_utf8_bytes": 247,
+            "entities": 40,
+            "full_coverage_recall": 0.825,
+            "fully_covered": 33,
+            "leaked_utf8_bytes": 49,
+            "overlap_recall": 0.825,
+            "overlapped": 33,
+            "utf8_bytes": 296
+          },
+          "TAXNUM": {
+            "byte_recall": 0.0,
+            "covered_utf8_bytes": 0,
+            "entities": 8,
+            "full_coverage_recall": 0.0,
+            "fully_covered": 0,
+            "leaked_utf8_bytes": 136,
+            "overlap_recall": 0.0,
+            "overlapped": 0,
+            "utf8_bytes": 136
+          }
+        },
+        "pipeline_availability": {
+          "attempted_documents": 168,
+          "completed_documents": 168,
+          "completion_rate": 1.0,
+          "error_stages": {},
+          "errors": {},
+          "failed_closed_documents": 0
+        },
+        "pipeline_contract": {
+          "documents": 168,
+          "documents_with_redact": 0,
+          "final_protection_trace_items": 168,
+          "initial_actionable_suspects": 49,
+          "initial_class_mismatches": 0,
+          "initial_safety_net_suspects": 49,
+          "manifest_integrity_errors": {
+            "invalid_clean_bounds": 0,
+            "invalid_raw_bounds": 0,
+            "non_monotonic_raw_spans": 0,
+            "overlapping_clean_spans": 0,
+            "raw_value_mismatches": 0,
+            "token_restore_failures": 0
+          },
+          "manifest_spans": 168,
+          "manifest_valid_document_rate": 1.0,
+          "manifest_valid_documents": 168,
+          "post_policy_scanned_documents": 168,
+          "post_policy_suspects": 0,
+          "post_policy_zero_suspect_documents": 168,
+          "post_policy_zero_suspect_rate": 1.0,
+          "redact_actions": 0,
+          "restore_exact_documents": 168,
+          "restore_exact_rate": 1.0,
+          "restore_success_decision_rate": 1.0,
+          "restore_success_decisions": 168,
+          "strict_acceptance_rate": 0.7261904761904762,
+          "strict_would_reject_documents": 46,
+          "tokenize_actions": 168
+        }
+      },
+      "documents": 168
+    },
+    "R": {
+      "baseline": {
+        "metrics": {
+          "documents": 100,
+          "documents_with_false_positives": 90,
+          "documents_without_leaks": 88,
+          "entities": {
+            "exact_boundary": 200,
+            "exact_boundary_recall": 0.45454545454545453,
+            "full_coverage_recall": 0.9545454545454546,
+            "fully_covered": 420,
+            "gold": 440,
+            "overlap_recall": 0.9545454545454546,
+            "overlapped": 420
+          },
+          "prediction_spans": {
+            "overlap_precision": 0.9198813056379822,
+            "overlapped_gold": 310,
+            "total": 337
+          },
+          "utf8_bytes": {
+            "f1": 0.9376253701404146,
+            "f2": 0.9476732960030894,
+            "false_positive": 419,
+            "false_positive_rate": 0.03889714073523951,
+            "leak_rate": 0.04550758459743287,
+            "leaked": 234,
+            "pii": 5142,
+            "precision": 0.9213440961141356,
+            "predicted": 5327,
+            "recall": 0.9544924154025671,
+            "true_positive": 4908
+          },
+          "zero_leak_document_rate": 0.88
+        },
+        "per_label_recall": {
+          "EMAIL": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 1700,
+            "entities": 70,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 70,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 70,
+            "utf8_bytes": 1700
+          },
+          "GIVENNAME": {
+            "byte_recall": 0.9917127071823204,
+            "covered_utf8_bytes": 718,
+            "entities": 140,
+            "full_coverage_recall": 0.9857142857142858,
+            "fully_covered": 138,
+            "leaked_utf8_bytes": 6,
+            "overlap_recall": 0.9857142857142858,
+            "overlapped": 138,
+            "utf8_bytes": 724
+          },
+          "IBAN": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 710,
+            "entities": 30,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 30,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 30,
+            "utf8_bytes": 710
+          },
+          "SURNAME": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 1198,
+            "entities": 140,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 140,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 140,
+            "utf8_bytes": 1198
+          },
+          "TAXNUM": {
+            "byte_recall": 0.36666666666666664,
+            "covered_utf8_bytes": 132,
+            "entities": 30,
+            "full_coverage_recall": 0.4,
+            "fully_covered": 12,
+            "leaked_utf8_bytes": 228,
+            "overlap_recall": 0.4,
+            "overlapped": 12,
+            "utf8_bytes": 360
+          },
+          "TELEPHONENUM": {
+            "byte_recall": 1.0,
+            "covered_utf8_bytes": 450,
+            "entities": 30,
+            "full_coverage_recall": 1.0,
+            "fully_covered": 30,
+            "leaked_utf8_bytes": 0,
+            "overlap_recall": 1.0,
+            "overlapped": 30,
+            "utf8_bytes": 450
+          }
+        },
+        "pipeline_availability": {
+          "attempted_documents": 100,
+          "completed_documents": 100,
+          "completion_rate": 1.0,
+          "error_stages": {},
+          "errors": {},
+          "failed_closed_documents": 0
+        },
+        "pipeline_contract": {
+          "documents": 100,
+          "documents_with_redact": 0,
+          "final_protection_trace_items": 337,
+          "initial_actionable_suspects": 20,
+          "initial_class_mismatches": 0,
+          "initial_safety_net_suspects": 20,
+          "manifest_integrity_errors": {
+            "invalid_clean_bounds": 0,
+            "invalid_raw_bounds": 0,
+            "non_monotonic_raw_spans": 0,
+            "overlapping_clean_spans": 0,
+            "raw_value_mismatches": 0,
+            "token_restore_failures": 0
+          },
+          "manifest_spans": 337,
+          "manifest_valid_document_rate": 1.0,
+          "manifest_valid_documents": 100,
+          "post_policy_scanned_documents": 100,
+          "post_policy_suspects": 0,
+          "post_policy_zero_suspect_documents": 100,
+          "post_policy_zero_suspect_rate": 1.0,
+          "redact_actions": 0,
+          "restore_exact_documents": 100,
+          "restore_exact_rate": 1.0,
+          "restore_success_decision_rate": 1.0,
+          "restore_success_decisions": 100,
+          "strict_acceptance_rate": 0.8,
+          "strict_would_reject_documents": 20,
+          "tokenize_actions": 337
+        }
+      },
+      "documents": 100
+    }
+  },
+  "name_multi_measurement_kinds": [],
+  "policy_sha256": "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe",
+  "prediction_registered_before_measurement": "90-100% of baseline leaked bytes within eligible exact-value spans; overall reduction unknown (Solo scratchpad 10781)",
+  "record_match_kinds_mode": "baseline_only",
+  "source_commit": "d9ba943d76c00e984e4c88f8a440a38c6e4f86bc"
+}

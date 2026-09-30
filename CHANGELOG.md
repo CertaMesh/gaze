@@ -200,7 +200,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the all-on arm but avoiding their measured benign counterweights. Exact
   declared phones and credit cards remain on by user decision despite 69 and
   99 added layer D benign bytes. Callers may override a group through
-  `record_match_kinds` in the call-scoped context JSON.
+  `record_match_kinds` in the call-scoped context JSON. The final shipped-default
+  oracle cuts leaked bytes by 6,064 with 258 added false-positive bytes under
+  both scored-label contracts; no-record scorecards match main exactly.
 - **Loopback IP addresses no longer tokenize.** The bundled IPv4 and IPv6
   rules reject `127.0.0.0/8`, `::1` and IPv4-mapped or IPv4-compatible
   loopback with the new
