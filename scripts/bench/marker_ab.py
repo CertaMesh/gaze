@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Same-corpus A/B for the safety-net redaction marker (solo todo 3652).
+"""Same-corpus A/B for the safety-net redaction marker.
 
 Deleting a flagged span and writing a `[REDACTED:<class>]` marker over it must
 redact the SAME spans. Only what stands in their place may differ. This script

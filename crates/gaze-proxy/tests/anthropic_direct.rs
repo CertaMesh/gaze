@@ -1533,7 +1533,7 @@ fn route_net_pipeline(error: bool, hits: Arc<AtomicUsize>) -> Pipeline {
 }
 
 /// A surfaced marker the net flags is resolved into a token before admission, the same
-/// Resolve step `gaze clean` runs (todo 3847). A net error still refuses before provider I/O.
+/// Resolve step `gaze clean` runs. A net error still refuses before provider I/O.
 #[tokio::test]
 async fn configured_net_direct_request_resolves_or_rejects_before_provider_io() {
     let mut observations = Vec::new();
@@ -1652,7 +1652,7 @@ async fn admission_reflags_and_resolvable_spills_restore_and_reuse_tokens_but_ba
                 .send()
                 .await
                 .unwrap();
-            // A spill covers raw bytes after the token; Resolve tokenizes them (todo 3847).
+            // A spill covers raw bytes after the token; Resolve tokenizes them.
             let accepted = matches!(mode, Mode::Reflag | Mode::Spill);
             assert_eq!(response.status().is_success(), accepted, "{mode:?}");
             if accepted {
@@ -1800,7 +1800,7 @@ async fn regression_fallback_redaction_does_not_admit_provider_origin_pii() {
 #[path = "support/date_net.rs"]
 mod date_net;
 
-/// Todo 3847 on the codec path: a net-flagged date is tokenized before admission, forwarded
+/// On the codec path: a net-flagged date is tokenized before admission, forwarded
 /// as a token, and restored in the response, instead of refusing the request.
 #[tokio::test]
 async fn regression_3847_direct_net_flagged_dates_are_tokenized_forwarded_and_restored() {
@@ -1847,7 +1847,7 @@ async fn regression_3847_direct_net_flagged_dates_are_tokenized_forwarded_and_re
     }
 }
 
-/// Todo 3847 parity on the codec path: the proxy forwards exactly what `gaze clean` /
+/// Parity on the codec path: the proxy forwards exactly what `gaze clean` /
 /// `gaze daemon` produce for the same text and policy (session hex aside).
 #[tokio::test]
 async fn regression_3847_direct_proxy_forwards_what_clean_produces() {
@@ -1907,7 +1907,7 @@ fn second_opinion_pipeline() -> Pipeline {
         .unwrap()
 }
 
-/// Todo 3847 (b) on the codec path: the refusal names the typed `ProtectionError` variant, the
+/// Part (b) on the codec path: the refusal names the typed `ProtectionError` variant, the
 /// fallback reason and the suspect classes, never the flagged bytes.
 #[tokio::test]
 async fn regression_3847_direct_refusal_body_is_typed_and_carries_no_pii() {
@@ -1972,7 +1972,7 @@ async fn direct_refusal_log_child() {
     assert_eq!(upstream.captures.lock().await.len(), 0);
 }
 
-/// Todo 3847 (b) on the codec path: the proxy log carries the refusal's reason and never the
+/// Part (b) on the codec path: the proxy log carries the refusal's reason and never the
 /// text. The whole stderr of a refused request is one line, byte for byte.
 #[test]
 fn regression_3847_direct_refusal_log_line_is_exactly_the_typed_refusal() {

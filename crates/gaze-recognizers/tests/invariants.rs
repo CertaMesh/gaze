@@ -124,7 +124,7 @@ fn restore_tokens(session: &Session, clean: &str) -> String {
         .to_string()
 }
 
-/// Locks research-855 §Rulepack > Normalization, todo #448, and audit
+/// Locks research-855 §Rulepack > Normalization, and audit
 /// scratchpad 862 §M1: recognizer normalizers may canonicalize validator input,
 /// but restore must preserve the original byte span byte-for-byte.
 #[test]

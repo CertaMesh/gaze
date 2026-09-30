@@ -1,4 +1,4 @@
-//! A net whose re-run finds something new, so Resolve's `Strict` fallback refuses (todo 3847).
+//! A net whose re-run finds something new, so Resolve's `Strict` fallback refuses.
 //!
 //! First sweep: flags `alpha` as a name, which Resolve tokenizes. Every later sweep, with
 //! `alpha` gone, flags `beta` as a location: a residual the fallback must refuse.

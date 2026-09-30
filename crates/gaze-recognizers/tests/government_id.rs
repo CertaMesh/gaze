@@ -1,4 +1,4 @@
-//! Regression fixtures for the government-ID cluster recognizers (solo todo #2318 follow-on).
+//! Regression fixtures for the government-ID cluster recognizers.
 //!
 //! The original government-ID fixtures cover structural shapes measured in the Dataiku EN/DE
 //! holdout. The later labelled-identifier fixtures use synthetic shapes beyond that corpus.
@@ -57,7 +57,7 @@ const CLASSES: [&str; 6] = [
 ///
 /// This matters more here than anywhere else in the repo: before #414 `ssn.us` was
 /// `locale_gated` to `en-US` and consequently matched only 38 of 217 gold SSN spans, because 113
-/// of them sit in German documents. See todos #2417 and #2403.
+/// of them sit in German documents.
 fn pipeline_for(chain: &[LocaleTag]) -> Pipeline {
     let rulepack = Rulepack::load(RulepackSource::Embedded(
         embedded("core").expect("core rulepack"),
@@ -456,7 +456,7 @@ fn bare_digit_run_after_tax_cue_is_not_matched() {
     // identifiers as bare digit runs. The broad variant covered 36.3% of gold but took all 64 as
     // false positives; requiring internal separators excludes them without invoking
     // DeSteuerIdMod1110 — which cannot help here, since 210 of 212 gold spans FAIL that checksum
-    // (the corpus is synthetic). See todo #2418.
+    // (the corpus is synthetic).
     assert_unchanged("tax number 12345678901 has no separators");
 }
 
@@ -1600,7 +1600,7 @@ fn government_ids_restore_exactly() {
 
 // ---------------------------------------------------------------------------- Slice G: shared connector
 //
-// Solo todo #3025 slice G: the cue→value connector of the five SSN / government-ID recognizers
+// The cue→value connector of the five SSN / government-ID recognizers
 // was a single optional keyword plus one punctuation mark. Real corpus phrasing puts up to four
 // closed-vocabulary words between the cue and the value ("license number, X", "Sozialversicherungs-
 // nummer, die lautet X", "tax number as X"), so those spans leaked. All five now share ONE
@@ -1782,7 +1782,7 @@ fn widened_connector_does_not_bridge_an_unbounded_gap() {
 
 // ------------------------------------------------------------------- Slice A: passport + national_id extension
 //
-// Solo todo #3025 slice A. Adds `passport.cue_anchored` (custom:passport, government-id family
+// Adds `passport.cue_anchored` (custom:passport, government-id family
 // precedence 15, sixth member of the shared-connector family) and extends `national_id.cue_anchored`
 // with new cue vocabulary (Identitätskarte, Personalnummer, Staatsbürgerschaftsnummer, AHV, the
 // hyphenated `national-id` forms) and new shapes (Swiss AHV `756.dddd.dddd.dd`, longer alnum). Both

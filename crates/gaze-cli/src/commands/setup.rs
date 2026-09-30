@@ -120,7 +120,7 @@ fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummar
 }
 
 /// Installs (or re-verifies) the GLiNER bundle when setup runs with `--dob-judge`;
-/// `None` otherwise: the judge is opt-in until its bundle is shrunk (todo 3905).
+/// `None` otherwise: the judge is opt-in until its bundle is shrunk.
 /// The installer is a parameter so the mapping from flags to policy is testable
 /// without the network.
 pub(crate) fn resolve_dob_judge(
@@ -942,7 +942,7 @@ mod tests {
 
     #[test]
     fn generated_policy_tokenizes_a_card_with_touching_digits() {
-        // Solo todo 3843: the forward path under the `gaze setup` policy. The no-policy run of
+        // The forward path under the `gaze setup` policy. The no-policy run of
         // the same shapes is `tests/card_forward_path.rs`.
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
@@ -1404,7 +1404,7 @@ mod tests {
         assert!(second.doctor_clean_text.contains(":Email_"));
     }
 
-    /// `resolver::is_learned` as it stood on main before todo 3884, frozen here. Declared
+    /// `resolver::is_learned` as it stood on main before that change, frozen here. Declared
     /// evidence replaced it; every shipped emitter must declare what it inferred, so the move
     /// changed no sweep decision.
     fn main_is_learned(recognizer_id: &str, source: &str) -> bool {
@@ -1464,7 +1464,7 @@ mod tests {
         SSN 123-45-6789, Steuer-ID 12 345 678 901, born 14.03.1987\n\
         order class-alpha-4242 for Quentin Probe, server 192.168.10.20, https://example.org/a\n";
 
-    /// Todo 3884: every recognizer in every shipped registry (no policy, `core`,
+    /// Every recognizer in every shipped registry (no policy, `core`,
     /// `core-extended` plus an adopter custom rule, and the `gaze setup` policy with NER)
     /// declares the evidence main inferred from its id, statically and on every candidate
     /// the registry emits; an adopter recognizer that declares nothing is learned.

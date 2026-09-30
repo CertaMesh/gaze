@@ -1,5 +1,5 @@
 //! The bundled `locale-de` / `locale-en` street lexicons reach the pipeline
-//! through assembly, per active locale (todo 3670). A stand-in labelled `ner`
+//! through assembly, per active locale. A stand-in labelled `ner`
 //! marks the street, as the bundled NER recognizer would.
 use gaze::{
     Candidate, CleanDocument, ConflictTier, Context, DetectContext, DictionaryBundle, LocaleChain,

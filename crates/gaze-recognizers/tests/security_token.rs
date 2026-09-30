@@ -1,9 +1,9 @@
-//! Regression fixtures for the `security_token.*` recognizers (solo todo #2318). They live in
+//! Regression fixtures for the `security_token.*` recognizers. They live in
 //! the opt-in `secrets` bundle, so every pipeline here loads `core` plus `secrets` explicitly.
 //!
 //! EVERY positive fixture here encodes a structural shape that was MEASURED in the Dataiku EN/DE
 //! holdout, not a phrasing invented alongside the implementation. That discipline exists because
-//! todo #2412 shipped 962 green tests for URL cue phrasings that occur in 5 of 276 gold spans and
+//! An earlier change shipped 962 green tests for URL cue phrasings that occur in 5 of 276 gold spans and
 //! produced a zero real-corpus delta. The measured distribution of the 219 gold SECURITYTOKEN
 //! spans is:
 //!
@@ -291,7 +291,7 @@ fn cue_without_high_entropy_run_is_not_a_credential() {
 
 // -------------------------------------------------------------------- locale-chain activation
 //
-// Todo #2403 shipped a leak because a locale-gated recognizer silently never fired on a chain
+// An earlier change shipped a leak because a locale-gated recognizer silently never fired on a chain
 // pinned to Global. The benchmark builds its chain as `[<lang>-<region>, "global"]`
 // (gaze_bench_score.py:87), and the corpus is en 117 / de 102, so roughly half the value of this
 // change sits on the German side. These tests assert firing on every chain that matters instead

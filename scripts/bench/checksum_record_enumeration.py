@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Old vs new acceptance of IBAN and card shapes when the checksum fails (todo 3906).
+"""Old vs new acceptance of IBAN and card shapes when the checksum fails.
 
 Runs one deterministic value x context grid through two `gaze daemon` binaries
 (base, candidate) and compares, per document, the bytes of the value each

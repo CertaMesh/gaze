@@ -44,7 +44,7 @@ pub(super) enum Batch {
     First,
     Second,
     /// The `Redact` fallback's reversible action: a residual set it can plan completely is
-    /// tokenized instead of deleted, so the document still restores exactly (todo 3879).
+    /// tokenized instead of deleted, so the document still restores exactly.
     Fallback,
     Deletion,
     /// The one reversible round the terminal phase runs on its own scan, after the fallback has
@@ -293,7 +293,7 @@ impl Ledger {
     /// `[REDACTED:<class>]` marker instead of cutting bytes: `Ledger::replace` only records a
     /// deletion when nothing is emitted, and that path was its sole caller.
     ///
-    /// Kept, with the rest of the deletion model, until solo todo 3739 measures the removal. A
+    /// Kept, with the rest of the deletion model, until a measurement covers the removal. A
     /// half-removed deletion model is worse than either end state, and `CleanLayout`'s
     /// deletion-aware branch has to be retired in the same pass.
     #[allow(dead_code)]

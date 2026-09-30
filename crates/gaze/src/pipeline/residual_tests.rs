@@ -182,7 +182,7 @@ fn pair_and_triple_use_existing_traced_live_staged_and_strict_calls() {
     }
 }
 
-/// Residual admission is per original (todo #3740): the loser
+/// Residual admission is per original: the loser
 /// (`custom:password`, action `b` through the default rule) is admitted
 /// whenever `b` protects, whatever the winner's action `a`. A `preserve`
 /// winner no longer shields the loser's bytes inside it: the cell then covers
@@ -861,7 +861,7 @@ struct ScriptNet {
     step: std::sync::Mutex<usize>,
     calls: NetCalls,
     /// Adds a plain-text class mismatch to the final residual, which the follow-up planner
-    /// declines: the whole set then goes to deletion instead of being tokenized (todo 3879).
+    /// declines: the whole set then goes to deletion instead of being tokenized.
     declined: bool,
 }
 impl SafetyNet for ScriptNet {
@@ -952,7 +952,7 @@ impl SafetyNet for ScriptNet {
     }
 }
 /// The straddling mismatch reaches the fallback as its exposed one-byte gap, which the planner can
-/// resolve: alone, it is tokenized and restore is exact (todo 3879). Beside a plain-text mismatch
+/// resolve: alone, it is tokenized and restore is exact. Beside a plain-text mismatch
 /// the planner declines, the fallback is the final authority over both and deletes them.
 #[test]
 fn actual_two_net_sequence_sees_residual_output_and_deletes_its_final_authority() {
@@ -1595,7 +1595,7 @@ fn a_record_whose_two_origins_disagree_fails_closed() {
 /// merged cell's parent list is the union. Arbitration here selects `11..15`
 /// and `35..45`; the admitted union of `synthetic.wide` is one run `15..35`,
 /// and it leaves as one token although `synthetic.inner` becomes active at
-/// `25` (todo #3740: one claimant, one fragment per uncovered run; splitting
+/// `25` (one claimant, one fragment per uncovered run; splitting
 /// there turned an email inside a preserved URL into `<Email_1><Email_2>`).
 #[test]
 fn adjacent_cells_of_one_representative_merge_across_an_inner_boundary() {
