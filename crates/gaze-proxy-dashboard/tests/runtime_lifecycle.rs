@@ -16,9 +16,9 @@ use gaze_inspection::{
     install_inspection_v1, InspectionBeginLogicalErrorV1, PendingInspectionProducerV1,
 };
 use gaze_proxy_dashboard::{
-    ChildConfig, ChildInheritedHandles, ClientLimits, DashboardChildEntrypoint, DashboardLifecycle,
-    DashboardPayloadAcceptance, DashboardStartupConfig, DashboardSupervisor, IpcLimits,
-    LoopbackBind, PairedDashboard, RetentionLimits, SpawnedDashboardChild,
+    ChildConfig, ChildInheritedHandles, ClientLimits, DashboardChildEntrypoint, DashboardControl,
+    DashboardLifecycle, DashboardPayloadAcceptance, DashboardStartupConfig, DashboardSupervisor,
+    IpcLimits, LoopbackBind, PairedDashboard, RetentionLimits, SpawnedDashboardChild,
 };
 
 // Subprocess-spawning tests share Unix-domain and TCP sockets and multiple
@@ -99,6 +99,19 @@ fn assert_process_reaped(pid: u32) {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+fn runtime_diagnostic(control: &DashboardControl, pid: u32) -> String {
+    let child = Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .output()
+        .map(|output| output.status.success());
+    format!(
+        "lifecycle={:?}, status={:?}, child_alive={child:?}",
+        control.lifecycle(),
+        control.status()
+    )
+}
+
 #[test]
 #[cfg(not(target_os = "macos"))]
 fn matched_activation_owns_serialized_purge_shutdown_and_child_reap() {
@@ -113,7 +126,13 @@ fn matched_activation_owns_serialized_purge_shutdown_and_child_reap() {
 
     control.purge().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Running(1));
-    assert!(producer.begin_logical().is_ok());
+    let logical = producer.begin_logical();
+    assert!(
+        logical.is_ok(),
+        "begin_logical={:?}; {}",
+        logical.as_ref().err(),
+        runtime_diagnostic(&control, pid)
+    );
     control.shutdown().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
     assert!(matches!(
@@ -458,9 +477,11 @@ fn concurrent_browser_and_operator_purges_do_not_disable_dashboard() {
         control
             .purge()
             .expect("operator purge must not be corrupted by concurrent browser purges");
+        let observed = control.lifecycle();
         assert!(
-            matches!(control.lifecycle(), DashboardLifecycle::Running(_)),
-            "dashboard spuriously disabled during concurrent purges"
+            matches!(observed, DashboardLifecycle::Running(_)),
+            "dashboard spuriously disabled during concurrent purges: observed={observed:?}; {}",
+            runtime_diagnostic(&control, pid)
         );
     }
 
@@ -524,9 +545,11 @@ fn concurrent_browser_purges_do_not_corrupt_rotate_pairing() {
             |_authority, _token: &[u8]| Ok::<(), io::Error>(()),
         ))
         .expect("rotate pairing must not be corrupted by concurrent browser purges");
+    let observed = control.lifecycle();
     assert!(
-        matches!(control.lifecycle(), DashboardLifecycle::Running(_)),
-        "dashboard spuriously disabled during rotate pairing"
+        matches!(observed, DashboardLifecycle::Running(_)),
+        "dashboard spuriously disabled during rotate pairing: observed={observed:?}; {}",
+        runtime_diagnostic(&control, pid)
     );
 
     stop.store(true, Ordering::Release);
@@ -557,7 +580,13 @@ fn rotate_immediately_followed_by_purge_and_shutdown_keeps_control_frames_intact
     assert_eq!(control.lifecycle(), DashboardLifecycle::Running(1));
     control.purge().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Running(2));
-    assert!(producer.begin_logical().is_ok());
+    let logical = producer.begin_logical();
+    assert!(
+        logical.is_ok(),
+        "begin_logical={:?}; {}",
+        logical.as_ref().err(),
+        runtime_diagnostic(&control, pid)
+    );
     control.shutdown().unwrap();
     assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
     drop(launch);

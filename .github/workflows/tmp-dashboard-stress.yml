@@ -1,0 +1,49 @@
+name: temporary dashboard stress
+on:
+  push:
+    branches: [fix-dashboard-lifecycle-race]
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+        with:
+          toolchain: 1.96.0
+      - name: Install pinned nextest
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/nextest.tar.gz" https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.146/cargo-nextest-0.9.146-x86_64-unknown-linux-gnu.tar.gz
+          echo "682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428  $RUNNER_TEMP/nextest.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/nextest.tar.gz" -C "$HOME/.cargo/bin" cargo-nextest
+      - name: Before stress
+        shell: bash
+        run: |
+          mkdir -p proof
+          uname -a > proof/hardware.txt
+          lscpu >> proof/hardware.txt
+          cargo nextest --version >> proof/hardware.txt
+          nice -n 19 cargo test -p gaze-proxy-dashboard --all-features --test runtime_lifecycle --no-run --message-format=json > proof/build.json
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          records = [json.loads(line) for line in pathlib.Path('proof/build.json').read_text().splitlines() if line.startswith('{')]
+          binary = next(r['executable'] for r in records if r.get('executable') and r.get('target', {}).get('name') == 'runtime_lifecycle')
+          names = ['matched_activation_owns_serialized_purge_shutdown_and_child_reap', 'concurrent_browser_and_operator_purges_do_not_disable_dashboard', 'concurrent_browser_purges_do_not_corrupt_rotate_pairing']
+          counts = {}
+          for name in names:
+              failures = 0
+              with open(f'proof/before-{name}.log', 'w') as log:
+                  for i in range(200):
+                      result = subprocess.run(['nice', '-n', '19', binary, '--exact', name, '--nocapture'], stdout=log, stderr=subprocess.STDOUT)
+                      failures += result.returncode != 0
+              counts[name] = {'iterations': 200, 'failures': failures}
+              print(name, counts[name], flush=True)
+          pathlib.Path('proof/before-counts.json').write_text(json.dumps(counts, indent=2))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: dashboard-proof
+          path: proof
