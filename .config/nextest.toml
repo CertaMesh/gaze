@@ -1,0 +1,30 @@
+[profile.ci]
+fail-fast = false
+retries = 0
+test-threads = 2
+slow-timeout = "120s"
+leak-timeout = { period = "5s", result = "fail" }
+
+[profile.ci.junit]
+path = "junit.xml"
+store-success-output = false
+store-failure-output = false
+
+[test-groups]
+nested-cargo = { max-threads = 1 }
+dashboard = { max-threads = 1 }
+rulepack = { max-threads = 1 }
+
+# These binaries use in-process locks around nested builds or loopback probes.
+# Nextest processes need equivalent scheduling locks.
+[[profile.ci.overrides]]
+filter = 'package(xtask) | binary_id(=gaze-proxy::proxy_substrate) | binary_id(=gaze-recognizers::no_phone_parser_fail_closed)'
+test-group = 'nested-cargo'
+
+[[profile.ci.overrides]]
+filter = 'package(gaze-proxy-dashboard) | binary_id(=gaze-cli::proxy_dashboard)'
+test-group = 'dashboard'
+
+[[profile.ci.overrides]]
+filter = 'binary_id(=gaze-recognizers::rulepack_lint)'
+test-group = 'rulepack'
