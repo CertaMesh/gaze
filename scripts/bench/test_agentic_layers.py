@@ -29,8 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "60c3fe121db4ce07b0dfbc2397c1a48a0c1773a5c94eff324fdde597a6aa8ae6",
-    "test": "ddd234551bcae00ab0f97026fd4b5b6d3d4b4b23cf08b8fa15926e87f598bd5c",
+    "dev": "304723001d77cbd91b2a4e50c5136bcb35f68167525b95720a7a38e8fa47672a",
+    "test": "81dc620dfb11ba0620622f3a0a7165a127f99bb5827079d05bf30d3f8b5b023c",
 }
 # v7: everything before the cued grammar and short-identifier cells.
 V7_CORPUS_SHA256 = {
@@ -453,7 +453,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "gov_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -904,8 +904,8 @@ class PhoneShapeCellTests(unittest.TestCase):
     # narrow rule matches, per partition. A narrow rule with no D cost here
     # would ship its false positives unmeasured.
     NARROW_D_COST = {
-        "dev": {"dotted": 8, "national_3x3": 21, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
-        "test": {"dotted": 8, "national_3x3": 25, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
+        "dev": {"dotted": 8, "national_3x3": 25, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
+        "test": {"dotted": 8, "national_3x3": 29, "national_2x4": 8, "prefix_00": 4, "prefix_001": 8},
     }
 
     def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
@@ -1353,7 +1353,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("STREET", agentic.load_contract(REPO_ROOT).scored_labels)
         with self.assertRaisesRegex(agentic.LayerError, "no committed scored-label contract"):
             agentic.load_contract(REPO_ROOT, version=3)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 8"):
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 9"):
             agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=7)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
@@ -1487,7 +1487,7 @@ def _scorecard(
                 "D|ref_number_16|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": guard_fp}},
                 **{
                     f"D|{family}|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": 0}}
-                    for family in ("ref_number_9", "ref_number_10", "ref_number_11", *CUE_CARD_TWINS)
+                    for family in agentic.guard_families(agentic.GENERATOR_VERSION) if family != "ref_number_16"
                 },
             }
         if layer == "A":
@@ -1929,7 +1929,7 @@ class GateTests(unittest.TestCase):
     def test_credit_guard_families_come_from_the_counterweights(self) -> None:
         self.assertEqual(agentic.CREDIT_GUARD_FAMILIES,
                          {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16"), "IBAN": (),
-                          "TAXNUM": ("ref_number_11",), "CPF": ("ref_number_11",),
+                          "TAXNUM": ("ref_number_11", "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped"), "CPF": ("ref_number_11",),
                           "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
                           "PHONENUMBER": ()})
         self.assertEqual(set(agentic.CREDIT_GUARD_FAMILIES), set(agentic.CREDIT_SCOPE_BY_LABEL))

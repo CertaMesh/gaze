@@ -1,0 +1,121 @@
+# Deliberately incorrect mutation probe. Never ship these recognizers.
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_tax_nine"
+pattern = '\b0\d{8}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_tax_eleven"
+pattern = '\b0\d{10}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_tax_grouped"
+pattern = '\b0\d \d{3} \d{3} \d{3}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_tax_slash"
+pattern = '\b0\d/\d{3}/\d{5}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_tax_slash_long"
+pattern = '\b0\d{2}/\d{4}/\d{5}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_tax_prefix"
+pattern = '\bZZ0\d{8}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_tax_suffix"
+pattern = '\b0\d{6}ZZ\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_tax_dotted"
+pattern = '\bZZ0\d{2}\.\d{3}\.\d{3}Z\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_ssn_us"
+pattern = '\b000[-. ]\d{2}[-. ]\d{4}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_ssn_triple"
+pattern = '\b000[- ]\d{3}[- ]\d{3}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_ssn_swiss_dot"
+pattern = '\b000\.\d{4}\.\d{4}\.\d{2}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_ssn_swiss_dash"
+pattern = '\b000-\d{4}-\d{4}-\d{2}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_ssn_mixed"
+pattern = '\bZZ0\d{5}Z\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_ssn_tail"
+pattern = '\b\d{4}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_card_grouped"
+pattern = '\b000\d{3}-\d{2}-\d{4}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_card_prefix"
+pattern = '\bZZ0\d{6}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_card_suffix"
+pattern = '\b000\d{4}Z\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_national_compact"
+pattern = '\b000\d{6,9}\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_national_grouped"
+pattern = '\b00 \d{3} \d{3} \d\b'
+class = "custom:mutant_government_id"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_national_embedded"
+pattern = '\b000\d{3}Z\d{4}\b'
+class = "custom:mutant_government_id"
