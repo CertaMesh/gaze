@@ -193,6 +193,14 @@ class DeclarationTest(unittest.TestCase):
         entities = pool.pool_entities() | set(space.GLINER_LABELS.values())
         self.assertEqual(sorted(entities - set(mapping)), [])
 
+    def test_every_openmed_model_label_is_mapped(self) -> None:
+        """OpenMed's labels, read from its model card configuration's label names."""
+        labels = {"api_key", "http_cookie", *pool.openmed_mapping()}
+        mapping = tune.tuned_mapping()
+        openmed = pool.openmed_mapping()
+        for label in labels:
+            self.assertIn(openmed.get(label, label), mapping, label)
+
     def test_gliner_label_set_covers_every_pool_entity(self) -> None:
         extras = pool.Extras(pool.ModelPaths(spacy={}), pool.pool_entities())
         values = set(extras.gliner_mapping().values())

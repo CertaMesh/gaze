@@ -51,8 +51,14 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+#: OpenMed labels that notebook 5's mapping leaves out (its config.json has exactly these two
+#: beyond the mapping); HuggingFaceNerRecognizer passes such labels through unchanged.
+MODEL_PASSTHROUGH_LABELS = {"api_key": ("SECURITYTOKEN",), "http_cookie": ()}
+
+
 def tuned_mapping() -> dict[str, tuple[str, ...]]:
-    """The comparison's presidio table, Presidio Research's extra entities, then the space's."""
+    """The comparison's presidio table, Presidio Research's extra entities, the space's,
+    then the model labels Presidio passes through unmapped."""
     base = compare.load_mapping()["presidio"]
     extra = json.loads(VENDOR_TUNED.read_text(encoding="utf-8"))["presidio-research"]["extra_labels"]
     mapping = {**base, **{k: tuple(v) for k, v in extra.items()}}
@@ -60,6 +66,10 @@ def tuned_mapping() -> dict[str, tuple[str, ...]]:
         if entity in mapping:
             raise ValueError(f"space.EXTRA_LABELS redefines {entity}")
         mapping[entity] = tuple(labels)
+    for entity, labels in MODEL_PASSTHROUGH_LABELS.items():
+        if entity in mapping:
+            raise ValueError(f"MODEL_PASSTHROUGH_LABELS redefines {entity}")
+        mapping[entity] = labels
     return mapping
 
 
@@ -335,7 +345,7 @@ def authors_coverage(mapping: dict[str, tuple[str, ...]], gold_labels: set[str])
     registry = RecognizerRegistry()
     registry.load_predefined_recognizers()
     removed = set(repro.NOTEBOOK5_REMOVED)
-    entities = set(repro.OPENMED_MAPPING.values()) | {"TITLE", "DATE_TIME", "AGE"}
+    entities = set(repro.OPENMED_MAPPING.values()) | {"TITLE", "DATE_TIME", "AGE"} | set(MODEL_PASSTHROUGH_LABELS)
     for recognizer in registry.recognizers:
         if type(recognizer).__name__ not in removed and recognizer.supported_language == "en":
             entities.update(recognizer.supported_entities)
