@@ -3,7 +3,8 @@
 This page compares **documented capabilities**, not detection quality. It uses
 Gaze at this repository revision; Presidio 2.2.364; DataFog Core 0.3.0;
 DataFog Python 4.8.1; scrubadub 2.0.0; GLiNER 0.2.29 with the
-`urchade/gliner_multi_pii-v1` model; OpenAI Privacy Filter (OPF) 0.1.0; and
+`urchade/gliner_multi_pii-v1` model; OpenAI Privacy Filter (OPF) 0.1.0; Perplexity
+PII-Tracer at model revision `d25c16f`; and
 LLM Guard 0.3.16 (its repository was [archived on 9 July
 2026](https://github.com/protectai/llm-guard)). The two DataFog packages have
 different APIs and contracts. A model or detector library is not a complete
@@ -30,13 +31,13 @@ commit. GLiNER's PII-language claim additionally uses model snapshot
 
 **Other detection tools**
 
-| Capability | scrubadub | GLiNER | OPF | LLM Guard |
-| --- | --- | --- | --- | --- |
-| Reversible restore and state | Replacement post-processors; restore contract not verified [2.0.0][s-usage] | Span detector; restore contract not verified [0.2.29][g-usage] | Span detector and masking CLI; restore contract not verified [0.1.0][o-readme] | `Anonymize`/`Deanonymize` share a `Vault`; session durability and unknown-token handling not verified [0.3.16][l-restore] |
-| Placeholder or token format | Default `{{EMAIL}}` style; post-processors can add an index or hash [2.0.0][s-usage] | Returns labelled spans, not replacements [0.2.29][g-usage] | Typed spans or generic `redacted` labels; masking is not a documented restore token [0.1.0][o-output] | `[REDACTED_PERSON_1]` style placeholders [0.3.16][l-restore] |
-| Repeated values | Repeat identity guarantee not verified [2.0.0][s-usage] | Not verified for a detector [0.2.29][g-usage] | Not verified for a detector [0.1.0][o-output] | Vault repeat behavior not verified [0.3.16][l-restore] |
-| Streaming | Streaming contract not verified [2.0.0][s-usage] | Incremental streaming NER is documented; this is detection, not restore [0.2.29][g-readme] | Long-context batch inference is documented; incremental stream contract not verified [0.1.0][o-readme] | Streaming anonymize/deanonymize contract not verified [0.3.16][l-restore] |
-| Agent integration | Python scrubber API; agent hook not verified [2.0.0][s-readme] | Python model API and optional serving; agent hook not verified [0.2.29][g-readme] | Local CLI/API; agent hook not verified [0.1.0][o-readme] | Input/output scanners and optional API deployment [0.3.16][l-readme] |
+| Capability | scrubadub | GLiNER | OPF | LLM Guard | PII-Tracer |
+| --- | --- | --- | --- | --- | --- |
+| Reversible restore and state | Replacement post-processors; restore contract not verified [2.0.0][s-usage] | Span detector; restore contract not verified [0.2.29][g-usage] | Span detector and masking CLI; restore contract not verified [0.1.0][o-readme] | `Anonymize`/`Deanonymize` share a `Vault`; session durability and unknown-token handling not verified [0.3.16][l-restore] | Span detector; `mask()` replaces spans with placeholders; restore contract not verified [d25c16f][t-card] |
+| Placeholder or token format | Default `{{EMAIL}}` style; post-processors can add an index or hash [2.0.0][s-usage] | Returns labelled spans, not replacements [0.2.29][g-usage] | Typed spans or generic `redacted` labels; masking is not a documented restore token [0.1.0][o-output] | `[REDACTED_PERSON_1]` style placeholders [0.3.16][l-restore] | `[PRIVATE_EMAIL]` style via `mask()`; the format is configurable, not a documented restore token [d25c16f][t-card] |
+| Repeated values | Repeat identity guarantee not verified [2.0.0][s-usage] | Not verified for a detector [0.2.29][g-usage] | Not verified for a detector [0.1.0][o-output] | Vault repeat behavior not verified [0.3.16][l-restore] | Trained and benchmarked to cover every mention of a recurring identifier across turns; this is detection coverage, not a stable replacement token [paper][t-paper] |
+| Streaming | Streaming contract not verified [2.0.0][s-usage] | Incremental streaming NER is documented; this is detection, not restore [0.2.29][g-readme] | Long-context batch inference is documented; incremental stream contract not verified [0.1.0][o-readme] | Streaming anonymize/deanonymize contract not verified [0.3.16][l-restore] | Streaming contract not verified; input is truncated at 4096 tokens, so longer documents need caller-side chunking [d25c16f][t-card] |
+| Agent integration | Python scrubber API; agent hook not verified [2.0.0][s-readme] | Python model API and optional serving; agent hook not verified [0.2.29][g-readme] | Local CLI/API; agent hook not verified [0.1.0][o-readme] | Input/output scanners and optional API deployment [0.3.16][l-readme] | Python `transformers` model API plus vLLM, GGUF (llama-server) and MLX packagings; agent hook not verified [d25c16f][t-card] |
 
 ## Detection, documents, and operations
 
@@ -53,14 +54,14 @@ commit. GLiNER's PII-language claim additionally uses model snapshot
 
 **Other detection tools**
 
-| Capability | scrubadub | GLiNER | OPF | LLM Guard |
-| --- | --- | --- | --- | --- |
-| Document/OCR ingestion | OCR ingestion not verified [2.0.0][s-readme] | OCR ingestion not verified [0.2.29][g-readme] | OCR ingestion not verified [0.1.0][o-readme] | OCR ingestion not verified [0.3.16][l-readme] |
-| Audit log | Detector records and document names; durable audit sink not verified [2.0.0][s-usage] | Labelled spans and scores; durable audit sink not verified [0.2.29][g-usage] | Typed predictions can be exported; durable audit sink not verified [0.1.0][o-output] | Scanner validity/risk scores; durable audit sink not verified [0.3.16][l-restore] |
-| Policy and rules | Configurable detectors and post-processors; user-supplied values [2.0.0][s-usage] | Runtime label list, threshold, model selection and fine-tuning [0.2.29][g-usage] | Eight fixed output categories; runtime operating points; changing label policy requires fine-tuning [0.1.0][o-readme] | Presidio-backed recognizers, custom patterns and threshold [0.3.16][l-anon] |
-| Locales and country IDs | US/GB/CA postal and GB national identifiers, plus locale-specific detectors [2.0.0][s-readme] | Model `gliner_multi_pii-v1` card reports six languages; ID coverage depends on requested labels and model [0.2.29 + model `1fcf13e`][g-model] | Primarily English; eight broad categories rather than a country-ID catalog [0.1.0][o-readme] | English and Chinese support is documented, with the entity detection caveat that it is English-specific [0.3.16][l-anon] |
-| NER and safety layers | Pattern detectors plus external spaCy/Stanford plugins [2.0.0][s-usage] | Learned NER itself; no independent rule floor verified [0.2.29][g-readme] | Bidirectional token classifier with constrained Viterbi span decoding; no rule floor verified [0.1.0][o-readme] | Presidio analyzer plus configurable NER and custom regex [0.3.16][l-anon] |
-| Structured data | Free-text scrubber; structured traversal not verified [2.0.0][s-readme] | Text/batch span inference; structured traversal not verified [0.2.29][g-usage] | Text span inference; structured traversal not verified [0.1.0][o-readme] | Prompt/output scanners; structured traversal not verified [0.3.16][l-readme] |
+| Capability | scrubadub | GLiNER | OPF | LLM Guard | PII-Tracer |
+| --- | --- | --- | --- | --- | --- |
+| Document/OCR ingestion | OCR ingestion not verified [2.0.0][s-readme] | OCR ingestion not verified [0.2.29][g-readme] | OCR ingestion not verified [0.1.0][o-readme] | OCR ingestion not verified [0.3.16][l-readme] | OCR ingestion not verified [d25c16f][t-card] |
+| Audit log | Detector records and document names; durable audit sink not verified [2.0.0][s-usage] | Labelled spans and scores; durable audit sink not verified [0.2.29][g-usage] | Typed predictions can be exported; durable audit sink not verified [0.1.0][o-output] | Scanner validity/risk scores; durable audit sink not verified [0.3.16][l-restore] | Labelled spans and a document sensitivity score; durable audit sink not verified [d25c16f][t-card] |
+| Policy and rules | Configurable detectors and post-processors; user-supplied values [2.0.0][s-usage] | Runtime label list, threshold, model selection and fine-tuning [0.2.29][g-usage] | Eight fixed output categories; runtime operating points; changing label policy requires fine-tuning [0.1.0][o-readme] | Presidio-backed recognizers, custom patterns and threshold [0.3.16][l-anon] | Nine fixed categories; no runtime label list or threshold documented [d25c16f][t-card] |
+| Locales and country IDs | US/GB/CA postal and GB national identifiers, plus locale-specific detectors [2.0.0][s-readme] | Model `gliner_multi_pii-v1` card reports six languages; ID coverage depends on requested labels and model [0.2.29 + model `1fcf13e`][g-model] | Primarily English; eight broad categories rather than a country-ID catalog [0.1.0][o-readme] | English and Chinese support is documented, with the entity detection caveat that it is English-specific [0.3.16][l-anon] | Card lists `en` and `multilingual`; the paper's benchmark covers 13 languages and its account type names national ID, SSN, IBAN, card and sort code [d25c16f][t-card], [paper][t-paper] |
+| NER and safety layers | Pattern detectors plus external spaCy/Stanford plugins [2.0.0][s-usage] | Learned NER itself; no independent rule floor verified [0.2.29][g-readme] | Bidirectional token classifier with constrained Viterbi span decoding; no rule floor verified [0.1.0][o-readme] | Presidio analyzer plus configurable NER and custom regex [0.3.16][l-anon] | 0.6B bidirectional Qwen3 token classifier with constrained BIOES Viterbi decoding and a document sensitivity head; no rule floor verified [d25c16f][t-card] |
+| Structured data | Free-text scrubber; structured traversal not verified [2.0.0][s-readme] | Text/batch span inference; structured traversal not verified [0.2.29][g-usage] | Text span inference; structured traversal not verified [0.1.0][o-readme] | Prompt/output scanners; structured traversal not verified [0.3.16][l-readme] | Text input; structured traversal not verified [d25c16f][t-card] |
 
 ## Deployment and evaluation
 
@@ -75,12 +76,12 @@ commit. GLiNER's PII-language claim additionally uses model snapshot
 
 **Other detection tools**
 
-| Capability | scrubadub | GLiNER | OPF | LLM Guard |
-| --- | --- | --- | --- | --- |
-| Offline / CPU / GPU | Local Python detectors; optional NLP plugins [2.0.0][s-readme] | Local CPU/GPU model inference [0.2.29][g-readme] | Local CPU or GPU; browser/laptop use documented [0.1.0][o-readme] | Local scanners and optional API; CPU/GPU depends on chosen NER model [0.3.16][l-anon] |
-| Platforms and SDKs | Python package [2.0.0][s-readme] | Python package, model ecosystem and optional serving [0.2.29][g-readme] | Python package and CLI, CPU/GPU execution [0.1.0][o-readme] | Python package and API deployment [0.3.16][l-readme] |
-| Licence | Apache-2.0 [2.0.0][s-license] | Apache-2.0 library; cited PII model also Apache-2.0 [0.2.29][g-license], [model `1fcf13e`][g-model] | Apache-2.0 [0.1.0][o-license] | MIT; archived [0.3.16][l-license] |
-| Evaluation tooling | Accuracy and timing benchmark scripts [2.0.0][s-bench] | Model evaluation script and benchmark examples [0.2.29][g-eval] | `opf eval` supports typed/untyped annotated datasets; own-data fine-tuning [0.1.0][o-eval] | Scanner timing benchmark script [0.3.16][l-bench] |
+| Capability | scrubadub | GLiNER | OPF | LLM Guard | PII-Tracer |
+| --- | --- | --- | --- | --- | --- |
+| Offline / CPU / GPU | Local Python detectors; optional NLP plugins [2.0.0][s-readme] | Local CPU/GPU model inference [0.2.29][g-readme] | Local CPU or GPU; browser/laptop use documented [0.1.0][o-readme] | Local scanners and optional API; CPU/GPU depends on chosen NER model [0.3.16][l-anon] | Local model; loading runs the repository's own Python code (`trust_remote_code`), so pin the revision; CPU is what this comparison used [d25c16f][t-card] |
+| Platforms and SDKs | Python package [2.0.0][s-readme] | Python package, model ecosystem and optional serving [0.2.29][g-readme] | Python package and CLI, CPU/GPU execution [0.1.0][o-readme] | Python package and API deployment [0.3.16][l-readme] | Python package (`transformers>=5.2`) with vLLM, GGUF and MLX packagings [d25c16f][t-card] |
+| Licence | Apache-2.0 [2.0.0][s-license] | Apache-2.0 library; cited PII model also Apache-2.0 [0.2.29][g-license], [model `1fcf13e`][g-model] | Apache-2.0 [0.1.0][o-license] | MIT; archived [0.3.16][l-license] | MIT [d25c16f][t-license] |
+| Evaluation tooling | Accuracy and timing benchmark scripts [2.0.0][s-bench] | Model evaluation script and benchmark examples [0.2.29][g-eval] | `opf eval` supports typed/untyped annotated datasets; own-data fine-tuning [0.1.0][o-eval] | Scanner timing benchmark script [0.3.16][l-bench] | Introduced with the PII-TRACE benchmark (13,148 synthetic multi-turn dialogues in 13 languages in the paper). Only a 500-conversation English subset (MIT) is public, with a documented exact typed-span P/R/F1 protocol; the full set and the paper's scorer were not verified as public [paper][t-paper], [subset `1c3eb67`][t-data] |
 
 
 Presidio has more published country recognizers and a dedicated structured-data
@@ -97,6 +98,7 @@ manifest/session/restore contract.
 **Measured detection results:** [Gaze's competitor scorecards](../reference/benchmarks/competitors.md)
 report Presidio, GLiNER and OPF on the same Gaze benchmark corpus and scorer,
 with configurations, skipped-document accounting, false positives and latency.
+Perplexity PII-Tracer's scores on the same corpus are on [their own page](../reference/benchmarks/competitors-pii-tracer.md), and its rows on the [competitors' own benchmarks](../reference/benchmarks/README.md#competitors-own-benchmarks) sit beside the other tools'.
 They do **not** test competitor restore contracts and do not include DataFog,
 scrubadub or LLM Guard. The [benchmark methods](../reference/benchmarks/README.md)
 define the scored labels and generated layers. No general “best detector” claim
@@ -146,3 +148,7 @@ this revision, so no result from it is linked here.
 [l-restore]: https://github.com/protectai/llm-guard/blob/v0.3.16/docs/output_scanners/deanonymize.md
 [l-bench]: https://github.com/protectai/llm-guard/blob/v0.3.16/benchmarks/run.py
 [l-license]: https://github.com/protectai/llm-guard/blob/v0.3.16/LICENSE
+[t-card]: https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/README.md
+[t-license]: https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/LICENSE
+[t-paper]: https://arxiv.org/abs/2609.22200v1
+[t-data]: https://huggingface.co/datasets/perplexity-ai/PII-TRACE/blob/1c3eb67bbd43e8571b4433a9d3d76271f9970eb9/README.md

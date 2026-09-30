@@ -406,6 +406,25 @@
         "PASSWORD",
         "SECRET"
       ]
+    },
+    "pii-tracer": {
+      "private_date": [
+        "DATE"
+      ],
+      "private_address": [
+        "LOCATION"
+      ],
+      "private_url": [
+        "DOMAIN",
+        "IPADDRESS"
+      ],
+      "custom:secret": [
+        "SECRET",
+        "PASSWORD"
+      ],
+      "account_number": [
+        "ACCOUNTNUM"
+      ]
     }
   }
 }
