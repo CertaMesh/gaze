@@ -39,7 +39,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 
 
-GENERATOR_VERSION = 6
+GENERATOR_VERSION = 7
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -2207,9 +2207,450 @@ def check_address_cells(records: Sequence[Record]) -> None:
         raise LayerError(f"unit spellings with no layer D counterweight: {uncovered} (first in {positive[uncovered[0]]})")
 
 
+# --------------------------------------------------------------------------
+# Phone shapes (generator v7). Layer A writes phone numbers in shapes the
+# `+CC` and US/DE national rules miss: French dotted groups (`02.61.91.23.45`,
+# whose last four groups also parse as an IPv4 address), national digit groups
+# with no `+` behind a phone label (`Phone: 012 448 903`, `Mobile: 07 18 44
+# 90`), a trunk zero in parentheses (`+44 (0)20 7946 0412`) and the `00` /
+# `001-` international prefixes. The whole number is gold, prefix included.
+# Layer D writes each shape's benign neighbours with no phone anywhere: dotted
+# version strings, dates and OIDs, digit groups behind an order or invoice
+# label, a signed score with a parenthesised zero, and `00`- or `001-`-prefixed
+# product and document codes. A rule that drops the label or the shape's
+# precision pays there.
+#
+# Values come from documented fictional ranges (CONTRIBUTING.md, phone-number
+# fixtures): ARCEP's numbers reserved for fiction (02 61 91, 04 65 71 and
+# 01 99 00 xx xx), BNetzA's media-production numbers (Berlin 030 23125,
+# Frankfurt 069 90009, München 089 99998), Ofcom's drama range 020 7946 0xxx
+# and NANPA 555-01xx. The labelled national groups have no documented range, so
+# they are synthesized non-reachable: the Spanish nine-digit and the Danish
+# eight-digit plans never start with 0, and every generated value does.
+
+# The `tel_` prefix: layer R already has a `phone_de` surface.
+PHONE_SURFACES = ("tel_prose", "tel_log_kv", "tel_csv", "tel_tool_json")
+DOCS_PER_PHONE_CELL = {LAYER_IDENTIFIERS: 6, LAYER_LOOKALIKES: 4}
+
+
+class PhoneShape(str, Enum):
+    """The written phone shape a cell exercises."""
+    DOTTED = "dotted"
+    NATIONAL_3X3 = "national_3x3"
+    NATIONAL_2X4 = "national_2x4"
+    TRUNK_PARENS = "trunk_parens"
+    PREFIX_00 = "prefix_00"
+    PREFIX_001 = "prefix_001"
+
+
+# Bare national digit groups are a phone only behind a phone label; the same
+# digits unlabelled are an order or ticket number, and layer D writes them so.
+NATIONAL_PHONE_SHAPES = frozenset({PhoneShape.NATIONAL_3X3, PhoneShape.NATIONAL_2X4})
+
+
+def _two(rng: Rng) -> str:
+    """Two digits with no leading zero, so a dotted tail stays IPv4-shaped."""
+    return str(rng.between(10, 99))
+
+
+# shape -> partition -> (region, value maker). Each partition draws from its
+# own fictional blocks, so no value repeats across partitions.
+PHONE_VALUES: dict[PhoneShape, dict[str, tuple[tuple[str, Callable[[Rng], str]], ...]]] = {
+    PhoneShape.DOTTED: {
+        "dev": (("FR", lambda rng: f"02.61.91.{_two(rng)}.{_two(rng)}"),),
+        "test": (("FR", lambda rng: f"04.65.71.{_two(rng)}.{_two(rng)}"),),
+    },
+    PhoneShape.NATIONAL_3X3: {
+        "dev": (("ES", lambda rng: f"0{rng.between(10, 49)} {rng.digits(3)} {rng.digits(3)}"),),
+        "test": (("ES", lambda rng: f"0{rng.between(50, 99)} {rng.digits(3)} {rng.digits(3)}"),),
+    },
+    PhoneShape.NATIONAL_2X4: {
+        "dev": (("DK", lambda rng: f"0{rng.between(1, 4)} {rng.digits(2)} {rng.digits(2)} {rng.digits(2)}"),),
+        "test": (("DK", lambda rng: f"0{rng.between(5, 9)} {rng.digits(2)} {rng.digits(2)} {rng.digits(2)}"),),
+    },
+    PhoneShape.TRUNK_PARENS: {
+        "dev": (("DE", lambda rng: f"+49 (0)30 23125 {rng.digits(3)}"),
+                ("FR", lambda rng: f"+33 (0)1 99 00 {rng.digits(2)} {rng.digits(2)}")),
+        "test": (("GB", lambda rng: f"+44 (0)20 7946 0{rng.digits(3)}"),
+                 ("DE", lambda rng: f"+49 (0)69 90009 {rng.digits(3)}")),
+    },
+    PhoneShape.PREFIX_00: {
+        "dev": (("DE", lambda rng: f"0049 30 23125{rng.digits(3)}"),
+                ("FR", lambda rng: f"0033 1 99 00 {rng.digits(2)} {rng.digits(2)}")),
+        "test": (("GB", lambda rng: f"0044 20 7946 0{rng.digits(3)}"),
+                 ("DE", lambda rng: f"0049 89 99998 {rng.digits(3)}")),
+    },
+    PhoneShape.PREFIX_001: {
+        "dev": (("US", lambda rng: f"001-{rng.choice(US_AREA_CODES['dev'])}-555-01{rng.digits(2)}"),),
+        "test": (("US", lambda rng: f"001 {rng.choice(US_AREA_CODES['test'])} 555 01{rng.digits(2)}"),),
+    },
+}
+# Every gold value of a shape matches its pattern in full: a cell cannot
+# drift into a shape another rule already covers.
+PHONE_SHAPE_PATTERNS: dict[PhoneShape, str] = {
+    PhoneShape.DOTTED: r"0[1-9](?:\.\d\d){4}",
+    PhoneShape.NATIONAL_3X3: r"0\d\d \d{3} \d{3}",
+    PhoneShape.NATIONAL_2X4: r"0\d(?: \d\d){3}",
+    PhoneShape.TRUNK_PARENS: r"\+\d{2} \(0\)\d{1,2}(?: \d{2,5}){2,4}",
+    PhoneShape.PREFIX_00: r"00(?:33|44|49) \d{1,2}(?: \d{2,8}){1,4}",
+    PhoneShape.PREFIX_001: r"001[- ]\d{3}[- ]555[- ]01\d\d",
+}
+# The over-broad rule for each shape: no label, no country code, no
+# fictional-block anchor. Every A value matches it, and so does at least one
+# layer D decoy of the shape, so shipping it costs false-positive bytes. The
+# committed mutant policy carries the same patterns.
+PHONE_BROAD_PATTERNS: dict[PhoneShape, str] = {
+    PhoneShape.DOTTED: r"\b\d{1,2}(?:\.\d{1,4}){2,6}\b",
+    PhoneShape.NATIONAL_3X3: r"\b\d{2,3} \d{3} \d{3}\b",
+    PhoneShape.NATIONAL_2X4: r"\b\d{2}(?: \d{2}){3}\b",
+    PhoneShape.TRUNK_PARENS: r"\+\d{1,3} ?\(0\)",
+    PhoneShape.PREFIX_00: r"\b00\d{2}[ -]\d{1,4}[ -]\d{2,5}",
+    PhoneShape.PREFIX_001: r"\b001[- ]\d{3}[- ]\d{3}[- ]\d{3,4}\b",
+}
+# The ordinary rule a detector would write for each shape: its exact group
+# widths and separators, with no label, numbering-plan or context check. Every
+# A value of the shape matches it, and so does at least one layer D twin
+# written in the same shape, so it pays false-positive bytes as well. The
+# `(0)` trunk after `+CC` has no benign writing; its counterweight is the
+# broad pattern and the phone parser. The committed narrow mutant policy
+# carries the same patterns.
+PHONE_NARROW_PATTERNS: dict[PhoneShape, str] = {
+    PhoneShape.DOTTED: r"\b0\d(?:\.\d{2}){4}\b",
+    PhoneShape.NATIONAL_3X3: r"\b\d{3} \d{3} \d{3}\b",
+    PhoneShape.NATIONAL_2X4: r"\b\d{2}(?: \d{2}){3}\b",
+    PhoneShape.PREFIX_00: r"\b00\d{2} \d{1,2}(?: \d{2,8}){1,4}\b",
+    PhoneShape.PREFIX_001: r"\b001[- ]\d{3}[- ]\d{3}[- ]\d{4}\b",
+}
+# E.164 spare country codes: a `00` code behind one reaches no phone.
+UNASSIGNED_COUNTRY_CODES = {"dev": "28", "test": "89"}
+# A benign context that makes dotted pairs a version or a part number.
+DOTTED_BENIGN_CONTEXT = r"(?i)(?:\b|_)(?:firmware|build|version|release|revision|part|catalog|model)(?:\b|_)"
+# A phone label, in any cell language. National cells carry one before the
+# value; no layer D twin carries one anywhere.
+PHONE_CUE = (
+    r"(?i)\b(?:phone|mobile|tel|tél|telephone|téléphone|telefon|telefono|teléfono|mobil|msisdn|call|dial|ring|"
+    r"rappeler|joindre|appelez|anrufen)\b"
+)
+
+
+@dataclass(frozen=True)
+class PhoneCell:
+    """One layer A cell: {V} is the whole phone number, gold."""
+    family: str
+    shape: PhoneShape
+    surface: str
+    language: str
+    templates: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class PhoneTwin:
+    """One layer D cell: {X} is a benign value of the shape's broad pattern."""
+    family: str
+    shape: PhoneShape
+    surface: str
+    language: str
+    region: str
+    templates: Mapping[str, str]
+    make: Callable[[Rng, str], str]
+
+
+def _phone_cell(family: str, shape: PhoneShape, surface: str, language: str, dev: str, test: str) -> PhoneCell:
+    return PhoneCell(family, shape, f"tel_{surface}", language, {"dev": dev, "test": test})
+
+
+def _phone_twin(family: str, shape: PhoneShape, surface: str, language: str, region: str, dev: str, test: str,
+                make: Callable[[Rng, str], str]) -> PhoneTwin:
+    return PhoneTwin(family, shape, f"tel_{surface}", language, region, {"dev": dev, "test": test}, make)
+
+
+def _dotted_version(rng: Rng, partition: str) -> str:
+    """Five dotted groups whose first four parse as a public IPv4 address."""
+    major = {"dev": (1, 4), "test": (5, 9)}[partition]
+    return f"{rng.between(*major)}.{_two(rng)}.{_two(rng)}.{_two(rng)}.{_two(rng)}"
+
+
+def _dotted_date(rng: Rng, partition: str) -> str:
+    year = {"dev": 2025, "test": 2026}[partition]
+    return f"{rng.between(1, 28):02d}.{rng.between(1, 12):02d}.{year}"
+
+
+def _oid(rng: Rng, partition: str) -> str:
+    arc = {"dev": "1.3.6.1.4.1", "test": "2.16.840.1"}[partition]
+    return f"{arc}.{rng.between(1000, 60000)}.{rng.between(1, 9)}"
+
+
+def _order_3x3(rng: Rng, partition: str) -> str:
+    low, high = {"dev": (10, 49), "test": (50, 99)}[partition]
+    return f"0{rng.between(low, high)} {rng.digits(3)} {rng.digits(3)}"
+
+
+def _amount_3x3(rng: Rng, partition: str) -> str:
+    return f"{rng.between(100, 999)} {rng.digits(3)} {rng.digits(3)}"
+
+
+def _ticket_2x4(rng: Rng, partition: str) -> str:
+    first = {"dev": (1, 4), "test": (5, 9)}[partition]
+    return f"0{rng.between(*first)} {rng.digits(2)} {rng.digits(2)} {rng.digits(2)}"
+
+
+def _score_2x4(rng: Rng, partition: str) -> str:
+    return " ".join(str(rng.between(10, 99)) for _ in range(4))
+
+
+def _signed_zero(rng: Rng, partition: str) -> str:
+    return f"+{rng.between(10, 49) if partition == 'dev' else rng.between(50, 99)} (0)"
+
+
+def _product_00(rng: Rng, partition: str) -> str:
+    country = {"dev": "49", "test": "44"}[partition]
+    return f"00{country}-{rng.digits(4)}-{rng.digits(4)}"
+
+
+def _document_001(rng: Rng, partition: str) -> str:
+    return f"001-{rng.digits(3)}-{rng.digits(3)}-{rng.digits(3)}"
+
+
+def _dotted_part(rng: Rng, partition: str) -> str:
+    """Dotted pairs in the phone's exact shape, a firmware or part number.
+
+    Every `0X.XX.XX.XX.XX` is a possible French number, so even a benign value
+    comes from an ARCEP fiction block and can reach no one."""
+    block = {"dev": "01.99.00", "test": "02.61.91"}[partition]
+    return f"{block}.{rng.digits(2)}.{rng.digits(2)}"
+
+
+def _ticket_00(rng: Rng, partition: str) -> str:
+    """Space-grouped like a `00` phone, behind a spare country code."""
+    return f"00{UNASSIGNED_COUNTRY_CODES[partition]} {rng.between(1, 99)} {rng.digits(4)} {rng.digits(4)}"
+
+
+def _item_001(rng: Rng, partition: str, separator: str | None = None) -> str:
+    """Grouped like a `001` NANP phone; an exchange starting 0 or 1 is never assigned.
+
+    Written with each partition's own positive separator unless `separator` is given."""
+    separator = separator or {"dev": "-", "test": " "}[partition]
+    groups = (str(rng.between(200, 999)), f"{rng.between(0, 1)}{rng.digits(2)}", rng.digits(4))
+    return separator.join(("001", *groups))
+
+
+def _item_001_spaced(rng: Rng, partition: str) -> str:
+    """A space-separated `001` item code in both partitions."""
+    return _item_001(rng, partition, " ")
+
+
+def phone_reading(value: str, before: str) -> PhoneShape | None:
+    """The phone shape `value` reads as, or None when it cannot be a phone:
+    a lexical match alone is not a phone reading."""
+    import re
+
+    if re.fullmatch(PHONE_SHAPE_PATTERNS[PhoneShape.TRUNK_PARENS], value):
+        return PhoneShape.TRUNK_PARENS
+    prefixed = re.fullmatch(r"00(\d{2}) \d{1,2}(?: \d{2,8}){1,4}", value)
+    if prefixed and prefixed.group(1) not in UNASSIGNED_COUNTRY_CODES.values():
+        return PhoneShape.PREFIX_00
+    nanp = re.fullmatch(r"001[- ](\d)\d\d[- ](\d)\d\d[- ]\d{4}", value)
+    if nanp and nanp.group(1) not in "01" and nanp.group(2) not in "01":
+        return PhoneShape.PREFIX_001
+    if re.fullmatch(PHONE_SHAPE_PATTERNS[PhoneShape.DOTTED], value) and not re.search(DOTTED_BENIGN_CONTEXT, before):
+        return PhoneShape.DOTTED
+    return None
+
+
+P_ = PhoneShape
+PHONE_CELLS = (
+    _phone_cell("phone_dotted_prose", P_.DOTTED, "prose", "fr",
+                "Tél. : {V}, merci de rappeler avant midi.",
+                "Vous pouvez me joindre au {V} demain matin."),
+    _phone_cell("phone_dotted_signature", P_.DOTTED, "prose", "fr",
+                "Cordialement,\nService client\n{V}",
+                "Bien à vous,\nL'équipe support\n{V}\n"),
+    _phone_cell("phone_dotted_log", P_.DOTTED, "log_kv", "fr",
+                "level=info event=callback.request phone={V} status=queued",
+                'svc=crm op=contact tel="{V}" result=ok'),
+    _phone_cell("phone_dotted_csv", P_.DOTTED, "csv", "fr",
+                "id,service,telephone\n3,support,{V}\n",
+                "ref,tel,statut\n12,{V},actif\n"),
+    _phone_cell("phone_national_3x3_prose", P_.NATIONAL_3X3, "prose", "en",
+                "Phone: {V} (evenings only).",
+                "Please note my new mobile, {V}, for the delivery driver."),
+    _phone_cell("phone_national_3x3_json", P_.NATIONAL_3X3, "tool_json", "en",
+                '{"contact":{"phone":"{V}","preferred":true}}',
+                '{"customer":{"mobile":"{V}","channel":"sms"}}'),
+    _phone_cell("phone_national_2x4_prose", P_.NATIONAL_2X4, "prose", "en",
+                "Mobile: {V}",
+                "Best reached by phone on {V} after six."),
+    _phone_cell("phone_national_2x4_log", P_.NATIONAL_2X4, "log_kv", "en",
+                'level=info event=profile.update mobile="{V}" status=ok',
+                'svc=support op=callback phone="{V}" result=queued'),
+    _phone_cell("phone_national_2x4_csv", P_.NATIONAL_2X4, "csv", "en",
+                "id,mobile,status\n4,{V},active\n",
+                "record_no,phone,state\n9,{V},pending\n"),
+    _phone_cell("phone_trunk_parens_prose", P_.TRUNK_PARENS, "prose", "en",
+                "Please call {V} if the courier is late.",
+                "Our office line is {V}, open weekdays."),
+    _phone_cell("phone_trunk_parens_json", P_.TRUNK_PARENS, "tool_json", "en",
+                '{"office":{"phone":"{V}","hours":"9-17"}}',
+                '{"contact":{"tel":"{V}"},"verified":false}'),
+    _phone_cell("phone_prefix_00_prose", P_.PREFIX_00, "prose", "en",
+                "From abroad, dial {V} and ask for billing.",
+                "Call {V} from outside the country."),
+    _phone_cell("phone_prefix_00_csv", P_.PREFIX_00, "csv", "en",
+                "id,phone,note\n2,{V},office\n",
+                "record_no,tel,source\n5,{V},import\n"),
+    _phone_cell("phone_prefix_001_prose", P_.PREFIX_001, "prose", "en",
+                "From Europe, dial {V} for the help desk.",
+                "Call {V} from abroad, the line is free."),
+    _phone_cell("phone_prefix_001_log", P_.PREFIX_001, "log_kv", "en",
+                "level=info event=callback.request phone={V} status=queued",
+                'svc=crm op=dial msisdn="{V}" result=ok'),
+)
+# Layer D. {X} is benign and matches the shape's broad pattern; no phone,
+# no phone label anywhere.
+PHONE_TWINS = (
+    _phone_twin("phone_twin_dotted_version", P_.DOTTED, "prose", "en", "US",
+                "Firmware {X} fixes the boot loop.", "Upgrade the agent to {X} before Friday.",
+                _dotted_version),
+    _phone_twin("phone_twin_dotted_version_log", P_.DOTTED, "log_kv", "en", "US",
+                'level=info event=deploy build="{X}" status=ok', "svc=ci op=release version={X} result=green",
+                _dotted_version),
+    _phone_twin("phone_twin_dotted_date_csv", P_.DOTTED, "csv", "de", "DE",
+                "id,datum,status\n3,{X},offen\n", "nr,faellig,stand\n8,{X},erledigt\n",
+                _dotted_date),
+    _phone_twin("phone_twin_oid_json", P_.DOTTED, "tool_json", "en", "US",
+                '{"certificate":{"policyOid":"{X}"}}', '{"snmp":{"oid":"{X}","type":"gauge"}}',
+                _oid),
+    _phone_twin("phone_twin_order_3x3", P_.NATIONAL_3X3, "prose", "en", "ES",
+                "Order {X} shipped today.", "Invoice {X} is paid in full.",
+                _order_3x3),
+    _phone_twin("phone_twin_amount_3x3_json", P_.NATIONAL_3X3, "tool_json", "en", "ES",
+                '{"invoice":{"total":"EUR {X}","status":"open"}}', '{"budget":{"amount":"{X}","currency":"EUR"}}',
+                _amount_3x3),
+    _phone_twin("phone_twin_ticket_2x4", P_.NATIONAL_2X4, "log_kv", "en", "DK",
+                'level=info event=ticket.close ref="{X}" status=done', 'svc=support op=merge case="{X}" result=ok',
+                _ticket_2x4),
+    _phone_twin("phone_twin_scores_2x4_csv", P_.NATIONAL_2X4, "csv", "en", "DK",
+                "round,scores\n1,{X}\n", "heat,times\n2,{X}\n",
+                _score_2x4),
+    _phone_twin("phone_twin_signed_zero", P_.TRUNK_PARENS, "prose", "en", "GB",
+                "The home side finished {X} on goal difference.", "Stock moved {X} after the audit.",
+                _signed_zero),
+    _phone_twin("phone_twin_product_00", P_.PREFIX_00, "prose", "en", "DE",
+                "Reorder part {X} before the line stops.", "The spare kit {X} is out of stock.",
+                _product_00),
+    _phone_twin("phone_twin_product_00_csv", P_.PREFIX_00, "csv", "en", "GB",
+                "sku,qty\n{X},4\n", "part_no,stock\n{X},12\n",
+                _product_00),
+    _phone_twin("phone_twin_document_001", P_.PREFIX_001, "tool_json", "en", "US",
+                '{"document":{"number":"{X}","type":"invoice"}}', '{"filing":{"ref":"{X}","status":"draft"}}',
+                _document_001),
+    _phone_twin("phone_twin_dotted_firmware", P_.DOTTED, "prose", "en", "US",
+                "Firmware {X} fixes the fan curve.", "Flash build {X} before the release.",
+                _dotted_part),
+    _phone_twin("phone_twin_dotted_part_csv", P_.DOTTED, "csv", "en", "US",
+                "part,qty\n{X},3\n", "model,stock\n{X},9\n",
+                _dotted_part),
+    _phone_twin("phone_twin_ticket_00", P_.PREFIX_00, "prose", "en", "GB",
+                "Ticket {X} is closed.", "Reorder kit {X} today.",
+                _ticket_00),
+    _phone_twin("phone_twin_item_001", P_.PREFIX_001, "log_kv", "en", "US",
+                'svc=warehouse op=pick item="{X}" result=ok', 'level=info event=rma.open case="{X}" status=new',
+                _item_001),
+    _phone_twin("phone_twin_item_001_spaced", P_.PREFIX_001, "csv", "en", "US",
+                "sku,bin\n{X},A4\n", "item,shelf\n{X},C2\n",
+                _item_001_spaced),
+)
+del P_
+
+
+def _phone_records(cells: Sequence[PhoneCell | PhoneTwin], partition: str, layer: str) -> list[Record]:
+    seed = PARTITION_SEEDS[partition]
+    records: list[Record] = []
+    for cell in cells:
+        rng = Rng(seed, f"{layer}/phone/{cell.family}")
+        for index in range(DOCS_PER_PHONE_CELL[layer]):
+            if isinstance(cell, PhoneCell):
+                makers = PHONE_VALUES[cell.shape][partition]
+                region, make = makers[index % len(makers)]
+                fields = {"V": (make(rng), "TELEPHONENUM")}
+            else:
+                region = cell.region
+                fields = {"X": (cell.make(rng, partition), DECOY_PREFIX + "benign")}
+            text, gold, decoys = _fill_with_decoys(cell.templates[partition], fields)
+            records.append(Record(
+                uid=f"agentic-{partition}-{layer}-{cell.family}-{index:03d}-{cell.surface}",
+                partition=partition, layer=layer, family=cell.family, surface=cell.surface,
+                validity=UNCHECKED if layer == LAYER_IDENTIFIERS else BENIGN,
+                group=f"{partition}-{layer}-{cell.family}-{index:03d}",
+                template=f"phone/{cell.family}/{partition}",
+                language=cell.language, region=region,
+                text=text, gold=gold, decoys=decoys,
+            ))
+    return records
+
+
+def check_phone_cells(records: Sequence[Record]) -> None:
+    """Fail closed unless every A phone is whole and in its shape, every
+    national one follows a phone label, and every shape A scores has a layer D
+    twin its broad pattern pays for, with no phone label in any twin and no
+    twin value with a phone reading; every narrow rule must pay in layer D too."""
+    import re
+
+    cells = {cell.family: cell for cell in PHONE_CELLS}
+    twins = {twin.family: twin for twin in PHONE_TWINS}
+    unused = sorted(t.family for t in PHONE_TWINS if t.shape not in {c.shape for c in PHONE_CELLS})
+    if unused:
+        raise LayerError(f"layer D phone twins no layer A cell uses: {unused}")
+    scored: dict[PhoneShape, str] = {}
+    paid: set[PhoneShape] = set()
+    narrow_paid: set[PhoneShape] = set()
+    for record in records:
+        if not record.surface.startswith("tel_"):
+            continue
+        if record.layer == LAYER_IDENTIFIERS:
+            cell = cells[record.family]
+            if record.decoys or len(record.gold) != 1 or record.gold[0].label != "TELEPHONENUM":
+                raise LayerError(f"{record.uid}: expected exactly one TELEPHONENUM gold and no decoy")
+            value = record.gold[0].value
+            if not re.fullmatch(PHONE_SHAPE_PATTERNS[cell.shape], value):
+                raise LayerError(f"{record.uid}: {value!r} is not a {cell.shape.value} phone")
+            for kind, patterns in (("broad", PHONE_BROAD_PATTERNS), ("narrow", PHONE_NARROW_PATTERNS)):
+                if cell.shape in patterns and not re.search(patterns[cell.shape], value):
+                    raise LayerError(f"{record.uid}: the {cell.shape.value} {kind} pattern misses {value!r}")
+            before = record.text.encode("utf-8")[: record.gold[0].start].decode("utf-8")
+            if cell.shape in NATIONAL_PHONE_SHAPES and not re.search(PHONE_CUE, before):
+                raise LayerError(f"{record.uid}: a national {cell.shape.value} phone has no phone label before it")
+            scored.setdefault(cell.shape, record.uid)
+        else:
+            twin = twins[record.family]
+            if record.gold:
+                raise LayerError(f"{record.uid}: a layer D phone twin carries gold")
+            if len(record.decoys) != 1:
+                raise LayerError(f"{record.uid}: expected one benign decoy")
+            if re.search(PHONE_CUE, record.text):
+                raise LayerError(f"{record.uid}: a layer D phone twin carries a phone label")
+            decoy = record.decoys[0]
+            before = record.text.encode("utf-8")[: decoy.start].decode("utf-8")
+            reading = phone_reading(decoy.value, before)
+            if reading is not None:
+                raise LayerError(f"{record.uid}: a layer D decoy reads as a {reading.value} phone")
+            if not re.search(PHONE_BROAD_PATTERNS[twin.shape], decoy.value):
+                raise LayerError(f"{record.uid}: the {twin.shape.value} broad pattern misses the decoy")
+            paid.add(twin.shape)
+            narrow = PHONE_NARROW_PATTERNS.get(twin.shape)
+            if narrow and re.search(narrow, decoy.value):
+                narrow_paid.add(twin.shape)
+    uncovered = sorted(shape.value for shape in set(scored) - paid)
+    if uncovered:
+        raise LayerError(f"phone shapes with no layer D counterweight: {uncovered}")
+    free = sorted(shape.value for shape in set(scored) & set(PHONE_NARROW_PATTERNS) - narrow_paid)
+    if free:
+        raise LayerError(f"phone shapes whose narrow rule pays nothing in layer D: {free}")
+
+
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one.
-GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_"}
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_"}
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
@@ -2224,6 +2665,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 HISTORICAL_CONTRACTS = {
     4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json"),
     5: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v5.json"),
+    6: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v6.json"),
 }
 
 
@@ -2460,9 +2902,12 @@ def generate(partition: str) -> list[Record]:
         + _labelled_lookalike_records(LOOKALIKE_TWINS, partition, LAYER_LOOKALIKES)
         + _address_records(ADDRESS_CELLS, partition, LAYER_IDENTIFIERS)
         + _address_records(ADDRESS_TWINS, partition, LAYER_LOOKALIKES)
+        + _phone_records(PHONE_CELLS, partition, LAYER_IDENTIFIERS)
+        + _phone_records(PHONE_TWINS, partition, LAYER_LOOKALIKES)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
+    check_phone_cells(records)
     for record in records:
         encoded = record.text.encode("utf-8")
         for gold in record.gold:
