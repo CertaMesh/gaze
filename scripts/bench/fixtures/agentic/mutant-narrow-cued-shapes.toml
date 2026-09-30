@@ -1,0 +1,69 @@
+# Deliberately narrow rules for the cued-shape counterweight check. Each is
+# the rule a detector would plausibly write for one shape: a person word before
+# the age wording, `at the age of` before an age with no subject, a few words
+# between the date-of-birth question and the date, the card issuer prefix and
+# length with no cue, a postal word within 40 non-digit characters. Appended to
+# a policy, they must lower layer A's leak on the `cue_` cells AND raise layer
+# D's false-positive bytes on the same-shape twins. The patterns equal
+# CUE_NARROW_PATTERNS in agentic_layers.py (a test pins them). Never ship these
+# rules.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_age_turned"
+pattern = '(?i)\b(?:i|me|my|he|she|his|her|we|they|patient|customer|client|mother|father|mom|dad|son|daughter|wife|husband|grandmother|grandfather|woman|man|female|male|ich|er|sie|mein|meine|meiner|meinem|mutter|vater|tochter|sohn|oma|opa)\b[^.\n]{0,40}?\b(?:turned|turns)\s+\d{1,3}\b|\b(?:i|me|my|he|she|his|her|we|they|patient|customer|client|mother|father|mom|dad|son|daughter|wife|husband|grandmother|grandfather|woman|man|female|male|ich|er|sie|mein|meine|meiner|meinem|mutter|vater|tochter|sohn|oma|opa)\b[^.\n]{0,40}?\b\d{1,3}\s+geworden\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_age_at_the_age_of"
+pattern = '(?i)\b(?:at the age of|im alter von) (?:[1-9]\d?|1[01]\d)\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_age_yo"
+pattern = '(?i)\b(?:i|me|my|he|she|his|her|we|they|patient|customer|client|mother|father|mom|dad|son|daughter|wife|husband|grandmother|grandfather|woman|man|female|male|ich|er|sie|mein|meine|meiner|meinem|mutter|vater|tochter|sohn|oma|opa)\b[^.\n]{0,40}?\b\d{1,3}\s?y/o\b|\b\d{1,3}\s?y/o\s+(?:fe)?male\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_age_year_old_gender"
+pattern = '(?i)\b\d{1,3}[- ]years?[- ]old[- ](?:fe)?male\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_dob_sentence_break"
+pattern = '(?i)(?:date\s+of\s+birth|\bdob\b|geburtsdatum)\s*[.?!]\s+(?:\S+\s+){0,3}?\d{1,4}[./-]\d{1,2}[./-]\d{2,4}'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_card_short_compact"
+pattern = '\b(?:5[0678]|6\d)\d{10,13}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_card_short_grouped"
+pattern = '\b(?:5[0678]|6\d)\d\d \d{4} \d{4}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_zip_se"
+pattern = '(?i)(?:zip(?:[\x20_-]?code)?|post(?:al)?[\x20_-]?code|postcode|postnummer|postleitzahl|plz|cep|kod\x20pocztowy|póstnúmer)[^\d]{0,40}?\b[1-9]\d\d \d\d\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_zip_pl"
+pattern = '(?i)(?:zip(?:[\x20_-]?code)?|post(?:al)?[\x20_-]?code|postcode|postnummer|postleitzahl|plz|cep|kod\x20pocztowy|póstnúmer)[^\d]{0,40}?\b\d\d-\d{3}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_zip_six"
+pattern = '(?i)(?:zip(?:[\x20_-]?code)?|post(?:al)?[\x20_-]?code|postcode|postnummer|postleitzahl|plz|cep|kod\x20pocztowy|póstnúmer)[^\d]{0,40}?\b[1-9]\d{5}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_zip_br"
+pattern = '(?i)(?:zip(?:[\x20_-]?code)?|post(?:al)?[\x20_-]?code|postcode|postnummer|postleitzahl|plz|cep|kod\x20pocztowy|póstnúmer)[^\d]{0,40}?\b\d{5}-\d{3}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_narrow_zip_three"
+pattern = '(?i)(?:zip(?:[\x20_-]?code)?|post(?:al)?[\x20_-]?code|postcode|postnummer|postleitzahl|plz|cep|kod\x20pocztowy|póstnúmer)[^\d]{0,40}?\b[1-9]\d\d\b'
+class = "custom:mutant_cue"

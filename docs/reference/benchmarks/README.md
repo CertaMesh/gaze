@@ -1187,8 +1187,20 @@ model:
   prose, log fields, CSV columns and tool JSON. The whole number is gold,
   prefix included. Layer D adds each shape's benign neighbours with no phone
   label anywhere. See [Phone shapes](#phone-shapes) below. The v6 documents
-  remain byte identical within each partition; the generator and both
-  partition hashes are pinned at v7.
+  remain byte identical within each partition.
+- **Cued ages, birth dates, short cards and postcodes (generator v8):** layer A
+  adds values that only their wording makes personal: a person's age after
+  `turned`, `at the age of` or `im Alter von`, before `geworden`, `y/o` or
+  `year old female`; a date of birth given one sentence after the question
+  (`date of birth? It's ...`); a 12- to 15-digit Maestro-length card number
+  right after a card label; and postcodes in short or foreign shapes
+  (`NNN NN`, `NN-NNN`, six digits, `NNNNN-NNN`, three digits) right after a
+  postal label, in prose, log fields, CSV columns and tool JSON. The value
+  alone is gold. Layer D adds the same wording and digit shapes where the text
+  says they are not personal. See [Cued ages, birth dates, short cards and
+  postcodes](#cued-ages-birth-dates-short-cards-and-postcodes) below. The v7
+  documents remain byte identical within each partition; the generator and
+  both partition hashes are pinned at v8.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1415,8 +1427,82 @@ twins, mostly through the IPv4 rule on dotted runs. Under the full
 put 274 false-positive bytes on the twins.
 
 The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
-do not include these cells yet; the note under that table says, row by row,
-where each one's v7 re-measure stands.
+are measured on generator v8, so they include these cells.
+
+#### Cued ages, birth dates, short cards and postcodes
+
+Some values are personal only because of the words around them. `47` is an
+age in `I just turned 47` and nothing in `the bridge turned 47`; `3/11/1987`
+is a birth date when it answers `date of birth?` one sentence earlier; a
+12-digit number is a Maestro card after `card number` and an order number
+after `Order`; `53-320` is a Polish postcode after `PLZ` and an error code
+after `error`. The shipped rules miss all of these: `age.cue` needs a labelled
+field, a copula or a person noun right before the number, `birth_date.cue`
+stops at the sentence break, `card.cued` accepts 16 to 19 digits (14 to 15
+starting with 3), and `postal.cued_four_digit` takes four digits only. Layer A
+(`CueCell` in `agentic_layers.py`) scores the number, date, card or postcode
+alone under `AGE`, `DATEOFBIRTH`, `CREDITCARDNUMBER` or `ZIPCODE`.
+
+| Layer A cells (gold, gated) | Layer D twins (not personal) |
+| --- | --- |
+| A person's age after `turned` or before `geworden`, in prose and a log note | an object's age after `turned` or before `geworden`, a person who turned 45 or 90 degrees |
+| after `at the age of` or `im Alter von`, in prose and a JSON note | a felled oak's, a bottled whisky's or a wine's age, a firm or a bridge `, at the age of N,` |
+| before `y/o`, in prose and a CSV note | `My 12 y/o laptop` |
+| before `year old female` / `year old male`, in prose and a JSON note | a year-old codebase or building, a year-old female cat or male horse |
+| a date given as the answer one sentence after a date-of-birth question (`It's`, `It is`, `Es ist der`, `Das ist der`), in prose and a log transcript | a date after an unrelated sentence that follows the question (`Last login was ...`, `The form closes ...`) |
+| 12 to 15 digits with a Maestro issuer prefix, compact or grouped 4-4-4, right after a card label, a card log key, a card JSON key or under a card column | the same digits after an order, tracking, transaction or reference label, 13-digit millisecond timestamps, a card terminal or reader serial |
+| `NNN NN`, `NN-NNN`, six digits, `NNNNN-NNN` and three digits right after `ZIP`, `postcode`, `PLZ`, `Postleitzahl`, `CEP`, a postal JSON key or under a postal column | the same shapes after batch, seat, room, gate, error, part, invoice or build labels, and one clause after a postal word (`Postcode lookup failed for batch ...`, `ZIP upload finished in ... seconds`) |
+
+The generator fails closed unless every layer A value reads as personal under
+`cue_reading`, a reference reading written into the harness (a person word in
+the sentence and no unit or object noun after the age; the sentence-break
+copula; a card or postal label directly before the value or as its CSV
+column's header), and no layer D value does. A near-cue twin must carry its
+card or postal word, and every other card or postal twin none; the three-digit shape has only its near-cue twin, since
+three-digit room, seat and version numbers already fill layer D. Card cells
+alternate Luhn-valid and Luhn-failing values; contract v2 credits the failing
+ones as it does every card, and the card twins join the card credit guard, so
+a false-positive rise on them fails the gate outright. That guard applies to
+scorecards measured on generator v8 or later. Ages are split between the
+partitions (19 to 56 dev, 57 to 94 test) but cannot avoid the dev partition's
+one- and two-digit house numbers. Each A cell has 6 documents per partition
+and each twin 4: 25 A cells (+150 documents, +5.6 %) and 25 D twins (+100
+documents, +9.7 %).
+
+Each shape has an over-broad rule (`CUE_BROAD_PATTERNS`: the wording or the
+digit shape alone) and a narrow one (`CUE_NARROW_PATTERNS`: a person word
+anywhere before `turned` or `y/o`, `at the age of` before a person-range age
+with no subject check, `year old female` with no check for an animal, any three
+words between the date-of-birth question and the date, the card issuer prefix
+and length with no cue, a postal word within 40 non-digit characters). Every A
+value of a shape matches both, every twin of the shape matches its broad rule,
+and every narrow rule reaches at least one same-shape twin; tests check this
+and pin how many layer D documents each narrow rule reaches. Extending `card.cued`'s
+32-character window to these lengths would reach the card-terminal twins; a
+test pins that too. The patterns are committed as
+[`mutant-broad-cued-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-broad-cued-shapes.toml)
+and
+[`mutant-narrow-cued-shapes.toml`](../../../scripts/bench/fixtures/agentic/mutant-narrow-cued-shapes.toml).
+Appended to the setup policy without its NER and Nym sections (`d675b3bb`), on
+generator v8 at `9ccc898c`, the broad mutant lowered the new cells' layer A
+leak from 861 to 0 bytes and raised their twins' layer D false positives from
+40 to 1,279 bytes; the narrow mutant also lowered the leak to 0 and raised the
+false positives to 1,341 bytes. Every shape's twins paid under both, the
+narrow rules included (`at the age of` 0 to 188, `turned` 0 to 48, `y/o` 0 to
+36, `year old female` 0 to 64, the sentence-break date 0 to 146, compact and
+grouped cards 0 to 103 and 0 to 112, the five postcode shapes to 84 to 156
+each, from 0 or, for the Brazilian shape, 40).
+Rules only (`rule-floor-extended`), main leaked 891 of the 1,003 new gold bytes
+and put no false positives on the twins; with the setup policy's rules it
+leaked 861 and put 40 on the Brazilian-shape twins (the five-digit US and
+German rules take their first five digits). Under the full `gaze setup` policy
+(NER and Nym), main leaked 781 of those 1,003 bytes and put 88 false-positive
+bytes on the twins. Every age, sentence-break date, grouped card, Luhn-failing
+or 12-digit compact card and short postcode leaked; the Luhn-valid 13- to
+15-digit cards were already protected by `card.structural`.
+
+The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
+are measured on generator v8, so they include these cells.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split
@@ -1600,44 +1686,44 @@ Both options are off by default.
 
 ### Measured adjacency layer history
 
-The release rows below use generator v4's test partition and the setup policy.
-The older `agentic_layers` aggregates embedded in
-[`release-history.json`](release-history.json) use generator corpus `c751da0b…`
-and are retained as historical data. They do not feed this A/D/R table; its
-measurements come from the [v4 ledger](agentic-adjacency-v4-history.json) on
-corpus `387a35ac…`.
+The release rows below use generator v8's test partition and the setup policy,
+so they include the v5 to v8 cells (labelled lookalikes, address blocks, phone
+shapes, cued ages, birth dates, short cards and postcodes). The table is
+rendered from the [v8 ledger](agentic-adjacency-v8-history.json). The earlier
+[v4 ledger](agentic-adjacency-v4-history.json) on corpus `387a35ac…` and the
+older `agentic_layers` aggregates embedded in
+[`release-history.json`](release-history.json) (corpus `c751da0b…`) are
+retained as historical data and do not feed this table.
 
-Record the three past-release `agentic_layers.py measure` outputs with
+Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
-committed ledger. Do not edit the rows by hand.
+committed ledger. Do not edit the rows by hand. The renderer pins the
+generator version, so a later generator leaves these rows bound to v8 until
+they are re-measured.
 
-<!-- BEGIN GENERATED: agentic-adjacency-v4 -->
+<!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `v0.15.1` `policy-file` | 18,064 / 48,508 | 1,196 | 3,454 | 374 / 5,142 | 403 |
-| `v0.15.0` `policy-file` | 18,237 / 48,508 | 1,196 | 3,454 | 374 / 5,142 | 403 |
-| `v0.14.0` `full-stack-kiji-resolve` | 26,765 / 48,508 | 3,673 | 2,473 | 525 / 5,142 | 190 |
-| `v0.14.0` `pass2-ner` | 27,185 / 48,508 | 886 | 2,328 | 550 / 5,142 | 140 |
+| `v0.15.1` `policy-file` | 20,400 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
+| `v0.15.0` `policy-file` | 20,573 / 56,510 | 1,526 | 4,662 | 374 / 5,142 | 403 |
+| `v0.14.0` `full-stack-kiji-resolve` | 29,695 / 56,510 | 5,308 | 3,893 | 525 / 5,142 | 190 |
+| `v0.14.0` `pass2-ner` | 30,320 / 56,510 | 988 | 3,229 | 550 / 5,142 | 140 |
 
-These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v4-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v4, test corpus `387a35ac1551…`, setup policy `f909a23aecac…`.
+These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v8-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v8, test corpus `ddd234551bca…`, setup policy `f909a23aecac…`.
 
-<!-- END GENERATED: agentic-adjacency-v4 -->
+<!-- END GENERATED: agentic-adjacency -->
 
-**Re-measure status on generator v7.** Every row above was measured on
-generator v4 and stays bound to that corpus by hash; none has been re-measured
-on the v5 to v7 cells yet (labelled lookalikes, address blocks, phone shapes).
-Nothing blocks any of them: each tag builds its own `clean_for_bench` and ships
-a layer-A-capable arm. The re-measure runs as one queued bench job after the
-v7 harness merges, `agentic_layers.py measure` with each release's own binary
-and arm, then `render_agentic_adjacency_doc.py --record`:
-
-- `v0.15.1` `policy-file`: not yet re-measured on v7; queued.
-- `v0.15.0` `policy-file`: not yet re-measured on v7; queued.
-- `v0.14.0` `full-stack-kiji-resolve`: not yet re-measured on v7; queued, with
-  `--manifest-actions tokenize --split-composite-source-ids`.
-- `v0.14.0` `pass2-ner`: not yet re-measured on v7; queued, with the same
-  v0.14.0 flags.
+**How these rows were measured.** Each release's `clean_for_bench` was
+rebuilt at its tag with Rust 1.96.0 (`--release -p gaze-recognizers --example
+clean_for_bench`, feature `safety-net-nym` for v0.15.x and `safety-net-kiji`
+for v0.14.0). The v0.15.0 binary is byte-identical to the one in the v4 ledger;
+the v0.15.1 and v0.14.0 rebuilds come from the same source revisions but differ
+in binary SHA-256, and the v8 ledger records the new digests. The v0.14.0
+`full-stack-kiji-resolve` arm also needs `GAZE_KIJI_DISTILBERT_MODEL_DIR`
+exported (v0.14.0's own harness set it; today's harness does not, and the arm
+fails closed without it). Layer R did not change between v4 and v8, and every
+row reproduces its v4 layer R numbers exactly.
 
 ### Hardware spec template
 

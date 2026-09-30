@@ -1,0 +1,66 @@
+# Deliberately over-broad rules for the cued-shape counterweight check.
+# Appended to a policy, each tags one cued shape with no person, no
+# sentence-break copula and no card or postal cue: together they must lower
+# layer A's leak on the `cue_` cells AND raise layer D's false-positive bytes on
+# their twins. The patterns equal CUE_BROAD_PATTERNS in agentic_layers.py (a
+# test pins them). Never ship these rules.
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_age_turned"
+pattern = '(?i)\bturn(?:ed|s)?\s+\d{1,3}\b|\b\d{1,3}\s+geworden\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_age_at_the_age_of"
+pattern = '(?i)\b(?:at\s+the\s+age\s+of|im\s+alter\s+von)\s+\d{1,3}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_age_yo"
+pattern = '(?i)\b\d{1,3}\s?y/o\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_age_year_old_gender"
+pattern = '(?i)\b\d{1,3}[- ]years?[- ]old\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_dob_sentence_break"
+pattern = '(?i)(?:date\s+of\s+birth|\bdob\b|geburtsdatum)[^\n]{0,80}?\d{1,4}[./-]\d{1,2}[./-]\d{2,4}'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_card_short_compact"
+pattern = '\b\d{12,15}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_card_short_grouped"
+pattern = '\b\d{4} \d{4} \d{4}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_zip_se"
+pattern = '\b\d{3} \d{2}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_zip_pl"
+pattern = '\b\d{2}-\d{3}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_zip_six"
+pattern = '\b\d{6}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_zip_br"
+pattern = '\b\d{5}-\d{3}\b'
+class = "custom:mutant_cue"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "mutant_broad_zip_three"
+pattern = '\b\d{3}\b'
+class = "custom:mutant_cue"
