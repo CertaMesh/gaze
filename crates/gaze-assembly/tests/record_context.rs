@@ -280,32 +280,35 @@ fn measured_full_name_defaults_keep_whitespace_only_variant_off() {
     let locales = LocaleChain::merge_policy_and_cli(None, None);
     let pipeline =
         build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
-    let session = Session::new(Scope::Ephemeral).unwrap();
-    let raw = "Maren Okafor; MAREN OKAFOR; MAREN  OKAFOR; Maren  Okafor.";
     let bundle = gaze::dictionary_bundle_from_context(&context);
-    let CleanDocument::Text(clean) = pipeline
-        .pseudonymize_with_detect_context(
-            &session,
-            RawDocument::Text(raw.into()),
-            locales.as_slice(),
-            &bundle,
-        )
-        .unwrap()
-    else {
-        panic!("expected text")
-    };
-    assert!(!clean.contains("Maren Okafor"));
-    assert!(!clean.contains("MAREN OKAFOR"));
-    assert!(!clean.contains("MAREN  OKAFOR"));
-    assert!(clean.contains("Maren  Okafor"));
-    assert_eq!(
-        pipeline
-            .restore_with_telemetry(&session, &clean)
+    for (raw, should_match) in [
+        ("Maren Okafor", true),
+        ("MAREN OKAFOR", true),
+        ("MAREN  OKAFOR", true),
+        ("Maren  Okafor", false),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(raw.into()),
+                locales.as_slice(),
+                &bundle,
+            )
             .unwrap()
-            .0
-            .text,
-        raw
-    );
+        else {
+            panic!("expected text")
+        };
+        assert_eq!(clean.contains(raw), !should_match, "{raw}");
+        assert_eq!(
+            pipeline
+                .restore_with_telemetry(&session, &clean)
+                .unwrap()
+                .0
+                .text,
+            raw
+        );
+    }
 }
 
 #[test]
