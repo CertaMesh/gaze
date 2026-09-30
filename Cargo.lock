@@ -1471,6 +1471,7 @@ dependencies = [
  "ndarray 0.16.1",
  "ort",
  "phonenumber",
+ "proptest",
  "regex",
  "serde",
  "serde_json",
