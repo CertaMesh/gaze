@@ -1427,8 +1427,7 @@ twins, mostly through the IPv4 rule on dotted runs. Under the full
 put 274 false-positive bytes on the twins.
 
 The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
-do not include these cells yet; the note under that table says, row by row,
-where each one's v7 re-measure stands.
+are measured on generator v8, so they include these cells.
 
 #### Cued ages, birth dates, short cards and postcodes
 
@@ -1503,8 +1502,7 @@ or 12-digit compact card and short postcode leaked; the Luhn-valid 13- to
 15-digit cards were already protected by `card.structural`.
 
 The past-release rows in [Measured adjacency layer history](#measured-adjacency-layer-history)
-do not include these cells yet; the note under that table says, row by row,
-where each one's v8 re-measure stands.
+are measured on generator v8, so they include these cells.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split
@@ -1688,18 +1686,22 @@ Both options are off by default.
 
 ### Measured adjacency layer history
 
-The release rows below use generator v4's test partition and the setup policy.
-The older `agentic_layers` aggregates embedded in
-[`release-history.json`](release-history.json) use generator corpus `c751da0b…`
-and are retained as historical data. They do not feed this A/D/R table; its
-measurements come from the [v4 ledger](agentic-adjacency-v4-history.json) on
-corpus `387a35ac…`.
+The release rows below use generator v8's test partition and the setup policy,
+so they include the v5 to v8 cells (labelled lookalikes, address blocks, phone
+shapes, cued ages, birth dates, short cards and postcodes). The table is
+rendered from the [v8 ledger](agentic-adjacency-v8-history.json). The earlier
+[v4 ledger](agentic-adjacency-v4-history.json) on corpus `387a35ac…` and the
+older `agentic_layers` aggregates embedded in
+[`release-history.json`](release-history.json) (corpus `c751da0b…`) are
+retained as historical data and do not feed this table.
 
-Record the three past-release `agentic_layers.py measure` outputs with
+Record the past-release `agentic_layers.py measure` outputs with
 `render_agentic_adjacency_doc.py --record`, then render this table from its
-committed ledger. Do not edit the rows by hand.
+committed ledger. Do not edit the rows by hand. The renderer pins the
+generator version, so a later generator leaves these rows bound to v8 until
+they are re-measured.
 
-<!-- BEGIN GENERATED: agentic-adjacency-v4 -->
+<!-- BEGIN GENERATED: agentic-adjacency -->
 
 | Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -1710,23 +1712,9 @@ committed ledger. Do not edit the rows by hand.
 
 These are layers A, D and R only, measured by the current harness against each release's own binary. Layer C release headlines above are unchanged. The [committed measurement ledger](agentic-adjacency-v4-history.json) records binary and scorecard SHA-256 digests, arm and manifest semantics. Generator v4, test corpus `387a35ac1551…`, setup policy `f909a23aecac…`.
 
-<!-- END GENERATED: agentic-adjacency-v4 -->
+<!-- END GENERATED: agentic-adjacency -->
 
-**Re-measure status on generator v8.** Every row above was measured on
-generator v4 and stays bound to that corpus by hash; none has been re-measured
-on the v5 to v8 cells yet (labelled lookalikes, address blocks, phone shapes,
-cued ages, birth dates, short cards and postcodes). Nothing blocks any of
-them: each tag builds its own `clean_for_bench` and ships a layer-A-capable
-arm. The re-measure runs as one queued bench job, `agentic_layers.py measure`
-with each release's own binary and arm, then
-`render_agentic_adjacency_doc.py --record`:
-
-- `v0.15.1` `policy-file`: not yet re-measured on v8; queued.
-- `v0.15.0` `policy-file`: not yet re-measured on v8; queued.
-- `v0.14.0` `full-stack-kiji-resolve`: not yet re-measured on v8; queued, with
-  `--manifest-actions tokenize --split-composite-source-ids`.
-- `v0.14.0` `pass2-ner`: not yet re-measured on v8; queued, with the same
-  v0.14.0 flags.
+@@STATUS@@
 
 ### Hardware spec template
 

@@ -14,11 +14,13 @@ import agentic_layers
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs/reference/benchmarks/README.md"
-HISTORY = ROOT / "docs/reference/benchmarks/agentic-adjacency-v4-history.json"
-# The ledger is the generator v4 measurement. Later generators keep every v4
-# document byte identical, so its identity is rebuilt from the current
-# generator and the committed v4 contract rather than read as the current one.
-GENERATOR_VERSION = 4
+# The ledger is the generator v8 measurement. The version is pinned rather than
+# read from the generator: a later generator keeps every v8 document byte
+# identical, so the identity is rebuilt from it and the committed v8 contract,
+# and the table keeps saying which corpus it measured until it is re-measured.
+# The generator v4 ledger stays committed as the earlier measurement.
+GENERATOR_VERSION = 8
+HISTORY = ROOT / f"docs/reference/benchmarks/agentic-adjacency-v{GENERATOR_VERSION}-history.json"
 CORPUS_SHA256, CONTRACT_SHA256 = agentic_layers.corpus_identity(ROOT, GENERATOR_VERSION)
 POLICY_SHA256 = "f909a23aecacc5695388223be5e71bc1e303c845563396d6658448396a0a9ebe"
 EXPECTED_ROWS = (
@@ -27,8 +29,8 @@ EXPECTED_ROWS = (
     ("v0.14.0", "full-stack-kiji-resolve"),
     ("v0.14.0", "pass2-ner"),
 )
-BEGIN = "<!-- BEGIN GENERATED: agentic-adjacency-v4 -->"
-END = "<!-- END GENERATED: agentic-adjacency-v4 -->"
+BEGIN = "<!-- BEGIN GENERATED: agentic-adjacency -->"
+END = "<!-- END GENERATED: agentic-adjacency -->"
 
 
 class HistoryError(ValueError):
@@ -59,7 +61,7 @@ def rows_from_scorecard(path: Path) -> list[dict]:
         raise HistoryError(f"unsupported measured release {version!r}")
     generator = scorecard.get("layers", {}).get("generator", {})
     if generator.get("generator_version") != GENERATOR_VERSION or generator.get("corpus_sha256") != CORPUS_SHA256:
-        raise HistoryError("scorecard did not measure the pinned v4 test corpus")
+        raise HistoryError(f"scorecard did not measure the pinned v{GENERATOR_VERSION} test corpus")
     contract = scorecard["layers"].get("scored_label_contract", {})
     if contract.get("file_sha256") != CONTRACT_SHA256:
         raise HistoryError("scorecard agentic contract differs from the committed contract")
@@ -140,7 +142,7 @@ def render(history: dict) -> str:
         "",
         "These are layers A, D and R only, measured by the current harness against each "
         "release's own binary. Layer C release headlines above are unchanged. The "
-        "[committed measurement ledger](agentic-adjacency-v4-history.json) records "
+        f"[committed measurement ledger]({HISTORY.name}) records "
         "binary and scorecard SHA-256 digests, arm and manifest semantics. "
         f"Generator v{GENERATOR_VERSION}, test corpus `{CORPUS_SHA256[:12]}…`, "
         f"setup policy `{POLICY_SHA256[:12]}…`.",
