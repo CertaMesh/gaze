@@ -31,14 +31,18 @@ jobs:
           records = [json.loads(line) for line in pathlib.Path('proof/build.json').read_text().splitlines() if line.startswith('{')]
           binary = next(r['executable'] for r in records if r.get('executable') and r.get('target', {}).get('name') == 'runtime_lifecycle')
           names = ['matched_activation_owns_serialized_purge_shutdown_and_child_reap', 'concurrent_browser_and_operator_purges_do_not_disable_dashboard', 'concurrent_browser_purges_do_not_corrupt_rotate_pairing']
+          import concurrent.futures
           counts = {}
+          def execute(name, i):
+              result = subprocess.run(['nice', '-n', '19', binary, '--exact', name, '--nocapture'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+              return result.returncode, result.stdout
           for name in names:
               failures = 0
-              with open(f'proof/before-{name}.log', 'w') as log:
-                  for i in range(200):
-                      result = subprocess.run(['nice', '-n', '19', binary, '--exact', name, '--nocapture'], stdout=log, stderr=subprocess.STDOUT)
-                      failures += result.returncode != 0
-              counts[name] = {'iterations': 200, 'failures': failures}
+              with open(f'proof/before-{name}.log', 'wb') as log, concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+                  for code, output in pool.map(lambda i: execute(name, i), range(2000)):
+                      log.write(output)
+                      failures += code != 0
+              counts[name] = {'iterations': 2000, 'workers': 4, 'failures': failures}
               print(name, counts[name], flush=True)
           pathlib.Path('proof/before-counts.json').write_text(json.dumps(counts, indent=2))
           PY
