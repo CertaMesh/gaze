@@ -243,8 +243,6 @@ fn redact_document_text(text: &str, ctx: &ToolCtx<'_>) -> Result<String, ToolErr
 /// fails closed when:
 /// - the path contains a malformed token spelling (e.g. `<Email_>`,
 ///   `<deadbeef:Email_>`), or
-/// - the path contains a nested-wrapper token spelling (e.g.
-///   `<<deadbeef:Email_1>>`), or
 /// - an unowned **non-bare** token spelling remains after restoration (e.g.
 ///   an injected `<deadbeef:Email_999>`, `<Email_1>`, or `email_1`).
 ///
@@ -253,8 +251,8 @@ fn redact_document_text(text: &str, ctx: &ToolCtx<'_>) -> Result<String, ToolErr
 /// file validation, preserving the `restore(protect(path)) == path` round-trip
 /// for non-PII paths.
 fn restore_path(session: &gaze::Session, protected_path: &str) -> Result<String, ToolError> {
-    // Gate 1: reject malformed and nested-wrapper spellings before any
-    // substitution or filesystem access.
+    // Gate 1: reject malformed spellings before any substitution or filesystem
+    // access. Literal angle brackets beside a token are path text.
     gaze::token_shape::validate_restore_shapes(protected_path)
         .map_err(|_| ToolError::InvalidArgs("path restoration failed".into()))?;
 
@@ -414,14 +412,18 @@ mod tests {
             super::restore_path(&session, &format!("directory/{token}/input.png")).unwrap(),
             "directory/alice@example.invalid/input.png"
         );
+        assert_eq!(
+            super::restore_path(&session, &format!("directory/<{token}>/input.png")).unwrap(),
+            "directory/<alice@example.invalid>/input.png"
+        );
         for path in [
-            format!("directory/<{token}>/input.png"),
+            "directory/<<deadbeef:Email_1>>/input.png".to_owned(),
             "directory/email1@gaze-fake.invalid/input.png".to_owned(),
             "directory/<Email_999>/input.png".to_owned(),
         ] {
             assert!(
                 super::restore_path(&session, &path).is_err(),
-                "unowned or nested token reached filesystem path: {path}"
+                "unowned token reached filesystem path: {path}"
             );
         }
     }
@@ -867,26 +869,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn read_file_dispatch_rejects_nested_wrapper_token_in_path() {
+    async fn read_file_dispatch_rejects_unowned_token_inside_angle_brackets() {
         let harness = Harness::new();
-        // `<<deadbeef:Email_1>>` wraps a valid token-shaped match in an extra
-        // layer of angle brackets; the nested-wrapper gate must reject it before
-        // any filesystem access.
-        for nested in [
+        // Angle brackets around an unowned token are path text; the unowned
+        // token itself must still fail the restore gate before any filesystem
+        // access.
+        for unowned in [
             "directory/<<deadbeef:Email_1>>/input.png",
             "path/<<Email_1>>/file.pdf",
         ] {
             let err = harness
-                .dispatch("gaze_read_file", json!({ "path": nested }))
+                .dispatch("gaze_read_file", json!({ "path": unowned }))
                 .await
-                .expect_err("nested-wrapper token in path must fail at the restore gate");
+                .expect_err("unowned token in path must fail at the restore gate");
             assert!(
                 matches!(
                     err,
                     DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
                     if msg == "path restoration failed"
                 ),
-                "nested `{nested}` must return InvalidArgs, got: {err:?}",
+                "unowned `{unowned}` must return InvalidArgs, got: {err:?}",
             );
         }
         assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
@@ -923,7 +925,7 @@ mod tests {
     async fn read_file_dispatch_restores_owned_token_alongside_negative_cases() {
         // Owned token must restore to raw PII; negative cases must still be
         // blocked. This test covers both paths in the same session to confirm
-        // the assessment and malformed/nested gates interact correctly.
+        // the assessment and malformed-spelling gates interact correctly.
         let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
         let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
         let directory = tempfile::tempdir().unwrap();

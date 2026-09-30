@@ -125,7 +125,9 @@ pub fn is_bare_identifier(match_text: &str) -> bool {
         })
 }
 
-/// Reject malformed or nested token spellings using the session restore scanner.
+/// Reject malformed token spellings using the session restore scanner.
+///
+/// A literal `<` or `>` beside a well-formed token is ordinary text, not a nested wrapper.
 ///
 /// This checks syntax only, without manifest lookup or substitution. Callers
 /// must still assess ownership before using restored text at a trusted boundary.
@@ -486,11 +488,14 @@ mod tests {
     }
 
     #[test]
-    fn validate_restore_shapes_rejects_nested_wrapper_spellings() {
-        // Extra angle brackets around a token match must be rejected.
-        assert!(validate_restore_shapes("<<deadbeef:Email_1>>").is_err());
-        assert!(validate_restore_shapes("<<Email_1>>").is_err());
-        // Mixed nesting variants.
-        assert!(validate_restore_shapes("path/<<deadbeef:Name_1>>/file.pdf").is_err());
+    fn validate_restore_shapes_treats_angle_neighbours_as_text() {
+        // `<alice@example.invalid>` cleans to `<{token}>`, so literal angle
+        // brackets beside a well-formed token are text. Ownership is checked later.
+        assert!(validate_restore_shapes("<<deadbeef:Email_1>>").is_ok());
+        assert!(validate_restore_shapes("path/<<deadbeef:Name_1>>/file.pdf").is_ok());
+        assert!(validate_restore_shapes("<deadbeef:Email_1>><deadbeef:Name_1>").is_ok());
+        assert!(validate_restore_shapes("<email1.deadbeef@gaze-fake.invalid>").is_ok());
+        // A malformed spelling inside angle brackets still fails.
+        assert!(validate_restore_shapes("<<deadbeef:Email_>>").is_err());
     }
 }
