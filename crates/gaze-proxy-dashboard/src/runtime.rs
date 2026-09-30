@@ -1,5 +1,5 @@
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -28,6 +28,62 @@ pub enum DashboardLifecycle {
     Disabled,
     /// Child termination and reap completed.
     Stopped,
+}
+
+struct Lifecycle {
+    state: Mutex<DashboardLifecycle>,
+    changed: Condvar,
+    #[cfg(test)]
+    wait_entered: Mutex<Option<Sender<()>>>,
+}
+
+impl Lifecycle {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(DashboardLifecycle::Running(0)),
+            changed: Condvar::new(),
+            #[cfg(test)]
+            wait_entered: Mutex::new(None),
+        }
+    }
+
+    fn set(&self, value: DashboardLifecycle) {
+        *self
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner()) = value;
+        self.changed.notify_all();
+    }
+
+    fn get(&self) -> DashboardLifecycle {
+        *self
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    fn wait_for_epoch(&self, minimum: u64) -> Result<u64, DashboardError> {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        #[cfg(test)]
+        if let Some(entered) = self.wait_entered.lock().unwrap().take() {
+            entered.send(()).unwrap();
+        }
+        let (state, _) = self
+            .changed
+            .wait_timeout_while(state, Duration::from_secs(5), |state| match state {
+                DashboardLifecycle::Running(epoch) => *epoch < minimum,
+                DashboardLifecycle::Purging { .. } => true,
+                DashboardLifecycle::Disabled | DashboardLifecycle::Stopped => false,
+            })
+            .unwrap_or_else(|poison| poison.into_inner());
+        match *state {
+            DashboardLifecycle::Running(epoch) if epoch >= minimum => Ok(epoch),
+            _ => Err(DashboardError::new(DashboardErrorCode::FatalDisabled)),
+        }
+    }
 }
 
 enum RuntimeCommand {
@@ -63,8 +119,7 @@ impl RuntimeParts {
 #[derive(Clone)]
 pub struct DashboardControl {
     commands: SyncSender<RuntimeCommand>,
-    lifecycle: Arc<Mutex<DashboardLifecycle>>,
-    status: Arc<Mutex<DashboardStatus>>,
+    lifecycle: Arc<Lifecycle>,
 }
 
 impl DashboardControl {
@@ -102,19 +157,28 @@ impl DashboardControl {
     /// Returns the sanitized status.
     #[must_use]
     pub fn status(&self) -> DashboardStatus {
-        *self
-            .status
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
+        match self.lifecycle.get() {
+            DashboardLifecycle::Running(_) => DashboardStatus::Active,
+            DashboardLifecycle::Purging { .. } => DashboardStatus::Purging,
+            DashboardLifecycle::Disabled => {
+                DashboardStatus::Disabled(DashboardErrorCode::FatalDisabled)
+            }
+            DashboardLifecycle::Stopped => DashboardStatus::Stopped,
+        }
     }
 
     /// Returns the serialized lifecycle.
     #[must_use]
     pub fn lifecycle(&self) -> DashboardLifecycle {
-        *self
-            .lifecycle
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
+        self.lifecycle.get()
+    }
+
+    /// Waits for an acknowledged running epoch, failing on disable, stop, or timeout.
+    ///
+    /// A returned epoch is a snapshot: subsequent browser requests may start another purge.
+    /// Use after completing HTTP requests to await their purge notifications without polling.
+    pub fn wait_for_epoch(&self, minimum: u64) -> Result<u64, DashboardError> {
+        self.lifecycle.wait_for_epoch(minimum)
     }
 }
 
@@ -132,19 +196,16 @@ impl DashboardLaunch {
         authority: std::net::SocketAddrV4,
     ) -> Result<Self, DashboardError> {
         let (commands, command_rx) = mpsc::sync_channel(CONTROL_QUEUE_CAPACITY);
-        let lifecycle = Arc::new(Mutex::new(DashboardLifecycle::Running(0)));
-        let status = Arc::new(Mutex::new(DashboardStatus::Active));
+        let lifecycle = Arc::new(Lifecycle::new());
         let thread_lifecycle = lifecycle.clone();
-        let thread_status = status.clone();
         let supervisor = thread::Builder::new()
             .name("gaze-dashboard-supervisor".to_owned())
-            .spawn(move || runtime_loop(parts, command_rx, &thread_lifecycle, &thread_status))
+            .spawn(move || runtime_loop(parts, command_rx, &thread_lifecycle))
             .map_err(|_| DashboardError::new(DashboardErrorCode::ActivationFailed))?;
         Ok(Self {
             control: DashboardControl {
                 commands,
                 lifecycle,
-                status,
             },
             authority,
             supervisor: Some(supervisor),
@@ -176,57 +237,51 @@ impl Drop for DashboardLaunch {
 fn runtime_loop(
     mut parts: RuntimeParts,
     commands: Receiver<RuntimeCommand>,
-    lifecycle: &Mutex<DashboardLifecycle>,
-    status: &Mutex<DashboardStatus>,
+    lifecycle: &Lifecycle,
 ) {
     loop {
         if parts.writer.is_faulted() || parts.child.has_exited() {
-            disable_and_reap(&mut parts, lifecycle, status);
+            disable_and_reap(&mut parts, lifecycle);
             break;
         }
-        if parts.child.take_browser_purge_request() && purge(&mut parts, lifecycle, status).is_err()
-        {
-            disable_and_reap(&mut parts, lifecycle, status);
+        if parts.child.take_browser_purge_request() && purge(&mut parts, lifecycle).is_err() {
+            disable_and_reap(&mut parts, lifecycle);
             break;
         }
         match commands.recv_timeout(Duration::from_millis(10)) {
             Ok(RuntimeCommand::Purge(reply)) => {
-                let result = purge(&mut parts, lifecycle, status);
+                let result = purge(&mut parts, lifecycle);
                 let failed = result.is_err();
                 let _ = reply.send(result);
                 if failed {
-                    disable_and_reap(&mut parts, lifecycle, status);
+                    disable_and_reap(&mut parts, lifecycle);
                     break;
                 }
             }
             Ok(RuntimeCommand::Rotate(mut delivery, reply)) => {
-                let result = rotate(&mut parts, lifecycle, status, delivery.as_mut());
+                let result = rotate(&mut parts, lifecycle, delivery.as_mut());
                 let failed = result.is_err();
                 let _ = reply.send(result);
                 if failed {
-                    disable_and_reap(&mut parts, lifecycle, status);
+                    disable_and_reap(&mut parts, lifecycle);
                     break;
                 }
             }
             Ok(RuntimeCommand::Shutdown(reply)) => {
-                disable_and_reap(&mut parts, lifecycle, status);
+                disable_and_reap(&mut parts, lifecycle);
                 let _ = reply.send(Ok(()));
                 break;
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
-                disable_and_reap(&mut parts, lifecycle, status);
+                disable_and_reap(&mut parts, lifecycle);
                 break;
             }
         }
     }
 }
 
-fn purge(
-    parts: &mut RuntimeParts,
-    lifecycle: &Mutex<DashboardLifecycle>,
-    status: &Mutex<DashboardStatus>,
-) -> Result<(), DashboardError> {
+fn purge(parts: &mut RuntimeParts, lifecycle: &Lifecycle) -> Result<(), DashboardError> {
     if !parts.admission.close_for_purge() {
         return Err(DashboardError::new(DashboardErrorCode::PurgeFailed));
     }
@@ -237,11 +292,7 @@ fn purge(
         .map_err(|_| DashboardError::new(DashboardErrorCode::PurgeFailed))?;
     let next = guard.next_epoch().get();
     let from = lifecycle_epoch(lifecycle);
-    *lifecycle
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner()) =
-        DashboardLifecycle::Purging { from, to: next };
-    *status.lock().unwrap_or_else(|poison| poison.into_inner()) = DashboardStatus::Purging;
+    lifecycle.set(DashboardLifecycle::Purging { from, to: next });
     parts.child.purge_and_zeroize(next)?;
     let completed = guard
         .complete()
@@ -249,41 +300,26 @@ fn purge(
     if completed.get() != next || !parts.admission.reopen_after_purge() {
         return Err(DashboardError::new(DashboardErrorCode::PurgeFailed));
     }
-    *lifecycle
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner()) = DashboardLifecycle::Running(next);
-    *status.lock().unwrap_or_else(|poison| poison.into_inner()) = DashboardStatus::Active;
+    lifecycle.set(DashboardLifecycle::Running(next));
     Ok(())
 }
 
 fn rotate(
     parts: &mut RuntimeParts,
-    lifecycle: &Mutex<DashboardLifecycle>,
-    status: &Mutex<DashboardStatus>,
+    lifecycle: &Lifecycle,
     delivery: &mut dyn PairingDelivery,
 ) -> Result<(), DashboardError> {
-    purge(parts, lifecycle, status)?;
+    purge(parts, lifecycle)?;
     parts.child.rotate_pairing(delivery)
 }
 
-fn disable_and_reap(
-    parts: &mut RuntimeParts,
-    lifecycle: &Mutex<DashboardLifecycle>,
-    status: &Mutex<DashboardStatus>,
-) {
+fn disable_and_reap(parts: &mut RuntimeParts, lifecycle: &Lifecycle) {
     let _ = parts.admission.disable();
     let _ = parts.activated.disable();
     let _ = parts.writer.stop_and_join();
-    *lifecycle
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner()) = DashboardLifecycle::Disabled;
-    *status.lock().unwrap_or_else(|poison| poison.into_inner()) =
-        DashboardStatus::Disabled(DashboardErrorCode::FatalDisabled);
+    lifecycle.set(DashboardLifecycle::Disabled);
     let _ = parts.child.shutdown_terminate_reap();
-    *lifecycle
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner()) = DashboardLifecycle::Stopped;
-    *status.lock().unwrap_or_else(|poison| poison.into_inner()) = DashboardStatus::Stopped;
+    lifecycle.set(DashboardLifecycle::Stopped);
 }
 
 fn send_command(
@@ -296,11 +332,8 @@ fn send_command(
     })
 }
 
-fn lifecycle_epoch(lifecycle: &Mutex<DashboardLifecycle>) -> u64 {
-    match *lifecycle
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner())
-    {
+fn lifecycle_epoch(lifecycle: &Lifecycle) -> u64 {
+    match lifecycle.get() {
         DashboardLifecycle::Running(epoch) => epoch,
         DashboardLifecycle::Purging { to, .. } => to,
         DashboardLifecycle::Disabled | DashboardLifecycle::Stopped => 0,
@@ -310,6 +343,45 @@ fn lifecycle_epoch(lifecycle: &Mutex<DashboardLifecycle>) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn epoch_ack_waits_for_running_and_rejects_terminal_states() {
+        for terminal in [
+            None,
+            Some(DashboardLifecycle::Disabled),
+            Some(DashboardLifecycle::Stopped),
+        ] {
+            let lifecycle = Arc::new(Lifecycle::new());
+            lifecycle.set(DashboardLifecycle::Purging { from: 0, to: 1 });
+            let (entered_tx, entered_rx) = mpsc::channel();
+            *lifecycle.wait_entered.lock().unwrap() = Some(entered_tx);
+            let worker = lifecycle.clone();
+            let waiting = thread::spawn(move || worker.wait_for_epoch(1));
+            entered_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("waiter entered under lifecycle lock");
+            lifecycle.set(terminal.unwrap_or(DashboardLifecycle::Running(1)));
+            let result = waiting.join().unwrap();
+            if terminal.is_some() {
+                assert_eq!(
+                    result.unwrap_err().code(),
+                    DashboardErrorCode::FatalDisabled
+                );
+            } else {
+                assert_eq!(result.unwrap(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn epoch_ack_rejects_disabled_even_when_minimum_is_zero() {
+        let lifecycle = Lifecycle::new();
+        lifecycle.set(DashboardLifecycle::Disabled);
+        assert_eq!(
+            lifecycle.wait_for_epoch(0).unwrap_err().code(),
+            DashboardErrorCode::FatalDisabled
+        );
+    }
 
     #[test]
     fn runtime_parts_constructor_requires_bound_activation_proof() {

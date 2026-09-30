@@ -18,34 +18,86 @@ jobs:
           curl --fail --location --retry 3 --output "$RUNNER_TEMP/nextest.tar.gz" https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.146/cargo-nextest-0.9.146-x86_64-unknown-linux-gnu.tar.gz
           echo "682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428  $RUNNER_TEMP/nextest.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/nextest.tar.gz" -C "$HOME/.cargo/bin" cargo-nextest
-      - name: Before stress
+      - name: Baseline and candidate stress
         shell: bash
         run: |
           mkdir -p proof
           uname -a > proof/hardware.txt
           lscpu >> proof/hardware.txt
           cargo nextest --version >> proof/hardware.txt
-          nice -n 19 cargo test -p gaze-proxy-dashboard --all-features --test runtime_lifecycle --no-run --message-format=json > proof/build.json
-          python3 - <<'PY'
-          import json, pathlib, subprocess
-          records = [json.loads(line) for line in pathlib.Path('proof/build.json').read_text().splitlines() if line.startswith('{')]
+          cp crates/gaze-proxy-dashboard/tests/runtime_lifecycle.rs /tmp/candidate-tests.rs
+          cp crates/gaze-proxy-dashboard/src/runtime.rs /tmp/candidate-runtime.rs
+          cp crates/gaze-inspection/src/lib.rs /tmp/candidate-inspection.rs
+          cat > /tmp/dashboard-stress.py <<'PY'
+          import concurrent.futures, json, pathlib, subprocess, sys
+          phase = sys.argv[1]
+          build = subprocess.run(['nice', '-n', '19', 'cargo', 'test', '-p', 'gaze-proxy-dashboard', '--all-features', '--test', 'runtime_lifecycle', '--no-run', '--message-format=json'], check=True, stdout=subprocess.PIPE, text=True)
+          pathlib.Path(f'proof/{phase}-build.json').write_text(build.stdout)
+          records = [json.loads(line) for line in build.stdout.splitlines() if line.startswith('{')]
           binary = next(r['executable'] for r in records if r.get('executable') and r.get('target', {}).get('name') == 'runtime_lifecycle')
           names = ['matched_activation_owns_serialized_purge_shutdown_and_child_reap', 'concurrent_browser_and_operator_purges_do_not_disable_dashboard', 'concurrent_browser_purges_do_not_corrupt_rotate_pairing']
-          import concurrent.futures
           counts = {}
           def execute(name, i):
               result = subprocess.run(['nice', '-n', '19', binary, '--exact', name, '--nocapture'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
               return result.returncode, result.stdout
           for name in names:
               failures = 0
-              with open(f'proof/before-{name}.log', 'wb') as log, concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-                  for code, output in pool.map(lambda i: execute(name, i), range(2000)):
+              with open(f'proof/{phase}-{name}.log', 'wb') as log, concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+                  for code, output in pool.map(lambda i: execute(name, i), range(5000)):
                       log.write(output)
                       failures += code != 0
-              counts[name] = {'iterations': 2000, 'workers': 4, 'failures': failures}
-              print(name, counts[name], flush=True)
-          pathlib.Path('proof/before-counts.json').write_text(json.dumps(counts, indent=2))
+              counts[name] = {'iterations': 5000, 'workers': 4, 'failures': failures}
+              print(phase, name, counts[name], flush=True)
+          pathlib.Path(f'proof/{phase}-counts.json').write_text(json.dumps(counts, indent=2))
+          if phase == 'after' and any(c['failures'] for c in counts.values()):
+              raise SystemExit('candidate stress failures')
           PY
+          git show e1635265:crates/gaze-proxy-dashboard/tests/runtime_lifecycle.rs > crates/gaze-proxy-dashboard/tests/runtime_lifecycle.rs
+          git show e1635265:crates/gaze-proxy-dashboard/src/runtime.rs > crates/gaze-proxy-dashboard/src/runtime.rs
+          git show e1635265:crates/gaze-inspection/src/lib.rs > crates/gaze-inspection/src/lib.rs
+          python3 /tmp/dashboard-stress.py before
+          cp /tmp/candidate-tests.rs crates/gaze-proxy-dashboard/tests/runtime_lifecycle.rs
+          cp /tmp/candidate-runtime.rs crates/gaze-proxy-dashboard/src/runtime.rs
+          cp /tmp/candidate-inspection.rs crates/gaze-inspection/src/lib.rs
+          python3 /tmp/dashboard-stress.py after
+      - name: Plain cargo test
+        run: |
+          nice -n 19 cargo test -p gaze-proxy-dashboard --all-features 2>&1 | tee proof/cargo-dashboard.log
+          nice -n 19 cargo test -p gaze-inspection --all-features 2>&1 | tee proof/cargo-inspection.log
+      - name: Nextest stress without retries
+        shell: bash
+        run: |
+          set -euo pipefail
+          selection='test(=matched_activation_owns_serialized_purge_shutdown_and_child_reap) | test(=concurrent_browser_and_operator_purges_do_not_disable_dashboard) | test(=concurrent_browser_purges_do_not_corrupt_rotate_pairing)'
+          for i in $(seq 1 200); do
+            nice -n 19 cargo nextest run -p gaze-proxy-dashboard --all-features --profile ci --retries 0 -E "$selection" >> proof/nextest-stress.log 2>&1
+          done
+          echo '200 iterations, 600 test executions, zero failures, retries=0' | tee proof/nextest-counts.txt
+          nice -n 19 cargo nextest run -p gaze-proxy-dashboard --all-features --profile ci --retries 0 >> proof/nextest-dashboard.log 2>&1
+      - name: Mutation probe removes purge acknowledgement wait
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('crates/gaze-proxy-dashboard/src/runtime.rs')
+          text = p.read_text()
+          old = 'DashboardLifecycle::Purging { .. } => true,'
+          assert text.count(old) == 1
+          p.write_text(text.replace(old, 'DashboardLifecycle::Purging { .. } => false,'))
+          PY
+          set +e
+          nice -n 19 cargo test -p gaze-proxy-dashboard --all-features --lib runtime::tests::epoch_ack_waits_for_running_and_rejects_terminal_states -- --exact --nocapture > proof/mutation.log 2>&1
+          mutation_exit=$?
+          set -e
+          cp /tmp/candidate-runtime.rs crates/gaze-proxy-dashboard/src/runtime.rs
+          test "$mutation_exit" -ne 0
+          rg 'epoch_ack_waits_for_running_and_rejects_terminal_states.*FAILED' proof/mutation.log
+          echo "mutation caught, exit=$mutation_exit" | tee proof/mutation-result.txt
+          nice -n 19 cargo test -p gaze-proxy-dashboard --all-features --lib runtime::tests::epoch_ack_waits_for_running_and_rejects_terminal_states -- --exact >> proof/mutation-restored.log 2>&1
+      - name: Format gate
+        run: cargo fmt --all -- --check
+      - name: Workspace clippy gate
+        run: nice -n 19 cargo clippy --workspace --all-features --all-targets -- -D warnings 2>&1 | tee proof/clippy.log
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
