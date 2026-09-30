@@ -2667,6 +2667,8 @@ class BlockCell:
     # Address cells share the established part-by-part gold writer.
     address: AddressCell | None = None
     benign: bool = False
+    ambiguous_plate_cue: bool = False
+    language: str | None = None
 
 
 BLOCK_CELLS = (
@@ -2726,6 +2728,10 @@ BLOCK_TWINS = (
     BlockCell("block_twin_plate", BlockShape.PLATE, {
         "dev": "Build {V} completed.", "test": "Batch {V} Released.",
     }, benign=True),
+    BlockCell("block_twin_plate_manufacturing", BlockShape.PLATE, {
+        "dev": "Workshop mounting plate {V} needs replacement.",
+        "test": "Factory mounting plate {V} requires inspection.",
+    }, benign=True, ambiguous_plate_cue=True, language="en"),
     BlockCell("block_twin_plate_near_cue", BlockShape.PLATE, {
         "dev": "Kennzeichen lookup failed for build {V}.",
         "test": "Kennzeichen query returned batch {V} Ready.",
@@ -2769,6 +2775,7 @@ def _block_records(cells: Sequence[BlockCell], partition: str) -> list[Record]:
                     value = f"Box {rng.between(*MILITARY_BOX_NUMBERS[partition])}"
                     language, region = "en", "US"
                 fields = {"V": (value, DECOY_PREFIX + "benign" if cell.benign else "LICENSEPLATE")}
+            language = cell.language or language
             text, gold, decoys = _fill_with_decoys(cell.templates[partition], fields)
             records.append(Record(
                 uid=f"agentic-{partition}-{layer}-{cell.family}-{index:03d}",
@@ -2798,9 +2805,12 @@ def check_block_cells(records: Sequence[Record]) -> None:
         if cell.benign:
             if record.gold or len(record.decoys) != 1:
                 raise LayerError(f"{record.uid}: block twin needs one decoy and no gold")
-            if cell.shape is BlockShape.PLATE and re.search(
+            plate_cue = cell.shape is BlockShape.PLATE and bool(re.search(
                 r'(?i)(?:Kennzeichen|plate)["\s:=]*$', record.text.encode()[:record.decoys[0].start].decode()
-            ):
+            ))
+            if cell.ambiguous_plate_cue and not plate_cue:
+                raise LayerError(f"{record.uid}: ambiguous plate twin must retain its immediate cue")
+            if plate_cue and not cell.ambiguous_plate_cue:
                 raise LayerError(f"{record.uid}: plate twin carries an immediate plate cue")
             if re.fullmatch(BLOCK_BROAD_PATTERNS[cell.shape], record.decoys[0].value):
                 broad_paid.add(cell.shape)

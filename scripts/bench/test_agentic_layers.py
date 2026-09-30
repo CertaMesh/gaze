@@ -35,8 +35,8 @@ PINNED_CORPUS_SHA256 = {
 # v7: everything before the CRLF and plate cells.
 V7_CORPUS_SHA256 = dict(PINNED_CORPUS_SHA256)
 PINNED_CORPUS_SHA256 = {
-    "dev": "47297895c8d750d2740fe8e5a3fb86f029ff437b19dc08b8ae89f1297c80409f",
-    "test": "a8838cdd81ed7aa14ea8bc376fafedf971f083474432169c9e51d465de21e57d",
+    "dev": "4143e3c983a1b63ce9b039bf33b05ead86bcb87c6673de34c7ca0d92fcbc1ad8",
+    "test": "7544c7ee8e4ad420d319e8efb58e54984f15015ca093c81a4d16fae35c6285ec",
 }
 # v6: everything before the phone-shape cells.
 V6_CORPUS_SHA256 = {
@@ -1054,7 +1054,7 @@ class BlockCellTests(unittest.TestCase):
         for partition in agentic.PARTITIONS:
             records = [r for r in agentic.generate(partition) if r.surface.startswith("block_")]
             self.assertEqual(sum(r.layer == "A" for r in records), 36)
-            self.assertEqual(sum(r.layer == "D" for r in records), 36)
+            self.assertEqual(sum(r.layer == "D" for r in records), 40)
             for cell in (*agentic.BLOCK_CELLS, *agentic.BLOCK_TWINS):
                 matching = [r for r in records if r.family == cell.family]
                 self.assertEqual(len(matching), 4 if cell.benign else 6)
@@ -1094,6 +1094,17 @@ class BlockCellTests(unittest.TestCase):
         index = next(i for i, t in enumerate(twins) if t.shape is agentic.BlockShape.PLATE)
         twins[index] = dataclasses.replace(twins[index], templates={**twins[index].templates, "test": "Kennzeichen {V}"})
         with self.assertRaisesRegex(agentic.LayerError, "immediate plate cue"):
+            self.generate_with("BLOCK_TWINS", tuple(twins))
+
+    def test_ambiguous_manufacturing_twin_keeps_its_cue_and_english_language(self) -> None:
+        for partition in agentic.PARTITIONS:
+            records = [r for r in agentic.generate(partition) if r.family == "block_twin_plate_manufacturing"]
+            self.assertEqual(len(records), 4)
+            self.assertTrue(all(r.language == "en" for r in records))
+        twins = list(agentic.BLOCK_TWINS)
+        index = next(i for i, t in enumerate(twins) if t.ambiguous_plate_cue)
+        twins[index] = dataclasses.replace(twins[index], templates={**twins[index].templates, "test": "Factory mounting part {V}"})
+        with self.assertRaisesRegex(agentic.LayerError, "retain its immediate cue"):
             self.generate_with("BLOCK_TWINS", tuple(twins))
 
     def test_gold_plate_cannot_lose_its_prefix(self) -> None:
