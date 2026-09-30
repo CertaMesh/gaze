@@ -29,15 +29,25 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
+    "dev": "cc3b150776e9eec8ff5934d80e47fd77d73141ac80cc689823c16dd1e27b5b77",
+    "test": "83f8f0a89dc255431cdfb93a845e395883ecd4b35d968cd9fcb03bd392920522",
+}
+# v8: everything before the CRLF and plate cells.
+V8_CORPUS_SHA256 = {
+    "dev": "60c3fe121db4ce07b0dfbc2397c1a48a0c1773a5c94eff324fdde597a6aa8ae6",
+    "test": "ddd234551bcae00ab0f97026fd4b5b6d3d4b4b23cf08b8fa15926e87f598bd5c",
+}
+
+# v7: everything before the cued grammar and short-identifier cells.
+V7_CORPUS_SHA256 = {
     "dev": "f7d45efdb7ac5bafeaa432ec1cb413e1137a1b78454fb3422a3bdcf1887c5168",
     "test": "ac9ff6e7b47824ec22c5201e6ff900618d3408eaa823f709d85381334d6aba69",
 }
-# v7: everything before the CRLF and plate cells.
-V7_CORPUS_SHA256 = dict(PINNED_CORPUS_SHA256)
-PINNED_CORPUS_SHA256 = {
-    "dev": "4143e3c983a1b63ce9b039bf33b05ead86bcb87c6673de34c7ca0d92fcbc1ad8",
-    "test": "7544c7ee8e4ad420d319e8efb58e54984f15015ca093c81a4d16fae35c6285ec",
-}
+# The cued card twins join the card credit guard (generator v8).
+CUE_CARD_TWINS = (
+    "card_twin_grouped_ref_csv", "card_twin_order", "card_twin_reader_serial",
+    "card_twin_timestamp_log", "card_twin_transaction_json",
+)
 # v6: everything before the phone-shape cells.
 V6_CORPUS_SHA256 = {
     "dev": "e1b6bc315cb52d41aaf93fd48cf9719d67e665317fc927cc9c6a5e33a3e57af7",
@@ -133,8 +143,12 @@ class GeneratorTests(unittest.TestCase):
 
     def test_previous_partition_documents_are_byte_identical(self) -> None:
         for partition, records in self.corpora.items():
-            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(agentic.records_as_of(7, records))).hexdigest(),
-                             V7_CORPUS_SHA256[partition])
+            v8 = agentic.records_as_of(8, records)
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(v8)).hexdigest(), V8_CORPUS_SHA256[partition])
+            v7 = agentic.records_as_of(7, records)
+            self.assertEqual(
+                hashlib.sha256(agentic.corpus_bytes(v7)).hexdigest(), V7_CORPUS_SHA256[partition]
+            )
             v6 = agentic.records_as_of(6, records)
             self.assertEqual(
                 hashlib.sha256(agentic.corpus_bytes(v6)).hexdigest(), V6_CORPUS_SHA256[partition]
@@ -252,7 +266,9 @@ class GeneratorTests(unittest.TestCase):
         records = self.corpora["test"]
         uids = {record.uid for record in records}
         for record in records:
-            if record.validity == agentic.VALID:
+            # Cued card cells alternate validity per document instead
+            # (`CueCellTests.test_card_cells_carry_both_validities`).
+            if record.validity == agentic.VALID and not record.surface.startswith("cue_"):
                 self.assertIn(record.uid[: -len(agentic.VALID)] + agentic.INVALID, uids)
 
     def test_nbsp_surfaces_perturb_their_prose_cue_parent_only(self) -> None:
@@ -445,7 +461,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "block_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -1002,6 +1018,247 @@ class PhoneShapeCellTests(unittest.TestCase):
             self.generate_with(PHONE_TWINS=tuple(twins))
 
 
+class CueCellTests(unittest.TestCase):
+    """Layer A values that only their wording makes personal; each shape's
+    broad and narrow rules pay in its layer D twins."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.full = {partition: agentic.generate(partition) for partition in agentic.PARTITIONS}
+        cls.cells = {
+            partition: [r for r in records if r.surface.startswith("cue_")]
+            for partition, records in cls.full.items()
+        }
+
+    def generate_with(self, **patches) -> None:
+        with contextlib.ExitStack() as stack:
+            for name, value in patches.items():
+                stack.enter_context(mock.patch.object(agentic, name, value))
+            agentic.generate("test")
+
+    @staticmethod
+    def replaced(cells: tuple, family: str, **changes) -> tuple:
+        return tuple(dataclasses.replace(c, **changes) if c.family == family else c for c in cells)
+
+    def test_every_cell_and_twin_is_generated_in_both_partitions(self) -> None:
+        for partition, records in self.cells.items():
+            for layer, cells in (("A", agentic.CUE_CELLS), ("D", agentic.CUE_TWINS)):
+                for cell in cells:
+                    matching = [r for r in records if r.layer == layer and r.family == cell.family]
+                    self.assertEqual(len(matching), agentic.DOCS_PER_CUE_CELL[layer], (partition, cell.family))
+            for layer in ("A", "D"):
+                self.assertEqual({r.surface for r in records if r.layer == layer}, set(agentic.CUE_SURFACES))
+        self.assertEqual({c.shape for c in agentic.CUE_CELLS}, set(agentic.CueShape))
+        self.assertEqual({c.shape.label for c in agentic.CUE_CELLS},
+                         {"AGE", "DATEOFBIRTH", "CREDITCARDNUMBER", "ZIPCODE"})
+
+    def test_growth_stays_within_ten_percent_per_layer(self) -> None:
+        for layer in ("A", "D"):
+            new = sum(1 for r in self.cells["test"] if r.layer == layer)
+            old = sum(1 for r in self.full["test"] if r.layer == layer) - new
+            self.assertLessEqual(new * 10, old, layer)
+
+    def test_the_value_alone_is_gold(self) -> None:
+        for records in self.cells.values():
+            for record in (r for r in records if r.layer == "A"):
+                (gold,) = record.gold
+                encoded = record.text.encode("utf-8")
+                self.assertEqual(encoded[gold.start : gold.end].decode("utf-8"), gold.value)
+                self.assertNotRegex(encoded[: gold.start].decode("utf-8"), r"\d$", record.uid)
+                self.assertNotRegex(encoded[gold.end :].decode("utf-8"), r"^\d", record.uid)
+
+    def test_structured_cells_parse(self) -> None:
+        for records in self.cells.values():
+            for record in records:
+                if record.surface == "cue_tool_json":
+                    json.loads(record.text)
+                if record.surface == "cue_csv":
+                    rows = list(csv.reader(io.StringIO(record.text)))
+                    self.assertEqual({len(row) for row in rows}, {len(rows[0])}, record.uid)
+
+    def test_templates_split_by_partition(self) -> None:
+        for cell in (*agentic.CUE_CELLS, *agentic.CUE_TWINS):
+            self.assertNotEqual(cell.templates["dev"], cell.templates["test"], cell.family)
+        values = {p: {g.value for r in rs for g in r.gold} for p, rs in self.cells.items()}
+        self.assertFalse(values["dev"] & values["test"])
+
+    def test_card_cells_carry_both_validities_and_every_length(self) -> None:
+        for records in self.cells.values():
+            cards = [r for r in records if r.layer == "A" and r.gold[0].label == "CREDITCARDNUMBER"]
+            self.assertEqual({r.validity for r in cards}, {agentic.VALID, agentic.INVALID})
+            compact = [r for r in cards if " " not in r.gold[0].value]
+            for length in (12, 15):
+                validities = {r.validity for r in compact if len(r.gold[0].value) == length}
+                self.assertEqual(validities, {agentic.VALID, agentic.INVALID}, length)
+            self.assertEqual({len(r.gold[0].value.replace(" ", "")) for r in cards}, {12, 13, 14, 15})
+            for record in cards:
+                digits = record.gold[0].value.replace(" ", "")
+                self.assertEqual(agentic.luhn_valid(digits), record.validity == agentic.VALID, record.uid)
+
+    def test_cued_card_twins_are_credited_and_guarded(self) -> None:
+        for family in (c.family for c in agentic.CUE_CELLS if c.shape.label == "CREDITCARDNUMBER"):
+            self.assertEqual(agentic.CUE_FAMILY_LABELS[family], "CREDITCARDNUMBER")
+            self.assertTrue(agentic.invalid_twin_credited(agentic.CUE_FAMILY_LABELS[family], "cue_prose"))
+        self.assertEqual(agentic.guard_families(7), ["ref_number_10", "ref_number_11", "ref_number_16",
+                                                      "ref_number_9"])
+        self.assertEqual(agentic.guard_families(8), sorted([*CUE_CARD_TWINS, *agentic.guard_families(7)]))
+        # A v8 corpus without a guarded card twin's count fails closed.
+        scorecard = _scorecard({"C": 0, "A": 0, "D": 0, "R": 0})
+        scorecard["layers"]["generator"] = {"generator_version": 8}
+        del scorecard["layers"]["D"]["runs"][0]["per_cell"]["D|card_twin_order|prose|benign"]
+        with self.assertRaisesRegex(agentic.LayerError, "card_twin_order"):
+            agentic.layer_totals(scorecard, "policy-file")
+        scorecard["layers"]["generator"] = {"generator_version": 7}
+        self.assertNotIn("card_twin_order",
+                         agentic.layer_totals(scorecard, "policy-file")["D"]["guard_false_positive"])
+
+    def test_a_cued_card_twin_fp_rise_fails_the_gate(self) -> None:
+        base = _scorecard({"C": 10, "A": 600, "D": 0, "R": 0}, {"D": 7})
+        candidate = _scorecard({"C": 10, "A": 0, "D": 0, "R": 0}, {"D": 8})
+        candidate["layers"]["D"]["runs"][0]["per_cell"]["D|card_twin_reader_serial|prose|benign"] = {
+            "utf8_bytes": {"leaked": 0, "false_positive": 1}}
+        result = agentic.gate(base, candidate)
+        self.assertEqual(result["verdict"], "fail")
+        self.assertIn("card_twin_reader_serial", result["reason"])
+
+    def test_each_broad_rule_catches_its_shape_and_pays_on_every_twin(self) -> None:
+        for shape in agentic.CueShape:
+            rule = re.compile(agentic.CUE_BROAD_PATTERNS[shape])
+            families = {c.family for c in agentic.CUE_CELLS if c.shape is shape}
+            twins = {t.family for t in agentic.CUE_TWINS if t.shape is shape}
+            for records in self.cells.values():
+                catches = [r for r in records if r.family in families and rule.search(r.text)]
+                costs = [r for r in records if r.family in twins and rule.search(r.text)]
+                self.assertEqual(len(catches), agentic.DOCS_PER_CUE_CELL["A"] * len(families), shape)
+                self.assertEqual(len(costs), agentic.DOCS_PER_CUE_CELL["D"] * len(twins), shape)
+
+    def test_mutant_policies_carry_the_broad_and_narrow_patterns(self) -> None:
+        for name, table in (("broad", agentic.CUE_BROAD_PATTERNS), ("narrow", agentic.CUE_NARROW_PATTERNS)):
+            path = REPO_ROOT / f"scripts/bench/fixtures/agentic/mutant-{name}-cued-shapes.toml"
+            patterns = re.findall(r"^pattern = '(.*)'$", path.read_text(encoding="utf-8"), flags=re.MULTILINE)
+            self.assertEqual(sorted(patterns), sorted(table.values()), name)
+
+    # Layer D documents (all of layer D) that each narrow rule matches, per
+    # partition. A narrow rule with no D cost would ship its false positives
+    # unmeasured.
+    NARROW_D_COST = {
+        # dev grouped: also 21 `ref_number_16` references; three digits: the
+        # three-digit near twin and the Swedish-shape one (`ticket 900 00`).
+        "dev": {"age_turned": 4, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
+                "card_short_compact": 8, "card_short_grouped": 29, "zip_se": 4, "zip_pl": 4, "zip_six": 4,
+                "zip_br": 4, "zip_three": 8},
+        "test": {"age_turned": 4, "age_at_the_age_of": 12, "age_yo": 4, "age_year_old_gender": 4, "dob_sentence_break": 4,
+                 "card_short_compact": 8, "card_short_grouped": 8, "zip_se": 4, "zip_pl": 4, "zip_six": 4,
+                 "zip_br": 4, "zip_three": 8},
+    }
+
+    def test_each_narrow_rule_catches_its_shape_and_pays_in_layer_d(self) -> None:
+        for partition in agentic.PARTITIONS:
+            layer_d = [r for r in self.full[partition] if r.layer == "D"]
+            costs = {}
+            for shape, pattern in agentic.CUE_NARROW_PATTERNS.items():
+                rule = re.compile(pattern)
+                families = {c.family for c in agentic.CUE_CELLS if c.shape is shape}
+                catches = [r for r in self.cells[partition] if r.family in families and rule.search(r.text)]
+                self.assertEqual(len(catches), agentic.DOCS_PER_CUE_CELL["A"] * len(families), shape)
+                costs[shape.value] = sum(1 for r in layer_d if rule.search(r.text))
+            self.assertEqual(costs, self.NARROW_D_COST[partition], partition)
+
+    def test_extending_the_shipped_card_cue_window_to_short_cards_pays_in_layer_d(self) -> None:
+        # `card.cued`'s window (any 32 non-digit characters after `card`) with
+        # 12- to 15-digit layouts would reach the terminal and reader twins.
+        rule = re.compile(
+            r"(?i)\bcards?\b[^\d\n.;!?:,=]{0,32}?\b(?:(?:5[0678]|6\d)\d{10,13}|(?:5[0678]|6\d)\d\d \d{4} \d{4})\b"
+        )
+        for partition, records in self.cells.items():
+            costs = [r.family for r in records if r.layer == "D" and rule.search(r.text)]
+            self.assertEqual(costs, ["card_twin_reader_serial"] * 4, partition)
+
+    def test_cue_reading_examples(self) -> None:
+        def reads(shape, text, value):
+            start = text.index(value)
+            return agentic.cue_reading(shape, text, start, start + len(value), "cue_prose")
+
+        shape = agentic.CueShape
+        self.assertTrue(reads(shape.AGE_TURNED, "I just turned 47.", "47"))
+        self.assertFalse(reads(shape.AGE_TURNED, "The bridge turned 47.", "47"))
+        self.assertFalse(reads(shape.AGE_TURNED, "She turned 90 degrees.", "90"))
+        self.assertTrue(reads(shape.AGE_YEAR_OLD_GENDER, "A 28 year old female.", "28"))
+        self.assertFalse(reads(shape.AGE_YEAR_OLD_GENDER, "A 28 year old female cat.", "28"))
+        self.assertFalse(reads(shape.AGE_YO, "My 12 y/o laptop.", "12"))
+        self.assertTrue(reads(shape.DOB_SENTENCE_BREAK, "My date of birth? It's 3/11/1987.", "3/11/1987"))
+        self.assertFalse(reads(shape.DOB_SENTENCE_BREAK, "My date of birth. Login 3/11/2026.", "3/11/2026"))
+        self.assertTrue(reads(shape.CARD_SHORT_COMPACT, "card number: 504712345678", "504712345678"))
+        self.assertFalse(reads(shape.CARD_SHORT_COMPACT, "card reader 504712345678", "504712345678"))
+        self.assertTrue(reads(shape.ZIP_PL, "PLZ: 53-320", "53-320"))
+        self.assertFalse(reads(shape.ZIP_PL, "PLZ missing, error 53-320", "53-320"))
+        text = "a,zip,b\nx,53-320,y\n"
+        start = text.index("53-320")
+        self.assertTrue(agentic.cue_reading(shape.ZIP_PL, text, start, start + 6, "cue_csv"))
+
+    def test_a_shape_without_a_twin_fails_generation(self) -> None:
+        twins = tuple(t for t in agentic.CUE_TWINS if t.shape is not agentic.CueShape.ZIP_BR)
+        with self.assertRaisesRegex(agentic.LayerError, r"no layer D counterweight: \['zip_br'\]"):
+            self.generate_with(CUE_TWINS=twins)
+
+    def test_a_twin_no_cell_uses_fails_generation(self) -> None:
+        cells = tuple(c for c in agentic.CUE_CELLS if c.shape is not agentic.CueShape.ZIP_THREE)
+        with self.assertRaisesRegex(agentic.LayerError, "no layer A cell uses"):
+            self.generate_with(CUE_CELLS=cells)
+
+    def test_a_shape_whose_narrow_rule_pays_nothing_fails_generation(self) -> None:
+        twins = tuple(t for t in agentic.CUE_TWINS if t.family != "age_twin_turned_degrees")
+        with self.assertRaisesRegex(agentic.LayerError, r"narrow rule pays nothing in layer D: \['age_turned'\]"):
+            self.generate_with(CUE_TWINS=twins)
+
+    def test_an_object_age_in_layer_a_fails_generation(self) -> None:
+        cells = self.replaced(agentic.CUE_CELLS, "age_turned_prose",
+                              templates={"dev": "x", "test": "Then she turned {V} degrees."})
+        with self.assertRaisesRegex(agentic.LayerError, "does not read as a age_turned value"):
+            self.generate_with(CUE_CELLS=cells)
+
+    def test_a_person_age_in_layer_d_fails_generation(self) -> None:
+        twins = self.replaced(agentic.CUE_TWINS, "age_twin_turned_degrees",
+                              templates={"dev": "x", "test": "She turned {X} last week."})
+        with self.assertRaisesRegex(agentic.LayerError, "reads as a age_turned value"):
+            self.generate_with(CUE_TWINS=twins)
+
+    def test_a_birth_date_answer_in_layer_d_fails_generation(self) -> None:
+        twins = self.replaced(agentic.CUE_TWINS, "dob_twin_last_login",
+                              templates={"dev": "x", "test": "Your date of birth? It is {X}."})
+        with self.assertRaisesRegex(agentic.LayerError, "reads as a dob_sentence_break value"):
+            self.generate_with(CUE_TWINS=twins)
+
+    def test_an_uncued_card_in_layer_a_fails_generation(self) -> None:
+        cells = self.replaced(agentic.CUE_CELLS, "card_short_compact_prose",
+                              templates={"dev": "x", "test": "Order {V} shipped."})
+        with self.assertRaisesRegex(agentic.LayerError, "does not read as a card_short_compact value"):
+            self.generate_with(CUE_CELLS=cells)
+
+    def test_a_plain_card_twin_with_a_card_word_fails_generation(self) -> None:
+        twins = self.replaced(agentic.CUE_TWINS, "card_twin_order",
+                              templates={"dev": "x", "test": "Card reader order {X} shipped."})
+        with self.assertRaisesRegex(agentic.LayerError, "carries a cue word"):
+            self.generate_with(CUE_TWINS=twins)
+
+    def test_a_near_cue_twin_without_its_cue_word_fails_generation(self) -> None:
+        twins = self.replaced(agentic.CUE_TWINS, "zip_twin_se_near",
+                              templates={"dev": "x", "test": "Lookup failed for batch {X}."})
+        with self.assertRaisesRegex(agentic.LayerError, "lacks a cue word"):
+            self.generate_with(CUE_TWINS=twins)
+
+    def test_a_value_outside_its_shape_fails_generation(self) -> None:
+        cells = self.replaced(agentic.CUE_CELLS, "zip_pl_csv", make=lambda rng, partition, index: "53320")
+        with self.assertRaisesRegex(agentic.LayerError, "is not a zip_pl value"):
+            self.generate_with(CUE_CELLS=cells)
+
+    def test_a_twin_the_broad_rule_misses_fails_generation(self) -> None:
+        twins = self.replaced(agentic.CUE_TWINS, "zip_twin_six_order_json",
+                              make=lambda rng, partition, index: "12345")
+        with self.assertRaisesRegex(agentic.LayerError, "broad pattern misses the decoy"):
+            self.generate_with(CUE_TWINS=twins)
+
+
 class PartitionTests(unittest.TestCase):
     def test_vocabularies_are_split_before_generation(self) -> None:
         pools = [
@@ -1038,7 +1295,13 @@ class PartitionTests(unittest.TestCase):
     def test_generated_values_templates_and_groups_are_disjoint(self) -> None:
         dev = agentic.generate("dev")
         test = agentic.generate("test")
-        self.assertFalse({g.value for r in dev for g in r.gold} & {g.value for r in test for g in r.gold})
+        # An age cannot avoid the dev partition's 1-99 house numbers; ages are
+        # split between the partitions themselves (19-56 dev, 57-94 test).
+        def values(records: list, ages: bool) -> set[str]:
+            return {g.value for r in records for g in r.gold if (g.label == "AGE") == ages}
+
+        self.assertFalse(values(dev, False) & values(test, False))
+        self.assertFalse(values(dev, True) & values(test, True))
         self.assertFalse({r.template for r in dev} & {r.template for r in test})
         self.assertFalse({r.group for r in dev} & {r.group for r in test})
         for records, partition in ((dev, "dev"), (test, "test")):
@@ -1046,7 +1309,6 @@ class PartitionTests(unittest.TestCase):
             for record in records:
                 groups.setdefault(record.group, set()).add(record.partition)
             self.assertTrue(all(value == {partition} for value in groups.values()))
-
 
 
 class BlockCellTests(unittest.TestCase):
@@ -1157,6 +1419,12 @@ class ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(agentic.LayerError, "PASSPORTNUM"):
                 agentic.apply_contract(self.documents(), contract)
 
+    def test_v8_contract_is_frozen_byte_for_byte(self) -> None:
+        frozen = REPO_ROOT / agentic.HISTORICAL_CONTRACTS[8]
+        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(), "282be3441ecc94eff59c555777a300873af3a8c8f26e40fae334c2d36c4e5f7e")
+        self.assertNotIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT, version=8).scored_labels)
+        self.assertIn("LICENSEPLATE", agentic.load_contract(REPO_ROOT).scored_labels)
+
     def test_an_older_generator_loads_its_own_committed_contract(self) -> None:
         # A record measured on v4, v5 or v6 is rescored under the contract that
         # ruled on exactly the labels that generator emitted.
@@ -1164,11 +1432,14 @@ class ContractTests(unittest.TestCase):
             contract = agentic.load_contract(REPO_ROOT, version=version)
             self.assertNotIn("STREET", contract.scored_labels)
         self.assertIn("STREET", agentic.load_contract(REPO_ROOT, version=6).scored_labels)
+        for version in (6, 7):
+            self.assertNotIn("AGE", agentic.load_contract(REPO_ROOT, version=version).scored_labels)
+        self.assertIn("AGE", agentic.load_contract(REPO_ROOT).scored_labels)
         self.assertIn("STREET", agentic.load_contract(REPO_ROOT).scored_labels)
         with self.assertRaisesRegex(agentic.LayerError, "no committed scored-label contract"):
             agentic.load_contract(REPO_ROOT, version=3)
-        with self.assertRaisesRegex(agentic.LayerError, "generator_version 8"):
-            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=6)
+        with self.assertRaisesRegex(agentic.LayerError, "generator_version 9"):
+            agentic.load_contract(REPO_ROOT, agentic.SCORED_LABELS_PATH, version=7)
 
     def test_generator_version_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1189,7 +1460,10 @@ class ContractTests(unittest.TestCase):
             applied = agentic.apply_contract(self.documents(), contract)
         dob = [d for d in applied if d.excluded_spans]
         self.assertTrue(dob)
-        self.assertTrue(all(d.cell and ("|dob|" in d.cell or "|birth_date_cue|" in d.cell) for d in dob))
+        self.assertTrue(all(
+            d.cell and ("|dob|" in d.cell or "|birth_date_cue|" in d.cell or "|dob_sentence_break" in d.cell)
+            for d in dob
+        ))
 
 
 def _success_response(document: score.Document) -> dict[str, object]:
@@ -1298,7 +1572,7 @@ def _scorecard(
                 "D|ref_number_16|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": guard_fp}},
                 **{
                     f"D|{family}|prose|benign": {"utf8_bytes": {"leaked": 0, "false_positive": 0}}
-                    for family in ("ref_number_9", "ref_number_10", "ref_number_11")
+                    for family in ("ref_number_9", "ref_number_10", "ref_number_11", *CUE_CARD_TWINS)
                 },
             }
         if layer == "A":
@@ -1739,7 +2013,7 @@ class GateTests(unittest.TestCase):
 
     def test_credit_guard_families_come_from_the_counterweights(self) -> None:
         self.assertEqual(agentic.CREDIT_GUARD_FAMILIES,
-                         {"CREDITCARDNUMBER": ("ref_number_16",), "IBAN": (),
+                         {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16"), "IBAN": (),
                           "TAXNUM": ("ref_number_11",), "CPF": ("ref_number_11",),
                           "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
                           "PHONENUMBER": ()})

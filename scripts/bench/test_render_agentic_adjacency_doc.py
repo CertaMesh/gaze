@@ -42,7 +42,7 @@ class AdjacencyHistoryTests(unittest.TestCase):
             self.assertEqual(row["layers"]["A"], {"gold": 100, "leaked": 20, "false_positive": 3})
             self.assertEqual(row["scorecard_sha256"], render.sha256(path))
             path.write_text(json.dumps(scorecard("c" * 64)), encoding="utf-8")
-            with self.assertRaisesRegex(render.HistoryError, "pinned v4 test corpus"):
+            with self.assertRaisesRegex(render.HistoryError, f"pinned v{render.GENERATOR_VERSION} test corpus"):
                 render.rows_from_scorecard(path)
 
     def test_render_is_idempotent_and_rejects_missing_rows(self) -> None:

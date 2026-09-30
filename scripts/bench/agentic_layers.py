@@ -39,7 +39,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 import gaze_bench_score as score
 
 
-GENERATOR_VERSION = 8
+GENERATOR_VERSION = 9
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -2648,6 +2648,603 @@ def check_phone_cells(records: Sequence[Record]) -> None:
         raise LayerError(f"phone shapes whose narrow rule pays nothing in layer D: {free}")
 
 
+# --------------------------------------------------------------------------
+# Cued grammar and short identifiers (generator v8). Layer A writes values that
+# only their wording makes personal: a person's age after `turned`, `at the age
+# of`, before `y/o` or `year old female`; a date of birth given one sentence
+# after the question (`date of birth? It's 3/11/1987`); a 12- to 15-digit
+# (Maestro-length) card number right after a card label; and postcodes in
+# foreign or short shapes (`481 22`, `53-320`, six digits, `75534-030`, three
+# digits) right after a postal label. The value alone is gold. Layer D writes
+# the same numbers where the wording says they are not personal: an object's or
+# an animal's age, a person turning 90 degrees, a date after an unrelated
+# sentence, order, tracking and timestamp numbers, and codes behind batch,
+# room or error labels, some of them one clause away from a card or postal
+# word. A rule that drops the person, the sentence-break copula or the
+# cue-adjacency pays there.
+
+CUE_SURFACES = ("cue_prose", "cue_log_kv", "cue_csv", "cue_tool_json")
+DOCS_PER_CUE_CELL = {LAYER_IDENTIFIERS: 6, LAYER_LOOKALIKES: 4}
+
+
+class CueShape(str, Enum):
+    """The wording or written shape a cell exercises."""
+    AGE_TURNED = "age_turned"
+    AGE_AT_THE_AGE_OF = "age_at_the_age_of"
+    AGE_YO = "age_yo"
+    AGE_YEAR_OLD_GENDER = "age_year_old_gender"
+    DOB_SENTENCE_BREAK = "dob_sentence_break"
+    CARD_SHORT_COMPACT = "card_short_compact"
+    CARD_SHORT_GROUPED = "card_short_grouped"
+    ZIP_SE = "zip_se"
+    ZIP_PL = "zip_pl"
+    ZIP_SIX = "zip_six"
+    ZIP_BR = "zip_br"
+    ZIP_THREE = "zip_three"
+
+    @property
+    def label(self) -> str:
+        return CUE_LABELS[self.value.split("_", 1)[0]]
+
+
+CUE_LABELS = {"age": "AGE", "dob": "DATEOFBIRTH", "card": "CREDITCARDNUMBER", "zip": "ZIPCODE"}
+
+_AGE_VALUE = r"(?:[1-9]\d?|1[01]\d)"
+_DOB_VALUE = (
+    r"(?:(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12]\d|3[01])/(?:19|20)\d\d"
+    r"|(?:0[1-9]|[12]\d|3[01])\.(?:0[1-9]|1[0-2])\.(?:19|20)\d\d"
+    r"|(?:19|20)\d\d-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))"
+)
+_DATE_LOOSE = r"\d{1,4}[./-]\d{1,2}[./-]\d{2,4}"
+# Maestro issuer prefixes (50, 56-58, 6x); each partition draws its own.
+_CARD_IIN = r"(?:5[0678]|6\d)"
+CARD_IINS = {"dev": ("50", "56"), "test": ("58", "67")}
+# Every gold value of a shape matches its pattern in full.
+CUE_SHAPE_PATTERNS: dict[CueShape, str] = {
+    CueShape.AGE_TURNED: _AGE_VALUE,
+    CueShape.AGE_AT_THE_AGE_OF: _AGE_VALUE,
+    CueShape.AGE_YO: _AGE_VALUE,
+    CueShape.AGE_YEAR_OLD_GENDER: _AGE_VALUE,
+    CueShape.DOB_SENTENCE_BREAK: _DOB_VALUE,
+    CueShape.CARD_SHORT_COMPACT: _CARD_IIN + r"\d{10,13}",
+    CueShape.CARD_SHORT_GROUPED: _CARD_IIN + r"\d\d \d{4} \d{4}",
+    CueShape.ZIP_SE: r"[1-9]\d\d \d\d",
+    CueShape.ZIP_PL: r"\d\d-\d{3}",
+    CueShape.ZIP_SIX: r"[1-9]\d{5}",
+    CueShape.ZIP_BR: r"\d{5}-\d{3}",
+    CueShape.ZIP_THREE: r"[1-9]\d\d",
+}
+# Words that make a sentence about a person. No apostrophes: the mutant
+# policies carry these patterns as TOML literal strings.
+PERSON_WORDS = (
+    r"(?:i|me|my|he|she|his|her|we|they|patient|customer|client|mother|father|mom|dad|son|daughter|wife|"
+    r"husband|grandmother|grandfather|woman|man|female|male|ich|er|sie|mein|meine|meiner|meinem|mutter|vater|"
+    r"tochter|sohn|oma|opa)"
+)
+_ZIP_WORDS = r"(?:zip(?:[\x20_-]?code)?|post(?:al)?[\x20_-]?code|postcode|postnummer|postleitzahl|plz|cep|kod\x20pocztowy|póstnúmer)"
+# The over-broad rule for each shape: the wording or the digits with no person,
+# sentence-break copula or cue. Every A value matches it and so does every
+# layer D twin of the shape. The committed broad mutant policy carries the same
+# patterns.
+CUE_BROAD_PATTERNS: dict[CueShape, str] = {
+    CueShape.AGE_TURNED: r"(?i)\bturn(?:ed|s)?\s+\d{1,3}\b|\b\d{1,3}\s+geworden\b",
+    CueShape.AGE_AT_THE_AGE_OF: r"(?i)\b(?:at\s+the\s+age\s+of|im\s+alter\s+von)\s+\d{1,3}\b",
+    CueShape.AGE_YO: r"(?i)\b\d{1,3}\s?y/o\b",
+    CueShape.AGE_YEAR_OLD_GENDER: r"(?i)\b\d{1,3}[- ]years?[- ]old\b",
+    CueShape.DOB_SENTENCE_BREAK: r"(?i)(?:date\s+of\s+birth|\bdob\b|geburtsdatum)[^\n]{0,80}?" + _DATE_LOOSE,
+    CueShape.CARD_SHORT_COMPACT: r"\b\d{12,15}\b",
+    CueShape.CARD_SHORT_GROUPED: r"\b\d{4} \d{4} \d{4}\b",
+    CueShape.ZIP_SE: r"\b\d{3} \d{2}\b",
+    CueShape.ZIP_PL: r"\b\d{2}-\d{3}\b",
+    CueShape.ZIP_SIX: r"\b\d{6}\b",
+    CueShape.ZIP_BR: r"\b\d{5}-\d{3}\b",
+    CueShape.ZIP_THREE: r"\b\d{3}\b",
+}
+# The rule a detector would plausibly write for each shape: a person word
+# somewhere before the age wording, any few words between the date-of-birth
+# question and the date, the issuer prefix and card length with no cue, a
+# postal word anywhere within 40 non-digit characters, `at the age of` or `im
+# Alter von` before a person-range age with no subject check. Every A value of
+# the shape matches it, and so does at least one layer D twin, so each pays
+# false positives. The committed narrow mutant policy carries the same
+# patterns.
+CUE_NARROW_PATTERNS: dict[CueShape, str] = {
+    CueShape.AGE_TURNED: (
+        rf"(?i)\b{PERSON_WORDS}\b[^.\n]{{0,40}}?\b(?:turned|turns)\s+\d{{1,3}}\b"
+        rf"|\b{PERSON_WORDS}\b[^.\n]{{0,40}}?\b\d{{1,3}}\s+geworden\b"
+    ),
+    CueShape.AGE_AT_THE_AGE_OF: rf"(?i)\b(?:at the age of|im alter von) {_AGE_VALUE}\b",
+    CueShape.AGE_YO: rf"(?i)\b{PERSON_WORDS}\b[^.\n]{{0,40}}?\b\d{{1,3}}\s?y/o\b|\b\d{{1,3}}\s?y/o\s+(?:fe)?male\b",
+    CueShape.AGE_YEAR_OLD_GENDER: r"(?i)\b\d{1,3}[- ]years?[- ]old[- ](?:fe)?male\b",
+    CueShape.DOB_SENTENCE_BREAK: (
+        r"(?i)(?:date\s+of\s+birth|\bdob\b|geburtsdatum)\s*[.?!]\s+(?:\S+\s+){0,3}?" + _DATE_LOOSE
+    ),
+    CueShape.CARD_SHORT_COMPACT: rf"\b{_CARD_IIN}\d{{10,13}}\b",
+    CueShape.CARD_SHORT_GROUPED: rf"\b{_CARD_IIN}\d\d \d{{4}} \d{{4}}\b",
+    **{
+        shape: rf"(?i){_ZIP_WORDS}[^\d]{{0,40}}?\b{CUE_SHAPE_PATTERNS[shape]}\b"
+        for shape in (CueShape.ZIP_SE, CueShape.ZIP_PL, CueShape.ZIP_SIX, CueShape.ZIP_BR, CueShape.ZIP_THREE)
+    },
+}
+# The reference reading (`cue_reading`): what makes a value personal.
+_SENTENCE_BREAK = r'[.!?\n"{}]'
+AGE_GRAMMAR: dict[CueShape, tuple[str | None, str | None]] = {
+    CueShape.AGE_TURNED: (r"(?i)\bturn(?:ed|s)?\s+$", r"(?i)^\s+geworden\b"),
+    CueShape.AGE_AT_THE_AGE_OF: (r"(?i)\b(?:at\s+the\s+age\s+of|im\s+alter\s+von)\s+$", None),
+    CueShape.AGE_YO: (None, r"(?i)^\s?y/o\b"),
+    CueShape.AGE_YEAR_OLD_GENDER: (None, r"(?i)^[- ]years?[- ]old\b"),
+}
+# An age followed by a unit is an angle or a share, and one followed by an
+# object or an animal noun is not a person's.
+AGE_NOT_PERSON_AFTER = (
+    r"(?i)^\s*(?:degrees?|grad|°|%|percent)"
+    r"|^(?:[- ]?(?:y/o|years?[- ]old|jahren?))?[- ]+(?:(?:fe)?male[- ]+)?"
+    r"(?:laptop|server|boiler|car|building|bridge|codebase|cat|dog|horse|mare|stallion|labrador|terrier|tortoise)\b"
+)
+DOB_BREAK = (
+    r"(?i)(?:date\s+of\s+birth|\bdob\b|geburtsdatum)\s*[.?!]\s+"
+    r"(?:it'?s|it\s+is|that'?s|that\s+is|es\s+ist|das\s+ist)(?:\s+der)?\s+$"
+)
+CARD_DIRECT = (
+    r"(?i)(?:\bcard(?:[\x20_-]?(?:number|num|no|nr))?|\bkarten?(?:nummer|nr)|\bmaestro)\b"
+    r"[\"'\s:=]*(?:\{\s*\"(?:number|num|pan|value)\"\s*:\s*\")?(?:(?:is|ist|lautet)\s+)?$"
+)
+CARD_HEADER = r"(?i)card(?:[\x20_-]?(?:number|num|no|nr))?"
+CARD_WORD = r"(?i)card|karte|maestro"
+ZIP_DIRECT = rf"(?i)\b{_ZIP_WORDS}\b[\"'\s:=]*(?:(?:is|ist|lautet)\s+)?$"
+ZIP_HEADER = rf"(?i){_ZIP_WORDS}"
+ZIP_WORD = rf"(?i){_ZIP_WORDS}"
+
+
+def _csv_header(text: str, start: int) -> str:
+    """The header of the CSV column the character offset `start` falls in."""
+    line_start = text.rfind("\n", 0, start) + 1
+    column = text[line_start:start].count(",")
+    return text.split("\n", 1)[0].split(",")[column]
+
+
+def cue_reading(shape: CueShape, text: str, start: int, end: int, surface: str) -> bool:
+    """Whether the value at character offsets [start, end) reads as personal.
+
+    This is the reference semantics the cells are built around, not a rule to
+    ship: layer A values must read as personal and layer D values must not."""
+    import re
+
+    before, after = text[:start], text[end:]
+    if shape.label == "AGE":
+        head = re.split(_SENTENCE_BREAK, before)[-1]
+        tail = re.split(_SENTENCE_BREAK, after)[0]
+        if not re.search(rf"(?i)\b{PERSON_WORDS}\b", f"{head} {tail}"):
+            return False
+        before_cue, after_cue = AGE_GRAMMAR[shape]
+        if not ((before_cue and re.search(before_cue, before)) or (after_cue and re.search(after_cue, after))):
+            return False
+        return not re.search(AGE_NOT_PERSON_AFTER, after)
+    if shape.label == "DATEOFBIRTH":
+        return bool(re.search(DOB_BREAK, before))
+    direct, header = (CARD_DIRECT, CARD_HEADER) if shape.label == "CREDITCARDNUMBER" else (ZIP_DIRECT, ZIP_HEADER)
+    if re.search(direct, before):
+        return True
+    return surface == "cue_csv" and re.fullmatch(header, _csv_header(text, start)) is not None
+
+
+@dataclass(frozen=True)
+class CueCell:
+    """One layer A cell: {V} is the gold value."""
+    family: str
+    shape: CueShape
+    surface: str
+    language: str
+    region: str
+    templates: Mapping[str, str]
+    make: Callable[[Rng, str, int], str]
+
+
+@dataclass(frozen=True)
+class CueTwin:
+    """One layer D cell: {X} is a benign value of the shape. A `near_cue` twin
+    writes a card or postal word one clause away from the value."""
+    family: str
+    shape: CueShape
+    surface: str
+    language: str
+    region: str
+    templates: Mapping[str, str]
+    make: Callable[[Rng, str, int], str]
+    near_cue: bool = False
+
+
+def _cue_cell(family: str, shape: CueShape, surface: str, language: str, region: str, dev: str, test: str,
+              make: Callable[[Rng, str, int], str]) -> CueCell:
+    return CueCell(family, shape, f"cue_{surface}", language, region, {"dev": dev, "test": test}, make)
+
+
+def _cue_twin(family: str, shape: CueShape, surface: str, language: str, region: str, dev: str, test: str,
+              make: Callable[[Rng, str, int], str], near_cue: bool = False) -> CueTwin:
+    return CueTwin(family, shape, f"cue_{surface}", language, region, {"dev": dev, "test": test}, make, near_cue)
+
+
+def _age(rng: Rng, partition: str, index: int) -> str:
+    """Ages split by partition, so no gold value repeats across them."""
+    return str(rng.between(19, 56) if partition == "dev" else rng.between(57, 94))
+
+
+def _angle(rng: Rng, partition: str, index: int) -> str:
+    return rng.choice(("45", "90"))
+
+
+def _birth_parts(rng: Rng, partition: str) -> tuple[int, int, int]:
+    year = rng.between(1940, 1971) if partition == "dev" else rng.between(1972, 2004)
+    return year, rng.between(1, 12), rng.between(1, 28)
+
+
+def _benign_parts(rng: Rng, partition: str) -> tuple[int, int, int]:
+    return {"dev": 2025, "test": 2026}[partition], rng.between(1, 12), rng.between(1, 28)
+
+
+def _us_date(parts: tuple[int, int, int]) -> str:
+    year, month, day = parts
+    return f"{month}/{day}/{year}"
+
+
+def _de_date(parts: tuple[int, int, int]) -> str:
+    year, month, day = parts
+    return f"{day:02d}.{month:02d}.{year}"
+
+
+def _iso_date(parts: tuple[int, int, int]) -> str:
+    year, month, day = parts
+    return f"{year}-{month:02d}-{day:02d}"
+
+
+def _short_card(rng: Rng, partition: str, length: int, valid: bool) -> str:
+    prefix = rng.choice(CARD_IINS[partition])
+    payload = prefix + rng.digits(length - 1 - len(prefix))
+    number = payload + luhn_check_digit(payload)
+    return number if valid else _bump_last_digit(number)
+
+
+def _grouped(number: str) -> str:
+    return f"{number[:4]} {number[4:8]} {number[8:]}"
+
+
+CARD_COMPACT_LENGTHS = (12, 12, 13, 14, 15, 15)
+
+
+def _card_compact(rng: Rng, partition: str, index: int) -> str:
+    """12 to 15 digits, Luhn-valid and Luhn-failing in turn: both at 12 and 15."""
+    length = CARD_COMPACT_LENGTHS[index % len(CARD_COMPACT_LENGTHS)]
+    return _short_card(rng, partition, length, index % 2 == 0)
+
+
+def _card_grouped(rng: Rng, partition: str, index: int) -> str:
+    return _grouped(_short_card(rng, partition, 12, index % 2 == 0))
+
+
+def _order_12(rng: Rng, partition: str, index: int) -> str:
+    """A Luhn-valid 12-digit number with a card issuer prefix, never a card."""
+    return _short_card(rng, partition, 12, True)
+
+
+def _reference_13_15(rng: Rng, partition: str, index: int) -> str:
+    """A card-prefixed 13- to 15-digit reference that fails Luhn."""
+    return _short_card(rng, partition, 13 + index % 3, False)
+
+
+def _grouped_12(rng: Rng, partition: str, index: int) -> str:
+    return _grouped(_short_card(rng, partition, 12, True))
+
+
+def _epoch_ms(rng: Rng, partition: str, index: int) -> str:
+    value = "17" + rng.digits(11)
+    return _bump_last_digit(value) if luhn_valid(value) else value
+
+
+def _zip_maker(shape: CueShape) -> Callable[[Rng, str, int], str]:
+    def make(rng: Rng, partition: str, index: int) -> str:
+        low = partition == "dev"
+        if shape is CueShape.ZIP_SE:
+            return f"{rng.between(100, 499) if low else rng.between(500, 999)} {rng.digits(2)}"
+        if shape is CueShape.ZIP_PL:
+            return f"{rng.between(10, 49) if low else rng.between(50, 99)}-{rng.digits(3)}"
+        if shape is CueShape.ZIP_SIX:
+            return str(rng.between(100000, 499999) if low else rng.between(500000, 999999))
+        if shape is CueShape.ZIP_BR:
+            return f"{rng.between(10000, 49999) if low else rng.between(50000, 99999)}-{rng.digits(3)}"
+        return str(rng.between(100, 499) if low else rng.between(500, 999))
+    return make
+
+
+C_ = CueShape
+_zip_se, _zip_pl, _zip_six, _zip_br, _zip_three = (
+    _zip_maker(s) for s in (C_.ZIP_SE, C_.ZIP_PL, C_.ZIP_SIX, C_.ZIP_BR, C_.ZIP_THREE)
+)
+CUE_CELLS = (
+    _cue_cell("age_turned_prose", C_.AGE_TURNED, "prose", "en", "US",
+              "I just turned {V} and finally booked the trip.",
+              "My mother turned {V} last week, so we are hosting lunch.", _age),
+    _cue_cell("age_turned_prose_de", C_.AGE_TURNED, "prose", "de", "DE",
+              "Meine Tochter ist letzte Woche {V} geworden.",
+              "Ich bin im Mai {V} geworden und feiere am Samstag.", _age),
+    _cue_cell("age_turned_log", C_.AGE_TURNED, "log_kv", "en", "US",
+              'level=info event=profile.note note="customer turned {V} in March" status=ok',
+              'svc=crm op=annotate text="client says she turned {V} last month" result=ok', _age),
+    _cue_cell("age_at_the_age_of_prose", C_.AGE_AT_THE_AGE_OF, "prose", "en", "US",
+              "He retired at the age of {V} after the merger.",
+              "My father learned to swim at the age of {V}.", _age),
+    _cue_cell("age_at_the_age_of_prose_de", C_.AGE_AT_THE_AGE_OF, "prose", "de", "DE",
+              "Meine Oma hat im Alter von {V} Jahren Spanisch gelernt.",
+              "Mein Vater ist im Alter von {V} Jahren in Rente gegangen.", _age),
+    _cue_cell("age_at_the_age_of_json", C_.AGE_AT_THE_AGE_OF, "tool_json", "en", "US",
+              '{"history":{"note":"patient quit smoking at the age of {V}"}}',
+              '{"intake":{"summary":"she started running at the age of {V}","verified":true}}', _age),
+    _cue_cell("age_yo_prose", C_.AGE_YO, "prose", "en", "US",
+              "hi all, i'm {V} y/o and new to the forum",
+              "Patient is a {V} y/o with chest pain since Monday.", _age),
+    _cue_cell("age_yo_csv", C_.AGE_YO, "csv", "en", "US",
+              "id,summary\n3,{V} y/o female smoker\n",
+              "case,triage_note\n11,{V} y/o male with fever\n", _age),
+    _cue_cell("age_year_old_gender_prose", C_.AGE_YEAR_OLD_GENDER, "prose", "en", "US",
+              "This {V} year old female reports knee pain.",
+              "A {V}-year-old male presented with a cough.", _age),
+    _cue_cell("age_year_old_gender_json", C_.AGE_YEAR_OLD_GENDER, "tool_json", "en", "US",
+              '{"triage":{"note":"{V} year old male, no allergies"}}',
+              '{"case":{"summary":"{V}-year-old female, stable","priority":2}}', _age),
+    _cue_cell("dob_sentence_break_prose", C_.DOB_SENTENCE_BREAK, "prose", "en", "US",
+              "Can you confirm your date of birth? It's {V}.",
+              "Thanks for waiting. You asked for my date of birth. It is {V}.",
+              lambda rng, partition, index: _us_date(_birth_parts(rng, partition))),
+    _cue_cell("dob_sentence_break_prose_de", C_.DOB_SENTENCE_BREAK, "prose", "de", "DE",
+              "Sie fragten nach meinem Geburtsdatum. Es ist der {V}.",
+              "Mein Geburtsdatum? Das ist der {V}.",
+              lambda rng, partition, index: _de_date(_birth_parts(rng, partition))),
+    _cue_cell("dob_sentence_break_log", C_.DOB_SENTENCE_BREAK, "log_kv", "en", "US",
+              "level=info event=call.transcript text=\"agent asked for date of birth. It's {V}\" status=ok",
+              'svc=voice op=transcribe utterance="my date of birth? it is {V}" result=ok',
+              lambda rng, partition, index: (_us_date if partition == "dev" else _iso_date)(_birth_parts(rng, partition))),
+    _cue_cell("card_short_compact_prose", C_.CARD_SHORT_COMPACT, "prose", "en", "US",
+              "What is the limit for card {V}?",
+              "Please block my debit card number {V} today.", _card_compact),
+    _cue_cell("card_short_compact_prose_de", C_.CARD_SHORT_COMPACT, "prose", "de", "DE",
+              "Meine Kartennummer lautet {V}.",
+              "Maestro {V} wurde gesperrt.", _card_compact),
+    _cue_cell("card_short_compact_log", C_.CARD_SHORT_COMPACT, "log_kv", "en", "US",
+              "level=warn event=payment.declined card_number={V} reason=limit",
+              'svc=pay op=refund card_no="{V}" result=ok', _card_compact),
+    _cue_cell("card_short_compact_json", C_.CARD_SHORT_COMPACT, "tool_json", "en", "US",
+              '{"payment":{"cardNumber":"{V}","brand":"maestro"}}',
+              '{"wallet":{"card":{"number":"{V}"}}}', _card_compact),
+    _cue_cell("card_short_grouped_prose", C_.CARD_SHORT_GROUPED, "prose", "en", "US",
+              "Maestro {V} expires next month.",
+              "My card number is {V}, can you check it?", _card_grouped),
+    _cue_cell("card_short_grouped_csv", C_.CARD_SHORT_GROUPED, "csv", "en", "US",
+              "holder_ref,card_number,status\nH-11,{V},active\n",
+              "account,card_no,state\nA7,{V},blocked\n", _card_grouped),
+    _cue_cell("zip_se_prose", C_.ZIP_SE, "prose", "en", "SE",
+              "Ship it to the office, ZIP: {V}.",
+              "Our postcode is {V} if the courier asks.", _zip_se),
+    _cue_cell("zip_pl_csv", C_.ZIP_PL, "csv", "en", "PL",
+              "name,postcode,id\nWarehouse,{V},4\n",
+              "site,zip,ref\nDepot,{V},9\n", _zip_pl),
+    _cue_cell("zip_pl_prose_de", C_.ZIP_PL, "prose", "de", "PL",
+              "Die PLZ lautet {V}.",
+              "Postleitzahl: {V}, bitte eintragen.", _zip_pl),
+    _cue_cell("zip_six_json", C_.ZIP_SIX, "tool_json", "en", "IN",
+              '{"address":{"zip":"{V}","country":"IN"}}',
+              '{"shipping":{"postalCode":"{V}"}}', _zip_six),
+    _cue_cell("zip_br_log", C_.ZIP_BR, "log_kv", "pt", "BR",
+              'level=info event=address.verify cep="{V}" status=ok',
+              "svc=geo op=lookup zip_code={V} result=hit", _zip_br),
+    _cue_cell("zip_three_prose", C_.ZIP_THREE, "prose", "en", "IS",
+              "My zip code is {V}.",
+              "Postal code: {V}. Thanks!", _zip_three),
+)
+# Layer D. {X} is benign: it matches the shape's broad pattern and does not
+# read as personal.
+CUE_TWINS = (
+    _cue_twin("age_twin_turned_object", C_.AGE_TURNED, "prose", "en", "US",
+              "The old bridge turned {X} this spring.",
+              "The company turned {X} in May and opened a new plant.", _age),
+    _cue_twin("age_twin_turned_degrees", C_.AGE_TURNED, "prose", "en", "US",
+              "She turned {X} degrees to face the door.",
+              "He turned {X} degrees and walked back to the car.", _angle),
+    _cue_twin("age_twin_turned_object_de", C_.AGE_TURNED, "prose", "de", "DE",
+              "Die Firma ist dieses Jahr {X} geworden.",
+              "Das Stadion ist im Juni {X} geworden.", _age),
+    _cue_twin("age_twin_at_the_age_of_object", C_.AGE_AT_THE_AGE_OF, "prose", "en", "US",
+              "The oak was felled at the age of {X}.",
+              "The whisky was bottled at the age of {X}.", _age),
+    _cue_twin("age_twin_at_the_age_of_clause", C_.AGE_AT_THE_AGE_OF, "prose", "en", "US",
+              "The firm, at the age of {X}, was sold to a rival.",
+              "The bridge, at the age of {X}, still carries the morning traffic.", _age),
+    _cue_twin("age_twin_at_the_age_of_object_de", C_.AGE_AT_THE_AGE_OF, "prose", "de", "DE",
+              "Die Eiche wurde im Alter von {X} Jahren gefällt.",
+              "Der Wein wurde im Alter von {X} Jahren abgefüllt.", _age),
+    _cue_twin("age_twin_yo_object", C_.AGE_YO, "prose", "en", "US",
+              "My {X} y/o laptop still boots.",
+              "My {X} y/o boiler finally gave up.", _age),
+    _cue_twin("age_twin_year_old_object", C_.AGE_YEAR_OLD_GENDER, "prose", "en", "US",
+              "We are replacing a {X} year old codebase.",
+              "The {X}-year-old building needs a new roof.", _age),
+    _cue_twin("age_twin_year_old_animal", C_.AGE_YEAR_OLD_GENDER, "prose", "en", "US",
+              "The shelter has a {X} year old female cat for adoption.",
+              "They sold the {X}-year-old male horse last week.", _age),
+    _cue_twin("dob_twin_optional", C_.DOB_SENTENCE_BREAK, "prose", "en", "US",
+              "Date of birth is optional. The form closes {X}.",
+              "The date of birth field is hidden. Renewal is due {X}.",
+              lambda rng, partition, index: _us_date(_benign_parts(rng, partition))),
+    _cue_twin("dob_twin_last_login", C_.DOB_SENTENCE_BREAK, "prose", "en", "US",
+              "Please update your date of birth. Last login was {X}.",
+              "We could not verify the date of birth. Retry after {X}.",
+              lambda rng, partition, index: _us_date(_benign_parts(rng, partition))),
+    _cue_twin("card_twin_order", C_.CARD_SHORT_COMPACT, "prose", "en", "US",
+              "Order number {X} shipped this morning.",
+              "Tracking number {X} is out for delivery.", _order_12),
+    _cue_twin("card_twin_timestamp_log", C_.CARD_SHORT_COMPACT, "log_kv", "en", "US",
+              "level=info event=job.done ts_ms={X} status=ok",
+              'svc=queue op=ack sent_at_ms="{X}" result=ok', _epoch_ms),
+    _cue_twin("card_twin_transaction_json", C_.CARD_SHORT_COMPACT, "tool_json", "en", "US",
+              '{"transaction":{"id":"{X}","state":"settled"}}',
+              '{"shipment":{"trackingId":"{X}"}}', _reference_13_15),
+    _cue_twin("card_twin_grouped_ref_csv", C_.CARD_SHORT_GROUPED, "csv", "en", "US",
+              "ref,qty\n{X},2\n", "batch,units\n{X},40\n", _grouped_12),
+    _cue_twin("card_twin_reader_serial", C_.CARD_SHORT_GROUPED, "prose", "en", "US",
+              "Card reader serial {X} needs a firmware update.",
+              "The card terminal ID is {X}; restart it tonight.", _grouped_12, near_cue=True),
+    _cue_twin("zip_twin_se_batch", C_.ZIP_SE, "prose", "en", "SE",
+              "Batch {X} passed QA.", "Seat block {X} is reserved.", _zip_se),
+    _cue_twin("zip_twin_se_near", C_.ZIP_SE, "prose", "en", "SE",
+              "Postcode lookup failed for batch {X}.",
+              "The zip code service rejected ticket {X}.", _zip_se, near_cue=True),
+    _cue_twin("zip_twin_pl_error_log", C_.ZIP_PL, "log_kv", "en", "PL",
+              "level=error event=job.fail code={X} retry=true",
+              'svc=hr op=room booking="{X}" result=ok', _zip_pl),
+    _cue_twin("zip_twin_pl_near_de", C_.ZIP_PL, "prose", "de", "PL",
+              "Das PLZ-Feld ist leer; Fehler {X} wurde protokolliert.",
+              "Postleitzahl fehlt, Fehlercode {X}.", _zip_pl, near_cue=True),
+    _cue_twin("zip_twin_six_order_json", C_.ZIP_SIX, "tool_json", "en", "IN",
+              '{"order":{"id":"{X}","state":"packed"}}',
+              '{"build":{"number":"{X}"}}', _zip_six),
+    _cue_twin("zip_twin_six_near_log", C_.ZIP_SIX, "log_kv", "en", "IN",
+              "level=warn event=zip.validation.failed order={X}",
+              'svc=geo op=postcode_check invoice="{X}" result=skipped', _zip_six, near_cue=True),
+    _cue_twin("zip_twin_br_part", C_.ZIP_BR, "prose", "en", "BR",
+              "Part {X} is back in stock.", "Invoice {X} was paid.", _zip_br),
+    _cue_twin("zip_twin_br_near_csv", C_.ZIP_BR, "csv", "en", "BR",
+              "postcode_checked,part\nyes,{X}\n", "zip_verified,sku\nno,{X}\n", _zip_br, near_cue=True),
+    _cue_twin("zip_twin_three_near", C_.ZIP_THREE, "prose", "en", "IS",
+              "ZIP upload finished in {X} seconds.",
+              "The zip archive holds {X} files.", _zip_three, near_cue=True),
+)
+del C_, _zip_se, _zip_pl, _zip_six, _zip_br, _zip_three
+
+# Layer A card cells carry checksum-invalid twins that contract v2 credits on
+# every surface; the gate maps them to their label by family.
+CUE_FAMILY_LABELS = {cell.family: cell.shape.label for cell in CUE_CELLS}
+# Their layer D twins join the credit guard: a false-positive rise on them
+# fails the gate outright.
+CREDIT_GUARD_FAMILIES["CREDITCARDNUMBER"] = tuple(sorted({
+    *CREDIT_GUARD_FAMILIES["CREDITCARDNUMBER"],
+    *(twin.family for twin in CUE_TWINS if twin.shape.label == "CREDITCARDNUMBER"),
+}))
+# The generator version that added a guarded family. A scorecard measured on an
+# older corpus (a displayed release's record) has no such cells and is not
+# asked for them; one measured on this version must carry them.
+CREDIT_GUARD_SINCE: dict[str, int] = {
+    twin.family: 8 for twin in CUE_TWINS if twin.shape.label == "CREDITCARDNUMBER"
+}
+
+
+def guard_families(generator_version: int) -> list[str]:
+    """The credit-guard families a corpus of this generator version contains."""
+    return sorted({
+        family for families in CREDIT_GUARD_FAMILIES.values() for family in families
+        if CREDIT_GUARD_SINCE.get(family, 0) <= generator_version
+    })
+
+
+def _cue_records(cells: Sequence[CueCell | CueTwin], partition: str, layer: str) -> list[Record]:
+    seed = PARTITION_SEEDS[partition]
+    records: list[Record] = []
+    for cell in cells:
+        rng = Rng(seed, f"{layer}/cue/{cell.family}")
+        for index in range(DOCS_PER_CUE_CELL[layer]):
+            value = cell.make(rng, partition, index)
+            if isinstance(cell, CueCell):
+                fields = {"V": (value, cell.shape.label)}
+                if cell.shape.label == "CREDITCARDNUMBER":
+                    validity = VALID if luhn_valid(value) else INVALID
+                else:
+                    validity = UNCHECKED
+            else:
+                fields = {"X": (value, DECOY_PREFIX + "benign")}
+                validity = BENIGN
+            text, gold, decoys = _fill_with_decoys(cell.templates[partition], fields)
+            records.append(Record(
+                uid=f"agentic-{partition}-{layer}-{cell.family}-{index:03d}-{cell.surface}",
+                partition=partition, layer=layer, family=cell.family, surface=cell.surface,
+                validity=validity,
+                group=f"{partition}-{layer}-{cell.family}-{index:03d}",
+                template=f"cue/{cell.family}/{partition}",
+                language=cell.language, region=cell.region,
+                text=text, gold=gold, decoys=decoys,
+            ))
+    return records
+
+
+def _char_span(text: str, span: Gold) -> tuple[int, int]:
+    encoded = text.encode("utf-8")
+    start = len(encoded[: span.start].decode("utf-8"))
+    return start, start + len(encoded[span.start : span.end].decode("utf-8"))
+
+
+def _overlaps(pattern: str, text: str, start: int, end: int) -> bool:
+    import re
+
+    return any(match.start() < end and start < match.end() for match in re.finditer(pattern, text))
+
+
+def check_cue_cells(records: Sequence[Record]) -> None:
+    """Fail closed unless every A value is whole, in its shape and reads as
+    personal, and every shape A scores has layer D twins that do not: its broad
+    rule must pay in layer D, and so must its narrow rule where it has one. A
+    near-cue twin must carry a card or postal word; any other card or postal
+    twin must carry none."""
+    import re
+
+    cells = {cell.family: cell for cell in CUE_CELLS}
+    twins = {twin.family: twin for twin in CUE_TWINS}
+    unused = sorted(t.family for t in CUE_TWINS if t.shape not in {c.shape for c in CUE_CELLS})
+    if unused:
+        raise LayerError(f"layer D cue twins no layer A cell uses: {unused}")
+    scored: dict[CueShape, str] = {}
+    paid: set[CueShape] = set()
+    narrow_paid: set[CueShape] = set()
+    for record in records:
+        if not record.surface.startswith("cue_"):
+            continue
+        if record.layer == LAYER_IDENTIFIERS:
+            cell = cells[record.family]
+            if record.decoys or len(record.gold) != 1 or record.gold[0].label != cell.shape.label:
+                raise LayerError(f"{record.uid}: expected exactly one {cell.shape.label} gold and no decoy")
+            start, end = _char_span(record.text, record.gold[0])
+            value = record.gold[0].value
+            if not re.fullmatch(CUE_SHAPE_PATTERNS[cell.shape], value):
+                raise LayerError(f"{record.uid}: {value!r} is not a {cell.shape.value} value")
+            if re.search(r"\d$", record.text[:start]) or re.match(r"\d", record.text[end:]):
+                raise LayerError(f"{record.uid}: {value!r} touches another digit")
+            for kind, patterns in (("broad", CUE_BROAD_PATTERNS), ("narrow", CUE_NARROW_PATTERNS)):
+                if cell.shape in patterns and not _overlaps(patterns[cell.shape], record.text, start, end):
+                    raise LayerError(f"{record.uid}: the {cell.shape.value} {kind} pattern misses {value!r}")
+            if not cue_reading(cell.shape, record.text, start, end, record.surface):
+                raise LayerError(f"{record.uid}: {value!r} does not read as a {cell.shape.value} value")
+            scored.setdefault(cell.shape, record.uid)
+        else:
+            twin = twins[record.family]
+            if record.gold:
+                raise LayerError(f"{record.uid}: a layer D cue twin carries gold")
+            if len(record.decoys) != 1:
+                raise LayerError(f"{record.uid}: expected one benign decoy")
+            start, end = _char_span(record.text, record.decoys[0])
+            if cue_reading(twin.shape, record.text, start, end, record.surface):
+                raise LayerError(f"{record.uid}: a layer D decoy reads as a {twin.shape.value} value")
+            word = {"CREDITCARDNUMBER": CARD_WORD, "ZIPCODE": ZIP_WORD}.get(twin.shape.label)
+            if word and bool(re.search(word, record.text)) != twin.near_cue:
+                state = "lacks" if twin.near_cue else "carries"
+                raise LayerError(f"{record.uid}: a {twin.shape.label} twin {state} a cue word")
+            if not _overlaps(CUE_BROAD_PATTERNS[twin.shape], record.text, start, end):
+                raise LayerError(f"{record.uid}: the {twin.shape.value} broad pattern misses the decoy")
+            paid.add(twin.shape)
+            narrow = CUE_NARROW_PATTERNS.get(twin.shape)
+            if narrow and _overlaps(narrow, record.text, start, end):
+                narrow_paid.add(twin.shape)
+    uncovered = sorted(shape.value for shape in set(scored) - paid)
+    if uncovered:
+        raise LayerError(f"cue shapes with no layer D counterweight: {uncovered}")
+    free = sorted(shape.value for shape in set(scored) & set(CUE_NARROW_PATTERNS) - narrow_paid)
+    if free:
+        raise LayerError(f"cue shapes whose narrow rule pays nothing in layer D: {free}")
+
 
 # --------------------------------------------------------------------------
 # CRLF address growth and cued German plates. A new surface prefix keeps all
@@ -2841,7 +3438,7 @@ def check_block_cells(records: Sequence[Record]) -> None:
 
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one.
-GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "block_"}
+GENERATOR_ADDITIONS = {4: "adjacent_", 5: "lookalike_", 6: "address_", 7: "tel_", 8: "cue_", 9: "block_"}
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
@@ -2854,10 +3451,11 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
-    7: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v7.json"),
+    8: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v8.json"),
     4: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v4.json"),
     5: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v5.json"),
     6: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v6.json"),
+    7: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v7.json"),
 }
 
 
@@ -3096,12 +3694,15 @@ def generate(partition: str) -> list[Record]:
         + _address_records(ADDRESS_TWINS, partition, LAYER_LOOKALIKES)
         + _phone_records(PHONE_CELLS, partition, LAYER_IDENTIFIERS)
         + _phone_records(PHONE_TWINS, partition, LAYER_LOOKALIKES)
+        + _cue_records(CUE_CELLS, partition, LAYER_IDENTIFIERS)
+        + _cue_records(CUE_TWINS, partition, LAYER_LOOKALIKES)
         + _block_records(BLOCK_CELLS, partition)
         + _block_records(BLOCK_TWINS, partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
     check_phone_cells(records)
+    check_cue_cells(records)
     check_block_cells(records)
     for record in records:
         encoded = record.text.encode("utf-8")
@@ -3500,8 +4101,12 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
     Each row also carries `guard_false_positive`: layer D false-positive bytes
     per CREDIT_GUARD_FAMILIES family (empty for other layers).
     """
-    family_labels = {family.name: family.label for family in IDENTIFIER_FAMILIES}
-    guard_families = sorted({f for families in CREDIT_GUARD_FAMILIES.values() for f in families})
+    family_labels = {family.name: family.label for family in IDENTIFIER_FAMILIES} | CUE_FAMILY_LABELS
+    # A scorecard that does not say which corpus it measured is held to the current one.
+    version = scorecard.get("layers", {}).get("generator", {}).get("generator_version", GENERATOR_VERSION)
+    if type(version) is not int:
+        raise LayerError("scorecard layers carry no integer generator_version")
+    required_guard_families = guard_families(version)
     totals: dict[str, dict[str, int]] = {}
     for layer in GATE_LAYERS:
         run = _layer_run(scorecard, layer, config)
@@ -3552,7 +4157,7 @@ def layer_totals(scorecard: Mapping[str, object], config: str) -> dict[str, dict
             cells = run.get("per_cell")
             if not isinstance(cells, dict):
                 raise LayerError("layer D has no per_cell; the credit guard cannot be checked")
-            for family in guard_families:
+            for family in required_guard_families:
                 blocks = [block for cell, block in cells.items() if cell.split("|")[1] == family]
                 if not blocks:
                     raise LayerError(f"layer D has no {family} cells; the credit guard cannot be checked")
@@ -3579,6 +4184,11 @@ def credit_guard_rise(base: Mapping[str, Mapping[str, object]],
     rose = []
     for label, families in sorted(CREDIT_GUARD_FAMILIES.items()):
         for family in families:
+            if CREDIT_GUARD_SINCE.get(family) and all(
+                family not in (totals[LAYER_LOOKALIKES].get("guard_false_positive") or {})
+                for totals in (base, candidate)
+            ):
+                continue  # both sides measured a corpus older than this family
             counts = []
             for side, totals in (("base", base), ("candidate", candidate)):
                 guard = totals[LAYER_LOOKALIKES].get("guard_false_positive")
@@ -3696,6 +4306,7 @@ def decide(base: Mapping[str, Mapping[str, int]], candidate: Mapping[str, Mappin
         family: {"base": base[LAYER_LOOKALIKES]["guard_false_positive"][family],
                  "candidate": candidate[LAYER_LOOKALIKES]["guard_false_positive"][family]}
         for families in CREDIT_GUARD_FAMILIES.values() for family in families
+        if family in base[LAYER_LOOKALIKES]["guard_false_positive"]
     }
     return {"verdict": verdict, "reason": reason, "summary": summary, "layers": rows,
             "gate_credit_version": GATE_CREDIT_VERSION,
