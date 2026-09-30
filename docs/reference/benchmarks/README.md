@@ -1711,9 +1711,10 @@ whole-plate gold after an immediate label, and a benign counterweight paid
 by both broad and narrow shape rules. Generation fails if these guards drift.
 
 A model-free regex replay on the 76 new test documents applies every broad
-or narrow pattern to each document. Both mutants cover 374 layer D benign
-bytes. The broad mutant covers 407 gold bytes and 16 layer A false-positive
-bytes; the narrow mutant covers 347 gold bytes and 4 layer A false-positive
+or narrow pattern to each document and maps character offsets to UTF-8 byte
+offsets before scoring. Both mutants cover 374 layer D benign
+bytes. The broad mutant covers 411 gold bytes and 12 layer A false-positive
+bytes; the narrow mutant covers 351 gold bytes and zero layer A false-positive
 bytes. These deliberately bad fixtures live under
 `scripts/bench/fixtures/agentic/`; the corpus guards require counterweights
 for every shape under both mutants. The leading-zero serial correction
