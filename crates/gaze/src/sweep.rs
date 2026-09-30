@@ -1,4 +1,4 @@
-//! Repeat-value sweep (solo todo 3849).
+//! Repeat-value sweep.
 //!
 //! Once a rule-found value is tokenized, every other copy of it in the same
 //! document and in later documents of the same session must be tokenized too.
@@ -407,7 +407,7 @@ impl SweepMatcher {
 /// Winner spans, answering "does one span contain this range" in O(log n).
 ///
 /// Asking every winner for every sweep hit made a document that repeats one
-/// value N times cost O(N^2) (todo 3895). A span containing `range` starts
+/// value N times cost O(N^2). A span containing `range` starts
 /// at or before `range.start`, so it exists exactly when the largest end
 /// among those spans reaches `range.end`.
 pub(crate) struct Coverage {
@@ -727,7 +727,7 @@ mod tests {
     use super::*;
 
     /// A value kept although its checksum failed is never swept, whatever evidence it carries and
-    /// even with a canonical form (solo todo 3906).
+    /// even with a canonical form.
     #[test]
     fn a_recorded_checksum_failure_is_learned_evidence() {
         let mut candidate = Candidate::new(
@@ -752,7 +752,7 @@ mod tests {
         assert!(!ManifestEvidence::of(&candidate).propagates());
     }
 
-    /// `Coverage` replaced a scan of every winner per sweep hit (todo 3895).
+    /// `Coverage` replaced a scan of every winner per sweep hit.
     /// Pin it against that scan on random, overlapping and empty spans.
     #[test]
     fn coverage_matches_the_full_scan() {
@@ -967,7 +967,7 @@ mod tests {
 
     #[test]
     fn runs_of_name_parts_match_in_any_case() {
-        // Solo todo 3897: a cue-found value carries its honorific, so the bare
+        // A cue-found value carries its honorific, so the bare
         // name is a run of its parts, not a spelling of the whole value.
         let sources = vec![name("Herr Tobias Brenner")];
         let text = "later: tobias brenner and TOBIAS BRENNER, tObIaS\u{a0}bReNnEr";

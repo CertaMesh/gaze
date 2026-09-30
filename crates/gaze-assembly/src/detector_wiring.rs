@@ -49,7 +49,7 @@ pub(crate) fn register_policy_detectors(
                 // not find this rule by the id its collision membership is
                 // filed under, `family_member_classes` saw no member, and a
                 // family token over policy regex rules derived its action from
-                // the default alone (solo todo 3757). The wrapper emitted every
+                // the default alone. The wrapper emitted every
                 // candidate at score 1.0 and outside the per-locale claiming
                 // step; the same score and the format basis keep the conflict
                 // ladder and the candidate pool as they were.
@@ -141,6 +141,7 @@ pub(crate) fn register_rulepack_recognizers(
                 pattern,
                 pattern_template,
                 capture_groups,
+                complete_labelled_value,
             } => {
                 let pattern =
                     lower_regex_pattern(&recognizer.id, pattern, pattern_template, locale_vocab)?;
@@ -182,6 +183,7 @@ pub(crate) fn register_rulepack_recognizers(
                             .as_ref()
                             .and_then(|context| context.reject_match_regex.as_deref()),
                     )?
+                    .with_complete_labelled_value(complete_labelled_value)
                     .with_locale_basis(recognizer.locale_basis)
                     .with_validator_on_fail(
                         recognizer

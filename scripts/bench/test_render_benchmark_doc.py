@@ -20,6 +20,7 @@ import unittest
 from pathlib import Path
 
 import benchmark_charts as charts
+import subprocess as _subprocess
 from tagged_gaze import check_public
 import render_benchmark_doc as render
 
@@ -168,6 +169,13 @@ def _mutate(value):
     if isinstance(value, float):
         return value + 0.25
     raise AssertionError(f"no mutation defined for {value!r}")
+
+
+
+def render_tree(tag: str) -> str:
+    return _subprocess.check_output(
+        ["git", "rev-parse", f"refs/tags/{tag}^{{commit}}:crates"], cwd=render.REPO_ROOT, text=True
+    ).strip()
 
 
 class ScorecardMappingTest(unittest.TestCase):
@@ -976,7 +984,11 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         )
         for panel in third:
             self.assertEqual([b.name for b in panel.bars if b.gaze], ["Gaze 0.15"])
-            self.assertIsNone(next(b for b in panel.bars if b.gaze).f2)
+        # The committed tagged v0.15.1 runs fill the third-party slots with their own numbers.
+        for panel, (f2, leaked) in zip(third, ((0.7850906648757555, 9769), (0.6180332286160448, 107701))):
+            bar = next(b for b in panel.bars if b.gaze)
+            self.assertEqual(bar.f2, f2)
+            self.assertEqual(bar.leaked, leaked)
         gliner = next(b for b in own.bars if b.name == "GLiNER")
         cell = self.comparison["tools"]["gliner"]["contracts"]["v3"]["C"]
         self.assertEqual(gliner.leaked, cell["leaked_bytes"])
@@ -1015,15 +1027,44 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
             [r.version for r in render.chart_gaze_rows(history)], ["v0.14.0", "v0.15.0"]
         )
 
-    def test_a_tagged_third_party_run_replaces_the_pending_slot(self):
+    def test_a_third_party_gaze_slot_is_the_committed_tagged_run_and_pending_without_one(self):
+        # The committed gaze-v0.15.1 rows fill the slots with that run's own numbers, exactly.
+        for key, panel, (f2, leaked, fp) in zip(
+                ("presidio-research", "piibench-commercial"), self.panels()[1:],
+                ((0.7850906648757555, 9769, 1352), (0.6180332286160448, 107701, 47616))):
+            row = self.their[key]["rows"]["gaze-v0.15.1"]["product_coverage"]
+            self.assertEqual((row["char_level"]["f2"], row["leaked_bytes"], row["false_positive_bytes"]),
+                             (f2, leaked, fp))
+            bar = next(b for b in panel.bars if b.gaze)
+            self.assertEqual((bar.f2, bar.leaked), (f2, leaked))
+            self.assertNotIn("pending", charts.model_card_tables([panel]))
+        # Without a tagged row the slot reads pending; the untagged gaze-full row never fills it.
         their = copy.deepcopy(self.their)
-        row = copy.deepcopy(their["presidio-research"]["rows"]["gaze-full"])
-        their["presidio-research"]["rows"]["gaze-v0.15.1"] = row
-        panel = self.panels(their=their)[1]
-        bar = next(b for b in panel.bars if b.gaze)
-        self.assertEqual(bar.f2, row["product_coverage"]["char_level"]["f2"])
-        self.assertEqual(bar.leaked, row["product_coverage"]["leaked_bytes"])
-        self.assertNotIn("pending", charts.model_card_tables([panel]))
+        for bench in their.values():
+            bench["rows"].pop("gaze-v0.15.1", None)  # PII-TRACE has no Gaze row yet
+        for panel in self.panels(their=their)[1:]:
+            bar = next(b for b in panel.bars if b.gaze)
+            self.assertIsNone(bar.f2)
+            self.assertIn("pending", charts.model_card_tables([panel]))
+
+    def test_presidio_research_charts_presidios_own_tuned_setup_only(self):
+        _, presidio, piibench = self.panels()
+        names = [b.name for b in presidio.bars]
+        self.assertEqual(names[:2], ["Gaze 0.15", "Presidio (tuned)"])
+        self.assertNotIn("Presidio", names)  # default and strong live in the page table, not the panel
+        tuned = presidio.bars[1]
+        row = self.their["presidio-research"]["rows"]["presidio-tuned-presidio-research"]["product_coverage"]
+        self.assertEqual((tuned.f2, tuned.leaked), (0.9175126580668143, 2857))
+        self.assertEqual((row["char_level"]["f2"], row["leaked_bytes"], row["false_positive_bytes"],
+                          row["total_bytes"]), (0.9175126580668143, 2857, 4918, 127496))
+        self.assertEqual(round(tuned.fp_per_1k, 1), 38.6)
+        self.assertEqual(presidio.caption,
+                         "Presidio Research: Presidio tuned for this dataset by its authors "
+                         "(their published custom setup)")
+        # PIIBench-commercial has no vendor-tuned Presidio: the declared best configuration stays.
+        self.assertEqual(piibench.bars[1].name, "Presidio")
+        self.assertEqual((piibench.bars[1].f2, piibench.bars[1].leaked), (0.6652086583731006, 87853))
+        self.assertIn("declared best configuration", piibench.caption)
 
     def test_lower_leak_swept_row_is_not_selected(self):
         report = copy.deepcopy(self.comparison)
@@ -1070,7 +1111,7 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         """Numerator and denominator come from the same block of the same tool."""
         _, presidio, piibench = self.panels()
         self.assertEqual([round(b.fp_per_1k, 1) for b in presidio.bars[1:]],
-                         [25.4, 0.0, 31.5, 14.6, 38.3, 5.2])
+                         [38.6, 0.0, 31.5, 14.6, 38.3, 5.2])  # first bar: Presidio tuned (was declared strong, 25.4)
         self.assertEqual([round(b.fp_per_1k, 1) for b in piibench.bars[1:]],
                          [38.0, 1.9, 94.1, 71.2, 36.6, 5.2])
         # The common-intersection block's total (a different, smaller byte count) is never used.
@@ -1081,10 +1122,10 @@ class ReadmeCompetitorChartTest(unittest.TestCase):
         self.assertEqual(self.panels(their=moved), self.panels())
         # The product-coverage block's own total is what divides its false positives.
         changed = copy.deepcopy(self.their)
-        row = changed["presidio-research"]["rows"]["presidio-strong"]["product_coverage"]
+        row = changed["presidio-research"]["rows"]["presidio-tuned-presidio-research"]["product_coverage"]
         row["total_bytes"] *= 2
         bar = self.panels(their=changed)[1].bars[1]
-        self.assertAlmostEqual(bar.fp_per_1k, 25.4 / 2, places=1)
+        self.assertAlmostEqual(bar.fp_per_1k, 38.6 / 2, places=1)
         # Own corpus: each competitor divides by its own block's total.
         cell = self.comparison["tools"]["opf"]["contracts"]["v3"]["C"]
         block = cell["metrics"]["product_coverage"]["full"]

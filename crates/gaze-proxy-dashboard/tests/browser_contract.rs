@@ -21,7 +21,7 @@ fn asset(name: &str) -> String {
         .unwrap_or_else(|err| panic!("asset {} must exist and be UTF-8: {err}", path.display()))
 }
 
-/// Blocker-class prohibited sinks and primitives (plan #4740 §11).
+/// Blocker-class prohibited sinks and primitives.
 #[test]
 fn app_js_contains_no_prohibited_sink() {
     let js = asset("app.js");
@@ -90,7 +90,7 @@ fn app_js_renders_via_safe_dom_construction_only() {
 
 /// The exhaustive closed-code label vocabulary must be present verbatim so a
 /// wire code can never leak its raw spelling and no private/numeric value can
-/// masquerade as a label (plan #4740 §10).
+/// masquerade as a label.
 #[test]
 fn app_js_carries_exact_closed_label_vocabulary() {
     let js = asset("app.js");
@@ -165,7 +165,7 @@ fn app_js_carries_exact_closed_label_vocabulary() {
 }
 
 /// SSE entries render ordinal/kind/delta/content-block only; the no-byte /
-/// no-timing constraint is explicit UI copy (seam audit #5953 INFO-2).
+/// no-timing constraint is explicit UI copy.
 #[test]
 fn app_js_states_sse_no_byte_no_timing_rule() {
     let js = asset("app.js");
@@ -299,7 +299,7 @@ fn assets_contain_no_real_pii_shapes() {
 }
 
 /// The disconnected surface states dashboard purge + provider continuity and
-/// never implies proxy failure (plan #4740 §10).
+/// never implies proxy failure.
 #[test]
 fn disconnected_copy_preserves_provider_continuity_claim() {
     let js = asset("app.js");

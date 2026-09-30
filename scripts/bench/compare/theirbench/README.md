@@ -67,4 +67,55 @@ uv run --project scripts/bench python scripts/bench/compare/theirbench/render_th
 uv run --project scripts/bench python scripts/bench/compare/theirbench/render_theirbench.py render
 ```
 
+## A tagged Gaze release as its own row
+
+The panels show released Gaze versions only, so a release is measured from its tag, never from `main`:
+
+```bash
+# 1. A clean checkout of the tag in its own worktree (no build there: the harness builds).
+git worktree add ../gaze-v0.15.1 v0.15.1     # or: anvil work bench-v0151 -b v0.15.1
+# 2. The release's own `gaze setup` policy (built from that checkout), unedited.
+(cd ../gaze-v0.15.1 && cargo run -q -p gaze-cli -- setup --non-interactive --force --policy-out /tmp/policy-v0.15.1.toml)
+# 3. Measure, twice, into FRESH reports (a tagged row is never resumed into an existing report).
+"$COMPARE_PYTHON" scripts/bench/compare/theirbench/theirbench.py --benchmark presidio-research \
+  --presidio-research-checkout "$PR_CHECKOUT" --predictions-dir "$OUT/pred-pr-1" --output "$OUT/pr-run1.json" \
+  --gaze-release-tag v0.15.1 --gaze-release-root ../gaze-v0.15.1 \
+  --gaze-model-dir "$NER_MODEL_DIR" --gaze-policy /tmp/policy-v0.15.1.toml
+"$COMPARE_PYTHON" scripts/bench/compare/theirbench/theirbench.py ... --output "$OUT/pr-run2.json" \
+  --gaze-release-tag v0.15.1 ... --reproduces "$OUT/pr-run1.json"
+# 4. Vendor evaluator on the same spans, then merge (repeat for PIIBench-commercial).
+"$VENDOR_PYTHON" scripts/bench/compare/theirbench/presidio_research_repro.py --checkout "$PR_CHECKOUT" \
+  --predictions "$OUT/pred-pr-2/gaze-v0.15.1.test.jsonl" --labels "$OUT/pred-pr-2/labels.gaze.json" \
+  --system gaze-v0.15.1 --output "$OUT/own-pr.json"
+python3 scripts/bench/compare/theirbench/render_theirbench.py add-tagged --report "$OUT/pr-run2.json" --own "$OUT/own-pr.json"
+python3 scripts/bench/compare/theirbench/render_theirbench.py render
+```
+
+What the harness enforces in this mode: the tag is resolved as `refs/tags/<tag>`, the checkout is exactly that commit with no local changes, the harness itself is clean and its state is re-read every run; the benchmark binary is built by the harness from that checkout into a fresh `CARGO_TARGET_DIR` (an existing directory or `--gaze-binary` is refused, so a stale executable cannot be attributed to the tag); the policy and both model bundles must equal the digests pinned in `tagged_gaze.RELEASE_PINS`. The row's provenance records the exact build command, toolchain, `Cargo.lock` hash and binary SHA-256, the pins, the prediction file's SHA-256 and, from the second run, the first run's prediction and binary hashes; `add-tagged` refuses a row whose second run did not reproduce the predictions byte for byte. Predictions themselves are never committed.
+
+## A vendor's own tuned setup as its row
+
+On a vendor's own benchmark the chart compares Gaze with that vendor's best published setup, not its defaults (user ruling 2026-09-29). [`vendor-tuned.json`](vendor-tuned.json) declares it per benchmark: the setup, its source and pinned commit, and the panel caption. Presidio Research publishes one, notebook 5 (custom analyzer, OpenMed NER, extra recognizers, context enhancement; F2 0.91 with the evaluator that produced it, reproduced here). PIIBench-commercial has none, so Presidio keeps its declared best configuration there and the panel caption says so. The declaration lives beside the harness, not in `../chart-configs.json`, whose bytes `comparison.json` pins.
+
+```bash
+OPENMED_SNAPSHOT=...   # OpenMed/OpenMed-PII-SuperClinical-Large-434M-v1 at df7af994 (see presidio_research_repro.py)
+# 1. The vendor environment runs the analyzer once and writes raw findings (offsets, entities, scores; no text).
+"$VENDOR_PYTHON" scripts/bench/compare/theirbench/tuned_presidio.py --checkout "$PR_CHECKOUT" \
+  --openmed-model "$OPENMED_SNAPSHOT" --output "$OUT/tuned-raw.jsonl" --meta "$OUT/tuned-meta.json"
+# 2. Our harness resolves overlaps with the comparison's resolver and scores the spans (fresh report).
+"$COMPARE_PYTHON" scripts/bench/compare/theirbench/theirbench.py --benchmark presidio-research \
+  --presidio-research-checkout "$PR_CHECKOUT" --predictions-dir "$OUT/pred-tuned" --output "$OUT/tuned.json" \
+  --vendor-tuned --tuned-raw "$OUT/tuned-raw.jsonl" --tuned-meta "$OUT/tuned-meta.json"
+# 3. The vendor evaluator replays the same spans with notebook 5's mapper rules (no label map).
+"$VENDOR_PYTHON" scripts/bench/compare/theirbench/presidio_research_repro.py --checkout "$PR_CHECKOUT" --tuned \
+  --predictions "$OUT/pred-tuned/presidio-tuned-presidio-research.test.jsonl" \
+  --system presidio-tuned-presidio-research --output "$OUT/own-tuned.json"
+# 4. Merge: the Presidio bar on that panel becomes this row.
+python3 scripts/bench/compare/theirbench/render_theirbench.py add-tuned --report "$OUT/tuned.json" --own "$OUT/own-tuned.json"
+```
+
+The OpenMed model is pinned in `vendor-tuned.json` by repository, revision and tree digest. `tuned_presidio.py` hashes the directory it is given and refuses a mismatch before any inference; `theirbench.py --vendor-tuned` and `add-tuned` compare the producer's receipt with the pin again, so no step trusts the one before it. Every vendor-evaluator result (`presidio_research_repro.py --predictions`, `piibench_repro.py --predictions`) records an `input` receipt, the SHA-256 of the prediction file it read and of the dataset it scored; `add-tagged` and `add-tuned` refuse a result whose receipt differs from the measured row's `prediction_sha256` or the committed dataset digest, and keep the receipt as `own_scorer_input` in the row's provenance.
+
+The tuned row's typed metrics and common-intersection view use the comparison's Presidio label table plus the extra OpenMed entities in `vendor-tuned.json`; the common-intersection label set is still computed over the standard roster. Leaked and false-positive bytes do not depend on labels. `add-tuned` refuses a row whose provenance does not match the declaration (setup, source, commit), whose producer record is a smoke run, or whose own-scorer result is not the notebook-5 replay of the same spans, and it needs the vendor's tuned number reproduced first.
+
 Measurements take the bench machine lock. `render --check` fails when the README block drifts from `their-benchmarks.json`.

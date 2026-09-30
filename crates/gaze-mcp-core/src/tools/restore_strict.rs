@@ -3,7 +3,7 @@
 //! Ordinary bare identifier shapes are preserved.
 //!
 //! The body delegates to the core pipeline strict restore path, which uses
-//! manifest substitution provenance and rejects malformed/nested token input.
+//! manifest substitution provenance and rejects malformed token input.
 //! Unmapped canonical placeholders and incomplete prefixed wrappers fail closed
 //! with `ToolError::NotFound`;
 //! otherwise the response bypasses agent

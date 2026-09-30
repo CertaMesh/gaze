@@ -232,7 +232,7 @@ The omitted-key behavior dates to the v0.4.0 rulepack policy loader.
 
 **Action required if you count manifest entries per entity, pin token
 shapes for nested identifiers, or rely on `preserve` shielding every byte
-of a span.** Two resolver changes from solo todo #3740, both breaking in
+of a span.** Two resolver changes, both breaking in
 0.x.
 
 1. **A span that wholly contains a differently-classed span now wins the

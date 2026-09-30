@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Both-direction policy matrix for policy regex collision families (todo #3757).
+"""Both-direction policy matrix for policy regex collision families.
 
 Runs a synthetic document set plus the pinned Dataiku en/de holdout through two
 `gaze daemon` binaries (base, head) under a matrix of policies whose custom

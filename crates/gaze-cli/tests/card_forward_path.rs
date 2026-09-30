@@ -1,5 +1,5 @@
 //! Forward path (the text sent to the model): a payment card with digits touching it is
-//! tokenized whole, with no policy (solo todo 3843). The same shapes run under the `gaze setup`
+//! tokenized whole, with no policy. The same shapes run under the `gaze setup`
 //! policy in `src/commands/setup.rs`.
 
 use assert_cmd::Command;

@@ -1,4 +1,4 @@
-//! Repeat-value sweep (solo todo 3849), end to end through the `gaze` binary.
+//! Repeat-value sweep, end to end through the `gaze` binary.
 //!
 //! Once a rule-found value is tokenized, its other copies in the document and
 //! in later turns of the same session must be tokenized too. Before the sweep
@@ -264,7 +264,7 @@ fn daemon_later_turns_are_swept_with_earlier_turn_values() {
     assert_eq!(swept, 2, "each swept copy writes one audit row");
 }
 
-/// Solo todo 3897, the reviewer repro: the header value carries `Herr`, and
+/// The reviewer repro: the header value carries `Herr`, and
 /// the all-caps copy used to ship raw.
 #[test]
 #[file_serial(gaze_subprocess)]

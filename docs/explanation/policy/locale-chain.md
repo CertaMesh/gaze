@@ -59,7 +59,7 @@ no longer a suppression mechanism.
 
 ## Known gap: a synthetic global chain
 
-The mixed-basis implementation does not resolve todo #2411. A synthetic
+The mixed-basis implementation does not resolve that gap. A synthetic
 `[LocaleTag::Global]` chain is now correct for format-basis recognizers only; it
 still suppresses document-basis `name.*`, `phone.national.de`, both postal
 recognizers, and legacy/custom rulepacks. Direct/codec primary and residual

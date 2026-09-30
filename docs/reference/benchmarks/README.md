@@ -409,28 +409,29 @@ One panel per benchmark, released Gaze versions and declared competitor configur
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 0.665 | **0.868** | 0.765 | 0.194 | 0.565 | 0.360 | 0.794 | 0.797 |
-| Presidio Research | not run | pending | **0.721** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
-| PIIBench-commercial | not run | pending | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
+| Presidio Research | not run | 0.785 | **0.918 (tuned)** | 0.147 | 0.639 | 0.538 | 0.692 | 0.663 |
+| PIIBench-commercial | not run | 0.618 | **0.665** | 0.183 | 0.522 | 0.441 | 0.532 | 0.400 |
 
 **Leaked PII bytes** (lower is better; best per row in bold):
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 22,144 | **13,319** | 25,314 | 103,617 | 29,142 | 84,397 | 20,152 | 24,080 |
-| Presidio Research | not run | pending | **12,383** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
-| PIIBench-commercial | not run | pending | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
+| Presidio Research | not run | 9,769 | **2,857 (tuned)** | 34,810 | 15,769 | 20,226 | 13,326 | 15,305 |
+| PIIBench-commercial | not run | 107,701 | **87,853** | 222,697 | 114,880 | 145,119 | 127,361 | 170,336 |
 
 **False-positive bytes per 1,000 bytes** (lower is better; best per row in bold):
 
 | Benchmark | Gaze 0.14 | Gaze 0.15 | Presidio | DataFog core | DataFog spaCy | scrubadub | GLiNER | OPF |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Own corpus | 164.9 | 19.4 | 42.9 | **6.1** | 255.6 | 12.5 | 54.0 | 28.9 |
-| Presidio Research | not run | pending | 25.4 | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
-| PIIBench-commercial | not run | pending | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
+| Presidio Research | not run | 10.6 | 38.6 (tuned) | **0.0** | 31.5 | 14.6 | 38.3 | 5.2 |
+| PIIBench-commercial | not run | 20.4 | 38.0 | **1.9** | 94.1 | 71.2 | 36.6 | 5.2 |
 
 A document a tool skips counts all its gold characters as missed and all its gold bytes as leaked. The declared competitor configurations skipped 0 of the own corpus's 2,910 documents and no documents on the third-party sets. Refused documents are ones Gaze failed closed on instead of cleaning: Gaze 0.14 0, Gaze 0.15 0.
 
-Gaze 0.15 on Presidio Research and PIIBench-commercial: measurement pending; no untagged build is shown.
+Presidio Research: Presidio tuned for this dataset by its authors (their published custom setup).
+PIIBench-commercial: PIIBench publishes no vendor-tuned Presidio, so Presidio is the declared best configuration.
 
 - **Own corpus:** Kiji EN/DE holdout and A4 negatives, 2,910 documents, scored labels v3 (the labels Gaze commits to detect, protected repeats credited). Gaze from [`release-history.json`](release-history.json) (the shipped default of each tagged release); competitors from [`comparison.json`](comparison.json).
 - **Presidio Research:** microsoft/presidio-research (1,500 documents, test split), every gold label scored (a label a tool cannot emit counts as missed); rows from [`their-benchmarks.json`](their-benchmarks.json).
@@ -795,6 +796,7 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 
 | Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (span F1, exact span + type, PIIBench seqeval) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gaze-v0.15.1 | 107,701 | 47,616 | 79.8% | held (typed-metric review) | held (typed-metric review) | 33,941 | held (typed-metric review) |
 | datafog-core | 222,697 | 4,529 | 99.9% | 0.128 | 0.092 | 52,232 | 0.099 |
 | datafog-gliner | 112,941 | 71,574 | 75.6% | 0.315 | 0.308 | 25,463 | 0.200 |
 | datafog-regex | 223,137 | 4,926 | 99.9% | 0.128 | 0.092 | 51,108 | 0.097 |
@@ -813,7 +815,7 @@ Gold PII bytes: 262,703. Common-intersection labels: CREDIT_CARD_NUMBER, CREDIT_
 
 pii-tracer was measured separately on the same documents, with harness `bfd35ce6` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
 
-Gaze v0.15.1: not yet measured on this set, so no Gaze row is shown.
+Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `923d5735`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
@@ -828,6 +830,7 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 
 | Tool | Leaked B | FP B | Doc leak rate | Typed F1 | Typed F2 | Leaked B, common | Own metric (F2, binary PII vs O, presidio-evaluator) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gaze-v0.15.1 | 9,769 | 1,352 | 48.9% | held (typed-metric review) | held (typed-metric review) | 8,274 | 0.702 |
 | datafog-core | 34,810 | 0 | 90.2% | 0.168 | 0.118 | 15,680 | 0.114 |
 | datafog-gliner | 9,520 | 5,525 | 34.4% | 0.578 | 0.577 | 5,807 | 0.691 |
 | datafog-regex | 35,039 | 0 | 90.6% | 0.165 | 0.116 | 15,893 | 0.115 |
@@ -841,12 +844,15 @@ Gold PII bytes: 39,531. Common-intersection labels: CREDIT_CARD, DATE_TIME, EMAI
 | presidio-en-de | 14,524 | 4,467 | 43.7% | 0.507 | 0.487 | 14,216 | 0.652 |
 | presidio-strong | 12,383 | 3,243 | 50.5% | 0.534 | 0.519 | 12,300 | 0.603 |
 | presidio-strong-high-recall | 12,058 | 3,243 | 49.5% | 0.531 | 0.518 | 12,300 | 0.614 |
+| presidio-tuned-presidio-research | 2,857 | 4,918 | 22.3% | 0.068 | 0.072 | 2,469 | 0.857 |
 | scrubadub-base | 35,019 | 6 | 87.3% | held (typed-metric review) | held (typed-metric review) | 16,726 | 0.147 |
 | scrubadub-spacy | 20,226 | 1,856 | 63.7% | held (typed-metric review) | held (typed-metric review) | 17,062 | 0.481 |
 
 pii-tracer was measured separately on the same documents, with harness `7b09e385` (typed metrics rescored with `bfd35ce6`); it changes neither the other rows nor the common-intersection labels.
 
-Gaze v0.15.1: not yet measured on this set, so no Gaze row is shown.
+Row gaze-v0.15.1: a clean checkout of tag `v0.15.1` (crates tree `70679f36`, benchmark binary `0e665110`, reproduced by a second run) scored with harness `e66d3360`; no timing is published.
+
+Row presidio-tuned-presidio-research: Presidio tuned for this dataset by its authors (their published custom setup). Setup: notebook 5, custom analyzer: OpenMed NER recognizer, title/year/age pattern recognizers, lemma context enhancement, 14 predefined recognizers removed, score threshold 0.3 (source `microsoft/presidio-research` `notebooks/5_Evaluate_Custom_Presidio_Analyzer.ipynb`, commit `6db3769a`). It replaces the declared presidio configuration on the chart panel; the other Presidio rows stay in this table.
 
 Typed cells read "held (typed-metric review)" for tools whose labels pass through collision-family or secret/password/token mappings, which the comparison's typed-scoring fix changed; leaked and false-positive bytes do not depend on labels and are unaffected.
 
@@ -854,6 +860,7 @@ Hardware: macOS-26.5-arm64-arm-64bit. Measured with comparison code `154f3da6`, 
 
 Not run:
 
+- PII-TRACE full set (13,148 conversations, 13 languages, 1,922-document test split): not public; only the 500-conversation English subset is, and it is what runs here.
 - PIIBench full ten-source mix: five sources carry non-commercial or custom-academic licences and WikiANN's licence is unknown; not downloaded or run.
 - ai4privacy/pii-masking-300k (OPF's published set): custom licence; commercial use requires a licence from ai4privacy; not downloaded or run.
 
@@ -1161,8 +1168,16 @@ model:
   `type` string longer than 64 bytes. Every such value is gold and gated.
   Layer D adds each cell's twin with no cue anywhere. See
   [Labelled lookalikes](#labelled-lookalikes) below. The v4 documents remain
-  byte identical within each partition; the generator and both partition
-  hashes are pinned at v5.
+  byte identical within each partition.
+- **Address blocks (generator v6):** layer A adds whole synthetic addresses
+  with a secondary unit or box (`Suite`, `Apt.`, `Unit`, `Flat`, `Floor`,
+  `PO Box`, `Wohnung`, `3. Etage`, `Postfach`), a house number after the
+  street name, US military lines (`PSC 5512, Box 7730, APO AP ...`) and a
+  state between city and ZIP, in prose, blocks, log fields, CSV columns and
+  tool JSON. Every part is gold. Layer D adds the same designator words with
+  no address anywhere. See [Address blocks](#address-blocks) below. The v5
+  documents remain byte identical within each partition; the generator and
+  both partition hashes are pinned at v6.
 - **Checksum code:** written from the published standards, not from Gaze's
   validators. Standard test vectors pin it, and the validator probe
   cross-checks it on every run.
@@ -1280,6 +1295,51 @@ tags every space-grouped 16-digit run without a Luhn check. Append one to the
 policy and run `agentic_layers.py measure`. Each must lower layer A's leak and
 raise layer D's false-positive bytes on its counterweight (`ref_number_9` or
 `ref_number_16`), where the unmodified policy has none.
+
+#### Address blocks
+
+An address identifies a person as a unit. When a rule finds the street, city
+and postcode but not the unit designator between them, `Suite 312` or
+`Apt. 771` stays raw next to tokens, and the address is half protected. Layer
+A (`AddressCell` in `agentic_layers.py`) writes whole addresses and scores every
+part under the layer C labels: `BUILDINGNUM` for the house number and for a
+unit or box with its designator word, `STREET`, `CITY`, `STATE` and `ZIPCODE`.
+A military address maps its `PSC`, `CMR` or `Unit` line to `STREET`, its `Box`
+to `BUILDINGNUM`, `APO` / `FPO` / `DPO` to `CITY` and `AA` / `AE` / `AP` to
+`STATE`, as the postal service does. The separators between parts are not gold.
+
+| Layer A cells (gold, gated) | Layer D twins (no address anywhere) |
+| --- | --- |
+| US addresses with `Suite`, `Apt.`, `Unit`, `Floor` or `PO Box`, in prose, a multi-line block, a log field, CSV columns, a one-line JSON value and split JSON fields; a block with only the state between city and ZIP | `test Suite 4`, `Apartment 12` on a floor plan, `Unit 3` of a course, `Floor 20`, a `PO Box` form field, in prose, logs and JSON |
+| US military lines in prose and blocks | `PSC 311` / `Unit 4` / `CMR 12` as a steering group, `Box 7` on a shelf |
+| A GB address with `Flat` before the house number | `Flat 55` as a fee in a CSV |
+| German addresses with the house number after the street, `Wohnung` / `Whg.`, `3. Etage` / `Stock` / `OG` and `Postfach`, in prose, a block, CSV and JSON | `Wohnung 958` in a listing, `im 7. Stock`, a mail folder `Postfach 954` |
+| An address followed by a benign designator in the next sentence or line (`The regression Suite 810 is still red.`, `Postfach 123 der Buchhaltung`) | |
+
+The benign designator after an address is a recorded decoy: an address rule
+that grows past a sentence or line end pays for it in layer A false-positive
+bytes. Every spelling of a designator (`Suite`, `Ste.`, `STE`, `Apt.`,
+`Unit #`, `Fl.`, `P.O. Box`, `CMR`, …) rotates through a cell's documents, so
+each one is generated on both sides. The generator fails closed unless every
+A document writes exactly the placeholders its shape requires and each one is
+gold under its own label (a house number and a unit are both `BUILDINGNUM`,
+so labels alone cannot tell a missing house number from a present unit), a
+unit value carries its cell's designator word, every unit spelling layer A
+scores also appears as a layer D decoy (a rule that matches only `Ste.` must
+pay somewhere), every twin is used, and no D document carries a postcode
+shape. Values are synthetic:
+invented street and city names, US ZIPs in the unassigned `000xx` range, German
+PLZ in the unassigned `00xxx` range, GB postcodes in the unused `ZZ` area, and
+number ranges split between the partitions. Each A cell has 6 documents per
+partition and each twin 4: 19 A cells (+114 documents, +4.6 %) and 12 D twins
+(+48 documents, +5.2 %).
+
+The counterweights have their own end-to-end check:
+[`mutant-standalone-designator.toml`](../../../scripts/bench/fixtures/agentic/mutant-standalone-designator.toml)
+tags every designator and number with no address anchor. Appended to the
+policy, it must lower layer A's leak on the address cells and raise layer D's
+false-positive bytes on the `designator_*` twins. A rule for one spelling
+alone (`\bSte\.? #?\d+[A-C]?\b`) must raise them too.
 
 **Held-out protocol.** Templates, machine keys, name pools, email domains,
 phone prefixes, the layer R name-word and decoy pools, and seeds are split

@@ -643,7 +643,7 @@ fn daemon_malformed_json_fails_closed_and_continues() {
     assert!(responses[1]["clean_text"].as_str().unwrap().contains("<"));
 }
 
-// S10-F2 (audit 7201) drift gate for the daemon path: the auto-activate locale
+// S10-F2  drift gate for the daemon path: the auto-activate locale
 // set is derived from the loaded rulepacks (same source of truth as
 // `gaze clean`). An adopter path pack with a document-basis `locale_gated`
 // es-ES recognizer activates under `core-extended` with no policy locale.
@@ -746,7 +746,7 @@ fn daemon_auto_activate_derives_locale_gated_locales_from_loaded_rulepacks() {
     );
 }
 
-// solo todo #2965. `gaze proxy start` spawns a detached child, and nothing here
+// `gaze proxy start` spawns a detached child, and nothing here
 // drove traffic through that child before this test — `proxy_dashboard.rs` only
 // asserted the `proxy start --help` flag surface. The daemonized path is the one
 // adopters run in production, so it has to resolve the same pipeline as
@@ -1050,7 +1050,7 @@ fn daemonized_proxy_start_fails_closed_when_the_policy_cannot_be_loaded() {
 }
 
 // ---------------------------------------------------------------------------
-// solo todo #3004: `gaze daemon` can run the locale-aware safety-net registry.
+// `gaze daemon` can run the locale-aware safety-net registry.
 //
 // Before #3004 `daemon.rs::clean_options` hardcoded `safety_net_registry: false`
 // and `safety_net_add: &[]`, and clap rejected the flags outright, so under an
@@ -2145,7 +2145,7 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
     );
 }
 
-/// todo 3746: the daemon builds its pipeline through the same `resolve_pipeline`
+/// The daemon builds its pipeline through the same `resolve_pipeline`
 /// as `gaze clean`, so a member-only policy must protect a no-cue IBAN's
 /// family-level token here too.
 #[test]

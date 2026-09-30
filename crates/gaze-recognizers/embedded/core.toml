@@ -66,7 +66,7 @@ kind = "regex"
 # A name part starts upper-case and may be all caps, carry diacritics, or join
 # more parts with a hyphen or apostrophe (`Vasquez-Ellery`, `O'Brien`,
 # `MÜLLER`). The `From: ... <address>` frame is the precision; an ASCII
-# title-case-only part let NER fragments decide these names (todo 3897).
+# title-case-only part let NER fragments decide these names.
 pattern_template = '''(?m)^(?:{locale.email_headers}):\s*(?:"([^"]+)"|(\p{Lu}[\p{L}\p{M}]*(?:['\x{2019}-]\p{L}[\p{L}\p{M}]*)*(?:\s+\p{Lu}[\p{L}\p{M}]*(?:['\x{2019}-]\p{L}[\p{L}\p{M}]*)*){0,3}))\s+<[^>]+>'''
 capture_groups = [1, 2]
 
@@ -279,12 +279,12 @@ kind = "regex"
 # consume country-neutral 22-character IBAN grouping and short 4+5 numeric ID
 # shapes before phone parsing sees phone-like substrings. The IBAN branch
 # keeps its trailing `\b` although `iban.structural` dropped its own (solo
-# todo #3756): without it the branch consumes the first 22 characters of every
+# the trailing-word fix): without it the branch consumes the first 22 characters of every
 # LONGER spaced IBAN too, which uncovered 7,212 bytes an accidental phone token
 # had hidden on digit-glued documents. The cost of keeping it is that a label
 # glued to a spaced German IBAN (`… 0130 00BIC`) stops the consumption and
 # this rule (priority 85) still claims `0532 0130` inside the IBAN; measured
-# and filed as solo todo #3764.
+# and filed as a follow-up.
 pattern = '''(?x)\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){4}\s?[A-Z0-9]{2}\b|(?:^|[^[:alnum:]_+])0[1-9]\d{2}[\s./-]*\d{5}\b|(?:^|[^[:alnum:]_+])((?:\+49[\s.-]*|0)[1-9]\d{1,4}[\s./-]*\d(?:[\s./-]*\d){4,10})\b'''
 capture_groups = [1]
 
@@ -378,14 +378,14 @@ kind = "regex"
 # length-multiple-of-4 IBAN (AT, BE, LU, PL, HU, ...) to swallow the next short
 # uppercase token -- `IBAN AT61 ... BIC: ...` -- which failed mod-97, lost the
 # candidate to validator veto, and leaked the country code and check digits raw
-# while `card.structural` mis-claimed the digits (solo todo #3708).
+# while `card.structural` mis-claimed the digits.
 # The country -> length map here is pinned to `gaze_types::iban_registry_length`
 # by `iban_pattern_branch_lengths_match_the_validator_registry` in
 # `crates/gaze-recognizers/tests/iban_trailing_group.rs`; nothing this pattern
 # drops could ever have passed the validator, so recall is unchanged.
 # There is deliberately NO trailing `\b`: with one, a compact IBAN glued to the
 # next label (`IBAN AT611904300234573201BIC`, `IBAN:<v>BIC:<v>` footers) was
-# never a candidate and shipped raw (solo todo #3756). `regex` has no lookahead,
+# never a candidate and shipped raw. `regex` has no lookahead,
 # so the trailing boundary is decided in code for every `iban_mod97` recognizer
 # (`gaze_types::word_run_extends_identifier`): the word run after the candidate
 # may be empty or letters only; a digit or `_` in it means the candidate is a
@@ -416,7 +416,7 @@ pattern = '''
 '''
 
 # A registry-shaped IBAN that fails mod-97 is still tokenized (a mistyped or masked IBAN is
-# still someone's account, user ruling 2026-09-27, solo todo 3906). The failure is written on
+# still someone's account, user ruling 2026-09-27). The failure is written on
 # the audit row, and the value is never swept to other copies.
 [recognizers.validator]
 kind = "iban_mod97"
@@ -448,7 +448,7 @@ locale_basis = "document"
 
 # An IBAN-structured value (two letters, two check digits, a BBAN) written after the word IBAN
 # whose country code is a real ISO 3166-1 alpha-2 code that is NOT in the ISO 13616 registry: an
-# account number the writer calls an IBAN, from a country without IBANs (solo todo 3906).
+# account number the writer calls an IBAN, from a country without IBANs.
 # Registry countries belong to `iban.structural`, which knows each country's exact length and
 # refuses a glued identifier; a registry country here would let a trailing group or glued label
 # ride into the token. A two-letter pair that is no country (`XY`, `EU`) is not an IBAN; `UK`,
@@ -511,7 +511,7 @@ locale_basis = "document"
 
 # The pattern takes a whole digit run; with the `luhn` validator the recognizer then finds
 # the card inside it (a CVV, an expiry or a number may touch it), see
-# `gaze_types::payment_card::scan_card_run`. Solo todo 3843.
+# `gaze_types::payment_card::scan_card_run`.
 [recognizers.match]
 kind = "regex"
 pattern = '''\b\d(?:[\s-]?\d)*\b'''
@@ -540,7 +540,7 @@ locales = ["global"]
 locale_basis = "document"
 
 # A card number written after a card cue is tokenized even when it fails Luhn: a mistyped or
-# masked card number is still someone's card (user ruling 2026-09-27, solo todo 3906).
+# masked card number is still someone's card (user ruling 2026-09-27).
 # `card.structural` keeps vetoing Luhn failures, because it offers every digit run in the text;
 # here the cue carries the precision. Cues: `card` (with credit/debit/payment/bank/prepaid/gift
 # and number/no/nr/holder, in any `_`/`-`/space/camelCase spelling), German card compounds
@@ -561,7 +561,7 @@ locale_basis = "document"
 # longer reference after a cue never yields a card-shaped prefix. A span that holds a card stays
 # whole: after a cue a 4-4-4-4-3 number is one token even when its first 16 digits pass Luhn
 # (a mistyped 19-digit card cannot be told from a card and its CVV). Without a cue
-# `card.structural` still scopes a card exactly (todo 3843).
+# `card.structural` still scopes a card exactly.
 [recognizers.match]
 kind = "regex"
 pattern = '''
@@ -643,7 +643,7 @@ kind = "regex"
 # as legal addresses. `ipv6_parse` cannot reject those, so the boundary is the whole guard.
 # A cue ending in `:` can explicitly mark an address without whitespace. Keep that recovery
 # separate from the word guard: `Address::new` leaves only `:new` after the cue, which cannot
-# parse as IPv6. `capture_groups = [1]` keeps the cue out of the emitted span. Todos 3710, 3762.
+# parse as IPv6. `capture_groups = [1]` keeps the cue out of the emitted span.
 pattern = '''(?ix)
 (?:\b(?:address|adresse|ipv6|ip|host|addr):|(?:^|[^\w:.]))
 (
@@ -924,7 +924,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:ssn|social[\s_-]*security(?:[\s_-]*number)?|ss#)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?(\d{3}-\d{2}-\d{4}|\d{9})\b'''
+pattern = '''(?i)(?:\b|_)(?:ssn|social[\s_-]*security(?:[\s_-]*number)?|ss#)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?(\d{3}-\d{2}-\d{4}|\d{9})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1327,7 +1327,7 @@ license = "Apache-2.0"
 # and 6,385 of 7,209 leaked URL bytes (88.6%), while matching NOTHING in all 1,024 documents of
 # the committed A4 negative corpus. Bare-host URLs (`example.invalid/path`, no scheme, no `www.`)
 # are the remaining 12.3% and are deliberately NOT matched: 97 of the A4 negative documents
-# contain bare-host shapes, so no bare-host rule can clear the negative gate. See todo #2254.
+# contain bare-host shapes, so no bare-host rule can clear the negative gate.
 #
 # Trailing-boundary rule: the match runs to the next whitespace and then gives back a run of
 # sentence and markup punctuation, so `.`, `,`, `;`, `:`, `!`, `?`, `)`, `]`, `}`, `>`, `"`, `'`
@@ -1366,7 +1366,7 @@ origin = "project-authored"
 license = "Apache-2.0"
 
 # ---------------------------------------------------------------------------------------------
-# Government-ID cluster (solo todo #2318 follow-on). Four fixed-format, cue-adjacent classes that
+# Government-ID cluster. Four fixed-format, cue-adjacent classes that
 # the deterministic rule floor could see but did not. Measured over the EN/DE holdout:
 #
 #   class              gold spans / bytes   cue adjacency   covered before
@@ -1375,7 +1375,7 @@ license = "Apache-2.0"
 #   DRIVERLICENSENUM   216 / 2,160          92.1%           none
 #   TAXNUM             212 / 2,495          92.9%           0 via steuer_id.de (0%)
 #
-# SHARED CONNECTOR GRAMMAR (solo todo #3025 slice G). The cue->value connector of these five
+# SHARED CONNECTOR GRAMMAR. The cue->value connector of these five
 # recognizers (the four above plus `ssn.us`) is one byte-identical fragment: up to four
 # closed-vocabulary tokens (numbers?/nummern?/no/nr/id/is/ist/lautet/mit/der/hat/with/the/... plus
 # `no.`/`nr.`) with Unicode-aware, UNBOUNDED whitespace (`\s`) and one optional separator. The
@@ -1415,7 +1415,7 @@ license = "Apache-2.0"
 # The measured gap is large: `ssn.us` matches only 38 of 217 gold SSN spans (17.5%), because 113
 # of 217 sit in GERMAN documents cued by "sozialversicherung" (101 occurrences) — a word its
 # vocabulary lacks entirely — and because its pattern has no `d3.d4.d4.d2` alternative (33 spans).
-# A US SSN inside a German document is still a US SSN, which is the argument of todo #2417; #414
+# A US SSN inside a German document is still a US SSN, which is the argument of the locale-gating decision; #414
 # answered the LOCALE half of that argument by moving `ssn.us` to `locale_basis = "format"`, so it
 # now runs under every chain. It did not answer the VOCABULARY half: an English-cued rule cannot
 # see a German-cued number, whatever the chain. This arm is the vocabulary half.
@@ -1447,7 +1447,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:sozialversicherung(?:s[_-]?(?:nummer|ausweis))?|sv[_-]?nummer)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?(\d{3}-\d{2}-\d{4}|\d{3}\.\d{4}\.\d{4}\.\d{2}|\d{9,11})\b'''
+pattern = '''(?i)(?:\b|_)(?:sozialversicherung(?:s[_-]?(?:nummer|ausweis))?|sv[_-]?nummer)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?(\d{3}-\d{2}-\d{4}|\d{3}\.\d{4}\.\d{4}\.\d{2}|\d{9,11})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1474,7 +1474,7 @@ license = "Apache-2.0"
 # production and capped at ~1% recall here. Simultaneously, the A4 negative corpus contains 64
 # tax-shaped INVALID identifiers in its `invalid_identifiers` category, which a broad cue rule
 # falsely matches and which a checksum would have rejected. The corpus thus penalises having a
-# validator and penalises not having one. See todo #2418.
+# validator and penalises not having one.
 #
 # The resolution is neither horn of that dilemma: REQUIRING INTERNAL SEPARATORS excludes A4's
 # bare-digit invalids without invoking the checksum. Measured, the broad form covers 36.3% but
@@ -1506,14 +1506,16 @@ license = "Apache-2.0"
 id = "tax_number.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:tax_number"
+cooperates_with = ["tax_number.labelled"]
 enabled = true
 locales = ["global"]
 locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:steuer(?:[_-]?id|[_-]?nummer|liche[ \t_-]identifikationsnummer)?|idnr\.?|tax(?:[ \t_-]?(?:id|number))?|taxpayer|tin)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?(\d{3}[ ./-]\d{2,4}[ ./-]\d{2,4}(?:[ ./-]\d{2,4})?)\b'''
+pattern = '''(?i)(?:\b|_)(?:steuer(?:[_-]?id|[_-]?nummer|liche[ \t_-]identifikationsnummer)?|idnr\.?|tax(?:[ \t_-]?(?:id|number))?|taxpayer|tin)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?(\d{3}[ ./-]\d{2,4}[ ./-]\d{2,4}(?:[ ./-]\d{2,4})?)\b'''
 capture_groups = [1]
+complete_labelled_value = true
 
 [recognizers.scoring]
 base = 0.85
@@ -1546,14 +1548,16 @@ license = "Apache-2.0"
 id = "driver_license.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:driver_license"
+cooperates_with = ["driver_license.labelled"]
 enabled = true
 locales = ["global"]
 locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:driver'?s?[ \t_-]?licen[cs]e|driving[ \t_-]?licen[cs]e|licen[cs]e[ \t_-]?number|dl#|dl[_-]?(?:number|num|no|nr)|f[uü]hrerschein(?:[_-]?nummer)?|fahrerlaubnis)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?([A-Z]{1,3}\d{5,12}|[A-Z]{1,3}-?\d{5,12})\b'''
+pattern = '''(?i)(?:\b|_)(?:driver'?s?[ \t_-]?licen[cs]e|driving[ \t_-]?licen[cs]e|licen[cs]e[ \t_-]?number|dl#|dl[_-]?(?:number|num|no|nr)|f[uü]hrerschein(?:[_-]?nummer)?|fahrerlaubnis)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?([A-Z]{1,3}\d{5,12}|[A-Z]{1,3}-?\d{5,12})\b'''
 capture_groups = [1]
+complete_labelled_value = true
 
 [recognizers.scoring]
 base = 0.85
@@ -1587,14 +1591,16 @@ license = "Apache-2.0"
 id = "national_id.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:national_id"
+cooperates_with = ["id_card.labelled"]
 enabled = true
 locales = ["global"]
 locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:national[ \t_-]?id(?:entity|entification)?(?:[ \t_-]?(?:number|nummer))?|nationalid|nationale[nr]?[ \t_-]+(?:id(?:-?nummer)?|identifikationsnummer|identit[äa]tsnummer|id-nummer)|national(?:-?ausweis(?:es)?|er[ \t_-]+identit[äa]tsausweis)(?:nummer)?|identity[ \t_-]?(?:card|number)|id[ \t_-]?(?:card|number|nummer|karte)(?:n?nummer)?|idcard|id-kartennummer|identit[äa]tskarte(?:n?nummer)?|personalausweis(?:es|nummer)?|ausweis(?:es)?(?:nummer)?|national[ \t_-]?insurance(?:[ \t_-]?number)?|(?:fahrzeug[ \t_-]*)?identifikationsnummer|personalnummer|staatsb[üu]rgerschaftsnummer|b[üu]rgerschaftsnummer|ahv(?:-?nummer)?)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?([A-Z]{2}-?756\.\d{4}\.\d{4}\.\d{1,2}|[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,13}|\d{6}-\d{4}|\d\.\d{2}\.\d{6}\.\d)\b'''
+pattern = '''(?i)(?:\b|_)(?:national[ \t_-]?id(?:entity|entification)?(?:[ \t_-]?(?:number|nummer))?|nationalid|nationale[nr]?[ \t_-]+(?:id(?:-?nummer)?|identifikationsnummer|identit[äa]tsnummer|id-nummer)|national(?:-?ausweis(?:es)?|er[ \t_-]+identit[äa]tsausweis)(?:nummer)?|identity[ \t_-]?(?:card|number)|id[ \t_-]?(?:card|number|nummer|karte)(?:n?nummer)?|idcard|id-kartennummer|identit[äa]tskarte(?:n?nummer)?|personalausweis(?:es|nummer)?|ausweis(?:es)?(?:nummer)?|national[ \t_-]?insurance(?:[ \t_-]?number)?|(?:fahrzeug[ \t_-]*)?identifikationsnummer|personalnummer|staatsb[üu]rgerschaftsnummer|b[üu]rgerschaftsnummer|ahv(?:-?nummer)?)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?([A-Z]{2}-?756\.\d{4}\.\d{4}\.\d{1,2}|[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,13}|\d{6}-\d{4}|\d\.\d{2}\.\d{6}\.\d)\b'''
 capture_groups = [1]
+complete_labelled_value = true
 
 [recognizers.context]
 reject_match_regex = '''(?i)\Afahrzeug[ \t_-]*identifikationsnummer\b'''
@@ -1637,7 +1643,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:passports?|passport[ \t_-]?id|reisep[aä]ss(?:e?s|[_-]?nummer|[_-]?nr\.?|[_-]?id|dokument)?|passnummer|passagierschein|pass(?:es)?[ \t]+(?:mit[ \t]+de[rmn][ \t]+(?:nummer|id)|nummer|nr\.?|trug[ \t]+die[ \t]+nummer))\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#/,.-]?\s*\\?["']?([A-Z]{1,3}-?\d{6,9}[A-Z]{0,2}|[A-Z]\d{2}[A-Z]\d{5,6}|\d{2}[A-Z]\d{6}|\d{9}|[A-Z]\d{2}[A-Z]\d[A-Z]\d[A-Z]\d|[A-Z]\d{2}[ ]\d{7}|\d{2}[A-Z]{2}\d{4})\b'''
+pattern = '''(?i)(?:\b|_)(?:passports?|passport[ \t_-]?id|reisep[aä]ss(?:e?s|[_-]?nummer|[_-]?nr\.?|[_-]?id|dokument)?|passnummer|passagierschein|pass(?:es)?[ \t]+(?:mit[ \t]+de[rmn][ \t]+(?:nummer|id)|nummer|nr\.?|trug[ \t]+die[ \t]+nummer))\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?([A-Z]{1,3}-?\d{6,9}[A-Z]{0,2}|[A-Z]\d{2}[A-Z]\d{5,6}|\d{2}[A-Z]\d{6}|\d{9}|[A-Z]\d{2}[A-Z]\d[A-Z]\d[A-Z]\d|[A-Z]\d{2}[ ]\d{7}|\d{2}[A-Z]{2}\d{4})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1656,7 +1662,108 @@ origin = "project-authored"
 license = "Apache-2.0"
 
 
-# Dates of birth (solo todo #3651). A date is tokenized only after a birth cue: invoices, logs
+# A labelled identifier can be less regular than a country's official format. These fallbacks
+# require a class-specific field name and a bounded field connector. Only group 1,
+# the value, is tokenized. The shared value scanner extends bounded regex captures through the
+# complete adjacent identifier run. They deliberately leave generic `id`, `number`, and
+# `customer_id` alone.
+# The three rules share a digit-bearing value grammar; tax excludes bare digits so that an
+# invalid German Steuer-ID remains with its checksum validator.
+[[recognizers]]
+id = "tax_number.labelled"
+safety_tier = "safe_default"
+class = "custom:tax_number"
+cooperates_with = ["tax_number.cue_anchored"]
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)(?:\b|_)(?:tax(?:[ _-]?(?:identification|payer))?[ _-]?(?:number|no\.?|id)|taxnum|tin|utr|tfn|ird[ _-]?number|steuernummer|steuer[ _-]?nummer|num[eé]ro[ _-]fiscal|num[eé]ro[ _-]de[ _-]contribuinte|belastingnummer)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:(?:[:=#|,;\t-][ \t\u{00A0}\u{202F}]*(?:\r?\n[ \t]{0,8})?|\r?\n[ \t]{0,8})|[ \t\u{00A0}\u{202F}]+(?:(?:(?:number|num[eé]ro|n[uú]mero)[ \t\u{00A0}\u{202F}]+)?(?:is|ist|lautet|est)|nr\.?|no\.?)[ \t\u{00A0}\u{202F}]+|[ \t\u{00A0}\u{202F}]{1,8})\\?["']?([A-Z]{1,4}\d[A-Z0-9]{1,5}(?:[ ./_:-][A-Z0-9]{3,6}){1,2}|[A-Z]{2,4}[ /_:-][A-Z]{0,3}\d[A-Z0-9]{3,8}(?:[ /_:-](?-i:[A-Z0-9]{2,6}))?|\d{2,4}[A-Z]{1,3}[ /_:-]?\d{2,6}|[A-Z]{1,4}-?\d[A-Z0-9]{5,13}|[A-Z]{0,3}-?\d{2,4}(?:[ ./_:-]\d{2,4}){2,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}./-]|\.(?:\z|[ \t\r\n]))'''
+capture_groups = [1]
+complete_labelled_value = true
+
+[recognizers.context]
+reject_match_regex = '''(?:^|[^0-9])(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})(?:[^0-9]|$)'''
+
+[recognizers.scoring]
+base = 0.84
+priority = 84
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "government-id"
+variant = "tax-number"
+precedence = 20
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+id = "driver_license.labelled"
+safety_tier = "safe_default"
+class = "custom:driver_license"
+cooperates_with = ["driver_license.cue_anchored"]
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)(?:\b|_)(?:driver'?s?[ _-]?licen[cs]e(?:[ _-]?(?:number|no\.?|nr\.?|id))?|driving[ _-]?licen[cs]e(?:[ _-]?(?:number|no\.?|id))?|licen[cs]e[ _-]?(?:number|no\.?|id)|f[uü]hrerschein(?:[ _-]?(?:nummer|nr\.?))?|f[uü]hrerausweis(?:[ _-]?nummer)?|fahrerlaubnis(?:[ _-]?nummer)?|rijbewijs(?:[ _-]?nummer)?|permis[ _-]de[ _-]conduire(?:[ _-]?(?:num[eé]ro|n[o°]))?|carta[ _-]de[ _-]condu[cç][aã]o(?:[ _-]?(?:n[uú]mero|n[o°]))?)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:(?:[:=#|,;\t-][ \t\u{00A0}\u{202F}]*(?:\r?\n[ \t]{0,8})?|\r?\n[ \t]{0,8})|[ \t\u{00A0}\u{202F}]+(?:(?:(?:number|num[eé]ro|n[uú]mero)[ \t\u{00A0}\u{202F}]+)?(?:is|ist|lautet|est)|nr\.?|no\.?)[ \t\u{00A0}\u{202F}]+)\\?["']?([A-Z]{1,4}\d[A-Z0-9]{1,5}(?:[ ./_:-][A-Z0-9]{3,6}){1,2}|[A-Z]{2,4}[ /_:-][A-Z]{0,3}\d[A-Z0-9]{3,8}(?:[ /_:-](?-i:[A-Z0-9]{2,6}))?|\d{2,4}[A-Z]{1,3}[ /_:-]?\d{2,6}|[A-Z]{1,4}-?\d[A-Z0-9]{5,13}|\d{6,12}[A-Z]{0,3}|[A-Z]{0,3}-?\d{2,4}(?:[ ./_:-]\d{2,4}){2,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}./-]|\.(?:\z|[ \t\r\n]))'''
+capture_groups = [1]
+complete_labelled_value = true
+
+[recognizers.context]
+reject_match_regex = '''(?:^|[^0-9])(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})(?:[^0-9]|$)'''
+
+[recognizers.scoring]
+base = 0.84
+priority = 84
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+id = "id_card.labelled"
+safety_tier = "safe_default"
+class = "custom:national_id"
+cooperates_with = ["national_id.cue_anchored"]
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)(?:\b|_)(?:national[ _-]?(?:id|identification)(?:[ _-]?(?:number|no\.?|nr\.?))?|id[ _-]?card(?:[ _-]?(?:number|no\.?|nr\.?|id))?|identification[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|identity[ _-]?card(?:[ _-]?(?:number|no\.?|id))?|personalausweis(?:[ _-]?(?:nummer|nr\.?))?|identit[aä]tskarte(?:[ _-]?(?:nummer|nr\.?))?|ausweiskarte(?:[ _-]?nummer)?|carte[ _-]d['’]identit[eé](?:[ _-]?(?:num[eé]ro|n[o°]))?|identiteitskaart(?:[ _-]?nummer)?|cart[aã]o[ _-]de[ _-]identidade(?:[ _-]?(?:n[uú]mero|n[o°]))?)[ \t\u{00A0}\u{202F}]*\\?["']?[ \t\u{00A0}\u{202F}]*(?:(?:[:=#|,;\t-][ \t\u{00A0}\u{202F}]*(?:\r?\n[ \t]{0,8})?|\r?\n[ \t]{0,8})|[ \t\u{00A0}\u{202F}]+(?:(?:(?:number|num[eé]ro|n[uú]mero)[ \t\u{00A0}\u{202F}]+)?(?:is|ist|lautet|est)|nr\.?|no\.?)[ \t\u{00A0}\u{202F}]+|[ \t\u{00A0}\u{202F}]{1,8})\\?["']?([A-Z]{1,4}\d[A-Z0-9]{1,5}(?:[ ./_:-][A-Z0-9]{3,6}){1,2}|[A-Z]{2,4}[ /_:-][A-Z]{0,3}\d[A-Z0-9]{3,8}(?:[ /_:-](?-i:[A-Z0-9]{2,6}))?|\d{2,4}[A-Z]{1,3}[ /_:-]?\d{2,6}|[A-Z]{1,4}-?\d[A-Z0-9]{5,13}|\d{6,12}[A-Z]{0,3}|[A-Z]{0,3}-?\d{2,4}(?:[ ./_:-]\d{2,4}){2,3}[A-Z]{0,2})(?:\z|[^\p{L}\p{N}./-]|\.(?:\z|[ \t\r\n]))'''
+capture_groups = [1]
+complete_labelled_value = true
+
+[recognizers.context]
+reject_match_regex = '''(?:^|[^0-9])(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})(?:[^0-9]|$)'''
+
+[recognizers.scoring]
+base = 0.84
+priority = 84
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "government-id"
+variant = "national-id"
+precedence = 30
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# Dates of birth. A date is tokenized only after a birth cue: invoices, logs
 # and release notes are full of dates, so the cue is the whole precision story and a bare date
 # stays raw. The rule was a line-start field record (`DOB: 1990-02-03`) plus `born on` /
 # `geboren am`; it now reads the cue in prose, tool-call JSON and `key=value` logs, the way the

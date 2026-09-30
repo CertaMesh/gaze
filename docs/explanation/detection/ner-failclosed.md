@@ -90,7 +90,7 @@ that tokenizer-window overlap cannot catch.
 
 The model labels WordPiece pieces, so a span can end inside a word:
 `jorunn vas` of `jorunn vasquez-ellery`, or a lone `J` of `JORUNN`. The rest of
-the word used to ship raw (solo todo 3897). After chunk offsets are remapped,
+the word used to ship raw. After chunk offsets are remapped,
 every `Name`, `Location` and `Organization` span grows outward to whole-word
 edges under `gaze_types::expand_to_word_edges`, and a `Name` also grows over
 parts glued on by a hyphen or apostrophe (`gaze_types::extend_over_name_joiners`,

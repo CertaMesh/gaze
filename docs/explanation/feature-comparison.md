@@ -150,5 +150,5 @@ this revision, so no result from it is linked here.
 [l-license]: https://github.com/protectai/llm-guard/blob/v0.3.16/LICENSE
 [t-card]: https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/README.md
 [t-license]: https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/LICENSE
-[t-paper]: https://arxiv.org/abs/2609.22200
+[t-paper]: https://arxiv.org/abs/2609.22200v1
 [t-data]: https://huggingface.co/datasets/perplexity-ai/PII-TRACE/blob/1c3eb67bbd43e8571b4433a9d3d76271f9970eb9/README.md

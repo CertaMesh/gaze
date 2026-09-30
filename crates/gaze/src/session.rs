@@ -510,7 +510,7 @@ impl Session {
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         // Copying the whole state on every call made minting N values
-        // O(N^2) (todo 3895). Update in place unless a reader still holds a
+        // O(N^2). Update in place unless a reader still holds a
         // snapshot. `update` must leave the state untouched when it reports
         // no change, and must not panic after its first write.
         if let Some(state) = Arc::get_mut(&mut boundary) {
@@ -1505,7 +1505,7 @@ fn restore_classified_strict_text_from_state(
     state: &SessionState,
     text: &str,
 ) -> Result<RestoredTextWithProvenance> {
-    // Keep malformed/nested input rejection before any owner-side substitution.
+    // Keep malformed input rejection before any owner-side substitution.
     strict_restore_tokens(text)?;
     let assessment = assess_restore_text_from_state(state, text)?;
     if let Some(unknown) = assessment.unknown_tokens.first() {
@@ -1742,7 +1742,7 @@ fn restore_boundary_events(
 /// recognizers, including checksum failures. The patterns run on the same
 /// normalized detection view as the pipeline (`crate::normalize`), so a Zs-grouped (NBSP,
 /// NARROW NBSP, THIN SPACE, ...) or fullwidth IBAN or card is found exactly as its ASCII form
-/// is (solo todo #3827). `location` and `raw` are mapped back to the caller's original bytes;
+/// is. `location` and `raw` are mapped back to the caller's original bytes;
 /// `canonical` comes from the normalized view, so it equals the canonical form of the same
 /// value in the manifest whatever separator either side used.
 fn structural_findings(text: &str) -> Vec<StructuralFinding> {
@@ -2054,14 +2054,10 @@ pub(crate) struct StrictRestoreToken {
 
 pub(crate) fn strict_restore_tokens(text: &str) -> Result<Vec<StrictRestoreToken>> {
     let mut tokens = Vec::new();
+    // Tokens are matched by their exact grammar, so a literal `<` or `>` beside one is
+    // ordinary text (an email address in angle brackets cleans to `<{token}>`). Rejecting such
+    // neighbours as "nested" broke round-trip for HTML, generics and mail headers.
     for matched in crate::token_shape::pattern().find_iter(text) {
-        let nested_start = matched.start() > 0 && text.as_bytes()[matched.start() - 1] == b'<';
-        let nested_end = matched.end() < text.len() && text.as_bytes()[matched.end()] == b'>';
-        if nested_start || nested_end {
-            let start = matched.start().saturating_sub(usize::from(nested_start));
-            let end = matched.end() + usize::from(nested_end);
-            return Err(unknown_token_error(&text[start..end]));
-        }
         tokens.push(StrictRestoreToken {
             start: matched.start(),
             end: matched.end(),
@@ -2696,7 +2692,7 @@ mod tests {
     }
 
     /// Installing the sweep-matcher cache must not copy the session state
-    /// when no reader holds a snapshot (todo 3895).
+    /// when no reader holds a snapshot.
     #[test]
     fn sweep_matcher_cache_installs_in_place() {
         let session = Session::new(Scope::Ephemeral).expect("session");
@@ -3364,7 +3360,7 @@ mod tests {
 
     #[test]
     fn restore_dlp_flags_a_card_anywhere_in_a_longer_digit_run() {
-        // REVIEW 652 round 2 F-A (solo todo 3843): the card sits past the first 19 digits of the
+        // REVIEW 652 round 2 F-A: the card sits past the first 19 digits of the
         // run, so the scan must look at the whole run, not only its first pattern-sized window.
         // F-B: every card layout, and the 19-digit card whose 16-digit prefix also passes Luhn
         // (the longest card wins).
@@ -3431,7 +3427,7 @@ mod tests {
 
     #[test]
     fn restore_dlp_leaves_no_card_digit_unflagged_after_any_prefix() {
-        // Solo todo 3843 round 2: every 1- to 4-digit number before a card, separated, glued by
+        // Every 1- to 4-digit number before a card, separated, glued by
         // a ZERO WIDTH JOINER, or glued in fullwidth. A prefix whose window passes Luhn by
         // chance must not leave any card digit outside the flagged span.
         let fullwidth = |text: &str| -> String {
@@ -3716,7 +3712,7 @@ mod tests {
         assert!(state.generation > 0);
     }
 
-    /// Minting a value must not copy the session state (todo 3895: a copy
+    /// Minting a value must not copy the session state (a copy
     /// per value made N values cost O(N^2)). Pointer identity proves the
     /// update happened in place while no reader held a snapshot.
     #[test]
@@ -3952,9 +3948,16 @@ mod tests {
         assert!(session
             .restore_strict_text_with_provenance("prefix <deadbeef:Email_1 suffix")
             .is_err());
-        assert!(session
+        // Literal angle brackets beside a token are text outside its range.
+        let bracketed = session
             .restore_strict_text_with_provenance(&format!("prefix <{name}> suffix"))
-            .is_err());
+            .expect("angle neighbours restore");
+        assert_eq!(bracketed.text, "prefix <Dr. Schmidt> suffix");
+        let name_start = "prefix <".len();
+        assert_eq!(
+            bracketed.authorized_output_ranges,
+            vec![name_start..name_start + "Dr. Schmidt".len()]
+        );
 
         let other = Session::new(Scope::Ephemeral).expect("other session");
         let cross_session = other
@@ -3966,7 +3969,7 @@ mod tests {
     }
 
     #[test]
-    fn transaction_token_shape_validation_rejects_unknown_malformed_nested_and_cross_session() {
+    fn transaction_token_shape_validation_rejects_unknown_malformed_and_cross_session() {
         let session = Session::new(Scope::Ephemeral).expect("session");
         let mut transaction = session.begin_transaction();
         let ordinary = transaction
@@ -3995,8 +3998,12 @@ mod tests {
                 transaction.session_hex()
             ))
             .is_err());
+        // Literal angle brackets beside a known token are ordinary text.
+        transaction
+            .validate_token_shapes(&format!("<{ordinary}> <<{format_preserving}>>"))
+            .expect("angle neighbours of known tokens");
         assert!(transaction
-            .validate_token_shapes(&format!("nested <{ordinary}>"))
+            .validate_token_shapes(&format!("<<{}:Email_999>>", transaction.session_hex()))
             .is_err());
         assert!(transaction
             .validate_token_shapes("malformed <deadbeef:Email_>")

@@ -41,7 +41,7 @@ def write(tmp_path: Path, report_body: dict, own: dict | None = None) -> tuple[P
 
 
 def data() -> dict:
-    return {"benchmarks": {"presidio-research": copy.deepcopy(ENTRY)}}
+    return {"benchmarks": {"presidio-research": copy.deepcopy(ENTRY)}, "not_run": {"old set": "licence"}}
 
 
 def test_adds_the_row_and_leaves_existing_rows_alone(tmp_path: Path) -> None:
@@ -95,6 +95,8 @@ def test_add_benchmark_creates_an_entry_with_only_the_vendor_row(tmp_path: Path)
     assert entry["reproduction"]["published"] is None
     assert entry["reproduction"]["vendor_result"]["char_f1"] == 0.97
     assert "presidio-research" in body["benchmarks"]  # the others are untouched
+    assert body["not_run"]["old set"] == "licence"
+    assert any("PII-TRACE full set" in name for name in body["not_run"])
 
 
 def test_add_benchmark_refuses_an_existing_benchmark_and_bad_inputs(tmp_path: Path) -> None:

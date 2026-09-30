@@ -78,7 +78,7 @@ enum ContainmentMode {
 /// Kept apart from `Candidate::decided_by`, which is the audit label of the
 /// last rung that touched the span: a later, unrelated overlap decided on the
 /// base ladder rewrites that label, and the missing-anchor fallback must not
-/// reopen a family the policy already settled because of it (todo #3709).
+/// reopen a family the policy already settled because of it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Settlement {
     /// No collision-policy verdict yet; the anchor rung still applies.
@@ -355,7 +355,7 @@ impl CandidatePool {
 /// Arrival order decides which rival an incoming candidate meets first, so
 /// it is kept as slot order: a replaced entry keeps its slot, a removed one
 /// leaves a hole. Finding the first rival by scanning every slot made a pool
-/// of N candidates cost O(N^2) (todo 3895); the index finds it among the
+/// of N candidates cost O(N^2); the index finds it among the
 /// spans that actually overlap.
 #[derive(Default)]
 struct ResolvedSet {
@@ -466,7 +466,7 @@ impl ResolvedSet {
 fn covers_all_spans(selected: &[WholeCandidate], prior: &[WholeCandidate]) -> bool {
     // Both lists are sorted by start. A selected span that ends before one
     // prior span starts ends before every later one too, so the scan resumes
-    // there instead of at 0 (restarting made this O(N^2), todo 3895).
+    // there instead of at 0 (restarting made this O(N^2)).
     let mut first = 0;
     prior.iter().all(|prior_node| {
         let mut cursor = prior_node.candidate.span.start;
@@ -618,7 +618,7 @@ fn arbitrate(
 
     // Containment-precedence rung: a candidate that wholly contains a
     // candidate of another class wins the whole span as one token, unless it
-    // is less certain than what it would swallow (todo #3740). It sits after
+    // is less certain than what it would swallow. It sits after
     // collision-family policy and the anchor rung so those keep deciding what
     // they decide today, and before the structured-containment rung, which it
     // generalises: that rung still catches a custom container the guard
@@ -637,7 +637,7 @@ fn arbitrate(
     // custom-class structured span never evicts its container. Without it the
     // base ladder's class priority (Email/Name/Organization/Location above
     // every `Custom`) let an NER sub-token split a URL, IBAN or credential
-    // around a mid-word token and leave the rest raw (todo #3025).
+    // around a mid-word token and leave the rest raw.
     if let Some(container_is_candidate) = structured_containment(existing, candidate, overlap) {
         return if container_is_candidate {
             Arbitration::CandidateWins(ConflictTier::StructuredContainment)
@@ -793,6 +793,9 @@ fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
     existing.validator_fail_reason = existing
         .validator_fail_reason
         .or(candidate.validator_fail_reason);
+    existing.labelled_value_scan_reason = existing
+        .labelled_value_scan_reason
+        .or(candidate.labelled_value_scan_reason);
     existing.decided_by = ConflictTier::Merged;
     existing.merged_sources.push(candidate.source);
 }
@@ -1054,7 +1057,7 @@ mod tests {
     }
 
     /// A canonical form proves a validator passed only when no failure was recorded: an IBAN or
-    /// card kept by `ValidatorOnFail::Record` must not rank as validated (solo todo 3906).
+    /// card kept by `ValidatorOnFail::Record` must not rank as validated.
     #[test]
     fn a_recorded_checksum_failure_is_not_validated_evidence() {
         let class = PiiClass::custom("iban").expect("class");
@@ -1888,7 +1891,7 @@ mod tests {
     /// The structured-containment rung still names the case the guard
     /// refuses: a plain custom container over a validator-backed builtin
     /// sub-span (a URL regex over an RFC-validated email) keeps the slot for
-    /// the todo #3025 reason, and the row says `StructuredContainment`.
+    /// the structured-containment reason, and the row says `StructuredContainment`.
     #[test]
     fn structured_containment_still_names_a_guard_refused_builtin_sub_span() {
         for container_first in [true, false] {
@@ -1942,7 +1945,7 @@ mod tests {
         assert_eq!(resolved[0].decided_by, ConflictTier::ClassPriority);
     }
 
-    /// Containment precedence (todo #3740): a custom span that wholly
+    /// Containment precedence: a custom span that wholly
     /// contains a differently-classed custom span wins the whole span as one
     /// token when its evidence tier is at least the contained span's, and
     /// the rung, not the base ladder, is named on the row.
@@ -2401,7 +2404,7 @@ mod tests {
         )
     }
 
-    /// Todo #3709: once collision policy has settled the family (IBAN beat
+    /// Once collision policy has settled the family (IBAN beat
     /// the card variant), a later unrelated overlap decided on the base ladder
     /// must not reopen the anchor check. Before the fix the ladder rung
     /// overwrote `decided_by`, the fallback keyed on it, and the settled IBAN
@@ -2594,7 +2597,7 @@ mod tests {
 mod recovery_event_tests {
     use super::*;
     /// `covers_all_spans` resumes its scan instead of restarting it for each
-    /// prior span (todo 3895). Pin it against the restarting original on
+    /// prior span. Pin it against the restarting original on
     /// random sorted, non-overlapping span lists, including empty spans.
     #[test]
     fn covers_all_spans_matches_the_restarting_scan() {

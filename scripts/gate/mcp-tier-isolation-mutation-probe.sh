@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mutation probe for the `mcp-tier-isolation` xtask gate (solo todo #2993).
+# Mutation probe for the `mcp-tier-isolation` xtask gate.
 #
 # A gate that cannot fail is indistinguishable from no gate. This script proves
 # the tier gate is causally connected to the thing it guards, by un-gating the

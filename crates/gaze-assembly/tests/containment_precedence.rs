@@ -1,5 +1,5 @@
 //! Containment precedence and the per-character protection safety net on the
-//! bundled `core` + `locale-de` rulepacks (solo todo #3740, concept v2).
+//! bundled `core` + `locale-de` rulepacks.
 //!
 //! One entity, one token: a candidate that wholly contains a candidate of
 //! another class wins the whole span when it is at least as certain

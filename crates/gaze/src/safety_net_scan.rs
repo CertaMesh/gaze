@@ -6,10 +6,10 @@ use sha2::{Digest, Sha256};
 
 use crate::pipeline::{Error, Result};
 
-/// Stable model input. Eight ASCII bytes replace eight ASCII bytes, so scan
-/// offsets are identical to observable clean-text offsets, including near UTF-8.
+/// Byte-aligned model views. Replacements preserve clean-text offsets, including near UTF-8.
 pub(crate) struct SafetyNetScanText<'a> {
     text: Cow<'a, str>,
+    neutral: Option<String>,
 }
 
 impl<'a> SafetyNetScanText<'a> {
@@ -19,6 +19,7 @@ impl<'a> SafetyNetScanText<'a> {
         is_owned: impl Fn(&str) -> bool,
     ) -> Result<Self> {
         let mut stable = None::<Vec<u8>>;
+        let mut neutral = None::<Vec<u8>>;
         for emitted in &manifest.spans {
             let token =
                 clean_text
@@ -29,12 +30,14 @@ impl<'a> SafetyNetScanText<'a> {
                         text_len: clean_text.len(),
                     })?;
             replace_session_hex(clean_text, &mut stable, emitted.clean_span.start, token);
+            replace_with_neutral(clean_text, &mut neutral, emitted.clean_span.start, token);
         }
         // Scan-only APIs have no manifest. The live session can still prove which
         // token-shaped strings it minted; leave every unowned literal unchanged.
         for matched in crate::token_shape::pattern().find_iter(clean_text) {
             if is_owned(matched.as_str()) {
                 replace_session_hex(clean_text, &mut stable, matched.start(), matched.as_str());
+                replace_with_neutral(clean_text, &mut neutral, matched.start(), matched.as_str());
             }
         }
 
@@ -44,17 +47,40 @@ impl<'a> SafetyNetScanText<'a> {
             }
             None => Cow::Borrowed(clean_text),
         };
-        Ok(Self { text })
+        let neutral = neutral.map(|bytes| {
+            String::from_utf8(bytes).expect("ASCII token replacement preserves UTF-8")
+        });
+        Ok(Self { text, neutral })
     }
 
     pub(crate) fn text(&self) -> &str {
         &self.text
     }
 
+    pub(crate) fn neutral_text(&self) -> Option<&str> {
+        self.neutral.as_deref()
+    }
+
     /// The exact offset map is the identity.
     pub(crate) fn to_clean_range(&self, range: Range<usize>) -> Range<usize> {
         range
     }
+}
+
+fn replace_with_neutral(
+    clean_text: &str,
+    neutral: &mut Option<Vec<u8>>,
+    token_start: usize,
+    token: &str,
+) {
+    // Only ASCII Gaze tokens permit an identity byte/UTF-8 boundary map.
+    if !token.is_ascii() || session_hex_offset(token).is_none() {
+        return;
+    }
+    let bytes = neutral.get_or_insert_with(|| clean_text.as_bytes().to_vec());
+    let replacement = &mut bytes[token_start..token_start + token.len()];
+    replacement.fill(b' ');
+    replacement[..5].copy_from_slice(b"[PII]");
 }
 
 fn replace_session_hex(
@@ -143,6 +169,46 @@ mod tests {
         );
         assert!(prefixes.iter().all(|prefix| prefix != "00000000"));
         assert_eq!(scan.text().len(), text.len());
+        let neutral = scan.neutral_text().unwrap();
+        assert_eq!(neutral.len(), text.len());
+        assert_eq!(neutral.matches("[PII]").count(), 3);
+    }
+
+    #[test]
+    fn neutralizes_only_owned_ascii_tokens() {
+        let emitted = "<deadbeef:Name_1>";
+        let owned = "<cafebabe:Name_2>";
+        let unowned = "<feedface:Name_3>";
+        let text = format!("é {emitted} {owned} {unowned} 🦊");
+        let start = text.find(emitted).unwrap();
+        let manifest = Manifest::from_spans(vec![EmittedTokenSpan::new(
+            start..start + emitted.len(),
+            0..1,
+            PiiClass::Name,
+        )]);
+        let scan = SafetyNetScanText::new(&text, &manifest, |token| token == owned).unwrap();
+        let neutral = scan.neutral_text().unwrap();
+        assert_eq!(neutral.matches("[PII]").count(), 2);
+        assert!(neutral.contains(unowned));
+        assert_eq!(neutral.len(), text.len());
+        for index in 0..=text.len() {
+            assert_eq!(
+                neutral.is_char_boundary(index),
+                text.is_char_boundary(index)
+            );
+        }
+    }
+
+    #[test]
+    fn non_ascii_manifest_text_keeps_original_boundaries() {
+        let token = "<deadbeef:🦊_1>";
+        let manifest = Manifest::from_spans(vec![EmittedTokenSpan::new(
+            0..token.len(),
+            0..1,
+            PiiClass::Name,
+        )]);
+        let scan = SafetyNetScanText::new(token, &manifest, |_| false).unwrap();
+        assert!(scan.neutral_text().is_none());
     }
 
     proptest! {
@@ -160,8 +226,11 @@ mod tests {
             let manifest = Manifest::from_spans(vec![EmittedTokenSpan::new(start..end, 0..1, PiiClass::Name)]);
             let scan = SafetyNetScanText::new(&text, &manifest, |_| false).unwrap();
             prop_assert_eq!(scan.text().len(), text.len());
+            let neutral = scan.neutral_text().unwrap();
+            prop_assert_eq!(neutral.len(), text.len());
             for index in 0..=text.len() {
                 prop_assert_eq!(scan.text().is_char_boundary(index), text.is_char_boundary(index));
+                prop_assert_eq!(neutral.is_char_boundary(index), text.is_char_boundary(index));
                 if text.is_char_boundary(index) && index < text.len() {
                     let next = text[index..].chars().next().unwrap().len_utf8() + index;
                     prop_assert_eq!(scan.to_clean_range(index..next), index..next);

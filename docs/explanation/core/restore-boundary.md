@@ -19,7 +19,7 @@ The restore boundary is where pseudonymous content becomes owner-side sensitive 
 The invariant is:
 
 1. A sensitive value may be re-materialized only when the active restore context has a manifest entry that authorizes that exact token-to-value mapping.
-2. Unmapped canonical placeholders and incomplete prefixed wrappers fail closed. Session strict APIs also reject malformed and nested token syntax. Bare identifier-like text is an audit signal, never authority to re-materialize a value.
+2. Unmapped canonical placeholders and incomplete prefixed wrappers fail closed. Session strict APIs also reject malformed token syntax; a literal `<` or `>` beside a well-formed token is ordinary text. Bare identifier-like text is an audit signal, never authority to re-materialize a value.
 3. Restore-side checks must be deterministic and auditable. A restore decision must be traceable to the active manifest, the structural recognizer that observed unauthorized raw sensitive data, or restore telemetry metadata.
 4. Restore must not silently expand scope. If a later phase wants identity-sensitive policy, it must be explicit, opt-in, and separately approved.
 
@@ -95,7 +95,7 @@ The API failure contracts remain distinct:
   under Lenient; zero produces the existing exact spelling `success`.
 - `Session::restore_strict_text`, its provenance/events variants, and the MCP
   operator `restore_strict` tool return a typed error on unmapped canonical
-  placeholders and incomplete prefixed wrappers. Session strict parsing also retains malformed/nested input rejection.
+  placeholders and incomplete prefixed wrappers. Session strict parsing also retains malformed input rejection; angle brackets beside a token restore as literal text.
 - CLI strict restore exits 3 for unmapped canonical placeholders and incomplete
   prefixed wrappers. Tolerant restore
   preserves them and returns warnings plus `partial` telemetry when requested.

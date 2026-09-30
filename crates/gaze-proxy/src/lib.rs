@@ -188,7 +188,7 @@ impl ProxyConfig {
 /// Deliberately `[LocaleTag::Global]`: it is exactly the chain the proxy pinned before
 /// [`ProxyConfig::with_locale_chain`] existed, so adopters who configure nothing observe no
 /// behavior change. Widening this default would activate `postal.us` / `postal.de` for every
-/// adopter at once and is a separate decision (Solo todo #2400, values-vs-bounds).
+/// adopter at once and is a separate decision (values-vs-bounds).
 fn default_locale_chain() -> LocaleChain {
     LocaleChain::from_tags(vec![LocaleTag::Global])
 }

@@ -165,7 +165,7 @@ different accounts, see
 
 `--dob-judge` additionally installs the SHA-pinned GLiNER multi PII int8 bundle
 and enables the local date-of-birth judge in `[dob_judge]`. It is off by
-default until the bundle is shrunk (todo 3905); its measured gain and its
+default until the bundle is shrunk; its measured gain and its
 memory cost are in the benchmark's
 [per-mechanism arms](../../docs/reference/benchmarks/README.md#per-mechanism-arms). `--dob-model-dir <path>` selects the bundle directory and requires
 `--dob-judge`. The doctor checks a synthetic cue-less birth date before
@@ -535,7 +535,7 @@ deadline is `5000` ms; tighten it via `--safety-net-timeout-ms` for
 latency-sensitive callers. On timeout the adapter sends `SIGKILL`, reaps
 the process, and returns exit `3` with variant `Timeout`. The safety net
 does not currently amortize subprocess startup across calls; a long-lived
-helper is filed for post-v0.6.0 (todo #303).
+helper is filed for post-v0.6.0.
 
 ### Audit
 

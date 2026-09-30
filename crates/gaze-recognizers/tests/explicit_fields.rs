@@ -438,6 +438,7 @@ fn assembled(
             pattern: Some(pattern.to_string()),
             pattern_template: None,
             capture_groups: None,
+            complete_labelled_value: false,
         };
         spec.scoring.priority = *priority;
         pack.recognizers.push(spec);
@@ -546,8 +547,8 @@ fn same_span_email_winner_selects_email_policy_instead_of_password_policy() {
     // The email still wins the same-span overlap and selects the email
     // policy (`preserve`), but the bytes are also a password-field value the
     // policy tokenizes: protection beats preservation, so the value leaves as
-    // one `custom:password` residual fragment inside the preserved winner
-    // (todo #3740). Before that rule the preserved email shipped the value raw.
+    // one `custom:password` residual fragment inside the preserved winner.
+    // Before that rule the preserved email shipped the value raw.
     let pipeline = assembled(reverse_rules, &[]);
     let session = Session::new(Scope::Ephemeral).unwrap();
     let (clean, spans, _) = pipeline
