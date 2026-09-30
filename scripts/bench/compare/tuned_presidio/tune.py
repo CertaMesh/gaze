@@ -212,20 +212,35 @@ def in_live_sample(uid: str) -> bool:
 
 
 def live_verify(config: dict, paths: pool.ModelPaths, replayer: search.Replayer) -> dict[str, object]:
+    """Run the configuration live on the fixed sample and compare with the replay.
+
+    A document whose output differs is analysed live twice more; it counts as
+    persistent only if every run differs. Both counts and each first-run
+    difference (offsets and labels, no text) are recorded.
+    """
     analyzers = pool.live_analyzers(config, paths)
-    differing, started = [], time.perf_counter()
+
+    def live_spans(doc) -> list:
+        found = pool.live_analyze(analyzers, config, doc.document.text, doc.language)
+        return compare.resolved_presidio_spans(replayer.anonymizer, doc.document.text, found)
+
+    differing, started = {}, time.perf_counter()
     sample = [(index, doc) for index, doc in enumerate(replayer.docs) if in_live_sample(doc.uid)]
     for count, (index, doc) in enumerate(sample, 1):
-        found = pool.live_analyze(analyzers, config, doc.document.text, doc.language)
-        live = compare.resolved_presidio_spans(replayer.anonymizer, doc.document.text, found)
-        if live != replayer.predict(index, config):
-            differing.append(doc.uid)
+        live, replayed = live_spans(doc), replayer.predict(index, config)
+        if live != replayed:
+            differing[doc.uid] = {"index": index, "live_only": [list(s) for s in live if s not in replayed],
+                                  "replay_only": [list(s) for s in replayed if s not in live]}
         if count % 100 == 0:
             print(f"live: {count}/{len(sample)} ({len(differing)} differ)", file=sys.stderr, flush=True)
+    persistent = [uid for uid, item in differing.items()
+                  if all(live_spans(replayer.docs[item["index"]]) != replayer.predict(item["index"], config)
+                         for _ in range(2))]
     return {"sample": "second SHA-256 byte of the document id < 32", "documents": len(sample),
             "documents_by_layer": {layer: sum(1 for _, d in sample if d.layer == layer) for layer in corpus.LAYERS},
-            "differing_documents": len(differing),
-            "differing_sample": differing[:20], "identical": not differing,
+            "differing_documents": len(differing), "persistent_differing_documents": len(persistent),
+            "differences": {uid: {k: v for k, v in item.items() if k != "index"} for uid, item in differing.items()},
+            "persistent": persistent, "identical": not persistent,
             "seconds": round(time.perf_counter() - started, 1)}
 
 

@@ -497,6 +497,14 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
                 wins.append(f"{label} has the higher v3 character F2")
     lines.extend(["", "Where tuned Presidio beats Gaze " + version + " here: "
                   + ("; ".join(wins) if wins else "nowhere") + ".", "",
+                  "Live check: each chosen configuration also ran live on a fixed sample (about one document "
+                  "in eight, every layer, both halves); "
+                  + "; ".join(
+                      f"{TUNED_LABELS[name]}: {live['documents']:,} documents, {live['differing_documents']} differed "
+                      f"on the first run, {live['persistent_differing_documents']} on every rerun"
+                      for name, provenance in tuned["provenance"].items()
+                      if (live := provenance.get("live_verification")))
+                  + ".", "",
                   f"The panels' Presidio bar is **{TUNED_LABELS[tuned['chart']['row']]}**, the highest "
                   "test-half v3 layer C character F2 of the three: "
                   + ", ".join(f"{TUNED_LABELS[n]} {v:.3f}" for n, v in tuned["chart"]["test_f2"].items())
