@@ -775,13 +775,17 @@ class BindingRegressionTests(unittest.TestCase):
 
     def test_workflow_native_cache_has_no_legacy_restore(self):
         workflow = (Path(__file__).resolve().parents[2]/'.github/workflows/test.yml').read_text()
-        cache = workflow.split('  test:\n', 1)[1].split('      - name: Cache cargo registry + target', 1)[1].split('      - name:', 1)[0]
+        support = workflow.split('\n  test-support:\n', 1)[1].split('\n  workspace-shards:\n', 1)[0]
+        cache = support.split('      - name: Cache cargo registry + target', 1)[1].split('      - name:', 1)[0]
         native = '~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671'
-        self.assertIn(native, cache, 'warm-target-restores-exact-native')
-        self.assertIn('-cargo-test-native-v2-', cache)
+        self.assertIn(native, cache, 'dependency-cache-restores-exact-native')
+        self.assertIn('-cargo-test-dependencies-v1-', cache)
+        self.assertNotIn('\n            target\n', cache, 'mutable-targets-are-not-cached')
+        self.assertNotIn('-cargo-test-native-v2-', cache, 'legacy-target-cache-excluded')
         self.assertNotIn('-cargo-test-${{', cache, 'legacy-exact-key-excluded')
         self.assertNotIn('-cargo-test-\n', cache, 'legacy-prefix-excluded')
-        self.assertLess(workflow.index('      - name: cargo test\n'), workflow.index('      - name: Test private fresh-build'))
+        self.assertIn('run: cargo test --workspace --all-features --doc --no-fail-fast', support)
+        self.assertLess(support.index('      - name: Workspace all-feature doctests\n'), support.index('      - name: Test private fresh-build'))
 
 
 def lifecycle(suite_deadline):
